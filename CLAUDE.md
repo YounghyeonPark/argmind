@@ -27,9 +27,22 @@ automotive.
 - Batch-1 solver loops (`P@x`, cached triangular solves, `A@x`, `Aᵀ@y`) are matrix-**vector**
   (GEMV) → no operand reuse → bandwidth-bound. 16× more MACs bought zero; 16→256 B/cycle bought ~9×.
 - **Bandwidth-first provisioning**: wide banked scratchpad, modest MAC array — opposite of an
-  NPU. Array sized for ML plus real matrix-matrix work (EKF covariance, SQP re-factorization).
-- Advantage is **energy + determinism, not speed**: **~10–20× perf/W (modelled, ±2×; band
-  9.0–26.2× over the scratchpad-energy sensitivity)**, and latency is **~0.9–3.2×, i.e. at or
+  NPU. **CM-100 baseline (costed 2026-07-30): 128 KB, 16 banks × 8 B = 128 B/cycle, 144 MACs
+  (12×12), 16 vector lanes, 800 MHz → 0.565 mm² at 16nm** (modelled, ±2×). Minimum viable is
+  64 B/cycle / 64 MACs / 0.430 mm²; a solver-only SKU at 64 MACs is a real option (+35% energy,
+  all on EKF).
+- **Size against the worst-case iteration tail, never the typical one.** At p95 iterations every
+  solver row meets its deadline at 16 B/cycle — a sweep run that way can only ratify a
+  configuration, never justify one. The measured cold-solve tail (QUAD-MPC 74 iterations) inside
+  a 50%-of-period budget is what sets the 64 B/cycle floor.
+- **The MAC array is *latency*-ML-justified but *energy*-solver-justified.** Nothing needs >36
+  MACs to meet a deadline, but tile dimension **is operand-reuse depth** ((1/Tm + 1/Tn) operand
+  elements per GEMM MAC), so 64→256 MACs cuts EKF-96 energy 1.59× and EKF-24 1.54× while doing
+  exactly nothing for pure-GEMV ADMM. EKF is a beachhead workload, so "solver customers subsidise
+  an ML feature" is *not* the honest story. Caveat: an L0 operand register file would buy the same
+  traffic cut at O(T) area instead of O(T²) — if that lands, honest array size drops to 36–64.
+- Advantage is **energy + determinism, not speed**: **14–22× perf/W at the CM-100 config
+  (modelled, ±2×; 9–26× across the scratchpad-energy sensitivity band)**, latency **~0.9–3.2×, at or
   below parity on the flagship benchmark**. A CPU already meets several deadlines — never pitch
   "the CPU can't do this." (Was quoted as 17–25× and 1.2–2.9×; both were corrected 2026-07-29
   after the scratchpad energy constant proved 2.3× too low and a phantom transcendental term was
