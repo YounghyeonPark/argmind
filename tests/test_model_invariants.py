@@ -92,11 +92,36 @@ def test_e3_admm_has_no_transcendentals():
     4/vector-lane) and was single-handedly responsible for an apparent latency
     advantage that did not exist.
     """
-    for b in solvers():
-        if b.name.startswith(("QUAD", "ARM", "PWR")):
-            assert b.transcendental_per_iter == 0.0, (
-                f"{b.name}: ADMM projection is min/max, not divide/sqrt. "
-                "Any nonzero value here re-creates the phantom-transcendental bug")
+    admm = [b for b in solvers() if b.algo == "admm"]
+    assert admm, "no ADMM benchmarks found — has `algo` tagging been dropped?"
+    for b in admm:
+        assert b.transcendental_per_iter == 0.0, (
+            f"{b.name}: ADMM projection is min/max, not divide/sqrt. "
+            "Any nonzero value here re-creates the phantom-transcendental bug")
+    # And the converse: interior-point DOES have real barrier transcendentals, so
+    # zeroing them everywhere would be the opposite error.
+    for b in (x for x in solvers() if x.algo == "ip"):
+        assert b.transcendental_per_iter > 0.0, (
+            f"{b.name}: interior-point has genuine barrier divides; zero here "
+            "would understate its cost")
+
+
+def test_algorithm_precision_floors_are_respected():
+    """Precision is a property of the algorithm, per solver-numerics.
+
+    Interior-point KKT conditioning reaches ~1e12 near convergence -> fp64 (or
+    fp32 + mandatory iterative refinement, which we do not model). The EKF
+    covariance recursion squares the covariance condition number -> fp32 minimum,
+    and there is NO fp16/bf16 path in any filter form.
+    """
+    for b in M.BENCHMARKS:
+        if b.algo == "ip":
+            assert b.prec == "fp64", (
+                f"{b.name}: interior-point modelled in {b.prec}. Without "
+                "iterative refinement (not modelled) this is optimistic")
+        if b.algo == "ekf":
+            assert b.prec in ("fp32", "fp64"), (
+                f"{b.name}: EKF covariance in {b.prec} — no fp16/bf16 path exists")
 
 
 def test_e4_constraint_rows_match_a_real_osqp_instance():

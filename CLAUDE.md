@@ -72,7 +72,9 @@ automotive.
 
 ## Conventions
 
-Windows/PowerShell; python 3.14; not a git repo. Markdown docs at root, model in `perf_model/`.
+Windows/PowerShell; python 3.14; **git repo since 2026-07-30** — commit before and after any
+change to `perf_model/`, and run `python -m pytest` (29 invariant + mutation tests) before
+quoting any modelled number. Markdown docs at root, model in `perf_model/`.
 Prefer open-source EDA (Verilator, cocotb, Yosys) — the cash plan depends on it. Interfaces:
 AXI4/AXI4-Lite baseline; ACE-Lite (Arm) and coherent TileLink (RISC-V) for zero-copy; CHI +
 SMMU/SVM deferred to Phase 4. Apple is not an integration target — they don't license

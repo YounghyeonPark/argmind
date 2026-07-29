@@ -35,8 +35,8 @@ except ImportError:          # run as a script
 # ---------------------------------------------------------------------------
 
 # Per-MAC dynamic energy (pJ), datapath only.
-E_MAC_PJ = {"int8": 0.07, "fp16": 0.20, "bf16": 0.20, "fp32": 0.60}
-BYTES_PER_ELEM = {"int8": 1, "fp16": 2, "bf16": 2, "fp32": 4}
+E_MAC_PJ = {"int8": 0.07, "fp16": 0.20, "bf16": 0.20, "fp32": 0.60, "fp64": 2.20}
+BYTES_PER_ELEM = {"int8": 1, "fp16": 2, "bf16": 2, "fp32": 4, "fp64": 8}
 
 # LEGACY flat scratchpad energy. Retained only so the v0 numbers stay
 # reproducible. sram_cost.py shows this is ~2x low once the bank->datapath
@@ -124,7 +124,8 @@ class ArgmindCfg:
 
     def macs_per_cycle(self, prec: str) -> float:
         """Precision scaling: int8 double-pumps, fp32 half-rate."""
-        scale = {"int8": 2.0, "fp16": 1.0, "bf16": 1.0, "fp32": 0.5}[prec]
+        scale = {"int8": 2.0, "fp16": 1.0, "bf16": 1.0, "fp32": 0.5,
+                 "fp64": 0.125}[prec]
         return self.macs * scale
 
     def delivered_bw_bpc(self, prec: str, row_len: float | None) -> float:
@@ -256,6 +257,17 @@ class Benchmark:
     # Governs how much of the peak fetch width is actually usable. None = long
     # enough not to matter.
     gemv_row_len: float | None = None
+    # Which algorithm this benchmark runs. Precision floors and transcendental
+    # counts are properties of the ALGORITHM, not of the benchmark's name --
+    # keying tests or requirements off the name silently breaks when a benchmark
+    # is re-specified (which is exactly what happened to ARM-MPC).
+    #   "admm"  first-order splitting: box projection is min/max, tolerant of
+    #           bf16 operands with fp32 accumulate
+    #   "ip"    interior-point: real barrier transcendentals, KKT conditioning
+    #           ~1/mu, needs fp64 or fp32 + mandatory iterative refinement
+    #   "ekf"   covariance recursion: fp32 minimum, no fp16/bf16 path in any form
+    #   "nn"    neural network inference
+    algo: str = ""
     # Once-per-call matrix-VECTOR work that cannot be warm-started: for MPC this is
     # rebuilding q and the state-dependent bounds from the new x0. It sits on the
     # critical path before iteration 1. Previously omitted entirely.
@@ -331,7 +343,51 @@ def condensed_mpc(name, n_x, n_u, N, iters, rate, note, prec="fp32", refactor=Fa
         # and triangular-solve rows (n_var/2 average, rounded up to n_var here --
         # slightly optimistic, and flagged as such).
         gemv_row_len=n_var,
-        gemv_macs_per_call=gemv_call,
+        gemv_macs_per_call=gemv_call, algo="admm",
+    )
+
+
+def sqp_rti_mpc(name, n_x, n_u, N, ip_iters, rate, note, prec="fp64"):
+    """Nonlinear MPC as actually deployed: acados SQP-RTI + HPIPM.
+
+    RE-SPECIFIED 2026-07-30 (solver-numerics audit). The previous specification --
+    60 SQP iterations of a fully-condensed QP that forms A^T A -- overstated the
+    work ~31x and matched no production stack. Deployed practice is the real-time
+    iteration scheme (Diehl et al.): ONE SQP step per sampling instant, split into
+    a preparation phase (re-linearise, form the QP) and a feedback phase (solve
+    one QP). acados defaults to partial condensing with HPIPM's block-structured
+    Riccati recursion, whose cost is O(N*(n_x+n_u)^3) per interior-point iteration
+    rather than O((N*n_u)^3) for full condensing (Frison & Diehl, IFAC 2020).
+
+    Precision: fp64 by default, because an interior-point method's KKT condition
+    number grows as 1/mu and reaches ~1e12 near convergence. fp32 requires
+    mandatory iterative refinement, which costs extra SEQUENTIAL steps. Modelling
+    this in fp32 without refinement would be a flattering assumption.
+    """
+    nb = n_x + n_u                     # stage block dimension -- the key quantity
+    # Per interior-point iteration: backward Riccati factorisation per stage is
+    # genuine matrix-matrix work, but on SMALL blocks (nb ~ 21), so tile
+    # utilisation is poor. Forward/backward substitution is matrix-vector.
+    gemm_iter = N * (nb ** 3) / 3.0
+    gemv_iter = 2 * N * nb * nb
+    # Preparation phase, once per call: dynamics Jacobians and sensitivity
+    # propagation. Cannot be warm-started -- the linearisation point moved.
+    gemm_call = N * n_x * nb * nb
+    gemv_call = 2 * N * nb * n_x
+    e = BYTES_PER_ELEM[prec]
+    persistent = e * (N * nb * nb + N * n_x * nb)
+    delta = e * (n_x + N * n_x)
+    return Benchmark(
+        name=name, kind="solver", note=note,
+        gemv_macs_per_iter=gemv_iter, gemm_macs_per_iter=gemm_iter,
+        gemm_macs_per_call=gemm_call,
+        vector_ops_per_iter=12 * N * nb,
+        transcendental_per_iter=2 * N * nb,   # IP barrier: real divides, unlike ADMM
+        scalar_ops_per_iter=150,
+        iters=ip_iters, calls_per_sec=rate, deadline_us=1e6 / rate,
+        persistent_bytes=persistent, delta_bytes=delta, prec=prec,
+        gemv_row_len=nb,
+        gemv_macs_per_call=gemv_call, algo="ip",
     )
 
 
@@ -342,14 +398,19 @@ def ekf(name, n, m, rate, note, prec="fp32"):
     (A@P@A.T, Joseph form), so the tile array is usable here. Only the Cholesky
     has limited parallelism and is counted as bandwidth-bound.
     """
+    # AUDIT CORRECTIONS (2026-07-30): the Joseph form was counted as 2*n^2*m,
+    # omitting its two DOMINANT n^3 products entirely -- (I-KH) is n^2*m to form,
+    # then (I-KH)P is n^3 and [.](I-KH)^T another n^3/2. Undercounted 2.5-3.9x.
+    # Also: F@P@F.T is 1.5n^3 not 2n^3 (the second product is symmetric),
+    # H@P@H.T is n*m^2/2 (S symmetric), and Cholesky is m^3/6 not m^3/3 (that is LU).
     gemm = (
-        2 * n * n * n          # A@P@A.T
+        1.5 * n ** 3           # F@P@F.T  (FP is n^3, (FP)F.T symmetric -> n^3/2)
         + n * n * m            # P@H.T
-        + m * m * n            # H@P@H.T
+        + n * m * m / 2.0      # H@P@H.T, S symmetric
         + n * m * m            # gain solve
-        + 2 * n * n * m        # Joseph form covariance update
+        + (n * n * m + 1.5 * n ** 3 + n * m * m + n * n * m / 2.0)   # Joseph form
     )
-    gemv = m * m * m / 3.0     # Cholesky: sequential, poor tile utilisation
+    gemv = m ** 3 / 6.0        # Cholesky: sequential, poor tile utilisation
     persistent = 4 * (3 * n * n + n * m)
     delta = 4 * (m + n)
     return Benchmark(
@@ -357,7 +418,7 @@ def ekf(name, n, m, rate, note, prec="fp32"):
         gemv_macs_per_iter=gemv, gemm_macs_per_iter=gemm,
         gemm_macs_per_call=0.0,
         vector_ops_per_iter=6 * n * n,
-        transcendental_per_iter=m, scalar_ops_per_iter=60,
+        transcendental_per_iter=m, scalar_ops_per_iter=60, algo="ekf",
         iters=1, calls_per_sec=rate, deadline_us=1e6 / rate,
         persistent_bytes=persistent, delta_bytes=delta, prec=prec,
         gemv_row_len=m,       # Cholesky of the m x m innovation covariance
@@ -375,6 +436,7 @@ def slm_decode(name, params_b, hidden, layers, seq, rate, note, prec="int8"):
         gemv_macs_per_iter=gemv, gemm_macs_per_iter=0.0, gemm_macs_per_call=0.0,
         vector_ops_per_iter=layers * hidden * 12,
         transcendental_per_iter=layers * (hidden + seq), scalar_ops_per_iter=200,
+        algo="nn",
         iters=1, calls_per_sec=rate, deadline_us=1e6 / rate,
         persistent_bytes=persistent, delta_bytes=delta, prec=prec,
         gemv_row_len=hidden,   # weight-matrix rows are long: fetch width is fine
@@ -388,7 +450,7 @@ def cnn_infer(name, gmacs, weights_mb, rate, note, prec="int8"):
         gemv_macs_per_iter=0.0, gemm_macs_per_iter=gmacs * 1e9,
         gemm_macs_per_call=0.0,
         vector_ops_per_iter=gmacs * 1e9 * 0.02,
-        transcendental_per_iter=1e5, scalar_ops_per_iter=500,
+        transcendental_per_iter=1e5, scalar_ops_per_iter=500, algo="nn",
         iters=1, calls_per_sec=rate, deadline_us=1e6 / rate,
         persistent_bytes=weights_mb * 1e6, delta_bytes=224 * 224 * 3, prec=prec,
     )
@@ -404,9 +466,13 @@ BENCHMARKS = [
     # `iters_worst` carries the cold-solve tail that a hard deadline must survive.
     condensed_mpc("QUAD-MPC",  n_x=12, n_u=4, N=20, iters=15, rate=1000,
                   note="Quadrotor MPC, 12 states, N=20, ADMM p95=15 iters (measured), 1 kHz"),
-    condensed_mpc("ARM-MPC",   n_x=14, n_u=7, N=30, iters=60, rate=500,
-                  refactor=True,
-                  note="7-DoF manipulator SQP-MPC, N=30, 500 Hz (re-factorises)"),
+    # RE-SPECIFIED 2026-07-30: acados SQP-RTI (one SQP step/tick) + HPIPM partial
+    # condensing, 15 interior-point iterations, fp64. Rate lowered 500 -> 250 Hz:
+    # published 7-DoF manipulator NMPC runs at 100-250 Hz above a 1 kHz joint loop,
+    # so 500 Hz was above deployed practice.
+    sqp_rti_mpc("ARM-MPC", n_x=14, n_u=7, N=30, ip_iters=15, rate=250,
+                note="7-DoF manipulator NMPC: acados SQP-RTI + HPIPM, 15 IP iters, "
+                     "fp64, 250 Hz"),
     # Iteration count scaled from the QUAD-MPC measurement (not independently measured).
     condensed_mpc("PWR-MPC",   n_x=4,  n_u=3, N=10, iters=12, rate=20000,
                   note="Motor-drive MPC, tiny problem, 20 kHz -- latency extreme"),

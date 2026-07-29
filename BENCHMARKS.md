@@ -1,4 +1,12 @@
-# Argmind CM — Frozen Phase-0 Benchmark Set (v1.0)
+# Argmind CM — Frozen Phase-0 Benchmark Set (v1.1)
+
+> **v1.1, 2026-07-30 — #2 ARM-MPC re-specified.** The v1.0 definition (60 SQP iterations of a
+> fully-condensed QP forming `AᵀA`) overstated the work ~23× and matched no production stack:
+> OSQP explicitly does not form `AᵀA`, and deployed nonlinear MPC uses the real-time-iteration
+> scheme — *one* SQP step per tick. Rate also lowered 500 → 250 Hz, since published 7-DoF
+> manipulator NMPC runs at 100–250 Hz above a 1 kHz joint loop. **Consequence: ARM-MPC now has
+> 24× deadline margin instead of being the binding constraint, so no solver benchmark is
+> latency-binding, and the CM-100 sizing that was justified by it must be re-run.**
 
 **Frozen 2026-07-29.** These seven workloads define what "winning" means. The go/no-go
 decision, all architecture trade-offs, and all external claims are evaluated against this
@@ -17,7 +25,7 @@ incumbent-NPU home turf (to know what we concede).
 | # | Name | Class | Definition | Rate / deadline | Why it is in the set |
 |---|---|---|---|---|---|
 | 1 | **QUAD-MPC** | solver | Quadrotor MPC, 12 states, 4 inputs, horizon N=20, condensed QP via ADMM (OSQP-style), 40 iterations, cached factorization | 1 kHz / 1000 µs | The flagship beachhead case. LTI problem → matrices fixed → pure matrix-vector inner loop |
-| 2 | **ARM-MPC** | solver | 7-DoF manipulator nonlinear SQP-MPC, 14 states, 7 inputs, N=30, 60 iterations, **re-linearizes and re-factorizes every call** | 500 Hz / 2000 µs | Hardest solver case; the re-factorization is genuine matrix-matrix work, unlike #1 |
+| 2 | **ARM-MPC** (re-spec v1.1) | solver | 7-DoF manipulator NMPC as deployed: **acados SQP-RTI — one SQP step per tick** (preparation + feedback phase), partial condensing + **HPIPM** block Riccati, 15 interior-point iterations, **fp64**. 14 states, 7 inputs, N=30 | **250 Hz** / 4000 µs | Genuine matrix-matrix work, but on small (n_x+n_u)=21 blocks at ~47% tile utilization |
 | 3 | **PWR-MPC** | solver | Motor-drive / power-electronics MPC, 4 states, 3 inputs, N=10, 25 iterations | **20 kHz** / 50 µs | Latency extreme — tests whether per-call overhead is survivable at all |
 | 4 | **EKF-24** | solver | INS/GNSS 24-state EKF, 12 measurements, Joseph-form covariance update | 1 kHz / 1000 µs | Deliberately the smallest problem — expected to be a CPU win or a tie. Defines the floor |
 | 5 | **EKF-96** | solver | Large-state estimator (SLAM-class), 96 states, 24 measurements | 200 Hz / 5000 µs | Covariance recursion is matrix-matrix → tests the tile array on solver work |
