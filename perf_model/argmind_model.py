@@ -65,7 +65,14 @@ E_OVERHEAD_MULT_BANKED = 2.0
 class ArgmindCfg:
     """One instantiation of the CM."""
     name: str
-    tile: int = 16               # systolic tile dimension (tile x tile MACs)
+    tile: int = 16               # systolic tile dimension (tile x tile_cols MACs)
+    # Second array dimension. None = square. Exists because MAC COUNT and
+    # OPERAND-REUSE DEPTH are separate knobs and the model previously conflated
+    # them: a Tm x Tn array reuses each A element Tn times and each B element Tm
+    # times, so GEMM operand traffic is (1/Tm + 1/Tn) elements per MAC, not
+    # 2/sqrt(macs). This matters because the surviving argument for a larger
+    # array is GEMM operand-fetch ENERGY, not latency.
+    tile_n: int | None = None
     freq_mhz: float = 800.0
     vector_lanes: int = 8        # fp32 lanes in the vector unit
     drain_cycles: int = 8        # pipeline fill/drain per tile pass
@@ -119,8 +126,28 @@ class ArgmindCfg:
         return E_OVERHEAD_MULT_BANKED if self.use_banked_energy else E_OVERHEAD_MULT
 
     @property
+    def tile_cols(self) -> int:
+        return self.tile if self.tile_n is None else self.tile_n
+
+    @property
     def macs(self) -> int:
-        return self.tile * self.tile
+        return self.tile * self.tile_cols
+
+    def gemm_operand_bytes_per_mac(self, prec: str) -> float:
+        """Scratchpad bytes fetched per GEMM MAC.
+
+        Output-stationary Tm x Tn tiling reads A once per column-block and B
+        once per row-block: M*K*(N/Tn) + K*N*(M/Tm) = MACs*(1/Tm + 1/Tn).
+        At FIXED MAC count Tm*Tn, (1/Tm + 1/Tn) is minimised when Tm == Tn
+        (AM-HM), so a SQUARE array is provably optimal for operand-fetch energy
+        and a rectangular one cannot buy reuse depth cheaply. This is why the
+        array-size question reduces to choosing one number.
+
+        CONSERVATIVE: assumes no operand register file below the tile. An L0
+        staging tier would cut this without adding MACs -- see the sizing note,
+        because it is the cheapest way to buy the reuse this term charges for.
+        """
+        return BYTES_PER_ELEM[prec] * (1.0 / self.tile + 1.0 / self.tile_cols)
 
     def macs_per_cycle(self, prec: str) -> float:
         """Precision scaling: int8 double-pumps, fp32 half-rate."""
@@ -272,6 +299,17 @@ class Benchmark:
     # rebuilding q and the state-dependent bounds from the new x0. It sits on the
     # critical path before iteration 1. Previously omitted entirely.
     gemv_macs_per_call: float = 0.0
+    # WORST-CASE iteration count that a hard deadline must survive: the cold /
+    # active-set-change tail, not the p95 design point. `iters` sizes typical
+    # energy; `iters_worst` sizes FEASIBILITY. Referenced in comments since v0 but
+    # never actually implemented, which let the sizing sweep be run against the
+    # typical case only -- and the typical case meets every deadline at 16 B/cycle,
+    # so it cannot size anything. 0 = not characterised.
+    iters_worst: int = 0
+
+    @property
+    def iters_wc(self) -> int:
+        return max(self.iters, self.iters_worst)
 
     @property
     def macs_per_iter(self) -> float:
@@ -283,7 +321,7 @@ class Benchmark:
 
 
 def condensed_mpc(name, n_x, n_u, N, iters, rate, note, prec="fp32", refactor=False,
-                  check_term=25):
+                  check_term=25, iters_worst=0):
     """Condensed QP solved by ADMM (OSQP-style), cached factorization.
 
     CRITICAL: every dominant operation here is matrix-VECTOR (P@x, triangular
@@ -344,10 +382,12 @@ def condensed_mpc(name, n_x, n_u, N, iters, rate, note, prec="fp32", refactor=Fa
         # slightly optimistic, and flagged as such).
         gemv_row_len=n_var,
         gemv_macs_per_call=gemv_call, algo="admm",
+        iters_worst=iters_worst,
     )
 
 
-def sqp_rti_mpc(name, n_x, n_u, N, ip_iters, rate, note, prec="fp64"):
+def sqp_rti_mpc(name, n_x, n_u, N, ip_iters, rate, note, prec="fp64",
+                iters_worst=0):
     """Nonlinear MPC as actually deployed: acados SQP-RTI + HPIPM.
 
     RE-SPECIFIED 2026-07-30 (solver-numerics audit). The previous specification --
@@ -388,6 +428,7 @@ def sqp_rti_mpc(name, n_x, n_u, N, ip_iters, rate, note, prec="fp64"):
         persistent_bytes=persistent, delta_bytes=delta, prec=prec,
         gemv_row_len=nb,
         gemv_macs_per_call=gemv_call, algo="ip",
+        iters_worst=iters_worst,
     )
 
 
@@ -419,6 +460,10 @@ def ekf(name, n, m, rate, note, prec="fp32"):
         gemm_macs_per_call=0.0,
         vector_ops_per_iter=6 * n * n,
         transcendental_per_iter=m, scalar_ops_per_iter=60, algo="ekf",
+        # The covariance recursion is a FIXED op count -- no iteration tail at
+        # all. Worst case == typical case. This is the strongest determinism
+        # story in the set and it costs nothing to claim.
+        iters_worst=1,
         iters=1, calls_per_sec=rate, deadline_us=1e6 / rate,
         persistent_bytes=persistent, delta_bytes=delta, prec=prec,
         gemv_row_len=m,       # Cholesky of the m x m innovation covariance
@@ -464,17 +509,28 @@ BENCHMARKS = [
     # iteration COLD solve. The previous assumption of 40 was ~3x too high for typical
     # warm-started operation. 15 is the p95 design point at control-loop tolerance;
     # `iters_worst` carries the cold-solve tail that a hard deadline must survive.
+    # iters_worst=74 is MEASURED: the cold / worst-tick solve on the coupled plant
+    # at eps=1e-6 (results_osqp_measured.txt: cold 73, max 74). This -- not the p95
+    # design point -- is what a hard deadline must be sized against, and it is the
+    # only thing in the current set that constrains scratchpad bandwidth at all.
     condensed_mpc("QUAD-MPC",  n_x=12, n_u=4, N=20, iters=15, rate=1000,
+                  iters_worst=74,
                   note="Quadrotor MPC, 12 states, N=20, ADMM p95=15 iters (measured), 1 kHz"),
     # RE-SPECIFIED 2026-07-30: acados SQP-RTI (one SQP step/tick) + HPIPM partial
     # condensing, 15 interior-point iterations, fp64. Rate lowered 500 -> 250 Hz:
     # published 7-DoF manipulator NMPC runs at 100-250 Hz above a 1 kHz joint loop,
     # so 500 Hz was above deployed practice.
+    # iters_worst=30: HPIPM is run with a hard max_iter, so the tail is BOUNDED BY
+    # CONFIGURATION rather than by the problem -- 2x the design point is generous.
+    # [EST], not measured.
     sqp_rti_mpc("ARM-MPC", n_x=14, n_u=7, N=30, ip_iters=15, rate=250,
+                iters_worst=30,
                 note="7-DoF manipulator NMPC: acados SQP-RTI + HPIPM, 15 IP iters, "
                      "fp64, 250 Hz"),
     # Iteration count scaled from the QUAD-MPC measurement (not independently measured).
+    # iters_worst scaled by the same 74/15 measured cold:p95 ratio -> 48. [EST]
     condensed_mpc("PWR-MPC",   n_x=4,  n_u=3, N=10, iters=12, rate=20000,
+                  iters_worst=48,
                   note="Motor-drive MPC, tiny problem, 20 kHz -- latency extreme"),
     ekf("EKF-24", n=24, m=12, rate=1000,
         note="INS/GNSS 24-state EKF, 12 measurements, 1 kHz -- smallest problem"),
@@ -562,7 +618,7 @@ def model_argmind(b: Benchmark, cfg: ArgmindCfg) -> dict:
     # GEMM amortises operand fetch over the tile dimension.
     sram_bytes = (b.gemv_macs_per_iter * b.iters * BYTES_PER_ELEM[b.prec]
                   + (b.gemm_macs_per_iter * b.iters + b.gemm_macs_per_call)
-                  * 2.0 * BYTES_PER_ELEM[b.prec] / cfg.tile)
+                  * cfg.gemm_operand_bytes_per_mac(b.prec))
     e_sram_pj_b = cfg.sram_pj_per_byte()
     e_sram = sram_bytes * e_sram_pj_b
     e_dram = bytes_moved * E_DRAM_BYTE_PJ

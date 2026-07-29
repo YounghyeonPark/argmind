@@ -48,6 +48,94 @@ Raw output: [perf_model/results_v0.txt](perf_model/results_v0.txt).
 >
 > **Action required before CM-100 is fixed: re-specify ARM-MPC (BENCHMARKS.md #2) and re-run the
 > sizing.** Neither agent could see this — one owned the benchmark, the other owned the sizing.
+>
+> ### RESOLVED (2026-07-30) — sizing re-run: **the previous recommendation was over-provisioned**
+>
+> ARM-MPC re-specified (`sqp_rti_mpc`, fp64, 250 Hz) and the sizing re-run against the corrected
+> set. Raw output: [perf_model/results_cm100_sizing.txt](perf_model/results_cm100_sizing.txt).
+> **All figures modelled-estimate, 16nm-class, ±2×, not quotable.**
+>
+> | | Previous | **REVISED** | Min viable |
+> |---|---|---|---|
+> | Scratchpad bandwidth | 128 B/cyc | **128 B/cyc** | 64 B/cyc |
+> | Scratchpad capacity | 256 KB | **128 KB** | 128 KB |
+> | MAC array | 256 | **144 (12×12)** | 64 |
+> | Core area | 0.820 mm² | **0.565 mm² (−31%)** | 0.430 mm² (−48%) |
+> | Solver energy (Σ 5 rows) | 34.21 µJ | **33.64 µJ** | 45.28 µJ |
+> | Solver perf/W | 11.9–23.6× | **14.1–22.2×** | 10.7–15.1× |
+>
+> The revised part **dominates** the old one — 31% less silicon at slightly lower energy. The old
+> point was simply off the Pareto front. Four specific answers:
+>
+> **1. The typical case sizes nothing; the cold-solve tail does.** At p95 iterations every solver
+> row meets its deadline at **16 B/cycle** (tightest margin in the whole 5×4 grid: 3.2×). A sweep
+> run that way can only ratify a configuration, never justify one — which is what the previous run
+> did. `iters_worst` (referenced in v0 comments but never implemented) is now in the model. Against
+> the **measured** cold tail (QUAD-MPC 74 iters, `results_osqp_measured.txt`) inside a 50%-of-period
+> engineering budget: 16 B/cyc misses outright (1092 µs > 1000 µs), 32 B/cyc blows the budget on
+> QUAD-MPC (560 µs > 500) and PWR-MPC (33 µs > 25), 64 B/cyc clears both (295 µs, 21 µs).
+> **64 B/cycle is the new latency floor — set by ADMM cold solves at 1 kHz/20 kHz, not by ARM-MPC.**
+> At 100% of period, 32 B/cycle would suffice; that assumption is load-bearing and is stated.
+> Binding resource: `gemv_bw` (scratchpad bandwidth) on the ADMM rows, `gemm_mac` on ARM-MPC's
+> Riccati factorisation, `dma` on SLM-DECODE.
+>
+> **2. The array is *latency*-ML-justified but *energy*-solver-justified — the repositioning in the
+> §0 note above is half wrong.** Nothing in the set needs >36 MACs to meet a deadline (VIT-TINY 36;
+> every solver row ≤16). But tile dimension **is operand-reuse depth**: a Tm×Tn array fetches
+> (1/Tm + 1/Tn) operand elements per GEMM MAC. 64→256 MACs cuts EKF-96 energy 1.59×, EKF-24 1.54×,
+> ARM-MPC 1.29×, and QUAD-MPC/PWR-MPC by exactly 1.00× (pure GEMV). **EKF is a beachhead workload,
+> not an ML one**, so "solver customers pay area for an ML feature" is not the honest story. The
+> array is an *energy* feature for matrix-matrix solver work and a *throughput* feature for ML —
+> consistent with the settled finding that our advantage is energy, not speed. Marginal return
+> collapses past 144 MACs (84 µJ/mm² for 8→12, 27 for 12→16, 8 for 16→24), hence 144.
+> *Adversarial:* growing the array buys reuse at O(T²) area for O(1/T) traffic; an **L0 operand
+> register file** buys the same traffic cut at O(T) area. The model cannot yet evaluate a tiered
+> scratchpad — highest-value model extension outstanding. If an L0 tier lands, the honest array
+> size drops back to the ML-only 36–64 MACs.
+> A **solver-only SKU is real**: 64 MACs at 0.430 mm² meets every solver deadline at worst-case
+> iterations, 48% less silicon, at 35% higher solver energy (all of it on the EKF rows). Right SKU
+> for an MPC-only socket, wrong one for state estimation. Synthesis parameter, not a second design —
+> which is what the MACIF boundary is for.
+>
+> **3. The energy case for 128 B/cycle survives at −12%, but ~80% of it is a bank-geometry bet.**
+> At 128 KB / 144 MACs: 38.05 → 33.64 µJ (−11.6%) for +0.043 mm² (+0.049 with margin). Decomposed:
+> **3.49 µJ of the 4.42 µJ is pJ/byte falling 0.884 → 0.718**, only 0.93 µJ is the shorter active
+> window. Byte *count* is identical at both widths — this is 16 banks of 8 KB being cheaper per
+> access than 8 banks of 16 KB, not a bandwidth effect. It is the same [A2] 45nm-interpolation
+> mechanism already flagged as at-risk from column gating, and **the same bet as the 128 KB energy
+> claim, so the two are correlated rather than independent evidence.** If the Phase-1 compiler
+> datasheet shows flat pJ/byte vs access width, drop to the 64 B/cycle floor.
+> ARM-MPC's move to fp64 halves the MACs a given width can feed (8 B/element), but its 4000 µs
+> deadline is 16× QUAD-MPC's against ~2× the op count, so it still does not bind — even 16 B/cycle
+> lands at 1059 µs. **The fp64 consequence that does matter is the datapath, not the bandwidth:**
+> the model gets fp64 from a 0.125 rate factor on a bf16 array, which is a modelling convenience.
+> A real 1/8-rate fp64 path needs multi-pass decomposition (unmodelled sequencer/accumulator work)
+> or a separate narrow fp64 FMA cluster (**area currently zero in the budget — largest un-costed
+> item, and it sits exactly on the MACIF boundary**).
+>
+> **4. 128 KB suffices — and is better on area, energy and leakage.** Corrected footprints:
+> QUAD-MPC 100 KB (was 150), EKF-96 117 KB, ARM-MPC 172 KB (was 861), PWR-MPC 8 KB, EKF-24 8 KB.
+> The determinism claim is *no DRAM in the control loop*, so it must be tested per co-resident
+> workload, not per benchmark: drone node (QUAD-MPC + EKF-24, 1 kHz) = 108 KB **fits**; drive node
+> (PWR-MPC + EKF-24, 20 kHz) = 16 KB **fits**; manipulator (ARM-MPC + EKF-96, 250 Hz) = 289 KB
+> **fits neither 128 KB nor 256 KB**. So 256 KB does not extend the claim to the case that fails —
+> it only reduces the streamed fraction of a workload with 24× deadline margin and 0.04 GB/s of
+> streaming demand. 256→128 KB: **−0.116 mm² SRAM (−0.134 with margin), pJ/byte 0.930 → 0.718,
+> solver energy −10%, leakage halved** (1.04 → 0.52 mW @85 °C, 4.18 → 2.09 @125 °C). The leakage
+> halving matters most: ungated perf/W on the low-duty rows is set almost entirely by static power.
+> 64 KB is rejected — QUAD-MPC's 100 KB set would stream every 1 ms tick, which is the claim we sell.
+>
+> **Unchanged:** bandwidth-first over MAC-first (ADMM rows are still GEMV-bound and still bind on
+> scratchpad bandwidth, just at a lower absolute width); ≥5× kill criterion (11–22×); zero-copy +
+> residency; **power gating is a requirement, not an optimisation** — and more load-bearing now,
+> since a smaller core makes the 15 mW static [EST] a larger fraction of the total. SLM-DECODE
+> still misses by 3.4× on external bandwidth (~22 GB/s needed, 6.4 provisioned): a provisioning
+> requirement to state, not a design flaw.
+>
+> **Process note:** the error that caused this re-run was structurally the same as the one that
+> caused the last one — a sizing decision resting on a single benchmark row nobody had audited.
+> Two tests now encode the fix: worst-case iteration tails must exist *and must bind somewhere*,
+> and GEMM energy must track reuse depth rather than MAC count (32 tests).
 
 > ## ⚠ SUPERSEDED (kept for the audit trail) — correction notice, solver-numerics audit
 > **The latency figures in §1 below are wrong and are being regenerated.** An independent audit
@@ -121,8 +209,12 @@ area budget is in an array that batch-1 solver code leaves idle.
 
 ## 3. Deadline misses — both are provisioning problems, not architecture failures
 
-- **ARM-MPC** (nonlinear SQP, 500 Hz): 3745 µs vs a 2000 µs deadline. Fixed by bandwidth
-  (1574 µs at 256 B/cyc). This is the benchmark that justifies the wide scratchpad.
+- ~~**ARM-MPC** (nonlinear SQP, 500 Hz): 3745 µs vs a 2000 µs deadline. Fixed by bandwidth
+  (1574 µs at 256 B/cyc). This is the benchmark that justifies the wide scratchpad.~~
+  **SUPERSEDED — see §0.** Re-specified as acados SQP-RTI + HPIPM at 250 Hz: 178 µs vs 4000 µs,
+  22× margin, meets its deadline at every bandwidth in the sweep including 16 B/cycle. It justifies
+  nothing. The wide scratchpad is now argued from the *measured ADMM cold-solve tail* (64 B/cycle
+  floor) plus a bank-geometry energy bet, not from this row.
 - **SLM-DECODE**: 176 ms/token vs 50 ms, and **DRAM-bandwidth-bound** — needs ~22 GB/s
   sustained but the baseline config has 6.4 GB/s. Batch-1 LLM decode is a *memory-bandwidth*
   product, not a MAC product. Either provision a wide external port (multi-channel LPDDR5) or

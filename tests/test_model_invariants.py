@@ -124,6 +124,59 @@ def test_algorithm_precision_floors_are_respected():
                 f"{b.name}: EKF covariance in {b.prec} — no fp16/bf16 path exists")
 
 
+def test_gemm_energy_tracks_REUSE_DEPTH_not_mac_count():
+    """ERROR 10: MAC count and operand-reuse depth were the same number.
+
+    GEMM operand traffic is (1/Tm + 1/Tn) bytes-elements per MAC. The model used
+    2/tile, which is only correct for a square array and made "more MACs" and
+    "more reuse" indistinguishable -- so the energy benefit of a bigger array got
+    attributed to the MACs. A 16x8 array has HALF the MACs of 16x16 but keeps
+    reuse depth 16 in one dimension, so its GEMM energy must sit strictly between
+    16x16 and 8x8, nowhere near either.
+    """
+    ekf = by_name("EKF-96")
+    e = {}
+    for label, tile, tile_n in (("16x16", 16, 16), ("16x8", 16, 8), ("8x8", 8, 8)):
+        c = M.ArgmindCfg(name=label, tile=tile, tile_n=tile_n)
+        e[label] = M.model_argmind(ekf, c)["energy_uj"]
+    assert e["16x16"] < e["16x8"] < e["8x8"], (
+        f"rectangular array energy {e} is not between the two square ones — "
+        "reuse depth and MAC count have been conflated again")
+    # And the analytic claim that makes the array-size question one-dimensional:
+    # at fixed MAC count, square minimises operand fetch.
+    sq = M.ArgmindCfg(name="s", tile=12, tile_n=12).gemm_operand_bytes_per_mac("fp32")
+    for tm, tn in ((16, 9), (18, 8), (24, 6), (36, 4)):
+        rect = M.ArgmindCfg(name="r", tile=tm,
+                            tile_n=tn).gemm_operand_bytes_per_mac("fp32")
+        assert sq < rect, (
+            f"{tm}x{tn} fetches fewer operand bytes/MAC than 12x12 at equal MAC "
+            "count — the AM-HM argument for a square array is broken")
+
+
+def test_worst_case_iteration_tail_is_characterised_and_binding():
+    """The typical case cannot size a hard-real-time part.
+
+    Every solver row must carry a worst-case iteration count, and it must be the
+    one used for feasibility. At p95 iterations EVERY solver row meets its
+    deadline at 16 B/cycle, so a sweep run on typical iterations reports no
+    binding constraint at all and would justify any configuration whatsoever.
+    """
+    for b in solvers():
+        assert b.iters_worst >= b.iters, (
+            f"{b.name}: no worst-case iteration tail (iters_worst="
+            f"{b.iters_worst} < iters={b.iters}) — feasibility is being sized "
+            "against the typical case")
+    # The tail must actually bind somewhere, or it is decoration.
+    import dataclasses
+    quad = by_name("QUAD-MPC")
+    narrow = M.ArgmindCfg(name="n", tile=16, scratchpad_bw_bpc=16, n_banks=2)
+    wc = M.model_argmind(dataclasses.replace(quad, iters=quad.iters_wc), narrow)
+    typ = M.model_argmind(quad, narrow)
+    assert typ["latency_us"] <= quad.deadline_us < wc["latency_us"], (
+        "the worst-case tail does not change any feasibility verdict at the "
+        "narrowest bandwidth — check it is being applied")
+
+
 def test_e4_constraint_rows_match_a_real_osqp_instance():
     """ERROR 4: two-sided bounds counted as two rows.
 
