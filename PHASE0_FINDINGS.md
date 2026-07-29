@@ -1,0 +1,548 @@
+# Argmind CM — Phase 0 Findings (interim, 2026-07-29)
+
+Inputs: [BENCHMARKS.md](BENCHMARKS.md) v1.0 run through
+[perf_model/argmind_model.py](perf_model/argmind_model.py) v0, plus a competitive teardown of
+four commercial NPU IP families and one measured CIM macro.
+
+**All model numbers are first-order estimates (±2×) and must not be quoted externally.**
+Raw output: [perf_model/results_v0.txt](perf_model/results_v0.txt).
+
+---
+
+> ## ⚠ §0 — CORRECTED HEADLINE (2026-07-29, after three audits). Supersedes §1.
+>
+> All corrections applied and regenerated from one run of the current model:
+>
+> | | Corrected | Previously claimed |
+> |---|---|---|
+> | Solver perf/W | **9.5–21.3×** (modelled, ±2×) | 17–25× |
+> | Solver latency | **0.6–2.9× — below parity on 3 of 5** | 1.2–2.9× |
+> | Deadlines met | 5 of 7 (SLM-DECODE, and ARM-MPC now passes) | 5 of 7 |
+> | CPU also meets deadline | **5 of 5 solver benchmarks** | 3 of 5 |
+>
+> **The kill criterion (≥5×) still passes on every solver benchmark, and bandwidth-first is
+> confirmed and now costed. Everything else has moved.** Three corrections drove it: the phantom
+> transcendental term, `P@x` double-counted plus A treated as dense, and the scratchpad energy
+> constant proving 2.3× too low. The honest one-line summary is now: *the CPU meets every solver
+> deadline we benchmark, we are at or below its latency on three of five, and our case is
+> ~10× energy and a bounded worst case.*
+>
+> ### The cross-agent contradiction: the CM-100 sizing is justified by a broken benchmark
+>
+> The scratchpad costing chose **128 B/cycle** and **256 MACs** on the grounds that "ARM-MPC is
+> the *only* latency-binding benchmark" (margin 0.96× at 64 B/cycle → 1.60× at 128; and 64 MACs
+> misses it while 144 is the true minimum). Independently, the op-count audit found ARM-MPC
+> **overstated ~31×**: it charged `n_con·n_var²` to form `AᵀA`, which OSQP explicitly does not do
+> and no production MPC stack does either, and it assumed 60 SQP iterations when deployed practice
+> (acados `SQP_RTI`) is **one SQP step per tick** with partial condensing and HPIPM.
+>
+> With just the `AᵀA` term removed, **ARM-MPC now meets its deadline at 64 B/cycle** (1179 µs vs
+> 2000 µs). So:
+>
+> - **No solver benchmark is latency-binding any more.** The justification for 128 B/cycle over
+>   64 collapses, and with it the justification for 256 MACs over 144.
+> - The remaining honest case for 128 B/cycle is **energy** (−15% solver energy for +0.042 mm²,
+>   the area of 45 MACs), not deadline feasibility. That is a real but much weaker argument.
+> - Re-specifying ARM-MPC as acados SQP-RTI would cut it a further ~31×, making the array
+>   **entirely ML-justified**. Say so internally rather than implying solvers need it.
+>
+> **Action required before CM-100 is fixed: re-specify ARM-MPC (BENCHMARKS.md #2) and re-run the
+> sizing.** Neither agent could see this — one owned the benchmark, the other owned the sizing.
+
+> ## ⚠ SUPERSEDED (kept for the audit trail) — correction notice, solver-numerics audit
+> **The latency figures in §1 below are wrong and are being regenerated.** An independent audit
+> of the operation counts found seven errors, the largest being a **phantom transcendental
+> term**: the model charged ADMM's box projection `Π_[l,u]` as 2·n_con divide/sqrt operations,
+> when it is min/max — zero divides. Because the CPU model charges 12 cycles per transcendental
+> against the CM's 4/vector-lane, ~640 fake divides per iteration penalized the CPU ~3× harder
+> than the CM. **That single error accounted for the entire apparent latency advantage.**
+> Corrected, QUAD-MPC goes from 1.47× to **0.92× — the CM is slower than the fastest CPU
+> baseline.** So the true range is roughly 0.9–3.2×, not 1.2–2.9×, and on the flagship benchmark
+> we are at parity or behind.
+>
+> **perf/W is robust** (17.0 → 15.7 on QUAD-MPC): it is a ratio of two quantities that both
+> scale linearly with the op count, so op-count errors cancel there and do *not* cancel in
+> latency or deadline feasibility. **The ≥5× kill criterion and the bandwidth-first conclusion
+> both survive; every latency-derived claim must be re-derived.** This is the third
+> flattering-assumption catch this phase (after undercounted overhead energy and GEMV-modelled-
+> as-GEMM), which is evidence the review discipline works — and a reason to trust no number here
+> that has not survived an adversarial read.
+
+## 1. Headline: the premise survives, but for a different reason than assumed
+
+| | Result |
+|---|---|
+| **Kill criterion (≥5× perf/W on solvers)** | **PASS, 5/5** — modelled 17–25× perf/W |
+| **Latency advantage** | **Much weaker than assumed: 1.2–2.9×**, not the 5–10× the thesis implied |
+| **Deadlines met at baseline config** | 5 of 7 (ARM-MPC and SLM-DECODE miss) |
+
+The original thesis said Argmind wins because iterative solvers are *latency*-bound and a
+tightly-coupled accelerator makes iterations faster. The model says the durable advantage is
+**energy, not speed**: ~20× perf/W but often under 2× wall-clock. On three of five solver
+benchmarks a CPU already meets the deadline unaided.
+
+**Repositioning this implies:** lead with *energy per solve*, *determinism*, and *CPU
+offload/consolidation* (freeing the application core), not with "the CPU can't do this." For
+most beachhead problems the CPU can — it just costs 20× the energy and gives up determinism.
+
+---
+
+## 2. The finding that changes the microarchitecture
+
+Splitting matrix-vector from matrix-matrix work exposed an error in the v0 assumptions. ADMM's
+inner loop (`P@x`, cached triangular solves, `A@x`, `Aᵀ@y`) is **all matrix-vector at batch 1**:
+every MAC consumes a fresh matrix element with no reuse, so throughput is capped by scratchpad
+bandwidth, not by MAC count.
+
+**Tile size is nearly irrelevant to solver latency:**
+
+| Benchmark | 256 MACs | 1024 MACs | 4096 MACs |
+|---|---|---|---|
+| QUAD-MPC | 431.8 µs | 431.8 µs | 431.8 µs |
+| PWR-MPC | 32.3 µs | 32.3 µs | 32.3 µs |
+| EKF-96 (matrix-matrix) | 36.2 µs | 16.5 µs | 11.7 µs |
+
+A **16× increase in MACs buys literally zero** on the flagship benchmark.
+
+**Scratchpad bandwidth is the knob that works:**
+
+| Benchmark | 16 B/cyc | 64 B/cyc | 256 B/cyc |
+|---|---|---|---|
+| QUAD-MPC | 1511.8 µs | 431.8 µs | **161.8 µs** |
+| ARM-MPC | 12427.3 µs | 3745.1 µs | **1574.5 µs** (meets deadline) |
+| PWR-MPC | 92.0 µs | 32.3 µs | **17.3 µs** |
+
+> **Architecture decision for Phase 1: a wide, heavily-banked scratchpad with a modest MAC
+> array — the opposite of an NPU's provisioning.** Sizing the array like an NPU would spend
+> most of the area budget on MACs that solver workloads cannot use.
+
+This also explains structurally why NPU IP cannot be retargeted at this workload: their whole
+area budget is in an array that batch-1 solver code leaves idle.
+
+## 3. Deadline misses — both are provisioning problems, not architecture failures
+
+- **ARM-MPC** (nonlinear SQP, 500 Hz): 3745 µs vs a 2000 µs deadline. Fixed by bandwidth
+  (1574 µs at 256 B/cyc). This is the benchmark that justifies the wide scratchpad.
+- **SLM-DECODE**: 176 ms/token vs 50 ms, and **DRAM-bandwidth-bound** — needs ~22 GB/s
+  sustained but the baseline config has 6.4 GB/s. Batch-1 LLM decode is a *memory-bandwidth*
+  product, not a MAC product. Either provision a wide external port (multi-channel LPDDR5) or
+  scope the ML claim to models whose weights fit resident in on-chip SRAM. **Do not claim
+  general edge-LLM capability until this is resolved.**
+
+## 4. Zero-copy / residency ablation (§3.2.1/3.2.2 of the plan)
+
+T1 (zero-copy + residency) vs T0 (copy-based offload), latency ratio:
+
+| Benchmark | T1 advantage | Note |
+|---|---|---|
+| EKF-24 | **13.3×** | Tiny problem: overhead *is* the workload. 2.1 µs vs 27.6 µs |
+| PWR-MPC | **1.9×** | T0 **misses** the 50 µs deadline (60.3 µs); T1 meets it at 32.3 µs |
+| EKF-96 | 2.2× | |
+| QUAD-MPC, ARM-MPC, ML rows | 1.1× | Larger/slower workloads amortize the overhead |
+
+**Verdict: the zero-copy/residency work is justified, but specifically for small problems at
+high rates** — exactly the embedded-control beachhead. It is what makes the 20 kHz motor-drive
+socket possible at all, and it is worth ~13× on the smallest workloads. On large problems it is
+nearly irrelevant, so it should be sold as a *real-time-control* feature, not a general one.
+
+## 5. Competitive teardown — the gaps are wider than expected
+
+Sourced from vendor product briefs and technical overviews (full citations at bottom).
+
+| | Data-dependent control flow | Call-to-call residency | Zero-copy / coherency | FP matrix throughput |
+|---|---|---|---|---|
+| **Arm Ethos-U85** | **No** — statically compiled command stream (Vela); no scalar unit, no branching; host MCU runs anything else | **No** — 29–267 KB is fixed-function buffering; all registers/memories cleared at reset | **No** — AXI manager + APB only; no ACE-Lite, no CHI, no SMMU | **None — INT8 weights only** |
+| **Arm Ethos-N78** | No | Unclear (384 KB–4 MB SRAM, no published contract) | **Yes, partially** — AXI4 + ACE-5-Lite + Arm SMMU (the only one) | INT8/INT16 only |
+| **Synopsys/MIPS ARC NPX6** | **No** — fixed conv + tensor accelerator; arbitrary control flow needs a paired ARC VPX DSP | Not published | Partial — MMUs in L1/L2 controllers; coherency protocol not published | Optional BF16/FP16 unit |
+| **Ceva NeuPro-M** | **Closest** — programmable VPU per engine, hardware task-flow control, "no redispatch per layer" — but graph flow control, **not** convergence-loop control | Not published | Not published | **FP32: 32 MACs vs 4K INT8 (~1%)** |
+| **Cadence Neo NPU** | **No** — requires a *second licensed core* (Tensilica NeuroEdge 130) as control processor | Not published (no SRAM size disclosed at all) | Not published | INT4–INT16 + FP16 |
+
+**Three structural gaps confirmed:**
+
+1. **Every commercial NPU IP compiles control flow away offline.** None publishes a mechanism
+   for the accelerator itself to decide "iterate again" from a computed value. Cadence's answer
+   costs a second IP license. This is the moat, and it is real.
+2. **Nobody has usable FP matrix throughput.** Ethos-U85 is INT8-weights-only; Ceva's FP32 path
+   is ~1% of its INT8 rate. **Incumbents cannot add solver support in software** — they lack the
+   arithmetic. This is stronger than the plan previously assumed.
+3. **Batch-1 / small-tensor latency is universally unpublished**, and Ethos-U85 is architecturally
+   N=1-only in its feature-map formats while still quoting only large-tensor throughput. There is
+   no public number any incumbent can be held to on small matrices — the regime solvers live in.
+   Publishing credible small-matrix latency data is therefore an uncontested marketing position.
+
+**Calibration warning for our own claims:** the only *measured-silicon* efficiency reference is
+MediaTek's NVE (ISSCC 2024): **23.2 TOPS/W at 12-bit in 3 nm**. Vendor claims run far above it
+(Ceva 350 TOPS/W "at 3nm", Synopsys 30 TOPS/W at 5nm) but are pre-silicon estimates at low or
+unstated precision, usually with sparsity. **Benchmark against measured numbers, publish our own
+with node and precision attached, and never compare against marketing figures.**
+
+### 5.1 Addendum (2026-07-29): control-domain incumbents — the row the teardown owed
+
+The teardown above covered **NPU IP**. It did not cover the products actually occupying the
+socket the beachhead targets. Desk research only; no measurement. Ranked by threat.
+
+**Headline, and it is a downgrade to the moat claim.** Against NPU IP the three gaps in §5 are
+structural. Against the *control-domain* incumbents they are not the same gaps, and against CPU
+matrix extensions **three of our four differentiators do not exist at all** — because SME2 and
+RVV are *inside the CPU*, they get data-dependent control flow, coherent zero-copy access to
+application memory, and call-to-call cache residency **for free, by construction.** Against
+SME2/RVV our only defensible claims are **energy per solve, deterministic worst-case latency,
+and core offload.** The sequencer, the zero-copy path and the generation-tag residency model are
+differentiators against accelerators, not against CPUs.
+
+#### The capability matrix
+
+| | In-fabric data-dependent control flow (decide "iterate again" from a computed residual, no host) | Call-to-call residency with an explicit contract | Zero-copy / coherent host memory | FP32 matrix or vector throughput | Threat |
+|---|---|---|---|---|---|
+| **Four NPU IP families** (§5) | **No** — all compile control flow away offline; Cadence needs a second licensed core | Not published, or fixed-function buffering | Ethos-N78 only (ACE5-Lite + SMMU) | **None usable** (INT8-weights-only; Ceva FP32 ≈1% of INT8) | 5 |
+| **Infineon AURIX TC4x PPU** (Synopsys ARC EV7x/EV71) | **Yes** — executes its own instruction stream in its own ISA; "does not execute TriCore instructions and vice versa" | VCCM exists; **size and inter-invocation persistence contract not published** | **Not published**; DMA mentioned, coherency with TriCore memory not stated | Vector FPU is an **option** in the EV7x family (IEEE-754, single or half precision); **whether Infineon enabled it in TC4x is not published**. No GFLOP/s, MAC/cycle, or PPU clock published anywhere | **2** |
+| **TI C2000 CLA** | **Yes** — has its own conditional delayed branch (`MBCNDD`) | Inherent, not contractual — an all-SRAM MCU has nothing to evict | Message RAM only, and **unidirectional** (CPU→CLA: CLA read-only; CLA→CPU: CPU read-only). 16-bit CLA address bus | **FP32 scalar**, 200 MHz on TMS320F28379D. **No FLOP/s figure published by TI** | 4 |
+| **Arm SME2** | **Yes — it is the CPU** | **Yes — the CPU's caches, implicitly** | **Yes — by construction** | **Measured: 2008 GFLOP/s FP32 FMOPA**, SVL 512-bit, Apple M4 P-core cluster, 3 nm class | **1** |
+| **RISC-V RVV 1.0** | **Yes — it is the CPU** | Yes — the CPU's caches | Yes — by construction | FP32 vector supported; **no matrix/outer-product primitive ratified**; **no measured FP32 GFLOP/s found in public sources** | 3 |
+
+#### 1. Infineon AURIX TC4x PPU — the biggest unhedged risk in the Phase-0 case
+
+| Item | Published | Class |
+|---|---|---|
+| Identity | Implemented as a vector processor **based on the Synopsys DesignWare ARC EV71 / EV7x architecture**; 32-bit RISC scalar core + SIMD vector unit; runs code compiled for the ARC EV71 ISA | secondary ([emmtrix](https://www.emmtrix.com/wiki/Infineon_AURIX_TC4x_Parallel_Processing_Unit_(PPU))), corroborated by the existence of a [Synopsys MetaWare Toolkit for AURIX TC4x](https://mips.com/processor-solutions/sw-metaware/) |
+| Vector width | **128-bit or 256-bit** in production TC4x; 512-bit noted for certain pre-production models. ARC EV7x family is published as a "512-bit wide vector DSP" per VPU, configurable for 8-, 16- or 32-bit operations | secondary + [Synopsys/MIPS EV7x page](https://mips.com/processor-solutions/ev-processors/ev7x-vision-processors/) (vendor) |
+| **Precision — the decisive cell** | EV7x offers an **optional** "IEEE 754-compliant vector floating point unit… single precision or half precision operations." **Whether the FP option is instantiated in the TC4x PPU is NOT PUBLISHED.** Infineon-facing material describes 8/16/32-bit *element widths* without naming float support | vendor (family) + **not published** (this part) |
+| VCCM size | **Not published** — neither Infineon nor Synopsys states a capacity | **not published** |
+| Persistence between invocations | **Not published.** No mechanism comparable to generation tags / dirty masks is described | **not published** |
+| Host memory model | **Not published** whether the PPU has coherent access to TriCore memory | **not published** |
+| Throughput | **No GFLOP/s, no MAC/cycle, no PPU clock, no process node published** | **not published** |
+| "up to 78× vs a single TriCore 1.8 core" | Benchmark **not identified**; the secondary source attributes it to a master's thesis and an Infineon presentation, neither accessible. No node, no precision, no workload. **Recorded as UNCOMPARABLE. Do not use this figure in any document, including as a competitor number.** | vendor claim via secondary |
+| Programming | Synopsys ARC MetaWare Toolkit; an AUTOSAR Complex Device Driver plus a "PPU dispatcher" runtime; [MathWorks Embedded Coder generates PPU code](https://www.mathworks.com/help/ecoder/infineonaurix/ug/soc-ifx-tc4x-ppu.html). EV7x family toolchain supports OpenVX, OpenCL C, ONNX/TF/Caffe import | vendor |
+| Safety | The EV7xFS variants are marketed as "ASIL B, ASIL C, or ASIL D Ready" with lockstep options | vendor |
+
+**Two consequences, pulling in opposite directions.**
+
+*Against us:* the PPU is a scalar core + SIMD vector unit + closely-coupled memory running its own
+instruction stream. That is not an absence of arithmetic and not an absence of a control plane —
+it is a small version of our own architecture, already qualified, already in an automotive MCU,
+already supported by Embedded Coder. **If Infineon enabled the FP option, the PPU can in
+principle run an ADMM inner loop with the convergence test executing in-fabric today, and the
+only thing missing is a solver library — i.e. a software release.** Note also that a vision VPU
+is provisioned to stream pixels, so it is plausibly *also* bandwidth-first, which makes it a
+worse comparison for us than an NPU rather than a better one.
+
+*For us:* Infineon **licensed third-party vector-compute IP** (Synopsys ARC) for exactly this
+socket rather than building it. That is the strongest evidence available that an automotive MCU
+vendor will license outside compute IP for control acceleration — directly relevant to
+CUSTOMER_DISCOVERY.md falsifier F3, and it is also a reason to treat Synopsys/MIPS ARC as an
+incumbent competitor for the *license*, not just for the socket.
+
+#### 2. TI C2000 CLA — small, but it voids two of our differentiators in MCU class
+
+| Item | Published | Class |
+|---|---|---|
+| Arithmetic | "fully-programmable independent **32-bit floating-point** hardware accelerator," "designed to execute real-time control algorithms in parallel with the C28x CPU" | [vendor](https://software-dl.ti.com/C2000/docs/cla_software_dev_guide/intro.html) |
+| Clock | **200 MHz** — TMS320F28379D is dual 200 MHz C28x + **dual 200 MHz CLA**, 800 MIPS device total, with FPU and TMU | [vendor](https://www.ti.com/product/TMS320F28379D) |
+| Throughput | **No FLOP/s figure published.** No vector unit is published; the CLA is a scalar FP datapath | **not published** |
+| Control flow | **Supported** — own conditional delayed branch `MBCNDD`; Type 2 adds a background task, software/peripheral triggering and uninterruptible sections | [vendor](https://software-dl.ti.com/C2000/docs/cla_software_dev_guide/features.html) |
+| Memory model | Memory blocks are device-family dependent and allocated to the CLA by the CPU; two dedicated **unidirectional** message RAMs; **16-bit CLA address bus** vs 32-bit pointers on C28x; shared globals must be declared in the C28x source; C support is restricted | [vendor FAQ](https://software-dl.ti.com/C2000/docs/cla_software_dev_guide/faq.html) |
+| MPC / solver benchmark from TI | **None found.** Third-party peer-reviewed work runs FCS-MPC on an F28379D ([MDPI 2023](https://www.mdpi.com/2227-7390/11/21/4553)), but finite-control-set MPC is exhaustive enumeration over a switching set, **not a QP solve**, so it is not comparable to BENCHMARKS.md #1–#5 | **not published** (TI); peer-reviewed (third party, non-comparable workload) |
+
+*Bound, clearly labelled as our inference and not TI's spec:* at the published 200 MHz, a scalar
+FP datapath cannot reach the GFLOP/s range at any plausible issue width — three orders of
+magnitude below measured M4 SME2 FP32. So the CLA is not a throughput threat.
+
+**But it is a strategic warning.** In MCU class there is no DRAM and no cache, so **our zero-copy
+and residency differentiators have nothing to bite on** — everything is already SRAM-resident and
+there is no cache maintenance to eliminate. PLAN.md §3.2.1 already concedes T2 needs an SMMU
+absent in MCU-class parts; this extends the concession to T1 and to §3.2.2. **The 20 kHz
+PWR-MPC socket, where §4 showed zero-copy is worth 1.9× and decides deadline feasibility, is
+exactly the socket most likely to be MCU-class.** That tension needs resolving before the
+zero-copy work is used to justify the motor-drive pitch.
+
+#### 3. Arm SME2 — the top threat, and the only measured matrix-extension silicon we have
+
+**Measured (third-party, independent of Arm and Apple):** Apple M4, SVL **512-bit**, ZA tile
+4096 B, **3 nm class** (Apple's own product statements; per-unit power **not published**):
+
+| Instruction | Precision | P-core cluster block | E-core cluster block |
+|---|---|---|---|
+| FMOPA (outer product) | **FP32** | **2008 GFLOP/s** | 357 GFLOP/s |
+| FMOPA | **FP64** | 503 GFLOP/s | 89 GFLOP/s |
+| FMOPA | FP16 → FP32 accum | 2010 GOPS | 358 GOPS |
+| BFMOPA | BF16 → FP32 accum | 2011 GOPS | 357 GOPS |
+| Streaming-SVE (non-outer-product) | FP32 | ≈250 GFLOP/s (and only 31 GFLOP/s via a naive vector formulation) | — |
+
+Sources: [Hello SME microbenchmarks, Univ. Jena](https://scalable.uni-jena.de/opt/sme/micro.html)
+and [independent M4 SME exploration](https://github.com/tzakharko/m4-sme-exploration/blob/main/reports/01-sme-overview.md).
+Both are **measured silicon**, precision and vector length stated, **node stated only as "3 nm
+class," power per unit not published.**
+
+Three details that matter more than the headline number:
+
+1. **The SME block is shared per CPU cluster, not per core** — one large block for the four
+   M4 P-cores, a smaller one for the six E-cores. So 2 TFLOP/s is a *cluster* figure, and
+   worst-case latency for one thread depends on what the other cores in the cluster are doing.
+   **This is the strongest determinism argument we have against SME2, and it is architectural
+   rather than incidental.**
+2. The gap between the outer-product path (2008 GFLOP/s) and the streaming-vector path
+   (≈250 GFLOP/s), and the further collapse to 31 GFLOP/s on a naive formulation, means SME2
+   performance is **highly dependent on hand-tuned kernels**. Our codegen-versus-their-library
+   argument is real here — but it is a software-ecosystem argument, not a hardware one.
+3. Reduced precision buys nothing: the source notes "the performance of instructions with
+   reduced precision is underwhelming" because halved instruction throughput offsets the wider
+   dot products.
+
+**Shipping Arm-designed silicon.** The Lumex CSS platform's **C1-Ultra, C1-Premium, C1-Pro and
+C1-Nano are SME2-enabled, optimized for 3 nm**, with SoCs expected in mobile devices during 2026
+([CNX](https://www.cnx-software.com/2025/09/10/arm-introduces-lumex-platform-with-sme2-enabled-c1-cpu-for-edge-ai-mali-g1-gpu/),
+[Arm C1-Ultra](https://www.arm.com/products/silicon-ip-cpu/c1-ultra)). Arm's uplift figures —
+"5x faster AI performance," "4.7x lower latency for speech-based workloads," "2.8x faster audio
+generation," C1-Ultra "25% single-thread vs Cortex-X925" — are **vendor claims with workloads
+only loosely named and no precision attached to the multipliers.** Not usable as comparison
+points.
+
+**Availability where our customers live is the real finding.** Cortex-A320 (the small Armv9.2-A
+edge/IoT core) is published with **SVE2**, and Arm does not state SME2 for it
+([Arm](https://www.arm.com/products/silicon-ip-cpu/cortex-a/cortex-a320)). For the automotive
+line, the reviewed Cortex-A720AE and Cortex-A78AE product pages **do not state SME2 support**
+([A720AE](https://www.arm.com/products/silicon-ip-cpu/cortex-a/cortex-a720ae)) — record that as
+**not published, not as absent**, since SME is optional in Armv9.2-A. Practically:
+**a robotics, industrial or automotive designer cannot buy an SME2 automotive-grade or
+industrial part today.** The SME2 threat currently exists in Apple silicon and 2026 mobile SoCs.
+**That is a timing window, not a moat**, and Arm closing it is a routine roadmap item rather than
+a research problem.
+
+#### 4. RISC-V RVV — weaker near-term, but it does not protect the solver claim
+
+- RVV 1.0 is a **vector** extension with FP32 support and **no matrix/outer-product primitive**.
+- Shipping, buyable today: **SpacemiT K1 / X60**, 8-core, RVV 1.0 with **256-bit** vector
+  registers, on a ~$100-class Banana Pi BPI-F3 ([BananaPi docs](https://docs.banana-pi.org/en/BPI-F3/SpacemiT_K1)).
+  The "2.0 TOPS" AI figure is a **vendor claim with precision and node not stated** — not
+  comparable. SiFive X280 is published at VLEN=512.
+- **Measured FP32 GFLOP/s for any RVV silicon: not found in public sources.** Phoronix's RVV
+  review of a 16-core SpacemiT K3 publishes no FLOP/s and notes the SoC "doesn't expose any power
+  metrics under Linux at this time"
+  ([Phoronix](https://www.phoronix.com/review/risc-v-rvv-vector-benchmarks)). This is a hole in
+  our own competitive picture, not just theirs.
+- **Matrix extension status: not ratified as of 2026**, and fragmented. Two task groups —
+  **IME** (reuses the existing V registers, adds no new architected matrix state, HPC-focused)
+  and **VME** — with RISC-V's own TSC minutes recording concern about "ecosystem fragmentation"
+  and that "RISC-V is already behind schedule for matrix extensions"
+  ([TSC 2026-02-04](https://riscv.atlassian.net/wiki/spaces/TSCX/pages/1100742657/2026-02-04+TSC+Meeting),
+  [IME TG](https://github.com/riscv-admin/integrated-matrix-extension)). Andes implements an
+  `amm` instruction per IME "Option E."
+
+**The uncomfortable nuance.** Per §2, our solver inner loop is GEMV and **bandwidth**-bound; a
+plain vector unit is the correct shape for GEMV and no matrix extension is required. So RVV's
+missing matrix extension protects the **ML/GEMM** half of our pitch and **does not protect the
+solver half at all.** An RVV core with sufficient load bandwidth is a legitimate solver
+competitor today, and like SME2 it inherits control flow, coherency and cache residency for free.
+
+#### Structural gap or feature gap — the verdict, per competitor
+
+| Competitor | Gap we exploit | Kind | Closable in a software release? |
+|---|---|---|---|
+| Four NPU IP families | No FP matrix arithmetic; no control plane | **Structural** | **No — needs new silicon.** §5 conclusion stands unchanged |
+| **AURIX TC4x PPU** | Possibly none. Contingent entirely on whether the EV7x FP option is instantiated | **Feature gap at most — possibly no gap** | **Yes, if FP is present** — it needs a solver library, not silicon. Our residual claims (coherent host path, explicit residency contract, bandwidth provisioning) are all *not published* for the PPU, so we cannot currently claim them as gaps either |
+| TI C2000 CLA | FP32 throughput (scalar, 200 MHz) | **Structural in our favour on arithmetic** | No — but irrelevant, because in MCU class **our zero-copy and residency differentiators are void**, and the CLA already has in-fabric control flow |
+| **Arm SME2** | Perf/W; deterministic WCET under cluster contention; core offload. **Nothing else** | **Not a moat — a timing window** | **N/A** — SME2 needs no retargeting, only libraries. Bringing SME2 to automotive-grade cores needs new silicon, but that is Arm's routine roadmap |
+| RISC-V RVV | ML/GEMM throughput (no matrix primitive, spec late and fragmented). **On solvers, effectively nothing** | **Feature/timing on ML; no structural gap on solvers** | Matrix ops need new silicon *and* an unratified spec; GEMV needs neither |
+
+#### What this does to the three "settled" claims
+
+1. **"Incumbents can't retarget in software."** True for NPU IP. **Not established for the
+   PPU** (contingent on the FP option), and **false for SME2 and RVV** — they need no
+   retargeting at all, only a tuned solver library. The claim must always carry the scope
+   qualifier "commercial NPU IP."
+2. **"Batch-1 / small-matrix latency is universally unpublished."** Survives and *widens*: no
+   FLOP/s of any kind is published for the PPU or the CLA, and no measured FP32 figure exists
+   publicly for RVV silicon. Publishing credible small-matrix latency and energy data across
+   PPU / CLA / SME2 / RVV is a stronger uncontested position than §5 claimed.
+3. **The moat narrows to three things:** energy per solve, deterministic worst-case latency
+   (strengthened by the cluster-shared SME block), and the codegen/software ecosystem. **Not
+   arithmetic, not control flow, not coherency.** Positioning, patents and the whitepaper should
+   all be re-aimed accordingly.
+
+#### The eval-board experiment that settles F4 — specified in advance
+
+Desk research cannot resolve the decisive cells: the PPU's FP option, any FLOP/s figure for PPU
+or CLA, measured RVV FP32, and every energy number. This specifies the experiment so the
+purchase decision is about cost, not scope.
+
+| Platform | Part / board | Gating item | Cost class |
+|---|---|---|---|
+| PPU (threat #2) | An Infineon AURIX TC4x application kit | **The Synopsys ARC MetaWare Toolkit for AURIX is the gate, not the board** — a licensed toolchain. Establish access and price *before* buying hardware | board low; toolchain **unknown, possibly prohibitive** |
+| CLA | LAUNCHXL-F28379D (dual 200 MHz C28x + dual 200 MHz CLA) | none — free toolchain (Code Composer Studio) | very low |
+| SME2 | Any Apple M-series Mac. **No automotive/industrial SME2 part exists to buy**, so this is the only measurable SME2 silicon; results are an *architectural* upper bound, and Apple remains a non-target for integration | none | low if already owned |
+| RVV | Banana Pi BPI-F3 (SpacemiT K1 / X60, RVV 1.0, VLEN 256) | none | very low |
+
+Measurements each platform must produce, using the *same* OSQP/acados problem formulations as
+BENCHMARKS.md #1–#5:
+
+1. **Wall-clock per solve and per iteration** — median and, separately, worst case over ≥10⁵
+   invocations.
+2. **Energy per solve measured at the rail**, not estimated from datasheet TDP. Report the
+   measurement point and method.
+3. **Achieved FP32 GFLOP/s on the GEMV inner kernel**, against that platform's published or
+   measured peak — this is the number that tells us whether their provisioning is
+   bandwidth-limited the way ours is.
+4. **Sustained load bandwidth in B/cycle** into the compute unit's local memory (VCCM, CLA data
+   RAM, L1). §2 says this is the only knob that matters; we need theirs.
+5. **Can the convergence test run without host involvement?** If yes, measure it. If no, measure
+   the per-iteration host round-trip cost — that is the size of our sequencer advantage, in
+   microseconds, on real silicon.
+6. **Worst-case vs median latency with an adversarial co-runner** pinned to the same
+   cluster/core complex. This is the determinism claim, and for SME2 it is the *only* claim.
+7. **PPU only, and decisive: does an FP path exist at all?** Compile an FP32 kernel with
+   MetaWare and check whether it vectorizes to the FPU or falls back to scalar/emulation.
+
+**F4 triggers if** the PPU — or an SME2/RVV part in the same power class — runs BENCHMARKS.md
+#1–#3 within **2×** of our modelled Argmind energy per solve. Given the model's stated ±2×
+uncertainty, a result inside 2× must be read as "no measurable advantage," not as a narrow win.
+
+**Two honest caveats to state in whatever we publish from this.** (a) Node is **not published**
+for TC4x, F28379D or the SpacemiT K1, and is only "3 nm class" for M4 — so cross-platform
+energy comparisons cannot be node-normalised and must be reported with nodes attached and the
+limitation stated in the same sentence. (b) These same boards **also produce the measured CPU
+baselines that PLAN.md §10 lists as Phase-0 critical-path item 1**, where the modelled CPU
+efficiency assumption is the largest error source in every ratio in this document. **One
+purchase closes two critical-path items.** That is the argument to hand the founder.
+
+---
+
+## 6. Revised go/no-go recommendation: **GO, with three amendments**
+
+1. **Re-provision the architecture**: bandwidth-first (wide banked scratchpad, modest array).
+   Model the area/power cost of 256 B/cycle banking before committing.
+2. **Re-position the pitch**: energy per solve + determinism + core offload. Drop implied
+   large latency wins; on many problems the CPU meets the deadline and we must say so.
+3. **Scope the ML claim**: resident-weight models only until an external-bandwidth story exists.
+   Keep VIT-TINY-class claims (32× perf/W, meets deadline); defer general edge-LLM claims.
+
+**Highest-value next work, in order:**
+1. Measure the real CPU baselines (OSQP/acados on A55- and A78-class hardware). The modelled
+   CPU efficiency assumption is the largest error source in every ratio above.
+2. Cost the wide-scratchpad banking in area and power — the whole architecture now rests on it.
+3. Verify the four "not published" competitor cells via evaluation NDAs or customer interviews
+   before relying on them in collateral.
+
+---
+
+## 7. First MEASURED data — real OSQP on QUAD-MPC (2026-07-29)
+
+Harness: [perf_model/measure_osqp_baseline.py](perf_model/measure_osqp_baseline.py); output in
+[perf_model/results_osqp_measured.txt](perf_model/results_osqp_measured.txt). Run on x86, so
+**timings do not transfer to Arm — but iteration counts and problem structure do**, and both
+were previously assumed rather than measured.
+
+### Two model inputs were wrong
+
+**1. Constraint rows overcounted 2×.** OSQP expresses a two-sided bound `l ≤ Ax ≤ u` as *one*
+row; the model counted two (`2*n_var + 2*N*n_x`). Real problem: **320 rows, not 640.** This
+inflated the `A@x` and `Aᵀ@y` terms in every solver benchmark. Fixed.
+
+**2. Iteration count ~3× too high.** The model assumed 40 ADMM iterations. Measured, with
+warm-starting from the previous tick:
+
+Final measured numbers, on the **physically coupled** plant (rotor-thrust inputs through the
+mixing matrix, plus drag and gyroscopic coupling — dense condensed Hessian, `nnz(P)`=6400, 100%):
+
+| Scenario | tol | cold | p50 | p95 | p99 | max |
+|---|---|---|---|---|---|---|
+| settle (hover, then hold) | 1e-3 | 60 | 1 | 4 | 7 | 60 |
+| settle | 1e-6 | 73 | 12 | 17 | 20 | 73 |
+| **aggressive** (feasible setpoint steps + gusts) | **1e-3** | 60 | **6** | **7** | 9 | 60 |
+| aggressive | 1e-6 | 73 | 20 | 21 | 22 | 74 |
+
+So `iters=15` is defensible as a design point between 1e-3 (p95=7) and 1e-6 (p95=21) accuracy —
+but the **cold-solve figure of 60–73 is the real-time requirement**, because any mode change,
+fault recovery, or reference discontinuity invalidates the warm start and the deadline must
+survive the next tick.
+
+**This measurement took three passes to get right, and the first two were wrong in ways that
+would have flattered us.** Recording all three, because the pattern is the point:
+
+1. *Quantized counts.* OSQP's default `check_termination=25` reports iterations in multiples of
+   25. The first run showed a suspiciously flat "25 iterations" across four tolerance decades.
+   Fixed by setting `check_termination=1` when the count is the measurand.
+2. *Decoupled plant.* The first quadrotor model applied inputs one-per-state with diagonal
+   inertia and no drag, which **decouples into four independent SISO channels** — the condensed
+   Hessian came out 4-block-diagonal at 25% density (`nnz(P)`=1600), and nobody would solve that
+   as one 80-variable QP. Caught by the solver-numerics audit, not by us. Fixed by using the
+   four rotor thrusts through the mixing matrix.
+3. *Infeasible scenario.* The first "aggressive" scenario used ±3 m setpoint steps against a
+   100 ms horizon and ±2 N per-rotor authority — physically unreachable, so OSQP was driven
+   primal-infeasible and reported p95 ≈ 900 iterations that measured nothing but struggle.
+   Caught by checking solver status rather than just reading the numbers. Fixed by making the
+   scenario reachable; the harness now flags and discards any run with non-`solved` ticks.
+
+### What this does to the conclusions
+
+Per-solve work drops ~4–6× (2× constraints × ~3× iterations). Both sides of the comparison
+scale together, so **perf/W is essentially unchanged at 17–25×** — that conclusion is robust.
+But absolute latencies fall, and the consequence is uncomfortable:
+
+> **QUAD-MPC: modelled CM 90 µs vs CPU 133 µs against a 1000 µs deadline.** The CPU meets the
+> flagship benchmark with 7.5× margin. On this benchmark the product case is *entirely* energy
+> and determinism — there is no latency story to tell at all.
+
+### But the determinism argument got stronger
+
+The measurement also quantified CPU **variance**: iteration count swings from p50=12 to max=60
+on the same problem, a 5× spread driven by disturbances and active-set changes. A hard
+real-time system must be provisioned for the worst case, not the median. That is the honest,
+measured form of the determinism pitch — not "we are faster," but "our worst case is bounded and
+close to our average, and a CPU's is not." Worth building the Phase-1 story around, and worth
+measuring properly on Arm.
+
+Also: with only ~15 iterations per call rather than 40, fixed per-call overhead is a larger
+fraction of each solve, which **strengthens** the zero-copy/residency case (§4) rather than
+weakening it.
+
+### Still not measured
+
+Arm latency, Arm energy, achieved SIMD efficiency on Arm, and iteration counts for the
+nonlinear SQP case (ARM-MPC) — where real deployments often use a real-time-iteration scheme of
+*one* QP solve per tick, which if true would make the model's 60 badly wrong. Flagged for the
+solver-numerics audit.
+
+## Sources
+
+Model: this repo. Teardown:
+[Ethos-U85 product brief](https://armkeil.blob.core.windows.net/developer/Files/pdf/datasheets/arm-ethos-u85-product-brief.pdf),
+[Ethos-U85 technical overview](https://developer.arm.com/documentation/102684/latest/),
+[Ethos-N78 product brief](https://armkeil.blob.core.windows.net/developer/Files/pdf/ML%20on%20Arm/arm-ethos-n78-product-brief.pdf),
+[ARC NPX6](https://mips.com/processor-solutions/arc-npx6/),
+[Synopsys NPX6 announcement](https://news.synopsys.com/2022-04-19-Synopsys-Introduces-Industrys-Highest-Performance-Neural-Processor-IP),
+[Ceva NeuPro-M](https://www.ceva-ip.com/product/ceva-neupro-m/),
+[NeuPro-M precision table (Embedded Vision Summit 2022)](https://www.edge-ai-vision.com/wp-content/uploads/2022/05/E2W07_Siegel_CEVA_2022.pdf),
+[Cadence Neo NPU](https://www.cadence.com/en_US/home/tools/silicon-solutions/ai-ip-platform/neo-npu.html),
+[Tensilica NeuroEdge 130](https://www.cadence.com/en_US/home/tools/silicon-solutions/ai-ip-platform/tensilica-neuroedge-ai-co-processor.html),
+[MediaTek NVE, ISSCC 2024](https://ieeexplore.ieee.org/document/10454482/).
+
+§5.1 control-domain addendum — **AURIX TC4x PPU:**
+[emmtrix wiki, PPU (secondary)](https://www.emmtrix.com/wiki/Infineon_AURIX_TC4x_Parallel_Processing_Unit_(PPU)) ·
+[Infineon PPU product page (vendor)](https://www.infineon.com/product-information/new-ppu-simd-vector-dsp) ·
+[AURIX TC4x product page (vendor)](https://www.infineon.com/products/microcontroller/32-bit-tricore/aurix-tc4x) ·
+[MetaWare Toolkit for AURIX TC4x (Synopsys/MIPS)](https://mips.com/processor-solutions/sw-metaware/) ·
+[ARC EV7x vision processors — vector FPU option, 512-bit vector DSP (vendor)](https://mips.com/processor-solutions/ev-processors/ev7x-vision-processors/) ·
+[EV7xFS functional-safety variants (vendor)](https://www.synopsys.com/designware-ip/processor-solutions/arc-evfs.html) ·
+[Embedded Coder PPU support (MathWorks)](https://www.mathworks.com/help/ecoder/infineonaurix/ug/soc-ifx-tc4x-ppu.html).
+**TI C2000 CLA:**
+[CLA software guide — overview (vendor)](https://software-dl.ti.com/C2000/docs/cla_software_dev_guide/intro.html) ·
+[device-specific CLA features / Type 0-1-2 (vendor)](https://software-dl.ti.com/C2000/docs/cla_software_dev_guide/features.html) ·
+[CLA FAQ — memory model, message RAM, C restrictions (vendor)](https://software-dl.ti.com/C2000/docs/cla_software_dev_guide/faq.html) ·
+[TMS320F28379D — 200 MHz dual C28x + dual CLA (vendor)](https://www.ti.com/product/TMS320F28379D) ·
+[LAUNCHXL-F28379D (vendor)](https://www.ti.com/tool/LAUNCHXL-F28379D) ·
+[FCS-MPC on F28379D (peer-reviewed third party; non-comparable workload)](https://www.mdpi.com/2227-7390/11/21/4553).
+**Arm SME2:**
+[Hello SME microbenchmarks, Univ. Jena — measured M4 (third party)](https://scalable.uni-jena.de/opt/sme/micro.html) ·
+[Hello SME paper, arXiv 2409.18779](https://arxiv.org/pdf/2409.18779) ·
+[M4 SME exploration — cluster-shared SME block, measured (third party)](https://github.com/tzakharko/m4-sme-exploration/blob/main/reports/01-sme-overview.md) ·
+[Arm SME introduction, part 1 (vendor)](https://developer.arm.com/community/arm-community-blogs/b/architectures-and-processors-blog/posts/arm-scalable-matrix-extension-introduction) ·
+[Lumex platform / SME2-enabled C1 cores (secondary, reporting Arm claims)](https://www.cnx-software.com/2025/09/10/arm-introduces-lumex-platform-with-sme2-enabled-c1-cpu-for-edge-ai-mali-g1-gpu/) ·
+[Arm C1-Ultra (vendor)](https://www.arm.com/products/silicon-ip-cpu/c1-ultra) ·
+[Cortex-A320 — SVE2, SME2 not stated (vendor)](https://www.arm.com/products/silicon-ip-cpu/cortex-a/cortex-a320) ·
+[Cortex-A720AE — SME2 not stated (vendor)](https://www.arm.com/products/silicon-ip-cpu/cortex-a/cortex-a720ae).
+**RISC-V RVV:**
+[SpacemiT K1 / X60 brief, RVV 1.0 VLEN 256 (BananaPi)](https://docs.banana-pi.org/en/BPI-F3/SpacemiT_K1) ·
+[Phoronix RVV review — no FLOP/s, no power metrics exposed](https://www.phoronix.com/review/risc-v-rvv-vector-benchmarks) ·
+[RISC-V TSC minutes 2026-02-04 — IME/VME fragmentation, matrix extensions behind schedule](https://riscv.atlassian.net/wiki/spaces/TSCX/pages/1100742657/2026-02-04+TSC+Meeting) ·
+[Integrated Matrix Extension TG (RISC-V)](https://github.com/riscv-admin/integrated-matrix-extension) ·
+[IME ratification plan](https://riscv.atlassian.net/wiki/spaces/IMEX/pages/598867969/IME+Ratification+Plan).

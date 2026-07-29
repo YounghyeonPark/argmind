@@ -1,0 +1,20 @@
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+*.egg-info/
+.venv/
+venv/
+
+# Editor / OS
+.vscode/
+.idea/
+Thumbs.db
+desktop.ini
+~$*
+
+# NOTE: perf_model/results_*.txt are deliberately NOT ignored. They are the
+# generated evidence behind claims in PHASE0_FINDINGS.md, and versioning them is
+# how we see a number change and find out what changed it. That traceability is
+# the whole reason this repo exists.

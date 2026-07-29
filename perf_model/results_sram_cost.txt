@@ -1,0 +1,182 @@
+======================================================================================================
+ARGMIND CM — SCRATCHPAD BANKING COST MODEL
+16nm-class, MODELLED ESTIMATE +/-2x, NOT QUOTABLE EXTERNALLY
+======================================================================================================
+
+Bitcell 0.070 um^2 [A1 cited]. Energy vs macro size/width from a 45nm
+published table [A2 cited], scaled to 16nm by 0.30x [ESTIMATED].
+Wire energy from 0.099 pJ/bit/mm at 45nm [A3 cited], halved for 16nm [EST].
+
+------------------------------------------------------------------------------------------------------
+1. AREA vs BANKING (256 KB unless noted; single-port 6T HD cell)
+------------------------------------------------------------------------------------------------------
+CALIBRATION CHECK against [A4] measured 16nm 6T-SP macro = 8.1 Mb/mm^2:
+   16 KB x  64b macro alone:  8.07 Mb/mm^2 (array eff 56.5%)  target ~8.1 / 57%
+   32 KB x  64b macro alone:  8.71 Mb/mm^2 (array eff 61.0%)  target ~8.1 / 57%
+   32 KB x 128b macro alone:  8.46 Mb/mm^2 (array eff 59.2%)  target ~8.1 / 57%
+   64 KB x 128b macro alone:  8.05 Mb/mm^2 (array eff 56.3%)  target ~8.1 / 57%
+
+config                       bank  row   col  mux  fld   macro   ctrl   TOTAL    eff  Mb/mm2  extent
+                               KB /fld  /fld               mm2    mm2     mm2      %              mm
+----------------------------------------------------------------------------------------------------
+64 B/cyc,  4 banks x 16B       64  256  1024    8    2   0.270  0.010   0.280   52.4    7.49    0.52
+64 B/cyc,  8 banks x  8B       32  256  1024   16    1   0.257  0.020   0.277   52.9    7.56    0.51
+64 B/cyc, 16 banks x  4B       16  256   512   16    1   0.272  0.040   0.312   47.1    6.73    0.52
+128 B/cyc,  8 banks x 16B      32  256  1024    8    1   0.264  0.020   0.284   51.6    7.37    0.51
+128 B/cyc, 16 banks x  8B      16  256   512    8    1   0.279  0.040   0.319   46.0    6.57    0.53
+128 B/cyc, 32 banks x  4B       8  256   256    8    1   0.309  0.080   0.389   37.7    5.39    0.56
+256 B/cyc,  8 banks x 32B      32  256  1024    4    1   0.279  0.020   0.299   49.1    7.02    0.53
+256 B/cyc, 16 banks x 16B      16  256   512    4    1   0.294  0.040   0.334   43.9    6.27    0.54
+256 B/cyc, 32 banks x  8B       8  256   256    4    1   0.325  0.080   0.405   36.2    5.17    0.57
+256 B/cyc, 64 banks x  4B       4  256   128    4    1   0.387  0.160   0.547   26.8    3.83    0.62
+128 B/cyc, 128KB 8x16B         16  256   512    4    1   0.147  0.020   0.167   43.9    6.27    0.38
+128 B/cyc, 512KB 8x16B         64  256  1024    8    2   0.540  0.020   0.560   52.4    7.49    0.73
+
+  Bitcell-limited density at 16nm = 14.3 Mb/mm^2. A large hero macro
+  reaches ~80% of that [A5]; nothing here does, because the 800 MHz
+  256-row bitline limit forbids the long bitlines that buy that density.
+
+  Small-macro penalty, measured on this model (the thing the task asked
+  us not to assume away):
+      2 banks x   128 KB : 0.268 mm2, array eff 54.7%, 7.82 Mb/mm2
+      4 banks x    64 KB : 0.280 mm2, array eff 52.4%, 7.49 Mb/mm2
+      8 banks x    32 KB : 0.284 mm2, array eff 51.6%, 7.37 Mb/mm2
+     16 banks x    16 KB : 0.334 mm2, array eff 43.9%, 6.27 Mb/mm2
+     32 banks x     8 KB : 0.405 mm2, array eff 36.2%, 5.17 Mb/mm2
+     64 banks x     4 KB : 0.547 mm2, array eff 26.8%, 3.83 Mb/mm2
+
+  If the licensee CANNOT route the read bus over the macros (macro
+  blockage to top metal, or a flow that forbids it):
+    64 B/cyc,  8 banks x  8B   0.277 -> 0.305 mm2 (+10%, channel 0.028 mm2)
+    128 B/cyc, 16 banks x  8B  0.319 -> 0.378 mm2 (+18%, channel 0.058 mm2)
+    256 B/cyc, 32 banks x  8B  0.405 -> 0.531 mm2 (+31%, channel 0.126 mm2)
+
+  If 800 MHz + licensee timing margin forces the high-current cell
+  (0.105 um^2 [EST]) instead of the HD cell:
+    128 B/cyc, 16 banks x  8B  0.319 -> 0.419 mm2 (+31%)
+    256 B/cyc, 32 banks x  8B  0.405 -> 0.511 mm2 (+26%)
+
+------------------------------------------------------------------------------------------------------
+2. WHAT THE SAME AREA BUYS IN MACs  (the decision this all turns on)
+------------------------------------------------------------------------------------------------------
+    256 MACs (bf16 mult / fp32 accum) : 0.240 mm2   |   int8-only: 0.056 mm2
+    512 MACs (bf16 mult / fp32 accum) : 0.479 mm2   |   int8-only: 0.112 mm2
+   1024 MACs (bf16 mult / fp32 accum) : 0.958 mm2   |   int8-only: 0.224 mm2
+   4096 MACs (bf16 mult / fp32 accum) : 3.834 mm2   |   int8-only: 0.895 mm2
+
+  Going 64 -> 128 B/cycle costs +0.042 mm2 (+15%)  = 45 bf16 MACs
+  Going 64 -> 256 B/cycle costs +0.128 mm2 (+46%)  = 137 bf16 MACs
+  For reference 256 -> 1024 MACs costs +0.719 mm2 and buys ZERO on
+  batch-1 GEMV (settled finding, PHASE0_FINDINGS.md).
+
+  Multi-porting instead of banking: 8T dual-port cell is ~2.1x the 6T
+  single-port area [A4 cited]. Two read ports on 256 KB via a DP cell:
+    ~0.582 mm2 for 2x8B/bank = 128 B/cyc, vs 0.319 mm2 for 16 single-port banks.
+    -> BANKING WINS ON AREA BY ~2x. Multi-porting is also worse on
+       energy (longer bitlines, more per-access periphery) and on
+       timing. Decision: bank, never multi-port. Confidence: high.
+
+------------------------------------------------------------------------------------------------------
+3. ENERGY PER BYTE vs BANKING — does E_SRAM_BYTE_PJ = 0.40 survive?
+------------------------------------------------------------------------------------------------------
+config                      macro45  macro16    wire    mux   TOTAL  vs 0.40  leak mW
+                               pJ/B     pJ/B    pJ/B   pJ/B    pJ/B               85C
+-------------------------------------------------------------------------------------
+64 B/cyc,  4 banks x 16B       3.76    1.127   0.214  0.060   1.400    3.50x     0.72
+64 B/cyc,  8 banks x  8B       2.91    0.873   0.210  0.060   1.143    2.86x     0.83
+64 B/cyc, 16 banks x  4B       2.18    0.654   0.214  0.060   0.928    2.32x     1.04  <-- EXTRAPOLATED, do not believe
+128 B/cyc,  8 banks x 16B      2.40    0.720   0.212  0.060   0.992    2.48x     0.83
+128 B/cyc, 16 banks x  8B      2.18    0.654   0.216  0.060   0.930    2.33x     1.04
+128 B/cyc, 32 banks x  4B      1.59    0.478   0.225  0.060   0.763    1.91x     1.47  <-- EXTRAPOLATED, do not believe
+256 B/cyc,  8 banks x 32B      1.76    0.528   0.216  0.060   0.804    2.01x     0.83
+256 B/cyc, 16 banks x 16B      1.78    0.535   0.221  0.060   0.816    2.04x     1.04
+256 B/cyc, 32 banks x  8B      1.59    0.478   0.229  0.060   0.767    1.92x     1.47
+256 B/cyc, 64 banks x  4B      1.05    0.316   0.244  0.060   0.621    1.55x     2.33  <-- EXTRAPOLATED, do not believe
+128 B/cyc, 128KB 8x16B         1.78    0.535   0.173  0.060   0.769    1.92x     0.41
+128 B/cyc, 512KB 8x16B         3.76    1.127   0.278  0.060   1.464    3.66x     1.66
+
+  VALIDITY LIMIT: rows marked EXTRAPOLATED have a bank word narrower than
+  64 bits, below which no published energy data exists. The model clamps
+  and therefore keeps predicting ever-cheaper bytes; physically pJ/byte
+  must turn back UP as per-access fixed costs stop amortising. DESIGN RULE:
+  bank word >= 64 bits, i.e. bank count <= (bytes/cycle)/8.
+
+  READ THIS CAREFULLY — the naive intuition in the task prompt is WRONG:
+  macro-internal energy per byte FALLS with more banks (shorter bitlines,
+  fewer rows precharged) and FALLS with wider per-bank words (fixed decode
+  amortised over more bits). [A2] is unambiguous on both.
+  What RISES with bandwidth is the DISTRIBUTION network: a physically
+  larger scratchpad region and a wider bus mean more wire energy per byte.
+  That term is absent from the current model, and at 16nm it is comparable
+  to the macro read itself.
+
+------------------------------------------------------------------------------------------------------
+4. DELIVERED vs PEAK BANDWIDTH — short GEMV rows (fp32, 4 B/elem)
+------------------------------------------------------------------------------------------------------
+workload                           bw64            bw128            bw256
+                            naive   seg      naive   seg      naive   seg
+-------------------------------------------------------------------------
+PWR-MPC   n_var=30          60       64     120      128     120      256
+QUAD-MPC  n_var=80          64       64     107      128     160      256
+ARM-MPC   n_var=210         60       64     120      128     210      256
+EKF-24    n=24              48       64      96      128      96      256
+EKF-96    n=96              64       64     128      128     192      256
+SLM row   n=2048            64       64     128      128     256      256
+
+  'naive' = one dot product per fetch beat; the tail beat is wasted.
+  'seg'   = segmented reduction: one beat may straddle two output rows.
+  Without segmented reduction, 256 B/cycle delivers as little as 47% of
+  peak on PWR-MPC and 62% on QUAD-MPC. The model's bandwidth sweep
+  assumes 100%. SEGMENTED REDUCTION IS A REQUIRED FEATURE, not an
+  optimisation — without it, roughly a third of the bandwidth you paid
+  area and power for is unreachable on the beachhead workload.
+
+------------------------------------------------------------------------------------------------------
+5. BANK CONFLICTS — naive A.T@y column walk (fraction of peak achieved)
+------------------------------------------------------------------------------------------------------
+workload                    8bx8B     16bx8B     32bx8B    16bx16B    32bx16B
+-----------------------------------------------------------------------------
+PWR-MPC   n_var=30           100%       100%       100%       100%       100%
+QUAD-MPC  n_var=80            12%        12%        12%        25%        25%
+ARM-MPC   n_var=210          100%       100%       100%       100%       100%
+EKF-24    n=24                25%        25%        25%        50%        50%
+EKF-96    n=96                12%         6%         6%        12%        12%
+SLM row   n=2048              12%         6%         3%         6%         3%
+
+  Sequential row reads (P@x, A@x, cached triangular solve) are
+  CONFLICT-FREE BY CONSTRUCTION with address-interleaved banks — the
+  dominant solver pattern is fine, which is the good news.
+  A.T@y walked as columns is NOT: on QUAD-MPC (n_var=80, 320 B stride)
+  a 32-bank x 8B organisation lands on 4 of 32 banks -> 12.5% of peak.
+  FIX IS FREE AND IN SOFTWARE: A.T@y = sum_i A[i,:].T * y_i is
+  row-sequential. Cost is one n_var-length fp32 accumulator (320 B for
+  QUAD-MPC, 840 B for ARM-MPC) held in the vector RF, not a transposed
+  copy of A. This is a CODEGEN OBLIGATION to write down in the MACIF /
+  codegen contract, and a reason the number of banks should not be a
+  power of two that divides common matrix strides. Prefer XOR-swizzled
+  bank indexing as belt-and-braces (deterministic, statically known).
+
+======================================================================================================
+6. RECOMMENDED CM-100 BASELINE
+======================================================================================================
+  Scratchpad : 256 KB, 16 single-port banks x 8 B/cycle = 128 B/cycle
+               256 rows x 512 cols, 8:1 col mux, 16 KB/bank
+  MAC array  : 256 MACs (16x16), bf16/fp16 mult + fp32 accumulate,
+               int8 double-pumped, fp32 by 2-pass decomposition
+  Vector unit: 16 fp32 lanes (up from 8: past ~128 B/cycle the ADMM
+               projection/transcendental work becomes the co-bottleneck)
+  Frequency  : 800 MHz
+
+  Scratchpad area      0.319 mm2  (6.6 Mb/mm2, 46% array efficiency)
+  MAC array area       0.240 mm2
+  Vector unit          0.009 mm2  [EST 2.2k gates/lane]
+  Sequencer + descr.   0.045 mm2  [EST]
+  DMA + AXI/ACE-Lite   0.070 mm2  [EST]
+  misc (CSR, MBIST..)  0.030 mm2  [EST]
+  ------------------------------------
+  Subtotal             0.713 mm2
+  +15% top-level route/CTS/margin      -> 0.820 mm2 TOTAL [EST]
+
+  Scratchpad read energy 0.93 pJ/byte  (vs 0.40 assumed = 2.3x)
+  Scratchpad leakage     1.04 mW @85C, 4.18 mW @125C
+

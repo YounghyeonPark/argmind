@@ -1,0 +1,53 @@
+============================================================================================
+MEASURED OSQP BASELINE — QUAD-MPC (BENCHMARKS.md #1)
+============================================================================================
+Host: x86_64 (this machine). TIMES DO NOT TRANSFER TO Arm — iteration
+counts and problem structure do. Compare only the iteration counts to the model.
+
+PROBLEM STRUCTURE
+  decision variables (N*n_u)      : 80
+  constraint ROWS, real OSQP form : 320   (input box 80 + state box 240)
+  constraint rows assumed by model: 640   (2*n_var + 2*N*n_x)
+  -> model overcounts constraints by 2.0x
+     Cause: OSQP expresses a two-sided bound l<=Ax<=u as ONE row; the model
+     counts two. This inflates the A@x and A.T@y terms in every solver row.
+
+  nnz(P)=6400  nnz(A_con)=8776  density(P)=1.00   [COUPLED plant, correct]
+  nnz(P)=1600  nnz(A_con)=2328  density(P)=0.25   [decoupled plant, FLAWED v1]
+  The first harness version used inputs [thrust,tau_x,tau_y,tau_z] with a
+  diagonal inertia and no drag, which decouples into 4 independent SISO
+  channels -> 4-block-diagonal Hessian at 25% density. Nobody solves that as
+  one 80-var QP. Fixed: inputs are now the 4 rotor thrusts through the mixing
+  matrix, plus drag and gyroscopic coupling. Both are measured below.
+
+ITERATION COUNTS   [check_termination=1, exact]
+     plant    scenario      tol  cold   p50   p95   p99   max   mean   status
+   coupled      settle    1e-03    60     1     4     7    60    1.7   solved
+   coupled      settle    1e-06    73    12    17    20    73   12.9   solved
+   coupled  aggressive    1e-03    60     6     7     9    60    6.3   solved
+   coupled  aggressive    1e-06    73    20    21    22    74   19.8   solved
+
+ decoupled      settle    1e-03    56     2     4    11    56    2.6   solved
+ decoupled      settle    1e-06    70    16    18    24    70   15.8   solved
+ decoupled  aggressive    1e-03    56     9    11    11    57    9.3   solved
+ decoupled  aggressive    1e-06    70    23    24    25    71   22.9   solved
+
+  'cold' = first solve, no warm start.
+  'settle' = return to hover then hold -- the EASIEST warm-start case.
+  'aggressive' = reference steps + disturbances forcing active-set changes;
+  this is the distribution a hard real-time deadline must be sized against,
+  and the tail (p99/max), not the median, is what determines feasibility.
+  Default OSQP settings would report all of these quantised to multiples of 25.
+
+TIMING ON THIS x86 HOST (reference only — NOT an Arm baseline)
+  solve time p50 369.6 us   p95 419.8 us   max 1179.5 us
+  per-iteration  14.78 us/iter at eps=1e-3
+  1 kHz deadline (1000 us) met on 100% of ticks
+
+============================================================================================
+WHAT THIS CHANGES
+============================================================================================
+  Anything above is measurement, not modelling. Two model inputs are
+  now testable rather than assumed: the iteration count and the constraint
+  row count. See the table above for whether 40 iterations was right.
+  Still NOT measured: Arm latency, Arm energy, achieved SIMD efficiency.

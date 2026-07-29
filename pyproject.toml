@@ -1,0 +1,21 @@
+[project]
+name = "argmind"
+version = "0.0.0"
+description = "Argmind CM — Phase 0 performance modelling and benchmark harness"
+requires-python = ">=3.12"
+
+# Phase 0 needs only these. The RTL flow (Verilator/cocotb) is Phase 2 and is
+# blocked on a Linux environment — see TESTING.md.
+dependencies = ["numpy>=2.0", "scipy>=1.14", "osqp>=1.0"]
+
+[project.optional-dependencies]
+dev = ["pytest>=8", "hypothesis>=6", "ruff>=0.6"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q --strict-markers --strict-config"
+filterwarnings = ["error::DeprecationWarning"]
+
+[tool.ruff]
+line-length = 90
+target-version = "py312"
