@@ -14,7 +14,13 @@ dev = ["pytest>=8", "hypothesis>=6", "ruff>=0.6"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-q --strict-markers --strict-config"
-filterwarnings = ["error::DeprecationWarning"]
+filterwarnings = [
+    "error::DeprecationWarning",
+    # Upstream notice that osqp will change its `raise_error` default. We check
+    # `res.info.status` explicitly on every solve, so the change is not a hazard
+    # for us -- but revisit when pinning a newer osqp.
+    "ignore:The default value of raise_error:PendingDeprecationWarning",
+]
 
 [tool.ruff]
 line-length = 90
