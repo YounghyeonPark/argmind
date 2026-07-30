@@ -567,6 +567,27 @@ ceiling, but available now, portable to any foundry, deterministic, and verifiab
 
 ### 7.1 Open-source distribution & adoption strategy (GitHub)
 
+> ## ⛔ HOLD — do not make any repository public until the filing question is settled
+>
+> Added 2026-07-30. **Publication is irreversible and is prior art against our own later
+> patent filings.** Apache-2.0 additionally grants patent rights in the contributed code. The
+> mechanisms this plan intends to publish now exist in concrete form and are exactly the ones
+> worth claiming: generation-tag call-to-call residency, the descriptor format plus
+> multi-template hardware generator, the MACIF precision-declaration contract, and
+> sequencer↔datapath convergence-loop control.
+>
+> Getting the order wrong cannot be undone — there is no way to un-publish prior art. Getting it
+> right costs a provisional filing fee and some weeks of delay.
+>
+> **Gate:** every repo in the table below stays private until [IP_STRATEGY.md](IP_STRATEGY.md)
+> records, per mechanism, either (a) a filing made or deliberately forgone, or (b) a finding that
+> it is not novel and therefore free to publish. Note the live prior-art risk on the sequencer
+> claim: the AURIX TC4x PPU is a licensed Synopsys ARC EV7x — scalar core + SIMD vector unit +
+> closely-coupled memory with its own instruction stream — which may already read on it
+> (PHASE0_FINDINGS §5.1).
+>
+> This hold does **not** block writing the code, the docs or the CI. It blocks flipping visibility.
+
 **Model: open core.** Everything a developer needs to *evaluate, integrate, and build
 software for* Argmind is open; the full-performance parameterized RTL + verification suite +
 PPA collateral (what a chip company pays for) stays proprietary.
