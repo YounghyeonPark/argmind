@@ -172,7 +172,7 @@ because the pattern is the point, and it recurs in §3.
 **Configuration for every figure in this subsection — CM-100 revised baseline, costed 2026-07-30:**
 128 KB scratchpad in 16 single-port banks × 8 B/cycle = 128 B/cycle; 144 MACs in a 12×12 array,
 bf16 multiply with fp32 accumulate; 16 fp32 vector lanes; 800 MHz; **16 nm-class**; area
-0.492 mm² + 15% top-level margin = **0.565 mm²**. Per-benchmark precision is fp32 for QUAD-MPC,
+0.492 mm² + 15% top-level margin = 0.565 mm². **Restated 2026-07-30 to 0.698 mm²** once the fp64/vector FMA cluster was costed (+0.067 mm² fp64, +0.049 mm² correcting an unphysical vector gate count), and **0.845 mm² at the pessimistic FMA gate anchor** — the gate count carries its own ±2.1× on top of the model's ±2×. Per-benchmark precision is fp32 for QUAD-MPC,
 PWR-MPC and both EKF rows, **fp64** for ARM-MPC (interior point demands it), INT8 for the two ML
 rows. **Modelled estimate, ±2×, from an analytical Python model — not simulated RTL, not
 synthesised, not silicon. The fp64 datapath area is zero in this budget because it has not been
@@ -181,7 +181,7 @@ costed.**
 | Benchmark (BENCHMARKS.md v1.1) | Deadline | Latency, p95 iters | Latency, worst-case iters | Margin at worst case | Energy/call | perf/W vs most efficient modelled CPU baseline | Binding resource |
 |---|---|---|---|---|---|---|---|
 | QUAD-MPC (quadrotor MPC, fp32, 1 kHz) | 1000 µs | 34.1 µs | 161.5 µs | 6.19× | 5.31 µJ | 14.5× | scratchpad bandwidth |
-| ARM-MPC (7-DoF NMPC, acados SQP-RTI, fp64, 250 Hz) | 4000 µs | 177.9 µs | 338.5 µs | 11.82× | 19.58 µJ | 14.1× | MAC array (Riccati) |
+| ARM-MPC (7-DoF NMPC, acados SQP-RTI, fp64, 250 Hz) | 4000 µs | 342.0 µs | 444.9 µs | 1.30× | 22.0 µJ | 20.2× | sequencer issue rate (see §5) |
 | PWR-MPC (motor drive MPC, fp32, 20 kHz) | 50 µs | 4.2 µs | 14.3 µs | 3.50× | 0.35 µJ | 15.6× | scratchpad bandwidth |
 | EKF-24 (INS/GNSS, fp32, 1 kHz) | 1000 µs | 2.6 µs | 2.6 µs | 388× | 0.19 µJ | 20.9× | MAC array |
 | EKF-96 (SLAM-class, fp32, 200 Hz) | 5000 µs | 65.4 µs | 65.4 µs | 76× | 8.22 µJ | 22.2× | MAC array |
@@ -276,7 +276,8 @@ The first CM-100 recommendation (128 B/cycle, 256 MACs, 256 KB, 0.820 mm²) was 
 grounds: that ARM-MPC was the only latency-binding benchmark, and that its working set was 861 KB.
 Error #8 destroyed the first ground and made the second wrong by 5× (172 KB, not 861 KB). Neither
 agent working on it could see the problem, because one owned the benchmark and the other owned the
-sizing. Re-run against the corrected set, the revised part is **0.565 mm², 31% smaller, at slightly
+sizing. Re-run against the corrected set, the revised part is **0.698 mm² (0.565 before fp64 was
+costed), 15% smaller than the original 0.820 mm², at slightly
 lower solver energy — it dominates the old recommendation on both axes.** The old point was simply
 off the Pareto front; there was no trade being made.
 
@@ -409,7 +410,7 @@ technical case.**
 | **Whether energy is a purchase driver** | Untested. Our headline advantage is energy, and we do not know whether anyone buys energy. The strongest disconfirming public fact we already hold: ODYS claims production embedded MPC on 3M+ vehicles on ordinary automotive MCUs with no accelerator [P, vendor claim, volume not independently verified], and a secondary summary reports acados HIL runs holding computation under 10 ms against a 50 ms sampling time [P, **not verified against the primary paper**] | This is pre-registered falsifier **F2**, identified in advance as the most likely and most damaging |
 | **Measured Arm baselines** | Not measured: Arm latency, Arm energy per solve, achieved SIMD efficiency on Arm. The model assumes 25–35% of SIMD peak on small matrices, described in its own caveats as "a literature-informed guess" | **This is the largest single error source in every ratio in this memo**, and it does not cancel |
 | **Any foundry PPA data** | None. Area from a bitcell-area model calibrated against one published measured 16 nm macro density (8.1 Mb/mm²); energy from one published 45 nm table scaled by a single 0.30 factor; **no foundry memory-compiler datasheet has been consulted**; static power is a 15 mW estimate | The two −10%-class energy claims (128 B/cycle, 128 KB) are the *same bet made twice*, hence correlated rather than additive |
-| **The fp64 datapath** | **Area is zero in the CM-100 budget because it has not been costed.** The model obtains fp64 via a 0.125 rate factor on a bf16 array, which is a modelling convenience, not a design. A real 1/8-rate fp64 path needs either multi-pass decomposition (unmodelled sequencer and accumulator work) or a separate narrow fp64 FMA cluster | Largest un-costed item in the area estimate, and it sits exactly on the MACIF boundary. ARM-MPC requires fp64 because interior-point KKT conditioning reaches ~1e12 near convergence |
+| **The fp64 datapath** | **COSTED 2026-07-30 — this row is resolved.** 8 multi-format FMA units (1×fp64 or 2×fp32 each) merged with the vector unit: +0.067 mm², core restated to 0.698 mm². Multi-pass emulation from bf16 was rejected on energy (49–361 passes, 3.5–23× worse energy to save ~4% of the core), and fp32 + iterative refinement only relocates the fp64 need to the residual | Resolved, but it forced a MACIF change: precision is now a declared interface contract, and the fp32/fp64 cluster is **outside** the swappable-macro boundary, since no CIM macro reaches 53-bit significands |
 | **Any RTL** | None written. No cycle-approximate model, no ISA freeze, no MACIF definition | Everything architectural is currently a spreadsheet-grade assertion |
 | **The RTL toolchain even runs on this machine** | Verilator, cocotb, Yosys, iverilog, make, Docker and WSL are all absent, and `wsl` reports "not installed." Verilator has no supported native Windows build | The cash plan depends explicitly on open-source EDA. Discovering a Windows-specific obstacle at month 6 with RTL waiting is the expensive version of this |
 | **The four decisive competitor cells** | PPU FP option; any FLOP/s for PPU or CLA; measured RVV FP32; energy per solve for any of them. All **not published** | Cannot be resolved by more desk research. Needs boards |
