@@ -83,7 +83,7 @@ computation under 10 ms against a 50 ms sampling time for an engine-control task
 primary paper — do that before citing**). A 5× deadline margin on a prototyping box is the
 shape of "we are not deadline-limited."
 
-That is entirely consistent with PHASE0_FINDINGS.md §1 (a CPU already meets 3 of 5 solver
+That is entirely consistent with PHASE0_FINDINGS.md §0 (a CPU meets **5 of 5** solver
 deadlines) and it is the reason §7's falsification criteria are aimed at the *energy* claim
 rather than the *latency* claim. **The purchase-driver question, not the feasibility question, is
 what discovery has to answer.**
@@ -289,7 +289,8 @@ lead.
 - **Q-B4.** If the solve used 20× less energy at the same speed, what would change? Does anyone
   in your organisation have a number for the power budget of the control compute, separately
   from the rest of the system? *(**This is the single most important question in the
-  program.** PHASE0_FINDINGS.md says our advantage is ~17–25× perf/W and only 1.2–2.9× latency.
+  program.** Our advantage is **14–22× perf/W and only 1.0–2.1× latency** (modelled, ±2×, at the
+  CM-100 configuration; a CPU meets every solver deadline in the frozen set).
   If nobody can name a control-compute power budget, our headline advantage has no buyer.)*
 - **Q-B5.** Where does the power actually go in your product? Rank compute against motors,
   actuators, radios, thermal. *(In a legged robot or a VFD, actuators dominate by orders of

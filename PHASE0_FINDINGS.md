@@ -13,12 +13,22 @@ Raw output: [perf_model/results_v0.txt](perf_model/results_v0.txt).
 >
 > All corrections applied and regenerated from one run of the current model:
 >
-> | | Corrected | Previously claimed |
+> **All figures below regenerated 2026-07-30 at the RECOMMENDED CM-100 configuration**
+> (144 MACs, 128 KB, 16 banks × 8 B = 128 B/cycle, 16 lanes, 800 MHz, T1). Every ratio quoted
+> before this date was computed at the legacy 256-MAC / 256 KB / 64 B/cycle configuration — a
+> part we no longer recommend — which is why the latency numbers moved.
+>
+> | | Corrected (CM-100) | Previously claimed |
 > |---|---|---|
-> | Solver perf/W | **9.5–21.3×** (modelled, ±2×) | 17–25× |
-> | Solver latency | **0.6–2.9× — below parity on 3 of 5** | 1.2–2.9× |
-> | Deadlines met | 5 of 7 (SLM-DECODE, and ARM-MPC now passes) | 5 of 7 |
+> | Solver perf/W | **14.1–22.2×** (modelled, ±2×) | 17–25× |
+> | Solver latency | **1.0–2.1×** — parity at worst, nothing below | 1.2–2.9× |
+> | Deadlines met | 6 of 7 (only SLM-DECODE misses) | 5 of 7 |
 > | CPU also meets deadline | **5 of 5 solver benchmarks** | 3 of 5 |
+>
+> Note the "below parity on 2–3 of 5" finding recorded earlier was an artefact of reporting at
+> 64 B/cycle. At the recommended 128 B/cycle it disappears — QUAD-MPC goes 0.9× → 1.8×. The
+> concession that stands, and must be said out loud, is that **a CPU meets every solver deadline
+> in the frozen set**; we are 1.0–2.1× faster and ~14–22× more efficient, not enabling.
 >
 > **The kill criterion (≥5×) still passes on every solver benchmark, and bandwidth-first is
 > confirmed and now costed. Everything else has moved.** Three corrections drove it: the phantom

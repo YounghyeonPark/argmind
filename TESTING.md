@@ -12,10 +12,12 @@ Surveyed and set up 2026-07-29. Run everything with `python -m pytest` from the 
 | python | 3.14.5 | — |
 | gcc | MinGW-w64 | present, unused so far |
 
-**29 tests, all passing**, in two files:
+**42 tests, all passing**, in two files:
 
 - [tests/test_model_invariants.py](tests/test_model_invariants.py) — 24 tests. One regression
   test per historical modelling error, plus physical invariants.
+- [tests/test_sram_and_harness.py](tests/test_sram_and_harness.py) — 10 tests covering the
+  SRAM cost model and the OSQP harness (see "Not yet covered" below, now largely closed).
 - [tests/test_guards_actually_bite.py](tests/test_guards_actually_bite.py) — 5 meta-tests that
   re-introduce real past bugs at runtime and assert the matching guard *fails*.
 
@@ -39,8 +41,8 @@ suite pins **relationships and directions** instead:
 
 ### Why the meta-tests matter
 
-Phase 0 produced **nine** modelling errors, each caught by manual or agent review — expensive
-and non-repeatable. The suite encodes all nine. But a regression suite that has never failed has
+Phase 0 produced **ten** modelling errors, each caught by manual or agent review — expensive
+and non-repeatable. The suite encodes all ten (the tenth: MAC count and operand-reuse depth were the same number). But a regression suite that has never failed has
 not been shown to catch anything, so `test_guards_actually_bite.py` mutates the model back to
 each buggy formulation and asserts the guard trips. Confirmed live:
 
@@ -50,9 +52,12 @@ each buggy formulation and asserts the guard trips. Confirmed live:
 
 If a test in that file ever starts passing *trivially*, the corresponding guard has gone slack.
 
-## Gap 1 — no version control (most urgent)
+## Gap 1 — no version control — **CLOSED 2026-07-30**
 
-There is no git repository. Consequences already felt: three agents edited `perf_model/` and the
+`git init` done; baseline plus subsequent work committed. The original text follows for the
+record, because the failure mode it describes is what the repo now prevents.
+
+> There is no git repository. Consequences already felt: three agents edited `perf_model/` and the
 Markdown docs concurrently on 2026-07-29, and there is **no way to diff, attribute, revert, or
 bisect** any of it. When a benchmark number moves, we cannot tell what moved it.
 
@@ -61,7 +66,11 @@ CI running on every PR. That is unreachable without a repo.
 
 Recommended: `git init`, a `.gitignore` for `results_*.txt` and `__pycache__`, and commit the
 current state as a baseline. Left as a founder decision because CLAUDE.md currently records
-"not a git repo" as a deliberate convention.
+> "not a git repo" as a deliberate convention.
+
+Caveat now that it exists: the repo lives inside a Google Drive folder, and Drive sync can
+corrupt `.git` if it touches objects mid-write. If you see unexplained index errors, that is the
+cause; the robust fix is a local working copy synced via a remote.
 
 ## Gap 2 — the Phase-2 RTL flow has no environment, and Windows is the blocker
 

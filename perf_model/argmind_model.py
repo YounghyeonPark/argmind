@@ -681,10 +681,25 @@ def model_cpu(b: Benchmark, cpu: CpuCfg) -> dict:
 # Reporting
 # ---------------------------------------------------------------------------
 
-CFG_16 = ArgmindCfg(name="CM-16 (16x16 tile, 800MHz, T1)", tile=16)
+# THE RECOMMENDED PART, as re-sized 2026-07-30 (see PHASE0_FINDINGS.md §0
+# resolution block). Every headline ratio must be reported at THIS configuration.
+# Until now they were all reported at CFG_16_LEGACY below -- 256 MACs and 256 KB,
+# a configuration we no longer recommend -- so the quoted latency and perf/W
+# figures described a part that was never the product.
+CFG_100 = ArgmindCfg(
+    name="CM-100 (12x12=144 MACs, 128 KB, 16 banks x 8 B = 128 B/cyc, 16 lanes, "
+         "800 MHz, T1)",
+    tile=12, scratchpad_kb=128, scratchpad_bw_bpc=128.0, n_banks=16,
+    vector_lanes=16)
+
+# Retained for comparison and for the tile/bandwidth sweeps. NOT the product.
+CFG_16 = ArgmindCfg(name="CM-16 legacy (16x16 tile, 256 KB, 64 B/cyc, T1)",
+                    tile=16)
 CFG_32 = ArgmindCfg(name="CM-32 (32x32 tile, 800MHz, T1)", tile=32)
 CFG_64 = ArgmindCfg(name="CM-64 (64x64 tile, 800MHz, T1)", tile=64)
-CFG_16_T0 = ArgmindCfg(name="CM-16, T0 copy-based (ablation)", tile=16, tier="T0")
+CFG_100_T0 = ArgmindCfg(
+    name="CM-100, T0 copy-based (ablation)", tile=12, scratchpad_kb=128,
+    scratchpad_bw_bpc=128.0, n_banks=16, vector_lanes=16, tier="T0")
 
 KILL_CRITERION = 5.0   # perf/W multiple vs best CPU baseline, solver workloads
 
@@ -708,9 +723,10 @@ def main():
 
     # ---- main table ----
     out()
-    out("Configuration under test: " + CFG_16.name)
-    out(f"  {CFG_16.macs} MACs, {CFG_16.scratchpad_kb} KB scratchpad, "
-        f"call overhead {CFG_16.call_overhead_us} us")
+    out("Configuration under test: " + CFG_100.name)
+    out(f"  {CFG_100.macs} MACs, {CFG_100.scratchpad_kb} KB scratchpad, "
+        f"{CFG_100.scratchpad_bw_bpc:.0f} B/cycle, {CFG_100.sram_pj_per_byte():.3f} pJ/byte, "
+        f"call overhead {CFG_100.call_overhead_us} us")
     out()
     out("Comparison rule (conservative on BOTH axes):")
     out("  speedup  = vs the FASTEST CPU baseline")
@@ -724,7 +740,7 @@ def main():
 
     solver_ratios = []
     for b in BENCHMARKS:
-        cm = model_argmind(b, CFG_16)
+        cm = model_argmind(b, CFG_100)
         cpus = [(c, model_cpu(b, c)) for c in ALL_CPUS]
 
         fastest_cfg, fastest = min(cpus, key=lambda t: t[1]["latency_us"])
@@ -765,7 +781,7 @@ def main():
     out(f"{'benchmark':<12} {'bytes/call':>12} {'deadline us':>12} "
         f"{'req GB/s':>9} {'have GB/s':>10}  status")
     for b in BENCHMARKS:
-        cm = model_argmind(b, CFG_16)
+        cm = model_argmind(b, CFG_100)
         req = cm["bytes_moved"] / (b.deadline_us * 1e-6) / 1e9
         ok = "OK" if req <= CFG_16.dma_bw_gbs else "BANDWIDTH-BOUND"
         out(f"{b.name:<12} {fmt(cm['bytes_moved'],12,0)} {fmt(b.deadline_us,12)} "
@@ -853,8 +869,8 @@ def main():
     out(hdr2)
     out("-" * len(hdr2))
     for b in BENCHMARKS:
-        t1 = model_argmind(b, CFG_16)
-        t0 = model_argmind(b, CFG_16_T0)
+        t1 = model_argmind(b, CFG_100)
+        t0 = model_argmind(b, CFG_100_T0)
         adv = t0["latency_us"] / t1["latency_us"]
         ok = "MEETS" if t0["latency_us"] <= b.deadline_us else "MISSES"
         out(f"{b.name:<12} {fmt(t1['latency_us'])} {fmt(t0['latency_us'])} "
@@ -875,7 +891,7 @@ def main():
     for n_u in (1, 2, 3, 4, 6, 8, 12, 16, 24):
         b = condensed_mpc(f"sweep{n_u}", n_x=12, n_u=n_u, N=20, iters=40,
                           rate=1000, note="")
-        cm = model_argmind(b, CFG_16)
+        cm = model_argmind(b, CFG_100)
         cp = model_cpu(b, CPU_A78)
         sp = cp["latency_us"] / cm["latency_us"]
         pw = cp["energy_uj"] / cm["energy_uj"]
