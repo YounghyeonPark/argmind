@@ -182,7 +182,7 @@ costed.**
 |---|---|---|---|---|---|---|---|
 | QUAD-MPC (quadrotor MPC, fp32, 1 kHz) | 1000 µs | 34.1 µs | 161.5 µs | 6.19× | 5.31 µJ | 14.5× | scratchpad bandwidth |
 | ARM-MPC (7-DoF NMPC, acados SQP-RTI, fp64, 250 Hz) | 4000 µs | 342.0 µs | 444.9 µs | 1.30× | 22.0 µJ | 20.2× | sequencer issue rate (see §5) |
-| PWR-MPC (motor drive MPC, fp32, 20 kHz) | 50 µs | 4.2 µs | 14.3 µs | 3.50× | 0.35 µJ | 15.6× | scratchpad bandwidth |
+| PWR-MPC (motor drive, **FCS-MPC v1.2**, fp32, **40 kHz**) | **25 µs** | 1.6 µs | 1.0 µs | **0.62×** | 0.1 µJ | **23.5×** | per-call overhead, then vector unit |
 | EKF-24 (INS/GNSS, fp32, 1 kHz) | 1000 µs | 2.6 µs | 2.6 µs | 388× | 0.19 µJ | 20.9× | MAC array |
 | EKF-96 (SLAM-class, fp32, 200 Hz) | 5000 µs | 65.4 µs | 65.4 µs | 76× | 8.22 µJ | 22.2× | MAC array |
 | SLM-DECODE (1.1B SLM, INT8, batch 1) | 50 ms | 174 ms | 174 ms | **0.29× — MISSES** | 17.6 mJ | 2.4× | external DMA bandwidth |
@@ -382,7 +382,11 @@ automotive MCU vendor will license outside compute IP for control acceleration �
 Synopsys/MIPS ARC a competitor for the *license*, not merely for the socket.
 
 **Third, there is an unresolved internal contradiction that must be settled before the motor-drive
-pitch is made to anyone.** PHASE0_FINDINGS §4 shows zero-copy is what makes the 20 kHz PWR-MPC
+pitch is made to anyone.** **CORRECTED 2026-07-30 (§0.3): the claim that zero-copy is what makes
+this socket possible is now affirmatively FALSE.** The row meets its deadline in every tier,
+including copy-based on an MCU-class host. What the tier buys there is ~1.7 µs of invocation
+overhead (6.7×), not data movement — buffer-map and cache-maintenance are MMU/cache artefacts an
+all-SRAM part does not have. Superseded text follows. PHASE0_FINDINGS §4 shows zero-copy is what makes the 20 kHz PWR-MPC
 deadline feasible at all, and motor drive is the socket most likely to be MCU-class — where
 zero-copy and residency have nothing to bite on, because there is no DRAM and no cache. Both
 statements cannot be load-bearing at once. Resolve it explicitly (most likely by re-deriving
@@ -416,7 +420,7 @@ technical case.**
 | **The four decisive competitor cells** | PPU FP option; any FLOP/s for PPU or CLA; measured RVV FP32; energy per solve for any of them. All **not published** | Cannot be resolved by more desk research. Needs boards |
 | **Trademark and domain clearance for "Argmind"** | USPTO/EUIPO Nice class 9/42 search and domain acquisition still pending | Cheap, and it gates every external artefact |
 | **The open-core strategy** | Untested by any customer. Q-C9 exists to test whether open RTL helps (evaluation without procurement) or hurts (license-compliance review, provenance concerns) | The entire adoption funnel in PLAN.md §7.1 is a hypothesis |
-| **Iteration tails for PWR-MPC and ARM-MPC** | Estimated by scaling the measured QUAD-MPC 74/15 ratio. Only QUAD-MPC's tail is measured | The 64 B/cycle floor depends on PWR-MPC's estimated tail as well as QUAD-MPC's measured one |
+| **Iteration tails: ARM-MPC only** | Estimated by scaling the measured QUAD-MPC 74/15 ratio. Only QUAD-MPC's tail is measured. **PWR-MPC no longer has an iteration tail at all** — as re-specified (FCS-MPC) it is an exhaustive enumeration of fixed cost, so the 64 B/cycle floor now rests on QUAD-MPC ALONE, whose tail IS the measured one | Single-row justification is the weakness that caused two prior sizing re-runs. well as QUAD-MPC's measured one |
 
 Three concessions to state in every document, in our own voice, before a reader finds them:
 

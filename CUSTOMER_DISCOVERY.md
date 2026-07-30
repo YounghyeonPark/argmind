@@ -106,7 +106,7 @@ segments are excluded from the target list regardless of how enthusiastic they w
 | **Robot motion planning** | A decade of accelerator work incl. an FPGA motion-planning accelerator reporting ~3 orders of magnitude speedup and >1 order of magnitude power improvement, and granted US patents on hardware collision detection ([Duke MICRO 2016](https://users.cs.duke.edu/~lkw34/papers/realtime-robotics-micro2016.pdf), [US 12,330,310](https://image-ppubs.uspto.gov/dirsearch-public/print/downloadPdf/12330310)) | peer-reviewed + patent |
 
 Two reads to carry into the calls. First, **power electronics and motor drives are the segment
-where the deadline is genuinely brutal** (our PWR-MPC benchmark is 20 kHz / 50 µs, and it is the
+where the deadline is genuinely brutal** (our PWR-MPC benchmark is **40 kHz / 25 µs finite-control-set MPC** since the 2026-07-30 re-spec, and it is the
 one where PHASE0_FINDINGS.md §4 shows zero-copy is worth 1.9× and decides whether the deadline
 is met at all). Second, **ABB's shipping approach moves the optimization offline** (precomputed
 optimal pulse patterns, real-time adjustment of switching instants) — which is exactly the
