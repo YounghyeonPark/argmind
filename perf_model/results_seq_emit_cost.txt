@@ -1,0 +1,69 @@
+============================================================================================
+DESCRIPTOR EMIT COST — closing the seq_setup_cycles [EST] by counting RV32
+============================================================================================
+Descriptor format v0: 8 words / 32 bytes.
+RV32IM at 1 IPC, write-buffered descriptor queue. Optimistic by design.
+
+                                          case  desc/tmpl    naive    delta    hwgen
+------------------------------------------------------------------------------------
+        HPIPM stage sweep, 1 shape x 30 stages      540.0     23.0     10.0     0.04
+ADMM iteration, QUAD-MPC (28 desc / ~6 shapes)        4.7     23.0     10.0     4.71
+ ADMM iteration, PWR-MPC (16 desc / ~6 shapes)        2.7     23.0     10.0     8.25
+
+  Instruction counts: naive 23, delta 10, generator arming 22 (once per template).
+
+  BREAK-EVEN: a template must cover >= 5.5 descriptors — call it 6 — for
+  the generator to beat the assumed 4 cycles/descriptor.
+
+============================================================================================
+VERDICT on seq_setup_cycles = 4
+============================================================================================
+  Assumed: 4.0 cycles/descriptor, unconditionally.
+  The count says it is achievable, but ONLY under two conditions, and the
+  second one is new:
+
+  1. A hardware descriptor generator is required. Software emit cannot get
+     near 4 at any encoding: naive is 23 cycles/descriptor and even a
+     delta-encoded queue is 10. So the assumption silently presumed the
+     generator — the same conclusion the sequencer analysis reached from the
+     other direction (run-ahead is mandatory). Two independent routes to it.
+
+  2. Templates must cover >= 6 descriptors. This is the part the flat
+     assumption hid. Arming costs ~22 instructions ONCE PER TEMPLATE, so the
+     benefit depends on descriptors-per-template, not on total descriptors:
+       HPIPM stage sweep    0.04 cycles/desc — 130x inside the bar
+       ADMM iteration       8.25 cycles/desc — ABOVE 4, i.e. the
+                                 assumption FAILS for ADMM as decomposed
+
+  The ADMM result is the finding. ADMM issues ~6 distinct kernel shapes per
+  iteration and only 16-28 descriptors, so each template covers 3-5 of them
+  and arming is not amortised. Two ways out, both codegen-side:
+    * Hoist arming out of the iteration loop. The shapes are IDENTICAL every
+      iteration — only the iterate values change, not addresses or dimensions
+      — so templates can be armed ONCE PER SOLVE and left resident, making
+      the per-iteration cost ~0. This is available precisely because
+      allocation is static, and it is the same property that makes overlap
+      legal. Worth designing the generator to hold several armed templates.
+    * Failing that, fuse the vector-update and projection descriptors, which
+      cuts shape count rather than descriptor count.
+
+  Independent corroboration of the model's pessimistic case: the sequencer
+  analysis charged write-descriptor-and-poll at 'setup ~20' cycles and found
+  it misses PWR-MPC's budget. This count gives 23 for exactly that
+  design, derived from instructions rather than intuition. They agree.
+
+  Delta encoding is NOT worth it: it needs an extra queue-protocol word and a
+  shadow descriptor register file, and still lands well above the generator.
+  Drop it from consideration.
+
+  ACTION: the generator needs a multi-template capability (hold >= 6 armed
+  templates), and that requirement did not exist before this count.
+
+REMAINING [EST] IN THIS COUNT
+  * 1 IPC with no I-fetch stalls and a never-full queue. A real RV32 core
+    with a small I-mem will be somewhat worse on the software paths, which
+    widens the gap in the generator's favour.
+  * Descriptors/kernel (540 / 28 / 16) come from the sequencer analysis'
+    kernel decomposition, which is itself [DER], not measured.
+  * Assumes three independent base addresses suffice. A kernel needing a
+    fourth (e.g. separate bias or scaling vector) would add one AGU.

@@ -84,6 +84,16 @@ automotive.
   depth.** Exposure is set by cycles/descriptor, **not** algorithm class — the most exposed row is
   PWR-MPC, which is ADMM, so do not pitch this as "interior point is the risky one." Consequence
   for §4.2: **descriptor emission stays on the CM side at every integration depth (D1/D2/D3).**
+- **Descriptor format v0 frozen and the emit cost derived, not guessed**
+  (`perf_model/seq_emit_cost.py`): **8 words / 32 B**, three base addresses, packed dims, a
+  chain/wait token pair. RV32 emit counted at **23 cycles naive, 10 delta-encoded, ~0 with the
+  hardware generator** — so `seq_setup_cycles=4` was never reachable in software and silently
+  presumed the generator. Drop delta encoding. **New requirement the flat assumption hid: arming
+  costs ~22 instructions *per template*, so a template must cover ≥6 descriptors.** An HPIPM stage
+  sweep gets 0.04 cycles/desc; an **ADMM iteration gets 8.25 — above the bar** — because it issues
+  ~6 distinct shapes over only 16–28 descriptors. Fix is free and codegen-side: **arm templates
+  once per solve, not per iteration** (legal because allocation is static — the same property that
+  makes overlap legal), which means **the generator must hold ≥6 armed templates.**
 - **Power gating is an architectural requirement, not an optimization.** Solver duty cycles are
   0.2–12%; charged ungated, QUAD-MPC perf/W falls 12.6× → 4.8× — *below the kill criterion* —
   and EKF-24 to 0.2×. Coarse-grain gating, or at minimum full clock gating plus retention-mode
