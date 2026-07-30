@@ -100,6 +100,32 @@ class ArgmindCfg:
     # bandwidth is well below peak. This is a real RTL feature with a cost.
     segmented_reduction: bool = True
 
+    # ---- sequencer / descriptor issue (modelled 2026-07-30; sequencer.py) ---
+    # Sequencer cycles to emit ONE descriptor: 3 operand base addresses, the
+    # dims/strides, the accumulate/format flags, the queue push. A hardware
+    # descriptor generator with AGUs and a hardware loop that walks a template
+    # is at the low end (2-4); a scalar core writing CSRs at 1 IPC is at the
+    # high end (16-32). THIS REPLACES the old flat `scalar_ops_per_iter` term
+    # for the CM (the CPU model still charges scalar ops, correctly, because a
+    # CPU really does execute the loop in software).
+    seq_setup_cycles: float = 4.0
+    # Descriptors the sequencer can emit per cycle. >1 needs a multi-ported
+    # descriptor queue; the analysis in sequencer.py shows it is never needed.
+    seq_issue_width: float = 1.0
+    # Descriptor queue depth between sequencer and datapath. 0 = NO decoupling:
+    # the sequencer writes a descriptor, starts it, waits for completion. Any
+    # value >=1 is decoupled access-execute and lets setup overlap execution.
+    # This is the knob that replaces the old fixed "50% overlap" fudge.
+    seq_queue_depth: int = 8
+    # Use the descriptor-derived sequencer model when the benchmark carries a
+    # kernel decomposition. False reproduces the legacy flat-scalar behaviour.
+    use_descriptor_seq: bool = True
+    # Override the blocking factor of a dependency chain (Cholesky, triangular
+    # solve). None = the datapath width, which is the design intent. Set it
+    # smaller to price the RTL risk that a potrf cannot be blocked that coarsely;
+    # sequencer.py sweeps it because that is the largest downside risk here.
+    chain_block_override: int | None = None
+
     # ---- fp64 datapath (costed 2026-07-30; see fp64_datapath.py) -----------
     # Number of IEEE-754 fp64 FMA units. THIS IS AN ABSOLUTE COUNT, NOT A RATE
     # FACTOR ON THE bf16 ARRAY. The model previously obtained fp64 from a 0.125
@@ -333,6 +359,110 @@ ALL_CPUS = [CPU_A55, CPU_A78, CPU_SME2]
 
 
 # ---------------------------------------------------------------------------
+# Kernel decomposition — what the sequencer actually has to issue
+# ---------------------------------------------------------------------------
+
+@dataclass(frozen=True)
+class KernelOp:
+    """One logically distinct operation in a benchmark's inner loop.
+
+    WHY THIS EXISTS. The model used to charge sequencer work as a flat
+    `scalar_ops_per_iter` constant with a fixed 50% compute overlap. That cannot
+    express the thing that actually matters for a block-structured solver: how
+    many descriptors the work decomposes into, and therefore how much datapath
+    work each descriptor commands. HPIPM issues hundreds of small block
+    operations per interior-point iteration; ADMM issues a handful of large
+    GEMVs. Those are opposite ends of a spectrum the flat constant collapses.
+
+    THE CONSISTENCY RULE, which is the whole discipline here: the `macs` /
+    `vec_ops` / `trans_ops` of a benchmark's kernel list must SUM TO the
+    benchmark's declared per-iteration totals. Descriptor counts and operation
+    counts derived independently is exactly the error that let an earlier
+    analysis double-count HPIPM GEMM work 5.7x. `assert_kernels_consistent()`
+    enforces it and a test calls it for every benchmark.
+
+    Fields
+      kind        "gemm" | "gemv" | "vec" | "trans" — selects the datapath
+                  resource, and hence the rate, so the cycles-per-descriptor
+                  figure is per-resource rather than an average.
+      n_desc      descriptors per `repeat`, for an op with no dependency chain.
+      chain_dim   >0 marks a DEPENDENCY CHAIN of this dimension (Cholesky,
+                  triangular solve, backward Riccati within a stage). The op is
+                  re-blocked along it, so descriptor count becomes
+                  ceil(chain_dim / block) * n_desc, and each boundary costs a
+                  datapath drain because descriptor i+1 cannot START until i's
+                  results are written back. Setup still overlaps (the addresses
+                  are statically known) — it is the DRAIN that does not.
+      repeat      structural repetition (N MPC stages, transformer layers).
+                  `macs` is per repeat.
+    """
+    name: str
+    kind: str
+    macs: float = 0.0
+    vec_ops: float = 0.0
+    trans_ops: float = 0.0
+    n_desc: float = 1.0
+    chain_dim: float = 0.0
+    repeat: float = 1.0
+
+    @property
+    def total_macs(self) -> float:
+        return self.macs * self.repeat
+
+    @property
+    def total_vec(self) -> float:
+        return self.vec_ops * self.repeat
+
+    @property
+    def total_trans(self) -> float:
+        return self.trans_ops * self.repeat
+
+
+def chain_block(cfg: ArgmindCfg, prec: str, kind: str) -> int:
+    """Blocking factor of a dependency chain on this datapath.
+
+    A blocked Cholesky or triangular solve advances one block of the diagonal at
+    a time, and the block is as wide as the unit that does the work: the tile
+    dimension for array GEMM, the fp64 FMA count for fp64 (fp64 does NOT run on
+    the array), the vector-lane count for a vector-unit triangular solve.
+    Smaller block => more descriptors => more drain boundaries and less work per
+    descriptor, which is precisely the mechanism under investigation.
+
+    `cfg.chain_block_override` forces a smaller value, to price the RTL risk that
+    a blocked Cholesky cannot in fact advance a full datapath width per step.
+    """
+    if cfg.chain_block_override is not None:
+        return max(1, cfg.chain_block_override)
+    if kind == "gemm":
+        return max(1, cfg.fp64_fmas) if prec == "fp64" else max(1, cfg.tile)
+    return max(1, cfg.vector_lanes)
+
+
+def op_descriptors(op: KernelOp, cfg: ArgmindCfg, prec: str) -> tuple[float, float]:
+    """(descriptor count, dependent-boundary count) for one kernel op."""
+    if op.chain_dim > 0:
+        steps = math.ceil(op.chain_dim / chain_block(cfg, prec, op.kind))
+        n = steps * op.n_desc * op.repeat
+        # Every descriptor inside a chain is gated on the previous one.
+        return n, n
+    return op.n_desc * op.repeat, 0.0
+
+
+def op_cycles(op: KernelOp, cfg: ArgmindCfg, prec: str, dim: float,
+              row_len: float | None = None) -> float:
+    """Datapath cycles for one kernel op, on the resource its `kind` names."""
+    if op.kind == "gemm":
+        return gemm_like_cycles(op.total_macs, cfg, prec, dim)
+    if op.kind == "gemv":
+        return op.total_macs / cfg.gemv_macs_per_cycle(prec, row_len)
+    if op.kind == "vec":
+        return op.total_vec / cfg.vector_lanes
+    if op.kind == "trans":
+        return op.total_trans * 4.0 / cfg.vector_lanes
+    raise ValueError(op.kind)
+
+
+# ---------------------------------------------------------------------------
 # Benchmark definition
 # ---------------------------------------------------------------------------
 
@@ -379,6 +509,24 @@ class Benchmark:
     # typical case only -- and the typical case meets every deadline at 16 B/cycle,
     # so it cannot size anything. 0 = not characterised.
     iters_worst: int = 0
+
+    # ---- kernel decomposition (added 2026-07-30; see KernelOp) --------------
+    # Per-iteration and once-per-call operation lists. Empty = not decomposed,
+    # in which case the CM model falls back to the legacy flat scalar term.
+    kernels: list = field(default_factory=list)
+    kernels_call: list = field(default_factory=list)
+    # Loop-carried SCALAR chain per iteration, in sequencer cycles: work whose
+    # result a subsequent descriptor's PARAMETERS depend on, so it can be
+    # overlapped by neither run-ahead nor speculation. For ADMM this is the
+    # convergence test (two reduction results -> compare -> branch), evaluated
+    # only every `check_term` iterations. For interior point it is the
+    # fraction-to-boundary step size alpha, which scales the very next update.
+    # For the EKF it is ZERO: a fixed schedule with no data-dependent control --
+    # the determinism story, and it costs nothing to claim.
+    # DELIBERATELY SMALL. The old flat 150 ops/iteration was standing in for
+    # descriptor issue, not for a dependent scalar chain; conflating the two is
+    # what hid the block-structured-solver exposure.
+    serial_scalar_per_iter: float = 0.0
 
     @property
     def iters_wc(self) -> int:
@@ -435,6 +583,36 @@ def condensed_mpc(name, n_x, n_u, N, iters, rate, note, prec="fp32", refactor=Fa
     # P symmetric (n^2/2), L triangular (n^2/2), A's identity block stores nothing.
     persistent = 4 * (n_var * n_var / 2 + n_var * n_var / 2 + Annz)
     delta = 4 * (n_x + 3 * n_var)                          # state + reference
+    # ---- kernel decomposition: what codegen has to ISSUE per ADMM iteration.
+    # This is the FEW-LARGE-OPERATIONS end of the spectrum, which is the point:
+    # the two Gamma products are single descriptors covering ~19k MACs each. The
+    # only fine-grained part is the pair of triangular solves against the cached
+    # factor, which ARE a dependency chain: one diagonal block at a time, and
+    # each block's descriptor cannot start until the previous block's results are
+    # written back. n_desc=2 per chain step = diagonal-block solve + trailing
+    # panel update. MACs sum exactly to the `gemv` expression above.
+    resid_macs = (n_var * n_var / 2 + Annz) / check_term
+    kern = [
+        KernelOp("Gamma^T y (rhs assembly)", "gemv", macs=Annz, n_desc=1),
+        KernelOp("L forward solve (cached factor)", "gemv", macs=n_var * n_var / 2,
+                 n_desc=2, chain_dim=n_var),
+        KernelOp("L^T back solve", "gemv", macs=n_var * n_var / 2,
+                 n_desc=2, chain_dim=n_var),
+        KernelOp("Gamma x", "gemv", macs=Annz, n_desc=1),
+        KernelOp("residual re-evaluation (amortised)", "gemv", macs=resid_macs,
+                 n_desc=3.0 / check_term),
+        KernelOp("z projection (min/max)", "vec", vec_ops=2 * n_con, n_desc=1),
+        KernelOp("y update (axpy)", "vec", vec_ops=2 * n_con, n_desc=1),
+        KernelOp("x over-relaxation", "vec", vec_ops=2 * n_var, n_desc=1),
+        KernelOp("norms and misc elementwise", "vec",
+                 vec_ops=(8 * (n_var + n_con) + 2 * n_con) - (4 * n_con + 2 * n_var),
+                 n_desc=3),
+    ]
+    kern_call = [
+        KernelOp("q = Gamma^T Qbar (Phi x0 - xref)", "gemv", macs=n_var * (N * n_x),
+                 n_desc=2),
+        KernelOp("state-dependent bounds", "gemv", macs=N * n_x * n_x, n_desc=1),
+    ]
     return Benchmark(
         name=name, kind="solver", note=note,
         gemv_macs_per_iter=gemv, gemm_macs_per_iter=0.0,
@@ -456,6 +634,11 @@ def condensed_mpc(name, n_x, n_u, N, iters, rate, note, prec="fp32", refactor=Fa
         gemv_row_len=n_var,
         gemv_macs_per_call=gemv_call, algo="admm",
         iters_worst=iters_worst,
+        kernels=kern, kernels_call=kern_call,
+        # OSQP evaluates termination every `check_term` iterations. The chain is
+        # reduction-result -> scalar register -> two compares -> branch; call it
+        # ~25 cycles of true latency, amortised. [EST]
+        serial_scalar_per_iter=25.0 / check_term,
     )
 
 
@@ -490,6 +673,50 @@ def sqp_rti_mpc(name, n_x, n_u, N, ip_iters, rate, note, prec="fp64",
     e = BYTES_PER_ELEM[prec]
     persistent = e * (N * nb * nb + N * n_x * nb)
     delta = e * (n_x + N * n_x)
+    # ---- kernel decomposition: the MANY-SMALL-OPERATIONS end of the spectrum,
+    # and the reason this analysis exists. HPIPM's backward Riccati recursion is
+    # per-stage, and each stage is a sequence of BLASFEO-level block operations
+    # on nb x nb blocks. Following Frison & Diehl (IFAC 2020) the per-stage
+    # factorisation is: trmm (Lxx^T [A B]), syrk (form the stage Hessian), potrf
+    # (Cholesky of it), trsm (extract the feedback gain), then vector backward
+    # substitution and forward recursion.
+    #
+    # THE SPLIT OF nb^3/3 ACROSS THOSE FOUR IS [EST], derived from their true
+    # relative op counts (trmm n_x^2*nb/2, syrk nb^2*n_x/2, potrf nb^3/6, trsm
+    # the gain block) normalised so the group SUMS TO the benchmark's declared
+    # N*nb^3/3. CONSERVATIVE NOTE, stated because it runs against us: the true
+    # HPIPM per-stage count at nb=21 is ~2.2x nb^3/3, so this decomposition puts
+    # FEWER MACs behind each descriptor than reality and therefore OVERSTATES
+    # sequencer pressure. Fixing the benchmark's GEMM count would make the
+    # sequencer picture better, not worse.
+    #
+    # potrf and trsm carry chain_dim=nb: a blocked Cholesky advances one diagonal
+    # block at a time and cannot be issued as one dataflow descriptor.
+    g = nb ** 3 / 3.0
+    kern = [
+        KernelOp("Riccati: Lxx^T [A B] (trmm)", "gemm", macs=0.30 * g,
+                 n_desc=1, repeat=N),
+        KernelOp("Riccati: stage Hessian (syrk)", "gemm", macs=0.45 * g,
+                 n_desc=1, repeat=N),
+        KernelOp("Riccati: Cholesky (potrf)", "gemm", macs=0.15 * g,
+                 n_desc=2, chain_dim=nb, repeat=N),
+        KernelOp("Riccati: feedback gain (trsm)", "gemm", macs=0.10 * g,
+                 n_desc=1, chain_dim=nb, repeat=N),
+        KernelOp("backward substitution", "gemv", macs=nb * nb, n_desc=2,
+                 repeat=N),
+        KernelOp("forward state recursion", "gemv", macs=nb * nb, n_desc=2,
+                 repeat=N),
+        KernelOp("slack / complementarity update", "vec", vec_ops=12 * nb,
+                 n_desc=2, repeat=N),
+        KernelOp("barrier divides", "trans", trans_ops=2 * nb, n_desc=1,
+                 repeat=N),
+    ]
+    kern_call = [
+        KernelOp("preparation: dynamics Jacobians", "gemm", macs=n_x * nb * nb,
+                 n_desc=2, repeat=N),
+        KernelOp("preparation: gradient and bounds", "gemv", macs=2 * nb * n_x,
+                 n_desc=2, repeat=N),
+    ]
     return Benchmark(
         name=name, kind="solver", note=note,
         gemv_macs_per_iter=gemv_iter, gemm_macs_per_iter=gemm_iter,
@@ -502,6 +729,13 @@ def sqp_rti_mpc(name, n_x, n_u, N, ip_iters, rate, note, prec="fp64",
         gemv_row_len=nb,
         gemv_macs_per_call=gemv_call, algo="ip",
         iters_worst=iters_worst,
+        kernels=kern, kernels_call=kern_call,
+        # Interior point: the fraction-to-boundary step size alpha is a reduction
+        # over all complementarity pairs, then a divide, then it SCALES the very
+        # next update -- a genuine loop-carried dependency that run-ahead cannot
+        # hide. Reduction drain + divide + compares ~ 60 cycles, once per IP
+        # iteration. Plus the barrier parameter mu update. [EST]
+        serial_scalar_per_iter=60.0,
     )
 
 
@@ -527,6 +761,29 @@ def ekf(name, n, m, rate, note, prec="fp32"):
     gemv = m ** 3 / 6.0        # Cholesky: sequential, poor tile utilisation
     persistent = 4 * (3 * n * n + n * m)
     delta = 4 * (m + n)
+    # ---- kernel decomposition. A FIXED schedule: ~10 large block products plus
+    # two short dependency chains (the m x m Cholesky of the innovation
+    # covariance, and the triangular solve for the gain). No data-dependent
+    # control at all, hence serial_scalar_per_iter = 0. MACs sum exactly to the
+    # `gemm` and `gemv` expressions above.
+    kern = [
+        KernelOp("F@P", "gemm", macs=n ** 3, n_desc=1),
+        KernelOp("(F P)@F^T (symmetric)", "gemm", macs=0.5 * n ** 3, n_desc=1),
+        KernelOp("P@H^T", "gemm", macs=n * n * m, n_desc=1),
+        KernelOp("H@(P H^T), S symmetric", "gemm", macs=n * m * m / 2.0, n_desc=1),
+        KernelOp("gain solve K S = P H^T (trsm)", "gemm", macs=n * m * m,
+                 n_desc=2, chain_dim=m),
+        KernelOp("Joseph: form (I-KH)", "gemm", macs=n * n * m, n_desc=1),
+        KernelOp("Joseph: (I-KH)@P", "gemm", macs=n ** 3, n_desc=1),
+        KernelOp("Joseph: [.]@(I-KH)^T", "gemm", macs=0.5 * n ** 3, n_desc=1),
+        KernelOp("Joseph: K R K^T", "gemm", macs=n * m * m, n_desc=1),
+        KernelOp("Joseph: symmetrise", "gemm", macs=n * n * m / 2.0, n_desc=1),
+        KernelOp("Cholesky of S (potrf)", "gemv", macs=m ** 3 / 6.0,
+                 n_desc=2, chain_dim=m),
+        KernelOp("covariance symmetrise / state update", "vec",
+                 vec_ops=6 * n * n, n_desc=3),
+        KernelOp("innovation normalisation", "trans", trans_ops=m, n_desc=1),
+    ]
     return Benchmark(
         name=name, kind="solver", note=note,
         gemv_macs_per_iter=gemv, gemm_macs_per_iter=gemm,
@@ -540,6 +797,7 @@ def ekf(name, n, m, rate, note, prec="fp32"):
         iters=1, calls_per_sec=rate, deadline_us=1e6 / rate,
         persistent_bytes=persistent, delta_bytes=delta, prec=prec,
         gemv_row_len=m,       # Cholesky of the m x m innovation covariance
+        kernels=kern, serial_scalar_per_iter=0.0,
     )
 
 
@@ -549,6 +807,20 @@ def slm_decode(name, params_b, hidden, layers, seq, rate, note, prec="int8"):
     gemv = params_b * 1e9 + 2 * layers * seq * hidden
     persistent = params_b * 1e9 * (1 if prec == "int8" else 2)   # weights + KV
     delta = 4 * hidden
+    # Kernel decomposition: 7 weight GEMVs per transformer layer (q,k,v,o,gate,
+    # up,down) plus 2 attention GEMVs. The FAR end of the granularity spectrum --
+    # each descriptor commands millions of MACs -- which is the control case
+    # showing the exposure is specific to block-structured solvers.
+    kern = [
+        KernelOp("layer weight GEMVs (q,k,v,o,gate,up,down)", "gemv",
+                 macs=params_b * 1e9 / layers, n_desc=7, repeat=layers),
+        KernelOp("attention over KV cache", "gemv", macs=2 * seq * hidden,
+                 n_desc=2, repeat=layers),
+        KernelOp("norms / residual adds / SwiGLU", "vec", vec_ops=hidden * 12,
+                 n_desc=4, repeat=layers),
+        KernelOp("softmax / rsqrt", "trans", trans_ops=hidden + seq, n_desc=2,
+                 repeat=layers),
+    ]
     return Benchmark(
         name=name, kind="ml", note=note,
         gemv_macs_per_iter=gemv, gemm_macs_per_iter=0.0, gemm_macs_per_call=0.0,
@@ -558,11 +830,20 @@ def slm_decode(name, params_b, hidden, layers, seq, rate, note, prec="int8"):
         iters=1, calls_per_sec=rate, deadline_us=1e6 / rate,
         persistent_bytes=persistent, delta_bytes=delta, prec=prec,
         gemv_row_len=hidden,   # weight-matrix rows are long: fetch width is fine
+        kernels=kern, serial_scalar_per_iter=0.0,
     )
 
 
-def cnn_infer(name, gmacs, weights_mb, rate, note, prec="int8"):
+def cnn_infer(name, gmacs, weights_mb, rate, note, prec="int8", blocks=12):
     # Conv/attention as GEMM with real operand reuse -- the tile array's home turf.
+    kern = [
+        KernelOp("block GEMMs (qkv, attn, proj, mlp x2)", "gemm",
+                 macs=gmacs * 1e9 / blocks, n_desc=6, repeat=blocks),
+        KernelOp("norms / residual / GELU", "vec",
+                 vec_ops=gmacs * 1e9 * 0.02 / blocks, n_desc=4, repeat=blocks),
+        KernelOp("softmax", "trans", trans_ops=1e5 / blocks, n_desc=2,
+                 repeat=blocks),
+    ]
     return Benchmark(
         name=name, kind="ml", note=note,
         gemv_macs_per_iter=0.0, gemm_macs_per_iter=gmacs * 1e9,
@@ -571,6 +852,7 @@ def cnn_infer(name, gmacs, weights_mb, rate, note, prec="int8"):
         transcendental_per_iter=1e5, scalar_ops_per_iter=500, algo="nn",
         iters=1, calls_per_sec=rate, deadline_us=1e6 / rate,
         persistent_bytes=weights_mb * 1e6, delta_bytes=224 * 224 * 3, prec=prec,
+        kernels=kern, serial_scalar_per_iter=0.0,
     )
 
 
@@ -640,6 +922,106 @@ def representative_dim(b: Benchmark) -> float:
     return max(4.0, b.macs_per_iter ** (1.0 / 3.0) * 1.6)
 
 
+def descriptor_cost(b: Benchmark, cfg: ArgmindCfg, per_call: bool = False) -> dict:
+    """Sequencer cost of one iteration (or of the once-per-call work).
+
+    REPLACES the flat `0.5 * scalar_ops_per_iter` term. Three separate physical
+    effects, none of which the old fudge could express:
+
+      issue_cycles   n_descriptors * seq_setup_cycles / seq_issue_width.
+                     The sequencer's own throughput.
+      dep_drain      one datapath drain per dependency-chain boundary. Descriptor
+                     i+1 of a Cholesky cannot START until i's results are written
+                     back. This is the term the flat constant missed entirely and
+                     it is the one that actually costs HPIPM time.
+      serial_scalar  the loop-carried scalar chain (convergence test, step size).
+
+    OVERLAP, stated as a condition instead of a fudge factor. With a descriptor
+    queue of depth >=1 the sequencer runs AHEAD: it computes descriptor i+1 while
+    the datapath executes i, so setup and execute overlap and the pair costs
+    max(execute, issue), not their sum. This is legitimate here for a specific
+    reason -- the CM's allocation and schedule are STATICALLY CODE-GENERATED, so
+    every descriptor's addresses, dims and strides are known before the loop
+    runs. Nothing in the descriptor stream is data-dependent except the trip
+    count, and continuing the loop is the correct speculation on every iteration
+    but the last. If a descriptor's PARAMETERS were data-dependent (pivoting, an
+    active-set index, alpha scaling the next operand) the overlap would not hold;
+    that work is charged to `serial_scalar_per_iter` instead.
+
+    Set cfg.seq_queue_depth = 0 to get the non-decoupled bound (issue serialised
+    with execute), which is what a naive CSR-write-and-poll sequencer gives. The
+    model must be able to produce that answer.
+
+    LOCAL issue binding: a burst of short descriptors longer than the queue
+    cannot borrow slack from a long neighbour, so a chain group is checked
+    against its own issue cost when its descriptor count exceeds the queue depth.
+    """
+    ops = b.kernels_call if per_call else b.kernels
+    dim = representative_dim(b)
+    n_desc = n_dep = 0.0
+    exec_cycles = 0.0
+    group_cycles = 0.0
+    for op in ops:
+        d, dep = op_descriptors(op, cfg, b.prec)
+        c = op_cycles(op, cfg, b.prec, dim, b.gemv_row_len)
+        n_desc += d
+        n_dep += dep
+        exec_cycles += c
+        # Drain between dependent descriptors: the chain's own serialisation.
+        g = c + dep * cfg.drain_cycles
+        issue_g = d * cfg.seq_setup_cycles / cfg.seq_issue_width
+        if dep > 0 and d > cfg.seq_queue_depth:
+            g = max(g, issue_g)
+        group_cycles += g
+    issue_cycles = n_desc * cfg.seq_setup_cycles / cfg.seq_issue_width
+    serial = 0.0 if per_call else b.serial_scalar_per_iter
+    if cfg.seq_queue_depth >= 1:
+        total = max(group_cycles, issue_cycles) + serial
+    else:
+        total = group_cycles + issue_cycles + serial
+    return {
+        "n_desc": n_desc,
+        "n_dep": n_dep,
+        "exec_cycles": exec_cycles,
+        "dep_drain_cycles": group_cycles - exec_cycles,
+        "issue_cycles": issue_cycles,
+        "serial_cycles": serial,
+        "total_cycles": total,
+        # The design-rule quantity: datapath cycles commanded per descriptor.
+        "cycles_per_desc": exec_cycles / n_desc if n_desc else float("inf"),
+        "issue_bound": issue_cycles > group_cycles,
+        # Everything above and beyond the raw datapath cycles.
+        "seq_overhead_cycles": total - exec_cycles,
+    }
+
+
+def assert_kernels_consistent(b: Benchmark, tol: float = 1e-6) -> None:
+    """The kernel list must account for the declared operation counts exactly.
+
+    Descriptor counts derived from a decomposition that does not add up to the
+    benchmark's MAC counts is the error that double-counted HPIPM GEMM 5.7x.
+    """
+    if not b.kernels:
+        return
+    for label, got, want in (
+        ("gemm", sum(o.total_macs for o in b.kernels if o.kind == "gemm"),
+         b.gemm_macs_per_iter),
+        ("gemv", sum(o.total_macs for o in b.kernels if o.kind == "gemv"),
+         b.gemv_macs_per_iter),
+        ("vec", sum(o.total_vec for o in b.kernels), b.vector_ops_per_iter),
+        ("trans", sum(o.total_trans for o in b.kernels),
+         b.transcendental_per_iter),
+        ("gemm_call", sum(o.total_macs for o in b.kernels_call
+                          if o.kind == "gemm"), b.gemm_macs_per_call),
+        ("gemv_call", sum(o.total_macs for o in b.kernels_call
+                          if o.kind == "gemv"), b.gemv_macs_per_call),
+    ):
+        if abs(got - want) > tol * max(1.0, abs(want)):
+            raise AssertionError(
+                f"{b.name}: kernel decomposition {label} sums to {got:.6g} but "
+                f"the benchmark declares {want:.6g}")
+
+
 def model_argmind(b: Benchmark, cfg: ArgmindCfg) -> dict:
     ns = cfg.cycle_ns
     dim = representative_dim(b)
@@ -654,12 +1036,29 @@ def model_argmind(b: Benchmark, cfg: ArgmindCfg) -> dict:
     trans_cycles = b.transcendental_per_iter * 4.0 / cfg.vector_lanes
     scal_cycles = b.scalar_ops_per_iter / cfg.seq_ipc
 
-    # Sequencer control overlaps compute only partially; assume 50% overlap.
-    per_iter_cycles = (gemv_cycles + gemm_cycles + vec_cycles + trans_cycles
-                       + 0.5 * scal_cycles)
-    once_cycles = (gemm_like_cycles(b.gemm_macs_per_call, cfg, b.prec, dim)
-                   + b.gemv_macs_per_call / cfg.gemv_macs_per_cycle(
-                       b.prec, b.gemv_row_len))
+    datapath_iter = gemv_cycles + gemm_cycles + vec_cycles + trans_cycles
+    once_datapath = (gemm_like_cycles(b.gemm_macs_per_call, cfg, b.prec, dim)
+                     + b.gemv_macs_per_call / cfg.gemv_macs_per_cycle(
+                         b.prec, b.gemv_row_len))
+    if cfg.use_descriptor_seq and b.kernels:
+        # Descriptor-derived sequencer cost. `seq_overhead_cycles` is everything
+        # the datapath cycles do not already contain: dependency drains, issue
+        # cycles when the sequencer is the bottleneck, and the loop-carried
+        # scalar chain. Adding the OVERHEAD (rather than substituting the
+        # descriptor total) keeps this term additive on top of the existing
+        # gemv/gemm/vec decomposition, so no other model output shifts for a
+        # reason unrelated to the sequencer.
+        d_iter = descriptor_cost(b, cfg)
+        d_call = descriptor_cost(b, cfg, per_call=True)
+        per_iter_cycles = datapath_iter + d_iter["seq_overhead_cycles"]
+        once_cycles = once_datapath + d_call["seq_overhead_cycles"]
+        seq_cycles_iter = d_iter["seq_overhead_cycles"]
+    else:
+        # LEGACY: flat scalar count, fixed 50% compute overlap. Retained so v0
+        # numbers stay reproducible and so the delta is auditable.
+        per_iter_cycles = datapath_iter + 0.5 * scal_cycles
+        once_cycles = once_datapath
+        seq_cycles_iter = 0.5 * scal_cycles
     compute_us = (per_iter_cycles * b.iters + once_cycles) * ns / 1000.0
 
     # ---- data movement --------------------------------------------------
@@ -703,6 +1102,9 @@ def model_argmind(b: Benchmark, cfg: ArgmindCfg) -> dict:
         "sram_pj_per_byte": e_sram_pj_b,
         "e_sram_frac": e_sram * cfg.overhead_mult / energy_pj,
         "delivered_bw_bpc": cfg.delivered_bw_bpc(b.prec, b.gemv_row_len),
+        "seq_cycles_per_iter": seq_cycles_iter,
+        "seq_frac_of_compute": (seq_cycles_iter * b.iters * ns / 1000.0
+                                / compute_us if compute_us > 0 else 0.0),
     }
 
 
@@ -978,7 +1380,12 @@ def main():
     out("  1. Energy constants are scaled estimates, not PDK numbers (+/-2x).")
     out("  2. CPU small-GEMM efficiency (30%) is a literature-informed guess; measure")
     out("     it on real hardware with OSQP/acados before trusting any ratio.")
-    out("  3. Sequencer/compute overlap fixed at 50% — a modelling assumption.")
+    out("  3. Sequencer cost is now DESCRIPTOR-DERIVED (issue rate + dependency")
+    out("     drain + loop-carried scalar chain), not the old flat 50%-overlap")
+    out("     fudge -- see perf_model/sequencer.py. The load-bearing [EST] is")
+    out(f"     seq_setup_cycles = {CFG_100.seq_setup_cycles:.0f} cycles/descriptor; "
+        f"count the instructions in a")
+    out("     real RV32 descriptor-emit sequence to firm it up.")
     out("  4. No thermal, DVFS, or contention modelling.")
     out("  5. Next fidelity step: measure the CPU baselines for real (Phase 0), then")
     out("     replace the CM side with the cycle-approximate model (Phase 1).")

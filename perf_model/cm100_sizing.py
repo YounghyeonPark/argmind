@@ -35,6 +35,11 @@ import dataclasses
 import argmind_model as M
 import sram_cost as S
 
+# Sequencer 0.045: was a flat [EST]; costed bottom-up 2026-07-30 in sequencer.py
+# as 0.0137 mm2 of logic (RV32IMC + 3 descriptor AGUs + hardware loop + 8-deep
+# descriptor queue) plus 0.0143 mm2 for an 8 KB I-mem / 4 KB D-mem = 0.028 mm2,
+# i.e. 62% of the allocation. Kept at 0.045 as headroom rather than reduced --
+# the derivation confirms the number, it does not license shrinking it.
 REST_MM2 = 0.045 + 0.070 + 0.030      # sequencer, DMA+AXI/ACE-Lite, misc [EST]
 TOP_MARGIN = 1.15                      # top-level route/CTS/margin [EST]
 A_GATE = S.A_GATE_UM2
@@ -125,7 +130,10 @@ def decompose(b: M.Benchmark, c: M.ArgmindCfg, iters: int | None = None) -> dict
       gemv_bw   scratchpad read bandwidth (matrix-vector: no operand reuse)
       gemm_mac  MAC array throughput      (matrix-matrix: reuse available)
       vec       vector unit / transcendental lanes
-      seq       sequencer issue rate
+      seq       sequencer DESCRIPTOR ISSUE rate (n_desc * setup / issue_width).
+                REPLACED 2026-07-30: was `0.5 * scalar_ops_per_iter`, a flat
+                constant with a fixed 50% overlap that could not express
+                descriptor granularity at all. See sequencer.py.
       dma       external bandwidth (non-overlapped residue)
       host      per-call launch overhead
     """
@@ -133,13 +141,19 @@ def decompose(b: M.Benchmark, c: M.ArgmindCfg, iters: int | None = None) -> dict
     ns = c.cycle_ns / 1000.0
     dim = M.representative_dim(b)
     gemv_pc = c.gemv_macs_per_cycle(b.prec, b.gemv_row_len)
+    if c.use_descriptor_seq and b.kernels:
+        di = M.descriptor_cost(b, c)
+        dc = M.descriptor_cost(b, c, per_call=True)
+        seq_us = (di["issue_cycles"] * it + dc["issue_cycles"]) * ns
+    else:
+        seq_us = 0.5 * b.scalar_ops_per_iter / c.seq_ipc * it * ns
     d = {
         "gemv_bw": (b.gemv_macs_per_iter * it + b.gemv_macs_per_call) / gemv_pc * ns,
         "gemm_mac": (M.gemm_like_cycles(b.gemm_macs_per_iter, c, b.prec, dim) * it
                      + M.gemm_like_cycles(b.gemm_macs_per_call, c, b.prec, dim)) * ns,
         "vec": (b.vector_ops_per_iter / c.vector_lanes
                 + b.transcendental_per_iter * 4.0 / c.vector_lanes) * it * ns,
-        "seq": 0.5 * b.scalar_ops_per_iter / c.seq_ipc * it * ns,
+        "seq": seq_us,
     }
     r = M.model_argmind(dataclasses.replace(b, iters=it), c)
     d["dma"] = r["transfer_us"]

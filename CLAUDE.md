@@ -68,6 +68,21 @@ automotive.
   (History: quoted as 17–25× and 1.2–2.9×, then 9.5–21.3× and "below parity on 2–3 of 5". The
   latter was an artefact of reporting at 64 B/cycle, a config we do not recommend. Always quote
   at the CM-100 configuration.)
+- **The sequencer is not the bottleneck, but two of its properties are requirements**
+  (settled 2026-07-30, PHASE0_FINDINGS §0.2). The earlier "ARM-MPC is sequencer-issue-bound at any
+  precision" note was a **unit error** — it divided an fp64 workload by the bf16 *array* rate.
+  Corrected: 30 datapath cycles/descriptor vs a 34-cycle crossover, and exposure scales with
+  arithmetic **rate**, so fp64 is the *safest* case and bf16/fp32 the most exposed. Sequencer =
+  scalar core **+ hardware descriptor generator, ≤4 cycles/descriptor, 8-deep run-ahead queue**;
+  0.028 mm², inside the existing budget, **no area change**. Issue *width* >1/cycle buys nothing.
+  Requirements, not optimizations: **(a) run-ahead** (write-and-poll misses PWR-MPC's 50% budget,
+  38.1 vs 25 µs) and **(b) dependency-chain blocking ≥ one datapath width** (a 4-wide blocked
+  Cholesky also misses it). **97–100% of the sequencer's latency cost is dependency drain, not
+  issue throughput** — drain is not relieved by bandwidth or MACs, only by wider chain blocks and a
+  shorter pipeline. Codegen rule: **≥8 datapath cycles per descriptor on average, bursts ≤ queue
+  depth.** Exposure is set by cycles/descriptor, **not** algorithm class — the most exposed row is
+  PWR-MPC, which is ADMM, so do not pitch this as "interior point is the risky one." Consequence
+  for §4.2: **descriptor emission stays on the CM side at every integration depth (D1/D2/D3).**
 - **Power gating is an architectural requirement, not an optimization.** Solver duty cycles are
   0.2–12%; charged ungated, QUAD-MPC perf/W falls 12.6× → 4.8× — *below the kill criterion* —
   and EKF-24 to 0.2×. Coarse-grain gating, or at minimum full clock gating plus retention-mode
@@ -113,7 +128,7 @@ automotive.
 ## Conventions
 
 Windows/PowerShell; python 3.14; **git repo since 2026-07-30** — commit before and after any
-change to `perf_model/`, and run `python -m pytest` (70 invariant + mutation tests) before
+change to `perf_model/`, and run `python -m pytest` (122 invariant + mutation tests) before
 quoting any modelled number. Markdown docs at root, model in `perf_model/`.
 Prefer open-source EDA (Verilator, cocotb, Yosys) — the cash plan depends on it. Interfaces:
 AXI4/AXI4-Lite baseline; ACE-Lite (Arm) and coherent TileLink (RISC-V) for zero-copy; CHI +

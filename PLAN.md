@@ -123,14 +123,29 @@ second selling point on the same engine.
   > fp64. Getting it by multi-pass decomposition onto the bf16 multipliers costs **49–361 passes**
   > for error-free accuracy and **3.5–23× the energy** — rejected. Native fp64 across all 144
   > cells costs +1.42 mm² — rejected. **A merged 8-unit cluster costs +0.067 mm²** and meets the
-  > deadline at 2.7× margin on worst-case iteration counts. Consequence for the RTL: the vector
+  > deadline at 2.4× margin on worst-case iteration counts. Consequence for the RTL: the vector
   > unit and the fp64 unit are **one scheduling resource**, which the sequencer and codegen must
   > model. Consequence for sizing: 8 units on *every* SKU — fp64 is a **feature bit, not a
   > scaling parameter**, and there is no SKU from which it can be removed while keeping
   > interior-point MPC.
 - **Sequencer:** a small RISC-V core (or licensed equivalent) running the solver loop control
   in-fabric: convergence tests, branching, step-size logic — no host round-trip per iteration.
-  This is what makes 1–10 kHz MPC feasible.
+  This is what makes 1–10 kHz MPC feasible. **Plus a hardware descriptor generator: 3 AGUs walking
+  a descriptor template under a 3-level hardware loop, and an 8-deep run-ahead descriptor queue.**
+  > **Specified 2026-07-30 (PHASE0_FINDINGS §0.2, `perf_model/sequencer.py`).** Sizing target:
+  > **≤4 sequencer cycles per descriptor, 1 descriptor/cycle issue width, queue depth 8** —
+  > 0.028 mm² all in (0.0137 logic + 0.0143 for an 8 KB I-mem / 4 KB D-mem), inside the existing
+  > 0.045 mm² allocation. Issue *width* above 1/cycle buys nothing on any benchmark; **setup cost
+  > per descriptor is the axis that matters.** Two things are requirements rather than
+  > optimisations: **(a) run-ahead** — a write-descriptor-and-poll sequencer misses PWR-MPC's
+  > 50%-of-period budget (38.1 µs vs 25 µs); **(b) dependency-chain blocking ≥ one full datapath
+  > width** — a blocked Cholesky that advances only 4 elements per dependent step also misses it.
+  > 97–100% of the sequencer's latency contribution is **dependency drain**, not issue throughput,
+  > and drain cannot be provisioned away by bandwidth or MACs.
+- **Codegen contract:** a code-generated iteration must average **≥ 8 datapath cycles per
+  descriptor** (2 × the setup cost) with no burst of sub-threshold descriptors longer than the
+  descriptor queue. HPIPM at nb=21 sits at 30 cycles/descriptor, ADMM at n_var=80 at 59, and the
+  20 kHz motor-drive row at **10.2 — the thinnest margin in the frozen set.**
 - **Memory:** software-managed multi-bank scratchpad + descriptor-based DMA; double-buffering
   so data movement overlaps compute.
 - Deterministic execution mode (no cache-miss variance) for real-time / safety markets.
@@ -434,6 +449,15 @@ lives in a datapath and a residency model, not in a core.
 - D3 gives up the "one engine, two workloads" story: inside someone's CPU pipeline we are an
   arithmetic unit, not a Computational Module with its own sequencer. The category we are coining
   presumes D1/D2.
+- **D2/D3 must not move descriptor emission to the host** (quantified 2026-07-30, PHASE0_FINDINGS
+  §0.2). "The host issues to us" means ~20 sequencer cycles per descriptor and no reliable
+  run-ahead, because the host is also executing the application. Worst solver margin against the
+  50%-of-period budget: **D1 1.71× · D2 with the generator moved to the CM side 1.71× · host
+  issuing with software double-buffering 1.23× · host issuing with no run-ahead 0.66× (misses)**.
+  The binding row is PWR-MPC every time — and PWR-MPC *is* the MCU-class socket D2 is nominated
+  for. So D2 stays a wrapper rather than a redesign **provided the wrapper keeps the descriptor
+  generator on the CM side**. This is also a MACIF constraint: the descriptor format is part of
+  the boundary a CIM macro must honour, so the generator sits *above* MACIF.
 
 **Recommendation:** stay on D1 for Phase 2, design the MACIF and the runtime API so D2 is a
 wrapper rather than a redesign, and treat D3 as a licensing conversation to open only once a

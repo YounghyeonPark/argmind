@@ -119,6 +119,49 @@ def test_ata_term_would_be_caught():
     assert cur_a == pytest.approx(cur_b, rel=1e-9)
 
 
+def test_a_free_sequencer_would_be_caught():
+    """New for the descriptor-issue model (2026-07-30).
+
+    The single most likely way for the sequencer model to go slack is for its
+    costs to be zeroed -- setup free and dependency drain free -- at which point
+    it can no longer report the one failure it exists to report. Prove that the
+    "a plausible sequencer misses a deadline" invariant depends on those terms.
+    """
+    import dataclasses
+
+    import sequencer as Q
+
+    pwr = dataclasses.replace(by_name("PWR-MPC"),
+                              iters=by_name("PWR-MPC").iters_wc)
+    budget = pwr.deadline_us * Q.PERIOD_BUDGET
+
+    honest = dataclasses.replace(M.CFG_100, seq_setup_cycles=20,
+                                 seq_queue_depth=0)
+    assert M.model_argmind(pwr, honest)["latency_us"] > budget
+
+    free = dataclasses.replace(honest, seq_setup_cycles=0.0, drain_cycles=0)
+    assert M.model_argmind(pwr, free)["latency_us"] <= budget, (
+        "zeroing descriptor setup and dependency drain no longer makes the "
+        "PWR-MPC budget reachable — the sequencer terms are not load-bearing")
+
+
+def test_inconsistent_descriptor_decomposition_would_be_caught():
+    """The consistency rule must actually bite.
+
+    Descriptor counts derived independently of the MAC counts is the error that
+    double-counted HPIPM GEMM work 5.7x. Corrupt one kernel op's MAC count and
+    the consistency assertion must fire.
+    """
+    arm = copy.deepcopy(by_name("ARM-MPC"))
+    M.assert_kernels_consistent(arm)          # clean
+    bad = M.KernelOp(name="inflated syrk", kind="gemm",
+                     macs=arm.kernels[1].macs * 2.0,
+                     n_desc=arm.kernels[1].n_desc, repeat=arm.kernels[1].repeat)
+    arm.kernels = [bad if i == 1 else k for i, k in enumerate(arm.kernels)]
+    with pytest.raises(AssertionError):
+        M.assert_kernels_consistent(arm)
+
+
 def test_infeasible_scenario_would_be_caught_by_status_check():
     """Historical error in the MEASUREMENT harness, not the model.
 

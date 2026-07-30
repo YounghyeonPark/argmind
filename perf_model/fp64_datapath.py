@@ -128,7 +128,12 @@ def arm_mpc_latency(cfg: M.ArgmindCfg, iters: int, dim: float = NB) -> dict:
         "fp64_gemv": w["gemv"] / gemv_rate * ns,
         "vec": (ARM.vector_ops_per_iter / cfg.vector_lanes
                 + ARM.transcendental_per_iter * 4.0 / cfg.vector_lanes) * iters * ns,
-        "seq": 0.5 * ARM.scalar_ops_per_iter / cfg.seq_ipc * iters * ns,
+        # SEQUENCER, updated 2026-07-30: was `0.5 * scalar_ops_per_iter`, the flat
+        # constant with the fixed 50% overlap. Now the descriptor-derived cost --
+        # descriptor issue, dependency-chain drain, and the loop-carried scalar
+        # chain (sequencer.py / argmind_model.descriptor_cost). This is the term
+        # whose absence produced the open item logged in Q1(a) below.
+        "seq": M.descriptor_cost(ARM, cfg)["seq_overhead_cycles"] * iters * ns,
         "host": cfg.call_overhead_us,
     }
     d["_total"] = sum(d.values())
@@ -267,7 +272,17 @@ def refinement_analysis(cfg: M.ArgmindCfg, k: int, iters: int) -> dict:
            + resid / r64v + resolve / r32v)
     vec = (ARM.vector_ops_per_iter / cfg.vector_lanes
            + ARM.transcendental_per_iter * 4.0 / cfg.vector_lanes) * iters
-    seq = 0.5 * ARM.scalar_ops_per_iter / cfg.seq_ipc * iters
+    # SEQUENCER, updated 2026-07-30 and it matters MORE here than anywhere else
+    # in this file. Refinement puts the O(n^3) factorisation on the bf16/fp32
+    # ARRAY, which is ~9x faster per descriptor than the fp64 cluster, so the same
+    # 450 block-op descriptors command only ~7 datapath cycles each. Charged with
+    # the descriptor model at the fp32 rate (sequencer.py Q4a): the crossover is
+    # ~10 setup cycles, so refinement is sequencer-issue-bound on any
+    # software-issued sequencer. Plus k*N extra descriptors per refinement pass
+    # (one fp64 residual GEMV and one fp32 re-solve per stage).
+    seq_fp32 = M.descriptor_cost(dataclasses.replace(ARM, prec="fp32"), cfg)
+    seq = seq_fp32["seq_overhead_cycles"] * iters
+    seq += k * iters * 2 * 30 * cfg.seq_setup_cycles / cfg.seq_issue_width
     lat = (cyc + vec + seq) * ns + cfg.call_overhead_us
 
     # Energy: MAC + scratchpad traffic, then the standard overhead multiplier.
@@ -423,17 +438,28 @@ def main():
     out("       so multi-pass does not make the sequencer tax relatively worse.")
     out("       The expected hidden expense is NOT there. Multi-pass is killed by")
     out("       the pass count alone.")
-    out("    2. BUT the ratio flags a SEPARATE, PRE-EXISTING problem this analysis")
-    out("       surfaced: at nb=21 an HPIPM block op is only a handful of array")
-    out("       cycles, so if descriptor issue costs >4 cycles, ARM-MPC is")
-    out("       SEQUENCER-ISSUE-BOUND rather than array-bound, at ANY precision.")
-    out("       The model does not represent this (it charges a flat 150 scalar")
-    out("       ops/iteration). It does not change the fp64 decision -- 8 FMAs is")
-    out("       still right, and an issue bound would only make a LARGER fp64 unit")
-    out("       even less useful -- but it is a new open item for the sequencer")
-    out("       microarchitecture: descriptor issue must be <=4 cycles, or the")
-    out("       sequencer needs a hardware loop that emits a stage's descriptors")
-    out("       from one instruction. LOGGED, NOT RESOLVED HERE.")
+    out("    2. The ratio ALSO seemed to flag a separate, pre-existing problem: at")
+    out("       nb=21 an HPIPM block op looked like only a handful of array cycles,")
+    out("       so if descriptor issue cost >4 cycles ARM-MPC would be")
+    out("       SEQUENCER-ISSUE-BOUND rather than array-bound 'at any precision'.")
+    out("       That was LOGGED here as an open item and has since been CLOSED --")
+    out("       AS A UNIT ERROR IN THIS FILE. See perf_model/sequencer.py and")
+    out("       PHASE0_FINDINGS.md 0.2. The table above divides by the 144-MAC bf16")
+    out("       ARRAY rate, but ARM-MPC is fp64 and fp64 runs on the 8-unit FMA")
+    out("       CLUSTER -- which is the decision THIS FILE makes two sections")
+    out("       earlier. Corrected, and with the descriptor count fixed at its")
+    out("       structural value (540/IP iteration, 3x the 180 assumed here), the")
+    out("       figure is 30 datapath cycles per descriptor against a crossover at")
+    out("       34 setup cycles: ARRAY-BOUND, with 8.6x margin at 4 cycles/desc.")
+    out("       'At any precision' is FALSE -- exposure scales with arithmetic")
+    out("       RATE, so fp64 is the SAFEST case and fp32/bf16 the most exposed.")
+    out("       The table below is therefore correct ONLY for the multi-pass option")
+    out("       it prices, where the work really is on the bf16 array.")
+    out("       NEW CONSEQUENCE FOR Q3: the fp32 + iterative-refinement option puts")
+    out("       the O(n^3) factorisation on the array in fp32, where the crossover")
+    out("       is 10 setup cycles -- so refinement is SEQUENCER-ISSUE-BOUND with")
+    out("       anything but a hardware descriptor generator. Q3 does not charge")
+    out("       it for that. Native fp64 wins on a third axis.")
     out()
     out("  AND THE ACCUMULATOR, which is the part of option (a) that has real area:")
     out(f"    error-free slice accumulation needs an exact "
@@ -707,8 +733,11 @@ def main():
     kx = next((k for k in range(1, 20)
                if refinement_analysis(REC, k, ARM.iters_wc)["energy_uj"]
                > s1["energy_uj"]), None)
+    _sp = [s1["latency_us"] / refinement_analysis(REC, k, ARM.iters_wc)["latency_us"]
+           for k in (1, 2, 3, 5)]
     out("  READ THIS TABLE ADVERSARIALLY, because it does NOT simply favour us.")
-    out(f"  Refinement is FASTER at every k (1.2x-3.1x). On ENERGY there is a")
+    out(f"  Refinement is FASTER at every k ({min(_sp):.1f}x-{max(_sp):.1f}x). "
+        f"On ENERGY there is a")
     out(f"  CROSSOVER at k = {kx}: below it refinement wins on energy too, above it")
     out("  native fp64 wins. So the honest statement is a crossover, not a verdict:")
     out()

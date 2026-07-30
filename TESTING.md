@@ -12,16 +12,23 @@ Surveyed and set up 2026-07-29. Run everything with `python -m pytest` from the 
 | python | 3.14.5 | — |
 | gcc | MinGW-w64 | present, unused so far |
 
-**70 tests, all passing**, in four files:
+**122 tests, all passing**, in five files:
 
 - [tests/test_model_invariants.py](tests/test_model_invariants.py) — 27 tests. One regression
   test per historical modelling error, plus physical invariants.
 - [tests/test_fp64_datapath.py](tests/test_fp64_datapath.py) — 28 tests covering the fp64 datapath
   costing: FMA gate model vs its published anchors, fp64 throughput decoupled from the MAC array,
   fp64 area nonzero and monotone, multi-pass scaling, and the refinement crossover.
+- [tests/test_sequencer.py](tests/test_sequencer.py) — 50 tests covering the descriptor-issue
+  model: every benchmark's kernel decomposition must sum to its declared MAC/vec/trans counts and
+  must reproduce the main model's datapath cycle count; the retired flat `scalar_ops_per_iter`
+  must no longer reach the CM path; monotonicity in setup cost, run-ahead and chain-block width;
+  dependency drain invariant to scratchpad bandwidth; and the findings themselves pinned as
+  relationships (block-structured IP issues >10× the descriptors of ADMM; exposure ordered by
+  cycles/descriptor; faster precision is *more* exposed).
 - [tests/test_sram_and_harness.py](tests/test_sram_and_harness.py) — 10 tests covering the
   SRAM cost model and the OSQP harness (see "Not yet covered" below, now largely closed).
-- [tests/test_guards_actually_bite.py](tests/test_guards_actually_bite.py) — 5 meta-tests that
+- [tests/test_guards_actually_bite.py](tests/test_guards_actually_bite.py) — 7 meta-tests that
   re-introduce real past bugs at runtime and assert the matching guard *fails*.
 
 ## Test strategy: pin relationships, not numbers
@@ -52,6 +59,9 @@ each buggy formulation and asserts the guard trips. Confirmed live:
 - Misclassifying GEMV as GEMM makes a 16× larger array look 5%+ faster → caught.
 - Restoring the phantom transcendental term inflates apparent speedup by >25% → caught.
 - Removing overhead energy inflates perf/W by >30% → caught.
+- Zeroing descriptor setup cost and dependency drain makes PWR-MPC's 50%-budget miss disappear,
+  i.e. the sequencer terms are load-bearing → caught.
+- Inflating one kernel op's MAC count breaks the descriptor/MAC consistency assertion → caught.
 
 If a test in that file ever starts passing *trivially*, the corresponding guard has gone slack.
 

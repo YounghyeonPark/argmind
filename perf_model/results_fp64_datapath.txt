@@ -47,10 +47,10 @@ Parametric IEEE-754 FMA gate model (sram_cost.fma_gates_ieee):
         9          16.0      365.4      47.5     243.0      655.9     34.67       0.8x MEETS 50% budget (fp32-acc only)
        25           5.8     1015.0      79.2     675.0     1769.2     83.02       1.9x MEETS 50% budget    
        49           2.9     1989.4     110.9    1323.0     3423.3    151.57       3.5x deadline only       
-      121           1.2     4912.6     174.3    3267.0     8353.9    349.24       8.2x MISSES DEADLINE     
-      196           0.7     7957.6     221.9    5292.0    13471.5    550.49      12.9x MISSES DEADLINE     
-      361           0.4    14656.6     301.1    9747.0    24704.7    986.87      23.1x MISSES DEADLINE     
-  NATIVE (8 FMAs)           8.0                                     741.7     42.72       1.0x MEETS 50% budget    
+      121           1.2     4912.6     174.3    3267.0     8353.9    349.24       7.9x MISSES DEADLINE     
+      196           0.7     7957.6     221.9    5292.0    13471.5    550.49      12.5x MISSES DEADLINE     
+      361           0.4    14656.6     301.1    9747.0    24704.7    986.87      22.5x MISSES DEADLINE     
+  NATIVE (8 FMAs)           8.0                                     822.1     43.93       1.0x MEETS 50% budget    
 
   THE SEQUENCER COST, checked explicitly because that is where the hidden
   expense usually lives. The result is NOT what was expected:
@@ -71,17 +71,28 @@ Parametric IEEE-754 FMA gate model (sram_cost.fma_gates_ieee):
        so multi-pass does not make the sequencer tax relatively worse.
        The expected hidden expense is NOT there. Multi-pass is killed by
        the pass count alone.
-    2. BUT the ratio flags a SEPARATE, PRE-EXISTING problem this analysis
-       surfaced: at nb=21 an HPIPM block op is only a handful of array
-       cycles, so if descriptor issue costs >4 cycles, ARM-MPC is
-       SEQUENCER-ISSUE-BOUND rather than array-bound, at ANY precision.
-       The model does not represent this (it charges a flat 150 scalar
-       ops/iteration). It does not change the fp64 decision -- 8 FMAs is
-       still right, and an issue bound would only make a LARGER fp64 unit
-       even less useful -- but it is a new open item for the sequencer
-       microarchitecture: descriptor issue must be <=4 cycles, or the
-       sequencer needs a hardware loop that emits a stage's descriptors
-       from one instruction. LOGGED, NOT RESOLVED HERE.
+    2. The ratio ALSO seemed to flag a separate, pre-existing problem: at
+       nb=21 an HPIPM block op looked like only a handful of array cycles,
+       so if descriptor issue cost >4 cycles ARM-MPC would be
+       SEQUENCER-ISSUE-BOUND rather than array-bound 'at any precision'.
+       That was LOGGED here as an open item and has since been CLOSED --
+       AS A UNIT ERROR IN THIS FILE. See perf_model/sequencer.py and
+       PHASE0_FINDINGS.md 0.2. The table above divides by the 144-MAC bf16
+       ARRAY rate, but ARM-MPC is fp64 and fp64 runs on the 8-unit FMA
+       CLUSTER -- which is the decision THIS FILE makes two sections
+       earlier. Corrected, and with the descriptor count fixed at its
+       structural value (540/IP iteration, 3x the 180 assumed here), the
+       figure is 30 datapath cycles per descriptor against a crossover at
+       34 setup cycles: ARRAY-BOUND, with 8.6x margin at 4 cycles/desc.
+       'At any precision' is FALSE -- exposure scales with arithmetic
+       RATE, so fp64 is the SAFEST case and fp32/bf16 the most exposed.
+       The table below is therefore correct ONLY for the multi-pass option
+       it prices, where the work really is on the bf16 array.
+       NEW CONSEQUENCE FOR Q3: the fp32 + iterative-refinement option puts
+       the O(n^3) factorisation on the array in fp32, where the crossover
+       is 10 setup cycles -- so refinement is SEQUENCER-ISSUE-BOUND with
+       anything but a hardware descriptor generator. Q3 does not charge
+       it for that. Native fp64 wins on a third axis.
 
   AND THE ACCUMULATOR, which is the part of option (a) that has real area:
     error-free slice accumulation needs an exact 128-bit fixed-point
@@ -101,8 +112,8 @@ Parametric IEEE-754 FMA gate model (sram_cost.fma_gates_ieee):
       pessimistic edge misses it by 6x. Taking a 7x-uncertainty
       dependency on the ONE hard-real-time correctness path to save 4%
       of the core is a bad trade at any pass count in that band.
-    * ENERGY, which is the axis we actually sell: 3.5x to 23.1x worse
-      than native (152-987 uJ vs 43 uJ), because P passes multiply BOTH the
+    * ENERGY, which is the axis we actually sell: 3.5x to 22.5x worse
+      than native (152-987 uJ vs 44 uJ), because P passes multiply BOTH the
       MAC energy and the sliced-operand fetch traffic. This alone settles
       it: an energy-differentiated part cannot use a 4-30x energy penalty
       on a beachhead workload to save 4% of its area.
@@ -125,12 +136,12 @@ Parametric IEEE-754 FMA gate model (sram_cost.fma_gates_ieee):
   as literally stated. Option (d) below merges it with the vector unit and
   is cheaper on net.
    FMAs  central mm2  pessim mm2  ARM wc us  margin vs 50% binds on    
-      1       0.0112      0.0235     5400.6          0.37x fp64_gemm   
-      2       0.0224      0.0470     2768.1          0.72x fp64_gemm   
-      4       0.0447      0.0940     1450.2          1.38x fp64_gemm   
-      8       0.0895      0.1879      741.7          2.70x fp64_gemm   
-     16       0.1790      0.3759      432.4          4.63x fp64_gemm   
-     32       0.3580      0.7518      264.5          7.56x fp64_gemm   
+      1       0.0112      0.0235     5967.1          0.34x fp64_gemm   
+      2       0.0224      0.0470     3064.5          0.65x fp64_gemm   
+      4       0.0447      0.0940     1611.6          1.24x fp64_gemm   
+      8       0.0895      0.1879      822.1          2.43x fp64_gemm   
+     16       0.1790      0.3759      485.8          4.12x fp64_gemm   
+     32       0.3580      0.7518      290.9          6.88x fp64_gemm   
 
   Cheapest per unit of what we need -- and what we need is 'meet a 4000 us
   deadline at 30 interior-point iterations inside 50% of the period'.
@@ -148,7 +159,7 @@ Parametric IEEE-754 FMA gate model (sram_cost.fma_gates_ieee):
   Net +1.417 mm2 to the compute block -- roughly 12x option (b) --
   which would take the CM-100 core from 0.565 to ~2.19 mm2, a 3.9x part, to
   serve ONE benchmark whose demand is 4-8 FMAs. Also pointless on its own
-  terms: at 144 fp64 FMAs ARM-MPC lands at 176 us, 11x inside the
+  terms: at 144 fp64 FMAs ARM-MPC lands at 202 us, 10x inside the
   50%-period budget, and its fp64 GEMV is bandwidth-capped at 16 MAC/cycle
   regardless -- so most of the array is unfeedable even on the one
   benchmark that wants fp64 at all. REJECTED.
@@ -198,13 +209,13 @@ Q2 — HOW MUCH fp64 THROUGHPUT DOES THE BENCHMARK SET ACTUALLY REQUIRE?
   split, vector and sequencer terms all charged (arm_mpc_latency):
 
    FMAs  fp64_gemm  fp64_gemv        vec        seq       host      TOTAL  vs 4000  vs 2000  verdict
-      1     4353.2     1014.3       29.5        2.8        0.8     5400.6    0.74x    0.37x  FAIL
-      2     2227.8      507.2       29.5        2.8        0.8     2768.1    1.45x    0.72x  deadline only
-      4     1163.4      253.6       29.5        2.8        0.8     1450.2    2.76x    1.38x  PASS
-      6      775.6      169.1       29.5        2.8        0.8      977.8    4.09x    2.05x  PASS
-      8      581.7      126.8       29.5        2.8        0.8      741.7    5.39x    2.70x  PASS
-     12      387.8       84.5       29.5        2.8        0.8      505.5    7.91x    3.96x  PASS
-     16      335.9       63.4       29.5        2.8        0.8      432.4    9.25x    4.63x  PASS
+      1     4353.2     1014.3       29.5      569.2        0.8     5967.1    0.67x    0.34x  FAIL
+      2     2227.8      507.2       29.5      299.3        0.8     3064.5    1.31x    0.65x  deadline only
+      4     1163.4      253.6       29.5      164.3        0.8     1611.6    2.48x    1.24x  PASS
+      6      775.6      169.1       29.5      110.2        0.8     1085.3    3.69x    1.84x  PASS
+      8      581.7      126.8       29.5       83.3        0.8      822.1    4.87x    2.43x  PASS
+     12      387.8       84.5       29.5       56.2        0.8      558.9    7.16x    3.58x  PASS
+     16      335.9       63.4       29.5       56.2        0.8      485.8    8.23x    4.12x  PASS
 
   CROSSOVERS (worst-case iterations, nb=21 utilisation):
     minimum for the 50%-of-period budget : 4 FMAs
@@ -213,7 +224,7 @@ Q2 — HOW MUCH fp64 THROUGHPUT DOES THE BENCHMARK SET ACTUALLY REQUIRE?
     optimistic utilisation proxy (dim=79) : 4 FMAs
 
   ANSWER: 4 FMAs is the feasibility FLOOR; 8 is the recommendation, at
-  2.70x margin on the 50%-period budget and 5.39x on the
+  2.43x margin on the 50%-period budget and 4.87x on the
   raw deadline. 2 FMAs misses the budget, 1 misses the deadline outright.
   8 is chosen over 4 because it is FREE: 8 merged units is exactly the
   16 fp32 vector lanes the part already needs. Above 8, fp64 GEMV becomes
@@ -226,18 +237,18 @@ Q2 — HOW MUCH fp64 THROUGHPUT DOES THE BENCHMARK SET ACTUALLY REQUIRE?
   that a LINEAR cluster only quantises its innermost loop. That is worth
   1.26x. Re-run with the FULL 2-D penalty charged instead:
    FMAs   harsh us  budget margin   deadline
-      2     3219.9          0.62x      1.24x
-      4     1748.3          1.14x      2.29x
-      8      890.7          2.25x      4.49x
-     16      583.7          3.43x      6.85x
+      2     3516.3          0.57x      1.14x
+      4     1909.8          1.05x      2.09x
+      8      971.2          2.06x      4.12x
+     16      637.2          3.14x      6.28x
   The recommendation is UNCHANGED (8 FMAs, 2.25x instead of 2.70x) and so
   is the floor (4 FMAs, 1.14x instead of 1.38x -- thin either way). So the
   sizing does not depend on the softening. What it DOES depend on is
   iters_worst=30, which is [EST] (2x the design point), not measured:
    iters_worst  floor (>=1x budget)   8-FMA budget margin
-            30                   4 FMAs                 2.70x
-            45                   6 FMAs                 1.83x
-            60                   6 FMAs                 1.39x
+            30                   4 FMAs                 2.43x
+            45                   6 FMAs                 1.65x
+            60                   8 FMAs                 1.25x
   At a 60-iteration tail the 8-FMA recommendation drops to 1.39x margin --
   still feasible, but no longer comfortable. MEASURING ARM-MPC'S ACTUAL
   IP ITERATION TAIL IS THE SINGLE HIGHEST-VALUE INPUT TO THIS DECISION,
@@ -277,14 +288,14 @@ Q3 — DOES fp32 + ITERATIVE REFINEMENT BEAT NATIVE fp64?
   array + 8 fp64 FMAs + 128 B/cycle), ARM-MPC at 30 IP iterations:
 
   strategy                              lat us       uJ   spad MB  fp64 frac  determinism
-  S1 all-fp64 KKT solve                  741.7    42.72     10.44       100%  fixed op count
-  S2 fp32 factor + fp64 IR, k=1          239.1    27.42     11.57         8%  fixed k
-  S2 fp32 factor + fp64 IR, k=2          332.1    40.63     17.92        13%  fixed k
-  S2 fp32 factor + fp64 IR, k=3          425.1    53.84     24.27        16%  fixed k
-  S2 fp32 factor + fp64 IR, k=5          611.2    80.26     36.97        20%  fixed k
+  S1 all-fp64 KKT solve                  822.1    43.93     10.44       100%  fixed op count
+  S2 fp32 factor + fp64 IR, k=1          301.5    28.36     11.57         8%  fixed k
+  S2 fp32 factor + fp64 IR, k=2          403.5    41.71     17.92        13%  fixed k
+  S2 fp32 factor + fp64 IR, k=3          505.5    55.05     24.27        16%  fixed k
+  S2 fp32 factor + fp64 IR, k=5          709.6    81.74     36.97        20%  fixed k
 
   READ THIS TABLE ADVERSARIALLY, because it does NOT simply favour us.
-  Refinement is FASTER at every k (1.2x-3.1x). On ENERGY there is a
+  Refinement is FASTER at every k (1.2x-2.7x). On ENERGY there is a
   CROSSOVER at k = 3: below it refinement wins on energy too, above it
   native fp64 wins. So the honest statement is a crossover, not a verdict:
 
@@ -310,9 +321,9 @@ Q3 — DOES fp32 + ITERATIVE REFINEMENT BEAT NATIVE fp64?
     (i)  adaptive k: worst-case latency is unbounded. Non-starter.
     (ii) fixed k with a correctness check and an all-fp64 fallback:
          deterministic, but the certifiable worst case is the SUM.
-    S1 alone                          741.7 us
-    S2 (k=3) alone                    425.1 us
-    S2 then fallback to S1           1166.8 us  <-- the number a safety
+    S1 alone                          822.1 us
+    S2 (k=3) alone                    505.5 us
+    S2 then fallback to S1           1327.6 us  <-- the number a safety
                                               argument must use
     ... which is 1.6x S1 alone. A scheme whose WORST case is worse than
     the thing it replaces cannot be the baseline for a hard-deadline part,
@@ -322,18 +333,18 @@ Q3 — DOES fp32 + ITERATIVE REFINEMENT BEAT NATIVE fp64?
   strength: (1) refinement does not remove the fp64 requirement at all,
   it relocates it; (2) its worst-case-with-fallback latency exceeds
   all-fp64; (3) past the k the numerics force, it is worse on energy;
-  (4) ARM-MPC already has 5.4x deadline margin all-fp64, so the latency
+  (4) ARM-MPC already has 4.9x deadline margin all-fp64, so the latency
   refinement buys is margin we do not need. Keep S2 as an OPTIONAL codegen
   mode for soft-deadline / throughput use; do not make it the baseline.
   CAVEAT: this rests on a citation [C5], not on our own measurement.
   Measuring the actual refinement count in acados/HPIPM is item 2 below.
 
   DOES THE ANSWER DIFFER FOR THE SOLVER-ONLY SKU (64 MACs, 64 B/cycle)?
-    S1 all-fp64         741.7 us    49.70 uJ
-    S2 k=3              651.3 us    67.08 uJ
+    S1 all-fp64         822.1 us    50.91 uJ
+    S2 k=3              758.8 us    68.69 uJ
     NO -- and for a structural reason worth stating: the fp64 cluster is
     NOT part of the MAC array, so it does not scale down with the SKU.
-    S1 latency is EXACTLY identical on both parts (742 vs 742 us) because
+    S1 latency is EXACTLY identical on both parts (822 vs 822 us) because
     both are fp64-cluster-limited, and at 64 B/cycle the fp64 GEMV
     bandwidth ceiling (8 MAC/cyc) exactly equals the cluster width. Energy is
     1.16x higher only because the smaller tile fetches more GEMM operand
@@ -343,7 +354,7 @@ Q3 — DOES fp32 + ITERATIVE REFINEMENT BEAT NATIVE fp64?
     So fp64 is proportionally MORE expensive on the small part -- and the
     small part is the MPC-only SKU that most needs it. There is no SKU
     from which fp64 can be removed while keeping interior-point MPC.
-    Dropping to 4 FMAs there gives only 1.38x budget margin: too thin. Keep 8.
+    Dropping to 4 FMAs there gives only 1.24x budget margin: too thin. Keep 8.
 
 ====================================================================================================
 Q4 — EFFECT ON THE CM-100 AREA BUDGET AND ON perf/W
@@ -382,12 +393,12 @@ Q4 — EFFECT ON THE CM-100 AREA BUDGET AND ON perf/W
   but the direction is worth knowing.
 
    fp64 pJ/MAC    ARM uJ   perf/W vs best CPU  vs 5x kill
-          2.20     22.04                20.2x        PASS
-          3.30     26.41                16.8x        PASS
-          4.40     30.79                14.4x        PASS
-          6.60     39.54                11.2x        PASS
+          2.20     22.64                19.6x        PASS
+          3.30     27.02                16.5x        PASS
+          4.40     31.39                14.2x        PASS
+          6.60     40.14                11.1x        PASS
 
-  fp64 MAC energy is 40% of ARM-MPC's 22.0 uJ/call at the typical
+  fp64 MAC energy is 39% of ARM-MPC's 22.6 uJ/call at the typical
   iteration count -- the single largest term. SENSITIVITY: the kill
   criterion survives a 3x error in the constant, so the go/no-go does not
   depend on it; the QUOTED RATIO does, by about 2x across the band.

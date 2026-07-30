@@ -154,6 +154,12 @@ Raw output: [perf_model/results_v0.txt](perf_model/results_v0.txt).
 > modelled-estimate at a 16nm-class node, ±2×, not quotable** — and the fp64 gate count carries a
 > further **2.1× band** of its own, making these the least certain numbers in the budget.
 >
+> **Latency figures restated 2026-07-30** when the sequencer was modelled properly (§0.2):
+> ARM-MPC's worst case moves 742 → **822 µs** and the refinement rows rise similarly, because the
+> flat sequencer term was replaced by descriptor issue + dependency drain. **Every conclusion in
+> this subsection survives unchanged** — the margins tighten by ~10% and no floor, crossover or
+> verdict moves. The stated numbers below are the current ones.
+>
 > **Decision: 8 merged multi-format FMA units (1 × fp64 *or* 2 × fp32 each), which are also the
 > 16 fp32 vector lanes. fp64 increment +0.067 mm² (+0.077 with top margin).** The `0.125` rate
 > factor is deleted from the model; fp64 throughput is now an absolute FMA count that carries area
@@ -162,9 +168,9 @@ Raw output: [perf_model/results_v0.txt](perf_model/results_v0.txt).
 > | Option | fp64 area | ARM-MPC worst case | Verdict |
 > |---|---|---|---|
 > | (a) multi-pass on the bf16 array | +0.040 mm² (wide accumulators) | 3423–24705 µs | **rejected — energy** |
-> | (b) separate fp64-only cluster, 8 units | +0.090 mm² | 742 µs | viable |
+> | (b) separate fp64-only cluster, 8 units | +0.090 mm² | 822 µs | viable |
 > | (c) native fp64 throughout (144 cells) | +1.417 mm² | 152 µs | **rejected — 3.9× the part** |
-> | **(d) merge the cluster with the vector unit** | **+0.067 mm²** | **742 µs** | **RECOMMENDED** |
+> | **(d) merge the cluster with the vector unit** | **+0.067 mm²** | **822 µs** | **RECOMMENDED** |
 >
 > **Gate-count basis.** A parametric IEEE-754 FMA model, `gates = 4.5·n² + 240·n + 1200` for
 > significand width *n* (`sram_cost.fma_gates_ieee`), at 0.26 µm²/NAND2: **fp32 9.55 kgates, fp64
@@ -179,18 +185,18 @@ Raw output: [perf_model/results_v0.txt](perf_model/results_v0.txt).
 > and 79% matrix-**matrix** (block Riccati), not GEMV. At worst-case 30 IP iterations it is
 > 3.77 M fp64 MACs, i.e. **2.36 fp64 MAC/cycle** at 800 MHz inside a 50%-of-period budget before
 > any overhead. With utilisation, GEMV/GEMM split, vector and sequencer terms charged:
-> **1 FMA misses the 4000 µs deadline (5401 µs), 2 misses the 50% budget, 4 is the floor (1.38×),
-> 8 gives 2.70× on the budget and 5.39× on the deadline.** 8 is chosen over 4 because it is *free* —
+> **1 FMA misses the 4000 µs deadline (5967 µs), 2 misses the 50% budget, 4 is the floor (1.24×),
+> 8 gives 2.43× on the budget and 4.87× on the deadline.** 8 is chosen over 4 because it is *free* —
 > 8 merged units is exactly the 16 fp32 lanes the part already carries — and because above 8, fp64
 > GEMV is bandwidth-capped at 16 MAC/cycle and further units buy 64 µs of a 2000 µs budget. The old
 > `0.125` factor was **over-providing fp64 by 2.25×** (18 vs 8 MAC/cycle) at zero area.
 >
 > **What the sizing is and is not sensitive to.** The softest modelling assumption — softening the
 > cluster's quantisation penalty by a square root, worth 1.26× — does **not** move the answer:
-> charged the full 2-D penalty, 8 FMAs gives 2.25× instead of 2.70× and the floor is still 4.
+> charged the full 2-D penalty, 8 FMAs gives 2.06× instead of 2.43× and the floor is still 4.
 > What *does* move it is `iters_worst = 30`, which is **[EST]** (2× the design point), not measured:
-> at a 45-iteration tail the floor is 6 FMAs and the 8-FMA margin is 1.83×; at 60 iterations it is
-> **1.39×** — still feasible, no longer comfortable. **Measuring ARM-MPC's actual interior-point
+> at a 45-iteration tail the floor is 6 FMAs and the 8-FMA margin is 1.65×; at 60 iterations it is
+> **1.25×** — still feasible, no longer comfortable. **Measuring ARM-MPC's actual interior-point
 > iteration tail is the highest-value input to this decision, ahead of the gate count and ahead of
 > the energy constant.**
 >
@@ -217,23 +223,26 @@ Raw output: [perf_model/results_v0.txt](perf_model/results_v0.txt).
 > issue bound makes a *larger* fp64 unit even less useful) but it is a **new open item**: descriptor
 > issue must be ≤4 cycles, or the sequencer needs a hardware loop emitting a stage's descriptors
 > from one instruction. **Logged, not resolved.**
+> **→ RESOLVED in §0.2, and the claim above is wrong: the "~5.6 array cycles" divided an fp64
+> workload by the bf16 *array* rate. The correct figure is ~30 cycles and "at any precision" is
+> false. The real exposure is elsewhere — see §0.2.**
 >
 > **4. fp32 + iterative refinement does not remove the fp64 requirement — it relocates it.** Fixed-
 > precision refinement converges only while cond·ε < 1 (Wilkinson/Skeel/Higham); at the barrier
 > endgame cond ≈ 1e12 and ε_fp32 ≈ 6e-8, so the product is ~6e4 ≫ 1 and it does not converge.
 > Mixed-precision (GMRES-IR, Carson & Higham 2017/18) works but needs the **residual in fp64**. So
 > fp64 silicon is required either way — refinement moves it from the O(n³) factorisation to the
-> O(n²) residual. Modelled honestly, refinement is **faster at every k (1.2–3.1×)** and there is a
-> genuine **energy crossover at k = 2**: below it refinement wins on both axes, above it native
+> O(n²) residual. Modelled honestly, refinement is **faster at every k (1.2–2.7×)** and there is a
+> genuine **energy crossover at k = 3**: below it refinement wins on both axes, above it native
 > fp64 wins on energy. The numerics force us above it. Two further points decide it: **the
 > asymptotic case for refinement fails at our block sizes** (residual:factorisation = 3k/nb, which
 > at nb=21, k=3 is **43%**, not the ~5% HPC intuition — refinement is only "cheap" above nb≈90);
-> and the **certifiable worst case with an all-fp64 fallback is the sum of both paths, 1167 µs vs
-> 742 µs for all-fp64 alone**. A scheme whose worst case exceeds the thing it replaces cannot be
+> and the **certifiable worst case with an all-fp64 fallback is the sum of both paths, 1328 µs vs
+> 822 µs for all-fp64 alone**. A scheme whose worst case exceeds the thing it replaces cannot be
 > the baseline for a hard-deadline part. **Verdict: native fp64 is the baseline; refinement stays
 > an optional codegen mode.** This rests on a citation, not our own measurement — see below.
 > **Answer for the solver-only SKU: unchanged, and structurally so** — the cluster is not part of
-> the array, so all-fp64 latency is *identical* (742 µs) on both parts. What changes is the area
+> the array, so all-fp64 latency is *identical* (822 µs) on both parts. What changes is the area
 > **fraction**: 9.6% of the CM-100 vs **11.9% of the floor SKU**. fp64 is proportionally more
 > expensive on the small part, and the small part is the MPC-only SKU that most needs it. **There
 > is no SKU from which fp64 can be removed while keeping interior-point MPC.**
@@ -254,7 +263,7 @@ Raw output: [perf_model/results_v0.txt](perf_model/results_v0.txt).
 > for the CM-100 core: 0.70–0.85 mm² at 16nm-class, ±2× on top.** Floor SKU: 0.430 → **0.563 mm²**.
 >
 > **6. fp64 energy per MAC is load-bearing, and the kill criterion survives it.** At 2.20 pJ [EST]
-> it is **39% of ARM-MPC's 22.5 µJ/call** — the single largest term. Sensitivity: **19.8× / 16.6× /
+> it is **39% of ARM-MPC's 22.6 µJ/call** — the single largest term. Sensitivity: **19.6× / 16.5× /
 > 14.2× / 11.1× perf/W at 1× / 1.5× / 2× / 3× the constant — passing 5× throughout.** So the
 > go/no-go does not depend on it; the *quoted ratio* does, by ~2×. An independent n²-scaling
 > derivation from Horowitz gives 2.45 pJ, so the constant is ~13% optimistic on its own logic.
@@ -262,8 +271,8 @@ Raw output: [perf_model/results_v0.txt](perf_model/results_v0.txt).
 > **7. A CPU-baseline bug was fixed at the same time, and it moves the ratio in our favour — so it
 > is flagged, not banked.** `model_cpu` charged fp64 work at every baseline's **fp32** rate. NEON/SVE
 > fp64 is half-rate and SME fp64 outer products are quarter-rate. ARM-MPC perf/W therefore moves
-> **14.1× → 19.8×**, and *all* of the increase comes from the CPU side (A55: 276 → 445 µJ, 1.6×)
-> against our own side getting slightly worse (19.6 → 22.5 µJ, from the honest fp64 throughput).
+> **14.1× → 19.6×**, and *all* of the increase comes from the CPU side (A55: 276 → 445 µJ, 1.6×)
+> against our own side getting slightly worse (19.6 → 22.6 µJ, from the honest fp64 throughput).
 > Two errors pointing in opposite directions that had partly cancelled. Sanity check the fix is not
 > overdone: **the A55 baseline still meets ARM-MPC's raw 4000 µs deadline (2955 µs)** — we are not
 > claiming the CPU cannot do this. Note also `FEAT_SME_F64F64` is **architecturally optional**; an
@@ -293,6 +302,165 @@ Raw output: [perf_model/results_v0.txt](perf_model/results_v0.txt).
 > (3) measure ARM-MPC's true worst-case IP iteration count (`iters_worst=30` is [EST] and it sizes
 > the cluster); (4) count HPIPM's actual block ops per IP iteration, which sets the newly-surfaced
 > descriptor-granularity risk. **28 new invariant tests (70 total).**
+
+> ### §0.2 — CLOSED (2026-07-30): the sequencer is modelled. The logged issue-bound risk was a unit error; two real risks replaced it
+>
+> Raw output: [perf_model/results_sequencer.txt](perf_model/results_sequencer.txt); model in
+> [perf_model/sequencer.py](perf_model/sequencer.py), with the descriptor cost itself in
+> `argmind_model.descriptor_cost`. **All figures modelled-estimate at a 16nm-class node, ±2×, not
+> quotable externally.** Evidence classes below: [EST] estimate, [DER] derived from another model
+> figure, [MEAS] measured, [C*] cited.
+>
+> **Decision: no provisioning change. The recommended sequencer is a small scalar core plus a
+> hardware descriptor generator with a depth-8 run-ahead queue (S2), 4 sequencer cycles per
+> descriptor, 1 descriptor/cycle issue width — 0.028 mm² all in, inside the existing 0.045 mm²
+> allocation, so core area stays 0.698 mm². Run-ahead and wide dependency-chain blocking are both
+> *requirements*, not optimisations.** The binding resource is unchanged on every benchmark:
+> scratchpad bandwidth on the ADMM rows, the fp64 FMA cluster on ARM-MPC, the tile array on
+> EKF/ViT, DMA on SLM decode.
+>
+> **1. The logged claim was a unit error, and it is worth being precise about which one.** The
+> "~5.6 array cycles" figure divided an HPIPM block operation by the **144-MAC bf16 array** rate.
+> ARM-MPC is fp64, and the decision made two sections earlier in the *same file* is that fp64 does
+> **not** come from the array — it comes from the 8-unit FMA cluster, at 1/16th the rate. Correcting
+> the denominator gives ~68 cycles; correcting the descriptor count in the other direction (the
+> structural count is **540/IP iteration, 3× the guessed 180**, because the Cholesky and the gain
+> solve are dependency chains that must be blocked) gives **30.3 datapath cycles per descriptor
+> against a crossover at 34.3 setup cycles [DER]** — array-bound with 8.6× margin at the
+> recommended 4-cycle setup cost. **"At any precision" is false, and false in the instructive
+> direction: exposure scales with arithmetic *rate*, so the fastest precision is the most exposed,
+> not the slowest.** Crossover setup cycles for ARM-MPC by precision: **fp64 34.3, fp32 10.1,
+> bf16 7.5 [DER]**.
+>
+> **2. What replaced the fudge.** `scalar_ops_per_iter` (flat, 150 for ARM-MPC) and the fixed 50%
+> overlap are gone from the CM path — `scalar_ops_per_iter` is now a **CPU-only** parameter, and a
+> test asserts that changing it cannot move CM latency. In their place, three terms with physical
+> meanings, all derived from a per-benchmark kernel decomposition (`KernelOp`) whose MAC counts are
+> **asserted to sum to the benchmark's declared totals** — the discipline whose absence produced the
+> original error:
+>
+> | Term | Definition | Relieved by |
+> |---|---|---|
+> | `issue_cycles` | descriptors × setup cycles ÷ issue width | faster descriptor emission |
+> | `dep_drain` | one datapath drain per dependency-chain boundary | wider chain blocking, shallower pipeline |
+> | `serial_scalar` | loop-carried scalar chain (step size α, convergence test) | nothing — it is a true dependency |
+>
+> Per iteration: `max(datapath + dep_drain, issue) + serial`, with a run-ahead queue; the **sum** if
+> queue depth is 0. Descriptors per iteration and datapath cycles each [DER]:
+>
+> | Benchmark | desc/iter | of which chained | datapath cyc/desc | crossover (setup cyc) | binding resource |
+> |---|---|---|---|---|---|
+> | PWR-MPC (ADMM, n_var=30) | 16 | 8 | **10.2** | **14.1** | scratchpad bandwidth |
+> | ARM-MPC (HPIPM, nb=21, fp64) | 540 | 270 | 30.3 | 34.3 | fp64 FMA cluster |
+> | QUAD-MPC (ADMM, n_var=80) | 28 | 20 | 59.3 | 65.0 | scratchpad bandwidth |
+> | EKF-24 | 17 | 4 | 81.7 | 83.6 | tile array |
+> | EKF-96 | 21 | 8 | 2461 | 2464 | tile array |
+> | SLM-DECODE | 330 | 0 | 27279 | 27279 | DMA |
+> | VIT-TINY | 144 | 0 | 42209 | 42209 | tile array |
+>
+> **3. The design rule, because that is what this becomes in codegen.**
+>
+> > **A code-generated iteration must average at least 2 × `seq_setup_cycles` datapath cycles per
+> > descriptor (≥ 8 at the recommended S2 sequencer), and no burst of sub-threshold descriptors may
+> > exceed the descriptor-queue depth (8). Below either bar, fuse the operations or unroll the
+> > chain.**
+>
+> The rule is an *average* plus a *burst length* rather than a per-descriptor minimum because
+> run-ahead lets a short descriptor borrow slack from a long neighbour. The bursts are the
+> dependency chains: an HPIPM stage at nb=21 on 8 fp64 units emits **9 consecutive sub-threshold
+> descriptors** (potrf blocked 3 ways × 2, plus trsm). Margin against the bar across the frozen
+> set: QUAD-MPC 7.4×, ARM-MPC 3.8×, EKF-24 10.2×, EKF-96 308×, **PWR-MPC 1.27× — the thinnest row
+> in the set.**
+>
+> **4. The dominant new cost is dependency drain, not issue throughput — and that changes the
+> design response.** At 4 cycles/descriptor, **97–100% of the sequencer's latency contribution is
+> drain**, not issue: 8.7% of QUAD-MPC's latency, 11.4% of ARM-MPC's, **26.7% of PWR-MPC's [DER]**.
+> This is not a provisioning problem. No amount of issue bandwidth, MAC count or scratchpad width
+> touches it (a test asserts the drain term is invariant to scratchpad bandwidth). What *does*:
+> **blocking the chain as wide as the datapath, and keeping the datapath pipeline short.** The
+> latter gives PLAN.md §3.1's short-fill/drain requirement a second, independent justification.
+>
+> **5. Two real risks replaced the logged one, and both can miss a deadline.**
+>
+> - **Run-ahead is mandatory.** A scalar-core sequencer that writes a descriptor, starts it and
+>   polls for completion (setup ≈ 20 cycles, queue 0) **misses PWR-MPC's 50%-of-period budget:
+>   38.1 µs against 25 µs [DER]**, i.e. 0.66× margin. Software double-buffering alone (queue 1)
+>   recovers it to 1.23×; the S2 hardware generator gives 1.71×. This is the only deadline miss the
+>   analysis produces, and it is on the 20 kHz motor-drive row — the MCU-class socket.
+> - **Narrow dependency-chain blocking breaks the same row.** If the RTL's blocked Cholesky can
+>   only advance 4 elements per dependent step instead of a full datapath width, PWR-MPC's margin
+>   falls to **0.96×** and at 1 element to **0.37× [DER]**. **RTL requirement: a blocked
+>   Cholesky/triangular solve must advance ≥ 8 (a full datapath width) per dependent step.** This
+>   is a bigger lever than the descriptor setup cost itself and is the highest-value Phase-1 check.
+>
+> **6. ADMM vs block-structured interior point, checked separately — and the tidy answer is wrong.**
+> The hypothesis was that ADMM's few large GEMVs make it insensitive and the exposure is specific to
+> block-structured IP. **Half confirmed.** ARM-MPC does issue **19× more descriptors per iteration**
+> than QUAD-MPC, and QUAD-MPC is genuinely insensitive (crossover 65 setup cycles). **But the most
+> exposed row in the set is PWR-MPC, which is ADMM** — exposed because n_var=30 is tiny and the rate
+> is 20 kHz, not because of its algorithm. So the correct statement is: **exposure is set by datapath
+> cycles per descriptor, which block structure and small problems both reduce independently.** Do not
+> pitch this as "interior point is the risky one."
+>
+> **7. A new, third argument for native fp64 that §0.1 did not charge.** The fp32 +
+> iterative-refinement option puts the O(n³) factorisation on the array in fp32, where the crossover
+> is **10.1 setup cycles [DER]**. That option is **sequencer-issue-bound with anything but a hardware
+> descriptor generator** — a cost §0.1 did not price. Native fp64 wins on energy, on numerics, and
+> now on issue pressure.
+>
+> **8. When sequencer work genuinely overlaps compute — stated as a condition, which is what the 50%
+> fudge lacked.** Overlap is legitimate **because the CM's allocation and schedule are statically
+> code-generated**: every descriptor's addresses, dims and strides are known before the loop runs, so
+> setup never waits on data, and the loop-continue branch is correct on every iteration but the last.
+> **Determinism and overlap-legality are the same architectural property** — a point worth making in
+> the pitch. Overlap does *not* hold for (a) the chain boundary itself, charged as `dep_drain`, or
+> (b) genuinely data-dependent descriptor *parameters* — a fraction-to-boundary α scaling the next
+> update, an active-set index, a pivot — charged as `serial_scalar_per_iter` and small (60
+> cycles/IP iteration, 25/`check_term` for ADMM).
+>
+> **9. Was the fudge actually wrong? Plainly: for ADMM it was a good approximation by accident.**
+> 75 modelled cycles/iteration against 161, but both are 5–10% of the iteration, so QUAD-MPC latency
+> moves **+5.6%** and PWR-MPC **+1.8%**. ARM-MPC moves **+11.8%** (the constant was ~30× low in
+> cycles). EKF and ML rows move <0.2%. **Headline ratios are unchanged: solver perf/W stays 14–22×;
+> solver latency 0.97–2.1× vs 0.99–2.11×.** The error was *qualitative*, not quantitative — the
+> constant stood in for descriptor issue, while the term that actually costs time is dependency
+> drain, and the two have opposite design responses.
+>
+> **10. Area: costed bottom-up, and it fits — contrary to expectation.** `REST_MM2` allocated
+> 0.045 mm² to "sequencer" as a flat [EST] with no memory line item, which looked like a candidate
+> omission. Costed properly: **0.0137 mm² of logic** (RV32IMC ~30 kgates + 3 descriptor AGUs +
+> 3-level hardware loop + 4 templates + 8-deep queue + issue FSM, at 0.26 µm²/NAND2 [EST]) **plus
+> 0.0143 mm² for an 8 KB I-mem and 4 KB D-mem [DER from `sram_cost.bank_geometry`] = 0.0280 mm², 62%
+> of the allocation.** The S0→S2 descriptor-generator delta is **0.0048 mm², 0.69% of the core**. It
+> would take a 26 KB program store to break the budget. **No area change; what was an assertion is
+> now a derivation.**
+>
+> **11. Consequence for the D2/D3 integration depths (PLAN.md §4.2).** D2/D3 shift descriptor issue
+> onto the host core, which raises setup cost (~20 cycles, no dedicated AGUs) and removes reliable
+> run-ahead (the host is also running the application). Worst solver margin against the 50% budget:
+> **D1 with its own sequencer 1.71×; D2 with the generator moved to the CM side 1.71×; D2/D3 with the
+> host issuing and software double-buffering 1.23×; D2/D3 with the host issuing and no run-ahead
+> 0.66× — misses.** The binding row is PWR-MPC every time.
+>
+> > **Decision: the descriptor generator belongs on the CM side of the interface at every integration
+> > depth. D2/D3 may move the control flow to the host; they must not move descriptor emission
+> > there.** This is also a MACIF question — the descriptor format is part of the boundary a CIM
+> > macro must honour, so the generator sits *above* MACIF and cannot be a host-side artefact.
+>
+> It bites precisely where §4.2 nominates D2: the MCU-class socket where D1's zero-copy has nothing
+> to bite on (the unresolved §4.1 tension) *is* the motor-drive row, and that is the most
+> issue-sensitive benchmark in the set. D2 stays "a wrapper rather than a redesign" **provided the
+> wrapper keeps the generator.**
+>
+> **What would firm this up, in order of value per day:** (1) write the descriptor-emit sequence for
+> one HPIPM stage in RV32 assembly and count instructions — settles `seq_setup_cycles`, the single
+> most load-bearing [EST] here, in an afternoon; (2) determine whether the RTL's blocked Cholesky can
+> advance a full datapath width per dependent step — it is a bigger lever than (1); (3) instrument
+> HPIPM's actual BLASFEO call counts on the real problem, which settles both the descriptor count and
+> the 30/45/15/10 split of nb³/3 across trmm/syrk/potrf/trsm [EST]. Note the benchmark's `N·nb³/3`
+> GEMM count is **~2.2× below** a true HPIPM stage count at nb=21 [EST], so this analysis is
+> *conservative* on that axis — fixing it raises cycles/descriptor and makes every conclusion here
+> more comfortable. **52 new invariant tests (122 total).**
 
 > ## ⚠ SUPERSEDED (kept for the audit trail) — correction notice, solver-numerics audit
 > **The latency figures in §1 below are wrong and are being regenerated.** An independent audit
