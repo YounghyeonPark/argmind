@@ -49,11 +49,31 @@ fp64 operands, fp64 solve  (reference)        0.000e+00    2.775e-06
              fp64 operands, fp32 solve        1.017e-06    2.775e-06
              fp64 operands, BF16 SOLVE        6.121e-02    9.374e-06
              bf16 operands, bf16 solve        5.903e-02    8.230e-06
+fp32 operands, fp32 solve   <-- CM-100 today        8.164e-07    2.775e-06
+FP16 operands, fp32 solve   <-- the proposal        1.946e-03    2.724e-06
+bf16 operands, fp32 solve   <-- proposal w/ bf16 array        1.942e-02    3.171e-06
 
   The claim: MATVECS tolerate bf16 (ADMM contracts operand error) while the
   cached triangular SOLVE does not (error there is amplified by kappa(M)).
   Compare 'bf16 operands, fp64 solve' against 'fp64 operands, BF16 SOLVE'.
   If the claim holds, the second is materially worse than the first.
+
+C4 — FCS-MPC: does a narrow operand format change the SELECTED switching
+     sequence? (three-level NPC, |U|=27, Np=2 -> 729 sequences, 200 trials)
+  operand prec  argmin disagrees   mean cost penalty     worst
+----------------------------------------------------------------
+          fp64             0.0%            0.00e+00  0.00e+00
+          fp32             0.0%            0.00e+00  0.00e+00
+          fp16             3.0%            1.47e-06  1.02e-04
+          bf16            11.0%            9.16e-05  4.21e-03
+
+  'cost penalty' = excess TRUE cost of the chosen sequence as a fraction of
+  the full cost spread across candidates. Disagreement alone is NOT a defect:
+  when two candidates are within epsilon, either is within epsilon of optimal.
+  The number that would kill a format is a large PENALTY, not a large
+  disagreement rate. Note the plant is deliberately near-unity-eigenvalue,
+  which packs the candidate costs close together — a well-separated plant
+  would flatter every format.
 
 ==============================================================================================
 VERDICTS

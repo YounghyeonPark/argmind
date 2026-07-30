@@ -62,7 +62,7 @@ Q1 — THE MODEL, AND WHAT REPLACED THE 50% FUDGE
   --------------------------------------------------------------------------------------------
   QUAD-MPC        28    20      1668      59.3     112     160     1.0        60  no          
   ARM-MPC        540   270     16344      30.3    2160    2160    60.0        75  no          
-  PWR-MPC         16     8       164      10.2      64      64     1.0        60  no          
+  PWR-MPC         12     0       649      54.1      48       0     0.0       100  no          
   EKF-24          17     4      1388      81.7      68      32     0.0        30  no          
   EKF-96          21     8     51681    2461.0      84      64     0.0        30  no          
   SLM-DECODE     330     0   9002070   27279.0    1320       0     0.0       100  no          
@@ -81,7 +81,7 @@ Q2 — BINDING RESOURCE PER BENCHMARK (worst-case iterations)
   ---------------------------------------------------------------------------------------------------------------
   QUAD-MPC    fp32      133.0       0.0     22.2     10.4      0.0     0.8 |    14.8    0.09 | spad_bw      0.17x
   ARM-MPC     fp64      126.8     490.0     29.5     81.6      0.0     0.8 |    81.0    2.25 | mm_unit      0.26x
-  PWR-MPC     fp32        6.4       0.0      3.5      3.9      0.0     0.8 |     3.8    0.06 | spad_bw      0.61x
+  PWR-MPC     fp32        0.0       0.1      0.7      0.1      0.0     0.8 |     0.0    0.00 | host         0.82x
   EKF-24      fp32        0.0       1.5      0.3      0.1      0.0     0.8 |     0.0    0.00 | mm_unit      0.55x
   EKF-96      fp32        0.1      60.2      4.3      0.1      0.0     0.8 |     0.1    0.00 | mm_unit      0.07x
   SLM-DECODE  int8    11192.7       0.0     59.8      1.7 162853.7     0.8 |     0.0    0.00 | dma          0.07x
@@ -107,7 +107,7 @@ Q3 — THE CROSSOVER, AND THE DESIGN RULE IT BECOMES
   benchmark       s=1     s=2     s=4     s=8    s=16    s=32    s=64   crossover  design rule
   QUAD-MPC      0.02    0.03    0.06    0.12    0.25    0.43    0.65        65.0   >= 65 datapath cyc/descriptor
   ARM-MPC       0.03    0.06    0.12    0.23    0.47    0.79    1.13*       34.3   >= 34 datapath cyc/descriptor
-  PWR-MPC       0.07    0.14    0.28    0.57    1.13*   2.26*   4.53*       14.1   >= 14 datapath cyc/descriptor
+  PWR-MPC       0.02    0.04    0.07    0.15    0.30    0.59    1.18*       54.1   >= 54 datapath cyc/descriptor
   EKF-24        0.01    0.02    0.05    0.10    0.19    0.38    0.77        83.6   >= 84 datapath cyc/descriptor
   EKF-96        0.00    0.00    0.00    0.00    0.01    0.01    0.03      2464.1   >= 2464 datapath cyc/descriptor
   SLM-DECODE    0.00    0.00    0.00    0.00    0.00    0.00    0.00     27279.0   >= 27279 datapath cyc/descriptor
@@ -124,10 +124,17 @@ Q3 — THE CROSSOVER, AND THE DESIGN RULE IT BECOMES
 
   Where the frozen set sits against that bar, at setup=4:
     QUAD-MPC      59.3 cyc/desc =  7.41x the bar
-    ARM-MPC       30.3 cyc/desc =  3.78x the bar
-    PWR-MPC       10.2 cyc/desc =  1.27x the bar   <-- thinnest in the set
+    ARM-MPC       30.3 cyc/desc =  3.78x the bar   <-- thinnest in the FROZEN set
+    PWR-MPC       54.1 cyc/desc =  6.76x the bar
     EKF-24        81.7 cyc/desc = 10.21x the bar
     EKF-96      2461.0 cyc/desc = 307.63x the bar
+
+  OFF-SET ROWS, shown because two real configurations of the motor-drive
+  socket sit BELOW the bar and the frozen row does not:
+    PWR-CCS       10.2 cyc/desc =  1.27x the bar
+    PWR-FCS1       4.8 cyc/desc =  0.61x the bar   <-- BELOW THE BAR
+    PWR-FAST       5.5 cyc/desc =  0.69x the bar   <-- BELOW THE BAR
+    PWR-FUSE      30.9 cyc/desc =  3.86x the bar
 
   The rule is an AVERAGE plus a BURST LENGTH, not a per-descriptor
   minimum, because a run-ahead queue lets a short descriptor borrow slack
@@ -195,27 +202,39 @@ Q5 — RUN-AHEAD (DECOUPLED ACCESS-EXECUTE): the one place a deadline is missed
   QUAD-MPC s=20      1000         500     174.5        226.6    1.30x  ok
   ARM-MPC s=4      4000        2000     730.3        811.9    1.11x  ok
   ARM-MPC s=20      4000        2000     742.4       1150.4    1.55x  ok
-  PWR-MPC s=4        50          25      14.6         18.5    1.27x  ok
-  PWR-MPC s=20        50          25      20.3         38.1    1.88x  MISSES 50% BUDGET
+  PWR-MPC s=4        25          12       1.6          1.7    1.04x  ok
+  PWR-MPC s=20        25          12       1.6          1.9    1.19x  ok
   EKF-24 s=4       1000         500       2.6          2.7    1.03x  ok
   EKF-24 s=20      1000         500       2.6          3.0    1.17x  ok
   EKF-96 s=4       5000        2500      65.5         65.6    1.00x  ok
   EKF-96 s=20      5000        2500      65.5         66.0    1.01x  ok
 
-  PWR-MPC WITH A SCALAR-CORE SEQUENCER AND NO RUN-AHEAD MISSES THE 50%
-  CONTROL-PERIOD BUDGET. That is the negative result this exercise was
-  for. It is the tiny-problem, highest-rate row -- 20 kHz motor drive,
-  the MCU-class socket -- and it is the row where per-operation overhead
-  dominates by construction.
+  RESTATED 2026-07-30 AFTER THE PWR-MPC RE-SPEC — THIS CONCLUSION IS
+  DOWNGRADED. It used to read: 'PWR-MPC with a scalar-core sequencer and no
+  run-ahead MISSES the 50% control-period budget (38.1 us vs 25)'. That
+  rested on PWR-MPC being a continuous-control-set ADMM QP. Re-specified as
+  finite-control-set MPC the row has ZERO dependency chains and 54 datapath
+  cycles per descriptor, and it survives no-run-ahead comfortably.
+
+  **NO ROW IN THE FROZEN SET NOW MISSES A BUDGET FROM LACK OF RUN-AHEAD
+  ALONE.** What survives, and is still a genuine negative result:
+    * QUAD-MPC at its MEASURED worst-case tail misses at 0.37x when
+      run-ahead AND full-width chain blocking are BOTH absent. You may skip
+      at most one of the two.
+    * The retired PWR-CCS definition still misses at 0.66x, and continuous-
+      control-set MPC is a real if smaller socket, so the requirement is not
+      vacuous -- it is now justified off the frozen set.
+  Run-ahead therefore moves from REQUIREMENT to 'required unless chain
+  blocking is full-width'. See results_pwr_mpc_respec.txt section 1.
 
 ========================================================================================================
 Q6 — WHAT THE SEQUENCER MUST BE, AND WHAT IT COSTS
 ========================================================================================================
   option                                  setup  queue  logic mm2  +mem mm2   total  worst solver margin
-  S0  scalar core, CSR write + poll          20      0     0.0088    0.0143  0.0232   0.66x (PWR-MPC)
-  S1  scalar core, software double-buffer     20      1     0.0091    0.0143  0.0235   1.23x (PWR-MPC)
-  S2  core + descriptor generator (q=8)       4      8     0.0137    0.0143  0.0280   1.71x (PWR-MPC)
-  S3  as S2, 1 descriptor/cycle               1      8     0.0137    0.0143  0.0280   1.71x (PWR-MPC)
+  S0  scalar core, CSR write + poll          20      0     0.0088    0.0143  0.0232   1.74x (ARM-MPC)
+  S1  scalar core, software double-buffer     20      1     0.0091    0.0143  0.0235   2.69x (ARM-MPC)
+  S2  core + descriptor generator (q=8)       4      8     0.0137    0.0143  0.0280   2.74x (ARM-MPC)
+  S3  as S2, 1 descriptor/cycle               1      8     0.0137    0.0143  0.0280   2.74x (ARM-MPC)
 
   S0  scalar core, CSR write + poll
       RV32 at 1 IPC: ~8 address computes, ~6 stores, loop bookkeeping, branch, then poll a completion CSR. No decoupling at all.
@@ -263,7 +282,7 @@ Q7 — ADMM vs BLOCK-STRUCTURED IP, CHECKED SEPARATELY AS ASKED
   benchmark   algo    desc/iter  cyc/desc  crossover  seq % of latency  of which drain
   QUAD-MPC    admm         28.1      59.3       65.0              8.7%             99%
   ARM-MPC     ip          540.0      30.3       34.3             11.4%             97%
-  PWR-MPC     admm         16.1      10.2       14.1             26.7%             98%
+  PWR-MPC     fcs          12.0      54.1       54.1              0.0%              0%
   EKF-24      ekf          17.0      81.7       83.6              1.6%            100%
   EKF-96      ekf          21.0    2461.0     2464.1              0.1%            100%
 
@@ -273,19 +292,20 @@ Q7 — ADMM vs BLOCK-STRUCTURED IP, CHECKED SEPARATELY AS ASKED
      products are single descriptors covering ~19k MACs.
    * ARM-MPC (IP, nb=21): 540 descriptors/iteration -- 19x more -- and
      30 cycles each. Still not binding IN fp64, but only 2.5x clear.
-   * THE EXCEPTION IS PWR-MPC, WHICH IS ADMM. It is exposed not because
-     of its algorithm but because n_var=30 is tiny and the rate is 20 kHz.
-     So the correct statement is NOT 'block-structured IP is exposed and
-     ADMM is not'. It is: EXPOSURE IS SET BY DATAPATH CYCLES PER
-     DESCRIPTOR, which block structure and small problems both reduce.
-     ADMM on a normal-sized problem is safe; ADMM on a 30-variable
-     problem at 20 kHz is the tightest row in the set.
+   * THE EXCEPTION WAS PWR-MPC WHEN IT WAS ADMM, and it is now an OFF-SET
+     row (PWR-CCS): 10.2 cycles/descriptor, exposed not because of its
+     algorithm but because n_var=30 is tiny. The MECHANISM is the durable
+     part and it survives the re-spec: EXPOSURE IS SET BY DATAPATH CYCLES
+     PER DESCRIPTOR, which block structure and small problems both reduce
+     independently. One-step FCS-MPC (PWR-FCS1, 4.8 cyc/desc) is the same
+     mechanism in a third algorithm class, which is the best evidence that
+     it is about problem size and not about ADMM or interior point.
 
    * The ADMM rows do carry a dependency-chain cost, and it is not small:
      QUAD-MPC  dep_drain    160 cyc/iter vs   1668 datapath =  9.6% -- the two triangular
                solves against the cached factor, 20 dependent descriptors.
-     PWR-MPC   dep_drain     64 cyc/iter vs    164 datapath = 39.0% -- the two triangular
-               solves against the cached factor, 8 dependent descriptors.
+     PWR-MPC   dep_drain      0 cyc/iter vs    649 datapath =  0.0% -- the two triangular
+               solves against the cached factor, 0 dependent descriptors.
 
 ========================================================================================================
 Q8 — WAS THE 50% FUDGE ACTUALLY WRONG? Answered plainly.
@@ -293,7 +313,7 @@ Q8 — WAS THE 50% FUDGE ACTUALLY WRONG? Answered plainly.
   benchmark    old seq cyc/iter  new seq cyc/iter   ratio  latency old  latency new    delta
   QUAD-MPC                   60               161   2.68x         34.1         36.0     5.6%
   ARM-MPC                    75              2220  29.60x        342.0        382.3    11.8%
-  PWR-MPC                    60                65   1.08x          4.2          4.3     1.8%
+  PWR-MPC                   100                 0   0.00x          1.7          1.6    -7.2%
   EKF-24                     30                32   1.07x          2.6          2.6     0.1%
   EKF-96                     30                64   2.13x         65.4         65.5     0.1%
   SLM-DECODE                100                 0   0.00x     174107.1     174107.1    -0.0%
@@ -346,23 +366,24 @@ Q9 — CONSEQUENCE FOR THE D2/D3 INTEGRATION DEPTHS (PLAN.md §4.2)
                    datapath. Depth 0 is the pessimistic case and depth 1
                    (software double-buffering) the realistic one.
   integration depth                           setup  queue  worst solver margin (50% budget)
-  D1 bus-attached, own sequencer (S2)             4      8   1.71x (PWR-MPC)
-  D2 RoCC, generator moved to CM side             4      8   1.71x (PWR-MPC)
-  D2 RoCC, host issues, sw double-buffer         20      1   1.23x (PWR-MPC)   <-- thin
-  D2 RoCC, host issues, no run-ahead             20      0   0.66x (PWR-MPC)   <-- MISSES BUDGET
-  D3 ISA ext, in-order host, no run-ahead        20      0   0.66x (PWR-MPC)   <-- MISSES BUDGET
-  D3 ISA ext, OoO host (reorders for us)         20      8   1.23x (PWR-MPC)   <-- thin
+  D1 bus-attached, own sequencer (S2)             4      8   2.74x (ARM-MPC)
+  D2 RoCC, generator moved to CM side             4      8   2.74x (ARM-MPC)
+  D2 RoCC, host issues, sw double-buffer         20      1   2.69x (ARM-MPC)
+  D2 RoCC, host issues, no run-ahead             20      0   1.74x (ARM-MPC)
+  D3 ISA ext, in-order host, no run-ahead        20      0   1.74x (ARM-MPC)
+  D3 ISA ext, OoO host (reorders for us)         20      8   2.69x (ARM-MPC)
 
   THE DECISION THIS FORCES, and it is cheap to make now:
   > THE DESCRIPTOR GENERATOR BELONGS ON THE CM SIDE OF THE INTERFACE AT
   > EVERY INTEGRATION DEPTH. D2/D3 may move the CONTROL FLOW to the host;
   > they must not move descriptor EMISSION there.
 
-  Why it bites precisely where §4.2 wants D2: the MCU-class socket where
-  D1's zero-copy has nothing to bite on (the unresolved §4.1 tension) IS
-  the motor-drive row, and PWR-MPC is the most issue-sensitive benchmark
-  in the set -- 10.2 datapath cycles per descriptor, 59% dependency drain.
-  'Let the host issue to us' fails there and only there. So D2 remains a
+  RESTATED 2026-07-30: the §4.1 zero-copy tension is now SETTLED (see
+  results_pwr_mpc_respec.txt section 3 -- on MCU class the honest advantage
+  is invocation overhead and determinism, not zero-copy), and the
+  re-specified motor-drive row is no longer the most issue-sensitive
+  benchmark. The D2 conclusion survives on the retired PWR-CCS row and on
+  the one-step FCS row (4.8 cyc/desc, below the bar). So D2 remains a
   wrapper rather than a redesign, as PLAN.md §4.2 recommends, PROVIDED the
   wrapper keeps the generator. This is also a MACIF question: the
   descriptor format is part of the boundary a CIM macro must honour, so
@@ -390,18 +411,25 @@ SENSITIVITIES — what would change these conclusions
      than a modelling one, so here is what it would cost. Sweeping the
      chain-block override (worst-case iterations, 50%-budget margin):
          chain block    QUAD-MPC     ARM-MPC     PWR-MPC      EKF-24      EKF-96
-      datapath width      2.93x       2.74x       1.71x     194.14x      38.18x 
-                   8      2.69x       2.74x       1.36x     191.17x      38.16x 
-                   4      2.32x       2.47x       0.96x!    188.29x      38.09x 
-                   2      1.82x       2.11x       0.63x!    180.15x      37.95x 
-                   1      1.27x       1.64x       0.37x!    165.81x      37.67x 
-     '!' = misses the 50% control-period budget. PWR-MPC BREAKS AT A CHAIN
-     BLOCK OF 4 OR BELOW, even with the S2 sequencer. So:
-     > RTL REQUIREMENT: a blocked Cholesky / triangular solve must advance
-     > a full datapath width (>= 8) per dependent step. If the RTL can
-     > only manage a narrow diagonal, the motor-drive row is lost.
-     This is the single most valuable thing to check first in Phase 1, and
-     it is a bigger lever than the descriptor setup cost itself.
+      datapath width      2.93x       2.74x       7.76x     194.14x      38.18x 
+                   8      2.69x       2.74x       7.76x     191.17x      38.16x 
+                   4      2.32x       2.47x       7.76x     188.29x      38.09x 
+                   2      1.82x       2.11x       7.76x     180.15x      37.95x 
+                   1      1.27x       1.64x       7.76x     165.81x      37.67x 
+     '!' = misses the 50% control-period budget.
+     RESTATED 2026-07-30: the re-specified PWR-MPC has NO dependency chain,
+     so it is exactly invariant to this sweep and no longer the row that
+     breaks. QUAD-MPC now carries the requirement, on its MEASURED tail, and
+     it does not miss on chain blocking alone -- it falls to 1.27x at a
+     scalar chain, and misses only if run-ahead is ALSO absent.
+     > RTL REQUIREMENT, still stated as a requirement: a blocked Cholesky /
+     > triangular solve must advance a full datapath width (>= 8) per
+     > dependent step. It is worth 2.3x of QUAD-MPC's worst-case margin,
+     > which is the largest single lever in this analysis -- but the
+     > justification is now a THIN MARGIN on one measured row, not a
+     > deadline miss on two rows.
+     Still the most valuable thing to check first in Phase 1, and still a
+     bigger lever than the descriptor setup cost itself.
   6. drain_cycles = 8 [EST]. The dep_drain term is linear in it, so a
      deeper datapath pipeline is directly a block-structured-solver tax --
      an argument for a SHORT pipeline that had no quantitative basis

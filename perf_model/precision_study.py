@@ -290,10 +290,119 @@ def run_c3(iters=400):
         ("fp64", "fp32", "fp64 operands, fp32 solve"),
         ("fp64", "bf16", "fp64 operands, BF16 SOLVE"),
         ("bf16", "bf16", "bf16 operands, bf16 solve"),
+        # ---- ADDED 2026-07-30: the configurations we would ACTUALLY BUILD.
+        # Everything above pairs a 16-bit operand path with an fp64 solve, which
+        # no CM SKU offers on the ADMM path -- the fp64 cluster exists for
+        # interior point and putting an O(n^2) triangular solve on 8 FMA units
+        # would cost more than the bandwidth saved. The proposal on the table is
+        # 16-bit operands with an FP32 solve, so that is what has to be measured.
+        # If the fp32 solve dominates the error, the whole "halve the operands to
+        # double the bandwidth" idea buys nothing and must be dropped.
+        ("fp32", "fp32", "fp32 operands, fp32 solve   <-- CM-100 today"),
+        ("fp16", "fp32", "FP16 operands, fp32 solve   <-- the proposal"),
+        ("bf16", "fp32", "bf16 operands, fp32 solve   <-- proposal w/ bf16 array"),
     ):
         x, res = admm_solution(prob, iters=iters, op_prec=op, solve_prec=sv)
         err = np.linalg.norm(x - x_ref) / max(np.linalg.norm(x_ref), 1e-300)
         rows.append((label, err, res))
+    return rows
+
+
+# ---------------------------------------------------------------------------
+# C4 — FCS-MPC operand precision (added 2026-07-30 with the PWR-MPC re-spec)
+# ---------------------------------------------------------------------------
+#
+# FCS-MPC's numerics are a different problem from every other row in the set and
+# the difference is structural, not a matter of degree:
+#
+#   * There is no factorisation, so no condition number to amplify anything.
+#   * The computation is a 1-2 step forward simulation -- error accumulates over
+#     Np products, not over 40 iterations or 60 filter steps.
+#   * THE OUTPUT IS A DISCRETE ARGMIN, not a real number. A precision error only
+#     changes the CONTROL ACTION if it reorders the top two candidates, and when
+#     two candidates' costs are within epsilon of each other, either choice is
+#     within epsilon of optimal.
+#
+# That last point is the one that could make FCS-MPC tolerate a much narrower
+# format than ADMM, which matters because it is a DIFFERENT ANSWER for the same
+# array and therefore a MACIF question: if solver operands want fp16 and FCS-MPC
+# tolerates bf16 or int8, the array must declare more than one format.
+#
+# Written so it can fail. The failure mode that would kill the idea is a high
+# disagreement rate coupled with a large COST PENALTY -- disagreement alone is
+# not a defect if the chosen candidate is nearly as good.
+
+
+def fcs_problem(n_x=4, n_y=2, n_u=3, levels=3, seed=0):
+    """A three-level FCS-MPC step: plant, output map, and the switching set."""
+    rng = np.random.default_rng(20260730 + seed)
+    # Discrete-time plant of a machine sampled at 25 us: eigenvalues near 1,
+    # which is what makes the candidate costs CLOSE TOGETHER and therefore makes
+    # the argmin sensitive. A well-separated problem would flatter every format.
+    A = np.eye(n_x) + 2e-2 * rng.standard_normal((n_x, n_x))
+    B = 0.15 * rng.standard_normal((n_x, n_u))
+    C = rng.standard_normal((n_y, n_x))
+    lv = np.linspace(-1.0, 1.0, levels)
+    U = np.array(np.meshgrid(*([lv] * n_u), indexing="ij")).reshape(n_u, -1)
+    x0 = rng.standard_normal(n_x)
+    y_ref = C @ x0 + 0.05 * rng.standard_normal(n_y)
+    return A, B, C, U, x0, y_ref
+
+
+def fcs_costs(prob, Np, prec, lam=1e-3):
+    """Cost of every switching SEQUENCE, with operands stored at `prec`.
+
+    Accumulation is fp32 (fp64 for the fp64 case), matching the datapath
+    contract. Returns the cost vector over |U|^Np sequences in fp64 so the
+    ORDERING can be compared across formats.
+    """
+    A, B, C, U, x0, y_ref = prob
+    acc = np.float64 if prec == "fp64" else np.float32
+    c = lambda M: cast(M, prec).astype(acc)          # noqa: E731
+    A_, B_, C_, U_ = c(A), c(B), c(C), c(U)
+    x_, yr_ = c(x0), c(y_ref)
+    nU = U.shape[1]
+
+    # states: (n_x, n_seq_so_far); cost accumulates per sequence
+    X = (A_ @ x_)[:, None] + B_ @ U_                 # (n_x, nU)
+    cost = np.sum((C_ @ X - yr_[:, None]) ** 2, axis=0).astype(acc)
+    cost = cost + acc(lam) * np.sum(U_ ** 2, axis=0)
+    for _ in range(2, Np + 1):
+        Xp = A_ @ X                                  # (n_x, k)
+        # tile parents across children
+        X = (np.repeat(Xp, nU, axis=1)
+             + np.tile(B_ @ U_, (1, Xp.shape[1])))
+        step = np.sum((C_ @ X - yr_[:, None]) ** 2, axis=0).astype(acc)
+        step = step + acc(lam) * np.tile(np.sum(U_ ** 2, axis=0), Xp.shape[1])
+        cost = np.repeat(cost, nU) + step
+    return np.asarray(cost, dtype=np.float64)
+
+
+def run_c4(Np=2, trials=200):
+    """Does a narrow operand format change the SELECTED switching sequence?
+
+    Two numbers per format, and they answer different questions:
+      disagree   fraction of ticks where argmin differs from the fp64 argmin
+      penalty    mean excess TRUE cost of the chosen sequence, relative to the
+                 true optimum -- the quantity a control engineer cares about
+    """
+    rows = []
+    for prec in ("fp64", "fp32", "fp16", "bf16", "int8-ish"):
+        if prec == "int8-ish":
+            continue                                  # not a float path; skip
+        disagree = 0
+        pens = []
+        for t in range(trials):
+            prob = fcs_problem(seed=t)
+            ref = fcs_costs(prob, Np, "fp64")
+            got = fcs_costs(prob, Np, prec)
+            i_ref, i_got = int(np.argmin(ref)), int(np.argmin(got))
+            if i_ref != i_got:
+                disagree += 1
+            spread = ref.max() - ref.min()
+            pens.append((ref[i_got] - ref[i_ref]) / spread if spread > 0 else 0.0)
+        rows.append((prec, disagree / trials, float(np.mean(pens)),
+                     float(np.max(pens))))
     return rows
 
 
@@ -359,6 +468,24 @@ def main():
     out("  cached triangular SOLVE does not (error there is amplified by kappa(M)).")
     out("  Compare 'bf16 operands, fp64 solve' against 'fp64 operands, BF16 SOLVE'.")
     out("  If the claim holds, the second is materially worse than the first.")
+    out()
+
+    # ---- C4 ----
+    out("C4 — FCS-MPC: does a narrow operand format change the SELECTED switching")
+    out("     sequence? (three-level NPC, |U|=27, Np=2 -> 729 sequences, 200 trials)")
+    out(f"{'operand prec':>14} {'argmin disagrees':>17} {'mean cost penalty':>19} "
+        f"{'worst':>9}")
+    out("-" * 64)
+    for prec, dis, mean_pen, max_pen in run_c4():
+        out(f"{prec:>14} {dis:>16.1%} {mean_pen:>19.2e} {max_pen:>9.2e}")
+    out()
+    out("  'cost penalty' = excess TRUE cost of the chosen sequence as a fraction of")
+    out("  the full cost spread across candidates. Disagreement alone is NOT a defect:")
+    out("  when two candidates are within epsilon, either is within epsilon of optimal.")
+    out("  The number that would kill a format is a large PENALTY, not a large")
+    out("  disagreement rate. Note the plant is deliberately near-unity-eigenvalue,")
+    out("  which packs the candidate costs close together — a well-separated plant")
+    out("  would flatter every format.")
     out()
 
     out("=" * 94)

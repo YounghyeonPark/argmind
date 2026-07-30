@@ -240,8 +240,14 @@ def main():
     out("Q1b — SWEEP AT WORST-CASE ITERATIONS (the tail a hard deadline must survive)")
     out("=" * 108)
     out("iters_worst: QUAD-MPC 74 (MEASURED cold/max, coupled plant, eps=1e-6),")
-    out("PWR-MPC 48 [EST, scaled by the measured 74/15 ratio], ARM-MPC 30 [EST,")
-    out("2x design point; HPIPM max_iter bounds it], EKF 1 (fixed op count).")
+    out("ARM-MPC 30 [EST, 2x design point; HPIPM max_iter bounds it], EKF 1 and")
+    out("PWR-MPC 1 (fixed op count).")
+    out()
+    out("UPDATED 2026-07-30: PWR-MPC was re-specified from a continuous-control-set")
+    out("ADMM QP to finite-control-set MPC (BENCHMARKS.md #3 v1.2), so it no longer")
+    out("has an iteration tail at all and no longer constrains bandwidth. It used to")
+    out("carry iters_worst=48 [EST] and was one of the TWO rows that set the")
+    out("64 B/cycle floor. See perf_model/results_pwr_mpc_respec.txt.")
     out()
     out(f"{'B/cyc':>6} {'MACs':>5} {'area':>6} " +
         " ".join(f"{b.name[:8]:>9}" for b in SOLVERS) +
@@ -274,14 +280,24 @@ def main():
     out("  above 64 B/cycle with any array size in the sweep.")
     out()
     out("  READ THE 50%-PERIOD COLUMN. It is the only column with a floor in it:")
-    out("    16 B/cycle  QUAD-MPC cold = 1092 us > 1000 us period -- MISSES outright")
-    out("    32 B/cycle  QUAD-MPC cold =  560 us, PWR-MPC cold = 33 us -- both blow")
-    out("                a 50% budget (500 us / 25 us)")
-    out("    64 B/cycle  QUAD-MPC cold =  295 us, PWR-MPC cold = 21 us -- both fit")
-    out("  -> 64 B/CYCLE IS THE LATENCY FLOOR, set by the measured ADMM cold-solve")
-    out("     tail at 1 kHz and 20 kHz. Not by ARM-MPC, which now has 24x margin.")
+    out("    16 B/cycle  QUAD-MPC cold = 1102 us > 1000 us period -- MISSES outright")
+    out("    32 B/cycle  QUAD-MPC cold =  570 us -- blows a 50% budget (500 us)")
+    out("    64 B/cycle  QUAD-MPC cold =  304 us -- fits")
+    out("  -> 64 B/CYCLE IS THE LATENCY FLOOR, set by the MEASURED QUAD-MPC")
+    out("     cold-solve tail at 1 kHz inside a 50%-of-period budget.")
+    out("  -> **IT NOW RESTS ON ONE ROW.** Until 2026-07-30 it rested on two, the")
+    out("     other being PWR-MPC at 33 us against a 25 us budget at 32 B/cycle. The")
+    out("     PWR-MPC re-spec removed that row from the argument (FCS-MPC clears its")
+    out("     budget at 9.3x even at 16 B/cycle). The floor does not MOVE, because")
+    out("     the surviving row is the one whose tail is measured rather than")
+    out("     estimated -- but a single-row justification is the exact structural")
+    out("     weakness that caused the two previous sizing re-runs, and it is stated")
+    out("     here rather than left to be rediscovered.")
     out("  -> MAC COUNT HAS NO LATENCY FLOOR IN THE SOLVER SET AT ALL: 64 MACs")
     out("     clears every solver row at worst-case iterations at 64 B/cycle.")
+    out("     Caveat added with the re-spec: FCS-MPC is ARRAY-bound below 12x12")
+    out("     (tile=8 costs it 1.14x) and intensity-bound above, so 144 MACs is the")
+    out("     knee for that row too. See results_pwr_mpc_respec.txt section 1.")
     out()
 
     out("-" * 108)
@@ -507,7 +523,7 @@ def main():
     out()
     composites = [
         ("drone node   QUAD-MPC 1kHz + EKF-24 1kHz", ["QUAD-MPC", "EKF-24"], 1000),
-        ("drive node   PWR-MPC 20kHz + EKF-24 1kHz", ["PWR-MPC", "EKF-24"], 20000),
+        ("drive node   PWR-MPC 40kHz + EKF-24 1kHz", ["PWR-MPC", "EKF-24"], 40000),
         ("manipulator  ARM-MPC 250Hz + EKF-96 200Hz", ["ARM-MPC", "EKF-96"], 250),
     ]
     out(f"  {'composite':<44} {'footprint':>10} {'fits 128K':>10} {'fits 256K':>10} "
@@ -518,7 +534,7 @@ def main():
         out(f"  {label:<44} {f / 1024:>7.1f} KB {str(f <= 128 * 1024):>10} "
             f"{str(f <= 256 * 1024):>10} {rate:>10} Hz")
     out()
-    out("  THIS IS THE DECIDING TABLE. 128 KB holds the 1 kHz and 20 kHz composites")
+    out("  THIS IS THE DECIDING TABLE. 128 KB holds the 1 kHz and 40 kHz composites")
     out("  -- the loops where determinism is the product. The 250 Hz manipulator")
     out("  composite (289 KB) does NOT fit at 128 KB and does NOT fit at 256 KB")
     out("  either, so 256 KB does not extend the claim to the case that fails; it")

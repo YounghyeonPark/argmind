@@ -131,18 +131,23 @@ def test_a_free_sequencer_would_be_caught():
 
     import sequencer as Q
 
-    pwr = dataclasses.replace(by_name("PWR-MPC"),
-                              iters=by_name("PWR-MPC").iters_wc)
-    budget = pwr.deadline_us * Q.PERIOD_BUDGET
+    # RE-POINTED 2026-07-30 to QUAD-MPC. It used to use PWR-MPC, which was a
+    # continuous-control-set ADMM row; re-specified as FCS-MPC that row has no
+    # dependency chain at all, so it can no longer demonstrate the drain term.
+    # QUAD-MPC at its MEASURED worst-case tail can, but only with both
+    # pathologies present -- which is itself the downgraded finding.
+    quad = dataclasses.replace(by_name("QUAD-MPC"),
+                               iters=by_name("QUAD-MPC").iters_wc)
+    budget = quad.deadline_us * Q.PERIOD_BUDGET
 
     honest = dataclasses.replace(M.CFG_100, seq_setup_cycles=20,
-                                 seq_queue_depth=0)
-    assert M.model_argmind(pwr, honest)["latency_us"] > budget
+                                 seq_queue_depth=0, chain_block_override=1)
+    assert M.model_argmind(quad, honest)["latency_us"] > budget
 
     free = dataclasses.replace(honest, seq_setup_cycles=0.0, drain_cycles=0)
-    assert M.model_argmind(pwr, free)["latency_us"] <= budget, (
+    assert M.model_argmind(quad, free)["latency_us"] <= budget, (
         "zeroing descriptor setup and dependency drain no longer makes the "
-        "PWR-MPC budget reachable — the sequencer terms are not load-bearing")
+        "QUAD-MPC budget reachable — the sequencer terms are not load-bearing")
 
 
 def test_inconsistent_descriptor_decomposition_would_be_caught():

@@ -12,9 +12,9 @@ Q1a — SWEEP AT TYPICAL (p95) ITERATIONS: proves the typical case sizes NOTHING
 ============================================================================================================
 Tightest SOLVER deadline margin (deadline/latency) over the whole grid:
  B/cyc  banks  word        64MAC       144MAC       256MAC      1024MAC
-    16      2    8B     3.2x PWR-     3.2x PWR-     3.2x PWR-     3.2x PWR-
-    32      4    8B     5.4x PWR-     5.4x PWR-     5.4x PWR-     5.4x PWR-
-    64      8    8B     8.4x PWR-     8.4x PWR-     8.4x PWR-     8.4x PWR-
+    16      2    8B     4.4x QUAD     4.4x QUAD     4.4x QUAD     4.4x QUAD
+    32      4    8B     8.4x QUAD     8.4x QUAD     8.4x QUAD     8.4x QUAD
+    64      8    8B    10.5x ARM-    10.5x ARM-    10.5x ARM-    10.5x ARM-
    128     16    8B    10.5x ARM-    10.5x ARM-    10.5x ARM-    10.5x ARM-
    256     16   16B    10.5x ARM-    10.5x ARM-    10.5x ARM-    10.5x ARM-
 
@@ -27,44 +27,60 @@ Tightest SOLVER deadline margin (deadline/latency) over the whole grid:
 Q1b — SWEEP AT WORST-CASE ITERATIONS (the tail a hard deadline must survive)
 ============================================================================================================
 iters_worst: QUAD-MPC 74 (MEASURED cold/max, coupled plant, eps=1e-6),
-PWR-MPC 48 [EST, scaled by the measured 74/15 ratio], ARM-MPC 30 [EST,
-2x design point; HPIPM max_iter bounds it], EKF 1 (fixed op count).
+ARM-MPC 30 [EST, 2x design point; HPIPM max_iter bounds it], EKF 1 and
+PWR-MPC 1 (fixed op count).
+
+UPDATED 2026-07-30: PWR-MPC was re-specified from a continuous-control-set
+ADMM QP to finite-control-set MPC (BENCHMARKS.md #3 v1.2), so it no longer
+has an iteration tail at all and no longer constrains bandwidth. It used to
+carry iters_worst=48 [EST] and was one of the TWO rows that set the
+64 B/cycle floor. See perf_model/results_pwr_mpc_respec.txt.
 
  B/cyc  MACs   area  QUAD-MPC   ARM-MPC   PWR-MPC    EKF-24    EKF-96 binds      100%period  50%period  
-    16    64  0.536      0.9X      3.6       0.8X    222.9      35.4  gemv_bw    QUAD,PWR-   QUAD,PWR-  
-    16   144  0.622      0.9X      3.6       0.8X    376.8      75.6  gemv_bw    QUAD,PWR-   QUAD,PWR-  
-    16   256  0.743      0.9X      3.6       0.8X    473.9     125.7  gemv_bw    QUAD,PWR-   QUAD,PWR-  
-    16  1024  1.569      0.9X      3.6       0.8X    677.6     334.8  gemv_bw    QUAD,PWR-   QUAD,PWR-  
-    32    64  0.538      1.8       4.7       1.5     225.1      35.5  gemv_bw    all OK      QUAD,PWR-  
-    32   144  0.625      1.8       4.7       1.5     383.3      76.0  gemv_bw    all OK      QUAD,PWR-  
-    32   256  0.745      1.8       4.7       1.5     484.2     126.8  gemv_bw    all OK      QUAD,PWR-  
-    32  1024  1.572      1.8       4.7       1.5     699.0     343.1  gemv_bw    all OK      QUAD,PWR-  
-    64    64  0.563      3.3       5.5       2.4     226.3      35.5  gemv_bw    all OK      all OK     
-    64   144  0.649      3.3       5.5       2.4     386.6      76.3  gemv_bw    all OK      all OK     
-    64   256  0.769      3.3       5.5       2.4     489.5     127.4  gemv_bw    all OK      all OK     
-    64  1024  1.596      3.3       5.5       2.4     710.1     347.3  gemv_bw    all OK      all OK     
-   128    64  0.612      5.9       5.5       3.4     226.8      35.5  gemv_bw    all OK      all OK     
-   128   144  0.698      5.9       5.5       3.4     388.3      76.4  gemv_bw    all OK      all OK     
-   128   256  0.819      5.9       5.5       3.4     492.2     127.7  gemv_bw    all OK      all OK     
-   128  1024  1.645      5.9       5.5       3.4     715.8     349.5  gemv_bw    all OK      all OK     
-   256    64  0.631      5.9       5.5       3.4     226.8      35.5  gemv_bw    all OK      all OK     
-   256   144  0.717      9.6       5.5       4.4     389.1      76.4  seq        all OK      all OK     
-   256   256  0.837      9.6       5.5       4.4     493.6     127.9  seq        all OK      all OK     
-   256  1024  1.664      9.6       5.5       4.4     718.7     350.6  seq        all OK      all OK     
+    16    64  0.536      0.9X      3.6       9.3     154.1      18.7  gemv_bw    QUAD        QUAD       
+    16   144  0.622      0.9X      3.6       9.3     212.1      27.8  gemv_bw    QUAD        QUAD       
+    16   256  0.743      0.9X      3.6       9.3     260.7      36.6  gemv_bw    QUAD        QUAD       
+    16  1024  1.569      0.9X      3.6       9.3     396.8      70.2  gemv_bw    QUAD        QUAD       
+    32    64  0.538      1.8       4.7      12.0     225.1      35.5  gemv_bw    all OK      QUAD       
+    32   144  0.625      1.8       4.7      12.0     343.2      53.9  gemv_bw    all OK      QUAD       
+    32   256  0.745      1.8       4.7      12.0     404.0      70.5  gemv_bw    all OK      QUAD       
+    32  1024  1.572      1.8       4.7      12.0     550.4     130.8  gemv_bw    all OK      QUAD       
+    64    64  0.563      3.3       5.5      14.1     226.3      35.5  gemv_bw    all OK      all OK     
+    64   144  0.649      3.3       5.5      14.1     386.6      76.3  gemv_bw    all OK      all OK     
+    64   256  0.769      3.3       5.5      14.1     489.5     127.4  gemv_bw    all OK      all OK     
+    64  1024  1.596      3.3       5.5      14.1     682.4     230.4  gemv_bw    all OK      all OK     
+   128    64  0.612      5.9       5.5      14.5     226.8      35.5  gemm_mac   all OK      all OK     
+   128   144  0.698      5.9       5.5      15.5     388.3      76.4  gemm_mac   all OK      all OK     
+   128   256  0.819      5.9       5.5      15.5     492.2     127.7  gemm_mac   all OK      all OK     
+   128  1024  1.645      5.9       5.5      15.5     715.8     349.5  gemm_mac   all OK      all OK     
+   256    64  0.631      5.9       5.5      14.5     226.8      35.5  gemm_mac   all OK      all OK     
+   256   144  0.717      9.6       5.5      15.9     389.1      76.4  gemm_mac   all OK      all OK     
+   256   256  0.837      9.6       5.5      16.3     493.6     127.9  gemm_mac   all OK      all OK     
+   256  1024  1.664      9.6       5.5      16.3     718.7     350.6  gemm_mac   all OK      all OK     
 
   The binding resource is SCRATCHPAD BANDWIDTH on the ADMM rows and the
   MAC ARRAY on ARM-MPC's Riccati factorisation -- but neither binds at or
   above 64 B/cycle with any array size in the sweep.
 
   READ THE 50%-PERIOD COLUMN. It is the only column with a floor in it:
-    16 B/cycle  QUAD-MPC cold = 1092 us > 1000 us period -- MISSES outright
-    32 B/cycle  QUAD-MPC cold =  560 us, PWR-MPC cold = 33 us -- both blow
-                a 50% budget (500 us / 25 us)
-    64 B/cycle  QUAD-MPC cold =  295 us, PWR-MPC cold = 21 us -- both fit
-  -> 64 B/CYCLE IS THE LATENCY FLOOR, set by the measured ADMM cold-solve
-     tail at 1 kHz and 20 kHz. Not by ARM-MPC, which now has 24x margin.
+    16 B/cycle  QUAD-MPC cold = 1102 us > 1000 us period -- MISSES outright
+    32 B/cycle  QUAD-MPC cold =  570 us -- blows a 50% budget (500 us)
+    64 B/cycle  QUAD-MPC cold =  304 us -- fits
+  -> 64 B/CYCLE IS THE LATENCY FLOOR, set by the MEASURED QUAD-MPC
+     cold-solve tail at 1 kHz inside a 50%-of-period budget.
+  -> **IT NOW RESTS ON ONE ROW.** Until 2026-07-30 it rested on two, the
+     other being PWR-MPC at 33 us against a 25 us budget at 32 B/cycle. The
+     PWR-MPC re-spec removed that row from the argument (FCS-MPC clears its
+     budget at 9.3x even at 16 B/cycle). The floor does not MOVE, because
+     the surviving row is the one whose tail is measured rather than
+     estimated -- but a single-row justification is the exact structural
+     weakness that caused the two previous sizing re-runs, and it is stated
+     here rather than left to be rediscovered.
   -> MAC COUNT HAS NO LATENCY FLOOR IN THE SOLVER SET AT ALL: 64 MACs
      clears every solver row at worst-case iterations at 64 B/cycle.
+     Caveat added with the re-spec: FCS-MPC is ARRAY-bound below 12x12
+     (tile=8 costs it 1.14x) and intensity-bound above, so 144 MACs is the
+     knee for that row too. See results_pwr_mpc_respec.txt section 1.
 
 ------------------------------------------------------------------------------------------------------------
 Q1c — MINIMUM SQUARE ARRAY THAT MEETS EACH DEADLINE (64 B/cycle, 16 lanes)
@@ -72,7 +88,7 @@ Q1c — MINIMUM SQUARE ARRAY THAT MEETS EACH DEADLINE (64 B/cycle, 16 lanes)
 benchmark     min MACs (p95)  min MACs (worst) binding resource at minimum   
 QUAD-MPC                   4                 9 gemv_bw                       
 ARM-MPC                    1                 1 gemm_mac                      
-PWR-MPC                    4                16 gemv_bw                       
+PWR-MPC                    1                 1 host                          
 EKF-24                     1                 1 gemm_mac                      
 EKF-96                     4                 4 gemm_mac                      
 SLM-DECODE             never             never dma                           
@@ -94,18 +110,18 @@ make the GEMM-bearing SOLVER rows faster than their deadline needs, but it
 does make them cheaper. Energy per call, 64 B/cycle, 128 KB, 16 lanes:
 
   tile   MACs  mac mm2  core mm2  QUAD-MPC   ARM-MPC   PWR-MPC    EKF-24    EKF-96   sum uJ  d(uJ)/d(mm2)
-     4     16    0.015     0.511      7.49     31.83      0.48      0.53     24.08    64.41 
-     6     36    0.034     0.532      6.66     28.11      0.43      0.34     15.62    51.17           615
-     8     64    0.060     0.563      6.66     26.26      0.43      0.27     12.07    45.69           182
-    12    144    0.135     0.649      6.66     24.40      0.43      0.20      8.97    40.66            58
-    16    256    0.240     0.769      6.66     23.47      0.43      0.18      7.59    38.33            19
-    24    576    0.539     1.114      6.66     22.54      0.43      0.15      6.32    36.10             6
-    32   1024    0.958     1.596      6.66     22.08      0.43      0.14      5.73    35.04             2
+     4     16    0.015     0.511      7.65     32.08      0.07      0.53     24.08    64.41 
+     6     36    0.034     0.532      6.82     28.36      0.07      0.34     15.62    51.21           613
+     8     64    0.060     0.563      6.82     26.51      0.06      0.27     12.07    45.73           182
+    12    144    0.135     0.649      6.82     24.65      0.06      0.20      8.97    40.70            58
+    16    256    0.240     0.769      6.82     23.72      0.06      0.18      7.59    38.37            19
+    24    576    0.539     1.114      6.82     22.79      0.06      0.15      6.42    36.24             6
+    32   1024    0.958     1.596      6.82     22.33      0.06      0.14      5.84    35.19             2
 
   Per-row sensitivity, 64 MACs vs 256 MACs:
-    QUAD-MPC           6.66 ->       6.66 uJ  (1.00x)  pure GEMV or DRAM-bound: array is dead area
-    ARM-MPC           26.26 ->      23.47 uJ  (1.12x)  GEMM-bearing: array pays
-    PWR-MPC            0.43 ->       0.43 uJ  (1.00x)  pure GEMV or DRAM-bound: array is dead area
+    QUAD-MPC           6.82 ->       6.82 uJ  (1.00x)  pure GEMV or DRAM-bound: array is dead area
+    ARM-MPC           26.51 ->      23.72 uJ  (1.12x)  GEMM-bearing: array pays
+    PWR-MPC            0.06 ->       0.06 uJ  (1.00x)  pure GEMV or DRAM-bound: array is dead area
     EKF-24             0.27 ->       0.18 uJ  (1.54x)  GEMM-bearing: array pays
     EKF-96            12.07 ->       7.59 uJ  (1.59x)  GEMM-bearing: array pays
     SLM-DECODE     18031.44 ->   18031.44 uJ  (1.00x)  pure GEMV or DRAM-bound: array is dead area
@@ -135,14 +151,14 @@ does make them cheaper. Energy per call, 64 B/cycle, 128 KB, 16 lanes:
     16x9  = 144 MACs  0.6944 operand B/MAC  EKF-96 9.13 uJ
     18x8  = 144 MACs  0.7222 operand B/MAC  EKF-96 9.34 uJ
     24x6  = 144 MACs  0.8333 operand B/MAC  EKF-96 9.95 uJ
-    36x4  = 144 MACs  1.1111 operand B/MAC  EKF-96 11.64 uJ
+    36x4  = 144 MACs  1.1111 operand B/MAC  EKF-96 11.78 uJ
 
   SOLVER-ONLY SKU — is it a real product? Yes, and it is a big saving:
   SKU                                 MACs  core mm2  solver uJ       perf/W misses (worst-case)   
-  CM-100S  solver-only, min array       16     0.511      64.41   7.5-14.0   SLM-DECODE, VIT-TINY  
-  CM-100S  solver-only, 64 MAC          64     0.563      45.69  11.6-16.9   SLM-DECODE            
-  CM-100   proposed                    144     0.698      36.74  14.5-22.2   SLM-DECODE            
-  CM-100   previous recommendation     256     0.953      38.20  11.9-23.6   SLM-DECODE            
+  CM-100S  solver-only, min array       16     0.511      64.41   7.7-17.5   SLM-DECODE, VIT-TINY  
+  CM-100S  solver-only, 64 MAC          64     0.563      45.73  11.3-20.7   SLM-DECODE            
+  CM-100   proposed                    144     0.698      36.77  14.1-23.5   SLM-DECODE            
+  CM-100   previous recommendation     256     0.953      38.27  11.6-23.9   SLM-DECODE            
 
   A 16-MAC solver-only part clears every solver deadline at worst-case
   iterations and costs 0.378 mm2 -- 54% less silicon than the previous
@@ -164,17 +180,17 @@ geometry alone; 'from static' is the part explained by a shorter active
 window. They should add to roughly the total delta.
 
  B/cyc  banks  word   pJ/B  spad mm2  solver uJ   vs 64B  from pJ/B  from static
-    32      4    8B  1.099     0.139      47.01    15.6%     -4.49u       -1.85u
-    64      8    8B  0.884     0.160      40.66    (ref)     +0.00u       +0.00u
-   128     16    8B  0.718     0.203      36.74    -9.7%     +3.49u       +0.44u
-   256     16   16B  0.652     0.219      35.13   -13.6%     +4.87u       +0.66u
+    32      4    8B  1.099     0.139      47.45    16.6%     -4.53u       -2.22u
+    64      8    8B  0.884     0.160      40.70    (ref)     +0.00u       +0.00u
+   128     16    8B  0.718     0.203      36.77    -9.7%     +3.52u       +0.42u
+   256     16   16B  0.652     0.219      35.17   -13.6%     +4.91u       +0.63u
 
-  64 -> 128 B/cycle at 128 KB / 144 MACs: solver energy 40.66 -> 36.74 uJ = -9.7%,
+  64 -> 128 B/cycle at 128 KB / 144 MACs: solver energy 40.70 -> 36.77 uJ = -9.7%,
   for +0.043 mm2 of scratchpad (+0.049 mm2 with top margin). The argument SURVIVES, at
   -10% rather than the -15% previously claimed.
 
-  NOW THE ASSUMPTION IT RESTS ON. Of that 3.93 uJ, 3.49 uJ is pJ/byte falling
-  0.884 -> 0.718 and only 0.44 uJ is the shorter active window -- so
+  NOW THE ASSUMPTION IT RESTS ON. Of that 3.94 uJ, 3.52 uJ is pJ/byte falling
+  0.884 -> 0.718 and only 0.42 uJ is the shorter active window -- so
   89% of the energy case for width is a BANK-GEOMETRY effect (16 banks of
   8 KB are cheaper per access than 8 banks of 16 KB), NOT a bandwidth
   effect: the byte COUNT a workload fetches is identical at both widths.
@@ -210,7 +226,7 @@ block stores nothing; ARM-MPC is fp64 so 8 B/element):
 benchmark     persistent  fits 64K  fits 128K  fits 256K  overflow @128K  stream GB/s   DRAM uJ
 QUAD-MPC        100.0 KB     False       True       True          0.0 KB        0.000      0.00
 ARM-MPC         172.3 KB     False      False       True         44.3 KB        0.011      0.54
-PWR-MPC           8.2 KB      True       True       True          0.0 KB        0.000      0.00
+PWR-MPC           0.7 KB      True       True       True          0.0 KB        0.000      0.00
 EKF-24            7.9 KB      True       True       True          0.0 KB        0.000      0.00
 EKF-96          117.0 KB     False       True       True          0.0 KB        0.000      0.00
 
@@ -223,10 +239,10 @@ EKF-96          117.0 KB     False       True       True          0.0 KB        
 
   composite                                     footprint  fits 128K  fits 256K  fastest loop
   drone node   QUAD-MPC 1kHz + EKF-24 1kHz       107.9 KB       True       True       1000 Hz
-  drive node   PWR-MPC 20kHz + EKF-24 1kHz        16.1 KB       True       True      20000 Hz
+  drive node   PWR-MPC 40kHz + EKF-24 1kHz         8.6 KB       True       True      40000 Hz
   manipulator  ARM-MPC 250Hz + EKF-96 200Hz      289.3 KB      False      False        250 Hz
 
-  THIS IS THE DECIDING TABLE. 128 KB holds the 1 kHz and 20 kHz composites
+  THIS IS THE DECIDING TABLE. 128 KB holds the 1 kHz and 40 kHz composites
   -- the loops where determinism is the product. The 250 Hz manipulator
   composite (289 KB) does NOT fit at 128 KB and does NOT fit at 256 KB
   either, so 256 KB does not extend the claim to the case that fails; it
@@ -235,10 +251,10 @@ EKF-96          117.0 KB     False       True       True          0.0 KB        
   that is not a determinism argument, it is a rounding error dressed as one.
 
     KB  banks  spad mm2   pJ/B  leak mW 85C  leak mW 125C  QUAD-MPC   ARM-MPC   PWR-MPC    EKF-24    EKF-96   sum uJ
-    64     16     0.146  0.533         0.26          1.04      4.76     21.48      0.29      0.17      8.04    34.74
-   128     16     0.203  0.718         0.52          2.09      5.34     22.64      0.35      0.19      8.22    36.74
-   256     16     0.319  0.930         1.04          4.18      6.50     24.34      0.42      0.21      9.17    40.64
-   512     16     0.555  1.205         2.09          8.36      8.01     27.24      0.51      0.23     10.40    46.40
+    64     16     0.146  0.533         0.26          1.04      4.86     21.63      0.05      0.17      8.04    34.75
+   128     16     0.203  0.718         0.52          2.09      5.46     22.84      0.06      0.19      8.22    36.77
+   256     16     0.319  0.930         1.04          4.18      6.67     24.60      0.06      0.21      9.17    40.71
+   512     16     0.555  1.205         2.09          8.36      8.22     27.58      0.07      0.23     10.40    46.51
 
   256 -> 128 KB: -0.116 mm2 of scratchpad (-0.134 mm2 with top margin),
   pJ/byte 0.930 -> 0.718, solver energy -10%, and leakage HALVED (1.04 ->
@@ -255,13 +271,13 @@ ADVERSARIAL CHECK 1 — segmented reduction (still required, cheaper to skip
 config         bench            seg ON    seg OFF   penalty  deliv B/cyc  (worst-case iters)
 bw=64          QUAD-MPC          303.8      303.8     1.00x           64
 bw=64          ARM-MPC           730.3      748.4     1.02x           56
-bw=64          PWR-MPC            21.0       21.8     1.04x           60
+bw=64          PWR-MPC             1.8        1.8     1.00x           16
 bw=128         QUAD-MPC          170.8      197.4     1.16x          107
 bw=128         ARM-MPC           730.3      730.3     1.00x           84
-bw=128         PWR-MPC            14.6       15.0     1.03x          120
+bw=128         PWR-MPC             1.6        1.6     1.00x           16
 bw=256         QUAD-MPC          104.4      144.3     1.38x          160
 bw=256         ARM-MPC           730.3      730.3     1.00x          168
-bw=256         PWR-MPC            11.4       15.0     1.32x          120
+bw=256         PWR-MPC             1.6        1.6     1.00x           16
 
   At 64 B/cycle the penalty is 1.00-1.05x: fp32 rows of 80 and 30 elements
   are already near-multiples of 64 B. Segmented reduction is now a
@@ -273,11 +289,11 @@ bw=256         PWR-MPC            11.4       15.0     1.32x          120
 ADVERSARIAL CHECK 2 — perf/W still depends on POWER GATING between calls
 ============================================================================================================
 bench           duty   gated uJ  ungated uJ  perf/W gated  perf/W ungated
-QUAD-MPC        6.4%       6.66       20.71         11.6x            3.7x
-ARM-MPC         9.6%      24.40       78.67         18.2x            5.7x
-PWR-MPC        11.8%       0.43        1.09         12.7x            5.0x
-EKF-24          0.3%       0.20       15.16         19.3x            0.3x
-EKF-96          1.3%       8.97       82.98         20.3x            2.2x
+QUAD-MPC        6.4%       6.82       20.87         11.3x            3.7x
+ARM-MPC         9.6%      24.65       78.92         17.6x            5.5x
+PWR-MPC         7.1%       0.06        0.41         20.7x            3.2x
+EKF-24          0.3%       0.20       15.16         20.2x            0.3x
+EKF-96          1.3%       8.97       82.98         20.7x            2.2x
 
   Unchanged conclusion, and MORE load-bearing at 128 KB/64 B/cycle than
   before: the smaller core has lower dynamic energy, so the fixed 15 mW
@@ -318,8 +334,8 @@ RECOMMENDATION — CM-100, REVISED DOWN
   scratchpad capacity              256 KB       128 KB       128 KB
   MAC array                           256          144           64
   core area mm2                     0.953        0.698        0.563
-  solver energy sum uJ              38.20        36.74        45.69
-  solver perf/W                 11.9-23.6    14.5-22.2    11.6-16.9
+  solver energy sum uJ              38.27        36.77        45.73
+  solver perf/W                 11.6-23.9    14.1-23.5    11.3-20.7
 
   The revised part is 27% smaller than the previous recommendation AND has slightly
   lower solver energy. It dominates it on both axes -- there is no trade
@@ -340,15 +356,15 @@ RECOMMENDATION — CM-100, REVISED DOWN
   LEAK  scratchpad 0.52 mW @85C / 2.09 mW @125C
 
   benchmark     deadline   lat p95  lat worst  margin wc   uJ/call  perf/W binds on   verdict
-  QUAD-MPC          1000      36.0      170.8      5.85x      5.34    14.5 gemv_bw    MEETS
-  ARM-MPC           4000     382.3      730.3      5.48x     22.64    19.6 gemm_mac   MEETS
-  PWR-MPC             50       4.3       14.6      3.43x      0.35    15.5 gemv_bw    MEETS
-  EKF-24            1000       2.6        2.6    388.28x      0.19    20.9 gemm_mac   MEETS
-  EKF-96            5000      65.5       65.5     76.36x      8.22    22.2 gemm_mac   MEETS
+  QUAD-MPC          1000      36.0      170.8      5.85x      5.46    14.1 gemv_bw    MEETS
+  ARM-MPC           4000     382.3      730.3      5.48x     22.84    19.0 gemm_mac   MEETS
+  PWR-MPC             25       1.6        1.6     15.51x      0.06    23.5 host       MEETS
+  EKF-24            1000       2.6        2.6    388.28x      0.19    21.9 gemm_mac   MEETS
+  EKF-96            5000      65.5       65.5     76.36x      8.22    22.5 gemm_mac   MEETS
   SLM-DECODE       50000  174107.1   174107.1      0.29x  17615.71     2.4 dma        MISSES
-  VIT-TINY         33333    7598.4     7598.4      4.39x    660.43    26.8 gemm_mac   MEETS
+  VIT-TINY         33333    7598.4     7598.4      4.39x    660.43    30.4 gemm_mac   MEETS
 
-  solver perf/W band: 14.5x - 22.2x  (kill criterion 5x)
+  solver perf/W band: 14.1x - 23.5x  (kill criterion 5x)
 
   DECISIONS AND WHAT THEY REST ON
    * 128 KB, 128 B/cycle, 144 MACs is the ENERGY-KNEE point. Every part of
@@ -374,7 +390,7 @@ RECOMMENDATION — CM-100, REVISED DOWN
 
   WHAT DID NOT CHANGE: bandwidth-first over MAC-first (the ADMM rows are
   still GEMV-bound and still bind on scratchpad bandwidth, just at a lower
-  absolute width); the >=5x kill criterion (passes 14-22x); zero-copy and
+  absolute width); the >=5x kill criterion (passes 14-24x); zero-copy and
   residency; power gating as a requirement. SLM-DECODE still misses by
   3.4x and is still an external-bandwidth provisioning problem.
 

@@ -393,12 +393,12 @@ Q4 — EFFECT ON THE CM-100 AREA BUDGET AND ON perf/W
   but the direction is worth knowing.
 
    fp64 pJ/MAC    ARM uJ   perf/W vs best CPU  vs 5x kill
-          2.20     22.64                19.6x        PASS
-          3.30     27.02                16.5x        PASS
-          4.40     31.39                14.2x        PASS
-          6.60     40.14                11.1x        PASS
+          2.20     22.84                19.0x        PASS
+          3.30     27.22                15.9x        PASS
+          4.40     31.59                13.7x        PASS
+          6.60     40.35                10.7x        PASS
 
-  fp64 MAC energy is 39% of ARM-MPC's 22.6 uJ/call at the typical
+  fp64 MAC energy is 38% of ARM-MPC's 22.8 uJ/call at the typical
   iteration count -- the single largest term. SENSITIVITY: the kill
   criterion survives a 3x error in the constant, so the go/no-go does not
   depend on it; the QUOTED RATIO does, by about 2x across the band.
@@ -410,9 +410,9 @@ Q4 — EFFECT ON THE CM-100 AREA BUDGET AND ON perf/W
   rate on every baseline. NEON/SVE fp64 is half-rate (same vector width,
   twice the element size) and SME fp64 outer products are quarter-rate.
   baseline                                      fp32 op/cyc  fp64 op/cyc  ARM-MPC us       uJ
-  Cortex-A55-class @1.5GHz (NEON, in-order)               8            4      2955.4    444.8
-  Cortex-A78-class @2.0GHz (NEON)                        16            8       989.9    892.4
-  Cortex-A720-class @2.2GHz (SME2, 256b)                 64           16       444.9    579.8
+  Cortex-A55-class @1.5GHz (NEON, in-order)               8            4      2879.8    433.5
+  Cortex-A78-class @2.0GHz (NEON)                        16            8       966.3    871.2
+  Cortex-A720-class @2.2GHz (SME2, 256b)                 64           16       435.7    567.9
   NOTE FOR FALSIFIER F4: FEAT_SME_F64F64 is architecturally OPTIONAL. An
   SME2 part without it has no fp64 matrix path at all. Check the target's
   ID registers on an eval board before claiming anything either way.
@@ -427,7 +427,7 @@ Q4 — EFFECT ON THE CM-100 AREA BUDGET AND ON perf/W
       from anything we designed. Both changes are corrections of errors
       that pointed in opposite directions and happened to partly cancel.
     * SANITY CHECK the fix is not overdone: the A55 baseline still MEETS
-      ARM-MPC's raw 4000 us deadline (2955 us). We are not claiming the
+      ARM-MPC's raw 4000 us deadline (2880 us). We are not claiming the
       CPU cannot do this -- only that it costs 20x the energy. Consistent
       with CLAUDE.md's standing instruction.
 

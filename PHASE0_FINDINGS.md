@@ -127,7 +127,8 @@ Raw output: [perf_model/results_v0.txt](perf_model/results_v0.txt).
 > QUAD-MPC 100 KB (was 150), EKF-96 117 KB, ARM-MPC 172 KB (was 861), PWR-MPC 8 KB, EKF-24 8 KB.
 > The determinism claim is *no DRAM in the control loop*, so it must be tested per co-resident
 > workload, not per benchmark: drone node (QUAD-MPC + EKF-24, 1 kHz) = 108 KB **fits**; drive node
-> (PWR-MPC + EKF-24, 20 kHz) = 16 KB **fits**; manipulator (ARM-MPC + EKF-96, 250 Hz) = 289 KB
+> (PWR-MPC + EKF-24, 20 kHz — now **40 kHz and 8.6 KB** after the §0.3 re-spec) = 16 KB **fits**,
+> and fits more easily; manipulator (ARM-MPC + EKF-96, 250 Hz) = 289 KB
 > **fits neither 128 KB nor 256 KB**. So 256 KB does not extend the claim to the case that fails —
 > it only reduces the streamed fraction of a workload with 24× deadline margin and 0.04 GB/s of
 > streaming demand. 256→128 KB: **−0.116 mm² SRAM (−0.134 with margin), pJ/byte 0.930 → 0.718,
@@ -462,6 +463,268 @@ Raw output: [perf_model/results_v0.txt](perf_model/results_v0.txt).
 > *conservative* on that axis — fixing it raises cycles/descriptor and makes every conclusion here
 > more comfortable. **52 new invariant tests (122 total).**
 
+> ### §0.3 — CLOSED (2026-07-30): PWR-MPC re-specified. Three conclusions downgraded, the row is still below parity, and the MCU-class contradiction is settled
+>
+> Raw output: [perf_model/results_pwr_mpc_respec.txt](perf_model/results_pwr_mpc_respec.txt);
+> model in [perf_model/pwr_mpc_respec.py](perf_model/pwr_mpc_respec.py) plus the FCS-MPC
+> benchmark, mixed-precision operands, the GEMM bandwidth ceiling and the MCU-class host tiers in
+> `argmind_model.py`. **All latency/energy/area figures are modelled estimates at a 16nm-class
+> node, ±2×, not quotable externally.** Numerical results are [MEAS] *numerics*, not silicon.
+> **29 new invariant tests (151 total).**
+>
+> Three threads converged on this one row and none had been settled: it was the only solver row
+> below the fastest CPU baseline (0.974×), it had the thinnest codegen margin (1.27×), it forced
+> run-ahead to be a hardware requirement, and it is the socket where CLAUDE.md records an
+> unresolved zero-copy tension. **The first question dissolved most of the rest.**
+>
+> #### 1. The benchmark was wrong for its socket. Re-specified as finite-control-set MPC
+>
+> Deployed practice in motor drives and power electronics is **direct / finite-control-set MPC**,
+> not a continuous-control-set QP. From Karamanakos, Liegmann, Geyer & Kennel, *Model Predictive
+> Control of Power Electronic Systems* (IEEE Open Journal of Industry Applications, vol. 1, 2020,
+> [PDF](http://www.tobiasgeyer.org/KLGK20_MPCsurvey.pdf)), quoting directly:
+>
+> - *"direct MPC for power electronics is most often formulated as an IQP. The common practice for
+>   solving such optimization problems in embedded control systems is with exhaustive search."*
+> - *"Since the problem is NP-hard, such an approach is impractical for horizons longer than one
+>   step (N_p > 1)."* Candidate count for a three-phase two-level converter is 2^(3·N_p) — 8 at
+>   N_p=1, 64 at N_p=2; a three-level converter gives {−1,0,1}³ = **27** and **729**.
+> - *"most direct MPC algorithms require a sampling frequency of about two orders of magnitude
+>   higher than the desired switching frequency"*; published implementations use **Ts = 5, 10, 25,
+>   100 and 125 µs**. **So 20 kHz was below deployed practice — the re-spec makes the deadline
+>   harder, not easier.**
+> - Continuous-control-set MPC *does* appear here (indirect MPC + carrier PWM, solved with
+>   qpOASES/ODYS; miOSQP/ADMM for the integer problem) but on dSpace-class rapid-prototyping
+>   hardware, not in a shipping drive.
+>
+> Commercial reference point: MPDTC with a tree search over candidate switching sequences at
+> **Ts = 25 µs**, embedded in ABB medium-voltage drive control software (Geyer & Papafotiou,
+> [PDF](https://tobiasgeyer.org/GePa09_MPDTC_ACS5000.pdf); Geyer is R&D platform manager for the
+> ACS6000/6080). Explicit MPC — offline piecewise-affine law + point location + table lookup — is
+> the other deployed answer and is a **memory** workload; we concede it rather than model it.
+>
+> **PWR-MPC v1.2: three-level NPC, |U| = 27, N_p = 2 exhaustive (729 sequences), n_x = 4, n_y = 2,
+> fp32, Ts = 25 µs / 40 kHz.** The retired definition survives off-set as **PWR-CCS**, alongside
+> **PWR-FCS1** (one-step, 27 candidates — the case we *lose*) and **PWR-FAST** (two-level, 100 kHz).
+>
+> #### 2. The result is NOT favourable, and the hoped-for reading is dead
+>
+> The hope was that enumeration — embarrassingly parallel, no loop-carried dependency, not
+> bandwidth-bound — would move the row above parity. **Both halves of that are wrong.**
+>
+> | | PWR-CCS (retired) | **PWR-MPC (v1.2)** | PWR-FCS1 (N_p=1) |
+> |---|---|---|---|
+> | Speedup vs fastest CPU | 1.08× | **0.62×** | 0.12× |
+> | perf/W vs most efficient CPU | 15.2× | **23.5×** | 7.1× |
+> | Worst-case margin, 50% of period | 1.71× | **7.76×** | 14.73× |
+> | Cycles/descriptor vs ≥8 rule | 1.27× | **6.76×** | **0.61× — fails** |
+> | Binding resource | scratchpad bandwidth | **per-call overhead, then vector unit** | per-call overhead |
+>
+> - **Latency gets worse: 1.08× → 0.62×.** The whole tick is 0.81 µs of compute against a 0.80 µs
+>   invocation overhead, while the host core pays no invocation cost at all. Decomposed:
+>   **datapath-only 1.24× → with the MCU-class 0.30 µs tier 0.90× → with T1's 0.80 µs 0.62×.**
+>   The CM *computes* this tick 1.24× faster than an SME2 core and then pays 0.8 µs to be asked.
+>   **For a sub-microsecond workload no invocation protocol involving a descriptor and a completion
+>   notification puts an accelerator ahead of the host core on latency.** That is an
+>   integration-depth statement: this socket wants D3, or it is sold on energy and offload alone.
+> - **It is still bandwidth-bound, for a new and more general reason.** The candidate set *is* a
+>   real batch dimension, so the work is genuinely matrix-**matrix** — but the reuse depth is set
+>   by **n_y = 2, the number of controlled outputs**, not by the tile. Arithmetic intensity is
+>   **2.33 B/MAC against 0.67 B/MAC** for a tile-limited GEMM: the batch buys a 1.7× traffic cut
+>   over pure GEMV, not the ~12× the array size suggests. **A GEMM bandwidth ceiling had to be
+>   added to the model to express this — it previously bounded only GEMV, so it was structurally
+>   incapable of reporting a bandwidth-starved GEMM.** A test asserts the new term binds on
+>   PWR-MPC and on nothing else.
+> - **A crossover, not a win ratio:** FCS-MPC is *array*-bound below 12×12 (tile=8 costs it 1.14×)
+>   and intensity-bound above. **144 MACs is the knee for this row too** — the same number the EKF
+>   energy argument produced, arrived at independently.
+>
+> What the re-spec *does* buy is worth more than the ratio: **the op count is fixed** (no
+> convergence tail, worst case == typical case — determinism as strong as the EKF's, on the row
+> where determinism is most saleable), **zero dependency chains** (drain 64 → 0 cycles/iter), and
+> the codegen margin goes 1.27× → 6.76×.
+>
+> #### 3. Three conclusions lose their justification — listed, not silently changed
+>
+> Worst-case margin against 50% of the control period:
+>
+> | Configuration | QUAD-MPC | PWR-MPC (v1.2) | PWR-CCS |
+> |---|---|---|---|
+> | Recommended | 2.93× | 7.76× | 1.71× |
+> | No run-ahead | 2.21× | 6.54× | **0.66× misses** |
+> | Scalar chain blocking | 1.27× | 7.76× (invariant) | **0.37× misses** |
+> | Both absent | **0.37× misses** | 6.54× | **0.08× misses** |
+>
+> 1. **Run-ahead is no longer a deadline requirement.** It was recorded as "the only deadline miss
+>    the analysis produces." **No row in the frozen set now misses from either pathology alone.**
+>    Downgraded statement that survives: *you may skip at most one of the two* — QUAD-MPC, at its
+>    **measured** worst-case tail, misses at 0.37× when both are absent. Run-ahead moves from
+>    *requirement* to *required unless chain blocking is full-width*.
+> 2. **The ≥8-wide chain-blocking RTL requirement** loses its deadline miss and keeps its lever: it
+>    is worth **2.3× of QUAD-MPC's worst-case margin**, the largest single lever in the analysis,
+>    but the justification is now a thin margin on one measured row rather than a miss on two.
+>    Still the first thing to check in Phase 1.
+> 3. **The 64 B/cycle bandwidth floor now rests on QUAD-MPC alone.** It does not move — the
+>    surviving row is the one whose tail is *measured* (74 iterations) rather than estimated, so
+>    the floor rests on the better of the two pieces of evidence. But a single-row justification is
+>    the exact structural weakness that caused the two previous sizing re-runs. Said out loud.
+> 4. **Not lost, and now sharper:** "a CPU already meets this deadline" gets *stronger*, and "the
+>    thinnest codegen margin in the set" transfers to ARM-MPC (3.78×).
+>
+> **The thinnest-margin problem moves rather than vanishing**, and this is the part to be careful
+> about: **PWR-FCS1 (one-step, 27 candidates — what MCUs ship today) is at 0.61× of the codegen
+> rule, and PWR-FAST (two-level, 100 kHz) at 0.69×.** Two adjacent, real configurations of the
+> same socket sit *under* the bar. Honest reading: **for one-step FCS-MPC, tell the customer to
+> use the MCU.** The minimum viable version of this socket is a multi-step horizon.
+>
+> #### 4. Would 16-bit operands fix the latency? Partly — and the array's format is wrong
+>
+> `precision_study.py` was extended with the configuration we would actually build. Previously
+> every 16-bit-operand row was paired with an **fp64** solve, which no CM SKU offers on the ADMM
+> path, so the proposal had never been tested. Relative error in the commanded control action
+> against the fp64 solution of the same problem [MEAS numerics]:
+>
+> | Configuration | Rel. error in x |
+> |---|---|
+> | fp32 operands, fp32 solve — **CM-100 today** | 8.2e-07 |
+> | **fp16 operands, fp32 solve — the proposal** | **1.9e-03** |
+> | bf16 operands, fp32 solve — with a bf16 array | 1.9e-02 |
+> | fp64 operands, **bf16 solve** | 6.1e-02 |
+>
+> - **Keeping the solve at fp32 costs nothing:** fp16/fp32-solve and fp16/fp64-solve score
+>   *identically* (1.946e-03). The operand precision, not the solve, limits the mixed scheme. So
+>   the split datapath — narrow operands, `prec` solve, `prec` accumulate — is numerically sound.
+> - **fp16 beats bf16 by 10× at the same width.** Mantissa bits dominate for these matrices, the
+>   opposite of the ML tradeoff. **The array's bf16 specification is wrong for the solver path.**
+> - **New (C4): FCS-MPC has a completely different precision floor**, because its output is a
+>   discrete argmin rather than a real number. Over 729 sequences × 200 trials, fp16 changes the
+>   selected switching sequence on **3.0%** of ticks at a mean excess cost of **1.5e-06** of the
+>   candidate cost spread; bf16 changes **11.0%** at 9.2e-05. A disagreement between two near-equal
+>   candidates is not an error. **Different algorithm, different floor — that is a MACIF fact.**
+>
+> Modelled effect of fp16 operands + fp32 solve + fp32 accumulate [DER]:
+>
+> | Row | Latency | Energy | Speedup | perf/W |
+> |---|---|---|---|---|
+> | QUAD-MPC | 35.96 → 24.07 µs (**1.49×**) | 5.46 → 3.05 µJ (**1.79×**) | 1.74× → 2.60× | 14.1× → **25.3×** |
+> | PWR-CCS | 4.29 → 3.69 µs (**1.16×**) | 0.359 → 0.237 µJ (**1.51×**) | 1.08× → 1.26× | 15.2× → 22.9× |
+>
+> **Why it is not 2×, which is the adversarial point:** halving operand width doubles the GEMV
+> rate, but once it halves the **vector unit becomes co-binding** — ADMM's projection, dual update
+> and over-relaxation are a fixed element-op count that 16 fp32 lanes cannot narrow, and the
+> dependency drain does not narrow either. *A bandwidth-bound row stops being bandwidth-bound
+> before the bandwidth doubling is spent.* Same shape as the 128 B/cycle finding.
+>
+> **Verdict: adopt fp16 as the 16-bit solver operand format and declare it in MACIF; do not rely
+> on it for latency.** ~2400× more operand error (8e-7 → 1.9e-3, i.e. ~0.2% in a commanded control
+> action) is plausibly fine for a drive and *not* obviously fine when the constraint is a hard
+> current limit — a per-problem codegen option a customer opts into, never a default. It does
+> nothing for the re-specified PWR-MPC row, which is not bandwidth-bound in the first place.
+>
+> #### 5. The MCU-class contradiction, settled — and CLAUDE.md's framing needs correcting
+>
+> The 25 µs T0 constant was never an MCU-class number. Decomposed [EST], each term naming a
+> mechanism that can be measured on its own:
+>
+> | Term | T0 (rich OS) | T1 (coherent) | T0M (MCU) | T1M (MCU) |
+> |---|---|---|---|---|
+> | driver / RTOS API | 8.0 | — | 1.5 | — |
+> | buffer map + pin | 6.0 | — | — | — |
+> | cache clean + invalidate | 6.0 | — | — | — |
+> | IRQ + scheduler wakeup | 5.0 | — | 0.5 | — |
+> | descriptor write | — | 0.1 | — | 0.10 |
+> | doorbell store | — | 0.1 | — | 0.05 |
+> | completion poll / latency | — | 0.6 | — | 0.15 |
+> | **TOTAL µs** | **25.0** | **0.8** | **2.0** | **0.30** |
+>
+> **Two of T0's four terms — buffer map/pin and cache maintenance — are artefacts of an MMU and a
+> cache.** An all-SRAM MCU has neither. T1M is *cheaper* than T1 because there is no coherence
+> round trip either. Ablation [DER]:
+>
+> | Row | T1/T0 latency | T1M/T0M latency | T1/T0 energy | T1M/T0M energy |
+> |---|---|---|---|---|
+> | PWR-MPC (v1.2) | 16.1× | **2.95×** | 7.7× | **1.70×** |
+> | PWR-CCS | 7.0× | 2.90× | 2.4× | 1.34× |
+> | EKF-24 | 10.9× | 4.29× | 3.6× | 1.63× |
+> | QUAD-MPC | 2.1× | 2.87× | 1.3× | 1.21× |
+>
+> **Answers, in order:**
+>
+> - **What does T1 zero-copy actually buy on an MCU-class host? Almost nothing that is zero-copy.**
+>   Of the 2.17 µs T1M advantage on the re-specified row, **1.70 µs (78%) is invocation overhead
+>   and 0.47 µs (22%) is an avoided on-chip copy** — and the copy costs anything at all only
+>   because MCU buses are narrow, not because the bytes are far away. The data-movement half
+>   collapses for two independent reasons: the bytes are cheap (~1.2 pJ/B on-chip [EST] versus
+>   ~12 pJ/B LPDDR) and there are barely any (**716 B** of persistent state for FCS-MPC, versus
+>   8.4 KB for the retired ADMM row and 100 KB for QUAD-MPC).
+> - **Is the per-call overhead really descriptor/doorbell/syscall cost rather than data movement?
+>   Yes, structurally** — `call_overhead_us` is charged independently of `bytes_moved`, and the
+>   decomposition shows which terms survive the removal of DRAM. **But the honest magnitude is far
+>   smaller than the headline: the advantage falls from 31× (25/0.8) to 6.7× (2.0/0.30), and in
+>   absolute terms from 24.2 µs to 1.7 µs.** Against a 25 µs period that is 6.8% — real, not
+>   decisive. Against the 5 µs period of the fastest deployed direct MPC it is 34%, and there it
+>   *is* decisive. **The invocation-overhead pitch for MCU class is rate-dependent and needs
+>   100 kHz+ to carry a deadline argument.**
+> - **What buys PWR-MPC its deadline there, and does it still meet it?** It meets it in **every**
+>   tier including T0M (3.28 µs against 25 µs). Nothing "buys" it — the re-specified workload is
+>   ~640 cycles of arithmetic and the deadline was never the issue.
+>
+> > **Correction to CLAUDE.md's framing.** "Zero-copy and residency are *void* in MCU class" is
+> > right about **residency** and about **coherency**, and wrong to bundle **invocation overhead**
+> > in with them: invocation cost is descriptor/doorbell/RTOS cost, it survives the removal of
+> > DRAM, and it is ~78% of what remains. **Withdraw the zero-copy argument from the MCU-class
+> > pitch entirely** and replace it with *low invocation overhead + determinism + energy*.
+> > Zero-copy stays a real differentiator on rich hosts (QUAD-MPC, ARM-MPC, the ML rows), where
+> > DRAM and cache maintenance exist. This also resolves the §5.1 / §4 tension below.
+>
+> **Adversarial note that cuts against us and was never charged before:** if the CM addresses host
+> SRAM directly (the D2/D3 tightly-coupled story) it inherits the host's bus width — 8 B/cycle at
+> 200 MHz is **1.6 GB/s [EST], 4× *less* than the LPDDR path it replaces**. The data is closer and
+> the pipe is narrower. Fine for a 716-byte working set, not fine for anything that streams; note
+> QUAD-MPC is *slower* on T0M (102 µs) than on rich-host T0 (76 µs) for exactly this reason. **Any
+> MCU-class SKU must keep its own scratchpad**, which means the copy does not disappear — it just
+> becomes cheap.
+>
+> #### 6. Microarchitecture consequences
+>
+> 1. **Invocation overhead is the binding resource on FCS-MPC; inside the datapath it is the
+>    VECTOR UNIT** (525 of 649 datapath cycles, 81% — cost evaluation and argmin). No other row in
+>    the set has that shape. *An earlier draft of this analysis claimed we were 5× under-provisioned
+>    on elementwise throughput versus SME2; that was a unit error (lanes/cycle compared against a
+>    FLOP figure) and it changed the recommendation.* In the same units: **CM-100 12.80 vs SME2
+>    12.32 G element-ops/s — parity, not a 5× deficit.**
+> 2. **Recommended response is two accumulator features, not more lanes.** 16 → 32 lanes costs
+>    **+0.143 mm² (+20% of the core)** and buys 1.26× — rejected on that ratio, since the
+>    merged-FMA construction doubles the fp64 cluster with it and half the latency is not datapath.
+>    Instead: **broadcast/bias initialisation of the accumulator** (folds the B@U broadcast-add) and
+>    **square-accumulate** (folds the ‖r‖² cost reduction). Modelled as PWR-FUSE: vector cycles
+>    **525 → 154**, datapath 0.81 → 0.35 µs, latency 1.61 → 1.15 µs, **0.62× → 0.88×** vs the
+>    fastest CPU, at near-zero area. Note the descriptor margin *falls* 6.76× → 3.86× (fewer, fatter
+>    descriptors is the point, but it is a trade). **This is the same L0-staging argument already
+>    flagged as the highest-value model extension: fold work into the accumulator at O(1) area
+>    instead of buying O(T²) of array.**
+> 3. **MACIF v0 gains two entries.** A broadcast-initialised, square-accumulating accumulator is a
+>    property of the swappable macro, so it belongs alongside `accumulator_width[format]`. And
+>    **fp16 must be a declared format distinct from bf16** — a macro that silently substituted bf16
+>    would cost 10× the control-action error, and the runtime must refuse it exactly as it refuses
+>    a missing fp64 path.
+> 4. **Bandwidth-first survives with a third, more general mechanism.** It was argued from batch-1
+>    GEMV (no reuse) and from bank-geometry energy. FCS-MPC adds: *even a workload with a real batch
+>    dimension is operand-fetch-bound if its reuse depth is set by a problem dimension rather than
+>    by the tile.* Stronger than "batch-1 solvers have no reuse."
+>
+> #### 7. What would firm this up, in order of value per day
+>
+> 1. **Confirm the FCS-MPC parameter set against a real deployed controller** (n_x, n_y, N_p, Ts,
+>    |U|, terminal cost / move blocking). Everything in §1 hangs on the shape, and the shape is
+>    cited literature, not a measured deployment.
+> 2. **Measure a C2000 CLA or AURIX PPU task-dispatch latency.** The entire MCU-class answer rests
+>    on T0M = 2.0 µs and T1M = 0.30 µs, both [EST]; it is a half-day on a LaunchPad board.
+> 3. **Measure FCS-MPC on an F28379D and on an A78/SME2 board.** The CPU side of this row is now
+>    the dominant uncertainty — the elementwise-rate correction alone moved a verdict across parity.
+> 4. **Re-run the C4 precision experiment across plant families and switching-set sizes.** One
+>    plant family with a fixed seed establishes a mechanism, not a distribution.
+
 > ## ⚠ SUPERSEDED (kept for the audit trail) — correction notice, solver-numerics audit
 > **The latency figures in §1 below are wrong and are being regenerated.** An independent audit
 > of the operation counts found seven errors, the largest being a **phantom transcendental
@@ -548,6 +811,15 @@ area budget is in an array that batch-1 solver code leaves idle.
 
 ## 4. Zero-copy / residency ablation (§3.2.1/3.2.2 of the plan)
 
+> **⚠ SUPERSEDED 2026-07-30 by §0.3 — the two load-bearing claims in this section are both wrong.**
+> (a) The "1.9× on PWR-MPC, and T0 misses the 50 µs deadline" cell was computed on a benchmark
+> definition that has since been re-specified *and* at a configuration we no longer recommend. The
+> re-specified row meets its deadline in **every** tier, including copy-based offload.
+> (b) The whole table assumes a **rich host with DRAM, an MMU and a cache**. On an MCU-class host —
+> which is the socket this section was used to justify — the advantage is **2.9× not 16×**, and
+> **78% of what remains is invocation overhead, not data movement.** Use §0.3's tier table.
+> Kept for the audit trail only. **Do not quote any figure below.**
+
 T1 (zero-copy + residency) vs T0 (copy-based offload), latency ratio:
 
 | Benchmark | T1 advantage | Note |
@@ -561,6 +833,12 @@ T1 (zero-copy + residency) vs T0 (copy-based offload), latency ratio:
 high rates** — exactly the embedded-control beachhead. It is what makes the 20 kHz motor-drive
 socket possible at all, and it is worth ~13× on the smallest workloads. On large problems it is
 nearly irrelevant, so it should be sold as a *real-time-control* feature, not a general one.
+
+> **Corrected verdict (2026-07-30):** zero-copy and residency remain justified **on rich hosts**,
+> where DRAM and cache maintenance actually exist — that is QUAD-MPC, ARM-MPC and the ML rows, plus
+> any Linux/AUTOSAR-Adaptive integration. **On MCU-class hosts the differentiator is low invocation
+> overhead and determinism, not zero-copy**, and the invocation argument only carries a *deadline*
+> above ~100 kHz. Sell it as a real-time-control feature, and say which host class you mean.
 
 ## 5. Competitive teardown — the gaps are wider than expected
 
@@ -667,10 +945,22 @@ magnitude below measured M4 SME2 FP32. So the CLA is not a throughput threat.
 **But it is a strategic warning.** In MCU class there is no DRAM and no cache, so **our zero-copy
 and residency differentiators have nothing to bite on** — everything is already SRAM-resident and
 there is no cache maintenance to eliminate. PLAN.md §3.2.1 already concedes T2 needs an SMMU
-absent in MCU-class parts; this extends the concession to T1 and to §3.2.2. **The 20 kHz
+absent in MCU-class parts; this extends the concession to T1 and to §3.2.2. ~~**The 20 kHz
 PWR-MPC socket, where §4 showed zero-copy is worth 1.9× and decides deadline feasibility, is
 exactly the socket most likely to be MCU-class.** That tension needs resolving before the
-zero-copy work is used to justify the motor-drive pitch.
+zero-copy work is used to justify the motor-drive pitch.~~
+
+> **RESOLVED 2026-07-30 — see §0.3(5).** The tension was created by charging an MCU-class host a
+> rich-host launch cost. Decomposed, two of T0's four terms (buffer map/pin, cache maintenance) are
+> MMU/cache artefacts that an all-SRAM part does not have, so the honest MCU-class copy tier is
+> ~2.0 µs [EST], not 25 µs. **The concession above is right about residency and coherency and wrong
+> to bundle invocation overhead in with them:** invocation cost is descriptor/doorbell/RTOS cost, it
+> survives the removal of DRAM, and it is ~78% of the remaining 2.9× advantage. And the re-specified
+> PWR-MPC meets its deadline in every tier, so nothing "decides feasibility" there any more.
+> **Correct MCU-class pitch: low invocation overhead, determinism, energy per solve — not
+> zero-copy.** Note also the TI comparison in the row above was already the right instinct: the
+> peer-reviewed C2000 work runs FCS-MPC, which is now what our own benchmark #3 models, so the
+> workload is comparable for the first time.
 
 #### 3. Arm SME2 — the top threat, and the only measured matrix-extension silicon we have
 

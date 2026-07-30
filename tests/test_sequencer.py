@@ -34,7 +34,7 @@ SOLVERS = [b for b in M.BENCHMARKS if b.kind == "solver"]
 
 
 def by_name(name):
-    return next(b for b in M.BENCHMARKS if b.name == name)
+    return next(b for b in M.BENCHMARKS + M.OFF_SET if b.name == name)
 
 
 def setup_cfg(setup, queue=8, base=None):
@@ -80,8 +80,9 @@ def test_datapath_cycles_match_the_main_model():
     for b in M.BENCHMARKS:
         d = M.descriptor_cost(b, REC)
         dim = M.representative_dim(b)
-        want = (b.gemv_macs_per_iter / REC.gemv_macs_per_cycle(b.prec, b.gemv_row_len)
-                + M.gemm_like_cycles(b.gemm_macs_per_iter, REC, b.prec, dim)
+        want = (M.split_gemv_cycles(b, REC, b.gemv_macs_per_iter)
+                + M.gemm_like_cycles(b.gemm_macs_per_iter, REC, b.prec, dim,
+                                     bytes_per_mac=b.gemm_bytes_per_mac)
                 + b.vector_ops_per_iter / REC.vector_lanes
                 + b.transcendental_per_iter * 4.0 / REC.vector_lanes)
         assert d["exec_cycles"] == pytest.approx(want, rel=1e-9), b.name
@@ -184,10 +185,36 @@ def test_block_structured_ip_issues_far_more_descriptors_than_admm():
 
 def test_exposure_ordering_by_cycles_per_descriptor():
     """Exposure is set by datapath cycles per descriptor, NOT by algorithm class.
-    PWR-MPC is ADMM and is the most exposed row in the set; that ordering is the
-    finding, and it contradicts the tidier 'only interior point is exposed'."""
+
+    RESTATED 2026-07-30 after the PWR-MPC re-spec. The original finding -- "the
+    most exposed row is PWR-MPC, and PWR-MPC is ADMM, so do not pitch this as
+    'interior point is the risky one'" -- was recorded against a continuous-
+    control-set ADMM formulation that is no longer the frozen row. With PWR-MPC
+    re-specified as FCS-MPC the ordering CHANGES: it is no longer the most exposed
+    row, because 12 descriptors command ~54 datapath cycles each and none of them
+    is chained.
+
+    What SURVIVES, and is the durable half of the finding, is the mechanism:
+    exposure tracks datapath cycles per descriptor, so small problems and
+    block-structured algorithms both reduce it independently. The off-set PWR-CCS
+    row still demonstrates it, and is asserted here so the mechanism keeps a
+    live example.
+    """
     cpd = {b.name: M.descriptor_cost(b, REC)["cycles_per_desc"] for b in SOLVERS}
-    assert cpd["PWR-MPC"] < cpd["ARM-MPC"] < cpd["QUAD-MPC"] < cpd["EKF-96"]
+    cpd["PWR-CCS"] = M.descriptor_cost(by_name("PWR-CCS"), REC)["cycles_per_desc"]
+    cpd["PWR-FCS1"] = M.descriptor_cost(by_name("PWR-FCS1"), REC)["cycles_per_desc"]
+    # The mechanism: block-structured IP is more exposed than a large ADMM, and a
+    # SMALL problem is more exposed than either -- regardless of algorithm.
+    assert cpd["ARM-MPC"] < cpd["QUAD-MPC"] < cpd["EKF-96"]
+    assert cpd["PWR-CCS"] < cpd["ARM-MPC"], (
+        "the small-problem exposure mechanism has disappeared from PWR-CCS")
+    assert cpd["PWR-FCS1"] < cpd["PWR-MPC"], (
+        "a one-step FCS horizon should be MORE descriptor-exposed than a two-step "
+        "one; if not, the descriptor decomposition does not scale with the batch")
+    # And the re-specified frozen row is no longer the thin one.
+    assert cpd["PWR-MPC"] > cpd["ARM-MPC"], (
+        "the re-specified PWR-MPC is still the most exposed row — check the "
+        "re-spec actually removed the dependency chains")
 
 
 def test_faster_precision_increases_sequencer_exposure():
@@ -229,42 +256,86 @@ def test_issue_width_above_one_buys_nothing():
 # The model must be able to fail
 # ---------------------------------------------------------------------------
 
+def margin(b, cfg):
+    """Worst-case margin against the 50%-of-control-period engineering budget."""
+    wc = dataclasses.replace(b, iters=b.iters_wc)
+    return (wc.deadline_us * Q.PERIOD_BUDGET
+            / M.model_argmind(wc, cfg)["latency_us"])
+
+
 def test_a_plausible_sequencer_misses_a_deadline_budget():
     """CLAUDE.md: "models must be able to fail". A sequencer model under which no
     plausible configuration ever misses anything is decoration.
 
-    The specific negative result being protected: a scalar-core sequencer that
-    writes descriptors and polls for completion (no run-ahead) misses the 50%
-    control-period budget on PWR-MPC.
+    DOWNGRADED AND RESTATED 2026-07-30 (PWR-MPC re-spec). The negative result used
+    to be: a scalar-core write-and-poll sequencer (no run-ahead) misses PWR-MPC's
+    50%-of-period budget at 0.66x. That rested on PWR-MPC being a continuous-
+    control-set ADMM problem. Re-specified as FCS-MPC the row has NO dependency
+    chain and 54 datapath cycles per descriptor, so it survives no-run-ahead at
+    6.5x and is completely insensitive to chain blocking.
+
+    **Consequence, stated plainly because it is a downgrade: no row in the frozen
+    set misses a budget from either pathology ALONE any more.** What survives is
+    that you may skip at most ONE of the two -- QUAD-MPC, at its MEASURED
+    worst-case iteration tail, misses at 0.37x when both are absent. Both terms
+    therefore stay load-bearing and the model can still fail; the "only deadline
+    miss in the analysis" framing is retired.
     """
-    b = dataclasses.replace(by_name("PWR-MPC"),
-                            iters=by_name("PWR-MPC").iters_wc)
-    budget = b.deadline_us * Q.PERIOD_BUDGET
-    bad = M.model_argmind(b, setup_cfg(20, queue=0))["latency_us"]
-    good = M.model_argmind(b, setup_cfg(4, queue=8))["latency_us"]
-    assert bad > budget, (
-        f"a no-run-ahead scalar-core sequencer now MEETS the PWR-MPC budget "
-        f"({bad:.1f} us vs {budget:.1f} us) — either the model has gone slack "
-        f"or the run-ahead requirement has genuinely been relieved; both need "
-        f"a human")
-    assert good <= budget, (
-        f"the RECOMMENDED sequencer misses the PWR-MPC budget ({good:.1f} us "
-        f"vs {budget:.1f} us) — that is a real architecture problem, not a "
-        f"test failure")
+    quad = by_name("QUAD-MPC")
+    both_absent = dataclasses.replace(REC, seq_setup_cycles=20,
+                                      seq_queue_depth=0, chain_block_override=1)
+    assert margin(quad, both_absent) < 1.0, (
+        f"QUAD-MPC now meets its worst-case budget with neither run-ahead nor "
+        f"wide chain blocking ({margin(quad, both_absent):.2f}x) — the sequencer "
+        f"model has gone slack and can no longer report any failure")
+    assert margin(quad, REC) > 1.0, (
+        "the recommended configuration misses QUAD-MPC's worst-case budget — a "
+        "real architecture problem, not a test failure")
+    # Each pathology alone must still cost real margin, or the requirement is
+    # unfalsifiable in the other direction.
+    for label, cfg in (("no run-ahead", setup_cfg(20, queue=0)),
+                       ("scalar chain blocking",
+                        dataclasses.replace(REC, chain_block_override=1))):
+        assert margin(quad, cfg) < 0.9 * margin(quad, REC), (
+            f"{label} costs QUAD-MPC no margin — that term is not load-bearing")
+
+
+def test_the_respecified_pwr_row_is_insensitive_to_both_sequencer_pathologies():
+    """The other half of the downgrade, asserted so it cannot be quietly undone.
+
+    If someone re-derives a run-ahead or chain-blocking requirement from the
+    motor-drive row, this fails and forces them to say which row they used.
+    """
+    pwr = by_name("PWR-MPC")
+    base = margin(pwr, REC)
+    assert margin(pwr, dataclasses.replace(REC, chain_block_override=1)) \
+        == pytest.approx(base, rel=1e-9), (
+        "the re-specified PWR-MPC has acquired sensitivity to chain blocking — "
+        "FCS-MPC has no dependency chain, so this means a chain_dim crept in")
+    assert margin(pwr, setup_cfg(20, queue=0)) > 0.7 * base, (
+        "the re-specified PWR-MPC has become run-ahead-sensitive")
+    assert base > 3.0, (
+        f"the re-specified PWR-MPC budget margin is only {base:.2f}x — if this "
+        f"falls the row is back to being a binding constraint")
 
 
 def test_narrow_chain_blocking_breaks_a_deadline():
     """The RTL requirement that came out of this: a blocked Cholesky must advance
-    a full datapath width per dependent step. Protect the fact that failing to
-    breaks something, so the requirement does not get quietly dropped."""
-    b = dataclasses.replace(by_name("PWR-MPC"),
-                            iters=by_name("PWR-MPC").iters_wc)
-    budget = b.deadline_us * Q.PERIOD_BUDGET
-    narrow = M.model_argmind(
-        b, dataclasses.replace(REC, chain_block_override=1))["latency_us"]
-    assert narrow > budget, (
-        "a scalar-sequential dependency chain no longer breaks the PWR-MPC "
-        "budget — the drain term may have gone slack")
+    a full datapath width per dependent step.
+
+    Kept alive on the OFF-SET PWR-CCS row (the retired continuous-control-set
+    definition), and labelled as such. A requirement whose only live example is
+    off the frozen set is a weaker requirement, and the test says so rather than
+    hiding it behind a frozen-set name.
+    """
+    ccs = by_name("PWR-CCS")
+    assert margin(ccs, dataclasses.replace(REC, chain_block_override=1)) < 1.0, (
+        "a scalar-sequential dependency chain no longer breaks even the off-set "
+        "PWR-CCS budget — the drain term may have gone slack")
+    assert margin(ccs, setup_cfg(20, queue=0)) < 1.0, (
+        "no-run-ahead no longer breaks even the off-set PWR-CCS budget")
+    assert margin(ccs, REC) > 1.0, (
+        "the recommended configuration misses the off-set PWR-CCS budget")
 
 
 def test_recommended_config_meets_every_solver_budget():

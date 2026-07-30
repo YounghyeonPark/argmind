@@ -12,7 +12,7 @@ Surveyed and set up 2026-07-29. Run everything with `python -m pytest` from the 
 | python | 3.14.5 | — |
 | gcc | MinGW-w64 | present, unused so far |
 
-**122 tests, all passing**, in five files:
+**151 tests, all passing**, in six files:
 
 - [tests/test_model_invariants.py](tests/test_model_invariants.py) — 27 tests. One regression
   test per historical modelling error, plus physical invariants.
@@ -28,6 +28,16 @@ Surveyed and set up 2026-07-29. Run everything with `python -m pytest` from the 
   cycles/descriptor; faster precision is *more* exposed).
 - [tests/test_sram_and_harness.py](tests/test_sram_and_harness.py) — 10 tests covering the
   SRAM cost model and the OSQP harness (see "Not yet covered" below, now largely closed).
+- [tests/test_pwr_mpc_respec.py](tests/test_pwr_mpc_respec.py) — 29 tests covering the PWR-MPC
+  re-specification (2026-07-30): the FCS-MPC benchmark and its arithmetic intensity (which must stay
+  set by n_y, not by the tile, or the row's binding resource is reported wrongly); the GEMM
+  bandwidth ceiling (must bind on PWR-MPC and on nothing else); mixed-precision operands
+  (`solve_prec_frac` must equal the chained ops' share, and fp16 must help by <2×); the MCU-class
+  host tiers (T1M cheaper than T1, the tier advantage must *collapse* on MCU class, and the
+  surviving advantage must be majority invocation overhead); and the CPU elementwise-rate
+  correction. **Two tests exist to protect NEGATIVE results**: the re-specified row must stay below
+  parity, and one-step FCS-MPC must stay a CPU win — a model that quietly optimises those away has
+  lost the ability to report a minimum viable problem size.
 - [tests/test_guards_actually_bite.py](tests/test_guards_actually_bite.py) — 7 meta-tests that
   re-introduce real past bugs at runtime and assert the matching guard *fails*.
 
@@ -45,7 +55,10 @@ suite pins **relationships and directions** instead:
 - perf/W stays inside a believable band (1–100×) — the guard that would have caught the original
   absurd 128× result.
 - The model **can still report failure**: there is a test asserting some benchmark misses its
-  deadline, and another asserting the CPU wins somewhere. A model that cannot produce a negative
+  deadline, and another asserting the CPU wins somewhere. Two more were added 2026-07-30 to protect
+  specific negative results from being optimised away — **the re-specified PWR-MPC must stay below
+  parity (0.62×), and one-step FCS-MPC must stay a CPU win (0.12×)** — because those two are what
+  keep the model able to report a minimum viable problem size on the motor-drive socket. A model that cannot produce a negative
   result is not evidence, and CLAUDE.md's rule to that effect is now mechanically enforced
   rather than merely stated.
 
@@ -59,8 +72,11 @@ each buggy formulation and asserts the guard trips. Confirmed live:
 - Misclassifying GEMV as GEMM makes a 16× larger array look 5%+ faster → caught.
 - Restoring the phantom transcendental term inflates apparent speedup by >25% → caught.
 - Removing overhead energy inflates perf/W by >30% → caught.
-- Zeroing descriptor setup cost and dependency drain makes PWR-MPC's 50%-budget miss disappear,
-  i.e. the sequencer terms are load-bearing → caught.
+- Zeroing descriptor setup cost and dependency drain makes **QUAD-MPC's** 50%-budget miss disappear,
+  i.e. the sequencer terms are load-bearing → caught. *(Re-pointed 2026-07-30: this used PWR-MPC
+  until that row was re-specified as FCS-MPC, which has no dependency chain and so cannot
+  demonstrate the drain term at all. QUAD-MPC can, but only with both run-ahead and full-width
+  chain blocking absent — which is itself the downgraded finding, recorded in §0.3.)*
 - Inflating one kernel op's MAC count breaks the descriptor/MAC consistency assertion → caught.
 
 If a test in that file ever starts passing *trivially*, the corresponding guard has gone slack.

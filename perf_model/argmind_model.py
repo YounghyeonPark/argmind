@@ -261,23 +261,72 @@ class ArgmindCfg:
         return 1000.0 / self.freq_mhz
 
     # ---- host-interface characteristics -----------------------------------
+    #
+    # DECOMPOSED 2026-07-30 to settle the MCU-class contradiction. The two flat
+    # constants (0.8 us and 25.0 us) were fine for a rich-OS/DRAM host and wrong
+    # for an MCU-class one, because TWO of T0's four cost terms -- buffer
+    # map/pin and cache clean+invalidate -- are artefacts of an MMU and a cache.
+    # An all-SRAM MCU has neither, so quoting 25 us there overstates what
+    # zero-copy buys by roughly 12x. Every number here is [EST]; the point of
+    # writing them out is that each one names a mechanism that can be measured
+    # separately, which a single constant cannot.
+    #
+    #   term                    T0 (rich OS)  T1 (coherent)  T0M (MCU)  T1M (MCU)
+    #   driver / RTOS API             8.0          --            1.5       --
+    #   buffer map + pin              6.0          --            --        --
+    #   cache clean + invalidate      6.0          --            --        --
+    #   IRQ + scheduler wakeup        5.0          --            0.5       --
+    #   descriptor write              --           0.1           --        0.10
+    #   doorbell store                --           0.1           --        0.05
+    #   completion poll / latency     --           0.6           --        0.15
+    #   TOTAL                        25.0          0.8           2.0       0.30
+    #
+    # T1M is CHEAPER than T1 because there is no coherence-protocol round trip:
+    # the descriptor lands in tightly-coupled memory the CM can already see.
+    # Note what the table says about the pitch: the T1-vs-T0 overhead advantage
+    # is 31x on a rich host and 6.7x on an MCU-class host, and in ABSOLUTE terms
+    # 24.2 us versus 1.7 us. It is still a real saving, and it is still
+    # descriptor/doorbell cost rather than data movement -- but it is 14x smaller
+    # than the headline figure and only decides a deadline above ~100 kHz.
+    CALL_OVERHEAD_US = {"T0": 25.0, "T1": 0.8, "T0M": 2.0, "T1M": 0.30}
+
     @property
     def call_overhead_us(self) -> float:
-        """Fixed cost to launch one CM call from the CPU."""
-        if self.tier == "T1":
-            # Descriptor write + doorbell store + completion poll, all in
-            # coherent shared memory. No syscall, no cache maintenance.
-            return 0.8
-        # T0: driver call, buffer map, cache clean/invalidate, IRQ wakeup.
-        return 25.0
+        """Fixed cost to launch one CM call from the host."""
+        return self.CALL_OVERHEAD_US[self.tier]
+
+    @property
+    def is_mcu_class(self) -> bool:
+        """MCU-class host: on-chip SRAM only. No DRAM, no cache, no MMU."""
+        return self.tier.endswith("M")
 
     @property
     def dma_bw_gbs(self) -> float:
+        if self.is_mcu_class:
+            # There is no LPDDR. What a copy actually crosses on an MCU-class
+            # part is a narrow on-chip bus: 8 B/cycle at a 200 MHz system clock
+            # = 1.6 GB/s [EST]. This is 4x WORSE than the DRAM path it replaces,
+            # which is the counter-intuitive half of the MCU-class answer -- the
+            # data is closer but the pipe is narrower.
+            return 1.6
         return 6.4   # one LPDDR4x-2400 x32 channel share
+
+    @property
+    def offchip_pj_per_byte(self) -> float:
+        """Energy of one byte crossing the host<->CM boundary.
+
+        On an MCU-class part this is an SRAM-to-SRAM copy over an on-chip bus,
+        not a DRAM access, so the 12 pJ/B LPDDR figure is wrong by ~10x. This is
+        the term that makes residency nearly worthless in MCU class: it is not
+        that the bytes disappear, it is that they were never expensive.
+        """
+        if self.is_mcu_class:
+            return 1.2       # 2x the scratchpad's own pJ/B, for the bus [EST]
+        return E_DRAM_BYTE_PJ
 
     def transfers_persistent_every_call(self) -> bool:
         """Without residency, problem data must be re-uploaded every call."""
-        return self.tier == "T0"
+        return self.tier in ("T0", "T0M")
 
 
 @dataclass
@@ -298,6 +347,27 @@ class CpuCfg:
     # None = derive as half the fp32 rate, which is the NEON/SVE datapath reality
     # (same vector width, twice the element size).
     fp64_flops_per_cycle: float | None = None
+    # Plain-SIMD fp32 rate for ELEMENTWISE and REDUCTION work, as distinct from
+    # the matrix/outer-product rate.
+    #
+    # ADDED 2026-07-30, and it is a correction that moves the ratio IN OUR FAVOUR,
+    # so it is flagged rather than banked. `model_cpu` charged `vector_ops` at
+    # `peak_flops_per_cycle * small_gemm_efficiency`, i.e. it ran elementwise work
+    # on the outer-product unit. For NEON that is harmless -- there is one set of
+    # units -- but SME2's ZA-tile outer product cannot execute an elementwise
+    # min/max or a horizontal reduction at all. The measured M4 numbers make the
+    # gap explicit: FMOPA FP32 2008 GFLOP/s against ~250 GFLOP/s for streaming
+    # SVE non-outer-product on the same core (an 8x ratio).
+    #
+    # None = same as fp32_flops_per_cycle, which is correct for NEON parts and
+    # keeps A55/A78 bit-identical. The SME2 value below is deliberately set at the
+    # GENEROUS end for the CPU (half the matrix rate, not the measured eighth).
+    simd_flops_per_cycle: float | None = None
+
+    @property
+    def simd_rate(self) -> float:
+        return (self.fp32_flops_per_cycle if self.simd_flops_per_cycle is None
+                else self.simd_flops_per_cycle)
 
     def peak_flops_per_cycle(self, prec: str) -> float:
         if prec == "int8":
@@ -339,6 +409,12 @@ CPU_SME2 = CpuCfg(
     # fp64 FMA, which would be a genuine structural gap rather than a ratio.
     # Do not claim either way without checking the target part's ID registers.
     fp64_flops_per_cycle=16.0,
+    # Elementwise / reduction work runs on streaming SVE, not on the ZA tile.
+    # 32 = HALF the outer-product rate, i.e. ~8 fp32 lanes x 2 FLOP x 2 pipes at
+    # SVL=256b [EST]. The measured M4 FMOPA:streaming-SVE ratio is 8x, which would
+    # put this at 8; 32 is chosen because it is the value least favourable to us
+    # and the conclusion should not need the generous reading.
+    simd_flops_per_cycle=32.0,
 )
 
 # The honest perf/W adversary: cost-sensitive robotics/industrial designs use an
@@ -404,6 +480,12 @@ class KernelOp:
     n_desc: float = 1.0
     chain_dim: float = 0.0
     repeat: float = 1.0
+    # Scratchpad bytes fetched per MAC for THIS op, overriding the tile-derived
+    # figure. Added 2026-07-30 for FCS-MPC, where the reuse depth of the dominant
+    # GEMM is set by the number of controlled OUTPUTS (n_y = 2), not by the tile
+    # dimension -- so `elem*(1/Tm + 1/Tn)` massively overstates the reuse. None =
+    # use cfg.gemm_operand_bytes_per_mac, i.e. no change to any existing row.
+    bytes_per_mac: float | None = None
 
     @property
     def total_macs(self) -> float:
@@ -452,7 +534,8 @@ def op_cycles(op: KernelOp, cfg: ArgmindCfg, prec: str, dim: float,
               row_len: float | None = None) -> float:
     """Datapath cycles for one kernel op, on the resource its `kind` names."""
     if op.kind == "gemm":
-        return gemm_like_cycles(op.total_macs, cfg, prec, dim)
+        return gemm_like_cycles(op.total_macs, cfg, prec, dim,
+                                bytes_per_mac=op.bytes_per_mac)
     if op.kind == "gemv":
         return op.total_macs / cfg.gemv_macs_per_cycle(prec, row_len)
     if op.kind == "vec":
@@ -510,6 +593,34 @@ class Benchmark:
     # so it cannot size anything. 0 = not characterised.
     iters_worst: int = 0
 
+    # ---- mixed-precision operands (added 2026-07-30) -----------------------
+    # Precision of the BULK matrix operands, when it differs from `prec`.
+    # `prec` remains the precision of the accumulator and of the numerically
+    # sensitive fraction below. None = single-precision-everywhere, i.e. no
+    # change to any pre-existing row.
+    #
+    # WHY THIS IS A SEPARATE KNOB. perf_model/precision_study.py (MEASURED
+    # numerics) found ADMM's cached triangular solve ~3x more error-sensitive
+    # than its matrix operands, and found fp16 operands 10x better than bf16 at
+    # the same width because MANTISSA bits dominate for these matrices. So the
+    # honest datapath is: narrow operands on the bulk GEMVs, `prec` on the
+    # solve, `prec` accumulate everywhere. One number per benchmark cannot say
+    # that, and using one number is how a bandwidth-bound row gets quoted at the
+    # wrong bandwidth.
+    operand_prec: str | None = None
+    # Fraction of `gemv_macs_per_iter` that must stay at `prec` (the cached
+    # triangular solve). Derived by the benchmark builder, not hand-entered, and
+    # asserted against the kernel decomposition's chained ops.
+    solve_prec_frac: float = 0.0
+
+    # ---- explicit GEMM shape (added 2026-07-30) ----------------------------
+    # Override the crude cube-root proxy for the GEMM utilisation penalty.
+    # None = representative_dim(), i.e. no change to any pre-existing row.
+    gemm_dim_override: float | None = None
+    # Scratchpad bytes per GEMM MAC, when reuse depth is set by a PROBLEM
+    # dimension rather than by the tile. See KernelOp.bytes_per_mac.
+    gemm_bytes_per_mac: float | None = None
+
     # ---- kernel decomposition (added 2026-07-30; see KernelOp) --------------
     # Per-iteration and once-per-call operation lists. Empty = not decomposed,
     # in which case the CM model falls back to the legacy flat scalar term.
@@ -542,7 +653,7 @@ class Benchmark:
 
 
 def condensed_mpc(name, n_x, n_u, N, iters, rate, note, prec="fp32", refactor=False,
-                  check_term=25, iters_worst=0):
+                  check_term=25, iters_worst=0, operand_prec=None):
     """Condensed QP solved by ADMM (OSQP-style), cached factorization.
 
     CRITICAL: every dominant operation here is matrix-VECTOR (P@x, triangular
@@ -634,11 +745,172 @@ def condensed_mpc(name, n_x, n_u, N, iters, rate, note, prec="fp32", refactor=Fa
         gemv_row_len=n_var,
         gemv_macs_per_call=gemv_call, algo="admm",
         iters_worst=iters_worst,
+        # Mixed-precision operands. `solve_prec_frac` is the cached triangular
+        # solve's share of the per-iteration GEMV work -- DERIVED from the same
+        # expression that produced `gemv`, never hand-entered, because the whole
+        # point is that the sensitive fraction and the total must stay consistent.
+        # precision_study.py measures the solve as ~3x more error-sensitive than
+        # the operands, so it is the fraction that must NOT be narrowed.
+        operand_prec=operand_prec,
+        solve_prec_frac=(n_var * n_var) / gemv,
         kernels=kern, kernels_call=kern_call,
         # OSQP evaluates termination every `check_term` iterations. The chain is
         # reduction-result -> scalar register -> two compares -> branch; call it
         # ~25 cycles of true latency, amortised. [EST]
         serial_scalar_per_iter=25.0 / check_term,
+    )
+
+
+def fcs_mpc(name, n_x, n_y, n_u, levels, Np, rate, note, prec="fp32",
+            fuse_accum_init=False, tile_hint=12):
+    """Finite-control-set (direct) MPC as actually deployed in power electronics.
+
+    ADDED 2026-07-30. This is the re-specification of BENCHMARKS.md #3. The
+    previous definition -- a continuous-control-set condensed QP solved by ADMM
+    at 20 kHz -- described a formulation that is used on research/rapid-
+    prototyping platforms but is not what ships in the socket, and it drove four
+    separate architecture conclusions. See the citations in PHASE0_FINDINGS.
+
+    THE COMPUTATIONAL SHAPE, and every part of it differs from ADMM:
+
+      * NO ITERATION. The op count is fixed and known at codegen time. There is
+        no convergence tail, so `iters_worst == iters == 1`. This is the same
+        determinism story as the EKF and it is stronger than any ADMM row's.
+      * NO LOOP-CARRIED DEPENDENCY. Candidates are independent; there is no
+        Cholesky, no triangular solve, no dependency chain at all. Every
+        `chain_dim` below is zero, which is the whole reason the run-ahead and
+        chain-blocking exposures vanish on this row.
+      * THE CANDIDATE SET IS A BATCH DIMENSION. |U|^Np sequences share the same
+        A, B, C, so what was matrix-VECTOR work at batch 1 becomes matrix-MATRIX
+        work at batch |U|^Np. This is the operand reuse the settled finding says
+        batch-1 solver loops do not have.
+
+    AND THE ADVERSARIAL PART, which is where the flattering reading dies: the
+    reuse depth is NOT the tile dimension. The dominant product is
+    (Q^(1/2) C) @ X2, with C an n_y x n_x matrix -- so each predicted state
+    element is consumed exactly n_y times, and n_y = 2. Arithmetic intensity is
+    therefore `elem * (1/n_y + 1/tile)` bytes per MAC, ~2.33 B/MAC at fp32
+    against 0.67 B/MAC for a tile-limited GEMM. The batch buys a 1.7x traffic cut
+    over pure GEMV, not the 12x the array size suggests. **FCS-MPC is still
+    bandwidth-bound.** Modelled via `gemm_bytes_per_mac`, and the GEMM bandwidth
+    ceiling had to be added to the model for it to be expressible at all.
+
+    Deployed-practice parameters (see PHASE0_FINDINGS for citations):
+      levels=3  three-level NPC -> U = {-1,0,1}^3, |U| = 27 switching states
+      levels=2  two-level       -> U = {-1,1}^3,   |U| =  8
+      Np=1      the horizon exhaustive search is actually practical at
+      Np=2      the horizon that needs an FPGA or a sphere decoder today
+
+    `fuse_accum_init=True` prices two accumulator features -- broadcast/bias
+    initialisation of the accumulator, and square-accumulate -- which move the
+    two largest vector terms into the array. It is off by default because it is
+    an RTL feature we have not committed to, and the difference between the two
+    settings is the size of the finding.
+    """
+    nU = levels ** n_u                     # switching states per step
+    n_seq = nU ** Np                       # candidate sequences
+    e = BYTES_PER_ELEM[prec]
+    # ONE arithmetic-intensity figure for the whole GEMM group, set by the
+    # DOMINANT product (Q^(1/2)C @ X, reuse depth n_y) and applied uniformly.
+    # The two cheaper products (B @ U and A @ X, reuse depth n_x) are 11% of the
+    # MACs; charging them at the dominant rate is ~3% pessimistic on cycles and
+    # ~7% on GEMM traffic. That is deliberate: a per-op figure would make the
+    # aggregate and kernel-decomposition cycle counts disagree by 4% (min() over
+    # array-vs-bandwidth does not commute with a MAC-weighted mean), and the
+    # invariant that those two paths agree exactly is worth more than 3%.
+    bpm = e * (1.0 / n_y + 1.0 / tile_hint)
+
+    # ---- GEMM work, per stage. Stage s enumerates nU^s candidates. ----------
+    # free response A x(k): a single GEMV, shared by every candidate.
+    gemv = n_x * n_x
+    gemm = 0.0
+    vec = 0.0
+    kern = []
+    kern.append(KernelOp("free response A x(k)", "gemv", macs=n_x * n_x,
+                         n_desc=1))
+    # B @ U for the nU DISTINCT switch positions -- computed once and reused by
+    # every parent, which is why this term does not scale with nU^Np.
+    bu = n_x * n_u * nU
+    gemm += bu
+    kern.append(KernelOp("forced response B @ U (nU distinct columns)", "gemm",
+                         macs=bu, n_desc=1, bytes_per_mac=bpm))
+    for s in range(1, Np + 1):
+        cand = nU ** s
+        if s > 1:
+            # propagate every stage-(s-1) state: A @ X_{s-1}. Reuse depth n_x.
+            prop = n_x * n_x * (nU ** (s - 1))
+            gemm += prop
+            kern.append(KernelOp(f"stage {s}: propagate A @ X{s-1}", "gemm",
+                                 macs=prop, n_desc=1,
+                                 bytes_per_mac=bpm))
+            # broadcast-add the nU precomputed Bu columns to each parent state.
+            # FOLDABLE into the accumulator as a bias/broadcast initialisation.
+            if not fuse_accum_init:
+                vec += cand * n_x
+                kern.append(KernelOp(f"stage {s}: broadcast-add B u", "vec",
+                                     vec_ops=cand * n_x, n_desc=1))
+        # outputs and weighted residual: (Q^(1/2) C) @ X_s. THE DOMINANT TERM,
+        # and its reuse depth is n_y, not the tile dimension.
+        outp = n_y * n_x * cand
+        gemm += outp
+        kern.append(KernelOp(f"stage {s}: (Q^1/2 C) @ X{s}", "gemm", macs=outp,
+                             n_desc=1,
+                             bytes_per_mac=bpm))
+        # square-and-accumulate the residual into a per-candidate cost.
+        # FOLDABLE into the array as a square-accumulate pass.
+        if not fuse_accum_init:
+            vec += cand * 2 * n_y
+            kern.append(KernelOp(f"stage {s}: ||r||^2 accumulate", "vec",
+                                 vec_ops=cand * 2 * n_y, n_desc=1))
+    # switching-effort penalty table over the nU distinct transitions, then two
+    # table adds per sequence to assemble the sequence cost.
+    vec += nU * 3 * n_u
+    kern.append(KernelOp("switching-effort penalty table", "vec",
+                         vec_ops=nU * 3 * n_u, n_desc=1))
+    vec += n_seq * Np
+    kern.append(KernelOp("assemble sequence costs", "vec",
+                         vec_ops=n_seq * Np, n_desc=1))
+    # argmin over every candidate at every stage.
+    n_cand_total = sum(nU ** s for s in range(1, Np + 1))
+    vec += n_cand_total
+    kern.append(KernelOp("argmin over candidates", "vec",
+                         vec_ops=n_cand_total, n_desc=2))
+
+    # Persistent: A, B, Q^(1/2)C, the nU precomputed B u columns, the penalty
+    # table, weights. Tiny -- and that is itself a finding about residency.
+    persistent = e * (n_x * n_x + n_x * n_u + n_y * n_x + n_x * nU + nU + 8)
+    delta = e * (n_x + n_u + n_y)          # x(k), u(k-1), y_ref
+
+    return Benchmark(
+        name=name, kind="solver", note=note,
+        gemv_macs_per_iter=gemv, gemm_macs_per_iter=gemm,
+        gemm_macs_per_call=0.0,
+        vector_ops_per_iter=vec,
+        # No barrier, no projection, no normalisation: cost evaluation is
+        # multiply-add and selection is compare. ZERO transcendentals, and this
+        # is the same trap that produced a 3x phantom CPU penalty once already.
+        transcendental_per_iter=0.0,
+        # Enumeration bookkeeping on a CPU. Deliberately modest (200, in line
+        # with the other rows) rather than one branch per candidate, because a
+        # competently vectorised CPU implementation amortises the loop -- this is
+        # the CONSERVATIVE choice and it is conservative against us.
+        scalar_ops_per_iter=200,
+        iters=1, calls_per_sec=rate, deadline_us=1e6 / rate,
+        persistent_bytes=persistent, delta_bytes=delta, prec=prec,
+        gemv_row_len=n_x,
+        gemv_macs_per_call=0.0, algo="fcs",
+        # Fixed op count. Worst case IS the typical case.
+        iters_worst=1,
+        kernels=kern,
+        # No convergence test, no step size, no active set. Nothing is
+        # loop-carried because there is no loop.
+        serial_scalar_per_iter=0.0,
+        # Utilisation is set by the candidate batch, which is long. The array is
+        # NOT what limits this row; arithmetic intensity is.
+        gemm_dim_override=float(n_seq),
+        # Weighted mean of the per-op figures, so the aggregate path and the
+        # kernel path agree. Asserted by a test.
+        gemm_bytes_per_mac=bpm,
     )
 
 
@@ -882,11 +1154,15 @@ BENCHMARKS = [
                 iters_worst=30,
                 note="7-DoF manipulator NMPC: acados SQP-RTI + HPIPM, 15 IP iters, "
                      "fp64, 250 Hz"),
-    # Iteration count scaled from the QUAD-MPC measurement (not independently measured).
-    # iters_worst scaled by the same 74/15 measured cold:p95 ratio -> 48. [EST]
-    condensed_mpc("PWR-MPC",   n_x=4,  n_u=3, N=10, iters=12, rate=20000,
-                  iters_worst=48,
-                  note="Motor-drive MPC, tiny problem, 20 kHz -- latency extreme"),
+    # RE-SPECIFIED 2026-07-30 (v1.2): finite-control-set / direct MPC, which is
+    # what the socket actually runs. The v1.1 definition was a continuous-
+    # control-set condensed QP solved by ADMM at 20 kHz. Rate raised 20 -> 40 kHz
+    # (Ts = 25 us) because deployed direct MPC needs fs ~ 100x fsw, so 20 kHz was
+    # BELOW deployed practice -- i.e. the re-spec makes the deadline HARDER, not
+    # easier. The retired ADMM definition is kept as PWR_MPC_CCS below.
+    fcs_mpc("PWR-MPC", n_x=4, n_y=2, n_u=3, levels=3, Np=2, rate=40000,
+            note="Motor-drive FCS-MPC: 3-level NPC, |U|=27, Np=2 exhaustive "
+                 "(729 sequences), Ts=25 us / 40 kHz"),
     ekf("EKF-24", n=24, m=12, rate=1000,
         note="INS/GNSS 24-state EKF, 12 measurements, 1 kHz -- smallest problem"),
     ekf("EKF-96", n=96, m=24, rate=200,
@@ -899,11 +1175,79 @@ BENCHMARKS = [
 
 
 # ---------------------------------------------------------------------------
+# Off-set rows kept for the audit trail. NOT part of the frozen seven; nothing
+# may be provisioned from them without saying so out loud.
+# ---------------------------------------------------------------------------
+
+# The RETIRED PWR-MPC definition. Continuous-control-set MPC does appear in
+# power electronics -- indirect MPC with a carrier-based modulator is solved as a
+# QP with qpOASES or ODYS -- but the published implementations run on dSpace-class
+# rapid-prototyping hardware, not in a shipping drive, and the deployed-majority
+# formulation is finite-control-set. Retained because (a) the CCS socket is real
+# even if smaller, and (b) two architecture requirements were justified from this
+# row and the audit trail has to show what happens to them.
+PWR_MPC_CCS = condensed_mpc(
+    "PWR-CCS", n_x=4, n_u=3, N=10, iters=12, rate=20000, iters_worst=48,
+    note="RETIRED v1.1 row: motor-drive continuous-control-set MPC via ADMM, "
+         "20 kHz. Research-platform practice, not shipping product")
+
+# One-step FCS-MPC: what an MCU ships today. Deliberately in the set of things we
+# model because it is the case we should LOSE, and a model that cannot report
+# that is not evidence.
+PWR_MPC_FCS1 = fcs_mpc(
+    "PWR-FCS1", n_x=4, n_y=2, n_u=3, levels=3, Np=1, rate=40000,
+    note="One-step FCS-MPC, 3-level, 27 candidates, 40 kHz -- the deployed "
+         "baseline, and the case where the host MCU should win")
+
+# Two-level converter at 100 kHz (Ts = 10 us), Np = 2: the fastest deployed
+# direct-MPC sampling interval in the survey, 64 sequences.
+PWR_MPC_FCS_FAST = fcs_mpc(
+    "PWR-FAST", n_x=4, n_y=2, n_u=3, levels=2, Np=2, rate=100000,
+    note="Two-level FCS-MPC, |U|=8, Np=2 (64 sequences), Ts=10 us / 100 kHz")
+
+# Same as the frozen row but with the two accumulator features (broadcast/bias
+# init and square-accumulate) that fold the dominant vector terms into the array.
+PWR_MPC_FUSED = fcs_mpc(
+    "PWR-FUSE", n_x=4, n_y=2, n_u=3, levels=3, Np=2, rate=40000,
+    fuse_accum_init=True,
+    note="Frozen PWR-MPC with accumulator broadcast-init + square-accumulate")
+
+OFF_SET = [PWR_MPC_CCS, PWR_MPC_FCS1, PWR_MPC_FCS_FAST, PWR_MPC_FUSED]
+
+
+# ---------------------------------------------------------------------------
 # Argmind model
 # ---------------------------------------------------------------------------
 
+def gemm_macs_per_cycle_bounded(cfg: ArgmindCfg, prec: str, effective_dim: float,
+                                bytes_per_mac: float | None = None) -> float:
+    """Achieved GEMM MAC/cycle, bounded by BOTH the array and operand fetch.
+
+    ADDED 2026-07-30. The model previously applied a bandwidth ceiling only to
+    GEMV, on the reasoning that tile reuse always keeps GEMM under it. That
+    reasoning is sound at `elem*(1/Tm + 1/Tn)` bytes per MAC on the CM-100
+    (0.67 B/MAC fp32 -> 192 MAC/cycle at 128 B/cycle, well above the 72 fp32
+    array rate), and a test asserts the new bound is INACTIVE on every row of the
+    frozen set that existed before this change. But it is not sound in general:
+    the moment a GEMM's reuse depth is set by a problem dimension rather than by
+    the tile -- FCS-MPC's dominant product reuses each predicted state exactly
+    n_y = 2 times, because there are two controlled outputs -- arithmetic
+    intensity collapses and the array cannot be fed.
+
+    Without this term the model was structurally incapable of reporting a
+    bandwidth-bound GEMM, which is a class of failure it must be able to report.
+    """
+    array = cfg.macs_per_cycle(prec) * cfg.gemm_util(prec, effective_dim)
+    bpm = (cfg.gemm_operand_bytes_per_mac(prec) if bytes_per_mac is None
+           else bytes_per_mac)
+    if bpm <= 0:
+        return array
+    return min(array, cfg.scratchpad_bw_bpc / bpm)
+
+
 def gemm_like_cycles(macs: float, cfg: ArgmindCfg, prec: str,
-                     effective_dim: float) -> float:
+                     effective_dim: float,
+                     bytes_per_mac: float | None = None) -> float:
     """Cycles for `macs` MACs, penalised for small-matrix tile underuse.
 
     A tile of dimension T is only fully used when the operand dimensions are
@@ -912,14 +1256,33 @@ def gemm_like_cycles(macs: float, cfg: ArgmindCfg, prec: str,
     ArgmindCfg.gemm_util for why the penalty is per-PRECISION: fp64 runs on the
     FMA cluster, not on the array.
     """
-    return macs / (cfg.macs_per_cycle(prec) * cfg.gemm_util(prec, effective_dim))
+    return macs / gemm_macs_per_cycle_bounded(cfg, prec, effective_dim,
+                                              bytes_per_mac)
 
 
 def representative_dim(b: Benchmark) -> float:
     """Crude inner-dimension proxy used for the GEMM utilisation penalty."""
+    if b.gemm_dim_override is not None:
+        return b.gemm_dim_override
     if b.kind == "ml":
         return 512.0            # large tensors -> tile stays busy
     return max(4.0, b.macs_per_iter ** (1.0 / 3.0) * 1.6)
+
+
+def split_gemv_cycles(b: Benchmark, cfg: ArgmindCfg, macs: float) -> float:
+    """GEMV cycles for `macs`, split across the two operand precisions.
+
+    `solve_prec_frac` of the work runs at `b.prec` (the numerically sensitive
+    cached triangular solve); the rest runs at `b.operand_prec`. Returns the
+    single-precision answer unchanged when `operand_prec` is None, so this cannot
+    move a pre-existing row.
+    """
+    if b.operand_prec is None:
+        return macs / cfg.gemv_macs_per_cycle(b.prec, b.gemv_row_len)
+    hi = macs * b.solve_prec_frac
+    lo = macs - hi
+    return (hi / cfg.gemv_macs_per_cycle(b.prec, b.gemv_row_len)
+            + lo / cfg.gemv_macs_per_cycle(b.operand_prec, b.gemv_row_len))
 
 
 def descriptor_cost(b: Benchmark, cfg: ArgmindCfg, per_call: bool = False) -> dict:
@@ -1028,18 +1391,20 @@ def model_argmind(b: Benchmark, cfg: ArgmindCfg) -> dict:
 
     # Matrix-vector work: bandwidth-bound, indifferent to tile size. Uses
     # DELIVERED bandwidth (short-row derated), not peak.
-    gemv_cycles = b.gemv_macs_per_iter / cfg.gemv_macs_per_cycle(
-        b.prec, b.gemv_row_len)
-    # Matrix-matrix work: tile-array-bound, penalised for small dimensions.
-    gemm_cycles = gemm_like_cycles(b.gemm_macs_per_iter, cfg, b.prec, dim)
+    gemv_cycles = split_gemv_cycles(b, cfg, b.gemv_macs_per_iter)
+    # Matrix-matrix work: tile-array-bound, penalised for small dimensions --
+    # and, since 2026-07-30, also bounded by operand fetch when reuse depth is
+    # set by a problem dimension rather than by the tile.
+    gemm_cycles = gemm_like_cycles(b.gemm_macs_per_iter, cfg, b.prec, dim,
+                                   bytes_per_mac=b.gemm_bytes_per_mac)
     vec_cycles = b.vector_ops_per_iter / cfg.vector_lanes
     trans_cycles = b.transcendental_per_iter * 4.0 / cfg.vector_lanes
     scal_cycles = b.scalar_ops_per_iter / cfg.seq_ipc
 
     datapath_iter = gemv_cycles + gemm_cycles + vec_cycles + trans_cycles
-    once_datapath = (gemm_like_cycles(b.gemm_macs_per_call, cfg, b.prec, dim)
-                     + b.gemv_macs_per_call / cfg.gemv_macs_per_cycle(
-                         b.prec, b.gemv_row_len))
+    once_datapath = (gemm_like_cycles(b.gemm_macs_per_call, cfg, b.prec, dim,
+                                      bytes_per_mac=b.gemm_bytes_per_mac)
+                     + split_gemv_cycles(b, cfg, b.gemv_macs_per_call))
     if cfg.use_descriptor_seq and b.kernels:
         # Descriptor-derived sequencer cost. `seq_overhead_cycles` is everything
         # the datapath cycles do not already contain: dependency drains, issue
@@ -1074,20 +1439,40 @@ def model_argmind(b: Benchmark, cfg: ArgmindCfg) -> dict:
 
     dma_us = bytes_moved / (cfg.dma_bw_gbs * 1e9) * 1e6
     # Double-buffered: DMA overlaps compute except for the unavoidable head.
-    transfer_us = dma_us if cfg.tier == "T0" else max(0.0, dma_us - compute_us * 0.8)
+    transfer_us = (dma_us if cfg.transfers_persistent_every_call()
+                   else max(0.0, dma_us - compute_us * 0.8))
 
     latency_us = compute_us + transfer_us + cfg.call_overhead_us
 
     # ---- energy ----------------------------------------------------------
-    e_mac = b.total_macs() * E_MAC_PJ[b.prec]
+    # Total GEMV MACs, split by operand precision. Narrow operands cut BOTH the
+    # multiplier energy and the scratchpad traffic, and both must move together
+    # or the model would report a bandwidth win with no energy win.
+    gemv_all = b.gemv_macs_per_iter * b.iters + b.gemv_macs_per_call
+    gemm_all = b.gemm_macs_per_iter * b.iters + b.gemm_macs_per_call
+    op_p = b.operand_prec or b.prec
+    gemv_hi = gemv_all * (b.solve_prec_frac if b.operand_prec else 0.0)
+    gemv_lo = gemv_all - gemv_hi
+    e_mac = (gemv_hi * E_MAC_PJ[b.prec] + gemv_lo * E_MAC_PJ[op_p]
+             + gemm_all * E_MAC_PJ[b.prec])
     # Scratchpad traffic: GEMV touches a fresh element per MAC (no reuse);
-    # GEMM amortises operand fetch over the tile dimension.
-    sram_bytes = (b.gemv_macs_per_iter * b.iters * BYTES_PER_ELEM[b.prec]
-                  + (b.gemm_macs_per_iter * b.iters + b.gemm_macs_per_call)
-                  * cfg.gemm_operand_bytes_per_mac(b.prec))
+    # GEMM amortises operand fetch over the tile dimension (or over an explicit
+    # per-benchmark reuse depth when the tile is not what limits it).
+    #
+    # SEPARATE CORRECTION, 2026-07-30, flagged rather than bundled: the old
+    # expression omitted `gemv_macs_per_call` from the scratchpad byte count
+    # while `e_mac` (via total_macs) charged it and the latency model charged it.
+    # Once-per-call GEMV traffic is real traffic. Including it raises reported
+    # solver energy a few percent -- i.e. it moves AGAINST our own ratio, which
+    # is why it is being fixed now rather than deferred.
+    gemm_bpm = (cfg.gemm_operand_bytes_per_mac(b.prec)
+                if b.gemm_bytes_per_mac is None else b.gemm_bytes_per_mac)
+    sram_bytes = (gemv_hi * BYTES_PER_ELEM[b.prec]
+                  + gemv_lo * BYTES_PER_ELEM[op_p]
+                  + gemm_all * gemm_bpm)
     e_sram_pj_b = cfg.sram_pj_per_byte()
     e_sram = sram_bytes * e_sram_pj_b
-    e_dram = bytes_moved * E_DRAM_BYTE_PJ
+    e_dram = bytes_moved * cfg.offchip_pj_per_byte
     e_static = cfg.static_mw * 1e-3 * (latency_us * 1e-6) * 1e12
     energy_pj = (e_mac + e_sram) * cfg.overhead_mult + e_dram + e_static
 
@@ -1113,7 +1498,11 @@ def model_cpu(b: Benchmark, cpu: CpuCfg) -> dict:
     eff = peak * cpu.small_gemm_efficiency          # ops/cycle achieved
     gemm_cycles = (b.gemm_macs_per_iter * 2.0) / eff
     gemv_cycles = b.gemv_macs_per_iter / cpu.gemv_macs_per_cycle(b.prec)
-    vec_cycles = (b.vector_ops_per_iter * 2.0) / eff
+    # Elementwise/reduction work runs on the plain SIMD path, NOT the outer-
+    # product unit. See CpuCfg.simd_flops_per_cycle. `*2.0` is kept because the
+    # model counts vector "element-ops" in the same FLOP-pair units as MACs.
+    vec_eff = cpu.simd_rate * cpu.small_gemm_efficiency
+    vec_cycles = (b.vector_ops_per_iter * 2.0) / vec_eff
     trans_cycles = b.transcendental_per_iter * 12.0      # div/sqrt latency-bound
     scal_cycles = b.scalar_ops_per_iter / cpu.scalar_ipc
 

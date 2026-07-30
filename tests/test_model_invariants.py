@@ -247,11 +247,28 @@ def test_e9_once_per_call_assembly_is_counted():
 
     It depends on the new x0, so it cannot be warm-started and sits on the
     critical path before iteration 1.
+
+    KEYED OFF `algo`, NOT THE NAME (changed 2026-07-30). It used to test
+    `b.name.endswith("MPC")`, which broke the moment PWR-MPC was re-specified as
+    finite-control-set MPC -- a formulation with genuinely NO once-per-call
+    assembly, because x(k) arrives as n_x floats and there is no q vector or
+    state-dependent bound to rebuild. This is the second time a name-keyed
+    requirement has misfired after a re-spec (ARM-MPC was the first), which is
+    what the `algo` field exists to prevent.
     """
+    condensing = [b for b in solvers() if b.algo in ("admm", "ip")]
+    assert condensing, "no condensing-MPC rows found — has `algo` tagging broken?"
+    for b in condensing:
+        assert b.gemv_macs_per_call > 0.0, (
+            f"{b.name}: once-per-call q/bounds assembly is not counted")
+    # The converse, so the exemption cannot be abused: a row that claims no
+    # once-per-call assembly must also have no iteration to warm-start into.
     for b in solvers():
-        if b.name.endswith("MPC"):
-            assert b.gemv_macs_per_call > 0.0, (
-                f"{b.name}: once-per-call q/bounds assembly is not counted")
+        if b.gemv_macs_per_call == 0.0 and b.gemm_macs_per_call == 0.0:
+            assert b.iters == 1 and b.iters_worst == 1, (
+                f"{b.name}: claims no once-per-call setup yet iterates "
+                f"({b.iters}/{b.iters_worst}) — an iterative solver must pay for "
+                f"assembling the data its first iteration consumes")
 
 
 # ---------------------------------------------------------------------------
@@ -345,11 +362,84 @@ def test_kill_criterion_is_evaluated_against_most_efficient_cpu(cfg):
 # ---------------------------------------------------------------------------
 
 def test_settled_admm_inner_loop_is_pure_gemv():
-    for name in ("QUAD-MPC", "PWR-MPC"):
-        b = by_name(name)
+    """Keyed off `algo`, not a name list (changed 2026-07-30, PWR-MPC re-spec)."""
+    admm = [b for b in M.BENCHMARKS + M.OFF_SET if b.algo == "admm"]
+    assert admm, "no ADMM rows left in the model at all"
+    for b in admm:
         assert b.gemm_macs_per_iter == 0.0, (
-            f"{name}: ADMM inner loop has acquired matrix-matrix work. If that "
+            f"{b.name}: ADMM inner loop has acquired matrix-matrix work. If that "
             "is real, CLAUDE.md's settled finding needs revising deliberately")
+
+
+def test_settled_fcs_mpc_is_gemm_not_gemv_and_that_is_not_a_contradiction():
+    """FCS-MPC's candidate set IS the batch dimension batch-1 solvers lack.
+
+    This looks like it contradicts the settled "solver inner loops are GEMV"
+    finding and does not: the settled finding is about ITERATIVE solvers at batch
+    1. Enumeration over a finite control set is a different algorithm class with a
+    real batch dimension, so it is matrix-MATRIX work.
+
+    The load-bearing half is the SECOND assertion. The batch does not make this
+    row array-bound, because the reuse depth is n_y = 2 (the number of controlled
+    outputs), not the tile dimension. Arithmetic intensity must therefore stay
+    well ABOVE the tile-limited figure -- if it ever drops to it, someone has
+    quietly assumed the array reuses these operands 12 times and the row's
+    binding constraint will be reported wrongly.
+    """
+    fcs = [b for b in M.BENCHMARKS + M.OFF_SET if b.algo == "fcs"]
+    assert fcs, "no FCS-MPC rows found"
+    for b in fcs:
+        assert b.gemm_macs_per_iter > 10 * b.gemv_macs_per_iter, (
+            f"{b.name}: FCS-MPC enumeration should be matrix-matrix dominated")
+        assert b.gemm_bytes_per_mac is not None
+        tile_limited = M.CFG_100.gemm_operand_bytes_per_mac(b.prec)
+        assert b.gemm_bytes_per_mac > 2.0 * tile_limited, (
+            f"{b.name}: arithmetic intensity {b.gemm_bytes_per_mac:.2f} B/MAC has "
+            f"collapsed to the tile-limited figure {tile_limited:.2f} — the "
+            f"n_y-limited reuse depth has been lost")
+        assert b.iters == 1 and b.iters_worst == 1, (
+            f"{b.name}: FCS-MPC has a FIXED op count and no convergence tail")
+        assert not any(o.chain_dim > 0 for o in b.kernels), (
+            f"{b.name}: FCS-MPC has no dependency chain — no Cholesky, no "
+            f"triangular solve. A chain here means the decomposition is wrong")
+
+
+def test_fcs_mpc_binding_resource_is_the_vector_unit():
+    """The architecture finding this re-spec produced, pinned.
+
+    On the re-specified PWR-MPC the vector unit -- cost evaluation and argmin --
+    costs more cycles than the MAC array and more than operand fetch. That is the
+    opposite of every other solver row and it is what would drive a lane-count or
+    reduction-unit change, so it must not drift silently.
+    """
+    b = by_name("PWR-MPC")
+    cfg = M.CFG_100
+    dim = M.representative_dim(b)
+    gemm = b.gemm_macs_per_iter / M.gemm_macs_per_cycle_bounded(
+        cfg, b.prec, dim, b.gemm_bytes_per_mac)
+    vec = b.vector_ops_per_iter / cfg.vector_lanes
+    assert vec > 2.0 * gemm, (
+        f"PWR-MPC vector {vec:.0f} cyc vs GEMM {gemm:.0f} cyc — the vector unit "
+        f"is no longer the binding resource on the FCS row; the lane-count "
+        f"recommendation needs re-deriving")
+
+
+def test_gemm_bandwidth_ceiling_is_inactive_on_the_pre_existing_rows():
+    """The GEMM bandwidth bound was added for FCS-MPC. Prove it changed nothing
+    else, and that it is not decoration -- it must actually bind somewhere."""
+    cfg = M.CFG_100
+    bound_bites = []
+    for b in M.BENCHMARKS:
+        dim = M.representative_dim(b)
+        array = cfg.macs_per_cycle(b.prec) * cfg.gemm_util(b.prec, dim)
+        bpm = (cfg.gemm_operand_bytes_per_mac(b.prec)
+               if b.gemm_bytes_per_mac is None else b.gemm_bytes_per_mac)
+        bound_bites.append((b.name, cfg.scratchpad_bw_bpc / bpm < array))
+    biting = [n for n, x in bound_bites if x]
+    assert biting == ["PWR-MPC"], (
+        f"GEMM bandwidth ceiling binds on {biting}; expected exactly PWR-MPC. "
+        f"If it now binds elsewhere the pre-existing rows have moved; if it binds "
+        f"nowhere the term is decoration")
 
 
 def test_settled_ekf_covariance_is_gemm_dominated():

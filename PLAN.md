@@ -136,12 +136,19 @@ second selling point on the same engine.
   > **≤4 sequencer cycles per descriptor, 1 descriptor/cycle issue width, queue depth 8** —
   > 0.028 mm² all in (0.0137 logic + 0.0143 for an 8 KB I-mem / 4 KB D-mem), inside the existing
   > 0.045 mm² allocation. Issue *width* above 1/cycle buys nothing on any benchmark; **setup cost
-  > per descriptor is the axis that matters.** Two things are requirements rather than
-  > optimisations: **(a) run-ahead** — a write-descriptor-and-poll sequencer misses PWR-MPC's
-  > 50%-of-period budget (38.1 µs vs 25 µs); **(b) dependency-chain blocking ≥ one full datapath
-  > width** — a blocked Cholesky that advances only 4 elements per dependent step also misses it.
-  > 97–100% of the sequencer's latency contribution is **dependency drain**, not issue throughput,
-  > and drain cannot be provisioned away by bandwidth or MACs.
+  > per descriptor is the axis that matters.**
+  >
+  > **DOWNGRADED 2026-07-30 (PHASE0_FINDINGS §0.3, PWR-MPC re-spec).** Both of the following were
+  > justified by a deadline miss on PWR-MPC; re-specified as finite-control-set MPC that row has
+  > **zero dependency chains** and is invariant to both, so **no frozen-set row now misses from
+  > either alone**: **(a) run-ahead** and **(b) dependency-chain blocking ≥ one full datapath
+  > width**. What survives, on QUAD-MPC's **measured** worst-case tail: **you may implement at most
+  > one of the two omissions** — without run-ahead 2.21×, with scalar chain blocking 1.27×, with
+  > both absent **0.37× (misses)**. Chain blocking is worth **2.3×** of that margin, the largest
+  > single lever in the analysis, so it remains an **RTL requirement** — now on a thin measured
+  > margin rather than on a deadline miss. Run-ahead becomes *required unless chain blocking is
+  > full-width*. 97–100% of the sequencer's latency contribution is still **dependency drain**, not
+  > issue throughput, and drain cannot be provisioned away by bandwidth or MACs.
 - **Codegen contract:** a code-generated iteration must average **≥ 8 datapath cycles per
   descriptor** (2 × the setup cost) with no burst of sub-threshold descriptors longer than the
   descriptor queue. HPIPM at nb=21 sits at 30 cycles/descriptor, ADMM at n_var=80 at 59, and the
@@ -300,10 +307,15 @@ throughput (Ethos-U85 is INT8-weights-only; Ceva's FP32 rate is ~1% of its INT8 
 >   FP path is instantiated it needs **a solver library, not silicon.** Our residual claims
 >   against it (coherent host path, residency contract, bandwidth) are all *not published*, so
 >   they cannot be asserted as gaps either.
-> - **TI C2000 CLA:** our arithmetic advantage is structural, but in MCU class **zero-copy and
->   residency are void** — no DRAM, no cache, nothing to eliminate. Unresolved tension with §4,
->   where zero-copy decides PWR-MPC deadline feasibility and motor drive is the socket most
->   likely to be MCU-class.
+> - **TI C2000 CLA:** our arithmetic advantage is structural, but in MCU class **residency and
+>   coherency are void** — no DRAM, no cache, nothing to eliminate. **Invocation overhead is NOT
+>   void, and that distinction resolves the tension with §4** (settled 2026-07-30, §0.3): the honest
+>   MCU-class launch costs are ~2.0 µs copy-based vs ~0.30 µs doorbell [EST], a 6.7× / 1.7 µs
+>   advantage rather than the rich-host 31× / 24 µs, because buffer-map and cache-maintenance are
+>   MMU/cache artefacts an all-SRAM part lacks. ~78% of the surviving advantage is invocation
+>   protocol, ~22% an avoided on-chip copy. **Pitch MCU class on low invocation overhead,
+>   determinism and energy — never on zero-copy.** And the re-specified PWR-MPC meets its deadline
+>   in every tier, so nothing "decides feasibility" there.
 >
 > **Net: the moat is energy per solve, deterministic worst-case latency, and the codegen/software
 > ecosystem — not arithmetic, not control flow, not coherency.** One strong new determinism leg:
@@ -454,9 +466,13 @@ lives in a datapath and a residency model, not in a core.
   run-ahead, because the host is also executing the application. Worst solver margin against the
   50%-of-period budget: **D1 1.71× · D2 with the generator moved to the CM side 1.71× · host
   issuing with software double-buffering 1.23× · host issuing with no run-ahead 0.66× (misses)**.
-  The binding row is PWR-MPC every time — and PWR-MPC *is* the MCU-class socket D2 is nominated
-  for. So D2 stays a wrapper rather than a redesign **provided the wrapper keeps the descriptor
-  generator on the CM side**. This is also a MACIF constraint: the descriptor format is part of
+  ~~The binding row is PWR-MPC every time~~ — **restated 2026-07-30 (§0.3): those margins were
+  computed on the retired continuous-control-set PWR-MPC definition, which is now an off-set row.
+  The re-specified FCS-MPC row survives host-issued, no-run-ahead at 6.5×.** The conclusion stands
+  but on weaker evidence: the live examples are now the off-set PWR-CCS row and **one-step FCS-MPC
+  at 4.8 datapath cycles per descriptor (0.61× of the ≥8 codegen rule)**, which fails the rule
+  regardless of who issues. So D2 stays a wrapper rather than a redesign **provided the wrapper
+  keeps the descriptor generator on the CM side**. This is also a MACIF constraint: the descriptor format is part of
   the boundary a CIM macro must honour, so the generator sits *above* MACIF.
 
 **Recommendation:** stay on D1 for Phase 2, design the MACIF and the runtime API so D2 is a
