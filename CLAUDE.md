@@ -61,10 +61,11 @@ automotive.
   exactly nothing for pure-GEMV ADMM. EKF is a beachhead workload, so "solver customers subsidise
   an ML feature" is *not* the honest story. Caveat: an L0 operand register file would buy the same
   traffic cut at O(T) area instead of O(T²) — if that lands, honest array size drops to 36–64.
-- Advantage is **energy + determinism, not speed**: **15–22× perf/W at the CM-100 config
-  (modelled, ±2×; 9–26× across the scratchpad-energy sensitivity band)**, latency **1.0–2.1× on
-  solvers — parity at worst, nothing below it**. **A CPU meets 5 of 5 solver deadlines in the
-  frozen set** — never pitch "the CPU can't do this"; we are more efficient, not enabling.
+- Advantage is **energy + determinism, not speed**: **14–22× perf/W at the CM-100 config
+  (modelled, ±2×; 9–26× across the scratchpad-energy sensitivity band)**, latency **0.97–2.11× on
+  solvers** — i.e. QUAD 1.67×, EKF-96 2.11×, and **PWR-MPC 0.97×, marginally below parity**.
+  **A CPU meets 5 of 5 solver deadlines in the frozen set** — never pitch "the CPU can't do
+  this"; we are more efficient, not enabling.
   (History: quoted as 17–25× and 1.2–2.9×, then 9.5–21.3× and "below parity on 2–3 of 5". The
   latter was an artefact of reporting at 64 B/cycle, a config we do not recommend. Always quote
   at the CM-100 configuration.)
