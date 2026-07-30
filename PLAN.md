@@ -43,6 +43,46 @@ Twists on "Argmin" (all clean of company collisions as of 2026-07):
 Action before committing: USPTO TESS + EUIPO search in Nice classes 9 (ICs/IP cores) and 42
 (design services); domain check (argmin.io / argmin-semi.com etc.).
 
+### 0.1 Naming decision rule (added 2026-07-30) — do not re-litigate on web searches
+
+**What actually blocks a name:** a registered mark in **Nice class 9 or 42 in the US/EU**, or any
+**semiconductor, EDA or IP** company with a confusingly similar name. Trademark protects against
+confusion *in the relevant market*.
+
+**What does not block it:** a same-named software consultancy in an unrelated field. Testing
+showed essentially every pronounceable, semantically-rooted 2–3 syllable tech word is already
+held by some small IT firm somewhere — Convexa (Norwegian VC + an IT services firm), Proxa (Hong
+Kong software), Iteron (Swiss/German AI consultancy), Solvara (Indian dev shop), Karush (Nebraska
+.NET consultancy, owns karush.com), Kairon (three companies). **That space is exhausted
+worldwide, so "someone shares the name" is the normal condition, not a disqualifier.**
+
+**Current status of Argmind:** the only concerning neighbour is **Argmin AI Inc.**
+(argminai.com) — concerning specifically because it is plausibly class 9/42 *and* AI-adjacent,
+unlike the consultancies. Whether it is actually registered in those classes is **unknown**: no
+register was reachable ([IP_STRATEGY.md](IP_STRATEGY.md) F-4).
+
+**Rule: do not rename on the strength of a web search.** Renaming costs a rewrite of every
+document, the SKU scheme, the GitHub org and the PyPI name. The 30-minute manual register check
+in IP_STRATEGY §1 is the only thing that decides it. Do that first.
+
+**If Argmind is blocked, two things change the approach:**
+
+1. **Go fully coined.** Only invented strings came back empty — `Detenta` and `Isochra` returned
+   *zero* results, against 3+ companies for every rooted candidate. Industry precedent is
+   overwhelmingly coined (Nvidia, Ceva, Altera, Rambus, Codasip, Quadric, Groq, Cerebras,
+   Tenstorrent). Coined marks are also the strongest trademark category, whereas "argmin" is
+   arguably *descriptive* of the function to our own audience — the weak end of the spectrum.
+2. **Pick for determinism, not minimization.** Our own findings say the moat is *energy per solve
+   and bounded worst-case latency* — and that on latency we are at or near parity with a CPU. A
+   name advertising `argmin` therefore markets the weakest claim we have. `Detenta` (from *detent*
+   — the mechanical feature holding a mechanism at a definite, repeatable position) and `Isochra`
+   (from *isochron* — a line of equal time) both point at determinism instead, which is what we
+   actually sell.
+
+Screening method for any further candidate: web search must return **<5 unrelated results**,
+then `.com` / GitHub org / PyPI must be free, then the class 9/42 register check. In that order —
+the cheap filters first.
+
 ---
 
 ## 1. Vision
