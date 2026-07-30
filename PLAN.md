@@ -350,6 +350,62 @@ likely 2030 edge architecture — analog/CIM macro running a learned policy or d
 digital solver enforcing constraints, one sequencer orchestrating both under a real-time
 deadline — is a system *we* are positioned to supply and a bare CIM macro is not.
 
+### 4.2 Can this expand into a CPU or a GPU? (asked 2026-07-30)
+
+**GPU: no, and the reason is structural, not a matter of resources.** A GPU is a
+throughput machine that hides latency with massive multithreading. Our measured finding is that
+the solver inner loop is matrix-**vector**, bandwidth-bound, and full of loop-carried
+dependencies — the single worst fit for that architecture, because there is no parallelism to
+hide latency with and per-kernel launch cost dominates a 15-iteration solve. Add the graphics
+software burden (Vulkan/OpenCL conformance, drivers, compilers) and a licensable-GPU market
+already held by Arm Mali, Imagination and VeriSilicon, and it is not a near-miss. **Where GPUs
+matter to us is as neighbours, not targets:** in the robotics socket a Jetson-class GPU does
+perception while a deterministic block does the control loop. That is an integration story the
+existing AXI/ACE-Lite plan already serves.
+
+**CPU: do not build one — but *get inside* one.** This is the interesting answer, and it is
+forced by our own competitive finding (§4.1). Against Arm SME2 and RISC-V RVV, three of our four
+differentiators evaporate *because those extensions live inside the CPU* and therefore get
+control flow, coherent zero-copy and cache residency for free. The logical response is not to
+compete with that position but to occupy it.
+
+Note also what we already are: a sequencer plus a vector/matrix datapath plus a
+closely-coupled scratchpad. That is structurally *already* a small CPU-with-matrix-extension —
+which is exactly what the AURIX PPU (a licensed Synopsys ARC EV7x) is. We are nearer to that
+category than to an NPU.
+
+Three integration depths, as a roadmap ladder rather than alternatives:
+
+| Depth | What it is | Status |
+|---|---|---|
+| **D1 — bus-attached** | AXI4 / ACE-Lite peer, own sequencer, zero-copy + residency | The current plan (§3.2) |
+| **D2 — tightly-coupled coprocessor** | RoCC-style attachment to a RISC-V core; the host issues to us over a private interface, no bus round-trip | Cheap follow-on; strongest fit for MCU-class sockets where D1's zero-copy has nothing to bite on (the unresolved §4.1 tension) |
+| **D3 — in-pipeline ISA extension** | Our datapath instantiated *inside* a licensee's core, driven by custom or standard RISC-V instructions | The structural answer to SME2/RVV — if the differentiator is "being inside the CPU," then be inside the CPU |
+
+**Why not just build the CPU.** CPU IP is the most contested market in the industry (Arm,
+SiFive, Andes, MIPS, Codasip, plus free cores), it demands a full toolchain, OS, ABI, debug and
+memory-model story, and ISA-compliance verification alone would exceed this company's entire
+Phase-2 budget. Worse, it discards the differentiator: we would be competing on
+general-purpose IPC, where energy-per-solve on iterative workloads is irrelevant. Our advantage
+lives in a datapath and a residency model, not in a core.
+
+**The real risks on the D3 path**, which should be tested in discovery rather than assumed:
+- The customer *is* the competitor. CPU and MCU vendors are who we would sell an extension to,
+  and Synopsys already sells them one (the PPU). Infineon licensing rather than building it is
+  encouraging evidence they buy — and evidence about who we bid against.
+- **Nonstandard RISC-V extensions fragment the ecosystem**, which RISC-V International actively
+  discourages via the profile/RVA process. A custom-opcode block is easy to ship and hard to get
+  adopted. The credible variants are a tightly-coupled coprocessor with a stable ABI (D2), or
+  proposing solver primitives as a *standard* extension — a multi-year committee exercise that a
+  pre-revenue company cannot lead alone, but could co-sponsor.
+- D3 gives up the "one engine, two workloads" story: inside someone's CPU pipeline we are an
+  arithmetic unit, not a Computational Module with its own sequencer. The category we are coining
+  presumes D1/D2.
+
+**Recommendation:** stay on D1 for Phase 2, design the MACIF and the runtime API so D2 is a
+wrapper rather than a redesign, and treat D3 as a licensing conversation to open only once a
+D1 design win exists. Do not spend Phase-0 or Phase-1 effort on it.
+
 #### Other future architectures
 
 | Trend | Threat to Argmind | Read |
