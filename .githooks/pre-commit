@@ -1,0 +1,56 @@
+#!/bin/sh
+# Argmind pre-commit hook.
+#
+# Two jobs, both addressing failure modes this project has actually suffered:
+#
+#   1. Run the test suite. The suite encodes twelve historical modelling errors
+#      as regression tests plus the "the model must be able to fail" invariants.
+#      A commit that breaks them is a commit that has quietly re-introduced a
+#      flattering assumption.
+#
+#   2. Warn when perf_model/ code changes without its results_*.txt being
+#      regenerated. Those outputs are tracked ON PURPOSE -- they are the evidence
+#      behind claims in PHASE0_FINDINGS.md, and versioning them is what makes a
+#      changed number visible and attributable. Code moving without outputs
+#      moving means the documents now disagree with the model.
+#
+# Install (once per clone):   git config core.hooksPath .githooks
+# Bypass (rarely justified):  git commit --no-verify
+
+set -e
+
+echo "pre-commit: running test suite..."
+if ! python -m pytest -q >/tmp/argmind-pytest.log 2>&1; then
+    echo ""
+    echo "COMMIT BLOCKED: tests failed."
+    echo ""
+    tail -25 /tmp/argmind-pytest.log
+    echo ""
+    echo "The suite pins relationships, not numbers, so a failure usually means"
+    echo "either a real regression or that a settled finding has genuinely changed."
+    echo "If it is the latter, update the test DELIBERATELY and say so in the"
+    echo "commit message -- do not weaken it to get green."
+    exit 1
+fi
+echo "pre-commit: tests pass."
+
+# --- staged-file consistency check (warn only) ---------------------------------
+staged=$(git diff --cached --name-only)
+code_changed=$(echo "$staged" | grep -E '^perf_model/.*\.py$' || true)
+results_changed=$(echo "$staged" | grep -E '^perf_model/results_.*\.txt$' || true)
+
+if [ -n "$code_changed" ] && [ -z "$results_changed" ]; then
+    echo ""
+    echo "pre-commit WARNING: perf_model/ code is staged but no results_*.txt is."
+    echo "Changed:"
+    echo "$code_changed" | sed 's/^/    /'
+    echo ""
+    echo "If this change affects any modelled number, regenerate and stage the"
+    echo "output so the diff shows what moved:"
+    echo "    python perf_model/argmind_model.py"
+    echo ""
+    echo "If it genuinely changes no output (refactor, comment, new unused"
+    echo "parameter), proceed -- this is a warning, not a block."
+fi
+
+exit 0

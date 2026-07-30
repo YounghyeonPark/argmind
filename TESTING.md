@@ -116,11 +116,27 @@ Recommendation: stand up option 1 now as a smoke test (install WSL2, `apt instal
 elaborate a trivial module), purely to prove the toolchain works on this host. Discovering a
 Windows-specific obstacle at month 6, with RTL waiting, is the expensive version of this.
 
-## Gap 3 — nothing runs the tests automatically
+## Gap 3 — nothing runs the tests automatically — **CLOSED 2026-07-30**
 
-There are no git hooks and no CI, so the suite runs only when invoked. Now that the repo exists,
-a pre-commit hook is cheap and worth adding. Until then the working rule (also in CLAUDE.md) is:
-run `python -m pytest` after any change to `perf_model/`, and before quoting any modelled number.
+`.githooks/pre-commit` is tracked in the repo and does two things:
+
+1. **Runs the suite and blocks the commit on failure.** The suite encodes twelve historical
+   modelling errors as regression tests, so a commit that breaks them has usually re-introduced a
+   flattering assumption.
+2. **Warns when `perf_model/` code is staged without any `results_*.txt`.** Those outputs are
+   tracked deliberately — they are the evidence behind PHASE0_FINDINGS claims — so code moving
+   without outputs moving means the documents now disagree with the model.
+
+Install once per clone: `git config core.hooksPath .githooks`. Bypass with `--no-verify`, rarely
+justified.
+
+**Verified to actually block**, because a hook that has never refused anything is unproven: a
+deliberately failing test makes `git commit` exit 1 and the commit does not land. Worth recording
+one trap found while verifying it — running `git commit … | head -8` makes the commit appear to
+succeed, because `head` exiting early kills the hook with SIGPIPE before it reaches its `exit 1`.
+Test hooks with git's output unpiped, or you will certify an unenforced hook.
+
+CI still does not exist; the hook is a local gate only.
 
 ## Not yet covered by tests
 
