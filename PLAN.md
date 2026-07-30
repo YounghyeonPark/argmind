@@ -5,7 +5,13 @@ both iterative optimization algorithms and matrix-multiplication workloads on on
 Category positioning: "the industry's first Computational Module."
 **Brand name:** **Argmind** (decided 2026-07-29) — argmin + *mind*: "the mind that
 minimizes." Keeps the math meaning for the optimization audience, adds the AI connotation.
-Pending: USPTO/EUIPO Nice class 9/42 clearance + domains (argmind.io, argmind.ai).
+**NOT CLEARED** — and note what that means ([IP_STRATEGY.md](IP_STRATEGY.md) F-4): no trademark
+register was actually searched, because all ten access routes failed (USPTO search is a JS app
+with a POST-only API; EUIPO eSearch likewise; TMview has a TLS certificate mismatch;
+Justia/Trademarkia return 403). "No blocker found" therefore means *nothing was looked at*, not
+that the name is clear. One live neighbour does exist: **Argmin AI Inc.** (argminai.com), an AI
+software company plausibly in classes 9/42. `github.com/argmind` and PyPI `argmind` are
+unclaimed. A 30-minute manual register check is specified in IP_STRATEGY §1.
 **Product naming structure:** `Argmind CM-<n>` (e.g., "Argmind CM-100"), so the category
 label is embedded in every SKU.
 **Date:** 2026-07-28 (naming decided 2026-07-29)
@@ -528,6 +534,13 @@ ceiling, but available now, portable to any foundry, deterministic, and verifiab
   codegen, runtime API, or host integration. Cheap now; near-impossible to retrofit later.
 - Solver codegen prototype targeting the model (CVXPY/CasADi front door).
 - Publish a technical whitepaper (credibility + inbound interest).
+  > **SEQUENCE THIS AGAINST THE FILING.** This whitepaper is the *earliest* public disclosure of
+  > all four candidate mechanisms and is currently unsequenced against any patent filing
+  > ([IP_STRATEGY.md](IP_STRATEGY.md)). Europe has **no grace period** — EPC Art. 54 is absolute
+  > novelty and Art. 55's six-month window covers only evident abuse and recognised
+  > exhibitions, neither of which a publication is. Since the licensees we want are European,
+  > losing EP means losing the patent where the design wins are. Reordering a document costs
+  > nothing; the loss is permanent.
 
 ### Phase 2 — RTL & FPGA prototype (months 6–15)
 - RTL: GEMM tile + vector unit + sequencer + DMA + AXI wrapper; ACE-Lite (T1 zero-copy)
@@ -603,7 +616,13 @@ PPA collateral (what a chip company pays for) stays proprietary.
 
 Design principles behind the split:
 - **Apache-2.0 for software** (explicit patent grant — required for corporate adoption);
-  **Solderpad-2.1 for open RTL** (the hardware-standard Apache variant). **Trademark stays
+  **Solderpad-2.1 for open RTL** — but **not for the reason previously assumed**
+  ([IP_STRATEGY.md](IP_STRATEGY.md) F-2): SHL-2.1 excludes Patents from its definition of
+  "Rights", which reads protectively, yet it replaces **only Apache §2 and the Appendix**.
+  **Apache §3 — the patent grant — survives, and a licensee may elect to treat the work as plain
+  Apache-2.0.** So publishing `argmind-lite` grants a royalty-free patent licence to make and
+  sell silicon containing it. Solderpad is still the right licence; it simply does not do the job
+  we thought. Attorney question L-1. **Trademark stays
   owned:** anyone can use the code, only we ship "Argmind®" — the Arm/RISC-V-era moat is
   brand + verification + support, not source secrecy.
 - **`argmind-lite` is genuinely useful but deliberately small** — big enough for real MPC/EKF
@@ -634,8 +653,17 @@ Cadence: quarterly tagged releases; simulator/codegen accept community targets.
 **Funnel math to watch:** GitHub stars are vanity; track (a) `pip` installs → (b) Kria
 bitstream downloads → (c) argmind-lite instantiations in public repos → (d) inbound
 commercial-license conversations. The open stack exists to manufacture (d).
-- **IP protection:** patent 2–3 core claims early (sequencer↔GEMM coupling mechanism,
-  small-matrix scheduling, deterministic-latency execution model); trade secret for the rest.
+- **IP protection — REVISED 2026-07-30, all three claims named here were wrong**
+  ([IP_STRATEGY.md](IP_STRATEGY.md) F-3). "Sequencer↔GEMM coupling / accelerator decides to
+  iterate" is **anticipated three ways**: TI's C2000 CLA (independent programmable FP coprocessor
+  with its own conditional branch `MBCNDD`, shipping since Piccolo), the AURIX PPU / Synopsys ARC
+  EV7x, and an FPGA-MPC literature deep enough to have survey papers. Prior art need not perform
+  well, only disclose the structure — so the PPU's unresolved FP/VCCM/coherency questions do not
+  save it. "Small-matrix scheduling" and "deterministic-latency execution model" are both
+  unpatentable as phrased. **What survives: one omnibus provisional on generation-tag
+  call-to-call residency plus the sequencer *quantitative* contracts** (chain blocking ≥ one
+  datapath width, run-ahead queue sized to the measured worst-case tail, ≥8 datapath cycles per
+  descriptor), which appear nowhere in the searched literature. Trade secret for the rest.
 
 ## 8. Team, tools, budget (lean scenario)
 
@@ -659,7 +687,7 @@ commercial-license conversations. The open stack exists to manufacture (d).
 | One-person start | Phase 0/1 are deliberately model-and-paper heavy — solo-feasible; hire at RTL phase |
 | **IMC/CIM erodes the inference half** of the pitch (§4.1) | MACIF makes a CIM macro adoptable rather than fatal; never market on inference TOPS/W; lead with solver latency + determinism |
 | **Analog matrix computing matures for QP/LP** — would hit the solver thesis directly | Annual re-evaluation; today blocked by precision, PD-only stability, data-dependent latency. Watch PoliMi/Ielmini-line publications |
-| System features (zero-copy, residency) are copyable by incumbents — not a physics moat | Patent the specific mechanisms (generation-tag residency, sequencer↔GEMM coupling); compound the software/codegen ecosystem where copying is slowest |
+| System features (zero-copy, residency) are copyable by incumbents — not a physics moat | Patent **generation-tag residency and the sequencer quantitative contracts** — the sequencer *coupling* claim is dead prior art (IP_STRATEGY F-3). Compound the software/codegen ecosystem, where copying is slowest and where the real moat now sits |
 
 ## 10. Next actions (30/60/90 days)
 
