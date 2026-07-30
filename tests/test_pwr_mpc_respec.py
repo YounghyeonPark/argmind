@@ -368,12 +368,26 @@ def test_simd_rate_only_moves_vector_heavy_rows():
         "the correction barely moves the most elementwise row in the set")
 
 
-def test_the_parity_verdict_is_declared_assumption_sensitive():
-    """The honest instruction, encoded: the retired ADMM row's parity position
-    flips on a single [EST], so neither side of it is quotable.
+def test_the_parity_verdict_is_still_not_quotable_but_the_reason_changed():
+    """The retired ADMM row's parity position, and an audit of why it moved.
 
-    This test exists to make the sensitivity visible in CI rather than only in a
-    document, because 0.974x was quoted in three files.
+    History. This test used to assert that the verdict STRADDLES 1.0 across the
+    elementwise-rate band -- 0.97x at 64 flops/cycle, above parity at 32 -- so
+    that neither side of it could be quoted. The check_term 25 -> 1 correction
+    (2026-07-30) moved it: the row is now above parity at every rate in the band.
+
+    That is a shift in our favour, so it gets audited rather than accepted. The
+    mechanism is legitimate and is asserted below: checking convergence every
+    iteration adds GEMV work (residual norms: Ax, Px, A'y) and no elementwise
+    work, so the elementwise share of the row falls 21.8% -> 16.0% and the
+    elementwise-rate assumption simply has less leverage than it did. Both sides
+    of the comparison do the same arithmetic; nothing was removed from the CPU.
+
+    The verdict is STILL NOT QUOTABLE, for a different and more durable reason:
+    PWR-CCS is a RETIRED row. Continuous-control-set MPC is research-platform
+    practice, not the deployed motor-drive formulation, which is finite control
+    set (PWR-MPC, and that row is 0.62x -- genuinely below parity). And the
+    pessimistic end of the band is only 1.06x, which is parity in all but name.
     """
     ccs = by_name("PWR-CCS")
     cm = M.model_argmind(ccs, REC)["latency_us"]
@@ -383,8 +397,29 @@ def test_the_parity_verdict_is_declared_assumption_sensitive():
                 else c for c in M.ALL_CPUS]
         speeds[simd] = min(M.model_cpu(ccs, c)["latency_us"]
                            for c in cpus) / cm
-    assert speeds[64.0] < 1.0 < speeds[32.0], (
-        f"the PWR-CCS parity verdict no longer straddles 1.0 across the "
-        f"elementwise-rate band ({speeds}) — if it has become robust, say so "
-        f"deliberately; a robust verdict here would be quotable and this one "
-        f"was explicitly declared not to be")
+
+    # The advantage is thin enough at the pessimistic end that it is parity in
+    # all but name. If this ever exceeds ~1.3x at 64 flops/cycle, something has
+    # changed materially and the row's status needs re-deciding deliberately.
+    assert 1.0 < speeds[64.0] < 1.3, speeds
+    assert speeds[8.0] > speeds[32.0] > speeds[64.0], speeds
+
+    # The audit: the shift is explained by a falling elementwise share, not by
+    # anything having been taken off the CPU side.
+    at25 = M.condensed_mpc("c25", n_x=4, n_u=3, N=10, iters=12, rate=20000,
+                           note="", check_term=25)
+    share25 = at25.vector_ops_per_iter / (at25.vector_ops_per_iter
+                                          + at25.gemv_macs_per_iter)
+    share1 = ccs.vector_ops_per_iter / (ccs.vector_ops_per_iter
+                                        + ccs.gemv_macs_per_iter)
+    assert ccs.vector_ops_per_iter == at25.vector_ops_per_iter   # nothing removed
+    assert ccs.gemv_macs_per_iter > at25.gemv_macs_per_iter      # only GEMV added
+    assert share1 < share25
+    assert 0.15 < share1 < 0.17 and 0.21 < share25 < 0.23
+
+    # And the row that is actually in the frozen set is still below parity, so
+    # the model has not lost the ability to report that we lose.
+    fcs = by_name("PWR-MPC")
+    fcs_speed = min(M.model_cpu(fcs, c)["latency_us"] for c in M.ALL_CPUS) \
+        / M.model_argmind(fcs, REC)["latency_us"]
+    assert fcs_speed < 1.0, fcs_speed

@@ -24,8 +24,10 @@ Modules
     ``Buffer`` (a plain pointer), lifetimes, generation tags, the static
     scratchpad allocation plan.
 :mod:`argmind.descriptor`
-    Descriptor format v0, exactly as frozen, plus what implementing it revealed
-    (``V0_LIMITATIONS``).
+    Descriptor format **v0.1**: the bit layout, the ruling on each gap that
+    implementing v0 exposed (``V0_LIMITATIONS`` paired with ``V0_1_RULINGS``),
+    the scratchpad ruling (``SCRATCHPAD_RULING``) and the re-checked sequencer
+    contract (``SEQUENCER_RECHECK``).
 :mod:`argmind.macif`
     The MACIF precision contract, and the refusals that enforce it.
 :mod:`argmind.program`
@@ -39,15 +41,29 @@ from . import kernels, macif, precision
 from .descriptor import (
     DESC_BYTES,
     DESC_WORDS,
+    DESCRIPTOR_VERSION,
     FROZEN_V0_OPCODES,
-    PROPOSED_OPCODES,
+    N_TOKENS,
+    SCRATCHPAD_RULING,
+    SEQUENCER_RECHECK,
+    V0_1_ADDED_OPCODES,
+    V0_1_BIT_BUDGET,
+    V0_1_OPCODES,
+    V0_1_RULINGS,
     V0_LIMITATIONS,
     Descriptor,
     Opcode,
     Structure,
     Transpose,
 )
-from .device import CM100_SCRATCHPAD_BYTES, BuiltProgram, CallStats, Device, DeviceConfig
+from .device import (
+    CM100_SCRATCHPAD_BYTES,
+    CM100_SCRATCHPAD_BYTES_V0,
+    BuiltProgram,
+    CallStats,
+    Device,
+    DeviceConfig,
+)
 from .errors import (
     ArgmindError,
     ConvergenceFailure,
@@ -62,8 +78,16 @@ from .errors import (
 )
 from .macif import MACIF_VERSION, FormatContract, MacroCapabilities
 from .memory import Buffer, Lifetime, ScratchpadPlan
-from .precision import Format
-from .program import Program, SolverProgram, auto_chain, check_dependencies, concat
+from .precision import Format, VecFormat
+from .program import (
+    Program,
+    SolverProgram,
+    auto_chain,
+    auto_chain_v0,
+    check_dependencies,
+    concat,
+    peak_live_tokens,
+)
 
 __version__ = "0.1.0.dev0"
 
@@ -73,8 +97,10 @@ __all__ = [
     "BuiltProgram",
     "CallStats",
     "CM100_SCRATCHPAD_BYTES",
+    "CM100_SCRATCHPAD_BYTES_V0",
     "ConvergenceFailure",
     "DESC_BYTES",
+    "DESCRIPTOR_VERSION",
     "DESC_WORDS",
     "DependencyViolation",
     "Descriptor",
@@ -89,10 +115,12 @@ __all__ = [
     "MacifError",
     "MacroCapabilities",
     "MissingDependency",
+    "N_TOKENS",
     "Opcode",
-    "PROPOSED_OPCODES",
     "PrecisionNotDeclared",
     "Program",
+    "SCRATCHPAD_RULING",
+    "SEQUENCER_RECHECK",
     "ScratchpadExhausted",
     "ScratchpadPlan",
     "SolverProgram",
@@ -100,11 +128,18 @@ __all__ = [
     "Structure",
     "Transpose",
     "UnsupportedOpcode",
+    "V0_1_ADDED_OPCODES",
+    "V0_1_BIT_BUDGET",
+    "V0_1_OPCODES",
+    "V0_1_RULINGS",
     "V0_LIMITATIONS",
+    "VecFormat",
     "__version__",
     "auto_chain",
+    "auto_chain_v0",
     "check_dependencies",
     "concat",
+    "peak_live_tokens",
     "kernels",
     "macif",
     "precision",

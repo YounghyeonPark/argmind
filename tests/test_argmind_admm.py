@@ -124,10 +124,15 @@ def test_program_shape_is_what_the_sequencer_analysis_must_assume():
     cfg = ADMMConfig()
     s = make_solver(80, 320, cfg)
     counts = s.descriptor_counts()
-    assert counts == {"setup": 4, "iteration": 17, "residual": 15}
-    # 32 descriptors per checked iteration, of which the convergence test is
-    # nearly half. The sequencer analysis assumed 28 per ADMM iteration.
-    assert counts["iteration"] + counts["residual"] == 32
+    # 16, not v0's 17: descriptor v0.1 ruling R2 makes PROJ out-of-place, which
+    # deletes the staging SCAL of the whole constraint vector.
+    assert counts == {"setup": 4, "iteration": 16, "residual": 15}
+    # 31 descriptors per checked iteration, of which the convergence test is
+    # nearly half (48%). The sequencer analysis assumed 28 per ADMM iteration.
+    # That correction does NOT move the >=8-datapath-cycles-per-descriptor
+    # contract: measured at fp32 / 128 B per cycle the block averages ~238
+    # cycles per descriptor, ~30x the bar. See SEQUENCER_RECHECK.
+    assert counts["iteration"] + counts["residual"] == 31
 
 
 def test_every_block_is_dependency_clean_including_across_iterations():
@@ -149,7 +154,12 @@ def test_iteration_block_uses_only_frozen_v0_opcodes():
 
 
 def test_the_infinity_norm_termination_test_is_NOT_expressible_in_frozen_v0():
-    """Limitation L1: OSQP's own stopping rule needs a reduction v0 lacks."""
+    """Limitation L1, and the measurement that ruling R1 rests on.
+
+    Kept as a *strict-v0* test on purpose. NRMI is part of v0.1 now, so the only
+    way this stays evidence rather than folklore is by still being able to
+    reproduce the refusal on a device pinned to v0.
+    """
     from argmind import Opcode, UnsupportedOpcode
 
     s = make_solver(12, 20, ADMMConfig(termination=TerminationNorm.LINF))
@@ -487,8 +497,16 @@ def test_fp32_reaches_1e_6_but_not_1e_8_on_quad_mpc():
     assert outcomes[1e-8] is False
 
 
-def test_quad_mpc_working_set_does_not_fit_the_costed_cm100_scratchpad():
-    """A finding, pinned so it cannot be lost: 128 KiB is not enough at fp32."""
+def test_quad_mpc_working_set_does_not_fit_the_128_kib_that_was_costed():
+    """The measurement that forced descriptor-v0.1 ruling R8.
+
+    Pinned against the OLD capacity, not the new one. A model that can no longer
+    reproduce the failure it was corrected for is not evidence, so this test
+    keeps asserting that 128 KiB does not hold the flagship -- which is why
+    :data:`CM100_SCRATCHPAD_BYTES_V0` still exists as a named constant.
+    """
+    from argmind import CM100_SCRATCHPAD_BYTES_V0
+
     _, _, mdl = quad_mpc()
     n, m = mdl["n_var"], mdl["A_con"].shape[0]
 
@@ -497,22 +515,30 @@ def test_quad_mpc_working_set_does_not_fit_the_costed_cm100_scratchpad():
         s = make_solver(n, m, ADMMConfig(fmt=fmt))
         footprints[fmt] = s.device.plan.used
 
-    assert footprints[Format.FP64] > 2 * CM100_SCRATCHPAD_BYTES
-    assert footprints[Format.FP32] > CM100_SCRATCHPAD_BYTES
-    assert footprints[Format.FP16] < CM100_SCRATCHPAD_BYTES
+    # Against the capacity that was costed: only all-fp16 fitted.
+    assert footprints[Format.FP64] > 2 * CM100_SCRATCHPAD_BYTES_V0
+    assert footprints[Format.FP32] > CM100_SCRATCHPAD_BYTES_V0
+    assert footprints[Format.FP16] < CM100_SCRATCHPAD_BYTES_V0
 
-    dev = Device(DeviceConfig(scratchpad_bytes=CM100_SCRATCHPAD_BYTES, banks=16,
-                              macro=macif.UNIVERSAL, strict_v0=False,
-                              host_bytes=8 << 20))
+    dev = Device(DeviceConfig(scratchpad_bytes=CM100_SCRATCHPAD_BYTES_V0, banks=16,
+                              macro=macif.UNIVERSAL, host_bytes=8 << 20))
     with pytest.raises(ScratchpadExhausted, match="against a 128 KiB"):
         ADMMSolver(dev, n, m, ADMMConfig(fmt=Format.FP32))
+
+    # Ruling R8: fp32 -- the default for ADMM -- now fits, with real margin.
+    assert footprints[Format.FP32] < CM100_SCRATCHPAD_BYTES
+    assert footprints[Format.FP32] / CM100_SCRATCHPAD_BYTES < 0.90
+    # ...and fp64 still does NOT, which is correct and must stay visible: fp64 is
+    # an interior-point requirement, not an ADMM one, and QUAD-MPC at fp64 is a
+    # validation configuration (bit-exact against OSQP), never a product one.
+    assert footprints[Format.FP64] > CM100_SCRATCHPAD_BYTES
 
 
 def test_iterates_and_problem_data_are_persistent_and_working_vectors_too():
     from argmind import Lifetime
 
     s = make_solver(6, 9, ADMMConfig())
-    for buf in (s.P, s.A, s.L, s.x, s.y, s.z, s.q, s.l, s.u):
+    for buf in (s.P, s.A, s.L, s.x, s.y, s.z, s.q, s.lu):
         assert buf.lifetime is Lifetime.PERSISTENT, buf.name
 
 

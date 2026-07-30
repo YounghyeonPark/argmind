@@ -60,7 +60,7 @@ Q1 — THE MODEL, AND WHAT REPLACED THE 50% FUDGE
 
   benchmark    ndesc   dep  datapath  cyc/desc   issue   drain  serial  old flat  issue-bound?
   --------------------------------------------------------------------------------------------
-  QUAD-MPC        28    20      1668      59.3     112     160     1.0        60  no          
+  QUAD-MPC        31    20      2340      75.5     124     160    25.0        60  no          
   ARM-MPC        540   270     16344      30.3    2160    2160    60.0        75  no          
   PWR-MPC         12     0       649      54.1      48       0     0.0       100  no          
   EKF-24          17     4      1388      81.7      68      32     0.0        30  no          
@@ -79,12 +79,12 @@ Q2 — BINDING RESOURCE PER BENCHMARK (worst-case iterations)
 ========================================================================================================
   benchmark   prec    spad_bw   mm_unit      vec  seq_iss      dma    host |   drain  serial | BINDING    2nd/1st
   ---------------------------------------------------------------------------------------------------------------
-  QUAD-MPC    fp32      133.0       0.0     22.2     10.4      0.0     0.8 |    14.8    0.09 | spad_bw      0.17x
+  QUAD-MPC    fp32      195.1       0.0     22.2     11.5      0.0     0.8 |    14.8    2.31 | spad_bw      0.11x
   ARM-MPC     fp64      126.8     490.0     29.5     81.6      0.0     0.8 |    81.0    2.25 | mm_unit      0.26x
   PWR-MPC     fp32        0.0       0.1      0.7      0.1      0.0     0.8 |     0.0    0.00 | host         0.82x
   EKF-24      fp32        0.0       1.5      0.3      0.1      0.0     0.8 |     0.0    0.00 | mm_unit      0.55x
   EKF-96      fp32        0.1      60.2      4.3      0.1      0.0     0.8 |     0.1    0.00 | mm_unit      0.07x
-  SLM-DECODE  int8    11192.7       0.0     59.8      1.7 162853.7     0.8 |     0.0    0.00 | dma          0.07x
+  SLM-DECODE  int8    11192.7       0.0     59.8      1.7 162843.5     0.8 |     0.0    0.00 | dma          0.07x
   VIT-TINY    int8        0.0    5597.6   2000.0      0.7      0.0     0.8 |     0.0    0.00 | mm_unit      0.36x
   (us per call; each column is the time that resource ALONE would take.
    mm_unit = the tile ARRAY at bf16/fp16/int8/fp32, the fp64 FMA CLUSTER
@@ -105,7 +105,7 @@ Q3 — THE CROSSOVER, AND THE DESIGN RULE IT BECOMES
   issue_cycles / (datapath + dep_drain), swept over setup cost.
   '*' = sequencer-issue-bound.
   benchmark       s=1     s=2     s=4     s=8    s=16    s=32    s=64   crossover  design rule
-  QUAD-MPC      0.02    0.03    0.06    0.12    0.25    0.43    0.65        65.0   >= 65 datapath cyc/descriptor
+  QUAD-MPC      0.01    0.02    0.05    0.10    0.20    0.36    0.58        80.6   >= 81 datapath cyc/descriptor
   ARM-MPC       0.03    0.06    0.12    0.23    0.47    0.79    1.13*       34.3   >= 34 datapath cyc/descriptor
   PWR-MPC       0.02    0.04    0.07    0.15    0.30    0.59    1.18*       54.1   >= 54 datapath cyc/descriptor
   EKF-24        0.01    0.02    0.05    0.10    0.19    0.38    0.77        83.6   >= 84 datapath cyc/descriptor
@@ -123,7 +123,7 @@ Q3 — THE CROSSOVER, AND THE DESIGN RULE IT BECOMES
     > QUEUE (8). Below either bar, fuse the operations or unroll the chain.
 
   Where the frozen set sits against that bar, at setup=4:
-    QUAD-MPC      59.3 cyc/desc =  7.41x the bar
+    QUAD-MPC      75.5 cyc/desc =  9.44x the bar
     ARM-MPC       30.3 cyc/desc =  3.78x the bar   <-- thinnest in the FROZEN set
     PWR-MPC       54.1 cyc/desc =  6.76x the bar
     EKF-24        81.7 cyc/desc = 10.21x the bar
@@ -131,7 +131,7 @@ Q3 — THE CROSSOVER, AND THE DESIGN RULE IT BECOMES
 
   OFF-SET ROWS, shown because two real configurations of the motor-drive
   socket sit BELOW the bar and the frozen row does not:
-    PWR-CCS       10.2 cyc/desc =  1.27x the bar
+    PWR-CCS       11.2 cyc/desc =  1.40x the bar
     PWR-FCS1       4.8 cyc/desc =  0.61x the bar   <-- BELOW THE BAR
     PWR-FAST       5.5 cyc/desc =  0.69x the bar   <-- BELOW THE BAR
     PWR-FUSE      30.9 cyc/desc =  3.86x the bar
@@ -198,8 +198,8 @@ Q5 — RUN-AHEAD (DECOUPLED ACCESS-EXECUTE): the one place a deadline is missed
   Queue depth 0 = the sequencer writes a descriptor, starts it, polls for
   completion. Queue depth >=1 = it prepares descriptor i+1 while i runs.
   benchmark    deadline  50% budget  runahead  no runahead  penalty  verdict (no run-ahead)
-  QUAD-MPC s=4      1000         500     170.8        181.3    1.06x  ok
-  QUAD-MPC s=20      1000         500     174.5        226.6    1.30x  ok
+  QUAD-MPC s=4      1000         500     235.2        246.7    1.05x  ok
+  QUAD-MPC s=20      1000         500     238.9        296.4    1.24x  ok
   ARM-MPC s=4      4000        2000     730.3        811.9    1.11x  ok
   ARM-MPC s=20      4000        2000     742.4       1150.4    1.55x  ok
   PWR-MPC s=4        25          12       1.6          1.7    1.04x  ok
@@ -231,10 +231,10 @@ Q5 — RUN-AHEAD (DECOUPLED ACCESS-EXECUTE): the one place a deadline is missed
 Q6 — WHAT THE SEQUENCER MUST BE, AND WHAT IT COSTS
 ========================================================================================================
   option                                  setup  queue  logic mm2  +mem mm2   total  worst solver margin
-  S0  scalar core, CSR write + poll          20      0     0.0088    0.0143  0.0232   1.74x (ARM-MPC)
-  S1  scalar core, software double-buffer     20      1     0.0091    0.0143  0.0235   2.69x (ARM-MPC)
-  S2  core + descriptor generator (q=8)       4      8     0.0137    0.0143  0.0280   2.74x (ARM-MPC)
-  S3  as S2, 1 descriptor/cycle               1      8     0.0137    0.0143  0.0280   2.74x (ARM-MPC)
+  S0  scalar core, CSR write + poll          20      0     0.0088    0.0143  0.0232   1.69x (QUAD-MPC)
+  S1  scalar core, software double-buffer     20      1     0.0091    0.0143  0.0235   2.09x (QUAD-MPC)
+  S2  core + descriptor generator (q=8)       4      8     0.0137    0.0143  0.0280   2.13x (QUAD-MPC)
+  S3  as S2, 1 descriptor/cycle               1      8     0.0137    0.0143  0.0280   2.13x (QUAD-MPC)
 
   S0  scalar core, CSR write + poll
       RV32 at 1 IPC: ~8 address computes, ~6 stores, loop bookkeeping, branch, then poll a completion CSR. No decoupling at all.
@@ -280,7 +280,7 @@ Q7 — ADMM vs BLOCK-STRUCTURED IP, CHECKED SEPARATELY AS ASKED
   is specific to block-structured interior point. TESTED:
 
   benchmark   algo    desc/iter  cyc/desc  crossover  seq % of latency  of which drain
-  QUAD-MPC    admm         28.1      59.3       65.0              8.7%             99%
+  QUAD-MPC    admm         31.0      75.5       80.6              7.3%             86%
   ARM-MPC     ip          540.0      30.3       34.3             11.4%             97%
   PWR-MPC     fcs          12.0      54.1       54.1              0.0%              0%
   EKF-24      ekf          17.0      81.7       83.6              1.6%            100%
@@ -302,7 +302,7 @@ Q7 — ADMM vs BLOCK-STRUCTURED IP, CHECKED SEPARATELY AS ASKED
      it is about problem size and not about ADMM or interior point.
 
    * The ADMM rows do carry a dependency-chain cost, and it is not small:
-     QUAD-MPC  dep_drain    160 cyc/iter vs   1668 datapath =  9.6% -- the two triangular
+     QUAD-MPC  dep_drain    160 cyc/iter vs   2340 datapath =  6.8% -- the two triangular
                solves against the cached factor, 20 dependent descriptors.
      PWR-MPC   dep_drain      0 cyc/iter vs    649 datapath =  0.0% -- the two triangular
                solves against the cached factor, 0 dependent descriptors.
@@ -311,12 +311,12 @@ Q7 — ADMM vs BLOCK-STRUCTURED IP, CHECKED SEPARATELY AS ASKED
 Q8 — WAS THE 50% FUDGE ACTUALLY WRONG? Answered plainly.
 ========================================================================================================
   benchmark    old seq cyc/iter  new seq cyc/iter   ratio  latency old  latency new    delta
-  QUAD-MPC                   60               161   2.68x         34.1         36.0     5.6%
+  QUAD-MPC                   60               185   3.08x         46.7         49.0     5.0%
   ARM-MPC                    75              2220  29.60x        342.0        382.3    11.8%
   PWR-MPC                   100                 0   0.00x          1.7          1.6    -7.2%
   EKF-24                     30                32   1.07x          2.6          2.6     0.1%
   EKF-96                     30                64   2.13x         65.4         65.5     0.1%
-  SLM-DECODE                100                 0   0.00x     174107.1     174107.1    -0.0%
+  SLM-DECODE                100                 0   0.00x     174096.9     174096.9    -0.0%
   VIT-TINY                  250                 0   0.00x       7598.7       7598.4    -0.0%
 
   HONEST VERDICT, in the terms the task asked for:
@@ -366,12 +366,12 @@ Q9 — CONSEQUENCE FOR THE D2/D3 INTEGRATION DEPTHS (PLAN.md §4.2)
                    datapath. Depth 0 is the pessimistic case and depth 1
                    (software double-buffering) the realistic one.
   integration depth                           setup  queue  worst solver margin (50% budget)
-  D1 bus-attached, own sequencer (S2)             4      8   2.74x (ARM-MPC)
-  D2 RoCC, generator moved to CM side             4      8   2.74x (ARM-MPC)
-  D2 RoCC, host issues, sw double-buffer         20      1   2.69x (ARM-MPC)
-  D2 RoCC, host issues, no run-ahead             20      0   1.74x (ARM-MPC)
-  D3 ISA ext, in-order host, no run-ahead        20      0   1.74x (ARM-MPC)
-  D3 ISA ext, OoO host (reorders for us)         20      8   2.69x (ARM-MPC)
+  D1 bus-attached, own sequencer (S2)             4      8   2.13x (QUAD-MPC)
+  D2 RoCC, generator moved to CM side             4      8   2.13x (QUAD-MPC)
+  D2 RoCC, host issues, sw double-buffer         20      1   2.09x (QUAD-MPC)
+  D2 RoCC, host issues, no run-ahead             20      0   1.69x (QUAD-MPC)
+  D3 ISA ext, in-order host, no run-ahead        20      0   1.69x (QUAD-MPC)
+  D3 ISA ext, OoO host (reorders for us)         20      8   2.09x (QUAD-MPC)
 
   THE DECISION THIS FORCES, and it is cheap to make now:
   > THE DESCRIPTOR GENERATOR BELONGS ON THE CM SIDE OF THE INTERFACE AT
@@ -411,11 +411,11 @@ SENSITIVITIES — what would change these conclusions
      than a modelling one, so here is what it would cost. Sweeping the
      chain-block override (worst-case iterations, 50%-budget margin):
          chain block    QUAD-MPC     ARM-MPC     PWR-MPC      EKF-24      EKF-96
-      datapath width      2.93x       2.74x       7.76x     194.14x      38.18x 
-                   8      2.69x       2.74x       7.76x     191.17x      38.16x 
-                   4      2.32x       2.47x       7.76x     188.29x      38.09x 
-                   2      1.82x       2.11x       7.76x     180.15x      37.95x 
-                   1      1.27x       1.64x       7.76x     165.81x      37.67x 
+      datapath width      2.13x       2.74x       7.76x     194.14x      38.18x 
+                   8      2.00x       2.74x       7.76x     191.17x      38.16x 
+                   4      1.79x       2.47x       7.76x     188.29x      38.09x 
+                   2      1.48x       2.11x       7.76x     180.15x      37.95x 
+                   1      1.09x       1.64x       7.76x     165.81x      37.67x 
      '!' = misses the 50% control-period budget.
      RESTATED 2026-07-30: the re-specified PWR-MPC has NO dependency chain,
      so it is exactly invariant to this sweep and no longer the row that

@@ -9,35 +9,34 @@ Reference: OSQP. Numbers below are computed, not modelled.
 --------------------------------------------------------------------------------------------
 1. THE DESCRIPTOR PROGRAM
 --------------------------------------------------------------------------------------------
-  descriptors: setup 4, iteration 17, residual 15
-  -> 32 descriptors per checked iteration, of which the convergence test is 15 (47%).
+  descriptors: setup 4, iteration 16, residual 15
+  -> 31 descriptors per checked iteration, of which the convergence test is 15 (48%).
      The sequencer analysis assumed 28 descriptors per ADMM iteration; the
      hand-written v0 sequence is 32, and the residual block is nearly half of it.
   rho=0.125 (power of two -- required, see section 6), sigma=1e-06, alpha=1.6
   dependency structure (emitted vs achievable):
-  setup        4 desc  emitted chain depth   4 vs true DAG depth   4 (1.00x)  policy=minimal   2 multi-producer    0 forced
-  iteration   17 desc  emitted chain depth  17 vs true DAG depth  12 (1.42x)  policy=serial    9 multi-producer    4 forced
-  residual    15 desc  emitted chain depth  15 vs true DAG depth   5 (3.00x)  policy=serial    3 multi-producer    6 forced
-  two-iteration unrolled block hazard-checks clean: 68 descriptors
+  setup        4 desc  emitted chain depth   4 vs true DAG depth   4 (1.00x)  policy=mask      2 multi-producer    0 forced
+  iteration   16 desc  emitted chain depth  11 vs true DAG depth  11 (1.00x)  policy=mask      8 multi-producer    0 forced
+  residual    15 desc  emitted chain depth   5 vs true DAG depth   5 (1.00x)  policy=mask      3 multi-producer    0 forced
+  two-iteration unrolled block hazard-checks clean: 66 descriptors
 
   iteration block:
-      0  SCAL fp64 [m=320]->1 t_dual = rho*z
-      1  AXPY fp64 [m=320]->2 wait1 t_dual -= y
-      2  SCAL fp64 [m=80]->3 wait2 rhs = sigma*x
-      3  AXPY fp64 [m=80]->4 wait3 rhs -= q
-      4  GEMV fp64 T=A acc [m=320,k=80]->5 wait4 rhs += A'*t_dual
-      5  TRSV fp64 TRIL [m=80]->6 wait5 xt = L^-1 rhs
-      6  TRSV fp64 T=A TRIL [m=80]->7 wait6 xt = L^-T xt
-      7  GEMV fp64 [m=320,k=80]->8 wait7 zt = A*xt
-      8  SCAL fp64 [m=80]->9 wait8 x *= (1-alpha)
-      9  AXPY fp64 [m=80]->10 wait9 x += alpha*xt
-     10  SCAL fp64 [m=320]->11 wait10 t = alpha*zt
-     11  AXPY fp64 [m=320]->12 wait11 t += (1-alpha)*z
-     12  AXPY fp64 [m=320]->13 wait12 t += y/rho
-     13  SCAL fp64 [m=320]->14 wait13 z = t  (stage for in-place PROJ)
-     14  PROJ fp64 [m=320]->15 wait14 z = clip(z, l, u)
-     15  SCAL fp64 [m=320]->16 wait15 y = rho*t
-     16  AXPY fp64 [m=320]->17 wait16 y -= rho*z
+      0  SCAL fp64 [m=320]->t0 t_dual = rho*z
+      1  AXPY fp64 [m=320]->t1 wait{0} t_dual -= y
+      2  SCAL fp64 [m=80]->t2 rhs = sigma*x
+      3  AXPY fp64 [m=80]->t3 wait{2} rhs -= q
+      4  GEMV fp64 T=A acc [m=320,k=80]->t4 wait{0,1,2,3} rhs += A'*t_dual
+      5  TRSV fp64 TRIL [m=80]->t5 wait{2,3,4} xt = L^-1 rhs
+      6  TRSV fp64 T=A TRIL [m=80]->t6 wait{5} xt = L^-T xt
+      7  GEMV fp64 [m=320,k=80]->t7 wait{5,6} zt = A*xt
+      8  SCAL fp64 [m=80]->t3 wait{2} x *= (1-alpha)
+      9  AXPY fp64 [m=80]->t4 wait{2,3,5,6} x += alpha*xt
+     10  SCAL fp64 [m=320]->t4 wait{7} t = alpha*zt
+     11  AXPY fp64 [m=320]->t2 wait{4} t += (1-alpha)*z
+     12  AXPY fp64 [m=320]->t5 wait{2,4} t += y/rho
+     13  PROJ fp64 [m=320]->t6 wait{0,2,4,5} z = clip(t, l, u)
+     14  SCAL fp64 [m=320]->t3 wait{1,2,4,5} y = rho*t
+     15  AXPY fp64 [m=320]->t7 wait{1,3,5,6} y -= rho*z
 
 --------------------------------------------------------------------------------------------
 2. V1 -- ALGORITHM IDENTITY vs settings-matched OSQP
@@ -93,35 +92,51 @@ Reference: OSQP. Numbers below are computed, not modelled.
      CM iterations      p50 2  p95 3  max 4   (cold first solve 4)
      OSQP default       p50 6  p95 7  max 60
      |u0_CM - u0_OSQP|  p50 2.312e-03  max 1.008e-02
-     per-tick transfer  fetched 5760 B, written back 640 B (first call fetched 268160 B)
+     per-tick transfer  fetched 5760 B, written back 640 B (first call fetched 267528 B)
      setup (Cholesky) ran on 1 of 200 ticks
-     descriptors per tick p50 64
+     descriptors per tick p50 62
    eps=1e-06
      CM iterations      p50 7  p95 8  max 9   (cold first solve 9)
      OSQP default       p50 20  p95 21  max 74
      |u0_CM - u0_OSQP|  p50 2.225e-06  max 9.675e-06
-     per-tick transfer  fetched 5760 B, written back 640 B (first call fetched 268160 B)
+     per-tick transfer  fetched 5760 B, written back 640 B (first call fetched 267528 B)
      setup (Cholesky) ran on 1 of 200 ticks
-     descriptors per tick p50 224
+     descriptors per tick p50 217
 
 --------------------------------------------------------------------------------------------
-5. SCRATCHPAD FOOTPRINT vs THE COSTED CM-100 CONFIGURATION
+5. SCRATCHPAD FOOTPRINT — THE MEASUREMENT THAT RESIZED THE CM-100
 --------------------------------------------------------------------------------------------
-   all-fp64 working set:   335416 B ( 327.6 KiB)  DOES NOT FIT the CM-100 128 KiB scratchpad (over by 156%)
-   all-fp32 working set:   167736 B ( 163.8 KiB)  DOES NOT FIT the CM-100 128 KiB scratchpad (over by 28%)
-   all-fp16 working set:    83896 B (  81.9 KiB)  fits the CM-100 128 KiB scratchpad
+   This section is why the CM-100 scratchpad is 192 KB and not 128 KB.
+   The plan below is MEASURED (statically allocated bytes), and it
+   contradicted the costed capacity. Ruling: descriptor v0.1 R8.
 
-   fp32 build against a real 128 KiB device: REFUSED --
-     static allocation of 'admm.u' (1280 B, padded 1280 B) does not fit: 129920 B already placed of 131072 B scratchpad. Working set is 128.1 KiB against a 128 KiB scratchpad.
+   against 128 KiB (as costed):
+     all-fp64 working set   334800 B ( 327.0 KiB)  DOES NOT FIT (over by 155%)
+     all-fp32 working set   167440 B ( 163.5 KiB)  DOES NOT FIT (over by 28%)
+     all-fp16 working set    83760 B (  81.8 KiB)  fits
+
+   against 192 KiB (corrected):
+     all-fp64 working set   334800 B ( 327.0 KiB)  DOES NOT FIT (over by 70%)
+     all-fp32 working set   167440 B ( 163.5 KiB)  fits
+     all-fp16 working set    83760 B (  81.8 KiB)  fits
+
+   fp32 build against a real 128.0 KiB device: REFUSED --
+     static allocation of 'admm.L' (25600 B, padded 25600 B) does not fit: 130904 B already placed of 131072 B scratchpad. Working set is 152.8 KiB against a 128 KiB scratchpad.
+   fp32 build against a real 192.0 KiB device: SUCCEEDED
+
+   fp32 is the DEFAULT for ADMM, so fp32 is what has to fit. fp64 here is
+   a VALIDATION configuration (it is what matches OSQP bit-for-bit); fp64
+   is an interior-point requirement, not an ADMM one, so the 327 KiB figure
+   must NOT be used to size anything.
 
    Breakdown of the fp32 working set, largest first:
      admm.A                     102400 B  (320, 80)
      admm.P                      25600 B  (80, 80)
      admm.L                      25600 B  (80, 80)
-     admm.l                       1280 B  (320,)
-     admm.u                       1280 B  (320,)
+     admm.lu                      2560 B  (320, 2)
      admm.y                       1280 B  (320,)
-     ... 21 smaller allocations
+     admm.z                       1280 B  (320,)
+     ... 22 smaller allocations
 
 --------------------------------------------------------------------------------------------
 6. WHAT IMPLEMENTING THE FROZEN SPEC REVEALED
@@ -166,24 +181,24 @@ Reference: OSQP. Numbers below are computed, not modelled.
 
    6d. Descriptor v0 limitations found by implementing it:
        [L1] No max-absolute (infinity-norm) reduction opcode.
-            severity: blocking for in-fabric convergence test
+            severity: blocking for reference-solver equivalence
             fix: One opcode (NRMI). No new fields, no new base addresses.
        [L2] Only three base addresses, so out-of-place box projection (input, lower, upper, output) cannot be expressed.
             severity: restricts kernels to in-place form
-            fix: Either accept in-place-only projection as the contract (it agrees with the in-place kernel requirement) or add a fourth AGU/base address. The emit-cost analysis already flagged a fourth AGU as the open question.
+            fix: A fourth AGU, or a packing convention that frees an address.
        [L3] Exactly one wait token per descriptor.
             severity: removes achievable overlap
-            fix: Either a second wait token (8 bits are not available in w0 -- it is exactly full) or a wait *mask* semantics change, or an explicit statement that codegen owns serialisation.
+            fix: A second wait token, or wait-mask semantics, or an explicit statement that codegen owns serialisation.
        [L4] One precision field, so operand and result formats are necessarily the same.
             severity: blocks the recommended numerics
-            fix: Architect ruling: widen w0's precision field by taking bits from elsewhere, add a second header word, or declare that the accumulator format is implied by the MACIF contract for the operand format (which is nearly true already, and would be the cheap answer, but it fixes the *store* format too).
-       [L5] w7 is an fp32 bit pattern, so a kernel cannot receive an exact fp64 scalar -- and it cannot receive a matched pair of reciprocal scalars unless they happen to be exact in fp32.
+            fix: A second precision field, a second header word, or declaring the accumulator implied by MACIF (which does not fix the store).
+       [L5] w7 is an fp32 bit pattern, so a kernel cannot receive a matched pair of reciprocal scalars unless they are exact in fp32.
             severity: SILENT WRONG ANSWER unless codegen constrains rho
-            fix: Cheapest: put 'rho must be a power of two' in the codegen contract and have the runtime refuse otherwise -- which it now does. Alternatives: a reciprocal-capable scalar field, or a kernel that divides rather than multiplying by a stored reciprocal.
+            fix: 'rho must be a power of two' in the codegen contract.
        [L6] 16-bit dimension and leading-dimension fields.
             severity: bounded, but reachable
-            fix: Codegen must tile flat elementwise ops. Cheap, but it must be in the codegen contract or it will be discovered by a customer.
+            fix: Tile flat elementwise ops in codegen, or widen the dims.
        [L7] No elementwise vector multiply, and only a scalar rho field.
-            severity: affects problems with equality constraints
+            severity: affects ADMM on problems with equality constraints
             fix: One opcode (VMUL), three addresses, no new fields.
 

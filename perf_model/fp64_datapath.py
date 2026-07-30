@@ -148,7 +148,8 @@ def min_fp64_fmas(bw: float = 128.0, lanes: int = 16, iters: int | None = None,
     it = ARM.iters_wc if iters is None else iters
     for f in (1, 2, 4, 6, 8, 12, 16, 24, 32):
         c = M.ArgmindCfg(name="probe", tile=12, scratchpad_bw_bpc=bw, n_banks=16,
-                         vector_lanes=lanes, fp64_fmas=f, scratchpad_kb=128)
+                         vector_lanes=lanes, fp64_fmas=f,
+                         scratchpad_kb=M.CM100_SCRATCHPAD_KB)
         if arm_mpc_latency(c, it, dim)["_total"] <= ARM.deadline_us * budget:
             return f
     return 0
@@ -319,10 +320,10 @@ def all_fp64_energy(cfg: M.ArgmindCfg, iters: int) -> dict:
 # ---------------------------------------------------------------------------
 
 REC = M.ArgmindCfg(
-    name="CM-100 recommended", tile=12, scratchpad_kb=128,
+    name="CM-100 recommended", tile=12, scratchpad_kb=M.CM100_SCRATCHPAD_KB,
     scratchpad_bw_bpc=128.0, n_banks=16, vector_lanes=16, fp64_fmas=8)
 FLOOR = M.ArgmindCfg(
-    name="solver-only floor", tile=8, scratchpad_kb=128,
+    name="solver-only floor", tile=8, scratchpad_kb=M.CM100_SCRATCHPAD_KB,
     scratchpad_bw_bpc=64.0, n_banks=8, vector_lanes=16, fp64_fmas=8)
 
 

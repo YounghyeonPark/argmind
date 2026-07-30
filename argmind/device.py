@@ -26,7 +26,7 @@ from typing import Iterable, Sequence
 
 import numpy as np
 
-from .descriptor import DESC_BYTES
+from .descriptor import DESC_BYTES, DESCRIPTOR_VERSION
 from .errors import ConvergenceFailure, UnmappedAddress
 from .kernels import KERNELS, accesses
 from .macif import CM100, MacroCapabilities
@@ -40,9 +40,21 @@ from .memory import (
 from .precision import Format
 from .program import HazardReport, Program, SolverProgram, check_dependencies
 
-#: CM-100 baseline scratchpad: 128 KiB, 16 banks x 8 B = 128 B/cycle.
-CM100_SCRATCHPAD_BYTES = 128 * 1024
+#: CM-100 baseline scratchpad: **192 KiB**, 16 banks x 12 KiB = 128 B/cycle.
+#:
+#: Was 128 KiB. Corrected 2026-07-30 by descriptor-v0.1 ruling R8 -- see
+#: :data:`argmind.descriptor.SCRATCHPAD_RULING`. The measured QUAD-MPC allocation
+#: plan is 163.8 KiB at fp32 (138.8 KiB with A = [I;Gamma] exploited) against a
+#: costed 128 KiB, and the flagship's three matrices ALONE are 125.0 KiB, so
+#: 128 KiB was arithmetically impossible rather than merely tight. Bandwidth and
+#: bank count do not move: this is a capacity correction, not a rebalancing.
+CM100_SCRATCHPAD_BYTES = 192 * 1024
 CM100_BANKS = 16
+
+#: The capacity that was costed before ruling R8. Kept named so that a
+#: regression test can assert the flagship does NOT fit in it -- a model that
+#: cannot reproduce the failure it was corrected for is not evidence.
+CM100_SCRATCHPAD_BYTES_V0 = 128 * 1024
 
 
 @dataclass
@@ -52,9 +64,15 @@ class DeviceConfig:
     scratchpad_bytes: int = CM100_SCRATCHPAD_BYTES
     banks: int = CM100_BANKS
     macro: MacroCapabilities = CM100
-    #: Refuse opcodes outside frozen descriptor format v0.
-    strict_v0: bool = True
-    #: Check that chain/wait tokens order every real dependency.
+    #: Descriptor format this device accepts: ``"0.1"`` or ``"0"``. A ``"0"``
+    #: device refuses the opcodes v0.1 adds, which is how the cost of each
+    #: addition stays measurable instead of becoming an assumption.
+    descriptor_version: str = DESCRIPTOR_VERSION
+    #: Legacy spelling of the same gate. ``True`` forces
+    #: ``descriptor_version = "0"``; the two are reconciled at construction so
+    #: there is one source of truth afterwards.
+    strict_v0: bool = False
+    #: Check that chain tokens / wait masks order every real dependency.
     check_hazards: bool = True
     host_bytes: int = 16 * 1024 * 1024
 
@@ -66,6 +84,14 @@ class DeviceConfig:
                 f">= {BANK_WORD_BYTES} B (64 bits), below which the energy model "
                 f"has no published data"
             )
+        if self.strict_v0:
+            self.descriptor_version = "0"
+        if self.descriptor_version not in ("0", DESCRIPTOR_VERSION):
+            raise ValueError(
+                f"descriptor_version must be '0' or {DESCRIPTOR_VERSION!r}, "
+                f"got {self.descriptor_version!r}"
+            )
+        self.strict_v0 = self.descriptor_version == "0"
 
 
 @dataclass
@@ -117,12 +143,16 @@ class BuiltProgram:
         for i, d in enumerate(prog.descriptors):
             if dev.config.strict_v0:
                 d.require_frozen_v0()
-            # MACIF precision refusal -- at build time, not run time.
-            dev.config.macro.require(
-                d.precision,
-                context=f"{prog.name}[{i}] {d.opcode.name}"
-                        + (f" ({d.label})" if d.label else ""),
-            )
+            # MACIF precision refusal -- at build time, not run time. BOTH
+            # formats are checked: a mixed-precision descriptor whose store
+            # format the macro does not declare is exactly as unrunnable as one
+            # whose operand format it does not declare, and v0.1 made that a
+            # reachable mistake by allowing the two to differ.
+            ctx = (f"{prog.name}[{i}] {d.opcode.name}"
+                   + (f" ({d.label})" if d.label else ""))
+            dev.config.macro.require(d.prec_m, context=ctx)
+            if d.is_mixed_precision:
+                dev.config.macro.require(d.prec_v, context=ctx + " [result format]")
             reads, writes = accesses(d)
             for acc in list(reads) + list(writes):
                 if acc.stop > acc.start:

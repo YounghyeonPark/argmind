@@ -84,10 +84,17 @@ class TerminationNorm(Enum):
     """Which norm the convergence test uses.
 
     ``L2`` is expressible in **frozen descriptor format v0** (via ``DOT``).
-    ``LINF`` reproduces OSQP's own criterion but needs the proposed ``NRMI``
-    opcode, which v0 does not have. The two programs are otherwise identical --
-    the same fifteen descriptors with one opcode substituted -- which is the
-    cheapest possible demonstration of what the missing reduction costs.
+    ``LINF`` reproduces OSQP's own criterion and uses ``NRMI``, which descriptor
+    **v0.1 adds** (ruling R1). The two programs are otherwise identical -- the
+    same fifteen descriptors with one opcode substituted -- which is the cheapest
+    possible demonstration of what the missing reduction cost: a different
+    iteration count and 3.7x worse control action at the same tolerance.
+
+    Both run entirely in fabric. The claim that without ``NRMI`` the convergence
+    test returns to the host is **not true** and is not the argument for R1 --
+    the L2 path is DOT plus two square roots on the FMA cluster plus compares on
+    the sequencer, with no host round trip. What the substitute costs is a
+    different answer from the reference solver.
     """
 
     L2 = "l2"
@@ -136,6 +143,13 @@ class ADMMConfig:
     check_every: int = 1
     fmt: Format = Format.FP64
     termination: TerminationNorm = TerminationNorm.LINF
+    #: Carry rho and 1/rho as scratchpad scalars read by a zero-stride ``VMUL``,
+    #: instead of as fp32 immediates in descriptor word 7. This is descriptor
+    #: v0.1 ruling R5, and it is what makes the power-of-two rho contract
+    #: non-load-bearing: at fp64 storage the reciprocal mismatch is ~1e-16
+    #: instead of w7's 1.5e-8, which is below any realistic tolerance. Off by
+    #: default so the w7 path -- and the stall it causes -- stays testable.
+    rho_in_scratchpad: bool = False
 
     @property
     def rho_as_encoded(self) -> float:
@@ -187,7 +201,7 @@ class ADMMSolver:
         self.name = name
         self.fmt = self.cfg.fmt
         err = self.cfg.rho_reciprocal_error
-        if err != 0.0 and not allow_inexact_rho:
+        if err != 0.0 and not allow_inexact_rho and not self.cfg.rho_in_scratchpad:
             raise ArgmindError(
                 f"rho={self.cfg.rho!r} is not exactly invertible in the fp32 "
                 f"descriptor scalar field: fl32(rho)*fl32(1/rho) - 1 = {err:.3e}. "
@@ -213,13 +227,26 @@ class ADMMSolver:
         def b(nm: str, shape, life=p) -> Buffer:
             return dev.alloc(f"{self.name}.{nm}", shape, f, life)
 
-        # Problem data. Generation-stable across control ticks except q, l, u.
+        # Problem data. Generation-stable across control ticks except q and lu.
         self.P = b("P", (n, n))
         self.A = b("A", (m, n))
-        self.sigma_diag = b("sigma_diag", n)      # sigma * ones(n), a codegen constant
+        # ONE element, not n. Descriptor v0.1 ruling R6b makes a zero AGU stride
+        # legal on reads, so the diagonal add broadcasts a single scalar instead
+        # of walking a materialised sigma*ones(n) vector: n-1 fewer element
+        # fetches and n-1 fewer stored elements, for zero descriptors.
+        self.sigma_s = b("sigma_s", 1)
         self.q = b("q", n)
-        self.l = b("l", m)
-        self.u = b("u", m)
+        # Bounds INTERLEAVED as (lo, hi) pairs -- descriptor v0.1 ruling R2. This
+        # is what frees a base address so PROJ can be out-of-place with three
+        # AGUs. At fp32 a pair is 8 B = exactly one bank word, so one bank access
+        # delivers both bounds where two separate vectors needed two accesses in
+        # two banks.
+        self.lu = b("lu", (m, 2))
+        # rho and 1/rho at storage precision, for ruling R5. Allocated
+        # unconditionally (16-32 B) so the allocation plan does not depend on a
+        # codegen flag; only the descriptors change.
+        self.rho_s = b("rho_s", 1)
+        self.rho_inv_s = b("rho_inv_s", 1)
 
         # The factor. Built by the setup block, overwriting K in place.
         self.L = b("L", (n, n))
@@ -267,24 +294,55 @@ class ADMMSolver:
                 lda=n, ldb=n, ldc=n, alpha=cfg.rho,
                 transpose=Transpose.A, label="K = rho*A'A",
             ),
-            # K += P, treating both as flat vectors of n*n elements. v0 has no
-            # matrix-add opcode; this is the workaround, and it is what caps n at
-            # 255 for a single descriptor (limitation L6).
+            # K += P as a genuine MATRIX add: v0.1 ruling R6a makes the
+            # elementwise opcodes walk M rows x N columns. v0 had no matrix-add
+            # and forced the flat form m = n*n, which is what capped n at 255.
+            # Here n = 80 needs 6400 in a 16-bit field either way, but a
+            # 300-variable condensed QP would have overflowed and now does not.
             Descriptor(
                 Opcode.AXPY, f, b=self.P.spad_offset, c=self.L.spad_offset,
-                m=n * n, ldb=1, ldc=1, alpha=1.0, label="K += P",
+                m=n, n=n, ldb=n, ldc=n, alpha=1.0, label="K += P",
             ),
-            # K += sigma*I, by walking the diagonal with a stride of n+1.
+            # K += sigma*I. The diagonal walk is ldc = n+1 as in v0; what is new
+            # is ldb = 0, a zero-stride BROADCAST read of a one-element buffer
+            # (ruling R6b). v0 needed a materialised sigma*ones(n) vector here.
             Descriptor(
-                Opcode.AXPY, f, b=self.sigma_diag.spad_offset,
-                c=self.L.spad_offset, m=n, ldb=1, ldc=n + 1, alpha=1.0,
-                label="K += sigma*I",
+                Opcode.AXPY, f, b=self.sigma_s.spad_offset,
+                c=self.L.spad_offset, m=n, ldb=0, ldc=n + 1, alpha=1.0,
+                label="K += sigma*I  (broadcast)",
             ),
             Descriptor(
                 Opcode.CHOL, f, a=self.L.spad_offset, m=n, lda=n,
                 structure=Structure.TRIL, label="K := chol(K)",
             ),
         ]
+
+    def _scale_by_rho(self, src, dest, length: int, label: str,
+                      recip: bool = False, negate: bool = False,
+                      accumulate: bool = False) -> Descriptor:
+        """Multiply a vector by rho or 1/rho.
+
+        Two encodings of the same arithmetic, and the choice is descriptor v0.1
+        ruling R5. Either the constant travels as an **fp32 immediate in w7**
+        (v0's only option), or it is read from a **scratchpad scalar at the
+        buffer's own precision by a zero-stride VMUL**. The second is what takes
+        the reciprocal mismatch that stalls the solve from 1.5e-8 to ~1e-16.
+        """
+        f, cfg = self.fmt, self.cfg
+        sign = -1.0 if negate else 1.0
+        if cfg.rho_in_scratchpad:
+            scalar = self.rho_inv_s if recip else self.rho_s
+            return Descriptor(
+                Opcode.VMUL, f, a=scalar.spad_offset, b=src.spad_offset,
+                c=dest.spad_offset, m=length, lda=0, ldb=1, ldc=1,
+                alpha=sign, accumulate=accumulate, label=label,
+            )
+        k = (1.0 / cfg.rho) if recip else cfg.rho
+        op = Opcode.AXPY if accumulate else Opcode.SCAL
+        return Descriptor(
+            op, f, b=src.spad_offset, c=dest.spad_offset, m=length,
+            alpha=sign * k, label=label,
+        )
 
     def _iteration_descriptors(self) -> list[Descriptor]:
         n, m, f = self.n, self.m, self.fmt
@@ -293,8 +351,7 @@ class ADMMSolver:
         D = Descriptor
         return [
             # t_dual = rho*z - y
-            D(Opcode.SCAL, f, b=self.z.spad_offset, c=self.t_dual.spad_offset,
-              m=m, alpha=rho, label="t_dual = rho*z"),
+            self._scale_by_rho(self.z, self.t_dual, m, "t_dual = rho*z"),
             D(Opcode.AXPY, f, b=self.y.spad_offset, c=self.t_dual.spad_offset,
               m=m, alpha=-1.0, label="t_dual -= y"),
             # rhs = sigma*x - q + A' t_dual
@@ -325,20 +382,20 @@ class ADMMSolver:
               m=m, alpha=al, label="t = alpha*zt"),
             D(Opcode.AXPY, f, b=self.z.spad_offset, c=self.t.spad_offset,
               m=m, alpha=1.0 - al, label="t += (1-alpha)*z"),
-            D(Opcode.AXPY, f, b=self.y.spad_offset, c=self.t.spad_offset,
-              m=m, alpha=1.0 / rho, label="t += y/rho"),
-            # z = clip(t, l, u). PROJ is in-place-only in v0, so stage t into z
-            # first: that SCAL exists purely because v0 has three addresses and a
-            # box projection needs four (limitation L2).
-            D(Opcode.SCAL, f, b=self.t.spad_offset, c=self.z.spad_offset,
-              m=m, alpha=1.0, label="z = t  (stage for in-place PROJ)"),
-            D(Opcode.PROJ, f, a=self.l.spad_offset, b=self.u.spad_offset,
-              c=self.z.spad_offset, m=m, label="z = clip(z, l, u)"),
+            self._scale_by_rho(self.y, self.t, m, "t += y/rho",
+                               recip=True, accumulate=True),
+            # z = clip(t, lu). ONE descriptor in v0.1: the bounds are interleaved
+            # (lo,hi) pairs at `b`, which frees `a` for the input, so projection is
+            # out of place. v0 needed a staging SCAL of the whole vector first,
+            # purely because it had three addresses and a box projection needs
+            # four (limitation L2, ruling R2).
+            D(Opcode.PROJ, f, a=self.t.spad_offset, b=self.lu.spad_offset,
+              c=self.z.spad_offset, m=m, lda=1, ldb=2, ldc=1,
+              label="z = clip(t, l, u)"),
             # y = rho*(t - z)
-            D(Opcode.SCAL, f, b=self.t.spad_offset, c=self.y.spad_offset,
-              m=m, alpha=rho, label="y = rho*t"),
-            D(Opcode.AXPY, f, b=self.z.spad_offset, c=self.y.spad_offset,
-              m=m, alpha=-rho, label="y -= rho*z"),
+            self._scale_by_rho(self.t, self.y, m, "y = rho*t"),
+            self._scale_by_rho(self.z, self.y, m, "y -= rho*z",
+                               negate=True, accumulate=True),
         ]
 
     def _residual_descriptors(self) -> list[Descriptor]:
@@ -445,13 +502,30 @@ class ADMMSolver:
         """Load the structurally stable problem data. Bumps their generations."""
         self.P.write(np.asarray(P, dtype=np.float64))
         self.A.write(np.asarray(A, dtype=np.float64))
-        self.sigma_diag.write(np.full(self.n, self.cfg.sigma, dtype=np.float64))
+        self.sigma_s.write(np.array([self.cfg.sigma], dtype=np.float64))
+        # rho at STORAGE precision, and its reciprocal taken from the value that
+        # descriptor word 7 would have carried, so the setup GEMM's fp32 alpha and
+        # the iteration's scratchpad scalar are the same number. That consistency
+        # is the whole point of ruling R5: the residual floor is set by
+        # rho * (1/rho) - 1, and mixing an fp32 rho with an fp64 reciprocal of the
+        # unrounded value would reintroduce the 1e-8 mismatch it exists to remove.
+        r = float(np.float32(self.cfg.rho))
+        self.rho_s.write(np.array([r], dtype=np.float64))
+        self.rho_inv_s.write(np.array([1.0 / r], dtype=np.float64))
 
     def set_instance(self, q, l, u) -> None:
-        """Load the per-tick data: cost vector and bounds. Bumps generations."""
+        """Load the per-tick data: cost vector and bounds. Bumps generations.
+
+        The bounds are interleaved into one (m, 2) buffer here. That is a codegen
+        detail, not an API change: the signature is still ``(q, l, u)``, and the
+        host pays two strided stores per constraint instead of two contiguous
+        ones, which is the same store count.
+        """
         self.q.write(np.asarray(q, dtype=np.float64))
-        self.l.write(np.asarray(l, dtype=np.float64))
-        self.u.write(np.asarray(u, dtype=np.float64))
+        lu = np.empty((self.m, 2), dtype=np.float64)
+        lu[:, 0] = np.asarray(l, dtype=np.float64)
+        lu[:, 1] = np.asarray(u, dtype=np.float64)
+        self.lu.write(lu)
 
     def reset_iterates(self) -> None:
         """Cold start: zero x, y, z. Omit this to warm start from the last solve."""
@@ -464,7 +538,7 @@ class ADMMSolver:
             self.reset_iterates()
         return self.device.solve(
             self.built,
-            dirty=(self.q, self.l, self.u),
+            dirty=(self.q, self.lu),
             outputs=list(outputs) if outputs is not None else [self.x],
         )
 

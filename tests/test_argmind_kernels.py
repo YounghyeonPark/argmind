@@ -274,16 +274,46 @@ def test_dot_with_both_operands_the_same_gives_a_squared_two_norm():
     assert np.isclose(s.read()[0], v0 @ v0)
 
 
-def test_proj_clips_in_place():
+def _interleaved(dev, name, lo, hi):
+    """Bounds as (lo,hi) pairs -- the v0.1 PROJ operand layout (ruling R2)."""
+    lu = np.empty((len(lo), 2))
+    lu[:, 0], lu[:, 1] = lo, hi
+    return _load(dev, name, lu)
+
+
+def test_proj_is_out_of_place_in_v0_1():
+    """Ruling R2: input at `a`, interleaved bounds at `b`, output at `c`.
+
+    v0 could not express this -- a box projection needs four addresses if the
+    bounds take two -- so projection was in-place-only and codegen paid a
+    full-vector staging copy per iteration.
+    """
     dev = _device()
     n = 8
     v0 = np.array([-3.0, -1.0, -0.2, 0.0, 0.2, 1.0, 3.0, 0.5])
     lo = np.full(n, -1.0)
     hi = np.full(n, 1.0)
+    src = _load(dev, "src", v0)
+    lu = _interleaved(dev, "lu", lo, hi)
+    out = _out(dev, "out", n)
+    _run(dev, [Descriptor(Opcode.PROJ, Format.FP64, a=src.spad_offset,
+                          b=lu.spad_offset, c=out.spad_offset, m=n,
+                          lda=1, ldb=2, ldc=1)], [out, src])
+    assert np.allclose(out.read(), np.clip(v0, lo, hi))
+    # The input is untouched: that is the whole point of out-of-place.
+    assert np.allclose(src.read(), v0)
+
+
+def test_proj_can_still_alias_for_an_in_place_projection():
+    dev = _device()
+    n = 8
+    v0 = np.array([-3.0, -1.0, -0.2, 0.0, 0.2, 1.0, 3.0, 0.5])
+    lo, hi = np.full(n, -1.0), np.full(n, 1.0)
     v = _load(dev, "v", v0)
-    a, b = _load(dev, "lo", lo), _load(dev, "hi", hi)
-    _run(dev, [Descriptor(Opcode.PROJ, Format.FP64, a=a.spad_offset,
-                          b=b.spad_offset, c=v.spad_offset, m=n)], [v])
+    lu = _interleaved(dev, "lu", lo, hi)
+    _run(dev, [Descriptor(Opcode.PROJ, Format.FP64, a=v.spad_offset,
+                          b=lu.spad_offset, c=v.spad_offset, m=n,
+                          lda=1, ldb=2, ldc=1)], [v])
     assert np.allclose(v.read(), np.clip(v0, lo, hi))
 
 
@@ -293,11 +323,13 @@ def test_proj_with_asymmetric_per_element_bounds():
     v0 = RNG.normal(size=n) * 3
     lo = RNG.uniform(-2, -1, n)
     hi = RNG.uniform(1, 2, n)
-    v = _load(dev, "v", v0)
-    a, b = _load(dev, "lo", lo), _load(dev, "hi", hi)
-    _run(dev, [Descriptor(Opcode.PROJ, Format.FP64, a=a.spad_offset,
-                          b=b.spad_offset, c=v.spad_offset, m=n)], [v])
-    assert np.allclose(v.read(), np.clip(v0, lo, hi))
+    src = _load(dev, "src", v0)
+    lu = _interleaved(dev, "lu", lo, hi)
+    out = _out(dev, "out", n)
+    _run(dev, [Descriptor(Opcode.PROJ, Format.FP64, a=src.spad_offset,
+                          b=lu.spad_offset, c=out.spad_offset, m=n,
+                          lda=1, ldb=2, ldc=1)], [out])
+    assert np.allclose(out.read(), np.clip(v0, lo, hi))
 
 
 def test_chol_factorises_in_place_and_leaves_the_upper_triangle_alone():
@@ -329,10 +361,10 @@ def test_chol_then_two_trsv_solves_the_system():
                    structure=Structure.TRIL, chain_token=1),
         Descriptor(Opcode.TRSV, Format.FP64, a=K.spad_offset, b=b.spad_offset,
                    c=x.spad_offset, m=n, lda=n, structure=Structure.TRIL,
-                   chain_token=2, wait_token=1),
+                   chain_token=2, wait_mask=0b010),
         Descriptor(Opcode.TRSV, Format.FP64, a=K.spad_offset, b=x.spad_offset,
                    c=x.spad_offset, m=n, lda=n, structure=Structure.TRIL,
-                   transpose=Transpose.A, chain_token=3, wait_token=2),
+                   transpose=Transpose.A, chain_token=3, wait_mask=0b100),
     ], [x])
     assert np.allclose(x.read(), np.linalg.solve(S, rhs))
 

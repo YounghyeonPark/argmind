@@ -51,7 +51,8 @@ import argmind_model as M
 import cm100_sizing as Z
 import sram_cost as S
 
-REC = Z.cfg("CM-100 recommended", 128.0, tile=12, lanes=16, kb=128, fp64_fmas=8)
+REC = Z.cfg("CM-100 recommended", 128.0, tile=12, lanes=16,
+            kb=M.CM100_SCRATCHPAD_KB, fp64_fmas=8)
 
 SETUP_SWEEP = (1, 2, 4, 8, 16, 32, 64)
 PERIOD_BUDGET = Z.PERIOD_BUDGET

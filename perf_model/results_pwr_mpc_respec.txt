@@ -48,11 +48,11 @@ What the re-spec does to the row, at the recommended CM-100 [DER]:
 
 row        algo   deadline    CM us  ofwhich   CPU us  speedup   perf/W  wc margin  desc mgn  binding resource
 --------------------------------------------------------------------------------------------------------------
-PWR-CCS    admm       50.0     4.29    0.80o     4.63    1.08x    15.2x      1.71x     1.27x  gemv_bw
-PWR-MPC    fcs        25.0     1.61    0.80o     1.00    0.62x    23.5x      7.76x     6.76x  call_overhead
-PWR-FCS1   fcs        25.0     0.85    0.80o     0.10    0.12x     7.1x     14.73x     0.61x  call_overhead
-PWR-FAST   fcs        10.0     0.88    0.80o     0.15    0.16x    10.3x      5.67x     0.69x  call_overhead
-PWR-FUSE   fcs        25.0     1.15    0.80o     0.52    0.46x    14.0x     10.89x     3.86x  call_overhead
+PWR-CCS    admm       50.0     5.39    0.80o     6.17    1.15x    13.0x      1.32x     1.40x  gemv_bw
+PWR-MPC    fcs        25.0     1.61    0.80o     1.00    0.62x    22.0x      7.76x     6.76x  call_overhead
+PWR-FCS1   fcs        25.0     0.85    0.80o     0.10    0.12x     7.0x     14.73x     0.61x  call_overhead
+PWR-FAST   fcs        10.0     0.88    0.80o     0.15    0.16x    10.0x      5.67x     0.69x  call_overhead
+PWR-FUSE   fcs        25.0     1.15    0.80o     0.52    0.46x    13.0x     10.89x     3.86x  call_overhead
 
   'ofwhich ...o' = the per-call invocation overhead component of CM latency.
   'wc margin' = worst-case-iteration latency against 50% of the control
@@ -63,7 +63,7 @@ first. The hoped-for result was that enumeration, being embarrassingly
 parallel and not bandwidth-bound, would move this row above parity. Both
 halves of that are wrong:
 
-  * LATENCY GETS WORSE, not better: 1.08x -> 0.62x. The re-specified row is ~1.6x SLOWER than the fastest CPU baseline, because
+  * LATENCY GETS WORSE, not better: 1.15x -> 0.62x. The re-specified row is ~1.6x SLOWER than the fastest CPU baseline, because
     the whole tick is 0.81 us of compute against a
     0.80 us invocation overhead, while the CPU pays no
     invocation cost at all. **Binding resource: per-call overhead, and
@@ -82,8 +82,8 @@ What the re-spec DOES buy, and it is worth more than the ratio:
   * The deadline stops being interesting. 7.8x margin against 50% of a 25 us period, and the op count is FIXED — no
     convergence tail, worst case == typical case. Determinism as strong as
     the EKF's, on the row where determinism is most saleable.
-  * The codegen margin problem dissolves: 1.27x -> 6.76x against the >= 8-cycles-per-descriptor rule,
-    because 16 descriptors of which 8 chained becomes 12 of which 0.
+  * The codegen margin problem dissolves: 1.40x -> 6.76x against the >= 8-cycles-per-descriptor rule,
+    because 19 descriptors of which 8 chained becomes 12 of which 0.
   * There is NO dependency chain. No Cholesky, no triangular solve, no
     loop-carried scalar. Dependency drain goes 64 -> 0 cycles.
 
@@ -91,10 +91,10 @@ AND THE THREE CONCLUSIONS THAT LOSE THEIR JUSTIFICATION — listed rather than
 silently changed:
 
   configuration           QUAD-MPC     PWR-MPC     PWR-CCS
-  recommended                2.93x        7.76x        1.71x 
-  no run-ahead               2.21x        6.54x        0.66x!
-  scalar chain block         1.27x        7.76x        0.37x!
-  both absent                0.37x!       6.54x        0.08x!
+  recommended                2.13x        7.76x        1.32x 
+  no run-ahead               1.69x        6.54x        0.54x!
+  scalar chain block         1.09x        7.76x        0.34x!
+  both absent                0.36x!       6.54x        0.08x!
   ('!' = misses the 50%-of-control-period budget at worst-case iterations)
 
   (i)  RUN-AHEAD is no longer a deadline requirement. It was recorded as
@@ -112,11 +112,11 @@ silently changed:
        re-specified row no longer constrains it:
 
    B/cyc     QUAD-MPC      PWR-MPC      PWR-CCS
-      16     1101.5us!        2.7us        59.1us!
-      32      569.7us!        2.1us        33.7us!
-      64      303.8us         1.8us        21.0us 
-     128      170.8us         1.6us        14.6us 
-     256      104.4us         1.6us        11.4us 
+      16     1601.0us!        2.7us        84.3us!
+      32      820.6us!        2.1us        47.0us!
+      64      430.3us         1.8us        28.3us!
+     128      235.2us         1.6us        19.0us 
+     256      137.7us         1.6us        14.3us 
 
        **The 64 B/cycle floor now rests on QUAD-MPC alone** — but QUAD-MPC's
        tail is the MEASURED one (74 iterations, results_osqp_measured.txt),
@@ -134,7 +134,7 @@ silently changed:
 
 One-step FCS-MPC (27 candidates, 40 kHz) — what an MCU ships TODAY:
   CM 0.85 us (0.05 compute + 0.80 overhead) vs CPU 0.10 us = 0.12x
-  perf/W 7.1x — above the 5x kill criterion but the lowest
+  perf/W 7.0x — above the 5x kill criterion but the lowest
   in the whole solver set, because the workload is smaller than the fixed
   overheads it has to amortise.
   Descriptor margin 0.61x — **BELOW the >= 8 codegen rule**.
@@ -181,19 +181,19 @@ fp32 (its share of GEMV work is carried as `solve_prec_frac`):
 
 row                          CM us  speedup    CM uJ   perf/W  wc margin  binding
 ---------------------------------------------------------------------------------
-QUAD/fp32 (today)            35.96    1.74x    5.463    14.1x      2.93x  gemv_bw
-QUAD/fp16 operands           24.07    2.60x    3.051    25.3x      4.40x  gemv_bw
-QUAD/fp16 incl. SOLVE (bad)     22.14    2.82x    2.658    29.0x      4.79x  gemv_bw
-PWR/fp32 (today)              4.29    1.08x    0.359    15.2x      1.71x  gemv_bw
-PWR/fp16 operands             3.69    1.26x    0.237    22.9x      2.04x  gemv_bw
-PWR/fp16 incl. SOLVE (bad)      3.47    1.33x    0.193    28.2x      2.19x  seq_overhead
+QUAD/fp32 (today)            35.96    1.74x    6.150    12.5x      2.93x  gemv_bw
+QUAD/fp16 operands           24.07    2.60x    3.443    22.4x      4.40x  gemv_bw
+QUAD/fp16 incl. SOLVE (bad)     22.14    2.82x    3.002    25.7x      4.79x  gemv_bw
+PWR/fp32 (today)              4.29    1.08x    0.399    13.6x      1.71x  gemv_bw
+PWR/fp16 operands             3.69    1.26x    0.263    20.7x      2.04x  gemv_bw
+PWR/fp16 incl. SOLVE (bad)      3.47    1.33x    0.213    25.5x      2.19x  seq_overhead
 
   The third variant is listed so the trade is visible, NOT recommended:
   narrowing the triangular solve too costs 6.1e-2 control-action error (C3),
   ~30x worse than fp16 operands alone, for a further 1.06-1.09x of latency.
 
-  QUAD-MPC: latency 35.96 -> 24.07 us (1.49x), energy 5.463 -> 3.051 uJ (1.79x), speedup 1.74x -> 2.60x
-  PWR-CCS: latency 4.29 -> 3.69 us (1.16x), energy 0.359 -> 0.237 uJ (1.51x), speedup 1.08x -> 1.26x
+  QUAD-MPC: latency 35.96 -> 24.07 us (1.49x), energy 6.150 -> 3.443 uJ (1.79x), speedup 1.74x -> 2.60x
+  PWR-CCS: latency 4.29 -> 3.69 us (1.16x), energy 0.399 -> 0.263 uJ (1.52x), speedup 1.08x -> 1.26x
 
   WHY IT IS ONLY ~1.3x AND NOT 2x, which is the adversarial point: halving
   operand width doubles the GEMV rate, but the GEMV term is not the whole
@@ -223,9 +223,9 @@ PWR/fp16 incl. SOLVE (bad)      3.47    1.33x    0.193    28.2x      2.19x  seq_
   baseline, HALF the matrix rate rather than the measured eighth, i.e. the
   value least favourable to us. Effect on the retired ADMM row:
 
-    simd=   64 FLOP/cyc  PWR-CCS speedup  0.97x   (uncorrected (elementwise on the ZA tile))
-    simd=   32 FLOP/cyc  PWR-CCS speedup  1.08x   (corrected, generous  <-- adopted)
-    simd=    8 FLOP/cyc  PWR-CCS speedup  1.72x   (corrected, measured M4 ratio)
+    simd=   64 FLOP/cyc  PWR-CCS speedup  1.06x   (uncorrected (elementwise on the ZA tile))
+    simd=   32 FLOP/cyc  PWR-CCS speedup  1.15x   (corrected, generous  <-- adopted)
+    simd=    8 FLOP/cyc  PWR-CCS speedup  1.66x   (corrected, measured M4 ratio)
 
     **So the famous 0.974x was partly an artefact of a CPU-side modelling
     error.** Corrected at the generous setting the retired row is at or just
@@ -278,29 +278,29 @@ Decomposed [EST], each term naming a mechanism that can be measured alone:
 row               T1        T0       T1M       T0M   T1/T0  T1M/T0M  T0M meets?
 -------------------------------------------------------------------------------
 PWR-MPC         1.61     25.93      1.11      3.28  16.09x    2.95x  MEETS
-PWR-CCS         4.29     29.86      3.79     10.97   6.96x    2.90x  MEETS
-QUAD-MPC       35.96     76.31     35.46    101.79   2.12x    2.87x  MEETS
+PWR-CCS         5.39     32.07      4.89     16.52   5.95x    3.38x  MEETS
+QUAD-MPC       49.01     95.57     48.51    139.66   1.95x    2.88x  MEETS
 EKF-24          2.58     28.06      2.08      8.91  10.89x    4.29x  MEETS
 
   And the energy side, where the answer is starker [DER]:
 
   row               T1        T0       T1M       T0M  T1/T0 uJ  T1M/T0M
-  PWR-MPC        0.056     0.429     0.048     0.081     7.71x    1.70x
-  PWR-CCS        0.359     0.843     0.347     0.465     2.35x    1.34x
-  QUAD-MPC       5.463     7.297     5.444     6.562     1.34x    1.21x
-  EKF-24         0.188     0.667     0.179     0.291     3.55x    1.63x
+  PWR-MPC        0.060     0.433     0.052     0.085     7.27x    1.65x
+  PWR-CCS        0.566     1.153     0.555     0.748     2.04x    1.35x
+  QUAD-MPC       8.898    11.302     8.880    10.418     1.27x    1.17x
+  EKF-24         0.199     0.678     0.190     0.302     3.41x    1.59x
 
 ANSWERS, in the order asked:
 
   Q: For an MCU-class host with on-chip SRAM only, what does the T1
      zero-copy tier actually buy?
-  A: On the re-specified row, 2.95x latency and 1.70x energy — against 16.09x and 7.71x
+  A: On the re-specified row, 2.95x latency and 1.65x energy — against 16.09x and 7.27x
      on a rich host. **Nearly all of what remains is invocation overhead,
      not data movement.** The data-movement half really does collapse, and
      for two independent reasons: the bytes are cheap (an on-chip copy at
      ~1.2 pJ/B [EST] instead of ~12 pJ/B of LPDDR) and there are barely any
      (716 B of persistent state for FCS-MPC, versus
-     8400 B for the retired ADMM row and 102400 B for QUAD-MPC).
+     15512 B for the retired ADMM row and 142112 B for QUAD-MPC).
      CLAUDE.md's 'zero-copy and residency are VOID in MCU class' is right
      about residency and about coherency, and WRONG to bundle invocation
      overhead in with them.
@@ -393,10 +393,10 @@ MICROARCHITECTURE CONSEQUENCES — what actually changes in the design
    for the descriptor margin; the second is far cheaper than the first:
 
     lanes  fp64 FMAs  PWR-MPC us  speedup  core mm2   d mm2
-        8          4        2.27    0.44x     0.626  -0.072
-       16          8        1.61    0.62x     0.698  +0.000
-       32         16        1.28    0.78x     0.842  +0.143
-       64         32        1.12    0.90x     1.128  +0.430
+        8          4        2.27    0.44x     0.715  -0.072
+       16          8        1.61    0.62x     0.786  +0.000
+       32         16        1.28    0.78x     0.930  +0.143
+       64         32        1.12    0.90x     1.216  +0.430
 
    (a) More lanes. 16 -> 32 costs +0.143 mm2 (+20% of the core) and buys
        1.26x on this row, because the merged-FMA construction doubles the
@@ -409,7 +409,7 @@ MICROARCHITECTURE CONSEQUENCES — what actually changes in the design
          vector cycles   525 -> 154
          CM latency      1.61 -> 1.15 us  (datapath 0.81 -> 0.35)
          vs fastest CPU  0.62x -> 0.88x
-         CM energy       0.0557 -> 0.0487 uJ (1.14x)
+         CM energy       0.0595 -> 0.0526 uJ (1.13x)
          descriptors     12 -> 9, descriptor margin 6.76x -> 3.86x
        NOTE ON HOW THIS IS SCORED, because the obvious way is wrong: the
        fusion is a CM DATAPATH capability, not a change to the algorithm, so

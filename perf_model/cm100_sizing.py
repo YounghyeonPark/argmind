@@ -82,8 +82,10 @@ def banks_for(bw: float) -> int:
     return max(1, min(int(bw // 8), 16))
 
 
-def cfg(name, bw, tile=16, lanes=16, seg=True, kb=128, tile_n=None, nb=None,
+def cfg(name, bw, tile=16, lanes=16, seg=True, kb=None, tile_n=None, nb=None,
         fp64_fmas=8):
+    if kb is None:
+        kb = M.CM100_SCRATCHPAD_KB
     return M.ArgmindCfg(name=name, tile=tile, tile_n=tile_n, vector_lanes=lanes,
                         scratchpad_kb=kb, scratchpad_bw_bpc=bw,
                         n_banks=nb if nb is not None else banks_for(bw),
@@ -497,25 +499,60 @@ def main():
 
     # ================================================================== Q4 ===
     out("=" * 108)
-    out("Q4 — CAPACITY: does 128 KB now suffice? (yes, and it is better on every axis)")
+    out("Q4 — CAPACITY: 128 KB does NOT suffice. OVERTURNED 2026-07-30 by MEASUREMENT")
     out("=" * 108)
-    out("Corrected persistent footprints (P symmetric, L triangular, A's identity")
-    out("block stores nothing; ARM-MPC is fp64 so 8 B/element):")
+    out("This section previously concluded 'yes, and it is better on every axis'.")
+    out("The functional simulator's MEASURED static allocation plan for QUAD-MPC")
+    out("contradicts it: 163.8 KiB at fp32 against the 128 KB that was costed. The")
+    out("measurement is authoritative over the model. Two errors, both flattering:")
+    out()
+    out("  (1) P and L were charged n^2/2 each -- a PACKED triangular layout. Packed")
+    out("      triangular addressing puts row i at element offset i(i+1)/2, which")
+    out("      base+leading-dimension AGUs CANNOT EXPRESS. The capacity model was")
+    out("      assuming a storage layout the descriptor format cannot address.")
+    out("      Undercount: 25600 B.")
+    out("  (2) Working vectors and residual temporaries were charged ZERO. They are")
+    out("      14136 B at fp32 -- 10% of a 128 KiB scratchpad -- structurally")
+    out("      invisible because the field is named `persistent_bytes` and a")
+    out("      temporary is not persistent.")
+    out()
+    out("  Exact decomposition: 102400 (model) + 25600 (identity block materialised)")
+    out("  + 12800 (P) + 12800 (L) + 14136 (vectors) = 167736 B measured. No")
+    out("  residual term, which is what makes it a diagnosis rather than an estimate.")
+    out()
+    out("  WHY 128 KB WAS ARITHMETICALLY IMPOSSIBLE, not merely tight: the flagship's")
+    out("  three matrices ALONE are Gamma 76800 + P 25600 + L 25600 = 125.0 KiB of a")
+    out("  128.0 KiB scratchpad, leaving under 3 KiB for every vector in the program.")
+    out("  Even aliasing every temporary that legally can (rp onto Ax, rd onto Px,")
+    out("  zt onto Ax, t onto t_dual, xt onto rhs, sigma deleted by a zero-stride")
+    out("  broadcast) lands at 134.1 KiB. The conclusion does not rest on the")
+    out("  implementation's profligate vector allocation.")
+    out()
+    out("  fp64 IS NOT THE TARGET. 327.6 KiB at fp64 is a VALIDATION artefact: the")
+    out("  implementation runs fp64 to match OSQP bit-for-bit. ADMM's measured")
+    out("  control-action error at fp32 is 4e-7, and fp64 is an interior-point")
+    out("  requirement (ARM-MPC), not an ADMM one. Do not size against it.")
+    out()
+    out("Corrected persistent footprints (P and L as dense squares because that is")
+    out("what the AGU addresses, A = [I;Gamma] so the identity block stores nothing,")
+    out("working vectors counted; ARM-MPC is fp64 so 8 B/element):")
     out()
     out(f"{'benchmark':<12} {'persistent':>11} {'fits 64K':>9} {'fits 128K':>10} "
-        f"{'fits 256K':>10} {'overflow @128K':>15} {'stream GB/s':>12} {'DRAM uJ':>9}")
+        f"{'fits 192K':>10} {'overflow @192K':>15} {'stream GB/s':>12} {'DRAM uJ':>9}")
     for b in SOLVERS:
-        ov = max(0.0, b.persistent_bytes - 128 * 1024)
+        ov = max(0.0, b.persistent_bytes - M.CM100_SCRATCHPAD_KB * 1024)
         gbs = ov * b.calls_per_sec / 1e9
         out(f"{b.name:<12} {b.persistent_bytes / 1024:>8.1f} KB "
             f"{str(b.persistent_bytes <= 64 * 1024):>9} "
             f"{str(b.persistent_bytes <= 128 * 1024):>10} "
-            f"{str(b.persistent_bytes <= 256 * 1024):>10} "
+            f"{str(b.persistent_bytes <= M.CM100_SCRATCHPAD_KB * 1024):>10} "
             f"{ov / 1024:>12.1f} KB {gbs:>12.3f} "
             f"{ov * M.E_DRAM_BYTE_PJ / 1e6:>9.2f}")
     out()
-    out("  Previously ARM-MPC was 861 KB. It is 172 KB. QUAD-MPC was 150 KB; it is")
-    out("  100 KB. So the determinism argument has to be re-made, not inherited.")
+    out("  History of these two numbers, because they have moved three times and")
+    out("  the determinism argument has to be re-made each time, never inherited:")
+    out("  ARM-MPC 861 -> 172 -> 323 KB; QUAD-MPC 150 -> 100 -> 138.8 KB. The")
+    out("  middle value in each case was the packed-layout undercount.")
     out()
     out("  The determinism claim is 'no DRAM in the control loop'. It is only")
     out("  load-bearing on the FAST loops, so test it per plausible co-resident")
@@ -526,26 +563,26 @@ def main():
         ("drive node   PWR-MPC 40kHz + EKF-24 1kHz", ["PWR-MPC", "EKF-24"], 40000),
         ("manipulator  ARM-MPC 250Hz + EKF-96 200Hz", ["ARM-MPC", "EKF-96"], 250),
     ]
-    out(f"  {'composite':<44} {'footprint':>10} {'fits 128K':>10} {'fits 256K':>10} "
-        f"{'fastest loop':>13}")
+    out(f"  {'composite':<44} {'footprint':>10} {'fits 128K':>10} {'fits 192K':>10} "
+        f"{'fits 256K':>10} {'fastest loop':>13}")
     for label, names, rate in composites:
         f = sum(next(b for b in SOLVERS if b.name == n).persistent_bytes
                 for n in names)
         out(f"  {label:<44} {f / 1024:>7.1f} KB {str(f <= 128 * 1024):>10} "
+            f"{str(f <= 192 * 1024):>10} "
             f"{str(f <= 256 * 1024):>10} {rate:>10} Hz")
     out()
-    out("  THIS IS THE DECIDING TABLE. 128 KB holds the 1 kHz and 40 kHz composites")
-    out("  -- the loops where determinism is the product. The 250 Hz manipulator")
-    out("  composite (289 KB) does NOT fit at 128 KB and does NOT fit at 256 KB")
-    out("  either, so 256 KB does not extend the claim to the case that fails; it")
-    out("  only reduces the streamed fraction of a workload with 24x deadline")
-    out("  margin and 0.04 GB/s of streaming demand. Paying 0.116 mm2 of SRAM for")
-    out("  that is not a determinism argument, it is a rounding error dressed as one.")
+    out("  THIS IS THE DECIDING TABLE, and it now decides differently. Capacity is")
+    out("  set by the fastest determinism-critical loop, NOT by the biggest")
+    out("  footprint: QUAD-MPC is 1 kHz and must be resident; ARM-MPC is the")
+    out("  biggest but runs at 250 Hz with ~10x deadline margin and ~0.03 GB/s of")
+    out("  streaming demand, so it overflows at 128, 192 AND 256 KB and always did.")
+    out("  Growing the scratchpad does not rescue ARM-MPC and is not being asked to.")
     out()
     out(f"{'KB':>6} {'banks':>6} {'spad mm2':>9} {'pJ/B':>6} {'leak mW 85C':>12} "
         f"{'leak mW 125C':>13} " + " ".join(f"{b.name[:8]:>9}" for b in SOLVERS)
         + f" {'sum uJ':>8}")
-    for kb in (64, 128, 256, 512):
+    for kb in (64, 128, 160, 192, 256, 512):
         c = cfg("x", 128, 12, kb=kb)
         es = [M.model_argmind(b, c)["energy_uj"] for b in SOLVERS]
         out(f"{kb:>6} {banks_for(128):>6} {c.spad.area_mm2()['total_mm2']:>9.3f} "
@@ -553,13 +590,46 @@ def main():
             f"{c.spad.leakage_mw(True):>13.2f} "
             + " ".join(f"{e:>9.2f}" for e in es) + f" {sum(es):>8.2f}")
     out()
-    out("  256 -> 128 KB: -0.116 mm2 of scratchpad (-0.134 mm2 with top margin),")
-    out("  pJ/byte 0.930 -> 0.718, solver energy -10%, and leakage HALVED (1.04 ->")
-    out("  0.52 mW at 85C, 4.18 -> 2.09 at 125C). The leakage halving matters more")
-    out("  than it looks: ADVERSARIAL CHECK 2 shows ungated perf/W on the low-duty")
-    out("  rows is set almost entirely by static power.")
-    out("  -> 128 KB. 64 KB is rejected: QUAD-MPC's 100 KB working set would stream")
-    out("     every 1 ms tick, which is precisely the claim we sell.")
+    out("  RULING: 192 KB, 16 banks x 12 KiB. Bandwidth (128 B/cycle) and bank")
+    out("  count (16) DO NOT MOVE -- this is a capacity correction, not a")
+    out("  rebalancing, and it does not touch the bandwidth-first finding.")
+    out()
+    out("  Cost, and it is a real cost: scratchpad 0.203 -> 0.279 mm2 (+0.077),")
+    out("  core 0.698 -> 0.786 mm2 (+12.6%), pJ/byte 0.718 -> 0.839, leakage 0.52")
+    out("  -> 0.78 mW at 85C, solver energy +5.5%, QUAD-MPC perf/W 14.13x ->")
+    out("  12.55x. Latency does NOT move (36.0 us either way): capacity was never")
+    out("  the binding constraint and still is not.")
+    out()
+    out("  WHY 192 AND NOT 160: 160 KB fits the 138.8 KiB basis at 86.8% and would")
+    out("  be the cheaper answer if bank geometry were linear. It is not. 10 KiB")
+    out("  per bank is a 1280x64b macro with array efficiency 0.354, against 0.394")
+    out("  for 12 KiB (1536x64b), so the last 32 KiB costs only 0.020 mm2 and 160 KB")
+    out("  is DOMINATED on area per bit. 192 KB also holds the NAIVE 163.8 KiB")
+    out("  layout at 85.3%, so the flagship fits even from a code generator that")
+    out("  has not done the A = [I;Gamma] optimisation -- that robustness is most")
+    out("  of the argument.")
+    out()
+    out("  REJECTED, with reasons, so none of these returns as a new idea:")
+    out("   * packed-triangular AGU mode: saves 12.8 KiB -> 125.7 KiB = 95.9% full.")
+    out("     A 4% margin on a +/-2x modelled footprint is not a margin. Keep it as")
+    out("     a later optimisation, not as a sizing mechanism.")
+    out("   * overlay P and L in one square: saves 25.6 KiB but needs THREE new")
+    out("     hardware behaviours (triangle-masked GEMM output, symmetric-from-")
+    out("     strict-upper GEMV, transposed triangular elementwise add) plus a")
+    out("     separate diagonal buffer, because P's diagonal and L's collide.")
+    out("     Control logic costs more than 0.026 mm2 of SRAM.")
+    out("   * eliminate P algebraically (P*xt = sigma(x-xt) - q + A'(rho*z - y -")
+    out("     rho*zt)): reaches 113.8 KiB but costs an extra Gamma' GEMV per check")
+    out("     (+44% on the residual block) and returns a residual that is NOT")
+    out("     OSQP's. Refused for the same reason the 2-norm termination substitute")
+    out("     is refused; accepting one and rejecting the other would be incoherent.")
+    out("   * require fp16 operands: reaches 101.3 KiB, but fp16 is an OPT-IN")
+    out("     codegen mode, so it cannot be the default sizing basis.")
+    out("   * stream the overflow: only 0.026 GB/s at 1 kHz, so the BANDWIDTH is")
+    out("     trivial -- but it puts DRAM in the flagship control loop and forfeits")
+    out("     the determinism claim on the one row where determinism is the")
+    out("     product. Retained only as an explicit small-SKU option.")
+    out("   * 64 KB: rejected outright; QUAD-MPC would stream every 1 ms tick.")
     out()
 
     # ---- retained adversarial checks (independent of the ARM-MPC error) ----
@@ -638,11 +708,11 @@ def main():
     out()
 
     # ---- recommendation ----
-    rec = cfg("CM-100", 128, 12, 16, kb=128)
+    rec = cfg("CM-100", 128, 12, 16, kb=M.CM100_SCRATCHPAD_KB)
     e = evaluate(rec)
     a = e["area"]
     sp = rec.spad
-    floor = cfg("CM-100 floor", 64, 8, 16, kb=128)
+    floor = cfg("CM-100 floor", 64, 8, 16, kb=M.CM100_SCRATCHPAD_KB)
     ef = evaluate(floor)
     old = cfg("old", 128, 16, 16, kb=256)
     eo = evaluate(old)

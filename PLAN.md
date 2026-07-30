@@ -199,8 +199,58 @@ second selling point on the same engine.
   descriptor** (2 × the setup cost) with no burst of sub-threshold descriptors longer than the
   descriptor queue. HPIPM at nb=21 sits at 30 cycles/descriptor, ADMM at n_var=80 at 59, and the
   20 kHz motor-drive row at **10.2 — the thinnest margin in the frozen set.**
+  > **RE-CHECKED against the built implementation 2026-07-30** (`argmind.descriptor`
+  > `SEQUENCER_RECHECK`). The measured count is **31 descriptors per checked ADMM iteration, not
+  > the 28 assumed**, and 48% of them are the convergence test. **The average is not threatened:**
+  > at fp32 / 128 B per cycle the block runs **238 cycles/descriptor, 29.8× the bar** (fp64: 474,
+  > 59.3×), because the residual block is 48% of descriptors *and 49% of cycles* — its mix is two
+  > full A-products, not the seven cheap reductions.
+  > **The queue-depth clause is where it is thin, and that is now a measurement rather than an
+  > assumption:** the residual block contains a run of **six consecutive descriptors averaging 5.8
+  > cycles**, below the bar. Six fits an 8-deep queue so run-ahead absorbs it — which **confirms
+  > queue depth 8 as a floor** (4 would not absorb it) and makes this the thinnest point in the
+  > sequencer analysis. The fix is a MACIF capability rather than silicon: **`maxabs_accumulate`**
+  > folds the ∞-norm into the producing pass, taking the block 15 → 10 descriptors and the run
+  > 6 → 4.
 - **Memory:** software-managed multi-bank scratchpad + descriptor-based DMA; double-buffering
   so data movement overlaps compute.
+- **Scratchpad capacity: 192 KB, 16 banks × 12 KiB (= 128 B/cycle).**
+  > **CORRECTED 128 → 192 KB, 2026-07-30, by MEASUREMENT** (descriptor v0.1 ruling R8;
+  > `argmind.descriptor.SCRATCHPAD_RULING`). The functional simulator's measured static allocation
+  > plan for QUAD-MPC is **163.8 KiB at fp32** (138.8 KiB with `A = [I;Γ]` exploited) against the
+  > 128 KB costed. Two model errors, both flattering: P and L were charged n²/2 each — **a packed
+  > triangular layout that base+leading-dimension AGUs cannot express**, so the capacity model
+  > assumed a storage layout the descriptor format cannot address; and working vectors were charged
+  > **zero** (14.1 KiB). **128 KB was arithmetically impossible, not tight: the flagship's three
+  > matrices alone are 125.0 KiB of 128.0 KiB.** Cost: core 0.698 → 0.786 mm² (+12.6%), pJ/byte
+  > 0.718 → 0.839, solver energy +5.5%, QUAD-MPC perf/W 14.13× → 12.55×. **Latency does not move,
+  > and neither bandwidth nor bank count changes — this is a capacity correction, not a
+  > rebalancing, and the bandwidth-first finding is untouched.** 192 rather than 160 KB because
+  > 12 KiB/bank (1536×64b, array efficiency 0.394) dominates 10 KiB/bank (0.354). It also holds the
+  > *naive* 163.8 KiB layout at 85.3%, so the flagship fits even from a code generator that has not
+  > done the `[I;Γ]` optimisation. **ARM-MPC (323 KiB honest) overflows at 128, 192 and 256 KB and
+  > always did** — 250 Hz, ~10× deadline margin, 0.034 GB/s of streaming demand; it does not drive
+  > capacity. Capacity is set by the **fastest determinism-critical loop**, not the biggest
+  > footprint.
+- **Descriptor format v0.1** (`argmind/descriptor.py`): **8 words / 32 B**, three base addresses,
+  packed 16-bit dims, `chain_token` 3b + `wait_mask` 8b, two precision fields (`prec_m` for the
+  bulk/matrix operand, `prec_v` for vectors and results), 3-bit `structure`, 2 bits reserved.
+  Ten opcodes: GEMM GEMV TRSV AXPY PROJ DOT SCAL CHOL **NRMI VMUL**.
+  > **v0.1 rules on all seven gaps that implementing v0 exposed, and it is paid for entirely by
+  > reclaiming v0 waste** — v0 had zero spare bits, and narrowing `chain_token` 8→3 and `prec_m`
+  > 4→3 funds `prec_v` and the wider `structure`. **No extra word, so descriptor bandwidth, queue
+  > SRAM and AGU count are all unchanged.** Load-bearing consequences for the RTL:
+  > **(a)** a token is a **scoreboard slot, not a name** (measured peak liveness 7), and reuse is
+  > safe **only if a descriptor that reclaims a token also waits on it** — otherwise a waiter that
+  > resolves a token to a later owner gets no guarantee about the earlier one, because in-order
+  > issue does not imply in-order completion;
+  > **(b)** a **zero AGU stride is legal on reads (broadcast) and illegal on writes**, and a
+  > zero-stride read must be served from the **L0 operand staging register, not re-fetched**, or n
+  > reads of one bank word serialise and the broadcast is slower than the vector it replaces;
+  > **(c)** elementwise ops walk **M×N**, so the AGU needs a 2-level walk (the descriptor generator
+  > already has a 3-level loop) and the n-cap goes 255 → 65535;
+  > **(d)** PROJ takes **interleaved (lo,hi) bound pairs**, which is why no fourth AGU is needed —
+  > and at fp32 a pair is 8 B = exactly one bank word.
 - Deterministic execution mode (no cache-miss variance) for real-time / safety markets.
 
 ### 3.2 SoC integration ("easy connection" requirement)
@@ -448,6 +498,25 @@ freeze in Phase 1:
    The rejected multi-pass option would have required error-free limb splitting and an exact
    128-bit accumulator *inside* the macro — a contract analog CIM cannot meet at all. Choosing the
    separate cluster preserves the interface's whole value.
+3. **Accumulator capabilities are part of the contract, and `maxabs_accumulate` joins them
+   (MACIF 0.2, 2026-07-30).** The declared set is now `broadcast_init`, `square_accumulate` and
+   **`maxabs_accumulate`** — a running max-absolute carried alongside the sum, folding an
+   **infinity-norm** reduction into the pass that produces the vector. It is not a nicety: OSQP's
+   stopping rule is stated entirely in ∞-norms, so `square_accumulate` folds the *wrong* norm for
+   the beachhead solver, and without the fold each residual norm costs a separate descriptor plus a
+   re-read. That is 5 of the ADMM residual block's 15 descriptors, and they are the *short* ones —
+   the one place the ≥8-cycles-per-descriptor contract is measurably thin (a run of six descriptors
+   averaging 5.8 cycles). Folding takes the block to 10 descriptors and the run to 4. Cost is a
+   compare-select and one register per accumulator lane — **cheaper than `square_accumulate`, which
+   needs a multiplier.** Same principle that decided the array-size question: fold work into the
+   accumulator at O(1) area instead of buying array at O(T²).
+4. **Both precision fields are checked, not just the operand one.** Descriptor v0.1 lets the store
+   format differ from the bulk-operand format (`prec_v` vs `prec_m`), which makes "fp16 matrix,
+   fp32 result" expressible — and makes it a *reachable mistake* to build a kernel whose store
+   format the macro does not declare. The runtime refuses on either field, at build time. The
+   existing refusals are unchanged and still hard errors: **no fp64 path**, and **fp16 ↔ bf16
+   substitution in either direction** (same width, ~10× the control-action error on the solver
+   path).
 
 This converts the IMC roadmap from an existential threat into a product line:
 `Argmind CM-100` (digital) → `CM-100C` (CIM inference macro behind MACIF, partnered or

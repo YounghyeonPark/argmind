@@ -50,6 +50,7 @@ import osqp  # noqa: E402
 
 from argmind import (  # noqa: E402
     CM100_SCRATCHPAD_BYTES,
+    CM100_SCRATCHPAD_BYTES_V0,
     Device,
     DeviceConfig,
     Format,
@@ -340,25 +341,36 @@ def main() -> None:
 
     # ---------------- 5. scratchpad footprint ----------------------------
     out("-" * 92)
-    out("5. SCRATCHPAD FOOTPRINT vs THE COSTED CM-100 CONFIGURATION")
+    out("5. SCRATCHPAD FOOTPRINT — THE MEASUREMENT THAT RESIZED THE CM-100")
     out("-" * 92)
-    for fmt in (Format.FP64, Format.FP32, Format.FP16):
-        c = ADMMConfig(fmt=fmt)
-        s = build_solver(model, c, BIG)
-        used = s.device.plan.used
-        fits = used <= CM100_SCRATCHPAD_BYTES
-        out(f"   all-{str(fmt):>4} working set: {used:>8} B "
-            f"({used / 1024:>6.1f} KiB)  "
-            f"{'fits' if fits else 'DOES NOT FIT'} the CM-100 128 KiB scratchpad"
-            f"{'' if fits else f' (over by {100 * used / CM100_SCRATCHPAD_BYTES - 100:.0f}%)'}")
+    out("   This section is why the CM-100 scratchpad is 192 KB and not 128 KB.")
+    out("   The plan below is MEASURED (statically allocated bytes), and it")
+    out("   contradicted the costed capacity. Ruling: descriptor v0.1 R8.")
     out()
-    try:
-        c = ADMMConfig(fmt=Format.FP32)
-        build_solver(model, c, CM100_SCRATCHPAD_BYTES)
-        out("   fp32 build against a real 128 KiB device: SUCCEEDED")
-    except ScratchpadExhausted as e:
-        out(f"   fp32 build against a real 128 KiB device: REFUSED --")
-        out(f"     {e}")
+    kib = lambda n: f"{n / 1024:.1f} KiB"
+    for cap, label in ((CM100_SCRATCHPAD_BYTES_V0, "128 KiB (as costed)"),
+                       (CM100_SCRATCHPAD_BYTES, "192 KiB (corrected)")):
+        out(f"   against {label}:")
+        for fmt in (Format.FP64, Format.FP32, Format.FP16):
+            s = build_solver(model, ADMMConfig(fmt=fmt), BIG)
+            used = s.device.plan.used
+            fits = used <= cap
+            over = "" if fits else f" (over by {100 * used / cap - 100:.0f}%)"
+            out(f"     all-{str(fmt):>4} working set {used:>8} B ({kib(used):>10})  "
+                f"{'fits' if fits else 'DOES NOT FIT'}{over}")
+        out()
+    for cap in (CM100_SCRATCHPAD_BYTES_V0, CM100_SCRATCHPAD_BYTES):
+        try:
+            build_solver(model, ADMMConfig(fmt=Format.FP32), cap)
+            out(f"   fp32 build against a real {kib(cap)} device: SUCCEEDED")
+        except ScratchpadExhausted as e:
+            out(f"   fp32 build against a real {kib(cap)} device: REFUSED --")
+            out(f"     {e}")
+    out()
+    out("   fp32 is the DEFAULT for ADMM, so fp32 is what has to fit. fp64 here is")
+    out("   a VALIDATION configuration (it is what matches OSQP bit-for-bit); fp64")
+    out("   is an interior-point requirement, not an ADMM one, so the 327 KiB figure")
+    out("   must NOT be used to size anything.")
     out()
     out("   Breakdown of the fp32 working set, largest first:")
     c = ADMMConfig(fmt=Format.FP32)

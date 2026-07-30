@@ -11,6 +11,7 @@ from __future__ import annotations
 import pytest
 
 from argmind import (
+    N_TOKENS,
     Descriptor,
     Device,
     DeviceConfig,
@@ -20,6 +21,7 @@ from argmind import (
     Opcode,
     Program,
     auto_chain,
+    auto_chain_v0,
     check_dependencies,
     concat,
     macif,
@@ -60,8 +62,8 @@ def test_wait_on_an_unproduced_token_is_detected():
     b = dev.alloc("b", 4, Format.FP64, Lifetime.PERSISTENT)
     prog = Program("p", [Descriptor(Opcode.SCAL, Format.FP64, b=a.spad_offset,
                                     c=b.spad_offset, m=4, alpha=1.0,
-                                    wait_token=42)])
-    with pytest.raises(DependencyViolation, match="token 42"):
+                                    wait_mask=1 << 5)])
+    with pytest.raises(DependencyViolation, match="token 5"):
         check_dependencies(prog, strict=True)
 
 
@@ -110,7 +112,7 @@ def test_auto_chain_output_passes_the_checker():
 def test_auto_chain_gives_a_serial_chain_its_true_depth():
     dev = _device()
     result = auto_chain(_chain_of(dev, 5))
-    assert result.policy == "minimal"
+    assert result.policy == "mask"
     assert result.true_depth == 5
     assert result.chain_depth == 5
     assert result.depth_penalty == 1.0
@@ -130,15 +132,17 @@ def test_auto_chain_leaves_independent_descriptors_unordered():
     ]
     result = auto_chain(descs)
     assert result.true_depth == 1
-    assert all(d.wait_token == 0 for d in result.descriptors)
+    assert all(d.wait_mask == 0 for d in result.descriptors)
 
 
-def test_a_forking_dependency_graph_forces_full_serialisation():
-    """Limitation L3, as an executable statement.
+def test_a_forking_graph_forced_v0_to_serialise_and_v0_1_does_not():
+    """Limitation L3 and ruling R3, as one executable statement.
 
     Two independent chains merging into one consumer cannot be ordered by a
-    single wait token, so the whole block has to be linearised and the emitted
-    dependency depth exceeds the achievable one.
+    single wait token, so under v0 the whole block had to be linearised and the
+    emitted dependency depth exceeded the achievable one. Both encodings are
+    exercised here: the v0 baseline has to stay reproducible, because the entire
+    justification for changing the token fields is the comparison between them.
     """
     dev = _device()
     z = dev.alloc("z", 4, Format.FP64, Lifetime.PERSISTENT)
@@ -167,11 +171,23 @@ def test_a_forking_dependency_graph_forces_full_serialisation():
     graph = dependency_graph(descs)
     assert graph[4] == (0, 1, 2, 3)              # a genuine four-way merge
     assert critical_path(graph) == 3
+    # v0: one wait token, so the only encodable schedule is fully serial.
+    v0 = auto_chain_v0(descs)
+    assert v0.policy == "serial"
+    assert v0.chain_depth == 5
+    assert v0.chain_depth > v0.true_depth
+    assert v0.depth_penalty > 1.0
+    check_dependencies(Program("v0", v0.descriptors), strict=True)
+
+    # v0.1: the wait mask names the exact producer set, so emitted depth == true
+    # depth and nothing is serialised that did not have to be.
     result = auto_chain(descs)
-    assert result.policy == "serial"
-    assert result.chain_depth == 5
-    assert result.chain_depth > result.true_depth
-    assert result.depth_penalty > 1.0
+    assert result.policy == "mask"
+    assert result.chain_depth == result.true_depth == 3
+    assert result.depth_penalty == 1.0
+    assert result.forced_serialisations == 0
+    assert result.max_merge_width == 4
+    assert result.descriptors[4].merge_width == 4
     check_dependencies(Program("p", result.descriptors), strict=True)
 
 
@@ -189,20 +205,72 @@ def test_concat_renumbers_tokens_and_stays_valid():
     check_dependencies(joined, strict=True)
 
 
-def test_concat_refuses_more_descriptors_than_the_token_field_holds():
+def test_concat_has_no_descriptor_limit_because_tokens_are_recycled():
+    """v0 raised above 255 descriptors. That limit was based on the wrong model
+    of a token -- a scoreboard slot, not a name -- and ruling R3 removes it."""
     dev = _device()
     block = Program("b", auto_chain(_chain_of(dev, 30)).descriptors)
-    with pytest.raises(FieldOverflow, match="255 chain tokens"):
-        concat("too_long", *([block] * 9))
+    joined = concat("long", *([block] * 9))
+    assert len(joined) == 270
+    check_dependencies(joined, strict=True)
 
 
-def test_token_values_fit_the_eight_bit_field():
+def test_token_values_fit_the_three_bit_field_at_any_block_length():
     dev = _device()
     result = auto_chain(_chain_of(dev, 200))
+    assert result.tokens_used <= N_TOKENS
     for d in result.descriptors:
-        assert 0 <= d.chain_token <= 255
-        assert 0 <= d.wait_token <= 255
+        assert 0 <= d.chain_token <= N_TOKENS - 1
+        assert 0 <= d.wait_mask <= 255
         d.encode()
+    check_dependencies(Program("p", result.descriptors), strict=True)
+
+
+def test_token_exhaustion_costs_overlap_and_never_correctness():
+    """The safety property the ruling rests on, and it needed a rule to be true.
+
+    Reuse is only safe because a descriptor that reclaims a token also waits on
+    it, so the current owner transitively covers every past owner. Without that
+    rule the concatenated block races -- which is how the bug was found.
+    """
+    dev = _device()
+    # A wide fan-out then fan-in, deliberately exceeding the 8-token space.
+    src = dev.alloc("src", 4, Format.FP64, Lifetime.PERSISTENT)
+    mids = [dev.alloc(f"m{i}", 4, Format.FP64, Lifetime.PERSISTENT)
+            for i in range(N_TOKENS + 6)]
+    sink = dev.alloc("sink", 4, Format.FP64, Lifetime.PERSISTENT)
+    descs = [Descriptor(Opcode.SCAL, Format.FP64, b=src.spad_offset,
+                        c=mm.spad_offset, m=4, alpha=1.0) for mm in mids]
+    descs.append(Descriptor(Opcode.SCAL, Format.FP64, b=mids[0].spad_offset,
+                            c=sink.spad_offset, m=4, alpha=1.0))
+    for mm in mids[1:]:
+        descs.append(Descriptor(Opcode.AXPY, Format.FP64, b=mm.spad_offset,
+                                c=sink.spad_offset, m=4, alpha=1.0))
+    result = auto_chain(descs)
+    assert result.peak_live_tokens > N_TOKENS      # pressure really is exceeded
+    assert result.forced_serialisations > 0        # ...and it cost overlap
+    assert result.chain_depth >= result.true_depth  # never less
+    # The only thing that must not happen: an unordered hazard.
+    check_dependencies(Program("p", result.descriptors), strict=True)
+
+
+def test_measured_token_pressure_on_the_admm_blocks_fits_the_field():
+    """The measurement that sizes the token field at 3 bits."""
+    from argmind.solvers.admm import ADMMConfig, ADMMSolver
+
+    dev = Device(DeviceConfig(scratchpad_bytes=1 << 24, banks=16,
+                              macro=macif.UNIVERSAL, host_bytes=1 << 25))
+    s = ADMMSolver(dev, 80, 320, ADMMConfig())
+    peaks = {k: s.chain_info[k].peak_live_tokens
+             for k in ("setup", "iteration", "residual")}
+    assert peaks["setup"] <= 3
+    assert peaks["iteration"] <= N_TOKENS - 1      # measured 7 of 8: one spare
+    assert peaks["residual"] <= 3
+    assert all(v <= N_TOKENS for v in peaks.values())
+    for k in ("setup", "iteration", "residual"):
+        c = s.chain_info[k]
+        assert c.forced_serialisations == 0
+        assert c.depth_penalty == 1.0, k
 
 
 # ---------------------------------------------------------------------------

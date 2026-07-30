@@ -17,6 +17,9 @@ manual or agent review, several of which were mechanically checkable:
   7. Scratchpad energy constant 2.3x too low (bank->datapath net omitted)
   8. `A^T A` formed in the SQP term, which no production solver does
   9. Once-per-call `q`/bounds assembly omitted entirely
+ 10. Working set charged at a PACKED triangular layout the AGU cannot address
+ 11. Working vectors and temporaries charged ZERO bytes
+ 12. Convergence checked every 25th iteration on a solve that takes 6-14
 
 Each numbered error below has a test that FAILS IF IT RETURNS. The rest are
 physical invariants: things that must hold for any believable model, whose
@@ -205,11 +208,21 @@ def test_e5_e6_admm_gemv_matches_hand_derivation():
     P does NOT appear as a separate matvec: it lives inside the cached factor.
     A's input-box rows are the identity and cost zero MACs.
     """
-    n_x, n_u, N, check = 12, 4, 20, 25
+    # check_term CORRECTED 25 -> 1 (2026-07-30). OSQP's library default is 25,
+    # but this problem converges in 6-14 iterations, so a check every 25th
+    # iteration never fires and the solver would always run to max_iterations.
+    # The validated functional simulator checks every iteration, and at
+    # check_term=1 this expression emits 31.0 descriptors per checked iteration
+    # against the simulator's MEASURED 31.
+    n_x, n_u, N, check = 12, 4, 20, 1
     n_var = N * n_u
     annz = N * n_x * n_var
     expected = n_var ** 2 + 2 * annz + (n_var ** 2 / 2 + annz) / check
     assert by_name("QUAD-MPC").gemv_macs_per_iter == pytest.approx(expected, rel=1e-9)
+    # The correction is NOT free and moves against us on latency, so pin that it
+    # really did increase the work rather than being absorbed somewhere.
+    at_25 = n_var ** 2 + 2 * annz + (n_var ** 2 / 2 + annz) / 25
+    assert expected / at_25 > 1.4
 
 
 def test_e7_scratchpad_energy_includes_distribution_network(cfg):
@@ -466,3 +479,177 @@ def test_benchmark_definitions_are_self_consistent():
             "hard-real-time MPC budgets only 30-60% of the control period to the "
             "solver; if that is introduced, update this test deliberately")
         assert b.persistent_bytes >= 0 and b.delta_bytes > 0
+
+
+# ---------------------------------------------------------------------------
+# ERRORS 10-12: the capacity errors, found 2026-07-30 when the functional
+# simulator's MEASURED allocation plan contradicted the sizing model.
+# (descriptor v0.1 ruling R8)
+# ---------------------------------------------------------------------------
+
+# Measured from argmind.solvers.admm's static allocation plan for QUAD-MPC
+# (n_var=80, n_con=320) under descriptor v0. Bytes, not estimates.
+MEASURED_QUAD_WS = {"fp16": 83896, "fp32": 167736, "fp64": 335416}
+#: The same plan with A = [I;Gamma] exploited: the honest fp32 sizing basis.
+MEASURED_QUAD_WS_FP32_STRUCTURED = 167736 - 25600
+
+
+def _quad_dims():
+    n_x, n_u, N = 12, 4, 20
+    n_var = N * n_u
+    return n_var, N * n_x * n_var, n_var + N * n_x
+
+
+def test_e10_persistent_bytes_does_not_assume_a_packed_triangular_layout():
+    """ERROR 10: P and L were charged n^2/2 each -- a PACKED triangular layout.
+
+    Packed triangular addressing puts row i at element offset i(i+1)/2, which
+    base + leading-dimension AGUs cannot express. The capacity model was assuming
+    a storage layout the descriptor format cannot address, and the error was
+    flattering by 25600 B on the flagship.
+    """
+    n_var, annz, _ = _quad_dims()
+    packed = 4 * (n_var ** 2 / 2 + n_var ** 2 / 2 + annz)
+    got = by_name("QUAD-MPC").persistent_bytes
+    assert got > packed, "the packed-layout undercount has returned"
+    assert got >= 4 * (2 * n_var ** 2 + annz)
+
+
+def test_e11_persistent_bytes_counts_working_vectors():
+    """ERROR 11: temporaries were charged zero, because the field is named
+    `persistent_bytes` and a temporary is not persistent."""
+    n_var, annz, _ = _quad_dims()
+    matrices_only = 4 * (2 * n_var ** 2 + annz)
+    vectors = by_name("QUAD-MPC").persistent_bytes - matrices_only
+    assert vectors > 0, "working vectors are charged zero bytes again"
+    # The simulator measures 14136 B of non-matrix allocation at fp32.
+    assert 0.8 * 14136 < vectors < 1.3 * 14136, vectors
+
+
+def test_the_model_now_reproduces_the_measured_allocation_plan():
+    """The point of the correction: model and measurement must agree.
+
+    Asserted to 5% -- tight enough to catch a re-introduced packing assumption
+    (18% error) or a dropped vector set (10% error).
+    """
+    got = by_name("QUAD-MPC").persistent_bytes
+    assert got == pytest.approx(MEASURED_QUAD_WS_FP32_STRUCTURED, rel=0.05), (
+        f"modelled {got} B vs measured {MEASURED_QUAD_WS_FP32_STRUCTURED} B")
+
+
+def test_128_kb_does_not_hold_the_flagship_and_192_kb_does():
+    """Ruling R8, and the negative result it rests on.
+
+    The model must still be able to report the failure it was corrected for, or
+    the correction is unfalsifiable.
+    """
+    ws = by_name("QUAD-MPC").persistent_bytes
+    assert ws > M.CM100_SCRATCHPAD_KB_PRE_R8 * 1024, (
+        "128 KB no longer overflows, so the reason for growing to 192 KB has "
+        "evaporated and the capacity decision must be re-made, not inherited")
+    assert ws < M.CM100_SCRATCHPAD_KB * 1024
+    # Real margin, not a rounding error: a 4% margin on a +/-2x modelled
+    # footprint is not a margin, which is why the packed-AGU option was rejected.
+    assert ws / (M.CM100_SCRATCHPAD_KB * 1024) < 0.80
+
+
+def test_the_flagship_matrices_alone_overflow_128_kb():
+    """Why 128 KB was arithmetically impossible rather than merely tight."""
+    n_var, annz, _ = _quad_dims()
+    matrices = 4 * (2 * n_var ** 2 + annz)
+    assert matrices == 128000
+    assert matrices > 0.97 * M.CM100_SCRATCHPAD_KB_PRE_R8 * 1024
+    # ...leaving under 3.5 KiB for every vector in the program.
+    assert M.CM100_SCRATCHPAD_KB_PRE_R8 * 1024 - matrices < 3.5 * 1024
+
+
+def test_growing_the_scratchpad_costs_energy_and_the_model_must_charge_it():
+    """192 KB is not free. A capacity decision that looked free would be a bug."""
+    import dataclasses as dc
+
+    small = dc.replace(M.CFG_100, scratchpad_kb=128)
+    big = dc.replace(M.CFG_100, scratchpad_kb=192)
+    assert big.sram_pj_per_byte() > small.sram_pj_per_byte()
+    assert big.spad.leakage_mw() > small.spad.leakage_mw()
+    assert big.spad.area_mm2()["total_mm2"] > small.spad.area_mm2()["total_mm2"]
+    q = by_name("QUAD-MPC")
+    assert (M.model_argmind(q, big)["energy_uj"]
+            > M.model_argmind(q, small)["energy_uj"])
+    # ...but NOT latency: capacity was never the binding constraint, bandwidth is.
+    assert M.model_argmind(q, big)["latency_us"] == pytest.approx(
+        M.model_argmind(q, small)["latency_us"], rel=1e-9)
+
+
+def test_e12_convergence_is_checked_often_enough_to_ever_fire():
+    """ERROR 12: check_term=25 on a solve that converges in 6-14 iterations.
+
+    OSQP's library default never fires here, so residual work was amortised over
+    checks that would not happen -- flattering, and it made the modelled
+    descriptor count disagree with the measured one.
+    """
+    q = by_name("QUAD-MPC")
+    n_var, annz, _ = _quad_dims()
+    resid = n_var ** 2 / 2 + annz
+    amortised = q.gemv_macs_per_iter - (n_var ** 2 + 2 * annz)
+    interval = resid / amortised
+    assert interval == pytest.approx(1.0, rel=1e-9), interval
+    assert interval <= q.iters, (
+        "convergence is checked less often than the solve takes to converge, so "
+        "the check never fires and its cost is amortised over nothing")
+
+
+def test_the_modelled_descriptor_count_matches_the_measured_one():
+    """Cross-validation between two independently written code paths.
+
+    The kernel decomposition here and the descriptor program in
+    argmind/solvers/admm.py were written separately. They must agree on how many
+    descriptors a checked ADMM iteration takes, and at check_term=1 they do.
+    """
+    d = M.descriptor_cost(by_name("QUAD-MPC"), M.CFG_100)
+    assert d["n_desc"] == pytest.approx(31.0, abs=1.0), d["n_desc"]
+
+
+def test_the_8_cycles_per_descriptor_contract_survives_31_descriptors():
+    """The negative result the sequencer re-check had to be able to produce.
+
+    31-vs-28 descriptors sounds like it should threaten the codegen rule and does
+    not: the residual block is 48% of descriptors but 49% of cycles, so average
+    work per descriptor barely moves.
+    """
+    d = M.descriptor_cost(by_name("QUAD-MPC"), M.CFG_100)
+    bar = 2 * M.CFG_100.seq_setup_cycles          # the >=8 cycles/descriptor bar
+    assert d["cycles_per_desc"] > bar
+    assert d["cycles_per_desc"] / bar > 3.0, (
+        f"only {d['cycles_per_desc'] / bar:.1f}x the bar -- the descriptor-count "
+        f"correction has started to bite and codegen must fuse")
+
+
+def test_arm_mpc_still_overflows_and_that_was_always_the_position():
+    """The capacity correction must not turn ARM-MPC into a fit.
+
+    Before the correction ARM-MPC's footprint counted the stage Hessians and the
+    [A B] blocks and nothing else -- no Riccati factor, no gains, no slacks -- and
+    at 172 KiB it appeared to fit the new 192 KB scratchpad. Corrected, it is
+    323 KiB and overflows, which is what was accepted all along: 250 Hz, ~10x
+    deadline margin, ~0.03 GB/s of streaming demand. It does not drive capacity.
+    """
+    arm = by_name("ARM-MPC")
+    for kb in (128, 192, 256):
+        assert arm.persistent_bytes > kb * 1024, kb
+    overflow = arm.persistent_bytes - M.CM100_SCRATCHPAD_KB * 1024
+    gbs = overflow * arm.calls_per_sec / 1e9
+    assert gbs < 0.1, (
+        f"ARM-MPC streaming demand is {gbs:.3f} GB/s -- if this ever approaches "
+        f"the external interface, 'it overflows but that is fine' stops holding")
+    # And the flagship, which DOES drive capacity, must not be streaming at all.
+    assert by_name("QUAD-MPC").persistent_bytes < M.CM100_SCRATCHPAD_KB * 1024
+
+
+def test_the_capacity_ranking_of_the_rows_is_what_drives_the_decision():
+    """Capacity is set by the fastest determinism-critical loop, not the biggest
+    footprint. If that ordering ever inverts, the decision must be re-made."""
+    quad, arm = by_name("QUAD-MPC"), by_name("ARM-MPC")
+    assert arm.persistent_bytes > quad.persistent_bytes    # biggest
+    assert quad.calls_per_sec > arm.calls_per_sec          # but fastest is QUAD
+    # The sized-for row is the fast one, so it must fit and the big one need not.
+    assert quad.persistent_bytes <= M.CM100_SCRATCHPAD_KB * 1024

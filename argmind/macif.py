@@ -42,7 +42,16 @@ from .precision import Format, SIXTEEN_BIT_FORMATS
 
 #: Version of the interface described by this module. Bump on any change to the
 #: set of declared attributes; a macro declares which version it speaks.
-MACIF_VERSION = "0.1"
+#:
+#: 0.2 adds :attr:`FormatContract.maxabs_accumulate`. The reason is measured, not
+#: aesthetic: the ADMM residual block contains a run of six consecutive
+#: descriptors averaging 5.8 datapath cycles -- below the >=8 cycles/descriptor
+#: codegen bar, and the thinnest point in the whole sequencer analysis. Folding
+#: the infinity-norm reduction into the pass that produces the vector takes the
+#: residual block from 15 descriptors to 10 and that run from 6 to 4. Same
+#: principle as ``broadcast_init`` and ``square_accumulate``: fold work into the
+#: accumulator at O(1) area rather than buying array at O(T^2).
+MACIF_VERSION = "0.2"
 
 
 @dataclass(frozen=True)
@@ -67,8 +76,16 @@ class FormatContract:
         Accumulator can be initialised from a broadcast scalar or a bias vector,
         folding an add into the matmul instead of costing a separate vector pass.
     square_accumulate:
-        Accumulator can accumulate squares of its inputs, folding a norm
+        Accumulator can accumulate squares of its inputs, folding a **2-norm**
         reduction into the pass that produces the vector.
+    maxabs_accumulate:
+        Accumulator can carry a running max-absolute alongside the sum, folding an
+        **infinity-norm** reduction into the pass that produces the vector.
+        MACIF 0.2. Needed because OSQP's stopping rule is stated entirely in
+        infinity norms, so ``square_accumulate`` folds the wrong norm for the
+        beachhead solver. Cost is a compare-select and one register per
+        accumulator lane -- cheaper than ``square_accumulate``, which needs a
+        multiplier.
     """
 
     macs_per_cycle: int
@@ -77,6 +94,7 @@ class FormatContract:
     subnormals: str = "gradual"
     broadcast_init: bool = False
     square_accumulate: bool = False
+    maxabs_accumulate: bool = False
 
     def __post_init__(self) -> None:
         if self.macs_per_cycle <= 0:
@@ -158,6 +176,15 @@ class MacroCapabilities:
     def macs_per_cycle(self, fmt: Format) -> int:
         return self.require(fmt).macs_per_cycle
 
+    def folds_infinity_norm(self, fmt: Format) -> bool:
+        """Can an infinity-norm reduction be folded into the producing pass?
+
+        If not, every residual norm costs a separate descriptor and a re-read of
+        the vector. On the ADMM residual block that is 5 extra descriptors out of
+        15, and they are the short ones -- see MACIF_VERSION's note.
+        """
+        return self.require(fmt).maxabs_accumulate
+
 
 def merge(name: str, *macros: MacroCapabilities, notes: str = "") -> MacroCapabilities:
     """Combine declarations, e.g. a swappable tile array plus the fixed FMA cluster.
@@ -219,10 +246,19 @@ CM100_FMA_CLUSTER = MacroCapabilities(
     name="cm100-fma-cluster",
     swappable=False,
     formats={
-        Format.FP32: FormatContract(macs_per_cycle=16, accumulator_width=32),
-        Format.FP64: FormatContract(macs_per_cycle=8, accumulator_width=64),
+        Format.FP32: FormatContract(
+            macs_per_cycle=16, accumulator_width=32,
+            broadcast_init=True, square_accumulate=True, maxabs_accumulate=True,
+        ),
+        Format.FP64: FormatContract(
+            macs_per_cycle=8, accumulator_width=64,
+            broadcast_init=True, square_accumulate=True, maxabs_accumulate=True,
+        ),
     },
-    notes="8 multi-format FMA units: 1 x fp64 or 2 x fp32 each. Fixed, not swappable.",
+    notes="8 multi-format FMA units: 1 x fp64 or 2 x fp32 each. Fixed, not "
+          "swappable. Carries all three accumulator features: this is where the "
+          "solver residual norms are reduced, so it is the block on which "
+          "maxabs_accumulate has to be present.",
 )
 
 #: The CM-100 baseline compute complex as costed.
@@ -259,6 +295,7 @@ UNIVERSAL = MacroCapabilities(
             accumulator_width=64 if fmt is Format.FP64 else 32,
             broadcast_init=True,
             square_accumulate=True,
+            maxabs_accumulate=True,
         )
         for fmt in Format
     },

@@ -20,7 +20,9 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Callable, Iterable, Sequence
 
-from .descriptor import Descriptor, FROZEN_V0_OPCODES, Opcode
+from .descriptor import (
+    Descriptor, FROZEN_V0_OPCODES, N_TOKENS, Opcode, TOKEN_MAX,
+)
 from .errors import DependencyViolation, FieldOverflow, MissingDependency
 from .kernels import accesses
 
@@ -65,25 +67,61 @@ class HazardReport:
     ``unordered`` lists read-after-write and write-after-write pairs that the
     tokens do not order. On an in-order functional model these are harmless; with
     hardware run-ahead they are races. ``multi_producer`` lists descriptors that
-    depend on more than one earlier descriptor -- interesting because descriptor
-    v0 has exactly one wait token, so codegen has to serialise the producers and
-    give up overlap it could otherwise have had.
+    depend on more than one earlier descriptor -- under descriptor v0 these were
+    the descriptors codegen had to over-serialise, because v0 had exactly one
+    wait token. **v0.1's wait mask expresses them directly** up to
+    :data:`argmind.descriptor.N_TOKENS` producers, so a non-empty
+    ``multi_producer`` list is now informational rather than a cost.
+
+    ``peak_live_tokens`` is the number of tokens that must be simultaneously live
+    for this block, i.e. the token pressure. It is the measurement that sizes the
+    3-bit token field: if it exceeds :data:`N_TOKENS` the block still runs
+    correctly (token reuse can only over-serialise) but loses overlap, so it is
+    reported rather than raised on.
     """
 
     unordered: list[tuple[int, int, str]] = field(default_factory=list)
     multi_producer: list[tuple[int, tuple[int, ...]]] = field(default_factory=list)
     chain_length: int = 0
+    peak_live_tokens: int = 0
+    max_merge_width: int = 0
 
     @property
     def ok(self) -> bool:
         return not self.unordered
 
+    @property
+    def token_pressure_ok(self) -> bool:
+        return self.peak_live_tokens <= N_TOKENS
+
     def summary(self) -> str:
         return (
             f"{len(self.unordered)} unordered hazard(s); "
-            f"{len(self.multi_producer)} descriptor(s) with >1 producer; "
-            f"critical chain {self.chain_length}"
+            f"{len(self.multi_producer)} descriptor(s) with >1 producer "
+            f"(max merge width {self.max_merge_width}); "
+            f"critical chain {self.chain_length}; "
+            f"peak live tokens {self.peak_live_tokens}/{N_TOKENS}"
         )
+
+
+def peak_live_tokens(descriptors: Sequence[Descriptor]) -> int:
+    """Maximum number of tokens that must be live at once, under mask semantics.
+
+    A token is live from its producer's issue until the issue of the last
+    descriptor that waits on it. This is the quantity the token field has to
+    cover, and it is what makes 3 bits defensible where 8 looked necessary: a
+    token is a **scoreboard slot, not a name**.
+    """
+    graph = dependency_graph(descriptors)
+    last_use: dict[int, int] = {}
+    for j, producers in enumerate(graph):
+        for i in producers:
+            last_use[i] = j
+    peak = 0
+    for pos in range(len(descriptors)):
+        live = sum(1 for i, lu in last_use.items() if i <= pos < lu)
+        peak = max(peak, live)
+    return peak
 
 
 def check_dependencies(program: Program, *, strict: bool = True) -> HazardReport:
@@ -99,33 +137,43 @@ def check_dependencies(program: Program, *, strict: bool = True) -> HazardReport
        cannot expose and that run-ahead turns into a wrong answer.
     """
     descs = program.descriptors
-    produced: dict[int, int] = {}          # token -> producing index
-    waits_on: list[int | None] = []
+    produced: dict[int, int] = {}          # token -> most recent producing index
+    waits_on: list[tuple[int, ...]] = []
     for i, d in enumerate(descs):
-        if d.wait_token:
-            if d.wait_token not in produced:
+        deps: list[int] = []
+        for t in d.waits_on:
+            if t not in produced:
                 raise DependencyViolation(
-                    f"{program.name}[{i}] ({d}) waits on token {d.wait_token}, "
-                    f"which no earlier descriptor produces"
+                    f"{program.name}[{i}] ({d}) waits on token {t}, which no "
+                    f"earlier descriptor has set. In hardware this hangs."
                 )
-            waits_on.append(produced[d.wait_token])
-        else:
-            waits_on.append(None)
-        if d.chain_token:
-            produced[d.chain_token] = i
+            deps.append(produced[t])
+        waits_on.append(tuple(deps))
+        # Every descriptor sets its token on completion. A reused token resolves
+        # to its MOST RECENT producer, which can only over-serialise -- the
+        # property that makes a 3-bit token field safe.
+        produced[d.chain_token] = i
 
     # Transitive closure of "must complete before", over token edges.
     before: list[set[int]] = []
     for i in range(len(descs)):
         s: set[int] = set()
-        p = waits_on[i]
-        if p is not None:
+        for p in waits_on[i]:
             s.add(p)
             s |= before[p]
         before.append(s)
 
-    report = HazardReport(chain_length=max((len(s) for s in before), default=0) + 1)
+    # Longest path over the emitted token edges, NOT the size of the ancestor
+    # set. Those coincide only for a fully serialised block, so conflating them
+    # overstates the emitted depth of anything with parallelism -- which is
+    # precisely the quantity the v0-vs-v0.1 comparison turns on.
+    edge_depth = [1] * len(descs)
+    for j in range(len(descs)):
+        for p in waits_on[j]:
+            edge_depth[j] = max(edge_depth[j], edge_depth[p] + 1)
+    report = HazardReport(chain_length=max(edge_depth, default=0))
     acc = [accesses(d) for d in descs]
+    widths: list[int] = []
     for j in range(len(descs)):
         producers: list[int] = []
         rj, wj = acc[j]
@@ -143,8 +191,11 @@ def check_dependencies(program: Program, *, strict: bool = True) -> HazardReport
             producers.append(i)
             if i not in before[j]:
                 report.unordered.append((i, j, kind))
+        widths.append(len(producers))
         if len(producers) > 1:
             report.multi_producer.append((j, tuple(producers)))
+    report.max_merge_width = max(widths, default=0)
+    report.peak_live_tokens = peak_live_tokens(descs)
 
     if strict and report.unordered:
         i, j, kind = report.unordered[0]
@@ -158,16 +209,17 @@ def check_dependencies(program: Program, *, strict: bool = True) -> HazardReport
 
 
 _COPY_FIELDS = (
-    "opcode", "precision", "a", "b", "c", "m", "k", "n", "lda", "ldb", "ldc",
-    "alpha", "transpose", "structure", "accumulate", "unit_diag", "label",
+    "opcode", "precision", "vec_precision", "a", "b", "c", "m", "k", "n",
+    "lda", "ldb", "ldc", "alpha", "transpose", "structure", "accumulate",
+    "unit_diag", "label",
 )
 
 
-def _retag(d: Descriptor, chain_token: int, wait_token: int) -> Descriptor:
+def _retag(d: Descriptor, chain_token: int, wait_mask: int) -> Descriptor:
     return Descriptor(
         **{f: getattr(d, f) for f in _COPY_FIELDS},
         chain_token=chain_token,
-        wait_token=wait_token,
+        wait_mask=wait_mask,
     )
 
 
@@ -214,40 +266,165 @@ class ChainResult:
     descriptors: tuple[Descriptor, ...]
     #: Descriptors that genuinely depend on more than one earlier descriptor.
     multi_producer: tuple[tuple[int, tuple[int, ...]], ...] = ()
-    #: Descriptors given a deeper wait than their data dependency required,
-    #: because a single wait token could not cover their producer set.
+    #: Descriptors given a deeper wait than their data dependency required.
+    #: Zero under v0.1 mask semantics unless token pressure forced reuse.
     forced_serialisations: int = 0
     #: Depth of the emitted token chain.
     chain_depth: int = 0
-    #: Depth of the true dependency DAG, ignoring the one-token limit.
+    #: Depth of the true dependency DAG.
     true_depth: int = 0
-    #: ``"minimal"`` if every wait matched a real dependency, ``"serial"`` if the
-    #: block had to be fully linearised to be encodable at all.
-    policy: str = "minimal"
+    #: ``"mask"`` for v0.1 exact-producer-set encoding, ``"minimal"`` /
+    #: ``"serial"`` for the v0 single-token fallbacks.
+    policy: str = "mask"
+    #: Peak simultaneous token liveness -- the token-field sizing measurement.
+    peak_live_tokens: int = 0
+    #: Widest producer set the mask had to express.
+    max_merge_width: int = 0
+    #: Number of distinct tokens actually used.
+    tokens_used: int = 0
 
     @property
     def depth_penalty(self) -> float:
-        """Emitted chain depth divided by the achievable depth."""
+        """Emitted chain depth divided by the achievable depth.
+
+        1.00x under v0.1. Kept because the v0 values (1.42x on the ADMM
+        iteration, 3.00x on the residual) are the measurement that motivated the
+        change, and because :func:`auto_chain_v0` still reports them.
+        """
         return self.chain_depth / self.true_depth if self.true_depth else 1.0
 
 
+def _token_assignment(
+    graph: Sequence[tuple[int, ...]],
+) -> tuple[list[int], list[int], int]:
+    """Give each descriptor a token, recycling tokens whose last use has passed.
+
+    Returns ``(token_of, extra_wait_tokens, n_forced)``.
+
+    Recycling is what makes a 3-bit token field enough. But the safety argument
+    needs one more rule than it first appears, and getting it wrong is a race
+    rather than a slowdown -- the concatenation hazard test found exactly that:
+
+        A waiter resolves a token to its **most recent** producer. If token *t*
+        was claimed by descriptor 5, reclaimed by descriptor 40, and descriptor
+        50 depends on 5, then waiting on *t* waits for 40 -- which says nothing
+        about 5, because in-order ISSUE does not imply in-order COMPLETION.
+
+    So reuse is **not** unconditionally safe. It is safe under this rule, which
+    is a requirement on both codegen and the RTL scoreboard:
+
+        **A descriptor that reclaims a token must itself wait on that token.**
+
+    Then the reclaiming descriptor cannot start until the previous owner has
+    completed, so the previous owner's completion is implied transitively by the
+    new owner's, and every later waiter is correctly ordered. The cost is the
+    over-serialisation the fallback was always supposed to cost -- and now it is
+    the *only* cost, which is what makes "token exhaustion loses overlap, it does
+    not produce a wrong answer" a true statement rather than a hopeful one.
+    """
+    last_use: dict[int, int] = {}
+    for j, producers in enumerate(graph):
+        for i in producers:
+            last_use[i] = j
+    token_of: list[int] = [0] * len(graph)
+    extra_wait: list[int] = [0] * len(graph)
+    free: list[int] = list(range(N_TOKENS))
+    busy: dict[int, int] = {}                 # token -> descriptor still needed
+    reuse_forced = 0
+    for j in range(len(graph)):
+        # Retire tokens whose last consumer has already been issued.
+        for tok, owner in list(busy.items()):
+            if last_use.get(owner, -1) < j:
+                del busy[tok]
+                free.append(tok)
+        if free:
+            tok = free.pop(0)
+        else:
+            # Pressure exceeds the token space. Reclaim the token whose owner is
+            # oldest, and make THIS descriptor wait on it so the reclaim is
+            # ordered. Costs overlap; preserves correctness.
+            tok = min(busy, key=lambda t: busy[t])
+            del busy[tok]
+            extra_wait[j] = 1 << tok
+            reuse_forced += 1
+        token_of[j] = tok
+        if j in last_use:
+            busy[tok] = j
+        else:
+            # No consumer, so nothing can ever wait on this token: return it
+            # immediately. Forgetting this leaks a slot per consumer-less
+            # descriptor and manufactures spurious token pressure -- the residual
+            # block reported 8 tokens used at a measured peak liveness of 3.
+            free.append(tok)
+    return token_of, extra_wait, reuse_forced
+
+
 def auto_chain(descriptors: Sequence[Descriptor]) -> ChainResult:
-    """Assign chain/wait tokens from the descriptors' actual data dependencies.
+    """Assign chain tokens and wait masks from the actual data dependencies.
 
-    This is the part of code generation that decides what the hardware may
-    overlap, and it is where descriptor v0's **single wait token** costs
-    something measurable.
+    Under descriptor **v0.1** this is straightforward, which is the point: each
+    descriptor's wait mask names exactly its producer set, so the emitted
+    dependency depth equals the true DAG depth and no serialisation is forced.
+    Compare :func:`auto_chain_v0`, which is kept so the cost of v0's single wait
+    token stays measurable rather than becoming folklore.
+    """
+    descs = list(descriptors)
+    graph = dependency_graph(descs)
+    multi = tuple((j, p) for j, p in enumerate(graph) if len(p) > 1)
+    true_depth = critical_path(graph)
+    token_of, extra_wait, reuse_forced = _token_assignment(graph)
 
-    First attempt: each descriptor waits on the latest producer that
-    transitively covers all its other producers. Where no single producer covers
-    the set -- which happens as soon as the dependency graph *forks*, e.g. a
-    GEMV accumulating into a vector that a different chain of descriptors built
-    -- fall back to waiting on the immediately preceding descriptor. If even that
-    is not sufficient (it is not, whenever two independent chains merge), the
-    whole block is emitted **fully serialised**, which is the only encodable
-    schedule, and ``policy`` reports ``"serial"``.
+    out: list[Descriptor] = []
+    depth_of: list[int] = []
+    for j, d in enumerate(descs):
+        producers = graph[j]
+        # Always assert the producer's token bit, even if the token has since
+        # been reclaimed. The reclaim rule makes this correct by induction: a
+        # reclaiming descriptor waits on the token it takes, so the CURRENT owner
+        # of a token transitively covers every past owner of it. A waiter that
+        # resolves the token to a later owner is therefore ordered after its real
+        # producer -- more conservatively than it asked, which is the whole
+        # bargain. (Dropping the bit instead is a race, and the concatenation
+        # hazard test is what caught that.)
+        mask = extra_wait[j]
+        depth = 1
+        for i in producers:
+            mask |= 1 << token_of[i]
+            depth = max(depth, depth_of[i] + 1)
+        if extra_wait[j]:
+            # A reclaim edge is a real ordering edge and must be counted.
+            for i in range(j):
+                if (1 << token_of[i]) & extra_wait[j]:
+                    depth = max(depth, depth_of[i] + 1)
+        depth_of.append(depth)
+        out.append(_retag(d, token_of[j], mask))
+    depth = max(depth_of, default=0)
 
-    ``chain_depth`` versus ``true_depth`` is then the price of the encoding.
+    return ChainResult(
+        descriptors=tuple(out), multi_producer=multi,
+        forced_serialisations=reuse_forced,
+        chain_depth=depth, true_depth=true_depth, policy="mask",
+        peak_live_tokens=peak_live_tokens(descs),
+        max_merge_width=max((len(p) for p in graph), default=0),
+        tokens_used=len(set(token_of)),
+    )
+
+
+def auto_chain_v0(descriptors: Sequence[Descriptor]) -> ChainResult:
+    """The v0 single-wait-token encoding, retained as the measurement baseline.
+
+    Kept in the shipping code on purpose. The whole justification for the v0.1
+    token change is a comparison -- emitted chain depth 17 vs an achievable 12 on
+    the ADMM iteration, 15 vs 5 on the residual -- and a comparison whose
+    baseline has been deleted stops being checkable. This function is what those
+    numbers come from, and a regression test pins them.
+
+    First attempt: each descriptor waits on the latest producer that transitively
+    covers all its other producers. Where no single producer covers the set --
+    which happens as soon as the dependency graph forks -- fall back to waiting on
+    the immediately preceding descriptor; and if that is still insufficient (it is,
+    whenever two independent chains merge) emit the block **fully serialised**,
+    which is the only encodable schedule.
     """
     descs = list(descriptors)
     graph = dependency_graph(descs)
@@ -255,19 +432,18 @@ def auto_chain(descriptors: Sequence[Descriptor]) -> ChainResult:
     true_depth = critical_path(graph)
 
     def emit(waits: Sequence[int | None]) -> tuple[tuple[Descriptor, ...], int]:
-        before: list[set[int]] = []
+        depth_of: list[int] = []
         out = []
         for j, d in enumerate(descs):
             w = waits[j]
-            s: set[int] = set()
-            if w is not None:
-                s.add(w)
-                s |= before[w]
-            before.append(s)
-            out.append(_retag(d, j + 1, 0 if w is None else w + 1))
-        return tuple(out), max((len(s) for s in before), default=0) + 1
+            depth_of.append(1 if w is None else depth_of[w] + 1)
+            # One token, expressed in the v0.1 field as a single-bit mask, with
+            # tokens recycled modulo N_TOKENS so the encoding stays legal.
+            tok = (j % TOKEN_MAX) + 1
+            wtok = 0 if w is None else (1 << ((w % TOKEN_MAX) + 1))
+            out.append(_retag(d, tok, wtok))
+        return tuple(out), max(depth_of, default=0)
 
-    # -- attempt 1: minimal waits ------------------------------------------
     before: list[set[int]] = []
     waits: list[int | None] = []
     forced = 0
@@ -294,40 +470,37 @@ def auto_chain(descriptors: Sequence[Descriptor]) -> ChainResult:
 
     if encodable:
         out, depth = emit(waits)
-        return ChainResult(
-            descriptors=out, multi_producer=multi, forced_serialisations=forced,
-            chain_depth=depth, true_depth=true_depth, policy="minimal",
+        policy = "minimal"
+    else:
+        out, depth = emit([None] + list(range(len(descs) - 1)))
+        forced = sum(
+            1 for j, producers in enumerate(graph)
+            if j > 0 and (not producers or max(producers) != j - 1)
         )
-
-    # -- attempt 2: full serialisation, the only encodable fallback --------
-    serial: list[int | None] = [None] + list(range(len(descs) - 1))
-    out, depth = emit(serial)
-    forced = sum(
-        1 for j, producers in enumerate(graph)
-        if j > 0 and (not producers or max(producers) != j - 1)
-    )
+        policy = "serial"
     return ChainResult(
         descriptors=out, multi_producer=multi, forced_serialisations=forced,
-        chain_depth=depth, true_depth=true_depth, policy="serial",
+        chain_depth=depth, true_depth=true_depth, policy=policy,
+        peak_live_tokens=peak_live_tokens(descs),
+        max_merge_width=max((len(p) for p in graph), default=0),
     )
 
 
 def concat(name: str, *programs: Program) -> Program:
-    """Concatenate blocks, renumbering tokens so the result is one valid stream.
+    """Concatenate blocks, retagging tokens so the result is one valid stream.
 
     Used to hazard-check a whole solve, including loop-carried dependencies
     between one iteration and the next, which a per-block check cannot see.
-    Raises if the concatenation needs more than the 255 tokens v0 encodes.
+
+    v0 raised here above 255 descriptors, on the theory that a block needed one
+    token per descriptor. That was the wrong model of a token and the limit is
+    gone: :func:`auto_chain` recycles tokens by liveness, so a block of any length
+    is encodable. What a long block can run out of is *overlap*, which
+    :attr:`ChainResult.forced_serialisations` reports.
     """
     descs: list[Descriptor] = []
     for p in programs:
         descs.extend(p.descriptors)
-    if len(descs) > 255:
-        raise FieldOverflow(
-            f"{len(descs)} descriptors need more than the 255 chain tokens "
-            f"descriptor v0 encodes in 8 bits; tokens must be recycled, which "
-            f"means codegen owns a token-liveness analysis"
-        )
     return Program(name, auto_chain(descs).descriptors)
 
 

@@ -1,8 +1,10 @@
-"""Numeric formats, and their encoding in the descriptor `precision` field.
+"""Numeric formats, and their encoding in the descriptor precision fields.
 
-The integer values here ARE the wire encoding of descriptor v0 field `w0[25:22]`.
-They are part of the frozen interface: changing one changes the meaning of every
-previously generated descriptor, so treat them as a published constant.
+The integer values here ARE the wire encoding of descriptor v0.1 field
+``prec_m`` (``w0[25:23]``). They are part of the published interface: changing one
+changes the meaning of every previously generated descriptor, so treat them as a
+published constant. **The values did not change between v0 and v0.1** -- only the
+field narrowed from 4 bits to 3, which every defined value already fits.
 
 bfloat16 has no numpy dtype. It is therefore represented in the simulated
 scratchpad as raw 16-bit containers (`numpy.uint16`), with explicit
@@ -26,7 +28,12 @@ import numpy as np
 
 
 class Format(IntEnum):
-    """Numeric format. The value is the descriptor v0 ``precision`` encoding."""
+    """Numeric format. The value is the descriptor ``prec_m`` wire encoding.
+
+    Five values, so the field is **3 bits** in v0.1 (it was 4 in v0, which was
+    one bit of waste; that bit paid for part of the second precision field).
+    Values 5-7 are unassigned and reserved for the two fp8 variants.
+    """
 
     INT8 = 0
     FP16 = 1
@@ -55,6 +62,67 @@ class Format(IntEnum):
 
     def __str__(self) -> str:  # nicer error messages
         return self.name.lower()
+
+
+class VecFormat(IntEnum):
+    """Descriptor v0.1 ``prec_v`` field: the format of vectors and results.
+
+    Added in v0.1 to fix limitation L4. ``prec_m`` gives the format of the
+    **bulk operand** -- the one whose size scales with the largest product of
+    dimensions, i.e. the matrix -- and ``prec_v`` gives the format of everything
+    else the descriptor touches. :attr:`SAME` means "as ``prec_m``", which is
+    what every v0 descriptor meant implicitly.
+
+    Why a second field rather than the cheap answer
+    -----------------------------------------------
+    The cheap answer was to let the MACIF operand contract imply the accumulator
+    width, and for the *accumulator* that answer is correct and is still what
+    happens -- accumulator width is a MACIF declaration, not a descriptor field.
+    What it cannot fix is the **store** format, and the store format is the one
+    the numerics need. PHASE0_FINDINGS 0.3 adopts fp16 operands with the
+    triangular solve at fp32; the operative constraint there is not that TRSV
+    carries a different opcode-level precision (v0 could already express that)
+    but that a **buffer written by an fp16 GEMV is read by an fp32 TRSV**. One
+    precision field forces the GEMV to store fp16 and the TRSV then reads a
+    different type at the same address. So the mixed scheme was inexpressible for
+    a storage reason, not an arithmetic one.
+
+    The honest limit of this encoding: exactly two formats per descriptor. A
+    kernel wanting three (int8 matrix, bf16 vector, fp32 result) must split into
+    two descriptors. Nothing in the frozen benchmark set wants three.
+    """
+
+    SAME = 0
+    INT8 = 1
+    FP16 = 2
+    BF16 = 3
+    FP32 = 4
+    FP64 = 5
+
+    def resolve(self, prec_m: "Format") -> "Format":
+        """The concrete format this field denotes, given the bulk-operand format."""
+        if self is VecFormat.SAME:
+            return Format(prec_m)
+        return _VEC_TO_FORMAT[self]
+
+    @classmethod
+    def of(cls, fmt: "Format") -> "VecFormat":
+        """The explicit :class:`VecFormat` naming `fmt` (never :attr:`SAME`)."""
+        return _FORMAT_TO_VEC[Format(fmt)]
+
+    def __str__(self) -> str:
+        return "same" if self is VecFormat.SAME else self.name.lower()
+
+
+_VEC_TO_FORMAT = {
+    VecFormat.INT8: Format.INT8,
+    VecFormat.FP16: Format.FP16,
+    VecFormat.BF16: Format.BF16,
+    VecFormat.FP32: Format.FP32,
+    VecFormat.FP64: Format.FP64,
+}
+
+_FORMAT_TO_VEC = {v: k for k, v in _VEC_TO_FORMAT.items()}
 
 
 _ITEMSIZE = {

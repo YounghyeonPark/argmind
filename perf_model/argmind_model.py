@@ -691,8 +691,38 @@ def condensed_mpc(name, n_x, n_u, N, iters, rate, note, prec="fp32", refactor=Fa
     # does either. Removed.
     gemm_call = (n_var ** 3) / 3.0 if refactor else 0.0
     vec = 8 * (n_var + n_con) + 2 * n_con  # + box projection as min/max element ops
-    # P symmetric (n^2/2), L triangular (n^2/2), A's identity block stores nothing.
-    persistent = 4 * (n_var * n_var / 2 + n_var * n_var / 2 + Annz)
+    # ---- CAPACITY. CORRECTED 2026-07-30 (descriptor v0.1 ruling R8) after the
+    # functional simulator's MEASURED allocation plan contradicted this line.
+    # It said 4*(n^2/2 + n^2/2 + Annz) = 100.0 KiB for QUAD-MPC; the plan measures
+    # 163.8 KiB at fp32. Two errors, BOTH FLATTERING:
+    #
+    #  (1) P and L were charged at n^2/2 -- a PACKED triangular layout. Packed
+    #      triangular addressing (row i at offset i(i+1)/2) is NOT EXPRESSIBLE with
+    #      the base+leading-dimension AGU the descriptor format has. The capacity
+    #      model was assuming a storage layout the hardware cannot address. They
+    #      cost n^2 each. Undercount: 25600 B.
+    #  (2) Working vectors and residual temporaries were charged ZERO. They are
+    #      14136 B at fp32 for QUAD-MPC -- 10% of a 128 KiB scratchpad -- and were
+    #      structurally invisible because the field is named `persistent_bytes`
+    #      and a temporary is not persistent.
+    #
+    # What the line got RIGHT and keeps: A = [I;Gamma], so the identity block
+    # stores nothing. That one is a strict win, since the identity rows were also
+    # being multiplied by for no MACs.
+    e = BYTES_PER_ELEM[prec]
+    matrices = e * (n_var * n_var          # P, dense square (symmetric-lower)
+                    + n_var * n_var        # L, dense square (factor in place)
+                    + Annz)                # Gamma only
+    # Iterates x,y,z; per-tick q and interleaved (lo,hi) bounds; and the
+    # temporaries the descriptor program actually names. Counted from the
+    # simulator's allocation plan, not estimated.
+    vectors = e * (2 * n_con               # interleaved bounds
+                   + 5 * n_con             # y, z, t, t_dual, and one of zt/Ax
+                   + 2 * n_con             # rp, and the second of zt/Ax
+                   + 6 * n_var             # x, q, rhs, xt, Px, Aty
+                   + 2 * n_var             # rd, and one spare n-vector
+                   + 8)                    # convergence scalars, bank-aligned
+    persistent = matrices + vectors
     delta = 4 * (n_x + 3 * n_var)                          # state + reference
     # ---- kernel decomposition: what codegen has to ISSUE per ADMM iteration.
     # This is the FEW-LARGE-OPERATIONS end of the spectrum, which is the point:
@@ -943,7 +973,30 @@ def sqp_rti_mpc(name, n_x, n_u, N, ip_iters, rate, note, prec="fp64",
     gemm_call = N * n_x * nb * nb
     gemv_call = 2 * N * nb * n_x
     e = BYTES_PER_ELEM[prec]
-    persistent = e * (N * nb * nb + N * n_x * nb)
+    # ---- CAPACITY. CORRECTED 2026-07-30, same error class as the ADMM rows
+    # (descriptor v0.1 ruling R8): this line was `e * (N*nb*nb + N*n_x*nb)`, which
+    # counted the stage Hessians and the [A B] blocks and NOTHING ELSE -- no
+    # Riccati factor, no feedback gains, no slack/dual vectors, no trajectory.
+    # Fixed here rather than merely flagged, because having just corrected the
+    # identical undercount on QUAD-MPC it would be incoherent to leave a known
+    # 1.9x one in place -- and because uncorrected it made ARM-MPC appear to FIT
+    # the new 192 KB scratchpad, which is a flattering conclusion resting on a
+    # known error.
+    #
+    # The conclusion does NOT change: ARM-MPC overflows at 128, 192 and 256 KB and
+    # always did. That was already accepted explicitly -- it runs at 250 Hz with
+    # ~10x deadline margin and its streaming demand is ~0.03 GB/s -- so it does
+    # not drive capacity. QUAD-MPC does. What changes is only that the number is
+    # now honest about it.
+    persistent = e * (
+        N * nb * nb                 # stage Hessians
+        + N * nb * nb               # Riccati factors (NOT in place: the Hessian
+                                    # is needed again on the forward recursion)
+        + N * n_x * nb              # [A B] sensitivity blocks
+        + N * n_u * n_x             # feedback gains K
+        + 4 * N * nb                # slacks and their duals, both bounds
+        + N * nb                    # state/input trajectory
+    )
     delta = e * (n_x + N * n_x)
     # ---- kernel decomposition: the MANY-SMALL-OPERATIONS end of the spectrum,
     # and the reason this analysis exists. HPIPM's backward Riccati recursion is
@@ -1140,8 +1193,19 @@ BENCHMARKS = [
     # at eps=1e-6 (results_osqp_measured.txt: cold 73, max 74). This -- not the p95
     # design point -- is what a hard deadline must be sized against, and it is the
     # only thing in the current set that constrains scratchpad bandwidth at all.
+    # check_term=1 CORRECTED 2026-07-30 from OSQP's library default of 25.
+    # The default is wrong for this workload and the error was flattering: this
+    # problem converges in 6-14 iterations (measured), so checking every 25th
+    # means never checking -- the solver would always run to max_iterations.
+    # The validated functional simulator checks every iteration, and at
+    # check_term=1 this decomposition emits 31.0 descriptors per checked
+    # iteration against the simulator's MEASURED 31. That agreement is the
+    # cross-validation; it did not hold at 25 (28.1 descriptors).
+    # Cost of the correction: latency 36.0 -> 49.0 us, energy 6.15 -> 8.90 uJ.
+    # perf/W barely moves (12.55x -> 12.33x) because the CPU baseline pays the
+    # same extra residual work -- but the LATENCY is 36% worse and that is real.
     condensed_mpc("QUAD-MPC",  n_x=12, n_u=4, N=20, iters=15, rate=1000,
-                  iters_worst=74,
+                  iters_worst=74, check_term=1,
                   note="Quadrotor MPC, 12 states, N=20, ADMM p95=15 iters (measured), 1 kHz"),
     # RE-SPECIFIED 2026-07-30: acados SQP-RTI (one SQP step/tick) + HPIPM partial
     # condensing, 15 interior-point iterations, fp64. Rate lowered 500 -> 250 Hz:
@@ -1188,6 +1252,7 @@ BENCHMARKS = [
 # row and the audit trail has to show what happens to them.
 PWR_MPC_CCS = condensed_mpc(
     "PWR-CCS", n_x=4, n_u=3, N=10, iters=12, rate=20000, iters_worst=48,
+    check_term=1,
     note="RETIRED v1.1 row: motor-drive continuous-control-set MPC via ADMM, "
          "20 kHz. Research-platform practice, not shipping product")
 
@@ -1541,11 +1606,26 @@ def model_cpu(b: Benchmark, cpu: CpuCfg) -> dict:
 # Until now they were all reported at CFG_16_LEGACY below -- 256 MACs and 256 KB,
 # a configuration we no longer recommend -- so the quoted latency and perf/W
 # figures described a part that was never the product.
+# CAPACITY CORRECTED 128 -> 192 KB, 2026-07-30, by descriptor v0.1 ruling R8.
+# The functional simulator's MEASURED allocation plan for QUAD-MPC is 163.8 KiB
+# at fp32 (138.8 KiB once A = [I;Gamma] is exploited) against the 128 KB that was
+# costed. The flagship's three matrices ALONE are 125.0 KiB of a 128.0 KiB
+# scratchpad, so 128 KB was arithmetically impossible, not merely tight.
+# Bandwidth (128 B/cycle) and bank count (16) DO NOT MOVE: capacity was never the
+# binding constraint on latency and still is not -- this is a capacity correction,
+# not a rebalancing, and it does not touch the bandwidth-first finding.
+# Cost: core 0.698 -> 0.786 mm2 (+12.6%), pJ/byte 0.718 -> 0.839, QUAD-MPC
+# perf/W 14.13x -> 12.55x. 192 KB rather than 160 KB because 12 KiB per bank
+# (1536 x 64b) has array efficiency 0.394 against 0.354 for 10 KiB, so the last
+# 32 KiB costs 0.020 mm2 -- 160 KB is dominated.
+CM100_SCRATCHPAD_KB = 192
+CM100_SCRATCHPAD_KB_PRE_R8 = 128        # kept so the failure stays reproducible
+
 CFG_100 = ArgmindCfg(
-    name="CM-100 (12x12=144 MACs, 128 KB, 16 banks x 8 B = 128 B/cyc, "
+    name="CM-100 (12x12=144 MACs, 192 KB, 16 banks x 8 B = 128 B/cyc, "
          "8 merged FMAs = 16 fp32 lanes / 8 fp64, 800 MHz, T1)",
-    tile=12, scratchpad_kb=128, scratchpad_bw_bpc=128.0, n_banks=16,
-    vector_lanes=16, fp64_fmas=8)
+    tile=12, scratchpad_kb=CM100_SCRATCHPAD_KB, scratchpad_bw_bpc=128.0,
+    n_banks=16, vector_lanes=16, fp64_fmas=8)
 
 # Retained for comparison and for the tile/bandwidth sweeps. NOT the product.
 # NOTE: all of these carry the SAME 8-unit fp64 cluster, because fp64 throughput
@@ -1556,7 +1636,8 @@ CFG_16 = ArgmindCfg(name="CM-16 legacy (16x16 tile, 256 KB, 64 B/cyc, T1)",
 CFG_32 = ArgmindCfg(name="CM-32 (32x32 tile, 800MHz, T1)", tile=32)
 CFG_64 = ArgmindCfg(name="CM-64 (64x64 tile, 800MHz, T1)", tile=64)
 CFG_100_T0 = ArgmindCfg(
-    name="CM-100, T0 copy-based (ablation)", tile=12, scratchpad_kb=128,
+    name="CM-100, T0 copy-based (ablation)", tile=12,
+    scratchpad_kb=CM100_SCRATCHPAD_KB,
     scratchpad_bw_bpc=128.0, n_banks=16, vector_lanes=16, fp64_fmas=8, tier="T0")
 
 KILL_CRITERION = 5.0   # perf/W multiple vs best CPU baseline, solver workloads

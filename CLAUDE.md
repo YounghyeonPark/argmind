@@ -40,11 +40,27 @@ automotive.
   GEMM.** Corollary worth having: **144 MACs is also the knee for FCS-MPC** (array-bound below
   12×12, intensity-bound above) — the same number the EKF energy argument produced, independently.
 - **Bandwidth-first provisioning**: wide banked scratchpad, modest MAC array — opposite of an
-  NPU. **CM-100 baseline (costed 2026-07-30): 128 KB, 16 banks × 8 B = 128 B/cycle, 144 MACs
-  (12×12), 8 merged FMA units (= 16 fp32 lanes or 8 fp64), 800 MHz → 0.698 mm² at 16nm**
-  (modelled, ±2×, and ±2.1× again on the FMA gate count → 0.845 mm² at the pessimistic anchor).
-  Minimum viable 64 B/cycle / 64 MACs / 0.563 mm²; a solver-only SKU at 64 MACs is real
+  NPU. **CM-100 baseline (re-costed 2026-07-30): 192 KB, 16 banks × 12 KiB = 128 B/cycle, 144
+  MACs (12×12), 8 merged FMA units (= 16 fp32 lanes or 8 fp64), 800 MHz → 0.786 mm² at 16nm**
+  (modelled, ±2×, and ±2.1× again on the FMA gate count → ~0.94 mm² at the pessimistic anchor).
+  Minimum viable 64 B/cycle / 64 MACs; a solver-only SKU at 64 MACs is real
   (+35% energy, all on EKF) but **cannot drop fp64**.
+- **Capacity was 128 KB and that was WRONG — corrected by measurement, not by modelling**
+  (2026-07-30, descriptor v0.1 ruling R8; `argmind.descriptor.SCRATCHPAD_RULING`). The functional
+  simulator's **measured** allocation plan for QUAD-MPC is **163.8 KiB at fp32** (138.8 KiB once
+  `A = [I;Γ]` is exploited) against the 128 KB costed. Two model errors, **both flattering**:
+  (1) P and L were charged n²/2 each — a **packed triangular layout that base+leading-dimension
+  AGUs cannot express**, i.e. the capacity model assumed a storage layout the descriptor format
+  cannot address; (2) working vectors and temporaries were charged **zero** (14.1 KiB at fp32),
+  structurally invisible because the field is named `persistent_bytes` and a temporary is not
+  persistent. **128 KB was arithmetically impossible, not merely tight: the flagship's three
+  matrices alone are 125.0 KiB of 128.0 KiB.** Cost of the fix: core 0.698 → 0.786 mm² (+12.6%),
+  pJ/byte 0.718 → 0.839, solver energy +5.5%, QUAD-MPC perf/W 14.13× → 12.55×. **Latency does not
+  move** — capacity was never the binding constraint, bandwidth is, and **bandwidth and bank count
+  are unchanged, so the bandwidth-first finding is untouched.** 192 not 160 KB because 12 KiB/bank
+  (1536×64b, array efficiency 0.394) dominates 10 KiB/bank (0.354): the last 32 KiB costs
+  0.020 mm². **Never size against QUAD-MPC at fp64 (327.6 KiB) — that is a validation artefact**
+  (bit-exact OSQP match); fp64 is an interior-point requirement, not an ADMM one.
 - **fp64 is a requirement and does not come from the array.** Interior-point KKT conditioning
   reaches ~1e12, so ARM-MPC (acados SQP-RTI + HPIPM) needs it. Multi-pass emulation from bf16
   needs **49–361 passes** — 3.5–23× worse energy to save ~4% of the core — and fp32 + iterative
@@ -98,12 +114,13 @@ automotive.
   exactly nothing for pure-GEMV ADMM. EKF is a beachhead workload, so "solver customers subsidise
   an ML feature" is *not* the honest story. Caveat: an L0 operand register file would buy the same
   traffic cut at O(T) area instead of O(T²) — if that lands, honest array size drops to 36–64.
-- Advantage is **energy + determinism, not speed**: **14–24× perf/W at the CM-100 config
-  (modelled, ±2×; 9–26× across the scratchpad-energy sensitivity band)**, latency **0.62–2.15× on
-  solvers** — QUAD 1.74×, EKF-96 2.15×, ARM 1.14×, EKF-24 1.21×, and **PWR-MPC 0.62×, genuinely
-  below parity**. **A CPU meets 5 of 5 solver deadlines in the frozen set** — never pitch "the CPU
-  can't do this"; we are more efficient, not enabling.
-  (History: 17–25×/1.2–2.9×, then 9.5–21.3×/"below parity on 2–3 of 5", then 14–22×/0.97–2.11×.
+- Advantage is **energy + determinism, not speed**: **12.3–22.0× perf/W at the CM-100 config
+  (modelled, ±2×)**, latency **0.62–2.15× on solvers** — QUAD 1.81×, EKF-96 2.15×, ARM 1.14×,
+  EKF-24 1.21×, and **PWR-MPC 0.62×, genuinely below parity**. **A CPU meets 5 of 5 solver
+  deadlines in the frozen set** — never pitch "the CPU can't do this"; we are more efficient, not
+  enabling. All five stay above the 5× kill criterion.
+  (History: 17–25×/1.2–2.9×, then 9.5–21.3×, then 14–22×, then 14–24×. The 14–24× → 12.3–22.0×
+  move is the 192 KB capacity correction plus charging ARM-MPC's real footprint.
   Always quote at the CM-100 configuration.)
 - **PWR-MPC is below parity and the reason is structural, not fixable by provisioning**
   (settled 2026-07-30, §0.3). Re-specified as finite-control-set MPC it is 0.62×, and the
@@ -137,16 +154,71 @@ automotive.
   customer to use the MCU. Exposure is set by cycles/descriptor, **not** algorithm class (three
   algorithm classes now demonstrate it), so do not pitch this as "interior point is the risky one."
   Consequence for §4.2: **descriptor emission stays on the CM side at every integration depth.**
-- **Descriptor format v0 frozen and the emit cost derived, not guessed**
-  (`perf_model/seq_emit_cost.py`): **8 words / 32 B**, three base addresses, packed dims, a
-  chain/wait token pair. RV32 emit counted at **23 cycles naive, 10 delta-encoded, ~0 with the
-  hardware generator** — so `seq_setup_cycles=4` was never reachable in software and silently
-  presumed the generator. Drop delta encoding. **New requirement the flat assumption hid: arming
-  costs ~22 instructions *per template*, so a template must cover ≥6 descriptors.** An HPIPM stage
-  sweep gets 0.04 cycles/desc; an **ADMM iteration gets 8.25 — above the bar** — because it issues
-  ~6 distinct shapes over only 16–28 descriptors. Fix is free and codegen-side: **arm templates
-  once per solve, not per iteration** (legal because allocation is static — the same property that
-  makes overlap legal), which means **the generator must hold ≥6 armed templates.**
+- **Descriptor format v0.1 is the current spec** (`argmind/descriptor.py`; `V0_1_RULINGS` is
+  authoritative, `V0_LIMITATIONS` is the paired v0 record). Still **8 words / 32 B**, three base
+  addresses, packed dims — so **descriptor traffic, queue SRAM and AGU count are unchanged, which
+  is what made the change affordable.** Layout: opcode 6b, prec_m 3b, prec_v 3b, transpose 2b,
+  structure 3b, accumulate 1b, unit_diag 1b, chain_token 3b, wait_mask 8b, reserved 2b.
+  **The whole change is paid for by reclaiming waste in v0**, which had *zero* spare bits:
+  chain_token 8b→3b (−5) and prec_m 4b→3b (−1) fund prec_v (+3) and structure (+1), leaving 2 bits
+  reserved. Rulings: **NRMI and VMUL added** (opcode space was never scarce — 10 of 64 used);
+  **wait token → wait mask**; **prec_v** makes "fp16 operands, fp32 solve" expressible;
+  **PROJ becomes out-of-place** via interleaved (lo,hi) bound pairs instead of a fourth AGU;
+  **elementwise ops go 2-D** (n-cap 255 → 65535, zero opcodes, zero bits); **zero AGU stride is
+  legal on reads, illegal on writes.**
+- **Two of the seven v0 findings were argued on grounds that do not hold. Do not repeat either.**
+  (1) "Without NRMI the convergence test leaves the fabric" is **false** — the 2-norm path is DOT
+  plus two sqrt on the FMA cluster plus compares on the sequencer, no host round-trip. NRMI is
+  justified by **equivalence with the reference solver** (3.7× better control action, an iteration
+  count a customer can check against OSQP) at essentially zero cost, which is enough. (2) "Scalar-only
+  ρ rules out the sparse MPC form acados and HPIPM use" **conflates two solvers**: ρ is ADMM's
+  penalty parameter and **HPIPM is interior-point, with no ρ at all.** v0 never blocked ARM-MPC —
+  its per-stage n_b×n_b blocks are exactly what three base addresses express, and it is the case
+  that gets 0.04 cycles/descriptor from the generator. VMUL enables **sparse-form ADMM**; claim that
+  and nothing more.
+- **The wait mask is worth −5 bits, NOT 1.42×. Adopt it for the bits.** The v0 depth penalties
+  (iteration 17 vs 12, residual 15 vs 5) are real but they count **chain steps, and a chain step
+  here is ~228 datapath cycles.** Measured on the emitted DAG the mask removes **120 of 7881 cycles
+  per checked QUAD-MPC iteration = 1.5%** — the depth-ratio metric overstates the value ~100×. It
+  pays where cycles/descriptor approaches `drain_cycles`=8: total drain is 10.6% of ARM-MPC latency
+  at 30.3 cycles/descriptor, and **the reducible share of that is NOT measured** — no HPIPM
+  descriptor program exists yet. Related metric bug found and fixed: `chain_depth` was computing
+  1 + *ancestor count*, not longest path; those coincide only for a fully serialised block.
+- **A token is a scoreboard slot, not a name — but reuse is only safe under an extra rule.**
+  Measured peak simultaneous liveness on the real ADMM DAG is **7 (iteration), 3 (residual),
+  3 (setup)**, so 8 tokens with one spare, and v0's 255 was waste. Reuse is safe **only if a
+  descriptor that reclaims a token also waits on it**; without that, a waiter resolving a token to a
+  later owner gets no guarantee about the earlier one, because in-order *issue* does not imply
+  in-order *completion*. That is an **RTL scoreboard and codegen requirement**, it was found by the
+  concatenation hazard test rather than by reasoning, and with it token exhaustion costs overlap and
+  cannot produce a wrong answer. v0's 255-descriptor `concat` limit is gone.
+- **The emit cost derived, not guessed** (`perf_model/seq_emit_cost.py`): RV32 emit counted at
+  **23 cycles naive, 10 delta-encoded, ~0 with the hardware generator** — so `seq_setup_cycles=4`
+  was never reachable in software and silently presumed the generator. Drop delta encoding.
+  **Arming costs ~22 instructions *per template*, so a template must cover ≥6 descriptors.** An
+  HPIPM stage sweep gets 0.04 cycles/desc; an ADMM iteration gets 8.25. Fix is free and
+  codegen-side: **arm templates once per solve, not per iteration** (legal because allocation is
+  static — the same property that makes overlap legal), so **the generator must hold ≥6 armed
+  templates.**
+- **The measured descriptor count is 31 per checked ADMM iteration, not 28, and the ≥8-cycle
+  contract is NOT threatened** (`argmind.descriptor.SEQUENCER_RECHECK`). At fp32 / 128 B per cycle
+  the block averages **238 cycles/descriptor, 29.8× the bar** (fp64: 474, 59.3×). The convergence
+  test is 48% of descriptors *and 49% of cycles* — its mix is dominated by two full A-products, not
+  by the seven cheap reductions, so the scary fraction is not a problem on average.
+  **Where it IS thin is the queue-depth clause:** the residual block holds a run of **six
+  consecutive descriptors averaging 5.8 cycles**, below the bar. Six fits an 8-deep queue, so
+  run-ahead absorbs it — this **confirms queue depth 8 as a floor by measurement** (a 4-deep queue
+  would not) and it is the thinnest point in the whole sequencer analysis. Fix is a MACIF
+  capability, not silicon: **`maxabs_accumulate` (MACIF 0.2)** folds the ∞-norm into the pass that
+  produces the vector, taking the residual block 15 → 10 descriptors and the run 6 → 4. Same
+  principle as `broadcast_init`/`square_accumulate` — fold work into the accumulator at O(1) area.
+- **`check_term=25` was wrong and flattering.** OSQP's library default never fires on a solve that
+  converges in 6–14 iterations, so residual work was being amortised over checks that would not
+  happen. Corrected to 1, matching the validated simulator. Cost: QUAD-MPC latency **36.0 → 49.0 µs
+  (+36%)**, energy 6.15 → 8.90 µJ; perf/W barely moves (the CPU pays the same extra work). The
+  payoff is a **cross-validation**: at `check_term=1` the model's kernel decomposition emits
+  **31.0 descriptors against the simulator's measured 31**, from two independently written code
+  paths. It did not agree at 25.
 - **Power gating is an architectural requirement, not an optimization.** Solver duty cycles are
   0.2–12%; charged ungated, QUAD-MPC perf/W falls 12.6× → 4.8× — *below the kill criterion* —
   and EKF-24 to 0.2×. Coarse-grain gating, or at minimum full clock gating plus retention-mode
@@ -180,29 +252,32 @@ a polished eps=1e-11 solve; closed-loop p50 7 / p95 8 / max 9 iterations, inside
 6–14 band. **Residency demonstrated, not modelled:** 268 KB on the first call, then
 **5.8 KB in / 0.6 KB out per tick (46×)**, with the Cholesky running on 1 of 200 ticks.
 
-Implementation against the *frozen* spec found seven gaps. The two that change how we work:
+Implementation against the *frozen* spec found seven gaps. **All seven are ruled on in descriptor
+v0.1** (above; `argmind.descriptor.V0_1_RULINGS`). The two that change how we work:
 
-- **ρ MUST be a power of two — a codegen contract, not a preference.** Descriptor word 7 is fp32
-  and ADMM multiplies by both ρ and 1/ρ; the fixed point requires them to be exact reciprocals,
-  since with an active constraint `y = ρ·(1/ρ)·y` forces `y = 0` otherwise and the dual never
-  settles. **ρ=0.1 (OSQP's default) stalls at 1500 iterations; ρ=0.125 converges in 34.** Costs
-  nothing to obey. `ADMMSolver` now refuses non-power-of-two ρ rather than returning a stalled
-  answer.
+- **ρ must be a power of two — but the root cause is NOT ρ.** Descriptor word 7 is fp32 and ADMM
+  multiplies by both ρ and 1/ρ; the fixed point requires them to be exact reciprocals, since with an
+  active constraint `y = ρ·(1/ρ)·y` forces `y = 0` otherwise and the dual never settles.
+  **ρ=0.1 (OSQP's default) stalls at 1500 iterations; ρ=0.125 converges in 34.** Re-diagnosed
+  (ruling R5): the failure is **an fp32 immediate multiplying fp64 data**, not ρ. OSQP runs happily
+  at ρ=0.1 because it keeps ρ and ρ⁻¹ as fp64 **vectors**, where the mismatch is ~1e-16 rather than
+  1.5e-8. So the fix is not a wider w7 — that would cost a word and still not be exact — it is:
+  **any scalar that must be exact relative to another scalar lives in scratchpad, at the buffer's
+  own precision, and is read by a zero-stride VMUL.** w7 keeps standalone tuning constants.
+  Power-of-two ρ stays *recommended* (free, and makes the mismatch exactly zero) but stops being
+  load-bearing. `ADMMSolver` still refuses non-power-of-two ρ on the w7 path.
 - **QUAD-MPC cannot validate the projection kernel or the dual update.** At its nominal ±2 N
   bounds the optimum is *interior* — OSQP reports no active set on all 200 closed-loop ticks — so
   y* = 0 and a broken dual fixed point is satisfied trivially. A genuinely wrong dual update
   (`y += ρ(t−z)` instead of `y = ρ(t−z)`) matched OSQP to 2.9e-15 across 60 solves. **Always run a
   tight-bound variant with a real active set alongside it.**
 
-Descriptor v0 gaps for the architect (see `argmind/descriptor.py` `V0_LIMITATIONS`): **no
-infinity-norm reduction** (OSQP's stopping rule is all ∞-norms; without an `NRMI` opcode the
-convergence test leaves the fabric, which is the one thing this architecture exists to prevent —
-one opcode, no new fields); **one wait token** forces serialisation where chains merge (emitted
-depth 17 vs achievable 12; residual 15 vs 5); **one precision field**, so the recommended
-"fp16 operands, fp32 solve" is inexpressible and w0 has zero spare bits; three base addresses make
-box projection in-place-only; 16-bit dims cap flat ops at n=255; scalar-only ρ rules out the
-sparse MPC form acados/HPIPM use. **Open contradiction:** QUAD-MPC's working set is **163.8 KiB at
-fp32 / 327.6 KiB at fp64** against the costed **128 KiB** — only all-fp16 fits, and that needs L4.
+**Both open items are now closed.** The seven descriptor gaps are ruled on in v0.1, and the
+scratchpad contradiction (QUAD-MPC 163.8 KiB at fp32 against a costed 128 KiB) is resolved by
+growing to 192 KB — see the two capacity bullets above. The measurement was authoritative over the
+model, and it exposed two flattering model errors rather than one implementation mistake.
+**Note the format change is not a capacity remedy:** v0.1 moves the measured footprint by 0.2%
+(167736 → 167440 B, from deleting the σ·ones(n) vector). The capacity ruling stands on its own.
 
 ## Evidence standards (non-negotiable — one bad number costs the company)
 
@@ -211,11 +286,18 @@ fp32 / 327.6 KiB at fp64** against the costed **128 KiB** — only all-fp16 fits
 - Model outputs are **±2× and never quotable externally** — say so in any doc containing them.
 - **"Not published"** is a valid, preferred finding; never present an estimate as a
   competitor's spec.
-- **Models must be able to fail**: a flattering result means find the assumption first. **Twelve
+- **Models must be able to fail**: a flattering result means find the assumption first. **Fifteen
   modelling errors so far**, most of them flattering — undercounted overhead energy, GEMV modelled
   as GEMM, a phantom transcendental term that alone produced the entire apparent latency win,
   scratchpad energy 2.3× low, MAC count conflated with operand-reuse depth, an unphysical vector
-  gate count. All are encoded as regression tests; run them.
+  gate count, and the three found 2026-07-30 by building the simulator: **a working set charged at a
+  packed triangular layout the AGU cannot address, working vectors charged zero bytes, and
+  convergence checked every 25th iteration on a solve that takes 6–14.** All are encoded as
+  regression tests; run them.
+- **The strongest error-finding tool so far was building the thing.** Three of the fifteen came from
+  one functional simulator, and the two capacity errors had survived every review because they were
+  *inside a plausible formula* rather than in a stated assumption. Corollary: **an implementation
+  measurement outranks the model**, and when they disagree the model is where to look first.
 - **Scrutinise corrections that favour us as hard as ones that don't.** The fp64 pass found a CPU
   baseline charging fp64 at fp32 rates — fixing it moved ARM-MPC perf/W 14.1× → 20.2×, entirely
   on the CPU side. Two errors had been partly cancelling.
@@ -224,7 +306,7 @@ fp32 / 327.6 KiB at fp64** against the costed **128 KiB** — only all-fp16 fits
 ## Conventions
 
 Windows/PowerShell; python 3.14; **git repo since 2026-07-30** — commit before and after any
-change to `perf_model/`, and run `python -m pytest` (151 invariant + mutation tests) before
+change to `perf_model/`, and run `python -m pytest` (307 invariant + mutation tests) before
 quoting any modelled number. Markdown docs at root, model in `perf_model/`.
 Prefer open-source EDA (Verilator, cocotb, Yosys) — the cash plan depends on it. Interfaces:
 AXI4/AXI4-Lite baseline; ACE-Lite (Arm) and coherent TileLink (RISC-V) for zero-copy; CHI +
