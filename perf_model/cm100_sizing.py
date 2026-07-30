@@ -38,7 +38,24 @@ import sram_cost as S
 REST_MM2 = 0.045 + 0.070 + 0.030      # sequencer, DMA+AXI/ACE-Lite, misc [EST]
 TOP_MARGIN = 1.15                      # top-level route/CTS/margin [EST]
 A_GATE = S.A_GATE_UM2
-VEC_LANE_GATES = 2200                  # [EST] fp32 lane + transcendental share
+
+# CORRECTED 2026-07-30. The old value was 2200 gates/lane, which is UNPHYSICAL:
+# the parametric FMA model in sram_cost.py puts an fp32 *multiplier alone* at
+# ~2.6 kgates, so 2200 could not hold one. Now derived from the same gate model
+# as everything else: one IEEE fp32 FMA (9.55 kgates) + a share of the
+# reciprocal / rsqrt / exp tables and the min/max/compare path.
+# Effect: the vector unit goes 0.009 -> 0.055 mm2. This is a PRE-EXISTING
+# UNDERESTIMATE, not an fp64 cost -- the two are reported separately below so
+# neither hides in the other.
+VEC_TRANSCENDENTAL_GATES = 2000        # [EST] recip/rsqrt tables + Newton, /lane
+VEC_LANE_GATES = int(S.fma_gates_ieee(S.SIG_BITS["fp32"])
+                     + VEC_TRANSCENDENTAL_GATES)          # ~11.5k [EST-CAL]
+
+# The recommended fp64 implementation is NOT a separate cluster bolted on: it is
+# a merged multi-format FMA cluster that IS the vector unit (1x fp64 or 2x fp32
+# per unit). Setting this True prices the two as one block, which is both cheaper
+# and removes the "dead area on 6 of 7 benchmarks" objection.
+MERGE_FP64_WITH_VECTOR = True
 
 # Fraction of the control period a hard-real-time integrator will actually give
 # the solver. 100% of the period is not an engineering budget -- the tick also
@@ -60,20 +77,40 @@ def banks_for(bw: float) -> int:
     return max(1, min(int(bw // 8), 16))
 
 
-def cfg(name, bw, tile=16, lanes=16, seg=True, kb=128, tile_n=None, nb=None):
+def cfg(name, bw, tile=16, lanes=16, seg=True, kb=128, tile_n=None, nb=None,
+        fp64_fmas=8):
     return M.ArgmindCfg(name=name, tile=tile, tile_n=tile_n, vector_lanes=lanes,
                         scratchpad_kb=kb, scratchpad_bw_bpc=bw,
                         n_banks=nb if nb is not None else banks_for(bw),
-                        segmented_reduction=seg)
+                        segmented_reduction=seg, fp64_fmas=fp64_fmas)
 
 
-def area_breakdown(c: M.ArgmindCfg) -> dict:
+def area_breakdown(c: M.ArgmindCfg, pessimistic: bool = False) -> dict:
+    """Core area, mm2 at 16nm-class. MODELLED ESTIMATE, +/-2x, NOT QUOTABLE.
+
+    `fp64` is reported as a SEPARATE LINE so the fp64 decision can be audited
+    without unpicking the vector-unit correction made at the same time.
+    """
     spad = c.spad.area_mm2()["total_mm2"]
     mac = S.mac_array_mm2(c.macs)
-    vec = c.vector_lanes * VEC_LANE_GATES * A_GATE / 1e6
-    sub = spad + mac + vec + REST_MM2
-    return {"spad": spad, "mac": mac, "vec": vec, "rest": REST_MM2,
-            "sub": sub, "total": sub * TOP_MARGIN}
+    if MERGE_FP64_WITH_VECTOR and c.fp64_fmas > 0:
+        # One merged block. Width is set by whichever demand is larger:
+        # fp64_fmas units, or vector_lanes/2 units (each does 2x fp32).
+        units = max(c.fp64_fmas, (c.vector_lanes + 1) // 2)
+        fma = S.fma_cluster_mm2(units, "fp64", pessimistic, multiformat=True)
+        trans = units * 2 * VEC_TRANSCENDENTAL_GATES * A_GATE / 1e6
+        # Attribution: what a vector-unit-only block of the same fp32 width
+        # would have cost, vs the increment for making it fp64-capable.
+        vec_only = ((c.vector_lanes * VEC_LANE_GATES) * A_GATE
+                    * S.MAC_STAGING_OVERHEAD / 1e6)
+        vec, fp64 = vec_only, max(0.0, fma + trans - vec_only)
+    else:
+        vec = c.vector_lanes * VEC_LANE_GATES * A_GATE * S.MAC_STAGING_OVERHEAD / 1e6
+        fp64 = (S.fma_cluster_mm2(c.fp64_fmas, "fp64", pessimistic)
+                if c.fp64_fmas > 0 else 0.0)
+    sub = spad + mac + vec + fp64 + REST_MM2
+    return {"spad": spad, "mac": mac, "vec": vec, "fp64": fp64,
+            "rest": REST_MM2, "sub": sub, "total": sub * TOP_MARGIN}
 
 
 # ---------------------------------------------------------------------------
@@ -409,31 +446,23 @@ def main():
     out("  compiler datasheet settles it; until then 128 B/cycle is a BET and")
     out("  64 B/cycle is the floor that does not depend on winning it.")
     out()
-    out("  ARM-MPC IS NOW fp64 -- 8 B/element. What that changes:")
+    out("  ARM-MPC IS fp64 -- 8 B/element. What that changes:")
     b = next(x for x in M.BENCHMARKS if x.name == "ARM-MPC")
     for bw in (64, 128):
-        for tile in (8, 12, 16):
-            c = cfg("x", bw, tile)
+        for f in (4, 8, 16):
             gemv_ceil = bw / 8.0
-            gemm_ceil = c.macs * 0.125
-            out(f"    {bw:>3} B/cyc, {c.macs:>3} MACs: fp64 GEMV ceiling "
-                f"{gemv_ceil:>5.1f} MAC/cyc (bandwidth), fp64 GEMM ceiling "
-                f"{gemm_ceil:>5.1f} MAC/cyc (array) -> "
-                f"{'BANDWIDTH' if gemv_ceil < gemm_ceil else 'ARRAY'}-limited "
-                f"on mixed work")
+            out(f"    {bw:>3} B/cyc, {f:>2} fp64 FMAs: fp64 GEMV ceiling "
+                f"{min(gemv_ceil, f):>5.1f} MAC/cyc -> "
+                f"{'FMA-CLUSTER' if f < gemv_ceil else 'BANDWIDTH'}-limited")
     out()
-    out("  fp64 halves the MAC/cycle a given B/cycle can feed, so ARM-MPC needs")
-    out("  2x the bytes per MAC of the fp32 ADMM rows. But its 4000 us deadline is")
-    out("  16x QUAD-MPC's 1000 us while its op count is only ~2x, so it still does")
-    out("  not bind: even at 16 B/cycle it lands at 1059 us with 30 IP iterations.")
-    out("  The fp64 consequence that DOES matter is not bandwidth, it is the")
-    out("  DATAPATH: the model gets fp64 from a 0.125 rate factor on a bf16 array,")
-    out("  which is a modelling convenience, not a design. A real 1/8-rate fp64")
-    out("  path through a bf16/fp32 array needs either multi-pass decomposition")
-    out("  (sequencer + accumulator work, not modelled) or a separate narrow fp64")
-    out("  FMA cluster (area not in this budget). SIZE THAT BEFORE RTL -- it is now")
-    out("  the largest un-costed item in the CM-100 area estimate, and it sits")
-    out("  exactly on the MACIF boundary.")
+    out("  fp64 halves the MAC/cycle a given B/cycle can feed, but ARM-MPC's")
+    out("  4000 us deadline is 16x QUAD-MPC's 1000 us while its op count is only")
+    out("  ~2x, so external/scratchpad bandwidth does not bind it. RESOLVED")
+    out("  2026-07-30: the fp64 DATAPATH is now costed explicitly -- see")
+    out("  perf_model/fp64_datapath.py. The 0.125 rate factor on the bf16 array is")
+    out("  gone; fp64 throughput is now an absolute FMA count that carries area.")
+    out("  Summary of that analysis: 8 merged multi-format FMAs, +0.072 mm2 over an")
+    out("  honest fp32-only vector unit, ARRAY-bound not bandwidth-bound on fp64.")
     out()
 
     # ================================================================== Q4 ===
@@ -620,13 +649,18 @@ def main():
     out(f"                 bank geometry: {sp.geom.rows} rows x {sp.geom.cols} cols, "
         f"{sp.geom.mux}:1 col mux, {sp.geom.folds} fold(s)")
     out(f"  MAC array      {rec.macs} MACs ({rec.tile}x{rec.tile_cols}), bf16 mult / "
-        f"fp32 accumulate, fp64 path NOT YET COSTED")
-    out(f"  vector unit    {rec.vector_lanes} fp32 lanes")
+        f"fp32 accumulate, int8 double-pumped, fp32 2-pass")
+    out(f"  FMA cluster    {max(rec.fp64_fmas, rec.vector_lanes // 2)} merged "
+        f"multi-format units = {rec.vector_lanes} fp32 lanes OR "
+        f"{rec.fp64_fmas} fp64 FMAs (fp64 path now COSTED)")
     out(f"  frequency      800 MHz")
     out()
     out(f"  AREA  scratchpad {a['spad']:.3f} | MAC {a['mac']:.3f} | vector "
-        f"{a['vec']:.3f} | seq+DMA+misc {a['rest']:.3f}")
+        f"{a['vec']:.3f} | fp64 increment {a['fp64']:.3f} | seq+DMA+misc "
+        f"{a['rest']:.3f}")
     out(f"        subtotal {a['sub']:.3f} mm2, +15% margin = {a['total']:.3f} mm2")
+    out(f"        pessimistic fp64 edge (56.2 kgate anchor): "
+        f"{area_breakdown(rec, pessimistic=True)['total']:.3f} mm2")
     out(f"  ENERGY scratchpad read {e['pj_b']:.3f} pJ/byte")
     out(f"  LEAK  scratchpad {sp.leakage_mw():.2f} mW @85C / "
         f"{sp.leakage_mw(True):.2f} mW @125C")
@@ -648,7 +682,8 @@ def main():
     out("  DECISIONS AND WHAT THEY REST ON")
     out("   * 128 KB, 128 B/cycle, 144 MACs is the ENERGY-KNEE point. Every part of")
     out("     it is a synthesis parameter, so none of it is irreversible.")
-    out("   * 64 B/cycle / 64 MACs / 128 KB (0.430 mm2) is the FEASIBILITY FLOOR:")
+    out(f"   * 64 B/cycle / 64 MACs / 128 KB ({ef['area']['total']:.3f} mm2) is the "
+        f"FEASIBILITY FLOOR:")
     out("     it meets every deadline in the set at worst-case iteration counts")
     out("     inside a 50%-of-period budget. If the Phase-1 macro datasheet shows")
     out("     flat pJ/byte vs access width, DROP TO THE FLOOR -- the entire case")
@@ -656,19 +691,32 @@ def main():
     out("   * Sensitive to, in order: (1) foundry macro pJ/byte vs access width and")
     out("     vs macro size -- one 45nm dataset, one scale factor, two correlated")
     out("     -10% claims; (2) static power (15 mW [EST]) which sets ungated")
-    out("     perf/W; (3) the fp64 datapath area, currently zero in this budget;")
-    out("     (4) PERIOD_BUDGET=0.50, which is what makes 64 B/cycle rather than")
-    out("     32 B/cycle the floor. At 100% of period, 32 B/cycle suffices.")
+    out("     perf/W; (3) the fp64 FMA gate count (26.6-56.2 kgates, a 2.1x band")
+    out(f"     that moves core area {a['total']:.2f} -> "
+        f"{area_breakdown(rec, pessimistic=True)['total']:.2f} mm2); "
+        f"(4) PERIOD_BUDGET=0.50,")
+    out("     which is what makes 64 B/cycle rather than 32 B/cycle the floor.")
+    out("     At 100% of period, 32 B/cycle suffices.")
     out("   * MEASUREMENTS THAT WOULD FIRM THIS UP: foundry SRAM compiler energy")
     out("     tables at 8/16/32 B access width and 8/16/32 KB macro size; measured")
     out("     cold-solve iteration tails for PWR-MPC and ARM-MPC (both [EST]);")
-    out("     synthesis area for a 1/8-rate fp64 path.")
+    out("     synthesis area + energy for one merged fp64/2xfp32 FMA at 800 MHz")
+    out("     (CVFPU/FPnew is open source -- this is a one-day Yosys/OpenROAD run")
+    out("     and it closes the largest remaining area uncertainty).")
     out()
     out("  WHAT DID NOT CHANGE: bandwidth-first over MAC-first (the ADMM rows are")
     out("  still GEMV-bound and still bind on scratchpad bandwidth, just at a lower")
-    out("  absolute width); the >=5x kill criterion (passes 11-22x); zero-copy and")
+    out(f"  absolute width); the >=5x kill criterion (passes "
+        f"{e['solver_pw_min']:.0f}-{e['solver_pw_max']:.0f}x); zero-copy and")
     out("  residency; power gating as a requirement. SLM-DECODE still misses by")
     out("  3.4x and is still an external-bandwidth provisioning problem.")
+    out()
+    out("  ADDED 2026-07-30: the fp64 datapath, previously ZERO in this budget, is")
+    out(f"  now costed at +{a['fp64']:.3f} mm2 (8 merged multi-format FMAs). The")
+    out("  vector-lane gate estimate was corrected at the same time (2200 gates/lane")
+    out("  could not hold an fp32 multiplier). Core area 0.565 -> "
+        f"{a['total']:.3f} mm2;")
+    out("  see perf_model/fp64_datapath.py and PHASE0_FINDINGS.md.")
     out()
 
     import os

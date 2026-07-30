@@ -12,10 +12,13 @@ Surveyed and set up 2026-07-29. Run everything with `python -m pytest` from the 
 | python | 3.14.5 | — |
 | gcc | MinGW-w64 | present, unused so far |
 
-**42 tests, all passing**, in three files:
+**70 tests, all passing**, in four files:
 
-- [tests/test_model_invariants.py](tests/test_model_invariants.py) — 24 tests. One regression
+- [tests/test_model_invariants.py](tests/test_model_invariants.py) — 27 tests. One regression
   test per historical modelling error, plus physical invariants.
+- [tests/test_fp64_datapath.py](tests/test_fp64_datapath.py) — 28 tests covering the fp64 datapath
+  costing: FMA gate model vs its published anchors, fp64 throughput decoupled from the MAC array,
+  fp64 area nonzero and monotone, multi-pass scaling, and the refinement crossover.
 - [tests/test_sram_and_harness.py](tests/test_sram_and_harness.py) — 10 tests covering the
   SRAM cost model and the OSQP harness (see "Not yet covered" below, now largely closed).
 - [tests/test_guards_actually_bite.py](tests/test_guards_actually_bite.py) — 5 meta-tests that
@@ -100,19 +103,34 @@ monotonic in bank count, the ≥64-bit bank-word validity floor flagged rather t
 extrapolated, density bracketing the measured 8.1 Mb/mm² anchor, and the coupled-plant Hessian
 density check that would have caught the decoupled-plant error automatically.
 
+Closed 2026-07-30: **the fp64 datapath is costed** (`perf_model/fp64_datapath.py`,
+PHASE0_FINDINGS §0.1, 28 new tests in `tests/test_fp64_datapath.py`). The `0.125` rate factor is
+gone — `ArgmindCfg.fp64_fmas` is an absolute FMA count that carries area, so fp64 can now be
+under-provisioned and the sizing can fail. Invariants pin: fp64 throughput independent of array
+size, fp64 area nonzero and monotone, the FMA gate model bracketing its published anchors,
+worst-case iterations requiring more fp64 units than typical, and the refinement trade modelled as
+a real crossover rather than one-sided. Writing those tests caught three errors in the analysis
+itself (array quantisation charged to the fp64 cluster; descriptor count and GEMM op count assumed
+independently, double-counting GEMM 5.7×; option (b) quoted at option (d)'s merged area).
+
 Still open:
 
-- **`cm100_sizing.py` has no tests.** Its output is the recommended part, so the invariants worth
-  pinning are that the recommendation meets every solver deadline at *worst-case* iteration
-  counts (not typical), and that it is not dominated by any other point in the sweep.
+- **`cm100_sizing.py` has no direct tests**, though `test_fp64_datapath.py` now exercises its
+  `area_breakdown` and the recommended configuration. The invariants still worth pinning are that
+  the recommendation meets every solver deadline at *worst-case* iteration counts (not typical),
+  and that it is not dominated by any other point in the sweep.
 - **No numerical-accuracy tests.** Nothing checks that a reduced-precision variant still
-  converges, which is exactly where `solver-numerics` set hard floors: fp32 minimum for the EKF
-  covariance recursion with no fp16/bf16 path in any filter form, and fp64 (or fp32 plus
-  mandatory iterative refinement, which the model does not represent) for interior-point. These
-  are claims about arithmetic the silicon must provide, and they are currently asserted in prose
-  and enforced only as a metadata check on the benchmark definitions — not demonstrated
-  numerically.
-- **The fp64 datapath is un-costed.** The model obtains fp64 from a 0.125 rate factor on a bf16
-  array, which is a modelling convenience; a real 1/8-rate path needs either multi-pass
-  decomposition or a separate narrow FMA cluster, and its area is currently zero in the budget.
-  It sits exactly on the MACIF boundary and interior-point MPC requires it, so it is not optional.
+  converges, which is where `solver-numerics` set hard floors: fp32 minimum for the EKF covariance
+  recursion with no fp16/bf16 path in any filter form, and fp64 for interior point. These are
+  claims about arithmetic the silicon must provide, currently enforced only as a metadata check on
+  the benchmark definitions — not demonstrated numerically.
+- **Descriptor-issue granularity is not modelled, and may be the real ARM-MPC bottleneck.**
+  Surfaced by the fp64 run: an HPIPM block op at nb=21 is only ~5.6 array cycles, so at >4
+  sequencer cycles per descriptor the benchmark is issue-bound rather than array-bound, at any
+  precision. The model charges a flat 150 scalar ops/iteration and cannot express this. Needs a
+  real count of HPIPM's block operations per interior-point iteration, then a sequencer issue-rate
+  term in the model.
+- **No numerical demonstration that fp32 + refinement fails where we claim it does.** §0.1 item 4
+  rests on the Wilkinson/Skeel/Higham convergence condition and on Carson & Higham, not on our own
+  run of acados/HPIPM at the barrier endgame. This is the same gap as the reduced-precision item
+  above, now narrowed to one specific, cheap experiment.

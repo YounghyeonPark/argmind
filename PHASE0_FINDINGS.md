@@ -147,6 +147,153 @@ Raw output: [perf_model/results_v0.txt](perf_model/results_v0.txt).
 > Two tests now encode the fix: worst-case iteration tails must exist *and must bind somewhere*,
 > and GEMM energy must track reuse depth rather than MAC count (32 tests).
 
+> ### §0.1 — CLOSED (2026-07-30): the fp64 datapath is costed. Core area restated 0.565 → 0.698 mm²
+>
+> Raw output: [perf_model/results_fp64_datapath.txt](perf_model/results_fp64_datapath.txt);
+> model in [perf_model/fp64_datapath.py](perf_model/fp64_datapath.py). **All figures
+> modelled-estimate at a 16nm-class node, ±2×, not quotable** — and the fp64 gate count carries a
+> further **2.1× band** of its own, making these the least certain numbers in the budget.
+>
+> **Decision: 8 merged multi-format FMA units (1 × fp64 *or* 2 × fp32 each), which are also the
+> 16 fp32 vector lanes. fp64 increment +0.067 mm² (+0.077 with top margin).** The `0.125` rate
+> factor is deleted from the model; fp64 throughput is now an absolute FMA count that carries area
+> and can be under-provisioned.
+>
+> | Option | fp64 area | ARM-MPC worst case | Verdict |
+> |---|---|---|---|
+> | (a) multi-pass on the bf16 array | +0.040 mm² (wide accumulators) | 3423–24705 µs | **rejected — energy** |
+> | (b) separate fp64-only cluster, 8 units | +0.090 mm² | 742 µs | viable |
+> | (c) native fp64 throughout (144 cells) | +1.417 mm² | 152 µs | **rejected — 3.9× the part** |
+> | **(d) merge the cluster with the vector unit** | **+0.067 mm²** | **742 µs** | **RECOMMENDED** |
+>
+> **Gate-count basis.** A parametric IEEE-754 FMA model, `gates = 4.5·n² + 240·n + 1200` for
+> significand width *n* (`sram_cost.fma_gates_ieee`), at 0.26 µm²/NAND2: **fp32 9.55 kgates, fp64
+> 26.6 kgates (2.8×)**. Calibrated so fp32 lands in the published 8–12 kgate band; cross-checks at
+> n=8 against the independently-guessed 3.0 kgate bf16 array cell to within 14%. Pessimistic edge
+> is a **measured** 28 nm dual-precision FMA at
+> [56.2 kgates](https://www.sciencedirect.com/science/article/abs/pii/S0141933117305665) (2.1×),
+> which takes core area to **0.845 mm²**. Existence proof for the merged unit is
+> [FPnew/CVFPU](https://arxiv.org/abs/2007.01530) (GF 22FDX, FP64/FP32/FP16/bfloat16 in one slice).
+>
+> **1. The requirement is small, and only interior point creates it.** ARM-MPC is 1 of 7 benchmarks
+> and 79% matrix-**matrix** (block Riccati), not GEMV. At worst-case 30 IP iterations it is
+> 3.77 M fp64 MACs, i.e. **2.36 fp64 MAC/cycle** at 800 MHz inside a 50%-of-period budget before
+> any overhead. With utilisation, GEMV/GEMM split, vector and sequencer terms charged:
+> **1 FMA misses the 4000 µs deadline (5401 µs), 2 misses the 50% budget, 4 is the floor (1.38×),
+> 8 gives 2.70× on the budget and 5.39× on the deadline.** 8 is chosen over 4 because it is *free* —
+> 8 merged units is exactly the 16 fp32 lanes the part already carries — and because above 8, fp64
+> GEMV is bandwidth-capped at 16 MAC/cycle and further units buy 64 µs of a 2000 µs budget. The old
+> `0.125` factor was **over-providing fp64 by 2.25×** (18 vs 8 MAC/cycle) at zero area.
+>
+> **What the sizing is and is not sensitive to.** The softest modelling assumption — softening the
+> cluster's quantisation penalty by a square root, worth 1.26× — does **not** move the answer:
+> charged the full 2-D penalty, 8 FMAs gives 2.25× instead of 2.70× and the floor is still 4.
+> What *does* move it is `iters_worst = 30`, which is **[EST]** (2× the design point), not measured:
+> at a 45-iteration tail the floor is 6 FMAs and the 8-FMA margin is 1.83×; at 60 iterations it is
+> **1.39×** — still feasible, no longer comfortable. **Measuring ARM-MPC's actual interior-point
+> iteration tail is the highest-value input to this decision, ahead of the gate count and ahead of
+> the energy constant.**
+>
+> **2. Multi-pass is rejected on energy and interface risk, not on the deadline** — the deadline
+> argument turned out weaker than expected and is reported as such. Error-free (Ozaki-scheme) fp64
+> emulation costs **25–196 GEMM passes with fp16 inputs and 121 with fp8**
+> ([arXiv:2508.00441](https://arxiv.org/abs/2508.00441), Table 1); bfloat16 has fewer mantissa bits
+> so needs more, extrapolating to **49–361 passes [EST from that data]**. The optimistic edge of
+> that band *does* meet the raw 4000 µs deadline. What kills it: **3.5–23× worse energy than native**
+> (152–987 µJ vs 43 µJ), because P passes multiply both MAC energy and sliced-operand fetch traffic —
+> unaffordable on the axis we sell, to save **0.028 mm², ~4% of the core**. **The asymmetry is the
+> real finding: bf16 multi-pass reaches fp32 accuracy in 6–9 passes and fp64 accuracy in 49–361.
+> fp32 is exactly the precision interior point cannot use.** (Consistent, not contradictory: the
+> model still shows 9-pass bf16 *cheaper* than native fp64, which is why the fp32 path already uses
+> operand splitting.)
+>
+> **3. The sequencer cost was checked, and the expected hidden expense is not there — but a
+> different one surfaced.** The multi-pass issue:array ratio is **pass-count-independent** (both
+> terms scale with P), so multi-pass carries no *relative* sequencer penalty. However, forcing the
+> descriptor count to be consistent with the benchmark's own GEMM count shows an HPIPM block op at
+> nb=21 is only **~5.6 array cycles**. At 8 sequencer cycles/descriptor the ratio is 1.42× — i.e.
+> **ARM-MPC would be sequencer-issue-bound rather than array-bound, at any precision.** The model
+> does not represent this (flat 150 scalar ops/iteration). It does not change the fp64 decision (an
+> issue bound makes a *larger* fp64 unit even less useful) but it is a **new open item**: descriptor
+> issue must be ≤4 cycles, or the sequencer needs a hardware loop emitting a stage's descriptors
+> from one instruction. **Logged, not resolved.**
+>
+> **4. fp32 + iterative refinement does not remove the fp64 requirement — it relocates it.** Fixed-
+> precision refinement converges only while cond·ε < 1 (Wilkinson/Skeel/Higham); at the barrier
+> endgame cond ≈ 1e12 and ε_fp32 ≈ 6e-8, so the product is ~6e4 ≫ 1 and it does not converge.
+> Mixed-precision (GMRES-IR, Carson & Higham 2017/18) works but needs the **residual in fp64**. So
+> fp64 silicon is required either way — refinement moves it from the O(n³) factorisation to the
+> O(n²) residual. Modelled honestly, refinement is **faster at every k (1.2–3.1×)** and there is a
+> genuine **energy crossover at k = 2**: below it refinement wins on both axes, above it native
+> fp64 wins on energy. The numerics force us above it. Two further points decide it: **the
+> asymptotic case for refinement fails at our block sizes** (residual:factorisation = 3k/nb, which
+> at nb=21, k=3 is **43%**, not the ~5% HPC intuition — refinement is only "cheap" above nb≈90);
+> and the **certifiable worst case with an all-fp64 fallback is the sum of both paths, 1167 µs vs
+> 742 µs for all-fp64 alone**. A scheme whose worst case exceeds the thing it replaces cannot be
+> the baseline for a hard-deadline part. **Verdict: native fp64 is the baseline; refinement stays
+> an optional codegen mode.** This rests on a citation, not our own measurement — see below.
+> **Answer for the solver-only SKU: unchanged, and structurally so** — the cluster is not part of
+> the array, so all-fp64 latency is *identical* (742 µs) on both parts. What changes is the area
+> **fraction**: 9.6% of the CM-100 vs **11.9% of the floor SKU**. fp64 is proportionally more
+> expensive on the small part, and the small part is the MPC-only SKU that most needs it. **There
+> is no SKU from which fp64 can be removed while keeping interior-point MPC.**
+>
+> **5. Restated area budget.** Two corrections, reported separately so neither hides in the other:
+>
+> | Item | Was | Now | Δ |
+> |---|---|---|---|
+> | Scratchpad (128 KB, 16 banks) | 0.2026 | 0.2026 | — |
+> | MAC array (144 bf16) | 0.1348 | 0.1348 | — |
+> | Vector unit (16 fp32 lanes) | 0.0092 | **0.0577** | +0.0485 ← *pre-existing underestimate* |
+> | fp64 increment (8 merged FMAs) | **0.0000** | **0.0670** | +0.0670 ← *the item closed here* |
+> | Sequencer + DMA + misc | 0.1450 | 0.1450 | — |
+> | Subtotal / +15% margin | 0.4916 / **0.565** | 0.6071 / **0.698** | +24% |
+>
+> The old `VEC_LANE_GATES = 2200` was **unphysical**: an fp32 multiplier alone is ~2.6 kgates, so
+> 2200 could not hold one. It is now derived from the same FMA gate model. **Honest range to state
+> for the CM-100 core: 0.70–0.85 mm² at 16nm-class, ±2× on top.** Floor SKU: 0.430 → **0.563 mm²**.
+>
+> **6. fp64 energy per MAC is load-bearing, and the kill criterion survives it.** At 2.20 pJ [EST]
+> it is **39% of ARM-MPC's 22.5 µJ/call** — the single largest term. Sensitivity: **19.8× / 16.6× /
+> 14.2× / 11.1× perf/W at 1× / 1.5× / 2× / 3× the constant — passing 5× throughout.** So the
+> go/no-go does not depend on it; the *quoted ratio* does, by ~2×. An independent n²-scaling
+> derivation from Horowitz gives 2.45 pJ, so the constant is ~13% optimistic on its own logic.
+>
+> **7. A CPU-baseline bug was fixed at the same time, and it moves the ratio in our favour — so it
+> is flagged, not banked.** `model_cpu` charged fp64 work at every baseline's **fp32** rate. NEON/SVE
+> fp64 is half-rate and SME fp64 outer products are quarter-rate. ARM-MPC perf/W therefore moves
+> **14.1× → 19.8×**, and *all* of the increase comes from the CPU side (A55: 276 → 445 µJ, 1.6×)
+> against our own side getting slightly worse (19.6 → 22.5 µJ, from the honest fp64 throughput).
+> Two errors pointing in opposite directions that had partly cancelled. Sanity check the fix is not
+> overdone: **the A55 baseline still meets ARM-MPC's raw 4000 µs deadline (2955 µs)** — we are not
+> claiming the CPU cannot do this. Note also `FEAT_SME_F64F64` is **architecturally optional**; an
+> SME2 part without it has no fp64 matrix path at all. Falsifier F4 — settle on an eval board.
+>
+> **8. MACIF consequence: precision must be a declared contract, not an implementation detail.**
+> - fp64 is an **algorithm requirement**, not a performance knob — a boundary that lets a macro
+>   silently substitute lower precision turns a swap decision into a field correctness failure.
+>   Precision must be queryable and the runtime must **refuse** an fp64 kernel on a macro that does
+>   not declare fp64 — a hard codegen-time error.
+> - **The boundary runs between the bf16/int8 array (swappable) and the fp32/fp64 FMA cluster (not
+>   swappable).** Neither analog nor digital CIM has a path to 53-bit significands, so the fp64 unit
+>   must sit in the fixed part of the CM, merged with the vector unit. This is the architectural
+>   consequence of the whole analysis.
+> - Choosing (d) over (a) **keeps MACIF's contract weak enough for a CIM macro to honour it.**
+>   Multi-pass would have pushed error-free limb semantics and an exact 128-bit accumulator *into*
+>   the swappable macro — a contract analog CIM cannot meet at all.
+> - fp64 is a **feature bit, not a scaling parameter** (same 8 units on the 144-MAC and 64-MAC
+>   parts), so MACIF v0 must declare, per format: `supported`, `macs_per_cycle[format]` (absolute,
+>   not a rate factor), `accumulator_width[format]`, rounding mode and subnormal behaviour. **The
+>   deleted `0.125` factor is exactly the shape of interface that would have been wrong.**
+>
+> **What would firm this up, in order of value per day:** (1) synthesise one CVFPU merged
+> fp64|2×fp32 FMA at 800 MHz with Yosys + an open PDK — closes both the 2.1× gate band and the
+> 2.20 pJ constant, one day, open source; (2) run acados+HPIPM in fp64 and in fp32-with-refinement
+> and **measure** k and whether it converges at the endgame — item 4 rests on a citation;
+> (3) measure ARM-MPC's true worst-case IP iteration count (`iters_worst=30` is [EST] and it sizes
+> the cluster); (4) count HPIPM's actual block ops per IP iteration, which sets the newly-surfaced
+> descriptor-granularity risk. **28 new invariant tests (70 total).**
+
 > ## ⚠ SUPERSEDED (kept for the audit trail) — correction notice, solver-numerics audit
 > **The latency figures in §1 below are wrong and are being regenerated.** An independent audit
 > of the operation counts found seven errors, the largest being a **phantom transcendental

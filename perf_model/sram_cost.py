@@ -101,6 +101,113 @@ GATES_MAC_BF16_FP32ACC = 3000            # [EST] bf16 mult + fp32 accumulate cel
 GATES_MAC_INT8 = 700                     # [EST]
 MAC_STAGING_OVERHEAD = 1.20              # [EST] operand skew regs, accum RF
 
+# ---------------------------------------------------------------------------
+# IEEE-754 FMA gate model, parametric in significand width
+# ---------------------------------------------------------------------------
+# Added 2026-07-30 to cost the fp64 datapath, which was ZERO in the CM-100 area
+# budget while ARM-MPC (acados SQP-RTI + HPIPM, interior point) requires fp64.
+#
+# Structure of the estimate, so the reader can attack each term separately:
+#   * multiplier   radix-4 Booth + Wallace/Dadda tree + final CPA. Partial-product
+#                  count is n/2, each ~n bits wide, reduced by full adders
+#                  (~6 NAND2-equiv each): ~3n^2, plus Booth encode/select ~1.25n^2,
+#                  plus a 2n-bit fast CPA. => K_MUL ~ 4.5 gates per bit^2.
+#   * linear terms alignment barrel shifter over ~3n, LZA + normalise shifter,
+#                  3n-wide adder, rounding. All scale ~n log n; folded into a
+#                  linear coefficient over the n range of interest (8..53).
+#   * fixed terms  exponent datapath, sign, flags, IEEE exception logic.
+#
+# CALIBRATION (this is the load-bearing part, so state it):
+#   n=24 (fp32) -> 9.55 kgates. n=53 (fp64) -> 26.6 kgates. Ratio 2.8x.
+#   Anchors:
+#     - FPnew / CVFPU (Mach, Schuiki, Zaruba, Benini, IEEE TVLSI 2021, GF 22FDX)
+#       is the existence proof that a merged FP64/FP32/FP16/bfloat16 FMA slice
+#       fits in an embedded RISC-V core's area budget.
+#       https://arxiv.org/abs/2007.01530
+#     - A 28nm dual-precision FMA (1x binary64 or 2x binary32, 3-stage, 660 MHz)
+#       is reported at 56.2 kgates -- Microprocess. Microsyst. 2018,
+#       https://www.sciencedirect.com/science/article/abs/pii/S0141933117305665
+#       That is a HIGH-PERFORMANCE merged unit and is used here as the pessimistic
+#       edge, not the central value.
+#   Sanity check at the low end: the model returns 3.4 kgates for n=8, against the
+#   independently-guessed GATES_MAC_BF16_FP32ACC = 3000 for the array cell. Two
+#   estimates made different ways agreeing to 14% is weak but real corroboration.
+#
+# The honest band on an fp64 FMA is therefore 26.6 - 56.2 kgates, i.e. the fp64
+# area figures carry their own +/-2x on top of everything else. [EST-CAL]
+K_FMA_MUL_GATES_PER_BIT2 = 4.5
+K_FMA_LIN_GATES_PER_BIT = 240.0
+K_FMA_FIX_GATES = 1200.0
+# 56.2 / 26.6: the measured high-performance merged unit over the parametric
+# central value. Applied as the pessimistic edge of the area band.
+FMA_AREA_PESSIMISM = 2.1
+# A slice that can do 1x fp64 OR 2x fp32 OR 4x bf16 needs segmentation muxes in
+# the reduction tree and per-segment rounding. Published multi-format units land
+# ~1.2-1.4x a single-format unit of the widest format, and well below the sum of
+# separate units. [EST]
+FMA_MULTIFORMAT_MERGE = 1.30
+# Cluster-level: 8-byte operand staging (3 operands), accumulator register file,
+# scratchpad read-port share, descriptor decode. On top of MAC_STAGING_OVERHEAD.
+FP64_CLUSTER_OVERHEAD = 1.35              # [EST]
+
+SIG_BITS = {"int8": 8, "bf16": 8, "fp16": 11, "fp32": 24, "fp64": 53}
+
+
+def fma_gates_ieee(sig_bits: int, pessimistic: bool = False,
+                   multiformat: bool = False) -> float:
+    """NAND2-equivalent gate count for one IEEE-754 FMA of the given significand.
+
+    `multiformat` = the slice can also be segmented into narrower formats.
+    `pessimistic` = the measured-28nm-high-performance edge of the band.
+    """
+    g = (K_FMA_MUL_GATES_PER_BIT2 * sig_bits ** 2
+         + K_FMA_LIN_GATES_PER_BIT * sig_bits
+         + K_FMA_FIX_GATES)
+    if multiformat:
+        g *= FMA_MULTIFORMAT_MERGE
+    if pessimistic:
+        g *= FMA_AREA_PESSIMISM
+    return g
+
+
+def fma_cluster_mm2(n_fma: int, prec: str = "fp64", pessimistic: bool = False,
+                    multiformat: bool = False) -> float:
+    """Area of a standalone FMA cluster of `n_fma` units at 16nm-class.
+
+    This is the option-(b) cost: a narrow cluster sized for the interior-point
+    inner loop only, NOT native fp64 widened through the whole MAC array.
+    """
+    return (n_fma * fma_gates_ieee(SIG_BITS[prec], pessimistic, multiformat)
+            * A_GATE_UM2 * MAC_STAGING_OVERHEAD * FP64_CLUSTER_OVERHEAD / 1e6)
+
+
+def native_fp64_array_mm2(n_macs: int, pessimistic: bool = False) -> float:
+    """Option (c): every array cell natively fp64 (merged multi-format).
+
+    No FP64_CLUSTER_OVERHEAD here -- the array already has its operand staging
+    counted in MAC_STAGING_OVERHEAD, same basis as mac_array_mm2.
+    """
+    return (n_macs * fma_gates_ieee(SIG_BITS["fp64"], pessimistic, multiformat=True)
+            * A_GATE_UM2 * MAC_STAGING_OVERHEAD / 1e6)
+
+
+# Multi-pass (option a) needs an EXACT wide accumulator per output element, or
+# the error-free-splitting property that makes the scheme work is lost. 2*53 bits
+# of product plus guard bits for the summation length.
+WIDE_ACCUM_BITS = 128                     # [EST] 106 product + 22 guard
+GATES_PER_ACCUM_BIT = 11.0                # [EST] flop (~5) + adder slice (~6)
+BASE_ACCUM_BITS = 32                      # fp32 accumulator already in the cell
+
+
+def wide_accum_delta_mm2(n_accum: int, bits: int = WIDE_ACCUM_BITS) -> float:
+    """Extra area to widen `n_accum` array accumulators for exact multi-pass fp64.
+
+    This is the hidden cost of option (a): it buys no multipliers, but every
+    participating output element needs an exact fixed-point accumulator.
+    """
+    extra = max(0, bits - BASE_ACCUM_BITS)
+    return n_accum * extra * GATES_PER_ACCUM_BIT * A_GATE_UM2 / 1e6
+
 
 # ---------------------------------------------------------------------------
 # [A2] 45nm SRAM access energy, pJ per 16-bit word

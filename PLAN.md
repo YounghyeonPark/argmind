@@ -108,12 +108,26 @@ second selling point on the same engine.
 > The MAC array is sized for the ML path and for matrix-matrix solver work (EKF covariance,
 > SQP re-factorization), not for the ADMM inner loop.
 
-- **GEMM engine:** configurable tile array (e.g., 16×16 to 64×64 MACs at instantiation time),
-  precision-configurable: FP32/FP16/BF16 accumulate, INT8/FP8 inference modes. Must be
-  efficient at **small matrices** (n = 4–128), not just large tiles — this is the key
-  micro-architectural differentiator (short pipeline fill/drain, no fixed large-tile penalty).
-- **Vector unit:** elementwise ops, reductions (dot, norm), the scalar-nonlinear ops solvers
-  need (div, sqrt, exp) — these are what usually stall solver loops on pure-GEMM NPUs.
+- **GEMM engine:** configurable tile array (CM-100 baseline 12×12 = 144 MACs), **bf16/fp16
+  multiply with fp32 accumulate**; INT8 double-pumped, **fp32 by 2-pass operand split** (products
+  exact in the fp32 accumulator). Must be efficient at **small matrices** (n = 4–128), not just
+  large tiles — short pipeline fill/drain, no fixed large-tile penalty. **The array does NOT do
+  fp64** — see below.
+- **Merged FMA cluster (vector unit + fp64 datapath, one block):** 8 multi-format IEEE-754 FMA
+  units, each **1 × fp64 *or* 2 × fp32**, giving 16 fp32 lanes or 8 fp64 FMAs. Handles elementwise
+  ops, reductions (dot, norm) and the scalar-nonlinear ops solvers need (div, sqrt, exp) — the
+  things that usually stall solver loops on pure-GEMM NPUs — *and* the interior-point fp64 path.
+  > **fp64 is a requirement, not an option, and it does not come from the array**
+  > (costed 2026-07-30; PHASE0_FINDINGS §0.1, `perf_model/fp64_datapath.py`).
+  > Interior-point KKT conditioning reaches ~1e12, so ARM-MPC (acados SQP-RTI + HPIPM) needs
+  > fp64. Getting it by multi-pass decomposition onto the bf16 multipliers costs **49–361 passes**
+  > for error-free accuracy and **3.5–23× the energy** — rejected. Native fp64 across all 144
+  > cells costs +1.42 mm² — rejected. **A merged 8-unit cluster costs +0.067 mm²** and meets the
+  > deadline at 2.7× margin on worst-case iteration counts. Consequence for the RTL: the vector
+  > unit and the fp64 unit are **one scheduling resource**, which the sequencer and codegen must
+  > model. Consequence for sizing: 8 units on *every* SKU — fp64 is a **feature bit, not a
+  > scaling parameter**, and there is no SKU from which it can be removed while keeping
+  > interior-point MPC.
 - **Sequencer:** a small RISC-V core (or licensed equivalent) running the solver loop control
   in-fabric: convergence tests, branching, step-size logic — no host round-trip per iteration.
   This is what makes 1–10 kHz MPC feasible.
@@ -342,6 +356,25 @@ multiply-accumulate is physically realized. Therefore:
 > matmul array. The digital systolic tile is the first implementation behind it; a digital
 > SRAM-CIM macro or a licensed analog macro must be substitutable **without touching codegen,
 > runtime API, or host integration.**
+
+**Where exactly the boundary runs (settled 2026-07-30 by the fp64 costing; PHASE0_FINDINGS §0.1):**
+MACIF separates the **bf16/int8 tile array (swappable)** from the **fp32/fp64 merged FMA cluster
+(not swappable)**. No CIM macro, analog or digital, has a path to 53-bit significands, so the fp64
+datapath must live in the fixed part of the CM. Two consequences for the interface we intend to
+freeze in Phase 1:
+
+1. **Precision is a declared contract, not an implementation detail.** fp64 is an *algorithm*
+   requirement — interior point at cond ≈ 1e12 either has it or returns a wrong answer. So MACIF
+   must make precision **queryable** and the runtime must **refuse** an fp64 kernel on a macro that
+   does not declare fp64: a hard codegen-time error, never a silently degraded result. Per format,
+   declare `supported`, `macs_per_cycle[format]` (**absolute, not a rate factor on some other
+   format**), `accumulator_width[format]`, rounding mode and subnormal behaviour. The performance
+   model previously derived fp64 from a `0.125` multiplier on the bf16 rate; that is precisely the
+   shape of interface that would have been wrong, and it has been deleted.
+2. **Keeping fp64 outside MACIF keeps MACIF's contract weak enough for a CIM macro to honour.**
+   The rejected multi-pass option would have required error-free limb splitting and an exact
+   128-bit accumulator *inside* the macro — a contract analog CIM cannot meet at all. Choosing the
+   separate cluster preserves the interface's whole value.
 
 This converts the IMC roadmap from an existential threat into a product line:
 `Argmind CM-100` (digital) → `CM-100C` (CIM inference macro behind MACIF, partnered or

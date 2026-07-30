@@ -100,6 +100,18 @@ class ArgmindCfg:
     # bandwidth is well below peak. This is a real RTL feature with a cost.
     segmented_reduction: bool = True
 
+    # ---- fp64 datapath (costed 2026-07-30; see fp64_datapath.py) -----------
+    # Number of IEEE-754 fp64 FMA units. THIS IS AN ABSOLUTE COUNT, NOT A RATE
+    # FACTOR ON THE bf16 ARRAY. The model previously obtained fp64 from a 0.125
+    # multiplier on `macs`, which implied 18 fp64 MAC/cycle on the CM-100 for
+    # zero area -- a modelling convenience with no corresponding hardware.
+    # Interior-point MPC (ARM-MPC / HPIPM) needs fp64, so the capability is not
+    # optional and must appear in both the area budget and the throughput ceiling.
+    # The recommended implementation is a merged multi-format cluster that is
+    # ALSO the fp32 vector unit (1x fp64 or 2x fp32 per unit), so
+    # `vector_lanes == 2 * fp64_fmas` in the recommended configurations.
+    fp64_fmas: int = 8
+
     @property
     def bank_word_bytes(self) -> int:
         if self.n_banks is None:
@@ -150,10 +162,48 @@ class ArgmindCfg:
         return BYTES_PER_ELEM[prec] * (1.0 / self.tile + 1.0 / self.tile_cols)
 
     def macs_per_cycle(self, prec: str) -> float:
-        """Precision scaling: int8 double-pumps, fp32 half-rate."""
-        scale = {"int8": 2.0, "fp16": 1.0, "bf16": 1.0, "fp32": 0.5,
-                 "fp64": 0.125}[prec]
+        """Peak MAC/cycle at `prec`.
+
+        int8 double-pumps and fp32 is half-rate through the bf16 array (2-pass
+        operand split, products exact in the fp32 accumulator).
+
+        fp64 DOES NOT come from the array. Splitting fp64 onto bf16 multipliers
+        with the error-free (Ozaki) property that interior point actually needs
+        costs 49-361 passes, not 8 -- see fp64_datapath.py for the derivation and
+        the citation. fp64 throughput is therefore the size of the dedicated FMA
+        cluster and is INDEPENDENT of the MAC array. Consequence worth stating:
+        on fp64 work the part is ARRAY-bound, not bandwidth-bound -- the one
+        documented exception to the bandwidth-first finding, and it holds because
+        ARM-MPC is 79% matrix-MATRIX (block Riccati), not GEMV.
+        """
+        if prec == "fp64":
+            return float(self.fp64_fmas)
+        scale = {"int8": 2.0, "fp16": 1.0, "bf16": 1.0, "fp32": 0.5}[prec]
         return self.macs * scale
+
+    def gemm_util(self, prec: str, effective_dim: float) -> float:
+        """Fraction of peak achieved on a GEMM whose operands are `effective_dim`.
+
+        The quantisation penalty must be charged against THE UNIT THAT DOES THE
+        WORK. fp64 runs on the FMA cluster, not the tile array, so charging it
+        `cfg.tile` made a BIGGER ARRAY look SLOWER on fp64 -- caught by
+        test_more_macs_never_increases_latency, which is exactly what that
+        invariant is for.
+
+        A linear cluster of F units accumulates along the reduction axis, so only
+        the innermost loop quantises: modelled as the geometric mean of perfect
+        utilisation and the 2-D penalty. Deliberately not claimed as 1.0.
+        """
+        if effective_dim <= 0:
+            return 1.0
+        if prec == "fp64":
+            T, soften = max(1, self.fp64_fmas), True
+        else:
+            T, soften = self.tile, False
+        quant = math.ceil(effective_dim / T) * T / effective_dim       # >= 1.0
+        drain = 1.0 + self.drain_cycles / max(effective_dim, 1.0)
+        u = 1.0 / (quant * drain)
+        return math.sqrt(u) if soften else u
 
     def delivered_bw_bpc(self, prec: str, row_len: float | None) -> float:
         """Bandwidth actually DELIVERED to a GEMV, not the peak figure.
@@ -214,11 +264,27 @@ class CpuCfg:
     active_w: float                 # sustained core power incl. L1/L2
     l1_bw_bpc: float = 32.0         # L1 load bandwidth, bytes/cycle
     scalar_ipc: float = 2.0
+    # fp64 peak. MODEL BUG FIXED 2026-07-30: the model charged fp64 work at the
+    # fp32 rate on every CPU baseline, i.e. it gave the CPU a free doubling on
+    # ARM-MPC. That error was CONSERVATIVE for us (a faster CPU burns less energy
+    # per solve, so our perf/W ratio was understated) -- fixing it INCREASES our
+    # reported advantage, which is exactly the direction that demands scrutiny.
+    # None = derive as half the fp32 rate, which is the NEON/SVE datapath reality
+    # (same vector width, twice the element size).
+    fp64_flops_per_cycle: float | None = None
+
+    def peak_flops_per_cycle(self, prec: str) -> float:
+        if prec == "int8":
+            return self.int8_ops_per_cycle
+        if prec == "fp64":
+            return (self.fp32_flops_per_cycle / 2.0
+                    if self.fp64_flops_per_cycle is None
+                    else self.fp64_flops_per_cycle)
+        return self.fp32_flops_per_cycle
 
     def gemv_macs_per_cycle(self, prec: str) -> float:
         """The CPU is bandwidth-bound on GEMV too -- model it the same way."""
-        peak = (self.int8_ops_per_cycle if prec == "int8"
-                else self.fp32_flops_per_cycle) / 2.0    # ops -> MACs
+        peak = self.peak_flops_per_cycle(prec) / 2.0             # ops -> MACs
         bw_limit = self.l1_bw_bpc / BYTES_PER_ELEM[prec]
         return min(peak, bw_limit) * self.small_gemm_efficiency
 
@@ -240,6 +306,13 @@ CPU_SME2 = CpuCfg(
     small_gemm_efficiency=0.35,
     active_w=1.30,
     l1_bw_bpc=64.0,
+    # An SME outer product covers SVL/esize elements per dimension, so fp64 is
+    # QUARTER rate, not half: 4x4 fp64 vs 8x8 fp32 at SVL=256b. [EST]
+    # NOTE FOR FALSIFIER F4: FEAT_SME_F64F64 is ARCHITECTURALLY OPTIONAL. An
+    # SME2 part without it has NO fp64 matrix path at all and falls back to SVE
+    # fp64 FMA, which would be a genuine structural gap rather than a ratio.
+    # Do not claim either way without checking the target part's ID registers.
+    fp64_flops_per_cycle=16.0,
 )
 
 # The honest perf/W adversary: cost-sensitive robotics/industrial designs use an
@@ -553,17 +626,11 @@ def gemm_like_cycles(macs: float, cfg: ArgmindCfg, prec: str,
 
     A tile of dimension T is only fully used when the operand dimensions are
     multiples of T. `effective_dim` is a representative matrix dimension; the
-    utilisation term captures quantisation waste plus fill/drain.
+    utilisation term captures quantisation waste plus fill/drain. See
+    ArgmindCfg.gemm_util for why the penalty is per-PRECISION: fp64 runs on the
+    FMA cluster, not on the array.
     """
-    T = cfg.tile
-    if effective_dim <= 0:
-        util = 1.0
-    else:
-        quant = math.ceil(effective_dim / T) * T / effective_dim   # >=1.0
-        # fill/drain amortised over the inner accumulation length
-        drain = 1.0 + cfg.drain_cycles / max(effective_dim, 1.0)
-        util = 1.0 / (quant * drain)
-    return macs / (cfg.macs_per_cycle(prec) * util)
+    return macs / (cfg.macs_per_cycle(prec) * cfg.gemm_util(prec, effective_dim))
 
 
 def representative_dim(b: Benchmark) -> float:
@@ -640,10 +707,7 @@ def model_argmind(b: Benchmark, cfg: ArgmindCfg) -> dict:
 
 
 def model_cpu(b: Benchmark, cpu: CpuCfg) -> dict:
-    if b.prec == "int8":
-        peak = cpu.int8_ops_per_cycle
-    else:
-        peak = cpu.fp32_flops_per_cycle
+    peak = cpu.peak_flops_per_cycle(b.prec)
     eff = peak * cpu.small_gemm_efficiency          # ops/cycle achieved
     gemm_cycles = (b.gemm_macs_per_iter * 2.0) / eff
     gemv_cycles = b.gemv_macs_per_iter / cpu.gemv_macs_per_cycle(b.prec)
@@ -687,19 +751,22 @@ def model_cpu(b: Benchmark, cpu: CpuCfg) -> dict:
 # a configuration we no longer recommend -- so the quoted latency and perf/W
 # figures described a part that was never the product.
 CFG_100 = ArgmindCfg(
-    name="CM-100 (12x12=144 MACs, 128 KB, 16 banks x 8 B = 128 B/cyc, 16 lanes, "
-         "800 MHz, T1)",
+    name="CM-100 (12x12=144 MACs, 128 KB, 16 banks x 8 B = 128 B/cyc, "
+         "8 merged FMAs = 16 fp32 lanes / 8 fp64, 800 MHz, T1)",
     tile=12, scratchpad_kb=128, scratchpad_bw_bpc=128.0, n_banks=16,
-    vector_lanes=16)
+    vector_lanes=16, fp64_fmas=8)
 
 # Retained for comparison and for the tile/bandwidth sweeps. NOT the product.
+# NOTE: all of these carry the SAME 8-unit fp64 cluster, because fp64 throughput
+# is not a function of the array size. The tile sweep therefore shows ARM-MPC
+# FLAT across tile sizes -- correct, and previously hidden by the 0.125 factor.
 CFG_16 = ArgmindCfg(name="CM-16 legacy (16x16 tile, 256 KB, 64 B/cyc, T1)",
                     tile=16)
 CFG_32 = ArgmindCfg(name="CM-32 (32x32 tile, 800MHz, T1)", tile=32)
 CFG_64 = ArgmindCfg(name="CM-64 (64x64 tile, 800MHz, T1)", tile=64)
 CFG_100_T0 = ArgmindCfg(
     name="CM-100, T0 copy-based (ablation)", tile=12, scratchpad_kb=128,
-    scratchpad_bw_bpc=128.0, n_banks=16, vector_lanes=16, tier="T0")
+    scratchpad_bw_bpc=128.0, n_banks=16, vector_lanes=16, fp64_fmas=8, tier="T0")
 
 KILL_CRITERION = 5.0   # perf/W multiple vs best CPU baseline, solver workloads
 
