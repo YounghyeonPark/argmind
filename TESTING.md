@@ -12,7 +12,7 @@ Surveyed and set up 2026-07-29. Run everything with `python -m pytest` from the 
 | python | 3.14.5 | — |
 | gcc | MinGW-w64 | present, unused so far |
 
-**42 tests, all passing**, in two files:
+**42 tests, all passing**, in three files:
 
 - [tests/test_model_invariants.py](tests/test_model_invariants.py) — 24 tests. One regression
   test per historical modelling error, plus physical invariants.
@@ -54,23 +54,18 @@ If a test in that file ever starts passing *trivially*, the corresponding guard 
 
 ## Gap 1 — no version control — **CLOSED 2026-07-30**
 
-`git init` done; baseline plus subsequent work committed. The original text follows for the
-record, because the failure mode it describes is what the repo now prevents.
+`git init` done, baseline and subsequent work committed. Recording why it mattered, because the
+failure mode is the one the repo exists to prevent: three agents edited `perf_model/` and the
+Markdown docs concurrently on 2026-07-29 with no way to diff, attribute, revert or bisect any of
+it — so when a benchmark number moved, nobody could say what moved it. It also blocked
+[PLAN.md](PLAN.md) §7.1, which commits to public repositories with CI on every PR.
 
-> There is no git repository. Consequences already felt: three agents edited `perf_model/` and the
-Markdown docs concurrently on 2026-07-29, and there is **no way to diff, attribute, revert, or
-bisect** any of it. When a benchmark number moves, we cannot tell what moved it.
+`results_*.txt` are tracked on purpose: they are the evidence behind claims in
+PHASE0_FINDINGS.md, so versioning them is what makes a changed number visible and attributable.
 
-This also blocks the plan directly: [PLAN.md](PLAN.md) §7.1 commits to public repositories with
-CI running on every PR. That is unreachable without a repo.
-
-Recommended: `git init`, a `.gitignore` for `results_*.txt` and `__pycache__`, and commit the
-current state as a baseline. Left as a founder decision because CLAUDE.md currently records
-> "not a git repo" as a deliberate convention.
-
-Caveat now that it exists: the repo lives inside a Google Drive folder, and Drive sync can
-corrupt `.git` if it touches objects mid-write. If you see unexplained index errors, that is the
-cause; the robust fix is a local working copy synced via a remote.
+Caveat: the repo lives inside a Google Drive folder, and Drive sync can corrupt `.git` if it
+touches objects mid-write. Unexplained index errors would be that; the robust fix is a local
+working copy synced through a remote.
 
 ## Gap 2 — the Phase-2 RTL flow has no environment, and Windows is the blocker
 
@@ -94,21 +89,30 @@ Windows-specific obstacle at month 6, with RTL waiting, is the expensive version
 
 ## Gap 3 — nothing runs the tests automatically
 
-No git hooks, no CI, so the suite only runs when invoked by hand. Until there is a repo, the
-practical mitigation is to run `python -m pytest` after any change to `perf_model/`, and
-before quoting any number from it.
+There are no git hooks and no CI, so the suite runs only when invoked. Now that the repo exists,
+a pre-commit hook is cheap and worth adding. Until then the working rule (also in CLAUDE.md) is:
+run `python -m pytest` after any change to `perf_model/`, and before quoting any modelled number.
 
 ## Not yet covered by tests
 
-- `sram_cost.py` and `cm100_sizing.py` have **no tests**. The scratchpad energy figure is now
-  ~80% of modelled solver call energy and the single most important constant in the model, so it
-  deserves invariants of its own: monotonicity of area in bank count, the bank-word ≥64-bit
-  validity floor (below which the model is known to become unphysical), and agreement with the
-  measured 8.1 Mb/mm² anchor.
-- `measure_osqp_baseline.py` is unvalidated by tests. Worth pinning: the condensed Hessian must
-  be dense for a coupled plant (this is the invariant that would have caught the decoupled-plant
-  error automatically), and every reported iteration statistic must come from an all-`solved`
-  run.
-- No numerical-accuracy tests: nothing checks that a reduced-precision variant still converges,
-  which is the requirement `solver-numerics` flagged as fp32-minimum for EKF covariance and
-  fp64-or-refinement for interior-point.
+Closed 2026-07-30: `sram_cost.py` and `measure_osqp_baseline.py` now have invariants — area
+monotonic in bank count, the ≥64-bit bank-word validity floor flagged rather than silently
+extrapolated, density bracketing the measured 8.1 Mb/mm² anchor, and the coupled-plant Hessian
+density check that would have caught the decoupled-plant error automatically.
+
+Still open:
+
+- **`cm100_sizing.py` has no tests.** Its output is the recommended part, so the invariants worth
+  pinning are that the recommendation meets every solver deadline at *worst-case* iteration
+  counts (not typical), and that it is not dominated by any other point in the sweep.
+- **No numerical-accuracy tests.** Nothing checks that a reduced-precision variant still
+  converges, which is exactly where `solver-numerics` set hard floors: fp32 minimum for the EKF
+  covariance recursion with no fp16/bf16 path in any filter form, and fp64 (or fp32 plus
+  mandatory iterative refinement, which the model does not represent) for interior-point. These
+  are claims about arithmetic the silicon must provide, and they are currently asserted in prose
+  and enforced only as a metadata check on the benchmark definitions — not demonstrated
+  numerically.
+- **The fp64 datapath is un-costed.** The model obtains fp64 from a 0.125 rate factor on a bf16
+  array, which is a modelling convenience; a real 1/8-rate path needs either multi-pass
+  decomposition or a separate narrow FMA cluster, and its area is currently zero in the budget.
+  It sits exactly on the MACIF boundary and interior-point MPC requires it, so it is not optional.
