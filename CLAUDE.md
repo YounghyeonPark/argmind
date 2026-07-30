@@ -172,6 +172,38 @@ automotive.
 - **Runtime API is the constitution** — identical across simulator, open core, and commercial
   core. Changing it is a business decision.
 
+## Built and validated (2026-07-30) — `argmind/` runtime API + functional simulator
+
+ADMM runs end-to-end as a descriptor sequence and **matches reference OSQP exactly** (22/22 and
+30/30 iterations, max|Δx| = 9.2e-15, with an active set present); control action within 4.2e-6 of
+a polished eps=1e-11 solve; closed-loop p50 7 / p95 8 / max 9 iterations, inside the measured
+6–14 band. **Residency demonstrated, not modelled:** 268 KB on the first call, then
+**5.8 KB in / 0.6 KB out per tick (46×)**, with the Cholesky running on 1 of 200 ticks.
+
+Implementation against the *frozen* spec found seven gaps. The two that change how we work:
+
+- **ρ MUST be a power of two — a codegen contract, not a preference.** Descriptor word 7 is fp32
+  and ADMM multiplies by both ρ and 1/ρ; the fixed point requires them to be exact reciprocals,
+  since with an active constraint `y = ρ·(1/ρ)·y` forces `y = 0` otherwise and the dual never
+  settles. **ρ=0.1 (OSQP's default) stalls at 1500 iterations; ρ=0.125 converges in 34.** Costs
+  nothing to obey. `ADMMSolver` now refuses non-power-of-two ρ rather than returning a stalled
+  answer.
+- **QUAD-MPC cannot validate the projection kernel or the dual update.** At its nominal ±2 N
+  bounds the optimum is *interior* — OSQP reports no active set on all 200 closed-loop ticks — so
+  y* = 0 and a broken dual fixed point is satisfied trivially. A genuinely wrong dual update
+  (`y += ρ(t−z)` instead of `y = ρ(t−z)`) matched OSQP to 2.9e-15 across 60 solves. **Always run a
+  tight-bound variant with a real active set alongside it.**
+
+Descriptor v0 gaps for the architect (see `argmind/descriptor.py` `V0_LIMITATIONS`): **no
+infinity-norm reduction** (OSQP's stopping rule is all ∞-norms; without an `NRMI` opcode the
+convergence test leaves the fabric, which is the one thing this architecture exists to prevent —
+one opcode, no new fields); **one wait token** forces serialisation where chains merge (emitted
+depth 17 vs achievable 12; residual 15 vs 5); **one precision field**, so the recommended
+"fp16 operands, fp32 solve" is inexpressible and w0 has zero spare bits; three base addresses make
+box projection in-place-only; 16-bit dims cap flat ops at n=255; scalar-only ρ rules out the
+sparse MPC form acados/HPIPM use. **Open contradiction:** QUAD-MPC's working set is **163.8 KiB at
+fp32 / 327.6 KiB at fp64** against the costed **128 KiB** — only all-fp16 fits, and that needs L4.
+
 ## Evidence standards (non-negotiable — one bad number costs the company)
 
 - Efficiency figures always carry **process node + precision**.

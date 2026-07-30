@@ -82,6 +82,23 @@ Comparison rule, conservative on both axes: **speedup** is measured against the 
 baseline, **perf/W** against the *most energy-efficient* baseline. Solver working sets are
 assumed cache-resident on the CPU (favourable to the CPU, and true at these sizes).
 
+## ⚠ QUAD-MPC has an interior optimum and cannot validate ADMM's distinctive parts
+
+Found 2026-07-30 while implementing the solver on the functional simulator. At the nominal ±2 N
+per-rotor bounds, **QUAD-MPC's optimum is interior** — OSQP reports no active set on all 200
+closed-loop ticks. Since y* = 0 at an interior optimum, both the box-projection kernel and the
+dual update are exercised only trivially: a genuinely wrong dual update (`y += ρ(t−z)` rather than
+`y = ρ(t−z)`) matched OSQP to 2.9e-15 across 60 solves, and diverges immediately once bounds are
+tightened. The same blind spot hid the ρ-reciprocal defect (CLAUDE.md).
+
+**Requirement: every validation of an ADMM row must also run a tight-bound variant with a real
+active set** (10–19 active constraints is what the harness now uses). This is a defect in the
+benchmark as frozen, not in the solver — a constrained-optimization benchmark whose constraints
+never bind is not testing constrained optimization.
+
+Not a re-spec: the nominal row stays, because an interior optimum is a legitimate operating point
+for a hovering quadrotor. The tight-bound variant is an addition, not a replacement.
+
 ## Kill criterion
 
 > Solver workloads (#1–#5) must show **≥5× perf/W** versus the best CPU baseline.
