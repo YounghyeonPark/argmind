@@ -37,6 +37,16 @@ automotive.
   needs **49–361 passes** — 3.5–23× worse energy to save ~4% of the core — and fp32 + iterative
   refinement only *relocates* the fp64 requirement to the residual. Answer: **merge fp64 into the
   vector unit** (8 multi-format FMAs, 1×fp64 or 2×fp32 each), +0.067 mm².
+- **Precision floors, now numerically demonstrated** (`perf_model/precision_study.py`, measured
+  numerics not silicon): **EKF needs fp32 — confirmed hard.** bf16 and fp16 lose
+  positive-definiteness on the *first* step in all three filter forms, square-root included;
+  fp16 overflows at κ(P)=1e6, so range binds as well as precision. **Interior-point fp64 is NOT
+  measured** — κ growth (3e2→2e13 as μ→1e-12) reproduces, but fp32 error stays ~5e-6, so the
+  requirement still rests on literature and the audit; do not cite it as measured. **ADMM
+  "tolerates bf16" is too strong**: bf16 operands cost ~2% control-action error vs 4e-7 for fp32,
+  though the directional claim holds — the triangular solve is ~3× more sensitive than operands.
+  **For solver operands fp16 beats bf16 by 10×** (mantissa matters more than range — the opposite
+  of the ML tradeoff), so if 16-bit operands are ever used to double GEMV bandwidth, use fp16.
 - **MACIF carries precision as a declared contract, not an implementation detail.** The boundary
   runs between the **bf16/int8 array (swappable, CIM-eligible)** and the **fp32/fp64 FMA cluster
   (not swappable)** — no in-memory-computing macro has a path to 53-bit significands. The runtime
