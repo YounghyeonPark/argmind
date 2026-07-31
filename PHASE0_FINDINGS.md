@@ -1209,6 +1209,467 @@ nonlinear SQP case (ARM-MPC) — where real deployments often use a real-time-it
 *one* QP solve per tick, which if true would make the model's 60 badly wrong. Flagged for the
 solver-numerics audit.
 
+---
+
+## 8. Scaling analysis (2026-07-31) — the band is narrow, and that is the product
+
+Inputs: [perf_model/scaling_study.py](perf_model/scaling_study.py) → raw output
+[perf_model/results_scaling_study.txt](perf_model/results_scaling_study.txt).
+**All figures modelled-estimate, 16nm-class, ±2×, NOT QUOTABLE EXTERNALLY.** Precision is stated
+per row (solvers fp32 except ARM-MPC fp64; ML int8). 29 new regression tests
+(`tests/test_scaling_study.py`); suite is now 336.
+
+PLAN.md §5 markets a "parameterized" core and Phase 4 lists "multi-core scaling"; §9
+simultaneously warns "few validated configs, not full matrix". Neither the axes nor the
+multi-core question had been analysed. Both are now priced.
+
+### 8.0 Headline
+
+**Exactly two axes scale by more than 3× over their defensible range: scratchpad bandwidth
+(64 → 256 B/cycle, 3.87× on QUAD-MPC worst case) and the fp64 FMA cluster (4 → 16 units, 3.76× on
+ARM-MPC).** Measured spans over the same ranges: frequency 1.64×, capacity 1.29× *as a cost*,
+MAC array **1.00×**. Everything else is a fit, a cost, or a distraction. That is a ~4×
+configuration band, and it is a legitimate product position for control-domain IP where problem
+sizes are set by actuator counts and physics rather than by a scaling roadmap.
+
+**Recommended family: two validated SKUs, not three.** CM-100 (144 MACs / 192 KB / 128 B/cycle /
+16 lanes / 8 fp64, 0.786 mm²) and CM-50 (64 MACs / 64 KB / 64 B/cycle / 8 lanes / 4 fp64,
+**0.424 mm²**, 54% of the flagship). The floating 16-MAC solver-only SKU and a 256 B/cycle
+CM-200 are both **rejected with reasons** (§8.9).
+
+> ### Two flattering model omissions found and fixed (errors 13 and 14)
+>
+> Neither axis had ever produced a wall, and in both cases the reason was that the model could
+> not express one:
+>
+> 13. **`freq_mhz` scaled latency as 1/f and left energy per operation untouched**, so the model
+>     reported 2 GHz as 2.5× the speed at *lower* energy per call — leakage integrated over a
+>     shorter window fell and nothing offset it. There was no supply-voltage term. Added
+>     `argmind_model.vdd_for_freq` (f–V table, 16nm-class [EST]) with dynamic energy × (V/V_nom)²
+>     and leakage × (V/V_nom)³.
+> 14. **The longest single-cycle-read bitline was a hard constant** (`ROWS_MAX_800MHZ`), so
+>     raising the clock cost nothing in scratchpad area either. Added
+>     `sram_cost.rows_max_for_freq` (rows_max ∝ 1/f, charge-limited bitline; honest band 1/f to
+>     1/√f).
+>
+> Both are **exactly 1.0 / 256 rows at the nominal 800 MHz**, verified by regenerating every
+> `results_*.txt` byte-identical. No established figure moved. The point is that the frequency
+> axis previously looked free because the model was structurally unable to charge for it.
+
+### 8.1 MAC array — the array is 2.25× oversized for its own bandwidth, and that is correct
+
+A **balance rule** derived rather than swept, and it is the most useful new result in this
+section. A GEMV consumes one matrix element per MAC, so its ceiling is `bw/elem` MAC/cycle while
+the array supplies `tile²·scale`. Equating:
+
+> **min tile for a given GEMV bandwidth = √(bw / (elem·scale))**, which is **√(bw/2) at fp32.**
+
+The sweep and the closed form agree to within one step of the tile grid (pinned by a test).
+Consequences:
+
+- **`tile 12` (144 MACs) absorbs GEMV up to 288 B/cycle — and the same 288 at fp32, bf16 *and*
+  int8.** Not a coincidence worth hiding: this datapath's rate multiplier is ~1/element-size
+  (fp32 half-rate 4 B, bf16 full-rate 2 B, int8 double-rate 1 B), so `tile²·scale·elem` is
+  invariant. **The GEMV balance point is a property of the array, not of the precision** — one
+  number sizes it for every format.
+- **This is where "16× more MACs bought zero" gets its scope.** That finding is a statement about
+  **64–128 B/cycle**, not about arrays in general. At 128 B/cycle tile 8→32 is flat to within 2%
+  (re-verified at the corrected 192 KB). At 256 B/cycle tile 8 is *already binding* (218.2 µs vs
+  120.6 for tile 12). At 384 B/cycle tile 12 binds. **More MACs do eventually pay for GEMV work,
+  and the crossover is computable.**
+- CM-100's 12×12 therefore has **2.25× MAC headroom over the bandwidth it is fed**, which is the
+  right amount: it is the headroom that makes 256 B/cycle a drop-in upgrade rather than a redesign.
+
+**Energy return dies at 144 MACs**, confirming the earlier sizing at the corrected capacity:
+marginal solver energy per mm² is 618 (tile 6), 191 (8), **56 (12)**, 19 (16), 6 (24), 2 (32).
+
+**ML latency is the only thing that wants more, and it stops at ~1024 MACs** because the vector
+unit takes over as the ML bottleneck at tile 32. The 30 fps int8 CNN envelope is **~4 GMAC/frame
+at CM-100, ~15 at tile 32**; a 17 GMAC/frame model misses at every array size in the sweep.
+
+### 8.2 Scratchpad bandwidth — the knob that works, and it works to 256 B/cycle
+
+Balanced packages (lanes = bw/8, fp64 = lanes/2, ≤16 banks with ≥64-bit words), QUAD-MPC at its
+**measured** worst-case tail:
+
+| B/cycle | banks × word | lanes | core mm² | pJ/B | QUAD wc µs | Σ solver µJ | ×/step | **mm² per ×** |
+|---|---|---|---|---|---|---|---|---|
+| 16 | 2 × 8 B | 4 | 0.611 | 1.761 | 1712.0 | 88.45 | — | — |
+| 32 | 4 × 8 B | 4 | 0.627 | 1.319 | 931.6 | 74.24 | 1.84× | 0.020 |
+| 64 | 8 × 8 B | 8 | 0.668 | 1.033 | 467.3 | 54.24 | 1.99× | 0.041 |
+| **128** | **16 × 8 B** | **16** | **0.786** | **0.839** | **235.2** | **43.15** | 1.99× | 0.120 |
+| 256 | 16 × 16 B | 32 | 0.947 | 0.747 | 120.6 | 37.82 | 1.95× | 0.169 |
+| 512 | 16 × 32 B | 64 | 1.268 | 0.647 | 101.3 | 33.99 | **1.19×** | **1.682** |
+
+Read the last column — marginal area per unit of speedup, so smaller is better and it is
+comparable step to step. **16 → 256 B/cycle returns a near-perfect 1.84–1.99× per doubling.
+256 → 512 returns 1.19× at ten times the marginal cost**, and the reason is precisely §8.1: the
+fp32 GEMV ceiling (bw/4) crosses the 144-MAC array rate (72 MAC/cycle) at 288 B/cycle. Past
+there, bandwidth alone buys nothing — you must buy array *and* lanes *and* banks together, which
+is a different part rather than a wider one.
+
+**512 B/cycle is rejected on integrability, not on model output**: 16 banks × 32 B is a
+**5530-bit read bus** including address/control/ECC. No soft-IP licensee will floorplan that;
+it is a hard macro in disguise.
+
+**Lanes must scale in step, but less than expected — and for one row only.** Minimum lanes at
+which the vector unit stops binding: QUAD-MPC, ARM-MPC, EKF-24 and EKF-96 need only **4** lanes up
+to 256 B/cycle (they are that GEMV-dominated). **FCS-MPC needs 16 at every bandwidth in the
+sweep** — it is the one solver row where the vector unit binds first. So **lanes are provisioned
+for FCS-MPC and for ML, not for the solver rows**, which is the same fact the accumulator-fusion
+finding rests on. Raising bandwidth while holding 16 lanes costs only 1.14–1.25×.
+
+### 8.3 Capacity — NOT a scaling axis. A step function with a monotone cost
+
+**Solver energy is monotone increasing in capacity across the whole 32 KB → 1024 KB range**
+(37.90 → 60.47 µJ). There is no capacity at which the part gets cheaper to run: bigger banks
+raise the cost of every access and the byte count a workload fetches does not change. Pinned by
+a test.
+
+The decisive case, and it confirms the earlier ARM-MPC observation by a second route:
+
+- ARM-MPC at 192 KB: 323.2 KB footprint **overflows**, streams 135 KB, **25.23 µJ**
+- ARM-MPC at 384 KB: **fits**, streams 3 KB, **26.34 µJ**
+- → making it fit costs **+1.11 µJ (1.044×) and +0.228 mm²**, for **zero** latency benefit
+  (250 Hz, 5.5× worst-case margin). **The pJ/byte penalty on every access exceeds the DRAM
+  traffic it saves.**
+
+**ARM-MPC overflowing CM-100 is deliberate, not a gap.** Determinism is load-bearing only on the
+fast loops; a 250 Hz interior-point solve streaming 0.034 GB/s is allowed to touch DRAM, and we
+should say so rather than size a scratchpad to hide it.
+
+> **RULE: size capacity to the fastest determinism-critical resident working set and to nothing
+> else. A slow loop that overflows should overflow.** Capacity belongs in the SKU table as a
+> discrete choice, never in a scaling roadmap.
+
+### 8.4 Frequency — three walls, and the arrow points DOWN
+
+| MHz | Vdd | rows_max | folds | spad mm² | core mm² | dynE | leakE | drain | QUAD wc µs | Σ solver µJ |
+|---|---|---|---|---|---|---|---|---|---|---|
+| 400 | 0.65 | 512 | 1 | 0.246 | 0.748 | 0.660 | 0.536 | 6 | 462.2 | **31.73** |
+| 600 | 0.72 | 341 | 1 | 0.279 | 0.786 | 0.810 | 0.729 | 7 | 310.9 | 36.36 |
+| **800** | **0.80** | **256** | **1** | **0.279** | **0.786** | **1.000** | **1.000** | **8** | **235.2** | **43.15** |
+| 1200 | 0.92 | 170 | **2** | 0.407 | 0.933 | 1.322 | 1.521 | 11 | 160.8 | 55.65 |
+| 1600 | 1.02 | 128 | 2 | 0.407 | 0.933 | 1.626 | 2.073 | 14 | 123.6 | 66.73 |
+
+1. **Bitline length.** A 12 KiB × 64b bank needs a second vertical fold at ~1100 MHz: scratchpad
+   **0.279 → 0.407 mm² (+46%)**.
+2. **Supply.** 800 → 1600 MHz gives QUAD-MPC **1.90×** (not 2.00×) at **1.547× the solver
+   energy** and 1.19× the core area. **The frequency axis buys latency we do not need at the cost
+   of the energy advantage that IS the product.**
+3. **Pipeline depth**, and this one is a coupling nobody had priced. A deeper datapath raises
+   `drain_cycles`, and 97–100% of the sequencer's latency cost is dependency drain. QUAD-MPC worst
+   case over a drain 4 → 32 sweep: **1.23× with chain blocking at the datapath width, 3.45×
+   without it** (338.8 → 1167.6 µs). **Raising the clock and skipping chain blocking are not
+   independent decisions** — chain blocking is what makes a deeper pipeline survivable, and it was
+   already an RTL requirement on a thinner margin.
+
+> #### **The uncomfortable finding: the recommended clock may be too HIGH**
+>
+> Every solver deadline has 4–15× worst-case margin, so the interesting question is not how fast
+> the part can go but how slowly it can go and still make the deadline — because **energy falls
+> with frequency**. Against a 50%-of-period budget at worst-case iterations:
+>
+> | MHz | Σ solver µJ | vs 800 | verdict @50% period |
+> |---|---|---|---|
+> | 300 | 34.16 | 0.79× | **MISSES** (QUAD-MPC cold 611 µs > 500 µs) |
+> | 400 | 31.73 | **0.74×** | all OK (QUAD-MPC 462 µs, 1.08× margin) |
+> | 600 | 36.36 | 0.84× | all OK (QUAD-MPC 311 µs, 1.61× margin) |
+> | 800 | 43.15 | 1.00× | all OK |
+>
+> **600 MHz meets every frozen worst case inside a 50% budget at 0.84× the solver energy of
+> 800 MHz, at identical area.** 800 MHz was chosen before the frequency axis had an energy cost in
+> the model, i.e. when lowering it appeared to buy nothing.
+>
+> **DO NOT re-spec on this alone.** The 400 MHz point has only 1.08× margin on the one row whose
+> tail is *measured*, the f–V table is [EST] with no PDK behind it, and the non-monotonicity below
+> 400 MHz is a **model artefact** (`vdd_for_freq` clamps at 0.65 V and refuses to extrapolate into
+> near-threshold). What it *does* establish: **the frequency parameter must be presented to a
+> licensee as a downward energy knob with a deadline floor, never as an upward performance knob.**
+> Firm it up with a real library f–V curve in Phase 1 — one of the cheapest measurements
+> outstanding, and it moves the headline energy number.
+
+**Process node is not a competitive axis at all.** Every perf/W figure in this document is a
+**ratio** against a CPU baseline. Moving 16nm → 5nm moves the CPU too. Node buys absolute power
+and area for a licensee's SoC budget; it does not move a single claim here. **Node is a cost axis.
+Do not put it on a roadmap slide as though it improved the argument.**
+
+### 8.5 Sequencer — fixed-size by nature; the only lever points down
+
+- **Issue width buys literally nothing**, from 0.5× to 4×. Even *halving* it is free. Do not build
+  a multi-ported descriptor queue. (Pinned by a test.)
+- **Setup cycles per descriptor are free up to 16**; the knee is ~17–20, and even the naive
+  **23-cycle RV32 emit costs 4% on QUAD-MPC and 5% on ARM-MPC**. **Consequence for the roadmap:
+  the hardware descriptor generator is an area-cheap insurance policy, not a deadline requirement
+  for the frozen set.** It stays in (0.028 mm², already budgeted) but must not be sold as
+  load-bearing — the *arm-templates-once-per-solve* codegen fix is what removes the exposure, and
+  that is free.
+- **Queue depth: only 0 → 1 moves anything** in this aggregate model (246.7 → 235.2 µs, 4.9%), and
+  **that DISAGREES with the settled finding that depth 8 is a measured floor.**
+  **The measurement wins and the reason is structural:** the aggregate model averages descriptor
+  cost over a block, while the measured DAG contains a **run of six consecutive descriptors
+  averaging 5.8 cycles** that a queue must absorb *instantaneously*. An average cannot see a
+  burst. **Depth 8 stays an RTL requirement; this sweep is not evidence against it, it is evidence
+  that this sweep cannot resolve it.**
+- **Drain cycles are the one sequencer number with leverage, and it scales the wrong way**:
+  ARM-MPC 652 → 1037 µs over drain 2 → 32. You cannot buy performance with it, only lose it.
+
+**The sequencer is therefore identical in every SKU.** Nothing about it is a per-SKU parameter;
+chain-block width follows the datapath width automatically.
+
+### 8.6 Scaling down — the customer rule, derived
+
+With `k = cpu_time / cm_compute_time` the datapath ratio:
+
+> **speedup ≥ 1 ⟺ cpu_time ≥ overhead · k/(k−1)**, and it is **unreachable when k ≤ 1**.
+
+The floor is **a ratio between the launch protocol and the datapath advantage** — not a MAC
+count, not a problem dimension. Measured k band across the frozen solver set: **1.14–2.17**. So
+at T1 (0.80 µs) the floor is **1.5 µs of host time at k = 2.17 and 4.1 µs at k = 1.24**; at T1M
+(0.30 µs), **0.56 µs and 1.6 µs**.
+
+Verified against a sweep that straddles the crossover (EKF n=6 → 96, ADMM n_u = 1 → 8, FCS
+2-level Np=1 → 3-level Np=2): EKF n=6 is **0.10×** with k = 0.92 — the model correctly reports
+the floor as **infinite**, i.e. no launch protocol rescues it. EKF n=18 is MCU-class-only;
+EKF n=24 wins at 1.21×.
+
+**The energy claim has its own, lower floor, and its mechanism is different.** The CM pays static
+power across the whole latency window including the launch, during which it computes nothing:
+15 mW × 0.80 µs = **12.0 nJ** (T1), 4.5 nJ (T1M). An A55-class core at 0.15 W burns 12 nJ in
+0.08 µs of compute, so a 5× advantage needs **≳0.4 µs of A55 compute at T1, ≳0.15 µs at T1M**.
+Consistency check against the sweep: FCS 2-level Np=1 has 0.063 µs of host work and scores
+**3.2× perf/W — below the 5× kill criterion**; FCS 3-level Np=1 has 0.102 µs and scores 7.0×.
+**"We are always more efficient" is false**, and this is where it stops being true. Rounded for a
+customer: **0.4 µs / 0.15 µs.**
+
+### 8.7 External bandwidth — large-model ML is outside the *differentiated* envelope
+
+| DMA GB/s | lat ms | DMA-bound % | perf/W | verdict |
+|---|---|---|---|---|
+| 6.4 | 174.1 | 93.5% | 2.35× | MISSES (deadline 50 ms) |
+| 12.8 | 88.2 | 87.2% | 2.53× | MISSES |
+| **25.6** | **45.2** | **75.1%** | **2.63×** | **MEETS** |
+| 102.4 | 13.0 | 13.4% | 2.71× | MEETS |
+
+"Misses at 6.4, meets at 25.6 GB/s" is a **provisioning requirement to state**. But read the
+perf/W column, not the verdict column: at the bandwidth where it becomes feasible it is **75%
+DRAM-bound**, and a CPU with the same 25.6 GB/s hits the same wall. **We are not differentiated on
+a workload whose binding resource is off-chip.** A test pins that SLM-DECODE is invariant to
+array, bandwidth, capacity *and* lanes — if it ever responds, this statement is wrong.
+
+**The envelope, at a 50%-of-period transfer budget:** weight bytes/token = parameters (int8), so
+at CM-100's assumed **6.4 GB/s and 20 tok/s the envelope is ~0.16 G int8 parameters** — a
+sub-Phi-class model. 1.28 G needs 25.6 GB/s at 10 tok/s. **Above ~0.16 G, sell the CNN/ViT row,
+not the LLM row.** VIT-TINY needs 0.17 GB/s and scores 28.2× perf/W; that is the ML story.
+
+### 8.8 Multi-CM — a distraction, and the prior was right for better reasons
+
+**Q1 — intra-solve splitting is dead in principle *and* in numbers.** The iteration is
+loop-carried, but there *is* work-level parallelism inside one iteration: row-split every GEMV.
+The cost is a **barrier at every chain step**, because the next step's operand is the
+concatenation of this step's partials. **Measured** chain depth of one checked ADMM iteration is
+**17 steps** under wait-mask semantics (32 under v0 one-token semantics). Charged generously
+(perfect load balance, zero broadcast bytes, no row-quantisation waste), 2 CMs on QUAD-MPC:
+
+| barrier model | µs/iter of sync | QUAD wc µs | vs 1 CM |
+|---|---|---|---|
+| 1 CM | — | 235.2 | 1.00× |
+| shared scratchpad (16 cyc) | 0.340 | 142.8 | 1.65× |
+| tightly-coupled mailbox (120 cyc) | 2.550 | 306.3 | **0.77×** |
+| host-coherent fabric (400 cyc) | 8.500 | 746.6 | **0.32×** |
+
+**And the one row that wins is unphysical, which is the real answer.** The `shared scratchpad`
+row charges each CM 1/n of the datapath time *while sharing one scratchpad*. QUAD-MPC's binding
+resource is scratchpad read bandwidth. **Two datapaths behind one 128 B/cycle scratchpad on a
+bandwidth-bound row deliver 1.00×, not 1.65× — the second datapath starves.** The row is only
+reachable if bandwidth also doubles, at which point bandwidth bought the speedup and the
+replication is incidental. **On the workload class that defines this architecture there is no
+mechanism by which intra-solve multi-CM helps.**
+
+**Q2 — "it is one wider CM", priced.** 2 × CM-100 = **1.572 mm²** for 2 × 128 B/cycle over two
+192 KB scratchpads; 1 CM at 256 B/cycle = **0.947 mm²**, QUAD-MPC 120.6 µs vs 142.8 µs
+best-case-barrier. **The single wide CM is 1.66× cheaper and 1.18× faster.** Marginal cost of
+bandwidth: **+0.161 mm² for +128 B/cycle inside one CM vs +0.786 mm² for a second CM — 4.9× more
+area per byte/cycle via replication.**
+
+**Q3 — FCS-MPC's 729 independent candidates: this is the one case where the answer is not an
+immediate no, and it should be said out loud.** Zero dependency chains, so a split needs exactly
+*one* barrier (the cross-CM argmin). Two CMs give **1.95× datapath and reach ~1.22× vs the
+fastest CPU** — it genuinely converts the 0.62× row into parity. Rejected anyway, on three
+grounds that must be given together:
+
+1. **No deadline needs it.** FCS-MPC already meets its 25 µs period at **15.5×** margin; the
+   socket is sold on 22.0× perf/W and core offload.
+2. **It is the wrong bottleneck.** FCS-MPC is vector-bound, not bandwidth-bound. Ranked by area
+   per unit of speedup: **MACIF `broadcast_init` + `square_accumulate` (525 → 154 vector cycles,
+   0.62× → 0.88×, near-zero area) < 16 → 32 lanes (+0.143 mm², 1.26×) < a second CM (+0.786 mm²,
+   ~1.95×)**. The second CM is last of three.
+3. **It doubles static power on the row whose entire pitch is energy.**
+
+Note the `shared scratchpad` row is admissible here and not in Q1 — because FCS-MPC is
+vector-bound, so the replicated resource really is the scarce one. **Stating why the same row is
+valid on one benchmark and invalid on another is the whole point of tracking the binding
+constraint per row.**
+
+**Q4 — many independent loops. Consolidation is capacity-bound, not throughput-bound.**
+
+| row | duty % (wc) | footprint KB | loops by duty | loops by capacity | binding |
+|---|---|---|---|---|---|
+| QUAD-MPC | 23.52 | 138.8 | 4.3 | **1.38** | capacity |
+| ARM-MPC | 18.26 | 323.2 | 5.5 | **0.59** | capacity |
+| PWR-MPC | 6.45 | 0.7 | 15.5 | 274.3 | duty |
+| EKF-24 | 0.26 | 7.9 | 388.3 | **24.3** | capacity |
+| EKF-96 | 1.31 | 117.0 | 76.4 | **1.64** | capacity |
+
+**Capacity binds 4 of 5 rows, by 3.1–47×.** One CM-100 hosts **one** flagship MPC loop, not four.
+**Provisioning a shared accelerator from duty cycle alone would oversell consolidation by up to
+47×** — worth remembering, because duty cycle is the number an integrator will reach for.
+
+**And the stronger argument is jitter.** A drive node running FCS-MPC at 40 kHz (25 µs period)
+alongside QUAD-MPC at 1 kHz: a QUAD-MPC worst-case solve is 235.2 µs = **9.4 periods** of the fast
+loop. **Non-preemptible at solve granularity, the fast loop misses 10 deadlines — fatal.
+Preemptible at descriptor granularity, worst-case blocking is the longest single descriptor
+(~1600 cycles = 2.0 µs = 8.0% of the period) — tolerable.**
+→ **Descriptor-granularity preemption, not a second CM, is what makes mixed-rate consolidation
+safe.** It is a sequencer/scoreboard feature (save wait-mask and token state, admit the
+higher-priority template) and it is nearly free next to a 0.786 mm² replica. **New architectural
+requirement, and the only one this section adds.**
+
+> **VERDICT: what survives is INDEPENDENT INSTANCES, NO INTERCONNECT** — for licensees wanting
+> hard physical isolation between safety domains (ASIL) or control rates. That is **already
+> supported**; it is instantiating the IP twice. It needs exactly one thing from us: **the runtime
+> API must address multiple devices.** Nothing in RTL, no shared scratchpad, no CM-to-CM
+> coherency, no one-sequencer-many-datapaths.
+>
+> **"Multi-core scaling" should come OFF the Phase 4 list**, because keeping it there implies a
+> verification obligation we have no reason to accept.
+>
+> **What would change this:** a row that (a) needs >288 B/cycle of fp32 GEMV to make a deadline,
+> or (b) needs >384 KB resident at >1 kHz. Neither exists today.
+
+### 8.9 The verification tension, and the SKU family
+
+§5 and §9 are both right; the resolution is that **parameters are not all the same kind of
+parameter.**
+
+**REPLICATIVE** — changes a width or depth, reuses the same control FSMs. Verification is a re-run
+of an existing regression at a new elaboration. *Sell these as parameters.*
+`tile`/`tile_n` (validated 8–16, square only) · `vector_lanes` (8–32) · `scratchpad_kb` (bank
+depth; re-run the memory compiler) · bank word bytes (≥64 bits by design rule, 8–16 B) ·
+frequency target (constraint-level, not RTL).
+
+**STRUCTURAL** — changes control logic, protocol behaviour, or a declared contract. Each value is
+a separate verification target with its own coverage closure. *Ration these; sell them as a SKU
+list.*
+`n_banks` (arbiter, address interleave, conflict resolution — **validate 8 and 16 only**) ·
+precision set (MACIF declaration **plus the runtime's refusal paths**; each removal is a new
+negative-test suite, not a smaller design) · fp64 present/absent (changes the *product*) ·
+`seq_queue_depth` (scoreboard + token-reuse hazard rule — **fix at 8**) · chain-block width
+(follows datapath width; not a knob) · pipeline depth (changes scoreboard hazard distances — fix
+per SKU, do not expose).
+
+> **`bus type` is the most expensive parameter in §5 and the most casually marketed.** AXI4,
+> ACE-Lite and TileLink each need their own protocol-checker verification and their own
+> coherency-behaviour proof. **It is not a parameter, it is three deliverables.** Never print it
+> in a parameter list again.
+
+#### The family: two SKUs
+
+| SKU | MACs | B/cyc | banks | KB | lanes | fp64 | core mm² | pJ/B | Σ solver µJ | perf/W | residency violations |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| **CM-100** | 144 | 128 | 16 | 192 | 16 | 8 | **0.786** | 0.839 | 43.15 | 12.3–22.0× | ARM-MPC *(deliberate)* |
+| **CM-50** | 64 | 64 | 8 | 64 | 8 | 4 | **0.424** | 0.683 | 53.23 | 11.9–19.6× | QUAD-MPC, ARM-MPC, EKF-96 |
+| ~~CM-100S~~ | 16 | 128 | 16 | 192 | 16 | 8 | 0.648 | 0.839 | 67.05 | 7.9–17.9× | ARM-MPC |
+| ~~CM-200~~ | 256 | 256 | 16 | 256 | 32 | 16 | 1.113 | 0.816 | 36.48 | 13.1–25.3× | ARM-MPC |
+
+**Read the residency column, not a deadline column.** All four "meet all deadlines" — latency
+margin is 4–15× everywhere, so that column separates nothing. **What separates the SKUs is which
+working sets stay resident**, because a residency violation puts DRAM in the control loop and
+forfeits the determinism claim, which is the thing we sell. An overflowing row still *meets* its
+deadline here (streaming is small and double-buffered); it just stops being deterministic.
+
+- **CM-100** — robotics/drone node: condensed-QP MPC + state estimation + CNN/ViT-class ML +
+  interior-point NMPC. Holds QUAD-MPC, PWR-MPC, EKF-24, EKF-96 resident. Tightest worst case
+  QUAD-MPC at 4.25× (2.13× against a 50%-of-period budget).
+- **CM-50** — MCU-class / motor-drive node. **0.424 mm², 54% of the flagship.**
+  **Datasheet scoping line: CM-50 does not support the QUAD-MPC class.** Its 64 KB holds 0.46 of
+  that 138.8 KB working set, so a 12-state N=20 condensed QP would stream ~75 KB every
+  millisecond tick — still meets the deadline, no longer deterministic. Honest envelope:
+  **n_var ≤ ~40 (ADMM), n ≤ ~48 (EKF), and finite-control-set MPC of any size** (FCS-MPC's whole
+  working set is 0.7 KB). Keeps fp64 — a solver SKU cannot drop it.
+
+**Rejected, with reasons:**
+- **CM-100S (16-MAC solver-only)** saves only **0.138 mm² (18%)** — the array is 17% of the core,
+  the cheapest thing in the part — and costs **2.68× the EKF-96 energy**. EKF is a *beachhead*
+  workload, so a SKU that is bad at state estimation is a SKU for a socket we are not selling
+  into. **Tile stays a replicative synthesis parameter over 8–16, not a SKU.**
+- **CM-200** is a real Pareto point (1.95× QUAD-MPC worst case, 1.18× solver energy for 1.42× the
+  core) with **no workload in the frozen set** against deadlines that already have 4–14× margin.
+  Keep it as a documented synthesis configuration; do not verify it, do not price it, do not put
+  it on a roadmap.
+
+#### fp64 up to `lanes/2` is FREE — and this has been treated as a cost all along
+
+The merged multi-format cluster is sized by `max(fp64_fmas, lanes/2)`, so at 16 lanes an fp64
+count of **1, 2, 4 or 8 all cost the same 0.786 mm²**. What you pay is the multi-format **merge
+premium — +0.067 mm² at 16 lanes over an fp32-only unit of the same width — once, not per fp64
+unit.** Interior-point capability is a ~9%-of-core decision taken once, not a scaling axis with a
+running cost. This is also why CM-50 can keep fp64 at 4 units for +0.034 mm².
+
+#### The one axis to grow on demand — and it is not the one Phase 4 lists
+
+**The fp64 FMA count.** ARM-MPC is the only row bound by *arithmetic* rather than bandwidth, and
+it scales near-linearly: 8 → 16 FMAs is **1.85×** (730.3 → 380.2 µs) for **+0.144 mm²**; 32 FMAs
+reaches 235.0 µs. But ARM-MPC already has **5.5× deadline margin** and the energy return is
+**~19 µJ/mm² against tile 8→12's 84** — right axis, **no customer yet**. Grow it if and only if a
+licensee brings a longer horizon, a faster rate, or an NMPC needing more interior-point
+iterations.
+
+### 8.10 Customer-facing envelope rule — "is my workload in the band?"
+
+Five tests, all must pass; each uses a number the customer already has.
+
+1. **Residency.** Sum every matrix as a **dense rectangle** at your working precision, plus every
+   working vector and temporary — **not** packed triangular, the AGUs cannot address it.
+   **≤192 KB (CM-100) or ≤64 KB (CM-50).** Over that, DRAM enters your control loop and the
+   determinism claim is void. A hard edge, not a gradient.
+2. **Latency floor.** Time your solve on your host core. **≥5 µs** → the latency claim holds on a
+   rich host (T1). **≥1.7 µs** → holds on an MCU-class doorbell (T1M). **<1.5 µs → use the CPU**;
+   no datapath size fixes this, the launch protocol is the cost.
+3. **Energy floor** (lower than the latency floor, so most workloads failing test 2 still pass
+   this): **≥0.4 µs of an efficient in-order core → ≥5× perf/W** (≥0.15 µs at T1M). Below that the
+   CM's static power during launch exceeds your entire compute energy. Requires power gating —
+   mandatory anyway.
+4. **Descriptor density.** Average **≥8 datapath cycles per descriptor**, no burst of more than 8
+   consecutive short descriptors. In practice your inner-loop matrix/vector operations must
+   average **≥~64 elements** at 128 B/cycle fp32. Frozen-set rows run 238 cycles/descriptor (30×
+   the bar); **one-step FCS-MPC and 100 kHz two-level FCS-MPC fail it — tell those customers to
+   use the MCU.**
+5. **Off-chip traffic.** (bytes crossing the boundary per call) / deadline **≤6.4 GB/s** at
+   baseline provisioning. If your answer is a weight-streaming model, this is the **only** test
+   that matters and no on-chip parameter changes it.
+
+> **And the reuse-depth diagnostic, which tells a customer which knob is theirs.** Take your
+> dominant product: how many times is each fetched operand element consumed before it is
+> discarded? Call it **R**.
+> - **R = 1** — pure GEMV. Bandwidth-bound. **MAC count is irrelevant to you.**
+> - **R < 8** — still bandwidth-bound *even with a batch dimension*. FCS-MPC has R = n_y = 2
+>   across 729 candidates and is bandwidth-bound; the batch buys 1.7×, not 12×.
+> - **R ≥ tile** — tile-limited GEMM. The only regime where a bigger array pays, and even then it
+>   pays in **energy** first.
+>
+> **If R is set by a *problem* dimension rather than by the tile, you are operand-fetch-bound.**
+> That is the general form of the batch-1 finding and the single most useful thing to tell a
+> customer architect.
+
+### 8.11 What would falsify this section
+
+**An L0 operand register file.** It buys the array's reuse at O(T) area instead of O(T²), which
+(a) drops the honest array size to 36–64 MACs and (b) **raises the bandwidth at which the array
+starts to bind**, moving the 288 B/cycle wall in §8.1–8.2 outward. It is the highest-value model
+extension outstanding and it moves two of the walls above. Secondary: a real library f–V curve
+(§8.4) could move the recommended clock down and the headline energy number with it.
+
 ## Sources
 
 Model: this repo. Teardown:

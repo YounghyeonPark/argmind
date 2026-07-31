@@ -375,6 +375,59 @@ Build order chosen so every layer is testable before the layer below it exists:
 
 ---
 
+### 3.3 Scaling band and SKU family
+
+> **Added 2026-07-31 from the scaling analysis** — full derivation, walls and numbers in
+> [PHASE0_FINDINGS.md](PHASE0_FINDINGS.md) §8, model in
+> [perf_model/scaling_study.py](perf_model/scaling_study.py). **All figures modelled-estimate,
+> 16nm-class, ±2×, not quotable externally.**
+
+**Exactly two axes scale by more than 3×**: scratchpad bandwidth (64 → 256 B/cycle, 3.87× on
+QUAD-MPC worst case) and the fp64 FMA cluster (4 → 16 units, 3.76× on ARM-MPC). Over the same
+defensible ranges: frequency 1.64×, capacity 1.29× *as a cost*, MAC array **1.00×**. **This is a
+~4× configuration band and it should be described as one.** It is a legitimate position for
+control-domain IP, where problem sizes are set by actuator counts and physics rather than by a
+scaling roadmap — but it must not be marketed as an open-ended parameterization.
+
+**The balance rule that ties the two main knobs together** (derived, and agreeing with the sweep):
+a GEMV consumes one matrix element per MAC, so **min tile = √(bw / (elem·scale)) = √(bw/2) at
+fp32**. A 12×12 array absorbs GEMV up to **288 B/cycle** — and the same 288 at fp32, bf16 and int8,
+because this datapath's rate multiplier is ~1/element-size. So CM-100 has 2.25× MAC headroom over
+its 128 B/cycle, which is why 256 B/cycle is a drop-in upgrade rather than a redesign, and why
+"16× more MACs bought zero" is a statement about **64–128 B/cycle** rather than about arrays in
+general.
+
+**The family is TWO validated SKUs.** Everything else is either a replicative synthesis parameter
+or a documented-but-unverified configuration.
+
+| SKU | MACs | B/cyc | banks | KB | lanes | fp64 | core mm² | target |
+|---|---|---|---|---|---|---|---|---|
+| **CM-100** | 144 (12×12) | 128 | 16 × 8 B | 192 | 16 | 8 | **0.786** | robotics/drone node: condensed-QP MPC + state estimation + CNN/ViT ML + interior-point NMPC |
+| **CM-50** | 64 (8×8) | 64 | 8 × 8 B | 64 | 8 | 4 | **0.424** | MCU-class / motor-drive node: FCS-MPC, small EKF, small condensed QP |
+
+**Datasheet scoping line, non-negotiable: CM-50 does not support the QUAD-MPC class.** Its 64 KB
+holds 0.46 of that 138.8 KB working set. It still *meets* the deadline; it stops being
+deterministic, which is the thing being sold. CM-50's honest envelope is **n_var ≤ ~40 (ADMM),
+n ≤ ~48 (EKF), and finite-control-set MPC of any size.** It keeps fp64 — no solver SKU can drop it.
+
+Rejected with reasons (§8.9): a **16-MAC solver-only SKU** (saves only 18% of core — the array is
+17% of the part — and costs 2.68× the EKF-96 energy, on a beachhead workload) and a **256 B/cycle
+CM-200** (a real Pareto point with no workload in the frozen set).
+
+**fp64 up to `lanes/2` is free.** The merged cluster is sized by `max(fp64_fmas, lanes/2)`, so 1,
+2, 4 or 8 fp64 units at 16 lanes all cost the same. The cost is the multi-format merge premium
+(+0.067 mm² at 16 lanes), paid **once**, not per unit. Interior-point capability is a
+~9%-of-core decision, not a scaling axis with a running cost.
+
+**One new architectural requirement falls out of the multi-CM analysis: descriptor-granularity
+preemption.** A QUAD-MPC worst-case solve is 9.4 periods of a 40 kHz FCS-MPC loop, so a CM that is
+non-preemptible at *solve* granularity cannot host mixed-rate loops at all. Preemptible at
+*descriptor* granularity, worst-case blocking is the longest single descriptor (~2.0 µs, 8% of a
+25 µs period). This is a sequencer/scoreboard feature — save wait-mask and token state, admit the
+higher-priority template — and it is what makes consolidation safe, not a second CM.
+
+---
+
 ## 4. Competitive landscape
 
 Teardown completed 2026-07-29 — findings and citations in [PHASE0_FINDINGS.md](PHASE0_FINDINGS.md)
@@ -613,6 +666,24 @@ ceiling, but available now, portable to any foundry, deterministic, and verifiab
 
 ## 5. IP product deliverables (what a licensee receives)
 
+> **⚠ THE PARAMETER LIST BELOW IS WRONG AND MUST BE REWRITTEN** (flagged 2026-07-31,
+> [PHASE0_FINDINGS.md](PHASE0_FINDINGS.md) §8.9). It resolves the §9 "parameterization
+> discipline" risk in the wrong direction by advertising four knobs of three different kinds as
+> though they cost the same. **Parameters split into two classes:**
+>
+> - **REPLICATIVE** (a width or depth; reuses the same control FSMs; verification is a re-run at a
+>   new elaboration): tile 8–16 square, vector lanes 8–32, scratchpad depth, bank word ≥64 bits,
+>   frequency target. **Sell these as parameters.**
+> - **STRUCTURAL** (changes control logic, protocol behaviour or a declared contract; each value
+>   is its own coverage-closure target): bank count (**validate 8 and 16 only**), precision set
+>   (MACIF declaration *plus* the runtime's refusal paths — each removal is a new negative-test
+>   suite, not a smaller design), fp64 present/absent, descriptor queue depth (**fix at 8**),
+>   pipeline depth. **Sell these as a SKU list** (§3.3), not as parameters.
+>
+> **`bus type` is the most expensive item in the list and the most casually marketed.** AXI4,
+> ACE-Lite and TileLink each need their own protocol-checker verification and coherency proof.
+> **It is not a parameter, it is three deliverables.** Do not print it in a parameter list again.
+
 - Synthesizable SystemVerilog RTL, parameterized (tile size, precisions, SRAM depth, bus type)
 - Testbench & verification suite (UVM or cocotb-based), coverage reports
 - Synthesis constraints + reference PPA reports (per node, via foundry PDK partners or
@@ -672,8 +743,37 @@ ceiling, but available now, portable to any foundry, deterministic, and verifiab
 
 ### Phase 4 — Scale (months 24+)
 - CHI variant with cache stashing, T2 shared-virtual-memory option (SMMU/IOMMU ATS+PRI),
-  multi-core scaling, ASIL-ready package, bigger LLM support (KV-cache management, FP8),
+  ~~multi-core scaling~~, ASIL-ready package, bigger LLM support (KV-cache management, FP8),
   design-services revenue alongside licensing.
+
+> **"Multi-core scaling" is STRUCK, 2026-07-31** ([PHASE0_FINDINGS.md](PHASE0_FINDINGS.md) §8.8).
+> A single ADMM or interior-point solve cannot be usefully split: the iteration is loop-carried,
+> and splitting *within* an iteration pays a barrier at each of the **17 measured chain steps**, so
+> 2 CMs give **0.77×** with a tightly-coupled mailbox and **0.32×** through a coherent fabric. The
+> one organisation that wins (shared scratchpad, 16-cycle barrier) is **unphysical on a
+> bandwidth-bound row** — two datapaths behind one 128 B/cycle scratchpad starve — and where it is
+> physical it *is* one wider CM, which is **4.9× cheaper per byte/cycle** than replication.
+> FCS-MPC's 729 independent candidates *do* reach ~1.22× CPU parity on 2 CMs, and are still
+> rejected: no deadline needs it (15.5× margin), the scarce resource is vector lanes (MACIF
+> accumulator fusion buys them at ~zero area, lanes at +0.143 mm², a second CM at +0.786 mm²), and
+> it doubles static power on the row whose whole pitch is energy.
+>
+> **What survives is independent instances with no interconnect** — for licensees wanting hard
+> isolation between ASIL domains or control rates. That is already supported (instantiate the IP
+> twice) and needs exactly one thing: **the runtime API must address multiple devices.** No shared
+> scratchpad, no CM-to-CM coherency, no one-sequencer-many-datapaths. Keeping the line on the
+> roadmap implies a verification obligation with no workload behind it.
+>
+> **Re-open if** a row appears that needs >288 B/cycle of fp32 GEMV to make a deadline, or >384 KB
+> resident at >1 kHz. Neither exists today. Note the real Phase-4 growth axis is the **fp64 FMA
+> count** (8 → 16 units = 1.85× on interior-point MPC for +0.144 mm²), which nothing in the frozen
+> set needs yet.
+
+> **Also for Phase 4 / §9 — bigger LLM support needs a bandwidth commitment, not a compute one.**
+> SLM-DECODE (1.1B int8, 20 tok/s) misses at 6.4 GB/s and meets at **25.6 GB/s**, at which point it
+> is **75% DRAM-bound and scores only 2.6× perf/W**. A CPU with the same bandwidth hits the same
+> wall. The differentiated decode envelope at 6.4 GB/s / 20 tok/s is **~0.16 G int8 parameters**;
+> above that, sell the CNN/ViT row (VIT-TINY: 0.17 GB/s, 28.2× perf/W), not the LLM row.
 
 ---
 
@@ -792,7 +892,7 @@ commercial-license conversations. The open stack exists to manufacture (d).
 | "IP + software" scope too big for small team | Fixed op library + codegen for one solver family first (QP/MPC), not a general compiler |
 | Customers demand silicon proof | FPGA demo first; shuttle chip only after eval-license interest |
 | Apple/first-party SoCs unreachable | Treat as compatibility target only; revenue plan built on ARM licensees + RISC-V vendors |
-| Verification cost explosion | Parameterization discipline (few validated configs, not full matrix); formal on control logic |
+| Verification cost explosion | Parameterization discipline (few validated configs, not full matrix); formal on control logic. **RESOLVED 2026-07-31 into a concrete rule** (§8.9, and the flag on §5): classify every parameter as **replicative** (a width/depth reusing the same control FSMs — sell as a parameter) or **structural** (changes control logic or a declared contract — sell as a SKU). **Two validated SKUs: CM-100 and CM-50** (§3.3). Bank count validated at 8 and 16 only; queue depth fixed at 8; `bus type` is three deliverables, not a parameter |
 | One-person start | Phase 0/1 are deliberately model-and-paper heavy — solo-feasible; hire at RTL phase |
 | **IMC/CIM erodes the inference half** of the pitch (§4.1) | MACIF makes a CIM macro adoptable rather than fatal; never market on inference TOPS/W; lead with solver latency + determinism |
 | **Analog matrix computing matures for QP/LP** — would hit the solver thesis directly | Annual re-evaluation; today blocked by precision, PD-only stability, data-dependent latency. Watch PoliMi/Ielmini-line publications |

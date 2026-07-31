@@ -12,10 +12,26 @@ Surveyed and set up 2026-07-29. Run everything with `python -m pytest` from the 
 | python | 3.14.5 | — |
 | gcc | MinGW-w64 | present, unused so far |
 
-**151 tests, all passing**, in six files:
+**336 tests, all passing**, in fourteen files. (The per-file counts below are maintained by hand
+and drift; `python -m pytest -q` is authoritative. The six `test_argmind_*.py` files cover the
+runtime API, descriptor format, kernels, memory, MACIF and program builder and are documented in
+[argmind/](argmind/) rather than here.)
 
-- [tests/test_model_invariants.py](tests/test_model_invariants.py) — 27 tests. One regression
+- [tests/test_model_invariants.py](tests/test_model_invariants.py) — 41 tests. One regression
   test per historical modelling error, plus physical invariants.
+- [tests/test_scaling_study.py](tests/test_scaling_study.py) — 29 tests covering the scaling
+  analysis (2026-07-31). Two are regression tests for **modelling errors 13 and 14**, both of
+  which made an axis look free: the frequency axis had no supply-voltage term (so 2 GHz was 2.5×
+  the speed at *lower* energy per call) and the longest single-cycle bitline was a hard constant
+  (so a faster clock cost no scratchpad area). Both new terms are asserted **exactly neutral at
+  the nominal 800 MHz**, which is what let every pre-existing `results_*.txt` regenerate
+  byte-identical. The rest pin the scaling conclusions as directions, and **five of them exist to
+  protect the ability to report a negative**: faster must cost energy, more capacity must cost
+  energy, two CMs must be *slower* than one on a loop-carried solve, the scale-down sweep must
+  contain losses as well as wins (and must report an *infinite* offload floor when the datapath
+  ratio k ≤ 1), and CM-50 must **not** hold the flagship working set. One test is a tripwire
+  rather than an invariant: `test_only_two_axes_scale_by_more_than_3x` fails if a third axis ever
+  clears 3×, which would mean the SKU family should be revisited.
 - [tests/test_fp64_datapath.py](tests/test_fp64_datapath.py) — 28 tests covering the fp64 datapath
   costing: FMA gate model vs its published anchors, fp64 throughput decoupled from the MAC array,
   fp64 area nonzero and monotone, multi-pass scaling, and the refinement crossover.

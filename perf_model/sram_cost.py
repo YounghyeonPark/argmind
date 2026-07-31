@@ -84,6 +84,27 @@ HALO_UM = 2.0                # [EST] per-side macro keep-out a licensee must hon
 ROWS_MAX_800MHZ = 256
 ASPECT_MAX = 8.0             # [EST] placeable macro aspect ratio limit
 
+
+def rows_max_for_freq(freq_mhz: float) -> int:
+    """Longest single-cycle-read bitline at `freq_mhz`. [EST]
+
+    ADDED 2026-07-31 for the scaling analysis, which needed the FREQUENCY axis
+    to have a cost and previously found it free. ROWS_MAX_800MHZ was a single
+    hard constant, so the model reported frequency as a pure 1/f latency win.
+
+    Physical basis: a 6T read discharges the bitline through one access
+    transistor at roughly constant cell current, so the discharge time is set by
+    the bitline capacitance, which is linear in the number of attached cells.
+    Hence rows_max ~ 1/f. This is the CENTRAL assumption; the honest band is
+    1/f (charge-limited, used here) to 1/sqrt(f) (if the compiler also trades
+    cell current or adds hierarchical bitlines). The sensitivity is reported.
+
+    At 800 MHz this returns exactly ROWS_MAX_800MHZ, so nothing pre-existing
+    moves. Clamped to [32, 512]: below 32 rows the macro is all periphery, and
+    no 16nm compiler in the survey offers a single-cycle 1024-row array.
+    """
+    return int(max(32, min(512, ROWS_MAX_800MHZ * 800.0 / freq_mhz)))
+
 # Energy scaling 45nm -> 16nm. C scales with physical length
 # (sqrt(0.070/0.25) = 0.53); V^2 scales 1.1V -> 0.8V (0.53).
 # Product 0.28; use 0.30 central. Range 0.22-0.45 is the honest band. [EST]
@@ -300,7 +321,7 @@ class BankGeom:
 
 
 def bank_geometry(size_kb: float, word_bits: int, cell_um2: float = A_CELL_HD_UM2,
-                  mux: int | None = None) -> BankGeom:
+                  mux: int | None = None, rows_max: int | None = None) -> BankGeom:
     """Minimum-area legal macro geometry.
 
     Two internal degrees of freedom, both of which real compilers expose:
@@ -315,6 +336,7 @@ def bank_geometry(size_kb: float, word_bits: int, cell_um2: float = A_CELL_HD_UM
     h_cell = math.sqrt(cell_um2 / CELL_ASPECT)
     w_cell = cell_um2 / h_cell
     bits = size_kb * 1024 * 8
+    r_max = ROWS_MAX_800MHZ if rows_max is None else rows_max
 
     best = None
     muxes = [mux] if mux else [1, 2, 4, 8, 16, 32]
@@ -325,7 +347,7 @@ def bank_geometry(size_kb: float, word_bits: int, cell_um2: float = A_CELL_HD_UM
             if rows_f < 16 or abs(rows_f - round(rows_f)) > 1e-9:
                 continue
             rows_f = int(round(rows_f))
-            if rows_f > ROWS_MAX_800MHZ:
+            if rows_f > r_max:
                 continue
             h_col = H_COL_BASE_UM + H_COL_PER_SA_UM / m
             w = cols * w_cell + W_ROWDEC_UM
@@ -339,7 +361,7 @@ def bank_geometry(size_kb: float, word_bits: int, cell_um2: float = A_CELL_HD_UM
                 best = cand
     if best is None:
         raise ValueError(f"no legal geometry for {size_kb}KB x {word_bits}b "
-                         f"under {ROWS_MAX_800MHZ}-row / AR{ASPECT_MAX} limits")
+                         f"under {r_max}-row / AR{ASPECT_MAX} limits")
     return best
 
 
@@ -355,6 +377,9 @@ class SpadCfg:
     cell_um2: float = A_CELL_HD_UM2
     route_over_macro: bool = True   # can the licensee route the read bus over
                                     # the SRAM macros (M6+ free)?
+    # Target clock. Sets the longest legal bitline via rows_max_for_freq. Default
+    # 800 MHz reproduces every pre-existing number exactly.
+    freq_mhz: float = 800.0
 
     @property
     def bw_bpc(self) -> float:
@@ -366,7 +391,8 @@ class SpadCfg:
 
     @property
     def geom(self) -> BankGeom:
-        return bank_geometry(self.bank_kb, self.word_bytes * 8, self.cell_um2)
+        return bank_geometry(self.bank_kb, self.word_bytes * 8, self.cell_um2,
+                             rows_max=rows_max_for_freq(self.freq_mhz))
 
     # ---- area ----------------------------------------------------------
     def area_mm2(self) -> dict:

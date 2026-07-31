@@ -56,6 +56,46 @@ E_OVERHEAD_MULT = 2.5
 # Keeping 2.5 would double-count it. 2.0 is the non-double-counting value.
 E_OVERHEAD_MULT_BANKED = 2.0
 
+# ---------------------------------------------------------------------------
+# Frequency <-> supply voltage, 16nm-class. ADDED 2026-07-31.
+# ---------------------------------------------------------------------------
+# WHY THIS EXISTS. Before this, `freq_mhz` scaled latency as 1/f and left energy
+# per operation untouched, so the model reported FREQUENCY AS A FREE LATENCY
+# AXIS -- push to 2 GHz, get 2.5x the speed at LOWER energy per call (because
+# static power integrated over a shorter window fell). That is unphysical above
+# the nominal operating point: a 16nm standard-cell path only closes at 2 GHz
+# with a supply boost, and dynamic energy goes as V^2.
+#
+# It was a FLATTERING omission and it is the reason the frequency axis had never
+# produced a wall. Two costs are now charged:
+#   * dynamic (MAC + scratchpad + overhead multiplier)  x (V/V_NOM)^2
+#   * static / leakage                                  x (V/V_NOM)^3
+# Cubic on leakage is a crude proxy for V*exp(V/nVt) over this narrow range; the
+# honest band is quadratic to quartic. [EST]
+#
+# At 800 MHz both multipliers are EXACTLY 1.0, so no pre-existing number moves.
+FV_POINTS_16NM = ((400.0, 0.65), (600.0, 0.72), (800.0, 0.80), (1000.0, 0.86),
+                  (1200.0, 0.92), (1600.0, 1.02), (2000.0, 1.10))   # [EST]
+V_NOM_16NM = 0.80
+
+
+def vdd_for_freq(freq_mhz: float) -> float:
+    """Supply needed to close timing at `freq_mhz`, 16nm-class. [EST]
+
+    Piecewise-linear over FV_POINTS_16NM, clamped at both ends. Clamping at the
+    low end is deliberate: below ~400 MHz you are near-threshold and the model
+    has no basis to extrapolate, so it stops giving credit for going slower.
+    """
+    pts = FV_POINTS_16NM
+    if freq_mhz <= pts[0][0]:
+        return pts[0][1]
+    if freq_mhz >= pts[-1][0]:
+        return pts[-1][1]
+    for (f0, v0), (f1, v1) in zip(pts, pts[1:]):
+        if f0 <= freq_mhz <= f1:
+            return v0 + (v1 - v0) * (freq_mhz - f0) / (f1 - f0)
+    return pts[-1][1]
+
 
 # ---------------------------------------------------------------------------
 # Hardware configurations
@@ -149,7 +189,8 @@ class ArgmindCfg:
         nb = self.n_banks if self.n_banks is not None else \
             max(1, int(self.scratchpad_bw_bpc // 8))
         wb = max(1, int(round(self.scratchpad_bw_bpc / nb)))
-        return sram_cost.SpadCfg(self.scratchpad_kb, nb, wb)
+        return sram_cost.SpadCfg(self.scratchpad_kb, nb, wb,
+                                 freq_mhz=self.freq_mhz)
 
     def sram_pj_per_byte(self) -> float:
         if not self.use_banked_energy:
@@ -162,6 +203,21 @@ class ArgmindCfg:
     @property
     def overhead_mult(self) -> float:
         return E_OVERHEAD_MULT_BANKED if self.use_banked_energy else E_OVERHEAD_MULT
+
+    # ---- frequency / voltage coupling (added 2026-07-31) -------------------
+    @property
+    def vdd(self) -> float:
+        return vdd_for_freq(self.freq_mhz)
+
+    @property
+    def dyn_energy_scale(self) -> float:
+        """Dynamic energy multiplier vs the 800 MHz nominal point. == 1.0 at 800."""
+        return (self.vdd / V_NOM_16NM) ** 2
+
+    @property
+    def leak_scale(self) -> float:
+        """Leakage multiplier vs the 800 MHz nominal point. == 1.0 at 800."""
+        return (self.vdd / V_NOM_16NM) ** 3
 
     @property
     def tile_cols(self) -> int:
@@ -1538,8 +1594,13 @@ def model_argmind(b: Benchmark, cfg: ArgmindCfg) -> dict:
     e_sram_pj_b = cfg.sram_pj_per_byte()
     e_sram = sram_bytes * e_sram_pj_b
     e_dram = bytes_moved * cfg.offchip_pj_per_byte
-    e_static = cfg.static_mw * 1e-3 * (latency_us * 1e-6) * 1e12
-    energy_pj = (e_mac + e_sram) * cfg.overhead_mult + e_dram + e_static
+    # V^2 on everything the CM's own supply pays for; leakage worse than V^2.
+    # Both multipliers are exactly 1.0 at the nominal 800 MHz, so this term
+    # cannot move a configuration that does not touch the frequency axis. DRAM /
+    # off-chip energy is NOT scaled: it is on the host's supply, not ours.
+    e_static = (cfg.static_mw * cfg.leak_scale) * 1e-3 * (latency_us * 1e-6) * 1e12
+    energy_pj = ((e_mac + e_sram) * cfg.overhead_mult * cfg.dyn_energy_scale
+                 + e_dram + e_static)
 
     return {
         "latency_us": latency_us,

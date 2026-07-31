@@ -1,0 +1,799 @@
+============================================================================================================
+ARGMIND CM — SCALING ANALYSIS (2026-07-31)
+MODELLED ESTIMATE, 16nm-class, +/-2x, NOT QUOTABLE EXTERNALLY
+============================================================================================================
+
+Reference: CM-100 (12x12=144 MACs, 192 KB, 16 banks x 8 B = 128 B/cyc, 8 merged FMAs = 16 fp32 lanes / 8 fp64, 800 MHz, T1)
+  core 0.786 mm2  (spad 0.279 / mac 0.135 / vec 0.058 / fp64 0.067 / rest 0.145)
+  0.839 pJ/byte, Vdd 0.80 V, call overhead 0.8 us (T1)
+
+Worst-case reference table (iters_worst; the tail a hard deadline must survive):
+row          prec  deadline   lat p95    lat wc  margin  binds@wc     sp  perf/W   duty%
+----------------------------------------------------------------------------------------
+QUAD-MPC     fp32      1000     49.01    235.23    4.25x   gemv_bw   1.81   12.33   23.52
+ARM-MPC      fp64      4000    382.26    730.33    5.48x  gemm_mac   1.14   17.18   18.26
+PWR-MPC      fp32        25      1.61      1.61   15.51x      host   0.62   22.02    6.45
+EKF-24       fp32      1000      2.58      2.58  388.28x  gemm_mac   1.21   20.63    0.26
+EKF-96       fp32      5000     65.48     65.48   76.36x  gemm_mac   2.15   21.14    1.31
+SLM-DECODE   int8     50000 174096.88 174096.88    0.29x       dma   0.49    2.35  348.19
+VIT-TINY     int8     33333   7598.39   7598.39    4.39x  gemm_mac   2.02   28.22   22.80
+
+============================================================================================================
+AXIS 1 — MAC ARRAY.  Wall: the array is already 2.25x oversized for its
+         own bandwidth. It pays on ENERGY (reuse depth) and on ML LATENCY.
+============================================================================================================
+
+The balance rule, derived not swept: a GEMV consumes one matrix element per
+MAC, so its ceiling is bw/elem MAC/cycle; the array supplies tile^2*scale.
+  min tile for a given fp32 GEMV bandwidth = sqrt(bw/2)
+ bw B/cyc  min tile  min MACs   tile 12 binds above
+       16       2.8         9                    no
+       32       4.0        16                    no
+       64       5.7        36                    no
+      128       8.0        64                    no
+      192       9.8       100                    no
+      256      11.3       144                    no
+      288      12.0       144                    no
+      384      13.9       196                   yes
+      512      16.0       256                   yes
+     1024      22.6       529                   yes
+  -> tile 12 (144 MACs) absorbs GEMV up to 288 B/cycle, and
+     the SAME number at fp32, bf16 and int8 -- not a coincidence worth
+     hiding: the array's rate multiplier happens to be ~1/element-size on
+     this datapath (fp32 half-rate 4 B, bf16 full-rate 2 B, int8 double-rate
+     1 B), so tile^2 * scale * elem is invariant. The GEMV balance point is a
+     property of the ARRAY, not of the precision, which is convenient: one
+     number sizes it for every format.
+  -> CM-100 runs 128 B/cycle, so the array has 2.25x MAC headroom over the
+     bandwidth it is fed. THAT is why '16x more MACs bought zero' held: the
+     statement is about 64-128 B/cycle, not about arrays in general.
+
+Measured against the model (QUAD-MPC worst case, us) — tile x bandwidth:
+    bw        t8       t12       t16       t24       t32   smallest tile that is not binding   predicted sqrt(bw/2)
+    64     467.3     467.3     467.3     467.3     467.3                                  t8                   5.7
+   128     235.2     235.2     235.2     235.2     235.2                                  t8                   8.0
+   256     218.2     120.6     120.6     120.6     120.6                                 t12                  11.3
+   384     211.5     103.1      81.5      81.5      81.5                                 t16                  13.9
+   512     209.7     101.3      63.4      63.4      63.4                                 t16                  16.0
+  1024     204.0      95.6      57.6      33.2      33.2                                 t24                  22.6
+  The sweep and the closed form agree: the smallest non-binding tile tracks
+  sqrt(bw/2) to within one step of the tile grid.
+
+ENERGY return on array size, at the CM-100 bandwidth (128 B/cyc, 192 KB):
+ tile   MACs   B/MAC  core mm2  QUAD-MPC   ARM-MPC   PWR-MPC    EKF-24    EKF-96   sum uJ   uJ/mm2
+    4     16   2.000     0.648     10.71     32.27      0.07      0.51     23.48    67.05 
+    6     36   1.333     0.670      9.37     28.75      0.06      0.33     15.22    53.73      618
+    8     64   1.000     0.700      8.90     26.99      0.06      0.26     11.76    47.98      191
+   12    144   0.667     0.786      8.90     25.23      0.06      0.20      8.76    43.15       56
+   16    256   0.500     0.907      8.90     24.35      0.06      0.17      7.43    40.91       19
+   24    576   0.333     1.251      8.90     23.47      0.06      0.14      6.21    38.78        6
+   32   1024   0.250     1.733      8.90     23.03      0.06      0.13      5.66    37.77        2
+
+  WALL: marginal solver energy per mm2 collapses past tile 12 (144 MACs).
+  ML latency wants more, and that is the ONLY thing that does:
+ GMAC/frame                    t12                    t16                    t32
+       0.30      1834us gemm_mac   OK      1245us gemm_mac   OK       687us      vec   OK
+       1.26      7598us gemm_mac   OK      5125us gemm_mac   OK      2782us      vec   OK
+       4.00     24052us gemm_mac   OK     16200us gemm_mac   OK      8762us      vec   OK
+      17.00    102118us gemm_mac MISS     68747us gemm_mac MISS     37133us      vec MISS
+  At tile 32 (1024 MACs) the VECTOR UNIT takes over as the ML bottleneck, so
+  even the ML axis stops at ~1024 MACs unless lanes grow with it. The 30 fps
+  int8 CNN envelope at CM-100 is ~4 GMAC/frame; at tile 32 it is ~15.
+
+============================================================================================================
+AXIS 2 — SCRATCHPAD BANDWIDTH.  The knob that works, and it works to
+         256 B/cycle. Wall: 16 banks x 16 B; past that the bus is the product.
+============================================================================================================
+
+BALANCED packages (lanes = bw/8, fp64 = lanes/2, banks <= 16 with >=64b word):
+   bw  banks  word  lanes  fp64  core mm2   pJ/B QUAD-MPC  ARM-MPC  PWR-MPC   EKF-24   EKF-96   sum uJ   QUADx   mm2/x
+----------------------------------------------------------------------------------------------------------------------
+   16      2     8      4     2     0.611  1.761   1712.0   2885.2      4.7      5.6    193.2    88.45                
+   32      4     8      4     2     0.627  1.319    931.6   2885.2      4.0      3.8    105.8    74.24   1.84x   0.020
+   64      8     8      8     4     0.668  1.033    467.3   1457.6      2.4      2.9     69.9    54.24   1.99x   0.041
+  128     16     8     16     8     0.786  0.839    235.2    730.3      1.6      2.6     65.5    43.15   1.99x   0.120
+  256     16    16     32    16     0.947  0.747    120.6    380.2      1.2      2.4     63.3    37.82   1.95x   0.169
+  512     16    32     64    32     1.268  0.647    101.3    203.3      1.1      2.4     62.2    33.99   1.19x   1.682
+
+  QUADx is the worst-case speedup over the previous row; mm2/x is the area
+  paid per unit of that speedup (mm2 / (ratio - 1)) -- a marginal cost, so
+  smaller is better and the column is directly comparable step to step.
+  16 -> 256 B/cycle returns a near-perfect 1.84-1.99x PER DOUBLING, at a
+  marginal cost rising 0.020 -> 0.169 mm2 per x. 256 -> 512 returns 1.19x at
+  1.682 mm2 per x -- TEN TIMES worse value -- because the fp32 GEMV ceiling
+  (bw/4) crosses the 144-MAC array rate (72 MAC/cycle) at 288 B/cycle.
+  Past there bandwidth alone buys nothing; you must buy array AND lanes AND
+  banks together, which is a different part rather than a wider one.
+
+UNBALANCED (bandwidth raised, lanes held at 16) — what the co-binding costs:
+   bw    QUADwc      bind   gemv us   vec us   seq us  balanced   lost
+  128     235.2   gemv_bw     195.1     22.2     11.5     235.2  1.00x
+  256     137.7   gemv_bw      97.6     22.2     11.5     120.6  1.14x
+  384     126.8   gemv_bw      86.7     22.2     11.5     103.1  1.23x
+  512     126.8   gemv_bw      86.7     22.2     11.5     101.3  1.25x
+
+  Minimum lanes at which the vector unit stops binding, per row:
+    QUAD-MPC   64B/c:  4  128B/c:  4  256B/c:  4  512B/c:  8
+    ARM-MPC    64B/c:  4  128B/c:  4  256B/c:  4  512B/c:  4
+    PWR-MPC    64B/c: 16  128B/c: 16  256B/c: 16  512B/c: 16
+    EKF-24     64B/c:  4  128B/c:  4  256B/c:  4  512B/c:  4
+    EKF-96     64B/c:  4  128B/c:  4  256B/c:  4  512B/c:  4
+  -> The ADMM and EKF rows are so GEMV-dominated that 4 lanes suffice to
+     256 B/cycle. FCS-MPC needs 16 AT EVERY BANDWIDTH -- it is the one row
+     where the vector unit binds first, which is the same fact the
+     accumulator-fusion finding rests on (broadcast_init + square_accumulate
+     take its vector work 525 -> 154 cycles for near-zero area, where doubling
+     lanes costs +0.143 mm2 for 1.26x). Lanes are provisioned for FCS-MPC and
+     for ML, not for the solver rows.
+
+  BANK-COUNT WALL, stated as the licensee sees it. The >=64-bit bank-word
+  rule caps banks at bw/8, and the sizing run caps banks at 16 because the
+  read crossbar and per-bank queues grow faster than the energy benefit:
+      128 B/cycle -> 16 banks x   8 B word, read bus  1382 bits incl. addr/ECC
+      256 B/cycle -> 16 banks x  16 B word, read bus  2764 bits incl. addr/ECC
+      512 B/cycle -> 16 banks x  32 B word, read bus  5529 bits incl. addr/ECC
+     1024 B/cycle -> 16 banks x  64 B word, read bus 11059 bits incl. addr/ECC
+  512 B/cycle is a 5530-bit read bus into a 16 x 32 B scratchpad. That is
+  a hard macro in disguise: no soft-IP licensee will floorplan it, and it
+  is rejected on integrability, not on model output.
+
+============================================================================================================
+AXIS 3 — CAPACITY.  NOT A SCALING AXIS. A step function with a monotone
+         cost. Every KB above the resident working set is a pure loss.
+============================================================================================================
+
+    KB  banks    spad    core   pJ/B  leak85  leak125  QUAD-MPC   ARM-MPC   PWR-MPC    EKF-24    EKF-96   sum uJ  fits
+    32     16   0.121   0.604  0.435    0.13     0.52      6.88     22.82      0.05      0.16      8.00    37.90    2/5
+    64     16   0.146   0.633  0.533    0.26     1.04      7.29     23.48      0.05      0.17      8.04    39.04    2/5
+    96     16   0.181   0.673  0.634    0.39     1.57      7.73     24.18      0.05      0.18      8.10    40.25    2/5
+   128     16   0.203   0.698  0.718    0.52     2.09      8.03     24.70      0.06      0.19      8.22    41.19    3/5
+   160     16   0.259   0.763  0.788    0.65     2.61      8.47     25.06      0.06      0.19      8.53    42.32    4/5
+   192     16   0.279   0.786  0.839    0.78     3.13      8.90     25.23      0.06      0.20      8.76    43.15    4/5
+   256     16   0.319   0.832  0.930    1.04     4.18      9.65     25.43      0.06      0.21      9.17    44.52    4/5
+   384     16   0.478   1.015  1.090    1.57     6.27     10.97     26.34      0.07      0.22      9.89    47.48    5/5
+   512     16   0.555   1.103  1.205    2.09     8.36     11.92     27.58      0.07      0.23     10.40    50.21    5/5
+  1024     16   1.091   1.720  1.639    4.18    16.71     15.49     32.28      0.09      0.27     12.35    60.47    5/5
+
+  SOLVER ENERGY IS MONOTONE INCREASING IN CAPACITY ACROSS THE WHOLE RANGE.
+  There is no capacity at which the part gets cheaper to run. Bigger banks
+  raise the cost of EVERY access, and the byte count a workload fetches does
+  not change.
+
+  The decisive case, and it confirms an earlier finding by a second route:
+    ARM-MPC at 192 KB: 323.2 KB footprint OVERFLOWS, streams 135 KB, 25.23 uJ
+    ARM-MPC at 384 KB: FITS, streams 3 KB, 26.34 uJ
+    -> making it fit costs +1.11 uJ (1.044x) and +0.228 mm2,
+       for ZERO latency benefit (ARM-MPC runs at 250 Hz with 5.5x margin).
+       The pJ/byte penalty on every access exceeds the DRAM traffic it saves.
+
+  RULE: size capacity to the FASTEST determinism-critical resident working
+  set, and to nothing else. A slow loop that overflows should overflow.
+  Capacity is a fitting constraint, so it belongs in the SKU table as a
+  discrete choice, never in a scaling roadmap.
+
+============================================================================================================
+AXIS 4 — FREQUENCY AND PROCESS NODE.  Cheapest on paper; three real walls.
+============================================================================================================
+
+Wall 1: bitline length. Single-cycle read forces rows <= ~256*(800/f).
+Wall 2: supply. Dynamic energy goes as V^2, so past nominal the part gets
+        FASTER AND LESS EFFICIENT -- the opposite of the value proposition.
+Wall 3: pipeline depth. A deeper datapath raises `drain_cycles`, and 97-100%
+        of the sequencer's latency cost is dependency drain.
+
+   MHz   Vdd  rowsmax  folds    spad    core   pJ/B   dynE  leakE  drain   QUADwc    ARMwc   sum uJ   uJ/MHz
+   400  0.65      512      1   0.246   0.748  0.829  0.660  0.536      6    462.2   1408.0    31.73   79.315
+   600  0.72      341      1   0.279   0.786  0.839  0.810  0.729      7    310.9    956.2    36.36   60.608
+   800  0.80      256      1   0.279   0.786  0.839  1.000  1.000      8    235.2    730.3    43.15   53.934
+  1000  0.86      204      1   0.279   0.786  0.839  1.156  1.242      9    189.8    594.8    48.51   48.509
+  1200  0.92      170      2   0.407   0.933  0.874  1.322  1.521     11    160.8    513.0    55.65   46.371
+  1600  1.02      128      2   0.407   0.933  0.874  1.626  2.073     14    123.6    404.3    66.73   41.706
+  2000  1.10      102      2   0.407   0.933  0.874  1.891  2.600     17    101.2    339.0    76.34   38.170
+
+  800 -> 1600 MHz: QUAD-MPC worst case 235.2 -> 123.6 us (1.90x, not 2.00x),
+    solver energy 43.15 -> 66.73 uJ (1.547x), core 0.786 -> 0.933 mm2 (1.19x).
+  So the frequency axis buys latency we do not need at the cost of the
+  energy advantage that IS the product. It is the wrong axis for this part.
+
+  ** AND THE ARROW POINTS DOWN, WHICH NOBODY HAD ASKED. ** Every solver
+  deadline has 4-15x worst-case margin, so the interesting question is not
+  how fast the part can go but how slowly it can go and still make the
+  deadline -- because energy falls with frequency, not rises. Checked against
+  a 50%-of-period budget (the honest engineering allocation), at worst-case
+  iterations:
+   MHz   Vdd  core mm2   sum uJ  vs 800  QUAD-MPC   ARM-MPC   PWR-MPC    EKF-24    EKF-96   verdict @50% period
+   300  0.65     0.748    34.16  0.792x     611.1    1842.4       3.0       5.3     171.3   MISS: QUAD-MPC
+   400  0.65     0.748    31.73  0.735x     462.2    1408.0       2.4       4.3     129.1   all OK
+   500  0.69     0.748    33.70  0.781x     370.0    1126.6       2.1       3.6     103.5   all OK
+   600  0.72     0.786    36.36  0.843x     310.9     956.2       1.9       3.1      86.7   all OK
+   800  0.80     0.786    43.15  1.000x     235.2     730.3       1.6       2.6      65.5   all OK
+  -> 600 MHz meets every frozen worst case inside a 50% budget at 0.84x the
+     solver energy of 800 MHz, same area. 400 MHz meets them too, at 0.74x
+     the energy, and is the lowest point where QUAD-MPC's measured cold tail
+     still fits its 500 us allocation.
+  -> THE NON-MONOTONICITY BELOW 400 MHz IS A MODEL ARTEFACT, NOT PHYSICS:
+     `vdd_for_freq` CLAMPS at 0.65 V, so going slower than 400 MHz stops
+     buying voltage and only adds leakage-time. The real curve keeps falling
+     into near-threshold and the model deliberately refuses to extrapolate
+     there. Read the 400 MHz row as 'the lowest point the model can defend',
+     not as an optimum.
+  -> THIS IS A REAL FINDING AND IT IS UNCOMFORTABLE: the recommended clock
+     may be too HIGH. 800 MHz was chosen before the frequency axis had an
+     energy cost in the model, i.e. when lowering it appeared to buy nothing.
+     DO NOT re-spec on this alone. The 400 MHz point has only 1.08x margin on
+     the one row whose tail is MEASURED, and the f-V table is [EST] with no
+     PDK behind it. What it does establish is that the frequency parameter
+     should be presented to a licensee as a DOWNWARD energy knob with a
+     deadline floor, never as an upward performance knob. Firm it up with a
+     real library f-V curve in Phase 1; it is one of the cheapest
+     measurements on the list and it moves the headline energy number.
+
+  Decomposing the sub-2x latency: 1/f applies only to compute. Fixed terms:
+    QUAD-MPC   compute    48.21 us, overhead 0.80 us -> asymptotic floor at f=inf is 0.80 us (1.6% of latency today)
+    ARM-MPC    compute   381.46 us, overhead 0.80 us -> asymptotic floor at f=inf is 0.80 us (0.2% of latency today)
+    PWR-MPC    compute     0.81 us, overhead 0.80 us -> asymptotic floor at f=inf is 0.80 us (49.6% of latency today)
+    EKF-24     compute     1.78 us, overhead 0.80 us -> asymptotic floor at f=inf is 0.80 us (31.1% of latency today)
+    EKF-96     compute    64.68 us, overhead 0.80 us -> asymptotic floor at f=inf is 0.80 us (1.2% of latency today)
+
+  Wall 3 quantified: pipeline depth x chain blocking (QUAD-MPC worst case).
+  Chain blocking is what makes a deeper pipeline survivable, so raising
+  frequency and skipping chain blocking are NOT independent decisions.
+ chain block     drain 4     drain 8    drain 16    drain 32
+    datapath       227.8       235.2       250.0       279.6   1.23x over the drain sweep
+          32       224.9       229.3       238.2       255.9   1.14x over the drain sweep
+           8       235.2       250.0       279.6       338.8   1.44x over the drain sweep
+    1 (none)       338.8       457.2       694.0      1167.6   3.45x over the drain sweep
+
+  PROCESS NODE is not a competitive axis at all, and this is the honest
+  point. Every perf/W figure here is a RATIO against a CPU baseline. Moving
+  from 16nm to 5nm moves the CPU too. Node buys absolute power and area for
+  a licensee's SoC budget; it does not move a single claim in this document.
+  Node is a COST axis, not a scaling axis. Do not put it on a roadmap slide
+  as though it improved the argument.
+
+============================================================================================================
+AXIS 5 — SEQUENCER.  Fixed-size by nature. Nothing about it scales UP;
+         the only lever points DOWN (shorter pipeline, wider chain blocks).
+============================================================================================================
+
+Issue width (needs a multi-ported descriptor queue):
+  width  0.5: QUAD-MPC=235.2 ARM-MPC=730.3 PWR-MPC=1.6 EKF-24=2.6 EKF-96=65.5
+  width  1.0: QUAD-MPC=235.2 ARM-MPC=730.3 PWR-MPC=1.6 EKF-24=2.6 EKF-96=65.5
+  width  2.0: QUAD-MPC=235.2 ARM-MPC=730.3 PWR-MPC=1.6 EKF-24=2.6 EKF-96=65.5
+  width  4.0: QUAD-MPC=235.2 ARM-MPC=730.3 PWR-MPC=1.6 EKF-24=2.6 EKF-96=65.5
+  -> IDENTICAL at 0.5x and 4x. Issue throughput is not a resource here, and
+     even HALVING it costs nothing. Do not build a multi-ported queue.
+
+Setup cycles per descriptor (the emit-cost axis):
+  setup  QUAD-MPC   ARM-MPC   PWR-MPC    EKF-24    EKF-96    vs 4
+      4     235.2     730.3       1.6       2.6      65.5  1.000x
+      8     235.2     730.3       1.6       2.6      65.5  1.000x
+     12     235.2     730.3       1.6       2.6      65.5  1.000x
+     16     235.2     730.3       1.6       2.6      65.5  1.000x
+     20     238.9     742.4       1.6       2.6      65.5  1.016x
+     23     244.5     767.4       1.6       2.6      65.5  1.039x
+     24     246.3     777.5       1.6       2.6      65.5  1.047x
+     32     261.1     858.5       1.6       2.6      65.5  1.110x
+     48     290.7    1020.5       1.6       2.6      65.5  1.236x
+  -> FREE up to 16 cycles/descriptor; the knee is at ~17-20 and even the
+     naive 23-cycle RV32 emit costs only 4% on QUAD-MPC and 5% on ARM-MPC.
+     CONSEQUENCE FOR THE ROADMAP: the hardware descriptor generator is an
+     AREA-CHEAP INSURANCE POLICY, not a deadline requirement for the frozen
+     set. It stays in (0.028 mm2, already budgeted) but it must not be sold
+     as load-bearing -- the `arm templates once per solve` codegen fix is
+     what actually removes the exposure, and that is free.
+
+Descriptor queue depth:
+  depth   0: QUAD-MPC=246.7 ARM-MPC=811.9 PWR-MPC=1.7 EKF-24=2.7 EKF-96=65.6
+  depth   1: QUAD-MPC=235.2 ARM-MPC=730.3 PWR-MPC=1.6 EKF-24=2.6 EKF-96=65.5
+  depth   2: QUAD-MPC=235.2 ARM-MPC=730.3 PWR-MPC=1.6 EKF-24=2.6 EKF-96=65.5
+  depth   4: QUAD-MPC=235.2 ARM-MPC=730.3 PWR-MPC=1.6 EKF-24=2.6 EKF-96=65.5
+  depth   8: QUAD-MPC=235.2 ARM-MPC=730.3 PWR-MPC=1.6 EKF-24=2.6 EKF-96=65.5
+  depth  16: QUAD-MPC=235.2 ARM-MPC=730.3 PWR-MPC=1.6 EKF-24=2.6 EKF-96=65.5
+  depth  32: QUAD-MPC=235.2 ARM-MPC=730.3 PWR-MPC=1.6 EKF-24=2.6 EKF-96=65.5
+  -> Only 0 -> 1 moves anything (QUAD-MPC 246.7 -> 235.2, 4.9%). Depth 2+ is
+     flat IN THIS AGGREGATE MODEL, and that DISAGREES with the settled
+     finding that depth 8 is a measured floor.
+     ** THE MEASUREMENT WINS AND THE REASON IS STRUCTURAL. ** The aggregate
+     model averages descriptor cost over a block; the measured DAG contains a
+     run of SIX CONSECUTIVE descriptors averaging 5.8 cycles in the residual
+     block, which a queue must absorb INSTANTANEOUSLY. An average cannot see
+     a burst. Depth 8 stays an RTL requirement; this sweep is not evidence
+     against it, it is evidence that this sweep cannot resolve it.
+
+Pipeline drain cycles — the ONE sequencer number that matters:
+  drain  QUAD-MPC   ARM-MPC   PWR-MPC    EKF-24    EKF-96    vs 8
+      2     224.1     652.3       1.6       2.4      64.0  0.893x
+      4     227.8     678.4       1.6       2.5      64.5  0.929x
+      8     235.2     730.3       1.6       2.6      65.5  1.000x
+     16     250.0     833.4       1.6       2.8      67.5  1.141x
+     32     279.6    1037.0       1.6       3.2      71.6  1.420x
+  -> ARM-MPC spans 652 -> 1037 us over the drain sweep (1.59x). This is the
+     only sequencer parameter with real leverage and it scales the WRONG WAY:
+     you cannot buy performance with it, you can only lose performance by
+     making the pipeline deeper. That is why the sequencer is fixed-size.
+
+  SEQUENCER SIZING VERDICT: scalar core + hardware descriptor generator,
+  <=4 cycles/descriptor, 8-deep queue, chain blocking >= one datapath width,
+  0.028 mm2. NOT a per-SKU parameter. Identical in every SKU. The only
+  thing that changes per SKU is the chain-block width, which follows the
+  datapath width automatically.
+
+============================================================================================================
+AXIS 6 — SCALING DOWN.  Where offload stops making sense, as a rule a
+         customer can apply with two numbers they already have.
+============================================================================================================
+
+Derivation. speedup = cpu / (compute + overhead). With k = cpu/compute:
+      speedup >= 1  <=>  cpu >= overhead * k/(k-1),   impossible if k <= 1
+The floor is a ratio between the LAUNCH PROTOCOL and the DATAPATH ADVANTAGE.
+It is not a MAC count and not a problem dimension.
+
+row                    compute us   cpu us      k  floor cpu   sp T1  sp T1M  perf/W  latency verdict
+FCS L2 Np1                  0.040    0.063   1.57       2.19    0.07    0.19    3.23  USE THE CPU
+FCS L3 Np1                  0.048    0.102   2.09       1.53    0.12    0.29    6.97  USE THE CPU
+FCS L2 Np2                  0.083    0.145   1.76       1.85    0.16    0.38   10.02  USE THE CPU
+FCS L3 Np2                  0.812    1.004   1.24       4.17    0.62    0.90   22.02  USE THE CPU
+EKF n6                      0.098    0.091   0.92        inf    0.10    0.23    7.24  USE THE CPU
+EKF n12                     0.312    0.461   1.48       2.47    0.41    0.75   16.22  USE THE CPU
+EKF n18                     0.904    1.384   1.53       2.31    0.81    1.15   19.42  MCU-class only
+EKF n24                     1.775    3.118   1.76       1.86    1.21    1.50   20.63  WINS
+EKF n48                    11.313   23.334   2.06       1.55    1.93    2.01   21.15  WINS
+EKF n96                    83.314  181.304   2.18       1.48    2.16    2.17   20.93  WINS
+ADMM nu1                   13.992   22.656   1.62       2.09    1.53    1.59   13.41  WINS
+ADMM nu2                   24.694   43.208   1.75       1.87    1.69    1.73   12.70  WINS
+ADMM nu4                   48.206   88.695   1.84       1.75    1.81    1.83   12.33  WINS
+ADMM nu8                  104.269  197.201   1.89       1.70    1.88    1.45   10.94  WINS
+
+  Measured k band across the frozen solver set: 1.14 - 2.17.
+  At T1 (0.80 us): floor is 1.48 us of CPU time at k=2.17, 4.13 us at k=1.24.
+  At T1M (0.30 us): 0.56 us and 1.55 us respectively.
+
+  ENERGY has a SEPARATE and LOWER floor, and its mechanism is different:
+  the CM pays static power across the whole latency window INCLUDING the
+  launch, during which it computes nothing.
+    idle-during-launch energy = 15 mW x 0.8 us = 0.000 nJ   (T1)
+                              = 15 mW x 0.30 us = 0.000 nJ   (T1M)
+    an A55-class in-order core at 0.15 W burns 0.000 nJ in 0.000 us of compute
+    -> for a 5x energy advantage the workload's CPU energy must be well
+       above 5x that floor: >= ~0.00 us of A55 compute at T1,
+       >= ~0.00 us at T1M. Rounded for a customer: 0.4 us / 0.15 us.
+    Consistency check against the sweep, which is what makes this more than
+    algebra: FCS L2 Np1 has 0.063 us of host work and scores 3.2x perf/W --
+    BELOW the 5x kill criterion. FCS L3 Np1 has 0.102 us and scores 7.0x.
+    The crossing lands between them, i.e. within a factor of ~1.5 of the
+    0.4 us floor the mechanism predicts. Good enough to quote as a rule of
+    thumb, not good enough to quote as a number.
+    THE ENERGY CLAIM HAS A FLOOR TOO. It is ~5x lower than the latency
+    floor, which is why most workloads that fail test 2 still pass test 3 --
+    but it is not zero, and 'we are always more efficient' is false.
+
+  POWER GATING IS WHAT MAKES THE ENERGY FLOOR THIS LOW. Charged ungated, the
+  fixed static term is the whole PERIOD rather than the active window, so it
+  grows by exactly 1/duty:
+    QUAD-MPC   duty  23.52%  static energy/call: gated     0.00 nJ  ungated     0.01 nJ  (  4.3x)
+    ARM-MPC    duty  18.26%  static energy/call: gated     0.01 nJ  ungated     0.06 nJ  (  5.5x)
+    PWR-MPC    duty   6.45%  static energy/call: gated     0.00 nJ  ungated     0.00 nJ  ( 15.5x)
+    EKF-24     duty   0.26%  static energy/call: gated     0.00 nJ  ungated     0.01 nJ  (388.3x)
+    EKF-96     duty   1.31%  static energy/call: gated     0.00 nJ  ungated     0.07 nJ  ( 76.4x)
+  Charged ungated, QUAD-MPC perf/W falls 12.6x -> 4.8x, BELOW the kill
+  criterion, and EKF-24 to 0.2x. Coarse-grain gating (or at minimum full
+  clock gating plus a retention-mode scratchpad) is not an optimisation.
+
+============================================================================================================
+AXIS 7 — EXTERNAL BANDWIDTH.  Large-model ML is outside the DIFFERENTIATED
+         envelope even where it is inside the feasible one.
+============================================================================================================
+
+SLM-DECODE (1.1B int8, 20 tok/s, batch 1). No amount of scratchpad
+bandwidth, MAC array or capacity touches this row:
+ DMA GB/s    lat ms    dma ms   comp ms   dma %        uJ  perf/W  verdict
+      6.4     174.1     162.8      11.3    93.5     17893    2.35  MISSES
+     12.8      88.2      76.9      11.3    87.2     16604    2.53  MISSES
+     25.6      45.2      34.0      11.3    75.1     15960    2.63  MEETS
+     51.2      23.7      12.5      11.3    52.6     15638    2.68  MEETS
+    102.4      13.0       1.7      11.3    13.4     15477    2.71  MEETS
+
+  It MEETS at 25.6 GB/s, so 'misses at 6.4, meets at 25.6' is a provisioning
+  requirement to state. But read the perf/W column, not the verdict column:
+  at the bandwidth where it becomes feasible it is 75% DRAM-bound, so the
+  advantage collapses toward the ratio of a small compute fraction. A CPU
+  with the same 25.6 GB/s is bounded by the same wall. WE ARE NOT
+  DIFFERENTIATED ON A WORKLOAD WHOSE BINDING RESOURCE IS OFF-CHIP.
+
+  The envelope, stated so a customer can check their own model. Weight bytes
+  per token = parameters (int8), and residency saves nothing once the model
+  exceeds the scratchpad, which every useful LLM does:
+ DMA GB/s       5 tok/s      10 tok/s      20 tok/s      50 tok/s
+      6.4        0.64 G        0.32 G        0.16 G        0.06 G
+     12.8        1.28 G        0.64 G        0.32 G        0.13 G
+     25.6        2.56 G        1.28 G        0.64 G        0.26 G
+  (at a 50%-of-period transfer budget, which is what a real system gives)
+  -> at CM-100's assumed 6.4 GB/s and 20 tok/s the envelope is ~0.16 G int8
+     parameters. THAT is the honest ML-decode statement, and it is a
+     sub-Phi-class model. Above it, sell the CNN/ViT row, not the LLM row.
+
+  What DOES stay inside the envelope: anything whose persistent data is
+  resident. CNN/ViT weights stream once and the activations stay:
+    SLM-DECODE  persistent  1074219 KB, moved   1074035 KB, required  22.00 GB/s, perf/W  2.35x
+    VIT-TINY    persistent     5566 KB, moved      5521 KB, required   0.17 GB/s, perf/W 28.22x
+
+============================================================================================================
+MULTI-CM — is it a product or a distraction?
+============================================================================================================
+
+Q1. Can a SINGLE solve be split? The iteration is loop-carried, so there is
+    no iteration-level parallelism. But there IS work-level parallelism
+    inside an iteration: row-split every GEMV, each CM owning a row block.
+    The cost is a BARRIER AT EVERY CHAIN STEP, because the next step's
+    operand is the concatenation of this step's partials. MEASURED chain
+    depth of one checked ADMM iteration = 17 steps under wait-mask
+    semantics (32 under v0 one-token semantics).
+
+    Charged GENEROUSLY to the multi-CM case: perfect load balance, zero
+    broadcast bytes, no row-quantisation waste, capacity always sufficient.
+
+ n_CM    sync model  sync us/iter  per-iter us  QUADwc us  vs 1 CM
+    1             -         0.000        3.157      235.2    1.00x
+    2   shared_spad         0.340        1.919      142.8    1.65x
+    2   tightly_cpl         2.550        4.129      306.3    0.77x
+    2      coherent         8.500       10.079      746.6    0.32x
+    4   shared_spad         0.340        1.129       84.4    2.79x
+    4   tightly_cpl         2.550        3.339      247.9    0.95x
+    4      coherent         8.500        9.289      688.2    0.34x
+
+    ANSWER: two CMs make a single ADMM solve SLOWER than one at any barrier
+    cost above ~16 cycles. Tightly-coupled mailbox loses (0.77x). Coherent-
+    fabric synchronisation loses catastrophically (0.32x) -- and coherent is
+    the only organisation that does not require new silicon.
+
+    ** AND THE ONE ROW THAT WINS IS UNPHYSICAL, WHICH IS THE REAL ANSWER. **
+    Read the `shared_spad` rows adversarially. They charge each CM 1/n of the
+    datapath time WHILE SHARING ONE SCRATCHPAD. QUAD-MPC's binding resource
+    is scratchpad read bandwidth (`gemv_bw`, see the reference table). Two
+    datapaths behind ONE 128 B/cycle scratchpad on a bandwidth-bound row
+    deliver 1.00x, not 1.65x -- the second datapath starves. The row is only
+    reachable if the scratchpad bandwidth ALSO doubles, at which point the
+    bandwidth is what bought the speedup and the datapath replication is
+    incidental. Corrected, the honest table is:
+        2 CM, shared scratchpad, bandwidth NOT scaled -> 1.00x (starved)
+        2 CM, shared scratchpad, bandwidth doubled    -> that IS 1 CM at
+                                                        256 B/cycle, cheaper
+    So intra-solve multi-CM is not merely a bad trade; on the workload class
+    that defines this architecture there is no mechanism by which it helps.
+
+Q2. Quantifying that, because 'it is one wider CM' should be priced. Compare
+    2 x CM-100 against 1 CM with the same total bandwidth:
+    2 x CM-100        : 1.572 mm2, 2 x 128 B/cyc over TWO 192 KB scratchpads, QUAD-MPC wc 142.8 us (best-case barrier)
+    1 x CM @256 B/cyc : 0.947 mm2, 256 B/cyc over ONE 192 KB scratchpad, QUAD-MPC wc 120.6 us
+    -> the single wide CM is 1.66x CHEAPER in area and 1.18x FASTER.
+    For bandwidth-bound work, buying bandwidth inside one CM dominates
+    buying a second CM, and it is not close. Marginal cost of bandwidth:
+      128 -> 256 B/cycle inside one CM: +0.161 mm2 for +128 B/cycle
+      a second CM-100:                  +0.786 mm2 for +128 B/cycle
+      -> 4.9x more area per byte/cycle via replication
+    And at 4 CMs, even taking the unphysical shared-scratchpad row at face
+    value, replication still loses on area:
+      4 x CM-100        : 3.145 mm2, QUAD-MPC wc 84.4 us
+      1 x CM @512 B/cyc : 1.268 mm2, QUAD-MPC wc 101.3 us
+      -> replication is 2.48x the area for 1.20x the speed, i.e. 2.07x worse value --
+         and 512 B/cycle is itself already rejected as unintegrable, so this
+         comparison is between two options we decline, not a recommendation.
+
+Q3. FCS-MPC's 729 candidates ARE independent. Does that parallelism want
+    two CMs? THIS IS THE ONE PLACE THE ANSWER IS NOT AN IMMEDIATE NO, and it
+    is worth saying so rather than reporting the convenient result.
+    FCS-MPC compute is 0.812 us against a 0.8 us launch. It is 0.62x overall and the
+    deficit is invocation, not datapath (datapath alone is 1.24x).
+    Zero dependency chains, so a split needs exactly ONE barrier -- the
+    cross-CM argmin reduction. The most favourable split in the whole set:
+      2 CM, shared_spad  0.826 us vs 1.612 us single -> 1.95x datapath, 1.22x vs the fastest CPU (ABOVE parity)
+      2 CM, tightly_cpl  0.956 us vs 1.612 us single -> 1.69x datapath, 1.05x vs the fastest CPU (ABOVE parity)
+      2 CM, coherent     1.306 us vs 1.612 us single -> 1.23x datapath, 0.77x vs the fastest CPU (below parity)
+    So yes: candidate splitting does convert 0.62x into ~1.2x parity. It is
+    still the wrong purchase, for three reasons that must be given together:
+
+    (a) NO DEADLINE NEEDS IT. FCS-MPC already meets its 25 us period at
+        15.5x margin. The latency we would be buying is
+        latency the customer does not have a use for; the socket is sold on
+        energy (22.0x perf/W) and core offload.
+    (b) IT IS THE WRONG BOTTLENECK. FCS-MPC is the one solver row where the
+        VECTOR UNIT binds first, not scratchpad bandwidth -- it needs 16 lanes
+        at every bandwidth in the sweep above. So the resource in short supply
+        is vector lanes, and there are two cheaper ways to buy them:
+          MACIF broadcast_init + square_accumulate: 525 -> 154 vector cycles,
+            0.62x -> 0.88x, NEAR-ZERO AREA (already the settled answer)
+          16 -> 32 lanes in one CM: +0.143 mm2 for 1.26x
+          a second CM:              +0.786 mm2 for ~1.95x datapath
+        Ranked by area per unit of speedup, the second CM is LAST of three.
+    (c) IT DOUBLES STATIC POWER ON A ROW SOLD ON ENERGY. Two CM-100 instances
+        leak twice as much for the same solve. Spending the energy claim to
+        buy latency nobody asked for is the wrong trade on this row
+        specifically, because energy IS the pitch here.
+    NOTE the shared_spad row carries the same caveat as Q1: it charges 1/n
+    datapath time behind one scratchpad. That is defensible HERE and not in
+    Q1, because FCS-MPC is vector-bound rather than bandwidth-bound -- the
+    replicated resource really is the scarce one. Stating why the same row is
+    admissible on one benchmark and not the other is the whole point of
+    tracking the binding constraint per row.
+
+Q4. MANY INDEPENDENT LOOPS (a manipulator's joints, several estimators).
+    This is the one case with a real argument, and it is NOT a parallelism
+    argument -- it is capacity plus determinism isolation.
+
+row          duty % wc  footprint KB  loops by duty  loops by capacity   binding
+QUAD-MPC         23.52         138.8            4.3               1.38  capacity
+ARM-MPC          18.26         323.2            5.5               0.59  capacity
+PWR-MPC           6.45           0.7           15.5             274.29      duty
+EKF-24            0.26           7.9          388.3              24.30  capacity
+EKF-96            1.31         117.0           76.4               1.64  capacity
+
+    CAPACITY BINDS CONSOLIDATION ON 4 OF 5 ROWS, by 0.1-47x.
+    QUAD-MPC has 4.3x throughput headroom and 1.38x capacity headroom: one
+    CM-100 can host ONE flagship MPC loop, not four. ARM-MPC does not even
+    fit once. So the reason to instantiate a second CM is that the working
+    sets do not co-reside -- which a bigger scratchpad also solves, at
+    0.020 mm2 per 32 KB against 0.786 mm2 for a whole second CM.
+    Note the direction of the error a throughput-only analysis would make:
+    duty cycle says 'consolidate 4-388 loops', capacity says 'consolidate
+    one'. Provisioning a shared accelerator from duty cycle alone would
+    oversell consolidation by up to 47x.
+
+    THE SECOND ARGUMENT IS JITTER, AND IT IS THE STRONGER ONE. Determinism
+    is the product, so consider a drive node: FCS-MPC at 40 kHz (25 us
+    period) sharing a CM with QUAD-MPC at 1 kHz.
+      QUAD-MPC worst-case solve = 235.2 us = 9.4 periods of the 40 kHz loop.
+      Non-preemptible at SOLVE granularity  -> the fast loop misses 10 deadlines. FATAL.
+      Preemptible at DESCRIPTOR granularity -> worst-case blocking is the
+      longest single descriptor. Measured longest in the ADMM DAG is a full
+      A-product at ~1600 cycles = 2.0 us = 8.0% of a 25 us period. TOLERABLE.
+    -> DESCRIPTOR-GRANULARITY PREEMPTION, not a second CM, is what makes
+       mixed-rate consolidation safe. It is a sequencer/scoreboard feature
+       (save the wait mask and token state, admit the higher-priority
+       template) and it is nearly free next to a 0.79 mm2 replica.
+
+VERDICT ON MULTI-CM
+  * Intra-solve splitting: DEAD IN PRINCIPLE AND IN NUMBERS. Loses to one
+    wider CM on both area and latency, at every barrier cost.
+  * Candidate-batch splitting (FCS-MPC): the ONE case that works -- it does
+    reach ~1.2x CPU parity. Rejected anyway, on three grounds together: no
+    deadline needs it (15.5x margin), the scarce resource is vector lanes
+    and two cheaper ways to buy them exist (MACIF accumulator fusion at
+    ~zero area, then +0.143 mm2 of lanes, then +0.786 mm2 of CM), and it
+    doubles static power on the row whose entire pitch is energy.
+  * Many independent loops: bounded by CAPACITY and JITTER, both of which
+    have cheaper fixes (more KB; descriptor-granularity preemption).
+  * What survives: INDEPENDENT INSTANCES, NO INTERCONNECT, when a licensee
+    wants hard physical isolation between safety domains (ASIL) or between
+    control rates. That is ALREADY SUPPORTED -- it is instantiating the IP
+    twice -- and it needs exactly one thing from us: the runtime API must
+    address multiple devices. Nothing in RTL, no shared scratchpad, no
+    CM-to-CM coherency, no one-sequencer-many-datapaths.
+  * WHAT WOULD CHANGE THIS: a frozen-set row that (a) needs >288 B/cycle of
+    fp32 GEMV to make a deadline, or (b) needs >384 KB resident at >1 kHz.
+    Neither exists today. Re-open the question if one appears; until then
+    'multi-core scaling' should come OFF the Phase 4 list, because keeping
+    it there implies a verification obligation we have no reason to accept.
+
+============================================================================================================
+THE VERIFICATION TENSION — parameters are not free, so classify them
+============================================================================================================
+
+§5 markets 'parameterized (tile size, precisions, SRAM depth, bus type)'.
+§9 flags 'few validated configs, not full matrix'. Both are right, and the
+resolution is that PARAMETERS ARE NOT ALL THE SAME KIND OF PARAMETER.
+
+REPLICATIVE — changes a width or a depth, reuses the same control FSMs.
+Verification cost is a re-run of an existing regression at a new elaboration.
+  tile / tile_n        generate-loop over MAC cells; reduction tree is
+                       width-generic. Validated range 8-16, square only.
+  vector_lanes         generate-loop over FMA slices. 8-32.
+  scratchpad_kb        bank depth only. Re-run the memory compiler + timing.
+  bank word bytes      >= 64 bits by design rule. 8-16 B.
+  freq target          constraint-level, not RTL. Re-run timing closure.
+
+STRUCTURAL — changes control logic, protocol behaviour, or a declared
+contract. Each value is a SEPARATE verification target with its own
+coverage closure. These are what must be rationed.
+  n_banks              arbiter, address interleave, conflict resolution.
+                       VALIDATE 8 AND 16 ONLY.
+  precision set        MACIF declaration + the runtime's REFUSAL paths. A
+                       macro without fp64, or with bf16 substituted for
+                       fp16, must be refused at codegen. Each removal is a
+                       new negative-test suite, not a smaller design.
+  fp64 present         presence/absence changes the PRODUCT (no interior
+                       point without it), not just the datapath.
+  bus type             THE MOST EXPENSIVE PARAMETER IN §5 AND THE MOST
+                       CASUALLY MARKETED. AXI4 / ACE-Lite / TileLink each
+                       need their own protocol-checker verification and
+                       their own coherency-behaviour proof. This is not a
+                       parameter, it is three deliverables.
+  seq queue depth      scoreboard + token-reuse hazard rule. FIX AT 8.
+  chain block width    follows datapath width automatically. Not a knob.
+  drain / pipe depth   timing-driven, but it changes the scoreboard's
+                       hazard distances. FIX PER SKU, do not expose.
+
+RULE: sell the replicative set as parameters. Sell the structural set as
+a SKU list. Never print 'bus type' in a parameter list again.
+
+============================================================================================================
+PROPOSED SKU FAMILY — TWO validated configurations, not three
+============================================================================================================
+
+SKU        MACs  B/cyc  banks    KB  lanes  fp64  core mm2   pJ/B  solver uJ        perf/W  deadlines   residency violations
+CM-100      144    128     16   192     16     8     0.786  0.839      43.15  12.3-22.0      all met                ARM-MPC
+CM-50        64     64      8    64      8     4     0.424  0.683      53.23  11.9-19.6      all met QUAD-MPC,ARM-MPC,EKF-96
+CM-100S      16    128     16   192     16     8     0.648  0.839      67.05   7.9-17.9      all met                ARM-MPC
+CM-200      256    256     16   256     32    16     1.113  0.816      36.48  13.1-25.3      all met                ARM-MPC
+
+  ** READ THE LAST COLUMN, NOT THE DEADLINE COLUMN. ** Every SKU here 'meets
+  all deadlines', which is close to meaningless: latency margin is 4-15x
+  everywhere. What separates the SKUs is which working sets stay RESIDENT,
+  because a residency violation puts DRAM in the control loop and forfeits
+  the determinism claim -- the thing we actually sell. A row that overflows
+  still MEETS its deadline in this model (the streaming is small and
+  double-buffered); it just stops being deterministic.
+
+  CM-100: Flagship. Robotics/drone node: condensed-QP MPC + state estimation + CNN/ViT-class ML + interior-point NMPC. The only SKU that holds the QUAD-MPC flagship working set resident.
+    holds resident: QUAD-MPC, PWR-MPC, EKF-24, EKF-96
+    DOES NOT hold:  ARM-MPC
+    tightest worst-case deadline margin: QUAD-MPC at 4.25x (2.13x against a 50%-of-period budget)
+    array/bandwidth balance: needs tile >= 8.0, has 12 (2.25x MAC headroom)
+
+  CM-50: MCU-class / motor-drive node: FCS-MPC, small EKF, small condensed QP. Sized to the fastest loop it can host RESIDENT, not to the biggest problem it can eventually finish.
+    holds resident: PWR-MPC, EKF-24
+    DOES NOT hold:  QUAD-MPC, ARM-MPC, EKF-96
+    tightest worst-case deadline margin: QUAD-MPC at 2.14x (1.07x against a 50%-of-period budget)
+    array/bandwidth balance: needs tile >= 5.7, has 8 (2.00x MAC headroom)
+
+  SCOPING LINE THAT MUST GO IN THE DATASHEET: CM-50 does NOT support the
+  QUAD-MPC class. Its 64 KB holds 0.46 of that 138.8 KB working set, so a
+  12-state N=20 condensed QP would stream ~75 KB every millisecond tick. It
+  still meets the deadline; it is no longer deterministic. CM-50's honest
+  envelope is n_var <= ~40 (ADMM), n <= ~48 (EKF), and finite-control-set MPC
+  of any size, because FCS-MPC's whole working set is 0.7 KB.
+
+  AND ONE PIECE OF GOOD NEWS THAT SHOULD BE STATED PLAINLY, because the fp64
+  decision has been treated as a cost all along: in the merged multi-format
+  cluster, fp64 THROUGHPUT UP TO lanes/2 IS FREE. The area is set by
+  max(fp64_fmas, lanes/2) units, so at 16 lanes an fp64 count of 1, 2, 4 or 8
+  all cost the same 0.786 mm2. What you pay for is the multi-format MERGE
+  premium (+0.067 mm2 at 16 lanes over an fp32-only unit of the same width),
+  once, not per fp64 unit. Interior-point capability is therefore a
+  ~9%-of-core decision taken once, not a scaling axis with a running cost.
+
+  ARM-MPC OVERFLOWING CM-100 IS DELIBERATE, NOT A GAP. It is 323.2 KB at
+  fp64, runs at 250 Hz with 5.5x worst-case margin, and streams 0.034 GB/s.
+  Axis 3 shows that growing to 384 KB to hold it costs +0.228 mm2 and MORE
+  energy. Determinism is only load-bearing on the fast loops; a 250 Hz
+  interior-point solve is allowed to touch DRAM and we should say so rather
+  than size a scratchpad to hide it.
+
+  WHY NOT A THIRD SKU:
+    CM-100S (16-MAC solver-only) saves 0.138 mm2 (18%) and costs
+    2.68x the EKF-96 energy. EKF is a BEACHHEAD workload, so a
+    SKU that is bad at state estimation is a SKU for a socket we are not
+    selling into. The array is the cheapest thing in the part
+    (17% of core). Do not spend a verification slot to remove it.
+    -> tile stays a REPLICATIVE synthesis parameter over 8-16, unsupported
+       outside that range. Not a SKU.
+
+    CM-200 (256 B/cyc, 16x16, 256 KB) costs 1.42x the core for
+    1.95x QUAD-MPC worst case and 1.18x solver energy, against
+    deadlines that already have 4-14x margin. It is a real Pareto point and
+    it has NO WORKLOAD IN THE FROZEN SET. Keep it as a documented synthesis
+    configuration for a customer who brings a harder problem; do not
+    verify it, do not price it, do not put it on a roadmap.
+
+  THE ONE AXIS TO GROW ON DEMAND, and it is not the one Phase 4 lists:
+  the fp64 FMA count. ARM-MPC is the only row bound by ARITHMETIC rather
+  than bandwidth, and it scales almost linearly:
+ fp64 FMAs  core mm2  ARM wc us   ARM uJ   margin   uJ/mm2
+         2     0.786     2796.6    41.48    1.43x         
+         4     0.786     1428.1    30.71    2.80x         
+         8     0.786      730.3    25.23    5.48x         
+        16     0.930      380.2    22.48   10.52x       19
+        32     1.216      235.0    21.34   17.02x        4
+  (blank uJ/mm2 cells = zero area delta: 2, 4 and 8 fp64 FMAs are the SAME
+   silicon, because the merged cluster is sized by max(fp64, lanes/2) = 8.
+   fp64 throughput below lanes/2 is free, as noted above -- so the 2- and
+   4-FMA rows are not cheaper configurations, they are the same part running
+   a narrower kernel. There is no reason to ship them.)
+  8 -> 16 FMAs is 1.85x on ARM-MPC latency for +0.144 mm2. But ARM-MPC
+  already has 5.5x deadline margin and the ENERGY return is ~18 uJ/mm2 --
+  worse than tile 8->12's 84 uJ/mm2. So: right axis, no customer yet.
+  Grow it if and only if a licensee brings a longer horizon, a faster rate,
+  or a genuinely nonlinear MPC that needs more interior-point iterations.
+
+============================================================================================================
+CUSTOMER-FACING ENVELOPE RULE — 'is my workload in the CM's band?'
+============================================================================================================
+
+Five tests. All must pass. Each uses a number the customer already has.
+
+1. RESIDENCY. Sum every matrix as a DENSE RECTANGLE at your working
+   precision, plus every working vector and temporary. Not packed
+   triangular -- the address generators cannot express it.
+     <= 192 KB (CM-100) or <= 64 KB (CM-50)  -> in.
+   Over that, DRAM enters your control loop and the determinism claim is
+   void. This is a hard edge, not a gradient.
+
+2. LATENCY FLOOR. Measure your solve on your host core. Then:
+     host time >= 5 us     -> the latency claim holds (T1, rich host)
+     host time >= 1.7 us   -> holds on an MCU-class doorbell (T1M)
+     host time <  1.5 us   -> USE THE CPU. No datapath size fixes this;
+                              the launch protocol is the cost.
+   (Derivation: cpu >= overhead*k/(k-1) with k = 1.2-2.2 measured.)
+
+3. ENERGY FLOOR, which is LOWER than the latency floor -- most workloads
+   that fail test 2 still pass this one:
+     host time >= 0.4 us of an efficient in-order core -> >=5x perf/W
+   Below that, the CM's static power during launch exceeds your whole
+   compute energy. Requires power gating, which is mandatory anyway.
+
+4. DESCRIPTOR DENSITY. Average >= 8 datapath cycles per descriptor, with
+   no burst of more than 8 consecutive short descriptors. In practice:
+   your inner-loop matrix/vector operations must average >= ~64 elements
+   at 128 B/cycle fp32. Frozen-set rows run 238 cycles/descriptor (30x the
+   bar); one-step FCS-MPC and 100 kHz two-level FCS-MPC FAIL it. Tell those
+   customers to use the MCU.
+
+5. OFF-CHIP TRAFFIC. (bytes that must cross the boundary per call) /
+   (deadline) <= 6.4 GB/s at the baseline LPDDR4x provisioning. If your
+   answer is a weight-streaming model, this is the ONLY test that matters
+   and no on-chip parameter changes it.
+
+AND THE REUSE-DEPTH DIAGNOSTIC, which tells you WHICH knob is yours:
+  Take your dominant product. How many times is each fetched operand
+  element consumed before it is discarded? Call it R.
+    R = 1        pure GEMV. Bandwidth-bound. MAC count is irrelevant to you.
+    R < 8        still bandwidth-bound even with a batch dimension
+                 (FCS-MPC has R = n_y = 2 across 729 candidates and is
+                  bandwidth-bound; the batch buys 1.7x, not 12x).
+    R >= tile    tile-limited GEMM. This is the only regime where a bigger
+                 array pays, and even then it pays in ENERGY first.
+  If R is set by a PROBLEM dimension rather than by the tile, you are
+  operand-fetch-bound. That is the general form of the batch-1 finding and
+  it is the single most useful thing to tell a customer architect.
+
+============================================================================================================
+SUMMARY — the band, stated plainly
+============================================================================================================
+
+  axis                  scales?  usable range              wall, and what sets it
+  --------------------  -------  ------------------------  ----------------------
+  MAC array             weakly   36 - 256 MACs             energy return dies at 144;
+                                                           ML latency wants 1024 but
+                                                           then lanes bind
+  scratchpad bandwidth  YES      64 - 256 B/cycle          16 banks x 16 B; and the
+                                                           fp32 GEMV ceiling crosses
+                                                           a 144-MAC array at 288
+  capacity              NO       a discrete fit, 64/192KB  monotone energy cost; only
+                                                           ever tracks the fastest
+                                                           resident working set
+  frequency             weakly   600 - 1000 MHz            bitline folds at ~1100;
+                                                           V^2 destroys the energy
+                                                           claim above nominal
+  process node          NO       cost axis only            the CPU baseline moves too
+  fp64 FMA count        YES      4 - 16                    linear on interior point,
+                                                           and no customer needs it
+  sequencer             NO       fixed                     97-100% is dependency
+                                                           drain; only shrinks
+  multi-CM              NO       independent instances     loop-carried iteration;
+                                                           loses to one wider CM
+  external bandwidth    n/a      a provisioning input      >=25 GB/s for 1.1B decode,
+                                                           and undifferentiated there
+
+  TWO axes scale usefully: scratchpad bandwidth (64 -> 256 B/cycle, ~4x) and
+  the fp64 FMA cluster (4 -> 16, ~4x, on one benchmark that does not need it).
+  Everything else is a fit, a cost, or a distraction. The honest product
+  statement is a NARROW BAND -- roughly 3-4x of usable configuration span --
+  and that is a legitimate position for control-domain IP, where the
+  customer's problem sizes are set by physics and actuator counts rather
+  than by a scaling roadmap. Two validated SKUs cover it.
+
+  WHAT WOULD FALSIFY THIS: an L0 operand register file. It would buy the
+  array's reuse at O(T) area instead of O(T^2), which drops the honest array
+  size to 36-64 MACs AND raises the bandwidth at which the array starts to
+  bind. That is the highest-value model extension outstanding and it moves
+  two of the walls above.
