@@ -244,6 +244,55 @@ automotive.
 - **Runtime API is the constitution** — identical across simulator, open core, and commercial
   core. Changing it is a business decision.
 
+## Scalability — the band is narrow, and that is the honest position (2026-07-31, §8)
+
+- **Only two axes move a benchmark by >3×:** scratchpad bandwidth (64→256 B/cycle, **3.87×** on
+  QUAD-MPC worst case) and the fp64 FMA cluster (4→16 units, **3.76×** on ARM-MPC). Over
+  defensible ranges: frequency 1.64×, capacity **1.29× as a *cost***, MAC array **1.00×**.
+  A tripwire test fails if a third axis ever clears 3×.
+- **The balance rule, which refines the settled MAC finding:** min tile = **√(bw/2)** at fp32. A
+  12×12 array absorbs GEMV up to **288 B/cycle** — the same 288 at fp32, bf16 *and* int8, because
+  this datapath's rate multiplier is ~1/element-size. So *"16× more MACs bought zero" is a
+  statement about 64–128 B/cycle, not about arrays in general*: at 256 B/cycle a tile of 8 already
+  binds. CM-100's 2.25× MAC headroom is exactly what makes 256 B/cycle a drop-in upgrade.
+- **Capacity is not a scaling axis.** Solver energy is *monotone increasing* 32 KB → 1024 KB.
+  Making ARM-MPC fit at 384 KB costs +1.11 µJ and +0.228 mm² for **zero** latency benefit.
+- **Frequency's arrow points DOWN.** 600 MHz meets every frozen worst case inside the
+  50%-of-period budget at **0.84× the solver energy and identical area**. Not re-spec'd (400 MHz
+  leaves only 1.08× margin on the one *measured* tail, and the f–V table is [EST]) — but sell
+  frequency as a downward energy knob with a deadline floor, not as headroom.
+- **Multi-CM is struck from Phase 4.** A loop-carried solve cannot be split: 2 CMs give **0.77×**
+  (mailbox) or **0.32×** (coherent) on ADMM's 17 measured chain steps. FCS-MPC's 729 candidates
+  *do* reach ~1.22×, but that row has 15.5× deadline margin, its scarce resource is vector lanes
+  (MACIF accumulator fusion ≈ free < +0.143 mm² lanes < +0.786 mm² CM), and a second CM doubles
+  static power on the row sold on energy. **Buying bandwidth inside one CM is 4.9× cheaper per
+  byte/cycle.** Consolidation across loops is **capacity-bound, not throughput-bound** — sizing it
+  by duty cycle would oversell 47× — and needs **descriptor-granularity preemption** (a QUAD-MPC
+  solve is 9.4 periods of a 40 kHz loop; preemption drops blocking to 2.0 µs).
+- **SKU family is TWO, not three:** **CM-100** (144 MACs / 192 KB / 128 B/cycle, 0.786 mm²) and
+  **CM-50** (64 / 64 KB / 64 B/cycle, 0.424 mm²), where CM-50 explicitly **does not support the
+  QUAD-MPC class**. Rejected: a 16-MAC solver-only part (18% saving for 2.68× the EKF-96 energy —
+  and EKF is a beachhead workload) and CM-200 (a real Pareto point with no workload asking for it).
+  **fp64 up to lanes/2 is free** — the merged cluster is sized `max(fp64, lanes/2)`, so interior
+  point is a one-off +0.067 mm² merge premium, not a running cost.
+- §5-vs-§9 resolved by classifying parameters **replicative** (sell as parameters) vs **structural**
+  (sell as a short SKU list). **`bus type` is not a parameter — it is three deliverables.**
+- **The energy claim has a floor: ~0.4 µs of in-order-core work to reach 5× perf/W.** Two-level
+  FCS-MPC at Np=1 scores **3.2×, below the kill criterion**. "We are always more efficient" is
+  false — say so before a customer finds it.
+- **Large-model ML is outside the *differentiated* envelope even where it is feasible.**
+  SLM-DECODE meets its deadline at 25.6 GB/s but is 75% DRAM-bound at 2.6× perf/W. At 6.4 GB/s and
+  20 tok/s the envelope is ~**0.16 G int8 parameters**.
+- **The hardware descriptor generator is NOT deadline-load-bearing** — setup is free up to 16
+  cycles/descriptor and the naive 23-cycle RV32 emit costs 4%. Keep it as cheap insurance; **stop
+  describing it as required** (this corrects the earlier "precondition for the modelled numbers").
+- Two more modelling errors, **13 and 14**, both of which made an axis look free because the model
+  could not express a cost: frequency had **no supply-voltage term** (2 GHz read as 2.5× speed at
+  *lower* energy per call; corrected, 800→1600 MHz is 1.90× latency at **1.547×** energy), and the
+  longest single-cycle bitline was a **hard constant** (a 12 KiB×64b bank needs a second fold above
+  ~1100 MHz: **+46% scratchpad area**). Both are exactly neutral at the nominal 800 MHz, verified
+  by regenerating every pre-existing `results_*.txt` byte-identical.
+
 ## Built and validated (2026-07-30) — `argmind/` runtime API + functional simulator
 
 ADMM runs end-to-end as a descriptor sequence and **matches reference OSQP exactly** (22/22 and
@@ -306,7 +355,7 @@ model, and it exposed two flattering model errors rather than one implementation
 ## Conventions
 
 Windows/PowerShell; python 3.14; **git repo since 2026-07-30** — commit before and after any
-change to `perf_model/`, and run `python -m pytest` (307 invariant + mutation tests) before
+change to `perf_model/`, and run `python -m pytest` (336 invariant + mutation tests) before
 quoting any modelled number. Markdown docs at root, model in `perf_model/`.
 Prefer open-source EDA (Verilator, cocotb, Yosys) — the cash plan depends on it. Interfaces:
 AXI4/AXI4-Lite baseline; ACE-Lite (Arm) and coherent TileLink (RISC-V) for zero-copy; CHI +
