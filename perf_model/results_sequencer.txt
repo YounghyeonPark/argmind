@@ -84,7 +84,7 @@ Q2 — BINDING RESOURCE PER BENCHMARK (worst-case iterations)
   PWR-MPC     fp32        0.0       0.1      0.7      0.1      0.0     0.8 |     0.0    0.00 | host         0.82x
   EKF-24      fp32        0.0       1.5      0.3      0.1      0.0     0.8 |     0.0    0.00 | mm_unit      0.55x
   EKF-96      fp32        0.1      60.2      4.3      0.1      0.0     0.8 |     0.1    0.00 | mm_unit      0.07x
-  SLM-DECODE  int8    11192.7       0.0     59.8      1.7 162843.5     0.8 |     0.0    0.00 | dma          0.07x
+  SLM-DECODE  int8    11192.7       0.0     59.8      1.7 170052.4     0.8 |     0.0    0.00 | dma          0.07x
   VIT-TINY    int8        0.0    5597.6   2000.0      0.7      0.0     0.8 |     0.0    0.00 | mm_unit      0.36x
   (us per call; each column is the time that resource ALONE would take.
    mm_unit = the tile ARRAY at bf16/fp16/int8/fp32, the fp64 FMA CLUSTER
@@ -316,7 +316,7 @@ Q8 — WAS THE 50% FUDGE ACTUALLY WRONG? Answered plainly.
   PWR-MPC                   100                 0   0.00x          1.7          1.6    -7.2%
   EKF-24                     30                32   1.07x          2.6          2.6     0.1%
   EKF-96                     30                64   2.13x         65.4         65.5     0.1%
-  SLM-DECODE                100                 0   0.00x     174096.9     174096.9    -0.0%
+  SLM-DECODE                100                 0   0.00x     181305.9     181305.8    -0.0%
   VIT-TINY                  250                 0   0.00x       7598.7       7598.4    -0.0%
 
   HONEST VERDICT, in the terms the task asked for:

@@ -79,11 +79,17 @@ automotive.
 - **fp16 operands are ADOPTED as an opt-in codegen mode, not as a default** (settled 2026-07-30,
   §0.3). Keeping the triangular **solve at fp32 costs nothing** — fp16/fp32-solve and fp16/fp64-solve
   score *identically* (1.9e-3), so the operand width, not the solve, limits the mixed scheme. Worth
-  **1.16–1.49× latency and 1.51–1.79× energy** on the ADMM rows (QUAD-MPC perf/W 14.1× → 25.3×) at
-  ~2400× the operand error (8e-7 → 1.9e-3, ~0.2% of a commanded control action). **Not 2×, because
-  the vector unit becomes co-binding once GEMV halves** — a bandwidth-bound row stops being
-  bandwidth-bound before the doubling is spent. **The array's bf16 spec is wrong for the solver
-  path; bf16 stays correct for ML.**
+  **1.16–1.49× latency and 1.51–1.79× energy** on the ADMM rows — **those are OUR OWN numbers and
+  they stand** — at ~2400× the operand error (8e-7 → 1.9e-3, ~0.2% of a commanded control action).
+  **Not 2×, because the vector unit becomes co-binding once GEMV halves** — a bandwidth-bound row
+  stops being bandwidth-bound before the doubling is spent. **The array's bf16 spec is wrong for the
+  solver path; bf16 stays correct for ML.**
+  **The "perf/W 14.1× → 25.3×" pairing is RETRACTED (2026-08-05, modelling error 16, §8.12):**
+  `model_cpu` gave the CPU no credit for narrow operands, so we narrowed our fetch and not the
+  adversary's. Corrected, the fp16-operand perf/W uplift is **1.18×, not 1.79×** (22.4× → 14.7× on
+  that module's row) and fp16 operands make us *relatively slower* on latency vs a vector CPU
+  (2.60× → 1.60×; PWR-CCS 1.26× → **0.93×, below parity**), because the CPU gains a full 2× on 90%
+  of its GEMV while ours is vector-capped. **Adopt on the energy argument, never on a perf/W ratio.**
 - **FCS-MPC has a different precision floor from every other row, because its output is a discrete
   argmin.** fp16 changes the selected switching sequence on 3.0% of ticks at 1.5e-6 of the candidate
   cost spread; bf16 on 11.0% at 9.2e-5 (measured numerics, 729 sequences × 200 trials). A
@@ -281,8 +287,8 @@ automotive.
   FCS-MPC at Np=1 scores **3.2×, below the kill criterion**. "We are always more efficient" is
   false — say so before a customer finds it.
 - **Large-model ML is outside the *differentiated* envelope even where it is feasible.**
-  SLM-DECODE meets its deadline at 25.6 GB/s but is 75% DRAM-bound at 2.6× perf/W. At 6.4 GB/s and
-  20 tok/s the envelope is ~**0.16 G int8 parameters**.
+  SLM-DECODE meets its deadline at 25.6 GB/s but is 76% DRAM-bound at 2.6× perf/W. At 6.4 GB/s and
+  20 tok/s the envelope is ~**0.16 G int8 parameters** (50%-of-period budget).
 - **The hardware descriptor generator is NOT deadline-load-bearing** — setup is free up to 16
   cycles/descriptor and the naive 23-cycle RV32 emit costs 4%. Keep it as cheap insurance; **stop
   describing it as required** (this corrects the earlier "precondition for the modelled numbers").
@@ -292,6 +298,63 @@ automotive.
   longest single-cycle bitline was a **hard constant** (a 12 KiB×64b bank needs a second fold above
   ~1100 MHz: **+46% scratchpad area**). Both are exactly neutral at the nominal 800 MHz, verified
   by regenerating every pre-existing `results_*.txt` byte-identical.
+
+## On-device AI — two boundaries, two resources (2026-08-05, §8.12, `perf_model/ml_envelope.py`)
+
+- **THE ML INFERENCE-EFFICIENCY CLAIM IS UNSUPPORTED, NOT MERELY NARROW.** Every ML perf/W figure
+  we have divides a modelled CM energy by a modelled **CPU** energy, and nobody runs edge CNN
+  inference on a Cortex-A when the SoC has an NPU. VIT-TINY's **28.2×** (not 30.4× — use the
+  recorded value) is correct against a baseline no engineer would choose. We cannot fix it: no
+  measured NPU energy at a stated node/precision exists, and our own standard forbids comparing a
+  modelled figure to a vendor claim. **Never quote an ML perf/W number.** Three ML-adjacent claims
+  survive because none needs an inference comparison: **arithmetic retargetability** (from the
+  rival's datasheet), **co-residency + one joint deterministic tick**, and **MACIF**.
+- **FEASIBILITY is set by external bandwidth; DIFFERENTIATION is set by residency.** Over a
+  6.4→51.2 GB/s sweep the feasible model size moves **8.0×** (0.32 → 2.56 G int8 at 20 tok/s,
+  `params_max = BW_ext/(tok_s·bytes_per_weight)`) while the ≥5× perf/W boundary moves **1.21×**
+  (0.00021 → 0.00025 G) and is **flat at int4** (0.00066 G). So buying bandwidth buys feasibility
+  and buys ~nothing of differentiation. **The feasible-but-undifferentiated zone is ~1000–1500×
+  wide in model size and contains every model anyone would call a language model**; the
+  differentiated zone tops out at **0.2–0.7 M parameters, which is an MLP, not an SLM.**
+- **The invariant is external arithmetic intensity: ≥~2.6 MAC per byte crossing the CM boundary.**
+  One number orders the whole set — batch-1 int8 decode **1.00** (by definition), int4 decode 1.93,
+  ViT-Tiny 223, resident MLP policy 258–989, QUAD-MPC 1022. Derivation: at batch 1,
+  `compute/transfer = BW_ext/BW_spad`, **independent of size and precision**, and BW_spad is
+  102.4 GB/s. **int4 does not change which resource binds** — it halves both sides.
+  **Honest weakness: int4 decode is only 1.35× under the threshold and intensity is LINEAR in batch,
+  so batch 2 crosses it.** The model cannot express a batched decode. Always say **batch-1 decode**.
+- **int4 is in the model, weights-only (GPTQ/AWQ-class), and buys BANDWIDTH ONLY.**
+  `macs_per_cycle(int4) == macs_per_cycle(int8)`: a digital multiplier is sized by its wider
+  operand and the product is 4b×8b. Full 12 pJ/B still charged on streamed weights (83% of the
+  row). **Accuracy is not modelled — an int4 result is never an endorsement of int4 accuracy.**
+  **int4 is NOT in descriptor v0.1 or `Format`, deliberately:** two elements share a byte, so row
+  length is even and leading dimension counts nibbles, which byte-addressing AGUs cannot express.
+  MACIF: substituting int8 for int4 is a **deadline miss**; int4 for int8 is a **wrong answer**;
+  refuse both directions.
+  **int4 AMENDS THE BALANCE RULE — the one architectural consequence of adding it.** The array knee
+  is `macs_per_cycle × bytes_per_elem` = 288 B/cycle at fp32/bf16/int8 but **144 B/cycle at int4**,
+  because int4's rate multiplier is int8's while its element halves. 128 B/cycle is still under it,
+  but **256 B/cycle is NOT a drop-in upgrade at int4: it wants a 16×16 tile, not 12×12.**
+- **There is NO resident-weight ML SKU, killed twice over.** 4 MB holds 8.39 M int4 params — ~80×
+  short of what a 6.4 GB/s stream already delivers — at **6.31× core area and 2.17× solver energy**.
+  And the network population is **bimodal**: MLP policies at 25–200 KB or backbones at 3–6 MB+.
+  Nothing wants 384 KB–1 MB *except* co-residency with the solver.
+- **The hybrid loop (learned policy → reference → MPC, one call) SURVIVES, but not as an ML claim
+  and not at 192 KB.** Policy + QUAD-MPC (138.8 KiB [MEAS]) fits 192 KB only for the smaller cited
+  policy (Hwangbo 256-128-32, 49,964 params → 189.5 KiB, **1.3% margin, and only because codegen
+  exploits A=[I;Γ]**; at the dense-A plan it overflows). The widely used `legged_gym` shape (Rudin
+  512-256-128, 190,860 params) needs **256 KB at int4 or 384 KB at int8** — **state 256 KB**.
+  End-to-end vs an NPU+CPU split with the **NPU charged ZERO**: 2.2–2.3× latency, **9.6–12.2×
+  energy**. But **the network is 1.1–4.0% of the tick, so the hybrid loop's advantage IS the
+  solver's advantage** — it removes a reason to buy a second engine, not a new efficiency claim.
+  Both sides meet 1 kHz. Do not sell it on launch overhead (2.5% of the period). **Sell it on one
+  engine / one address space / one deterministic joint tick.**
+  **It only closes when the network runs at the CONTROL rate, which forces an MLP:** ViT+QUAD in a
+  1 kHz tick misses **8.5× on COMPUTE** (array-bound GEMM), not on capacity — perception at 30 Hz
+  beside control at 1 kHz is the consolidation-across-loops question, needing preemption.
+- **This is the first workload asking for capacity for a reason other than making one solver fit.**
+  It does not overturn "capacity is a cost, not an axis" — it supplies the demand side and pays
+  §8.3's price (256 KB: +6% area, +3.2% solver energy, zero solver latency benefit).
 
 ## Built and validated (2026-07-30) — `argmind/` runtime API + functional simulator
 
@@ -335,18 +398,24 @@ model, and it exposed two flattering model errors rather than one implementation
 - Model outputs are **±2× and never quotable externally** — say so in any doc containing them.
 - **"Not published"** is a valid, preferred finding; never present an estimate as a
   competitor's spec.
-- **Models must be able to fail**: a flattering result means find the assumption first. **Fifteen
+- **Models must be able to fail**: a flattering result means find the assumption first. **Seventeen
   modelling errors so far**, most of them flattering — undercounted overhead energy, GEMV modelled
   as GEMM, a phantom transcendental term that alone produced the entire apparent latency win,
   scratchpad energy 2.3× low, MAC count conflated with operand-reuse depth, an unphysical vector
-  gate count, and the three found 2026-07-30 by building the simulator: **a working set charged at a
+  gate count, the three found 2026-07-30 by building the simulator (**a working set charged at a
   packed triangular layout the AGU cannot address, working vectors charged zero bytes, and
-  convergence checked every 25th iteration on a solve that takes 6–14.** All are encoded as
-  regression tests; run them.
-- **The strongest error-finding tool so far was building the thing.** Three of the fifteen came from
-  one functional simulator, and the two capacity errors had survived every review because they were
-  *inside a plausible formula* rather than in a stated assumption. Corollary: **an implementation
-  measurement outranks the model**, and when they disagree the model is where to look first.
+  convergence checked every 25th iteration on a solve that takes 6–14**), and the two found
+  2026-08-05 by the on-device-AI audit: **16, the CPU baseline got no credit for narrow matrix
+  operands** (we narrowed our fetch and not the adversary's — retracts the fp16 perf/W pairing) and
+  **17, the SLM row's KV cache was never counted although the comment said it was**. All are encoded
+  as regression tests; run them.
+- **The strongest error-finding tool so far was building the thing.** Three of the seventeen came
+  from one functional simulator, and the two capacity errors had survived every review because they
+  were *inside a plausible formula* rather than in a stated assumption. Corollary: **an
+  implementation measurement outranks the model**, and when they disagree the model is where to look
+  first. **Errors 16 and 17 add a second pattern: a COMMENT that claims a term the expression does
+  not contain, and a SWEPT AXIS that moves only one side of a comparison.** Both are cheap to check
+  and neither shows up in a review of the conclusion.
 - **Scrutinise corrections that favour us as hard as ones that don't.** The fp64 pass found a CPU
   baseline charging fp64 at fp32 rates — fixing it moved ARM-MPC perf/W 14.1× → 20.2×, entirely
   on the CPU side. Two errors had been partly cancelling.
@@ -355,7 +424,7 @@ model, and it exposed two flattering model errors rather than one implementation
 ## Conventions
 
 Windows/PowerShell; python 3.14; **git repo since 2026-07-30** — commit before and after any
-change to `perf_model/`, and run `python -m pytest` (336 invariant + mutation tests) before
+change to `perf_model/`, and run `python -m pytest` (429 invariant + mutation tests) before
 quoting any modelled number. Markdown docs at root, model in `perf_model/`.
 Prefer open-source EDA (Verilator, cocotb, Yosys) — the cash plan depends on it. Interfaces:
 AXI4/AXI4-Lite baseline; ACE-Lite (Arm) and coherent TileLink (RISC-V) for zero-copy; CHI +

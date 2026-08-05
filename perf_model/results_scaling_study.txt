@@ -15,7 +15,7 @@ ARM-MPC      fp64      4000    382.26    730.33    5.48x  gemm_mac   1.14   17.1
 PWR-MPC      fp32        25      1.61      1.61   15.51x      host   0.62   22.02    6.45
 EKF-24       fp32      1000      2.58      2.58  388.28x  gemm_mac   1.21   20.63    0.26
 EKF-96       fp32      5000     65.48     65.48   76.36x  gemm_mac   2.15   21.14    1.31
-SLM-DECODE   int8     50000 174096.88 174096.88    0.29x       dma   0.49    2.35  348.19
+SLM-DECODE   int8     50000 181305.84 181305.84    0.28x       dma   0.49    2.29  362.61
 VIT-TINY     int8     33333   7598.39   7598.39    4.39x  gemm_mac   2.02   28.22   22.80
 
 ============================================================================================================
@@ -388,11 +388,11 @@ AXIS 7 — EXTERNAL BANDWIDTH.  Large-model ML is outside the DIFFERENTIATED
 SLM-DECODE (1.1B int8, 20 tok/s, batch 1). No amount of scratchpad
 bandwidth, MAC array or capacity touches this row:
  DMA GB/s    lat ms    dma ms   comp ms   dma %        uJ  perf/W  verdict
-      6.4     174.1     162.8      11.3    93.5     17893    2.35  MISSES
-     12.8      88.2      76.9      11.3    87.2     16604    2.53  MISSES
-     25.6      45.2      34.0      11.3    75.1     15960    2.63  MEETS
-     51.2      23.7      12.5      11.3    52.6     15638    2.68  MEETS
-    102.4      13.0       1.7      11.3    13.4     15477    2.71  MEETS
+      6.4     181.3     170.1      11.3    93.8     18555    2.29  MISSES
+     12.8      91.8      80.5      11.3    87.7     17212    2.47  MISSES
+     25.6      47.0      35.8      11.3    76.1     16541    2.57  MEETS
+     51.2      24.6      13.4      11.3    54.3     16205    2.62  MEETS
+    102.4      13.4       2.2      11.3    16.3     16037    2.65  MEETS
 
   It MEETS at 25.6 GB/s, so 'misses at 6.4, meets at 25.6' is a provisioning
   requirement to state. But read the perf/W column, not the verdict column:
@@ -415,7 +415,7 @@ bandwidth, MAC array or capacity touches this row:
 
   What DOES stay inside the envelope: anything whose persistent data is
   resident. CNN/ViT weights stream once and the activations stay:
-    SLM-DECODE  persistent  1074219 KB, moved   1074035 KB, required  22.00 GB/s, perf/W  2.35x
+    SLM-DECODE  persistent  1119275 KB, moved   1119091 KB, required  22.92 GB/s, perf/W  2.29x
     VIT-TINY    persistent     5566 KB, moved      5521 KB, required   0.17 GB/s, perf/W 28.22x
 
 ============================================================================================================

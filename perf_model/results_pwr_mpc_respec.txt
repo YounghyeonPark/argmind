@@ -182,18 +182,18 @@ fp32 (its share of GEMV work is carried as `solve_prec_frac`):
 row                          CM us  speedup    CM uJ   perf/W  wc margin  binding
 ---------------------------------------------------------------------------------
 QUAD/fp32 (today)            35.96    1.74x    6.150    12.5x      2.93x  gemv_bw
-QUAD/fp16 operands           24.07    2.60x    3.443    22.4x      4.40x  gemv_bw
-QUAD/fp16 incl. SOLVE (bad)     22.14    2.82x    3.002    25.7x      4.79x  gemv_bw
+QUAD/fp16 operands           24.07    1.60x    3.443    14.7x      4.40x  gemv_bw
+QUAD/fp16 incl. SOLVE (bad)     22.14    1.57x    3.002    15.2x      4.79x  gemv_bw
 PWR/fp32 (today)              4.29    1.08x    0.399    13.6x      1.71x  gemv_bw
-PWR/fp16 operands             3.69    1.26x    0.263    20.7x      2.04x  gemv_bw
-PWR/fp16 incl. SOLVE (bad)      3.47    1.33x    0.213    25.5x      2.19x  seq_overhead
+PWR/fp16 operands             3.69    0.93x    0.263    17.1x      2.04x  gemv_bw
+PWR/fp16 incl. SOLVE (bad)      3.47    0.86x    0.213    18.4x      2.19x  seq_overhead
 
   The third variant is listed so the trade is visible, NOT recommended:
   narrowing the triangular solve too costs 6.1e-2 control-action error (C3),
   ~30x worse than fp16 operands alone, for a further 1.06-1.09x of latency.
 
-  QUAD-MPC: latency 35.96 -> 24.07 us (1.49x), energy 6.150 -> 3.443 uJ (1.79x), speedup 1.74x -> 2.60x
-  PWR-CCS: latency 4.29 -> 3.69 us (1.16x), energy 0.399 -> 0.263 uJ (1.52x), speedup 1.08x -> 1.26x
+  QUAD-MPC: latency 35.96 -> 24.07 us (1.49x), energy 6.150 -> 3.443 uJ (1.79x), speedup 1.74x -> 1.60x
+  PWR-CCS: latency 4.29 -> 3.69 us (1.16x), energy 0.399 -> 0.263 uJ (1.52x), speedup 1.08x -> 0.93x
 
   WHY IT IS ONLY ~1.3x AND NOT 2x, which is the adversarial point: halving
   operand width doubles the GEMV rate, but the GEMV term is not the whole
@@ -209,8 +209,8 @@ PWR/fp16 incl. SOLVE (bad)      3.47    1.33x    0.213    25.5x      2.19x  seq_
 
   DOES IT MOVE THE ROW ABOVE PARITY? Reported precisely, because this is
   where a flattering answer would hide:
-    PWR-CCS: 1.08x -> 1.26x
-    QUAD-MPC: 1.74x -> 2.60x
+    PWR-CCS: 1.08x -> 0.93x
+    QUAD-MPC: 1.74x -> 1.60x
     But note what the CPU-side correction below did to the SAME question,
     and read the two together before quoting either.
 

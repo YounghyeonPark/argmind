@@ -35,8 +35,49 @@ except ImportError:          # run as a script
 # ---------------------------------------------------------------------------
 
 # Per-MAC dynamic energy (pJ), datapath only.
-E_MAC_PJ = {"int8": 0.07, "fp16": 0.20, "bf16": 0.20, "fp32": 0.60, "fp64": 2.20}
-BYTES_PER_ELEM = {"int8": 1, "fp16": 2, "bf16": 2, "fp32": 4, "fp64": 8}
+#
+# int4 ADDED 2026-08-05 for the ML-envelope study. READ THE THREE RULES BELOW
+# BEFORE USING IT; two of them exist to stop int4 from becoming a free win.
+#
+#  (1) int4 IS WEIGHTS-ONLY, WHICH IS WHAT SHIPPING LLM QUANTISATION DOES.
+#      GPTQ (Frantar et al., ICLR 2023, arXiv:2210.17323) and AWQ (Lin et al.,
+#      MLSys 2024, arXiv:2306.00978) quantise WEIGHTS to 3-4 bits and keep
+#      activations at 8 or 16 bits. So the product a 4-bit kernel actually
+#      executes is 4b x 8b, not 4b x 4b, and it is expressed in this model as
+#      `prec="int8", operand_prec="int4"` using the EXISTING mixed-precision
+#      machinery -- not as a uniform int4 row. A uniform int4 row would be a
+#      workload nobody ships.
+#  (2) int4 DOES NOT DOUBLE THE ARRAY RATE. A digital multiplier is sized by its
+#      WIDER operand, so a 4b x 8b product costs the same array slot as
+#      8b x 8b. `macs_per_cycle` therefore gives int4 the int8 rate (see
+#      ArgmindCfg.macs_per_cycle). int4 buys BANDWIDTH -- half the bytes per
+#      weight element -- and nothing else. Giving it 4x the array rate is the
+#      exact shape of the two most recent modelling errors (13, 14) inverted:
+#      an axis made to look free because the model could not express its cost.
+#  (3) ENERGY FALLS, BUT NOWHERE NEAR 2x. Narrowing one operand from 8b to 4b
+#      halves that operand's partial-product rows, but the accumulator, the
+#      operand registers, the clock and the adder tree do not narrow at all.
+#      0.06 pJ is ~0.86x int8 [EST]. The study reports the sensitivity: setting
+#      it equal to int8's 0.07 moves no conclusion, because every row where int4
+#      matters is DRAM-dominated.
+#
+# ACCURACY IS NOT MODELLED. Nothing here says a network still works at int4.
+# GPTQ/AWQ report single-digit-percent perplexity cost on billion-scale models
+# and much worse on small ones; that is a workload property, and this model
+# speaks only about what the datapath can move and compute.
+E_MAC_PJ = {"int4": 0.06, "int8": 0.07, "fp16": 0.20, "bf16": 0.20,
+            "fp32": 0.60, "fp64": 2.20}
+BYTES_PER_ELEM = {"int4": 0.5, "int8": 1, "fp16": 2, "bf16": 2,
+                  "fp32": 4, "fp64": 8}
+
+# int4 is SUB-BYTE, and that is an interface fact, not just a table entry: two
+# elements share a byte, so an int4 matrix row must be an even number of elements
+# and a leading dimension is a count of NIBBLES. The v0.1 descriptor's AGUs
+# address bytes. Recording it here because the last two capacity errors were
+# both "the model assumed a layout the descriptor format cannot address"
+# (packed triangular, PHASE0_FINDINGS R8) -- so this one is stated out loud
+# rather than discovered later. See PHASE0_FINDINGS 8.6 for the cost.
+SUB_BYTE_FORMATS = ("int4",)
 
 # LEGACY flat scratchpad energy. Retained only so the v0 numbers stay
 # reproducible. sram_cost.py shows this is ~2x low once the bank->datapath
@@ -257,10 +298,20 @@ class ArgmindCfg:
         on fp64 work the part is ARRAY-bound, not bandwidth-bound -- the one
         documented exception to the bandwidth-first finding, and it holds because
         ARM-MPC is 79% matrix-MATRIX (block Riccati), not GEMV.
+
+        int4 GETS THE int8 RATE, NOT DOUBLE IT. A digital multiplier array is
+        sized by its wider operand and weight-only 4-bit quantisation
+        (GPTQ/AWQ-class) multiplies a 4-bit weight by an 8-bit activation, so the
+        product occupies the same array slot as int8 x int8. int4's entire
+        benefit in this model is that a weight element costs 0.5 B of fetch
+        instead of 1 B. If a future macro really does implement 4b x 4b at 2x the
+        int8 rate it declares that through MACIF, and it is a MACRO capability,
+        not a property of this datapath.
         """
         if prec == "fp64":
             return float(self.fp64_fmas)
-        scale = {"int8": 2.0, "fp16": 1.0, "bf16": 1.0, "fp32": 0.5}[prec]
+        scale = {"int4": 2.0, "int8": 2.0, "fp16": 1.0, "bf16": 1.0,
+                 "fp32": 0.5}[prec]
         return self.macs * scale
 
     def gemm_util(self, prec: str, effective_dim: float) -> float:
@@ -356,8 +407,21 @@ class ArgmindCfg:
         """MCU-class host: on-chip SRAM only. No DRAM, no cache, no MMU."""
         return self.tier.endswith("M")
 
+    # External (host<->CM) bandwidth in GB/s, overriding the tier default.
+    # ADDED 2026-08-05. It exists because the ML-envelope study sweeps external
+    # bandwidth, and the previous way to do that was to SUBCLASS ArgmindCfg and
+    # shadow the property (see scaling_study.py AXIS 7) -- which works but cannot
+    # be handed to `dataclasses.replace`, and which silently hid the fact that
+    # `model_cpu` was pinning the CPU's DRAM bandwidth to a hard 12.8 GB/s
+    # regardless. A swept axis that moves only one side of a comparison is a
+    # baseline-fairness bug; both sides now take the same number. None = the
+    # tier default, so no pre-existing figure moves.
+    dma_bw_gbs_override: float | None = None
+
     @property
     def dma_bw_gbs(self) -> float:
+        if self.dma_bw_gbs_override is not None:
+            return self.dma_bw_gbs_override
         if self.is_mcu_class:
             # There is no LPDDR. What a copy actually crosses on an MCU-class
             # part is a narrow on-chip bus: 8 B/cycle at a 200 MHz system clock
@@ -426,7 +490,14 @@ class CpuCfg:
                 else self.simd_flops_per_cycle)
 
     def peak_flops_per_cycle(self, prec: str) -> float:
-        if prec == "int8":
+        # int4 runs at the int8 rate on every CPU baseline, because there IS no
+        # 4-bit SIMD dot product: Armv9 gives SDOT/SMMLA at 8 bits and RVV gives
+        # widening 8-bit multiplies. A real int4 CPU kernel unpacks nibbles to
+        # bytes first, which costs shift/and/interleave work this model does NOT
+        # charge -- so the CPU is being handed a free unpack. That is deliberate:
+        # the baseline gets its fair advantages, and an unmodelled CPU cost is
+        # the direction that hurts our own ratio.
+        if prec in ("int8", "int4"):
             return self.int8_ops_per_cycle
         if prec == "fp64":
             return (self.fp32_flops_per_cycle / 2.0
@@ -1182,11 +1253,43 @@ def ekf(name, n, m, rate, note, prec="fp32"):
     )
 
 
-def slm_decode(name, params_b, hidden, layers, seq, rate, note, prec="int8"):
-    """Autoregressive decode, batch 1: weight-bound GEMV + attention over KV cache."""
+def slm_decode(name, params_b, hidden, layers, seq, rate, note, prec="int8",
+               weight_prec=None):
+    """Autoregressive decode, batch 1: weight-bound GEMV + attention over KV cache.
+
+    `prec` is the ACTIVATION / KV format; `weight_prec` is the weight format and
+    defaults to `prec`. Setting `weight_prec="int4"` with `prec="int8"` is
+    weight-only 4-bit quantisation, i.e. what GPTQ/AWQ actually ship, and it maps
+    onto the existing `operand_prec` / `solve_prec_frac` mixed-precision
+    machinery with no new field: the weight GEMVs are the "bulk operand" and the
+    attention GEMVs over the KV cache are the fraction that stays at `prec`.
+
+    TWO CORRECTIONS LANDED HERE 2026-08-05, BOTH FLATTERING BEFORE THE FIX:
+
+      * THE KV CACHE WAS NOT COUNTED. `persistent` was
+        `params * 1e9 * (1 if int8 else 2)`, with a comment reading "weights +
+        KV" -- the comment claimed a term the expression did not contain. For the
+        frozen 1.1B / 22L / 512-token row the KV cache is 46.1 MB against 1.10 GB
+        of weights (+4.2% of external traffic), and at the ~0.16 G-parameter
+        envelope boundary it is 29% -- i.e. it matters precisely where the
+        envelope is drawn. Omitting it understated the external bytes on BOTH
+        sides of the comparison, which pushes perf/W AWAY from its true asymptote
+        of 1.0 and makes the deadline look easier than it is.
+      * WEIGHT WIDTH WAS `1 if int8 else 2`, so any format wider than int8 became
+        2 B and int4 would have become 2 B. It now goes through BYTES_PER_ELEM.
+
+    KV IS NOT QUANTISED TO 4 BITS HERE. Weight-only 4-bit quantisation leaves the
+    KV cache at 8 or 16 bits, which is what GPTQ/AWQ do; 4-bit KV is a separate
+    (and much more accuracy-sensitive) technique and claiming it here would halve
+    a term we have no basis to halve.
+    """
+    weight_prec = weight_prec or prec
     # Batch-1 decode is pure GEMV: each weight is used exactly once per token.
-    gemv = params_b * 1e9 + 2 * layers * seq * hidden
-    persistent = params_b * 1e9 * (1 if prec == "int8" else 2)   # weights + KV
+    attn_macs = 2 * layers * seq * hidden
+    gemv = params_b * 1e9 + attn_macs
+    weight_bytes = params_b * 1e9 * BYTES_PER_ELEM[weight_prec]
+    kv_bytes = attn_macs * BYTES_PER_ELEM[prec]      # 2 (K and V) already in attn_macs
+    persistent = weight_bytes + kv_bytes
     delta = 4 * hidden
     # Kernel decomposition: 7 weight GEMVs per transformer layer (q,k,v,o,gate,
     # up,down) plus 2 attention GEMVs. The FAR end of the granularity spectrum --
@@ -1212,6 +1315,10 @@ def slm_decode(name, params_b, hidden, layers, seq, rate, note, prec="int8"):
         persistent_bytes=persistent, delta_bytes=delta, prec=prec,
         gemv_row_len=hidden,   # weight-matrix rows are long: fetch width is fine
         kernels=kern, serial_scalar_per_iter=0.0,
+        # Weight-only quantisation. None when weight_prec == prec, so the
+        # single-precision row is bit-identical to before this change.
+        operand_prec=None if weight_prec == prec else weight_prec,
+        solve_prec_frac=0.0 if weight_prec == prec else attn_macs / gemv,
     )
 
 
@@ -1619,11 +1726,28 @@ def model_argmind(b: Benchmark, cfg: ArgmindCfg) -> dict:
     }
 
 
-def model_cpu(b: Benchmark, cpu: CpuCfg) -> dict:
+def model_cpu(b: Benchmark, cpu: CpuCfg, dram_gbs: float = 12.8) -> dict:
+    """CPU baseline. `dram_gbs` is the SYSTEM's external bandwidth.
+
+    IT MUST BE THE SAME NUMBER THE CM IS GIVEN. It was a hard-coded 12.8 GB/s,
+    which was harmless while nothing swept the axis and became a
+    baseline-fairness bug the moment the ML-envelope study did: at 51.2 GB/s the
+    CM would have been credited with 4x the CPU's weight-streaming rate on the
+    same SoC. Default 12.8 reproduces every pre-existing figure byte-identically.
+    """
     peak = cpu.peak_flops_per_cycle(b.prec)
     eff = peak * cpu.small_gemm_efficiency          # ops/cycle achieved
     gemm_cycles = (b.gemm_macs_per_iter * 2.0) / eff
-    gemv_cycles = b.gemv_macs_per_iter / cpu.gemv_macs_per_cycle(b.prec)
+    # Mixed-precision operands: the bulk matrix at `operand_prec`, the sensitive
+    # fraction at `prec`. On the CPU this changes only the L1 bandwidth term
+    # (there is no narrower compute path), which is the honest effect.
+    if b.operand_prec is None:
+        gemv_cycles = b.gemv_macs_per_iter / cpu.gemv_macs_per_cycle(b.prec)
+    else:
+        hi = b.gemv_macs_per_iter * b.solve_prec_frac
+        gemv_cycles = (hi / cpu.gemv_macs_per_cycle(b.prec)
+                       + (b.gemv_macs_per_iter - hi)
+                       / cpu.gemv_macs_per_cycle(b.operand_prec))
     # Elementwise/reduction work runs on the plain SIMD path, NOT the outer-
     # product unit. See CpuCfg.simd_flops_per_cycle. `*2.0` is kept because the
     # model counts vector "element-ops" in the same FLOP-pair units as MACs.
@@ -1643,8 +1767,8 @@ def model_cpu(b: Benchmark, cpu: CpuCfg) -> dict:
     if b.kind == "ml":
         mem_bytes = b.persistent_bytes + b.delta_bytes
         e_mem = mem_bytes * E_DRAM_BYTE_PJ
-        # DRAM bandwidth bound check for weight-streaming workloads
-        dram_us = mem_bytes / (12.8e9) * 1e6
+        # DRAM bandwidth bound check for weight-streaming workloads.
+        dram_us = mem_bytes / (dram_gbs * 1e9) * 1e6
         latency_us = max(latency_us, dram_us)
     else:
         mem_bytes = b.total_macs() * 0.5

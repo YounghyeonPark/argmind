@@ -124,7 +124,7 @@ does make them cheaper. Energy per call, 64 B/cycle, 128 KB, 16 lanes:
     PWR-MPC            0.07 ->       0.07 uJ  (1.00x)  pure GEMV or DRAM-bound: array is dead area
     EKF-24             0.29 ->       0.19 uJ  (1.57x)  GEMM-bearing: array pays
     EKF-96            13.06 ->       8.09 uJ  (1.62x)  GEMM-bearing: array pays
-    SLM-DECODE     18370.53 ->   18370.53 uJ  (1.00x)  pure GEMV or DRAM-bound: array is dead area
+    SLM-DECODE     19032.31 ->   19032.31 uJ  (1.00x)  pure GEMV or DRAM-bound: array is dead area
     VIT-TINY        1112.33 ->     646.43 uJ  (1.72x)  GEMM-bearing: array pays
 
   So the array is justified by: VIT-TINY on LATENCY (needs 36 MACs at 30
@@ -430,7 +430,7 @@ RECOMMENDATION — CM-100, REVISED DOWN
   PWR-MPC             25       1.6        1.6     15.51x      0.06    22.0 host       MEETS
   EKF-24            1000       2.6        2.6    388.28x      0.20    20.6 gemm_mac   MEETS
   EKF-96            5000      65.5       65.5     76.36x      8.76    21.1 gemm_mac   MEETS
-  SLM-DECODE       50000  174096.9   174096.9      0.29x  17893.13     2.3 dma        MISSES
+  SLM-DECODE       50000  181305.8   181305.8      0.28x  18554.91     2.3 dma        MISSES
   VIT-TINY         33333    7598.4     7598.4      4.39x    710.65    28.2 gemm_mac   MEETS
 
   solver perf/W band: 12.3x - 22.0x  (kill criterion 5x)

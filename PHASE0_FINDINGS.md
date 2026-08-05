@@ -1444,12 +1444,16 @@ customer: **0.4 µs / 0.15 µs.**
 
 ### 8.7 External bandwidth — large-model ML is outside the *differentiated* envelope
 
+*(Numbers below re-run 2026-08-05 after the KV-cache correction in §8.12; the earlier
+figures were 174.1 ms / 2.35× at 6.4 GB/s and 45.2 ms / 2.63× at 25.6. Nothing in the
+conclusion moves — 4% of external traffic.)*
+
 | DMA GB/s | lat ms | DMA-bound % | perf/W | verdict |
 |---|---|---|---|---|
-| 6.4 | 174.1 | 93.5% | 2.35× | MISSES (deadline 50 ms) |
-| 12.8 | 88.2 | 87.2% | 2.53× | MISSES |
-| **25.6** | **45.2** | **75.1%** | **2.63×** | **MEETS** |
-| 102.4 | 13.0 | 13.4% | 2.71× | MEETS |
+| 6.4 | 181.3 | 93.8% | 2.29× | MISSES (deadline 50 ms) |
+| 12.8 | 91.8 | 87.7% | 2.47× | MISSES |
+| **25.6** | **47.0** | **76.1%** | **2.57×** | **MEETS** |
+| 102.4 | 13.4 | 16.3% | 2.65× | MEETS |
 
 "Misses at 6.4, meets at 25.6 GB/s" is a **provisioning requirement to state**. But read the
 perf/W column, not the verdict column: at the bandwidth where it becomes feasible it is **75%
@@ -1461,6 +1465,12 @@ array, bandwidth, capacity *and* lanes — if it ever responds, this statement i
 at CM-100's assumed **6.4 GB/s and 20 tok/s the envelope is ~0.16 G int8 parameters** — a
 sub-Phi-class model. 1.28 G needs 25.6 GB/s at 10 tok/s. **Above ~0.16 G, sell the CNN/ViT row,
 not the LLM row.** VIT-TINY needs 0.17 GB/s and scores 28.2× perf/W; that is the ML story.
+
+> **Superseded in part by §8.12 (2026-08-05).** The feasibility arithmetic above is confirmed and
+> generalised (int4 doubles it), but the last sentence is withdrawn: **VIT-TINY's 28.2× is against
+> a CPU baseline no customer would deploy on an SoC that has an NPU, so "that is the ML story" is
+> not a story we can tell.** §8.12 also draws the *differentiation* boundary, which is a different
+> resource (residency, not bandwidth) and is what this subsection left undone.
 
 ### 8.8 Multi-CM — a distraction, and the prior was right for better reasons
 
@@ -1669,6 +1679,274 @@ Five tests, all must pass; each uses a number the customer already has.
 starts to bind**, moving the 288 B/cycle wall in §8.1–8.2 outward. It is the highest-value model
 extension outstanding and it moves two of the walls above. Secondary: a real library f–V curve
 (§8.4) could move the recommended clock down and the headline energy number with it.
+
+### 8.12 On-device AI (2026-08-05) — the two-boundary map, and the ML claim is unsupported
+
+Model: `perf_model/ml_envelope.py`, output `perf_model/results_ml_envelope.txt`, tests
+`tests/test_ml_envelope.py` (30). §8.7 said large-model ML is outside the *differentiated*
+envelope and left the boundary undrawn. This draws it. **All figures modelled estimate,
+16nm-class, ±2×, not quotable externally. Accuracy is not modelled anywhere in this
+subsection — int4 here is a statement about bytes and cycles, never about whether a network
+still works at 4 bits.**
+
+#### The result in one paragraph
+
+**There are two boundaries and they are set by two different resources.** *Feasibility* is set
+by **external bandwidth** and moves 8× across an 8× bandwidth sweep. *Differentiation* (≥5×
+perf/W) is set by **whether the working set is resident** and barely moves at all. So
+"provision more bandwidth" is the right answer to the feasibility question and **almost no
+answer at all** to the differentiation question — which is the quantitative form of §8.7's
+"we are not differentiated on a workload whose binding resource is off-chip."
+
+| boundary | set by | int8, 20 tok/s | 6.4 GB/s → 51.2 GB/s |
+|---|---|---|---|
+| FEASIBLE (meets deadline) | external bandwidth | 0.32 G → 2.56 G params | **8.0×** |
+| DIFFERENTIATED (≥5× perf/W) | scratchpad residency | 0.00021 G → 0.00025 G params | **1.21×** |
+| DIFFERENTIATED at int4 | scratchpad residency | 0.00066 G, flat | **1.00×** |
+
+**The feasible-but-undifferentiated zone is ~1000–1500× wide in model size and contains every
+model anyone would call a language model.** The differentiated zone tops out at **0.2–0.7 M
+parameters — which is an MLP, not an SLM.** `params_max = BW_ext / (tok_s · bytes_per_weight)`
+at a 100%-of-period budget; halving it for a 50% budget reproduces §8.7's 0.16 G exactly.
+
+#### The invariant: external arithmetic intensity ≈ 2.6 MAC/byte
+
+The boundary is a **workload** property, not a configuration property, and one number orders the
+entire benchmark set — neither MAC count nor model size:
+
+| row | MAC per byte crossing the CM boundary | perf/W vs-CPU |
+|---|---|---|
+| batch-1 int8 LLM decode | **1.00** (one MAC per weight byte, by definition) | 2.3× |
+| batch-1 int4 LLM decode | 1.93 | 3.7× |
+| **the ≥5× threshold** | **≈ 2.6** | 5.0× |
+| ViT-Tiny | 223 | 28.2× |
+| resident MLP policy | 258–989 | 17–19× |
+| QUAD-MPC | 1022 | 12.3× |
+
+Derivation of why the DRAM share is what it is, independent of the model: at batch 1 each weight
+crosses the boundary once and does one MAC, so `compute/transfer = BW_ext / BW_spad ≡ ρ`,
+**independent of model size and of precision** (int4 halves both sides). With double buffering
+hiding 80% of compute the DRAM share is `(1 − 0.8ρ)/(1 + 0.2ρ)`. Against the model on the frozen
+1.1B row: 93.8/93.8, 87.7/87.8, 76.1/76.2, 54.3/54.5 — agreement to half a point, from two
+independently written paths. `BW_spad` is 102.4 GB/s, so **every realistic edge external
+bandwidth (6.4–51.2) puts batch-1 decode 2–16× on the wrong side of that ratio, and int4 cannot
+change the ratio.**
+
+**Honest weakness in the negative result, stated because it is the likeliest way it breaks:**
+int4 decode at 1.93 MAC/byte is only **1.35×** below the 2.6 threshold, not orders of magnitude.
+External intensity is **linear in batch size**, so **batch 2 at int4 would cross it**, and
+speculative decoding or multi-request serving both produce an effective batch >1. **The model
+cannot express a batched decode** (it needs the GEMM path plus a KV-growth term), so no batched
+number is quotable — but the finding must always be restated as **batch-1 decode**, never as
+"LLMs".
+
+#### int4: adopted in the model, weights-only, and it buys bandwidth only
+
+Weights-only 4-bit is what GPTQ ([arXiv:2210.17323](https://arxiv.org/abs/2210.17323)) and AWQ
+([arXiv:2306.00978](https://arxiv.org/abs/2306.00978)) ship: 4-bit weights, 8/16-bit
+activations, **KV cache not quantised**. Expressed with the existing `operand_prec` /
+`solve_prec_frac` mixed-precision machinery — no new benchmark field.
+
+- **No free compute.** A digital multiplier is sized by its *wider* operand, and the product
+  executed is 4b×8b, so `macs_per_cycle("int4") == macs_per_cycle("int8")` (288 MAC/cycle on
+  CM-100). Only the fetch ceiling doubles, 128 → 256 MAC/cycle, and it is **still below the array
+  rate** — int4 GEMV stays bandwidth-bound on chip. A test fails if int4 ever gets a 4× scale.
+- **No free bytes.** DRAM energy is charged at the full 12 pJ/B on every streamed weight byte and
+  remains **83% of the row** at int4.
+- **MAC energy 0.06 pJ [EST], ~0.86× int8** — narrowing one operand halves its partial-product
+  rows while the accumulator, staging and clock do not narrow. Forcing it to int8's 0.07 moves
+  the row **1.0026×**, so no conclusion rests on the estimate. That is the reason to accept it.
+- **int4 AMENDS §8.1/§8.2's BALANCE RULE, and this is the one real architectural consequence of
+  adding it.** §8 says a 12×12 array absorbs GEMV up to 288 B/cycle "the same 288 at fp32, bf16
+  *and* int8, because this datapath's rate multiplier is ~1/element-size." **int4 breaks that
+  coincidence:** its multiplier is int8's while its element is half the size, so the knee
+  (`macs_per_cycle × bytes_per_elem`) is **144 B/cycle, not 288**. CM-100's 128 B/cycle sits just
+  under it, so nothing changes today — but **§8.2 sells 256 B/cycle as a drop-in upgrade on the
+  strength of the array's 2.25× headroom, and at int4 that headroom is gone: a 256 B/cycle part
+  wants a 16×16 tile for int4 GEMV, not 12×12** (min tile = `√(bw / (bytes·scale))` = 16.0 vs 11.3
+  for the other three formats). A test pins all four knees.
+- **int4 is NOT expressible in descriptor v0.1 and is deliberately not added to `Format`.** Two
+  elements share a byte, so a row length must be even and a leading dimension counts **nibbles**,
+  while the v0.1 AGUs address bytes. **Recorded as a requirement with a cost, not quietly
+  assumed** — the last two capacity errors were both "the model assumed a layout the descriptor
+  cannot address" (R8). Adding `Format.INT4` also consumes one of the three reserved `prec_m`
+  codepoints, leaving 2 — still enough for both fp8 variants.
+- **MACIF consequence, and it is the mirror image of fp16-vs-bf16.** A macro silently
+  substituting int8 for int4 gives the **right answer** and loses 2× of bandwidth (a deadline
+  miss, not a wrong answer); substituting int4 for a declared int8 kernel is a **wrong answer**.
+  Asymmetric in consequence, symmetric in policy: **refuse both directions and report which kind
+  of failure was avoided.**
+
+#### The weight-resident regime, and there is no resident-weight ML SKU
+
+192 KB holds 0.000197 G int8 / 0.000393 G parameters. The streaming envelope at the CM-100's own
+6.4 GB/s is 0.32/0.64 G. **Those differ by ~1600×, so for LLM decode the resident and the
+feasible regimes do not overlap at all.** Scaling capacity does not close it:
+
+| KB | core mm² | vs 192 KB | int4 params held | solver energy vs 192 KB |
+|---|---|---|---|---|
+| 192 | 0.786 | 1.00× | 0.39 M | 1.000× |
+| 256 | 0.832 | 1.06× | 0.52 M | 1.032× |
+| 384 | 1.015 | 1.29× | 0.79 M | 1.100× |
+| 1024 | 1.720 | 2.19× | 2.10 M | 1.401× |
+| 4096 | 4.960 | 6.31× | 8.39 M | **2.172×** |
+
+**Killed twice over:** 4 MB reaches 8.39 M int4 parameters, still **~80× short** of what a
+6.4 GB/s stream already delivers, *and* it taxes every solver row 2.17× on energy — the rows the
+company is actually sold on. §8.3's "capacity is a cost, not an axis" holds.
+
+**And there is no middle case in the sense the question implied.** The population is **bimodal**:
+MLP control policies at 25–200 KB (which fit, or nearly), and anything with a convolutional or
+transformer backbone at 3–6 MB and up (which never fits at any SKU we would build). Nothing wants
+384 KB–1 MB and repays it — **except co-residency with the solver**, which is the next block.
+
+#### The hybrid loop — it survives, but not as an ML claim and not at 192 KB
+
+Concretely: a learned locomotion policy produces a reference, QUAD-MPC enforces it, both resident,
+one call, 1 kHz. Two real cited policies, both ANYmal-class (obs 48, act 12):
+**policy A** = MLP 256-128-32, 49,964 params (Hwangbo et al., *Sci. Robotics* 2019,
+[arXiv:1901.08652](https://arxiv.org/abs/1901.08652)); **policy B** = MLP 512-256-128,
+190,860 params (Rudin et al., CoRL 2021, [arXiv:2109.11978](https://arxiv.org/abs/2109.11978)) —
+the `legged_gym` default and the most-copied shape in the field.
+
+| combination | policy KiB | solver KiB [MEAS] | total | of 192 | verdict |
+|---|---|---|---|---|---|
+| policy A @ int8 | 50.7 | 138.8 | 189.5 | 99% | **FITS** (2.5 KiB spare) |
+| policy A @ int4 | 26.3 | 138.8 | 165.1 | 86% | FITS |
+| policy B @ int8 | 190.1 | 138.8 | 328.9 | 171% | **NO — needs 384 KB** |
+| policy B @ int4 | 96.9 | 138.8 | 235.7 | 123% | **NO — needs 256 KB** |
+
+**The margin is the finding and it is not a margin, it is a coincidence.** 1.3% of capacity. And
+it depends on a **codegen optimisation**: 138.8 KiB is the QUAD-MPC plan with `A = [I;Γ]`
+exploited; at the measured dense-A plan (163.8 KiB) even policy A overflows 192 KB.
+**State the requirement as 256 KB.** This is the **first workload in the whole analysis that asks
+for capacity for a reason other than making one solver fit** — it does not overturn §8.3, it
+supplies the demand side §8.3 said did not exist, and it comes with §8.3's price attached
+(256 KB: +6% area, +3.2% solver energy, zero solver latency benefit; 384 KB: +29%, +10.0%).
+
+**Residency across both is binary.** Policy B @ int8 in 192 KB re-streams **136.9 KiB every
+tick** — 21.9 µs of a 1000 µs period and 1.68 µJ against the solve's own 8.90 µJ, **+19% energy
+for a network that is 4% of the work.** The measured 46× residency ratio survives intact in the
+fitting cases and is destroyed in the others; there is no partial credit. (The model's overflow
+term is a uniform "excess streams every call" approximation. Here it *coincides* with what codegen
+would choose — keep the solver data, touched 15–74× per tick; stream the policy weights, touched
+once — so it is the right number rather than merely a bound. It would not be for two workloads of
+similar reuse.)
+
+**End-to-end tick versus the NPU-plus-CPU split a robot ships today, with the NPU charged ZERO
+time, ZERO energy and ZERO DRAM** — the only defensible choice, since we have no measured NPU data
+and may not benchmark against vendor claims. The incumbent pays only one offload launch plus its
+own solve; the CPU gets the fastest core for latency *and* the most efficient for energy:
+
+| | CM, one call | NPU(free)+CPU, rich host | ratio |
+|---|---|---|---|
+| policy A, 192 KB | 49.56 µs, 9.01 µJ | 113.69 µs, 109.68 µJ | 2.29× lat, **12.17× energy** |
+| policy B, 384 KB | 51.01 µs, 11.45 µJ | 113.69 µs, 109.68 µJ | 2.23× lat, **9.58× energy** |
+
+**What this actually says, and it is less than the pitch wants:**
+
+1. **The network is 1.1–4.0% of the tick.** THE HYBRID LOOP'S ADVANTAGE IS THE SOLVER'S
+   ADVANTAGE. Fusing the policy in does not create a new efficiency claim; it removes a **reason
+   to buy a second engine** and one offload per tick.
+2. **Both sides meet 1 kHz.** Same as every solver row: more efficient, not enabling. Do not
+   pitch feasibility.
+3. **Do not sell it on launch overhead.** The deleted launch is 25 µs rich-host / 2.0 µs
+   MCU-class = 2.5% / 0.2% of the period, consistent with the settled "needs a deadline above
+   ~100 kHz to decide anything."
+4. **The claim that survives is determinism-shaped:** one engine, one address space, one
+   statically allocated working set, therefore **one deterministic worst-case tick covering
+   perception and control together.** A robot today cannot state a joint worst case across an NPU
+   and a CPU sharing DRAM. Determinism is already one of the three claims that survive against a
+   vector CPU.
+5. **It only closes when the network runs at the CONTROL rate, which forces the network to be an
+   MLP.** ViT-Tiny + QUAD-MPC in a 1 kHz tick misses by **8.5×**, and it misses on **compute**
+   (7598 µs of array-bound GEMM vs 882 µs of streaming) — so co-residency is not even the binding
+   problem, and buying the 5.7 MB that would make it resident would not help by a microsecond.
+   The binding resource is the one thing §8 says does not scale (MAC array, 1.00×). Perception at
+   30 Hz beside control at 1 kHz is §8.8's **consolidation-across-loops** question:
+   capacity-bound, not throughput-bound, needing **descriptor-granularity preemption**. Second
+   workload pointing at the same requirement.
+
+#### THE PART THAT HURTS: the ML claim is unsupported, not merely narrow
+
+**Every ML perf/W figure in this analysis divides a modelled CM energy by a modelled *CPU*
+energy, and nobody runs edge CNN inference on a Cortex-A when the SoC has an NPU.** VIT-TINY's
+28.2× is arithmetically correct against a baseline no engineer would choose. The honest adversary
+is the NPU and **we cannot run that comparison**: (a) no measured NPU silicon energy at a stated
+node and precision exists in our evidence base; (b) our own standard forbids comparing a modelled
+figure against a vendor marketing claim, which is all that is published; (c) an inference-optimised
+int8 or CIM macro is designed for exactly the operand-reuse pattern a CNN has, which is the one
+pattern where our bandwidth-first provisioning is **not** the right shape.
+
+> **The ML inference-efficiency claim is UNSUPPORTED, not merely narrow** — unsupported in the
+> specific sense that the only baseline we can model is one no customer would deploy. Removing it
+> costs nothing, because it was never going to survive a customer architect's whiteboard.
+> The zone label is spelled `DIFF*` in the model output and a test asserts the asterisk, so an ML
+> perf/W figure cannot escape its caveat by being copied out of a table.
+
+**Three ML-adjacent claims survive, none of which needs an inference-efficiency comparison:**
+(1) **arithmetic retargetability** — NPU IP is int8-weights-only (Ethos-U85) or ~1% of int8
+throughput at FP32 (Ceva), a capability statement measurable from the rival's own datasheet, and
+the reason an NPU cannot run the solver half of a hybrid loop at all; (2) **co-residency plus one
+joint deterministic tick**, quantified above; (3) **MACIF** — the answer to "an inference macro
+beats you on TOPS/W" is "yes, and it plugs in here", which is what makes int4 needing to be a
+*declared* format load-bearing.
+
+*Housekeeping: the figure sometimes quoted for VIT-TINY is 30.4×. The model has said 28.22× since
+the 192 KB capacity correction and `results_scaling_study.txt` records 28.22×. Use the recorded
+value.*
+
+#### Modelling errors 16 and 17, both found by auditing this change, both flattering
+
+**16. `model_cpu` gave the CPU no credit for narrow matrix operands.** It charged every GEMV at
+`b.prec`, so the fp16-operand study narrowed *our* fetch and not the CPU's — and on an SME2
+baseline whose GEMV is L1-bandwidth-bound that is a real 2× withheld from the adversary. Required
+fixing here regardless, because weight-only int4 is expressed through the same `operand_prec` path
+and the int8-vs-int4 comparison would otherwise have halved only our bytes. **Effect on the
+recorded fp16-operand figures** (`results_pwr_mpc_respec.txt`; that module builds its rows at
+`check_term=25`, so these are its internal figures, not frozen-row figures):
+
+| row | before | after |
+|---|---|---|
+| QUAD/fp16 operands, perf/W | 22.4× | **14.7×** |
+| QUAD/fp16 operands, speedup vs CPU | 2.60× | **1.60×** |
+| PWR-CCS/fp16 operands, speedup vs CPU | 1.26× | **0.93× — below parity** |
+
+**Our own energy saving is unchanged** (CM 6.150 → 3.443 µJ, 1.79×) because it was never a CPU
+number. What falls is the *ratio*: the perf/W uplift from fp16 operands is **1.18×, not 1.79×**,
+and fp16 operands make us *relatively slower* against a vector CPU because the CPU gains 2× on
+90% of its GEMV while our gain is capped by the vector unit. **The adoption decision stands** (opt-in
+codegen mode, on our own energy numbers) but **CLAUDE.md's "QUAD-MPC perf/W 14.1× → 25.3×" is
+retracted**; that pairing was also stale by two corrections.
+
+**17. The SLM row's KV cache was never counted, while the code comment claimed it was.**
+`persistent = params * 1e9 * (1 if int8 else 2)` with a comment reading "weights + KV". For the
+frozen 1.1B/22L/512-token row the KV cache is 46.1 MB against 1.10 GB of weights (+4.2% of
+external traffic) — and **29% at the ~0.16 G envelope boundary, i.e. it matters exactly where the
+envelope is drawn.** Same shape as R8's "working vectors charged zero bytes": a term the formula
+looked like it contained. Effect: SLM-DECODE 174.1 → 181.3 ms, perf/W 2.35× → 2.29×, required
+bandwidth 22.00 → 22.92 GB/s. **§8.7's conclusion is untouched.** The same expression also read
+`1 if int8 else 2`, which would have made int4 cost 2 bytes; it now goes through `BYTES_PER_ELEM`.
+
+*(Also added and neutral by construction: `ArgmindCfg.dma_bw_gbs_override`, so external bandwidth
+is a `dataclasses.replace`-able field instead of a property shadowed by a subclass, and
+`model_cpu(..., dram_gbs=)` defaulting to the 12.8 GB/s it used to hard-code. A test asserts both
+reproduce every pre-existing figure. `scaling_study.py`'s AXIS 7 still uses the subclass and the
+12.8 default; that is a no-op there because its CPU baseline is compute-bound at every swept
+point, but it should be migrated when that file is next touched.)*
+
+#### What would falsify §8.12
+
+- **A measured NPU energy figure at a stated node and precision.** The single missing input;
+  everything in "the part that hurts" turns on its absence. Settle it with an eval board and a
+  power rail, same instruction as falsifier F4.
+- **A batch dimension.** See the honest weakness above: batch 2 at int4 crosses the intensity
+  threshold. The model cannot currently express it.
+- **An L0 operand register file.** Raises on-chip intensity and makes the GEMM/ViT regime cheaper
+  still. It does **not** touch the LLM regime, because the binding resource there is off chip.
+- **A measured accuracy result at int4 on a control-relevant network.** This subsection models
+  bytes and cycles only. If int4 costs a policy its behaviour, every int4 row here is a datapath
+  capability with no workload attached.
 
 ## Sources
 

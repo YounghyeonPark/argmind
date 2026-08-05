@@ -167,6 +167,90 @@ def test_inconsistent_descriptor_decomposition_would_be_caught():
         M.assert_kernels_consistent(arm)
 
 
+def test_a_free_2x_of_int4_compute_is_invisible_at_the_row_level():
+    """New for the on-device-AI envelope (2026-08-05), and the result is a warning.
+
+    The likeliest way the int4 addition goes wrong is int4 acquiring 4x the array
+    rate alongside its real 2x of bandwidth -- the shape of modelling errors 13
+    and 14. This meta-test was written expecting a benchmark row to detect it.
+    IT CANNOT, and that is worth pinning: at 128 B/cycle an int4 GEMV is
+    bandwidth-bound (256 MAC/cycle from fetch, below the 288 array rate), so the
+    array rate is UNOBSERVABLE on the LLM row no matter what value it takes.
+
+    Consequences, both of which this test asserts:
+      * only the DIRECT invariant on `macs_per_cycle` can protect this, so
+        test_int4_does_not_grant_free_array_throughput is not redundant with any
+        row-level check; and
+      * the model can still express the difference -- at 256 B/cycle the fetch
+        ceiling (512) rises above the array and the array becomes binding, which
+        is the same crossover as §8's balance rule.
+    """
+    import dataclasses
+
+    def mutate():
+        return lambda self, prec: (
+            float(self.fp64_fmas) if prec == "fp64"
+            else self.macs * {"int4": 4.0, "int8": 2.0, "fp16": 1.0,
+                              "bf16": 1.0, "fp32": 0.5}[prec])
+
+    b4 = M.slm_decode("i4", 1.1, 2048, 22, 512, 20, "", prec="int8",
+                      weight_prec="int4")
+    wide = dataclasses.replace(M.CFG_100, scratchpad_bw_bpc=256.0, n_banks=16)
+
+    honest_128 = M.model_argmind(b4, M.CFG_100)["compute_us"]
+    honest_256 = M.model_argmind(b4, wide)["compute_us"]
+    saved = M.ArgmindCfg.macs_per_cycle
+    try:
+        M.ArgmindCfg.macs_per_cycle = mutate()
+        # The direct guard MUST fire.
+        assert M.CFG_100.macs_per_cycle("int4") != M.CFG_100.macs_per_cycle("int8")
+        free_128 = M.model_argmind(b4, M.CFG_100)["compute_us"]
+        free_256 = M.model_argmind(b4, wide)["compute_us"]
+    finally:
+        M.ArgmindCfg.macs_per_cycle = saved
+
+    assert free_128 == pytest.approx(honest_128), (
+        "an int4 GEMV at 128 B/cycle has become array-bound; if that is real the "
+        "bandwidth-first finding needs re-deriving for int4")
+    assert free_256 < 0.95 * honest_256, (
+        "even at 256 B/cycle the array rate is invisible, so the model can no "
+        "longer express the cost of a wrong int4 rate anywhere")
+
+
+def test_an_uncounted_kv_cache_would_be_caught():
+    """Modelling error 17, re-introduced at runtime.
+
+    The KV cache was omitted from `persistent_bytes` while the comment claimed
+    it was there. Removing it again must move the external traffic AND the
+    verdict-relevant latency, or the guard is cosmetic.
+    """
+    honest = by_name("SLM-DECODE")
+    buggy = copy.deepcopy(honest)
+    buggy.persistent_bytes = 1.1e9          # weights only, the old expression
+    c = M.CFG_100
+    h = M.model_argmind(honest, c)
+    b_ = M.model_argmind(buggy, c)
+    assert b_["bytes_moved"] < 0.99 * h["bytes_moved"]
+    assert b_["latency_us"] < 0.99 * h["latency_us"], (
+        "dropping the KV cache no longer changes the SLM row's latency; the "
+        "e17 guard has gone slack")
+
+
+def test_a_privately_provisioned_cpu_would_be_caught():
+    """Modelling error 16's sibling: a swept axis that moves one side only.
+
+    If `model_cpu` ignores `dram_gbs`, a bandwidth sweep credits the CM with
+    bandwidth the CPU is not given. Prove the fairness guard depends on the
+    parameter actually reaching the CPU's DRAM term.
+    """
+    b = by_name("SLM-DECODE")
+    slow = min(M.model_cpu(b, x, dram_gbs=3.2)["latency_us"] for x in M.ALL_CPUS)
+    fast = min(M.model_cpu(b, x, dram_gbs=51.2)["latency_us"] for x in M.ALL_CPUS)
+    assert slow > 1.5 * fast, (
+        "the CPU baseline is insensitive to system DRAM bandwidth, so any "
+        "bandwidth sweep comparing against it is an artefact")
+
+
 def test_infeasible_scenario_would_be_caught_by_status_check():
     """Historical error in the MEASUREMENT harness, not the model.
 

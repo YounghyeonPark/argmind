@@ -12,7 +12,7 @@ Surveyed and set up 2026-07-29. Run everything with `python -m pytest` from the 
 | python | 3.14.5 | — |
 | gcc | MinGW-w64 | present, unused so far |
 
-**336 tests, all passing**, in fourteen files. (The per-file counts below are maintained by hand
+**429 tests, all passing**, in seventeen files. (The per-file counts below are maintained by hand
 and drift; `python -m pytest -q` is authoritative. The six `test_argmind_*.py` files cover the
 runtime API, descriptor format, kernels, memory, MACIF and program builder and are documented in
 [argmind/](argmind/) rather than here.)
@@ -54,7 +54,23 @@ runtime API, descriptor format, kernels, memory, MACIF and program builder and a
   correction. **Two tests exist to protect NEGATIVE results**: the re-specified row must stay below
   parity, and one-step FCS-MPC must stay a CPU win — a model that quietly optimises those away has
   lost the ability to report a minimum viable problem size.
-- [tests/test_guards_actually_bite.py](tests/test_guards_actually_bite.py) — 7 meta-tests that
+- [tests/test_ml_envelope.py](tests/test_ml_envelope.py) — 31 tests covering the on-device-AI
+  envelope (2026-08-05, PHASE0_FINDINGS §8.12). Two are regression tests for **modelling errors 16
+  and 17**, both flattering: the CPU baseline got no credit for narrow matrix operands (so a
+  mixed-precision row narrowed *our* fetch and not the adversary's) and the SLM row's KV cache was
+  never counted although the code comment claimed it was. Three guard the new precision from
+  becoming a free win — int4 must **not** raise the array rate, must still pay 12 pJ/B on every
+  streamed byte, and must not become MAC-energy-sensitive. One guards baseline fairness on the new
+  swept axis: a DRAM-bound CPU row must get slower when external bandwidth is cut, or `model_cpu`
+  has re-acquired a private bandwidth. **Four protect NEGATIVE results**:
+  `test_large_model_llm_decode_is_never_differentiated` (parametrised over int8/int4 × 8 sizes ×
+  4 bandwidths, and its failure message names the recorded finding it would contradict),
+  `test_a_perception_network_cannot_be_in_a_1khz_tick`, `test_no_plausible_scratchpad_makes_an_llm_resident`,
+  and `test_the_network_is_a_small_fraction_of_the_hybrid_tick` (the deflation guard: if the policy
+  ever exceeds 25% of the tick, "the hybrid loop's advantage is the solver's advantage" stops
+  holding). Two are honesty guards rather than physics: the zone label must keep its `DIFF*`
+  asterisk, and no NPU stand-in may appear among the baselines.
+- [tests/test_guards_actually_bite.py](tests/test_guards_actually_bite.py) — 10 meta-tests that
   re-introduce real past bugs at runtime and assert the matching guard *fails*.
 
 ## Test strategy: pin relationships, not numbers
@@ -80,10 +96,10 @@ suite pins **relationships and directions** instead:
 
 ### Why the meta-tests matter
 
-Phase 0 produced **ten** modelling errors, each caught by manual or agent review — expensive
-and non-repeatable. The suite encodes all ten (the tenth: MAC count and operand-reuse depth were the same number). But a regression suite that has never failed has
-not been shown to catch anything, so `test_guards_actually_bite.py` mutates the model back to
-each buggy formulation and asserts the guard trips. Confirmed live:
+Phase 0 has produced **seventeen** modelling errors, each caught by manual or agent review —
+expensive and non-repeatable. The suite encodes all seventeen. But a regression suite that has
+never failed has not been shown to catch anything, so `test_guards_actually_bite.py` mutates the
+model back to each buggy formulation and asserts the guard trips. Confirmed live:
 
 - Misclassifying GEMV as GEMM makes a 16× larger array look 5%+ faster → caught.
 - Restoring the phantom transcendental term inflates apparent speedup by >25% → caught.
@@ -94,6 +110,14 @@ each buggy formulation and asserts the guard trips. Confirmed live:
   demonstrate the drain term at all. QUAD-MPC can, but only with both run-ahead and full-width
   chain blocking absent — which is itself the downgraded finding, recorded in §0.3.)*
 - Inflating one kernel op's MAC count breaks the descriptor/MAC consistency assertion → caught.
+- Dropping the SLM row's KV cache (error 17) changes its external traffic *and* its latency → caught.
+- Pinning the CPU baseline to a private DRAM bandwidth makes it insensitive to the swept axis
+  (error 16's sibling) → caught.
+- Giving int4 a 4× array rate is **NOT** caught by any benchmark row at 128 B/cycle, and the
+  meta-test asserts that: an int4 GEMV is bandwidth-bound there, so the array rate is
+  unobservable and only the direct `macs_per_cycle` invariant protects it. The same mutation *is*
+  observable at 256 B/cycle, which is where the int4 array knee (144 B/cycle) has been crossed.
+  **Written expecting a row-level catch and it failed; the failure was the finding.**
 
 If a test in that file ever starts passing *trivially*, the corresponding guard has gone slack.
 
