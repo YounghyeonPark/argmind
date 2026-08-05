@@ -233,8 +233,8 @@ Q6 — WHAT THE SEQUENCER MUST BE, AND WHAT IT COSTS
   option                                  setup  queue  logic mm2  +mem mm2   total  worst solver margin
   S0  scalar core, CSR write + poll          20      0     0.0088    0.0143  0.0232   1.69x (QUAD-MPC)
   S1  scalar core, software double-buffer     20      1     0.0091    0.0143  0.0235   2.09x (QUAD-MPC)
-  S2  core + descriptor generator (q=8)       4      8     0.0137    0.0143  0.0280   2.13x (QUAD-MPC)
-  S3  as S2, 1 descriptor/cycle               1      8     0.0137    0.0143  0.0280   2.13x (QUAD-MPC)
+  S2  core + descriptor generator (q=8)       4      8     0.0197    0.0143  0.0340   2.13x (QUAD-MPC)
+  S3  as S2, 1 descriptor/cycle               1      8     0.0197    0.0143  0.0340   2.13x (QUAD-MPC)
 
   S0  scalar core, CSR write + poll
       RV32 at 1 IPC: ~8 address computes, ~6 stores, loop bookkeeping, branch, then poll a completion CSR. No decoupling at all.
@@ -258,17 +258,17 @@ Q6 — WHAT THE SEQUENCER MUST BE, AND WHAT IT COSTS
    * AREA: the descriptor generator is nearly free, and -- CONTRARY TO
      WHAT I EXPECTED WHEN I STARTED THIS -- the whole sequencer including
      its program store FITS INSIDE THE EXISTING BUDGET LINE.
-       S0 -> S2 logic delta            0.0048 mm2  (0.69% of the 0.698 mm2 core)
-       S2 logic                        0.0137 mm2  [EST, bottom-up gate count]
+       S0 -> S2 logic delta            0.0108 mm2  (1.55% of the 0.698 mm2 core)
+       S2 logic                        0.0197 mm2  [EST, bottom-up gate count]
        + 8 KB I-mem, 4 KB D-mem         0.0143 mm2  [DER from sram_cost.bank_geometry]
-       = sequencer, all in              0.0280 mm2
+       = sequencer, all in              0.0340 mm2
        cm100_sizing REST_MM2 allocation for 'sequencer': 0.0450 mm2 [EST]
-       -> uses 62% of it. NO AREA CHANGE. The 0.698 mm2 figure stands.
+       -> uses 76% of it. NO AREA CHANGE. The 0.698 mm2 figure stands.
 
      This is worth stating as a negative result: the flat 0.045 mm2 [EST]
      in REST_MM2 had no memory line item and no bottom-up basis, so it
      was a candidate omission. Costed properly it is adequate, with the
-     I-mem sized generously at 8 KB. It would take a 26 KB
+     I-mem sized generously at 8 KB. It would take a 21 KB
      program store to break it, and a code-generated solver loop with
      hardware descriptor emission is nowhere near that. What was an
      assertion is now a derivation -- that is the whole gain here.

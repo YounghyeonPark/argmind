@@ -211,8 +211,28 @@ class BuiltSolver:
     def blocks(self) -> tuple[BuiltProgram, ...]:
         return (self.setup, self.iteration, self.residual)
 
-    def setup_needed(self) -> bool:
+    def setup_needed(self, dirty_names: frozenset[str] = frozenset()) -> bool:
+        """Must the setup block (factorisation) re-run before this call?
+
+        RULING 2026-07-31 on codegen finding G5, which was a silent wrong answer
+        reachable through the supported API. Two mechanisms decided two different
+        things and could disagree: the **dirty mask** decides what is re-fetched,
+        the **generation tag** decides whether setup re-runs. Naming `P` dirty
+        without bumping its generation refreshed the operand and left the Cholesky
+        factor *derived from it* resident and stale — the solve then converged, with
+        no error, to the wrong answer.
+
+        The rule adopted: **the dirty mask is conservative with respect to derived
+        data.** Naming a setup input dirty invalidates everything derived from it.
+        That can only cause more factorisations, never fewer, and re-factorising
+        unnecessarily costs microseconds while a stale factor costs correctness in
+        a control loop. Determinism is unaffected: the decision is made from the
+        call's declared mask, not from data values, so it stays statically
+        analysable.
+        """
         if self._setup_generations is None:
+            return True
+        if any(b.name in dirty_names for b in self.setup.inputs):
             return True
         return any(
             self._setup_generations.get(b.name) != b.generation
@@ -417,7 +437,7 @@ class Device:
                     seen.append(buf)
         self._stage_inputs(seen, dirty_names, stats)
 
-        if built.setup_needed():
+        if built.setup_needed(dirty_names):
             self._run_block(built.setup, stats)
             built._note_setup_ran()
             stats.setup_ran = True

@@ -18,6 +18,8 @@ from __future__ import annotations
 
 import math
 
+import dataclasses
+
 import numpy as np
 import osqp
 import pytest
@@ -1048,9 +1050,9 @@ def test_a_mis_declared_tensor_is_reported_as_a_contradiction(quad_nominal):
     assert any("xt" in c for c in plan.contradictions)
 
 
-def test_declaring_a_buffer_dirty_without_bumping_its_generation_is_a_trap(
+def test_declaring_a_buffer_dirty_also_invalidates_data_derived_from_it(
         quad_nominal):
-    """Finding G5, recorded as a test because it is a silent wrong answer.
+    """Finding G5 — FIXED 2026-07-31. This is now the positive test.
 
     Two mechanisms decide two different things and they can disagree. The **dirty
     mask** decides what is re-fetched; the **generation tag** decides whether the
@@ -1060,11 +1062,16 @@ def test_declaring_a_buffer_dirty_without_bumping_its_generation_is_a_trap(
     a factor of one matrix against the residual of another, and converges to the
     wrong answer without complaint.
 
-    This test pins the behaviour rather than the intended behaviour, so that
-    fixing it is a visible decision. The fix is one line in
-    ``BuiltSolver.setup_needed`` (also re-run if a setup input is in the dirty
-    mask) and it is conservative, but the dirty mask's meaning is part of the
-    runtime contract, so it is the architect's call and not codegen's.
+    RULING: **the dirty mask is conservative with respect to derived data.**
+    Naming a setup input dirty invalidates everything derived from it, so setup
+    re-runs. That can only cause more factorisations, never fewer — and an
+    unnecessary re-factorisation costs microseconds where a stale factor costs
+    correctness in a control loop. Determinism is unaffected, because the decision
+    is made from the call's declared mask rather than from data values, so it stays
+    statically analysable.
+
+    This test was originally written to pin the DEFECT, with a note that it should
+    become the positive test once the runtime was fixed. That is what happened.
     """
     g = gen(quad_nominal, fp64(eps_abs=1e-8, eps_rel=1e-8, max_iterations=400))
     g.solve(warm=False)
@@ -1075,18 +1082,21 @@ def test_declaring_a_buffer_dirty_without_bumping_its_generation_is_a_trap(
     stats = g.device.solve(g.built, dirty=[P, g.buf("q"), g.buf("lu")],
                            outputs=[g.buf("x")])
     assert P.name in stats.buffers_fetched, "the dirty mask did re-fetch P"
-    assert not stats.setup_ran, (
-        "RECORDED DEFECT: the operand was refreshed and the factorisation "
-        "derived from it was not. If this assertion starts failing, the runtime "
-        "has been fixed and this test should become the positive one.")
-    # And the answer is wrong, which is the reason it matters.
-    ref = osqp_matched(quad_nominal.with_instance(), g.options, 1e-8)
-    stale = float(np.max(np.abs(g.solution - np.asarray(ref.x).ravel())))
-    # Now do it the supported way and the factor is rebuilt.
+    assert stats.setup_ran, (
+        "naming a setup input dirty must re-run the factorisation derived from "
+        "it -- otherwise the solve runs the factor of one matrix against the "
+        "residual of another and converges, silently, to the wrong answer")
+
+    # And the answer is now RIGHT, which is the point: it agrees with a reference
+    # solve of the problem the host actually asked for.
+    doubled = dataclasses.replace(quad_nominal, P=quad_nominal.P * 2.0)
+    ref = osqp_matched(doubled.with_instance(), g.options, 1e-8)
+    err = float(np.max(np.abs(g.solution - np.asarray(ref.x).ravel())))
+    assert err < 1e-5, f"solution disagrees with the reference by {err:.3e}"
+
+    # The supported path (write() bumps the generation) still re-runs setup too.
     P.write(quad_nominal.P * 2.0)
-    fixed_stats = g.solve()
-    assert fixed_stats.setup_ran
-    assert stale >= 0.0
+    assert g.solve().setup_ran
 
 
 def test_the_setup_block_is_skipped_when_only_instance_data_changes(quad_nominal):

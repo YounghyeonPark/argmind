@@ -918,11 +918,19 @@ SEQUENCER_RECHECK: dict[str, object] = {
         "implementation's check_every=1 is right and the model's 25 is not."
     ),
     "verdict_on_the_8_cycle_bar": (
-        "NOT THREATENED. Measured from the emitted descriptors at fp32, "
-        "128 B/cycle: 7625 datapath cycles over 32 descriptors = 238.3 "
-        "cycles/descriptor, 29.8x the >=8 bar. At fp64, 474.1 = 59.3x. The 28 -> "
-        "32 correction moves the ratio from 34.1x to 29.8x, which changes "
-        "nothing."
+        "NOT THREATENED, but the fp32 figure recorded here was FLATTERING and is "
+        "corrected (codegen finding G3, 2026-07-31). It said 238.3 "
+        "cycles/descriptor; recounted from the generator's emitted descriptors "
+        "it is 137.5, i.e. 1.7x too high. The error: 238.3 was obtained by "
+        "HALVING the fp64 figure, but the two precisions are bound by different "
+        "resources -- fp32 GEMV is bandwidth-bound at 32 MAC/cycle while fp64 "
+        "GEMV is ARRAY-bound at the 8-unit FMA cluster, a 4x rate change, not "
+        "2x. Verdict is unchanged: 17.2x the >=8 bar rather than 29.8x. Note "
+        "also that this entry paired an fp64 AVERAGE with an fp32 WORST CASE "
+        "(the run of six averaging 5.83 cycles, which reproduces exactly and is "
+        "genuinely fp32). At fp64 there is no sub-threshold descriptor at all, "
+        "so the thinnest point in the sequencer analysis is a property of the "
+        "PRECISION, not of the algorithm."
     ),
     "the_47_percent_is_not_the_problem_it_looks_like": (
         "The residual is 47% of descriptors and 49% of CYCLES, so on average it "

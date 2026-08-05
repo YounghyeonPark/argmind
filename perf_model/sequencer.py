@@ -71,7 +71,14 @@ DESC_BITS = 192                           # op, 3 base addrs, 3 dims, 2 strides,
                                           # format/accum flags, completion tag
 GATES_PER_FLOP_BIT = 6                    # [EST] flop + mux + clock gate
 GATES_ISSUE_FSM = 4_000                   # issue/completion tracking, doorbell
-N_DESC_TEMPLATES = 4                      # templates the hardware loop walks
+N_DESC_TEMPLATES = 24                     # armed templates the generator holds.
+# CORRECTED 2026-07-31 from 4 (codegen finding G2). The generated QUAD-MPC solver
+# emits 24 DISTINCT kernel shapes (15 in the iteration block alone over 16
+# descriptors) -- not the ~6 the emit-cost analysis assumed. Since arming costs
+# ~22 instructions PER TEMPLATE, per-iteration arming is 16.7 cycles/descriptor,
+# not 8.25: 2x worse than believed, in the same direction, so the "arm once per
+# solve" conclusion is strengthened rather than threatened (hoisted: 1.5).
+# Cost of the extra 20 templates: 1152 gates each, +0.006 mm2, 0.8% of the core.
 
 # The sequencer needs its own program store. This was NOT in the area budget:
 # cm100_sizing.REST_MM2 allocates 0.045 mm2 to "sequencer" as a flat number with
