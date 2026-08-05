@@ -35,6 +35,12 @@ Modules
     iterative-solver structure.
 :mod:`argmind.solvers`
     Hand-written reference solver programs.
+:mod:`argmind.codegen`
+    The code generator: a problem description (a QP, or a CVXPY problem) in, a
+    descriptor program plus a static scratchpad allocation plan plus a residency
+    plan out, with a compliance report against the codegen contract. Imported
+    explicitly (``from argmind.codegen import generate``) rather than re-exported
+    here, because it is a tool built *on* the runtime API and not part of it.
 """
 
 from . import kernels, macif, precision
