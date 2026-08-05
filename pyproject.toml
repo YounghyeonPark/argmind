@@ -10,6 +10,12 @@ dependencies = ["numpy>=2.0", "scipy>=1.14", "osqp>=1.0"]
 
 [project.optional-dependencies]
 dev = ["pytest>=8", "hypothesis>=6", "ruff>=0.6"]
+# The CVXPY front end for the code generator. Optional on purpose: the direct
+# front door (QPProblem.from_arrays) needs nothing beyond numpy, the generator
+# imports cvxpy lazily, and the test suite skips the front-end tests when it is
+# absent. A user's existing CVXPY problem is the adoption on-ramp, not a
+# requirement for using the generator.
+cvxpy = ["cvxpy>=1.4"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
@@ -32,4 +38,4 @@ target-version = "py312"
 # hold until the filing question is settled (PLAN.md 7.1), and a licence header
 # implies a grant we have not decided to make.
 [tool.setuptools]
-packages = ["argmind", "argmind.solvers"]
+packages = ["argmind", "argmind.codegen", "argmind.solvers"]

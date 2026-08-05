@@ -1,0 +1,276 @@
+============================================================================================
+CODE GENERATION FOR QUAD-MPC: PROBLEM DESCRIPTION IN, DESCRIPTORS OUT
+============================================================================================
+Problem: QUAD-MPC: n_var=80 n_con=320 density(P)=1.00 density(A)=0.34 structural=['P', 'A'] per-call=['q', 'l', 'u'] origin=arrays
+Reference: OSQP, and the hand-written descriptor sequence in
+argmind/solvers/admm.py. Numbers below are computed by executing
+descriptors, except the cycles-per-descriptor column, which is MODELLED
+(+/-2x, not quotable externally) and labelled where it appears.
+
+--------------------------------------------------------------------------------------------
+1. THE FRONT DOOR
+--------------------------------------------------------------------------------------------
+   a) CVXPY. The user's own problem, with the state as a Parameter.
+      cvxpy front end: n_var=80, canonical constraint rows=640 (0 equality), merged to 320 two-sided rows by pairing 320 (A_i = -A_j) row pairs -- 102400 B of constraint matrix saved at fp32. Parameters ['x0', 'xref'] -> per-call blocks ['l', 'q', 'u']; structural ['P', 'A'].
+      Two things happened there and both matter:
+      * `varies` was DERIVED, not declared. A CVXPY Parameter IS the
+        residency declaration -- data that changes between solves is a
+        Parameter, data that does not is a constant, which is what DPP
+        means. The front end canonicalises at two parameter values and
+        differences the result, so the user supplies NO hints.
+      * The two-sided rows were RECOVERED. CVXPY canonicalises
+        l <= Ax <= u into two one-sided rows, so a 320-constraint
+        problem arrives with 640 -- and the constraint matrix is the
+        largest object in the program. Pairing rows A_i = -A_j recovers
+        the hand-derived form exactly. Without it, coming in through
+        CVXPY would cost 2x the scratchpad and 2x the A-product cycles,
+        i.e. the on-ramp would be a tax on using it.
+
+   b) Direct: QPProblem.from_arrays(P, q, A, l, u, varies=(...)).
+      Needs nothing beyond numpy. `varies` must be stated and defaults to
+      EVERYTHING, i.e. to no residency assumption at all -- a generator
+      that guessed 'P is probably constant' would return a stale answer
+      the first time a user retuned a weight.
+
+   c) CasADi: DEFERRED, not attempted.
+      CasADi's natural output is a nonlinear program; its QP subproblems come from an SQP outer loop (the acados / HPIPM path). Generating the subproblem without the outer loop would not run a user's problem, so it would be a false claim about the on-ramp.
+
+--------------------------------------------------------------------------------------------
+2. GENERATED == HAND-WRITTEN, DESCRIPTOR FOR DESCRIPTOR
+--------------------------------------------------------------------------------------------
+   setup        4 descriptors  IDENTICAL
+   iteration   16 descriptors  IDENTICAL
+   residual    15 descriptors  IDENTICAL
+   Compared in canonical form: addresses resolved to (buffer, element
+   offset), because requiring identical absolute addresses would only test
+   that two allocators declare buffers in the same order.
+
+   descriptors: {'setup': 4, 'iteration': 16, 'residual': 15} -> 31 per checked iteration
+   dependency structure (emitted vs achievable):
+  setup        4 desc  emitted chain depth   4 vs true DAG depth   4 (1.00x)  policy=mask      2 multi-producer    0 forced  peak live tokens 3/8
+  iteration   16 desc  emitted chain depth  11 vs true DAG depth  11 (1.00x)  policy=mask      8 multi-producer    0 forced  peak live tokens 7/8
+  residual    15 desc  emitted chain depth   5 vs true DAG depth   5 (1.00x)  policy=mask      3 multi-producer    0 forced  peak live tokens 3/8
+
+   iteration block, as generated:
+       0  SCAL fp64 [m=320]->t0 t_dual = rho*z
+       1  AXPY fp64 [m=320]->t1 wait{0} t_dual -= y
+       2  SCAL fp64 [m=80]->t2 rhs = sigma*x
+       3  AXPY fp64 [m=80]->t3 wait{2} rhs -= q
+       4  GEMV fp64 T=A acc [m=320,k=80]->t4 wait{0,1,2,3} rhs += A'*t_dual
+       5  TRSV fp64 TRIL [m=80]->t5 wait{2,3,4} xt = L^-1 rhs
+       6  TRSV fp64 T=A TRIL [m=80]->t6 wait{5} xt = L^-T xt
+       7  GEMV fp64 [m=320,k=80]->t7 wait{5,6} zt = A*xt
+       8  SCAL fp64 [m=80]->t3 wait{2} x *= (1-alpha)
+       9  AXPY fp64 [m=80]->t4 wait{2,3,5,6} x += alpha*xt
+      10  SCAL fp64 [m=320]->t4 wait{7} t = alpha*zt
+      11  AXPY fp64 [m=320]->t2 wait{4} t += (1-alpha)*z
+      12  AXPY fp64 [m=320]->t5 wait{2,4} t += y/rho
+      13  PROJ fp64 [m=320]->t6 wait{0,2,4,5} z = clip(t, l, u)
+      14  SCAL fp64 [m=320]->t3 wait{1,2,4,5} y = rho*t
+      15  AXPY fp64 [m=320]->t7 wait{1,3,5,6} y -= rho*z
+
+--------------------------------------------------------------------------------------------
+3. GENERATED == OSQP, ON BOTH BOUND SETS
+--------------------------------------------------------------------------------------------
+   The nominal +/-2 N row has an INTERIOR optimum (active set 0), so PROJ
+   and the dual update are no-ops at convergence and a wrong dual update
+   is undetectable there. The tight +/-0.35 N row is what validates them.
+
+               bounds       mode     eps  act  OSQP it  CM it  desc/it  max|x-x_osqp|
+              nominal  reference   1e-06    0       10      9       31      3.062e-06
+              nominal    default   1e-06    0       10      9       29      3.062e-06
+              nominal  reference   1e-08    0       13     12       31      6.443e-08
+              nominal    default   1e-08    0       13     12       29      6.443e-08
+                tight  reference   1e-06   10       22     22       31      9.326e-15
+                tight    default   1e-06   10       22     22       29      9.326e-15
+                tight  reference   1e-08   10       30     30       31      9.215e-15
+                tight    default   1e-08   10       30     30       29      9.215e-15
+
+   'reference' is the mode that reproduces the hand-written program (rho in
+   descriptor word 7, staging copies kept). 'default' is what the generator
+   ships: rho in scratchpad (ruling R5) and staging copies elided, 29
+   descriptors instead of 31. The two agree bit for bit.
+
+--------------------------------------------------------------------------------------------
+4. CONTRACT RULE C1: rho IS REFUSED, NOT WARNED ABOUT
+--------------------------------------------------------------------------------------------
+   rho=0.1    w7 immediate     REFUSED  (reciprocal error 1.49e-08 -> the dual cannot settle)
+   rho=0.2    w7 immediate     REFUSED  (reciprocal error 1.49e-08 -> the dual cannot settle)
+   rho=0.125  w7 immediate     ACCEPTED (reciprocal error 0.00e+00)
+   rho=0.25   w7 immediate     ACCEPTED (reciprocal error 0.00e+00)
+
+   And ruling R5's answer, measured: the same rho that stalls in w7
+   converges when it lives in scratchpad at the buffer's own precision.
+        rho           encoding  iterations  converged
+        0.1    scratchpad VMUL          34       True
+      0.125    scratchpad VMUL          34       True
+   The w7 encoding of rho=0.1 does NOT converge -- measured in
+   tests/test_argmind_codegen.py, which bypasses the refusal by rewriting
+   the two VMULs as w7 immediates and runs to the 600-iteration limit. So
+   the power-of-two rule is real on the w7 path and genuinely lifted by R5
+   --
+   which is worth knowing, because rho is a tuning parameter and taking
+   away 7 of every 8 candidate values is not free.
+
+--------------------------------------------------------------------------------------------
+5. THE STATIC SCRATCHPAD ALLOCATION PLAN
+--------------------------------------------------------------------------------------------
+                         policy     bytes      KiB  of 192 KiB  desc/it
+          all-fp64 (validation)    331600    323.8      168.7%       29
+             all-fp32 (default)    165840    162.0       84.4%       29
+     fp16 operands / fp32 solve    114640    112.0       58.3%       29
+
+   fp32 is the default for ADMM and fp32 is what has to fit. fp64 is a
+   VALIDATION configuration -- it is what matches OSQP bit for bit -- and
+   must not be used to size anything. Against a real 192 KiB device:
+     fp32: build SUCCEEDED, 165840 B
+     fp64: build REFUSED -- static allocation of 'A' (204800 B, padded 204800 B) does not fit: 51200 B already placed of 196608 B scratchpad. Working set is 250.0 KiB against a 192 KiB scratchpad.
+
+   The hand-written v0.1 layout measured 167440 B at fp32. Generated in
+   reference mode: 167440 B -- the same plan. With the
+   in-place rule enforced: 165840 B, 1600 B less, which is
+   exactly the two staging buffers rule C6 deletes.
+
+   Largest allocations, fp32:
+     A              102400 B   fp32  (320, 80)
+     P               25600 B   fp32  (80, 80)
+     L               25600 B   fp32  (80, 80)
+     lu               2560 B   fp32  (320, 2)
+     y                1280 B   fp32  (320,)
+     z                1280 B   fp32  (320,)
+     ... 20 smaller allocations
+
+--------------------------------------------------------------------------------------------
+6. THE RESIDENCY PLAN, DERIVED THEN MEASURED
+--------------------------------------------------------------------------------------------
+residency plan (derived from the emitted dataflow):
+  fetch once    : P, A, sigma_s, rho_s, rho_inv_s, x, y, z
+  fetch per call: q, lu
+  never fetched : 16 tensors (L, t_dual, rhs, xt, zt, t, Ax, Px, Aty, s_rp, s_Ax, s_z, s_rd, s_Px, s_Aty, s_q)
+  written back  : x
+  first call in 267544 B; steady state 5760 B in / 640 B out
+  against 267544 B per call with no residency -> 46.4x
+  setup block runs when: only when A, P, sigma_s change generation -- once for the life of the plant model
+  declarations that are NOT derivable: which QP data blocks change from call to call (QPProblem.varies); everything else in this plan is derived from the emitted dataflow
+
+   PREDICTED  first call 267544 B in, steady 5760 B in / 640 B out
+   MEASURED   first call 267544 B in, steady 5760 B in / 640 B out
+   setup ran on the first call: True; on the second: False
+   Predicted equals measured. The 46x was hand-arranged before; it is now
+   derived from the emitted dataflow, and the only thing the planner had to
+   be told is which data blocks change from call to call -- which the CVXPY
+   route supplies for free.
+
+   200-tick closed loop, warm started (BENCHMARKS 'aggressive' scenario):
+     CM iterations       p50 7  p95 8  max 9   (cold first solve 9)
+     OSQP default        p50 20  p95 21  max 74
+     |u0_CM - u0_OSQP|   p50 2.225e-06  max 9.675e-06
+     per-tick transfer   5760 B in, 640 B out (first call 267544 B)
+     Cholesky ran on 1 of 200 ticks
+
+--------------------------------------------------------------------------------------------
+7. THE CODEGEN CONTRACT, CHECKED ON THE EMITTED PROGRAM
+--------------------------------------------------------------------------------------------
+   Cycles are MODELLED (CM-100: 128 B/cycle, 144 MACs, 16 fp32 lanes, 8
+   fp64 FMAs), +/-2x, NOT QUOTABLE. The descriptor stream they are
+   computed from is measured.
+
+   Reported for the SHIPPING configuration: all-fp32 on a real 192 KiB
+   CM-100, which is what a customer would build. (Sections 3 and 6 run
+   fp64, because that is the configuration that matches OSQP bit for bit.)
+
+codegen contract compliance -- target CM-100: ALL RULES PASS
+  [C1 PASS] rho is exact against its reciprocal
+      rho = 0.125 travels as a scratchpad scalar at the buffer's own precision, read by a zero-stride VMUL (ruling R5). The w7 fp32 immediate would have carried a reciprocal mismatch of 0.000e+00; at fp64 storage it is ~1e-16. Power-of-two rho remains recommended (it makes the mismatch exactly zero) but is not load-bearing on this path.
+  [C2 PASS] A'y is accumulated row-wise
+      2 transposed GEMV(s), each one descriptor over the row-major operand (1 matrix address read both transposed and untransposed, i.e. one stored copy). The column-walk alternative would stride 320 B = 40 bank words, reaching 2 of 16 banks = 12.5% of peak scratchpad bandwidth. HARDWARE REQUIREMENT: a 80-element accumulator in the vector register file, live for the duration of one descriptor.
+  [C3 PASS] >= 8 datapath cycles per descriptor, bursts <= queue depth
+      checked iteration = 29 descriptors, 4238 datapath cycles = 146.1 cycles/descriptor (18.3x the bar). setup: 4 desc, mean 7657.4, min 400.0, 0 below bar, longest sub-threshold run 0 | iteration: 16 desc, mean 142.7, min 5.0, 4 below bar, longest sub-threshold run 2 | residual: 13 desc, mean 150.4, min 5.0, 6 below bar, longest sub-threshold run 5. Thinnest point: residual[8..]12, 5 descriptors averaging 6.0 cycles (|A'y|, rd += q, rd += A'y, |Px + q + A'y|  dual residual, |q|); ABSORBED by a 8-deep queue with 3 slot(s) of margin.
+  [C4 PASS] templates armed once per solve, not per iteration
+      24 distinct templates over the whole solve (setup: 4, iteration: 15, residual: 7); the loop (iteration + residual) issues 29 descriptors from 22 templates. Arming at 22 instructions/template costs 16.69 cycles/descriptor if done PER ITERATION and 1.500 if done ONCE PER SOLVE (12 iterations, 352 descriptors) -- a 11x difference, and the hoist is legal because every iteration's descriptors are bit-identical. HARDWARE REQUIREMENT: the descriptor generator must hold 24 armed templates; perf_model/sequencer.py instantiates 4. 20 more costs 5990 um2 = 0.0060 mm2 at 1152 gates/template. Templates that differ ONLY in the w7 alpha immediate could share a slot and re-arm one word: that would take 24 -> 19, which is not obviously worth the control logic at this area price.
+  [C5 PASS] static allocation, no runtime reallocation
+      the address map is fixed at generation time and identical across two independent builds (signature 7f8c42c3b22277a6...). Working set 165840 B = 162.0 KiB of 192 KiB (84.4%). No allocator runs in the solver path, so there is no allocation-dependent latency.
+  [C6 PASS] in-place kernels, no staging copies
+      15 descriptors update a buffer at its own address (read-modify-write), and the generation tag is bumped by the runtime on every CM write so the resident copy stays authoritative. 2 staging copy/copies eliminated by the elision pass, reclaiming 1600 B and 2 descriptors per checked iteration: rp onto Ax; rd onto Px. Both were present in the hand-written program, which is the argument for enforcing this mechanically rather than by review.
+  [C7 PASS] narrow operands opt-in, solve kept wide
+      policy 'all-fp32': bulk fp32, solve fp32, vectors fp32. No narrow operands, so nothing to opt in to.
+  [C8 PASS] a descriptor reclaiming a live token waits on it
+      62 descriptors in the unrolled stream, 33 reclaim(s) of a still-live token, all of them ordered by a wait on the token they take. 8 tokens available.
+
+   Cycles per descriptor by precision, and where the program is thinnest:
+                         policy    c/desc   x bar  longest run  absorbed?
+          all-fp64 (validation)     522.8    65.3            0        yes
+             all-fp32 (default)     146.1    18.3            5        yes
+     fp16 operands / fp32 solve      91.0    11.4            5        yes
+   The bar is 8 cycles/descriptor on
+   average, with no sub-threshold run longer than the 8-deep
+   queue. At fp64 there is no sub-threshold descriptor at all; the thin
+   point exists at fp32 and narrower.
+
+   The thinnest run at fp32, descriptor by descriptor:
+     residual[ 0] GEMV     812.5 cycles (bandwidth-bound)  Ax = A*x
+     residual[ 1] NRMI      20.0 cycles (unit-bound)  |Ax|
+     residual[ 2] NRMI      20.0 cycles (unit-bound)  |z|
+     residual[ 3] SCAL      20.0 cycles (unit-bound)  rp = Ax
+     residual[ 4] AXPY      30.0 cycles (bandwidth-bound)  rp -= z
+     residual[ 5] NRMI      20.0 cycles (unit-bound)  |Ax - z|  primal residual
+     residual[ 6] GEMV     205.0 cycles (bandwidth-bound)  Px = P*x
+     residual[ 7] NRMI       5.0 cycles (unit-bound)  |Px|  <-- below bar
+     residual[ 8] GEMV     812.5 cycles (bandwidth-bound)  Aty = A'*y
+     residual[ 9] NRMI       5.0 cycles (unit-bound)  |A'y|  <-- below bar
+     residual[10] SCAL       5.0 cycles (unit-bound)  rd = Px  <-- below bar
+     residual[11] AXPY       7.5 cycles (bandwidth-bound)  rd += q  <-- below bar
+     residual[12] AXPY       7.5 cycles (bandwidth-bound)  rd += A'y  <-- below bar
+     residual[13] NRMI       5.0 cycles (unit-bound)  |Px + q + A'y|  dual residual  <-- below bar
+     residual[14] NRMI       5.0 cycles (unit-bound)  |q|  <-- below bar
+
+   And the contract is a statement about PROBLEM SIZE, not just about the
+   algorithm. Generated ADMM at fp32, average cycles per descriptor:
+     n_var   n_con    c/desc  longest run   verdict
+         6      12       1.3           16      FAIL
+        12      24       3.1            8      FAIL
+        24      48       9.5            8      PASS
+        48      96      32.7            5      PASS
+        80     160      84.9            5      PASS
+   Small QPs are sequencer-issue-bound, and the generator says so rather
+   than reporting a pass. For those, tell the customer to use the MCU.
+
+--------------------------------------------------------------------------------------------
+8. WHAT GENERATING (RATHER THAN HAND-WRITING) FOUND
+--------------------------------------------------------------------------------------------
+   [G1] The elementwise opcodes (AXPY, SCAL, VMUL, PROJ) carry exactly ONE format, not two, because they have no bulk operand and so never read prec_m. A mixed-format elementwise operation is inexpressible.
+        severity : forces a storage decision the numerics did not ask for
+        found by : Assigning formats per BUFFER and deriving the descriptor fields. In the fp16-operand mode the setup block's `K += P` is an fp32 destination and an fp16 source, and there is no encoding for it. A human choosing descriptor fields directly would have stored P at fp32 without noticing there was a decision.
+        cost     : P must be stored at the factor's format. On QUAD-MPC that is 12800 B of extra scratchpad (25600 at fp32 instead of 12800 at fp16) and the P*x GEMV runs at 205 cycles instead of 105, i.e. +100 of ~2800 cycles per checked iteration at fp16. The measured fp16 working set is 114640 B = 112.0 KiB, against the 101.3 KiB the scratchpad ruling costed for an all-fp16 layout -- and that 101.3 KiB figure assumed a P the format cannot store.
+        fix      : Let the elementwise opcodes read `b` at prec_m and write `c` at prec_v. Zero new bits -- prec_m is already in w0 and already ignored by these opcodes. It is a SEMANTIC change to the format, so it is a ruling to be made, not an implementation detail: it changes what an existing bit pattern means for four opcodes.
+        status   : REPORTED, NOT IMPLEMENTED. The generator works around it and says so in its report.
+
+   [G2] The 'about 6 distinct kernel shapes per ADMM iteration' figure that the descriptor-emit cost analysis rests on is too low. The emitted iteration block has 15 distinct shapes over 16 descriptors, and the whole solve has 24.
+        severity : informational, but it changes a stated requirement
+        found by : Counting templates on the emitted program instead of estimating them from the kernel decomposition. Almost every descriptor in an ADMM iteration is its own shape: the dimensions alternate between n and m, and the alpha immediate differs on nearly all of them.
+        cost     : Per-iteration arming costs 16.7 cycles/descriptor (17.0 in reference-equivalent mode), not the 8.25 the analysis quoted -- 2.0x worse and, like 8.25, above the >=8-cycle bar. The CONCLUSION is unchanged and in fact strengthened: arming must be hoisted out of the iteration loop, which is legal because allocation is static and every iteration's descriptors are bit-identical. Hoisted, the cost is 1.5 cycles/descriptor over a 12-iteration solve -- 5.3x inside the bar, and it falls further on longer solves.
+        fix      : Raise N_DESC_TEMPLATES. Alternatively, templates that differ only in the w7 alpha immediate could share a slot and re-arm one word, which would cut the count; the area saving does not obviously justify the control logic.
+        status   : REPORTED for the architect to rule on.
+
+   [G3] SEQUENCER_RECHECK states 238.3 datapath cycles per descriptor at fp32 and 474.1 at fp64, i.e. exactly 2x apart. Recounted from the emitted descriptors the figures are ~137 at fp32 and ~491 at fp64 -- 3.6x apart, not 2x.
+        severity : a flattering number in a settled record
+        found by : Costing each emitted descriptor individually instead of scaling one precision's total by element size.
+        why      : fp32 and fp64 GEMV are limited by DIFFERENT RESOURCES on the CM-100. At fp32 the ceiling is delivered bandwidth, 128 B/cycle / 4 B = 32 MAC/cycle. At fp64 the bandwidth ceiling would be 16 but the merged FMA cluster is 8, so fp64 GEMV is ARRAY-bound. Halving an fp64 cycle count to get an fp32 one therefore understates the rate change by 2x, and in the flattering direction.
+        effect   : The margin over the >=8-cycle bar at fp32 is 17.2x, not 29.8x. The verdict does not change and nothing rests on it. What DOES matter is the other half of the record: the 'run of six consecutive descriptors averaging 5.8 cycles' reproduces EXACTLY from the generated program at fp32 (5.83), so the record pairs an fp64-derived average with an fp32-derived worst case.
+        status   : CORRECTION for the record. Pinned by a test.
+
+   [G4] The `accumulate` bit is only defined for GEMM, GEMV and VMUL. SCAL, TRSV, PROJ, DOT, NRMI and CHOL silently ignore it, so a descriptor with the bit set decodes identically to the same descriptor without it.
+        severity : two encodings, one meaning, no error
+        found by : A mutation test. Turning the ADMM dual update into its known-wrong expanded form (`y += rho*(t-z)`) by setting accumulate on the SCAL that writes y produced NO CHANGE IN BEHAVIOUR, because the SCAL kernel does not read the bit. The mutation was silently discarded, which is the same mechanism by which a real codegen bug would be.
+        fix      : Refuse `accumulate` in the Descriptor constructor for opcodes that do not define it. Pure validation -- it rejects encodings that currently have no meaning, so it cannot change the meaning of any descriptor a correct generator emits.
+        status   : REPORTED for the format owner. The GENERATOR refuses it already (argmind.codegen.ir.ACCUMULATE_DEFINED_FOR), so no generated program can contain the meaningless encoding; the shared descriptor module is left alone because tightening validation there is a format decision.
+
+   [G5] Two mechanisms decide two different things and they can disagree. The DIRTY MASK decides what is re-fetched. The GENERATION TAG decides whether the setup block re-runs. Naming a setup input in the dirty mask without bumping its generation refreshes the OPERAND and leaves the FACTORISATION DERIVED FROM IT stale.
+        severity : SILENT WRONG ANSWER, reachable through the supported API
+        reached  : A host writes P through the raw pointer -- which is legal, it is a pointer, and the runtime cannot detect it -- and then names P in the call's dirty mask, which is the careful thing to do. P is re-fetched; the Cholesky factor of the OLD P stays resident; the solve converges to the wrong answer without any error.
+        fix      : One line: BuiltSolver.setup_needed() must also return True when any setup input is named in the call's dirty mask. It is conservative -- it can only cause more setup runs, never fewer.
+        status   : ESCALATED, NOT FIXED. The dirty mask's meaning is part of the runtime contract, so widening it is a business decision. Generated code cannot hit it (the generated host API writes through Buffer.write, which bumps the generation), and a test pins the current behaviour so that fixing it is a visible change.
+
+   The G1 workaround, in the generated program:
+     P is stored at fp32 rather than the requested bulk format fp16 because the setup block adds it into K with an elementwise AXPY, and descriptor v0.1's elementwise opcodes carry exactly one format (prec_m is unused by them). Cost: 12800 B of extra scratchpad and a P*x GEMV at fp32 instead of fp16.
+
