@@ -259,6 +259,35 @@ second selling point on the same engine.
 |---|---|
 | **ARM SoCs** | AXI4 primary data port + AXI4-Lite/APB control. Optional ACE-Lite or CHI wrapper for coherent variants. AMBA specs are freely licensable from Arm for interoperability. |
 | **RISC-V SoCs** | TileLink wrapper (Chipyard/Rocket ecosystem) + standard AXI (most commercial RISC-V SoCs use AMBA anyway). Optionally expose sequencer as a RoCC-style coprocessor for tight coupling demos. |
+
+> **RISC-V exposure is an implementation detail, not an ecosystem commitment** (recorded
+> 2026-08-07; two independent analyses reached this and it should stop being reopened).
+> §4.2 found that **nonstandard extensions fragment the ecosystem and RISC-V International
+> actively discourages them** via the profile process, so a custom-opcode block is easy to ship
+> and hard to get adopted. Independently, the sequencer analysis found that **descriptor emission
+> must stay on the CM side at every integration depth**, because host-side issuing without
+> run-ahead lands at 0.66× on the binding row. Together: **we need no custom instructions in the
+> licensee's CPU.** The sequencer is ours and internal; any custom instructions live inside our
+> block and are never exposed to licensee software. No fragmentation debate, no ratification
+> dependency, no toolchain fight.
+>
+> Consequences: **core choice is decided by inherited verification, not features** — Ibex
+> (Apache-2.0, verified via OpenTitan) or CV32E40P (Solderpad, ships verification collateral) both
+> beat building our own, because verification is the largest Phase-2 cost and our sequencer's job
+> (~22 instructions to arm a template) does not justify a bespoke ISA. **Membership is not
+> required to implement the ISA** — it matters for influencing extensions or using the trademark,
+> neither of which is a priority at zero customer conversations.
+>
+> Two things worth borrowing from how RVI governs itself: **open the specification, own the
+> trademark** (exactly our open-core plan, validated at scale), and **profiles as an
+> anti-fragmentation mechanism** — whose analogue is our own §9 discipline of a few validated SKUs
+> rather than a full parameter matrix.
+>
+> And the honest note: **RVV does not protect the solver half of our story.** Our inner loop is
+> GEMV and bandwidth-bound, and a plain vector unit is the *right* shape for GEMV, so RISC-V's
+> missing matrix extension protects only the ML half. In the RISC-V ecosystem our position is an
+> **adoption path** (Chipyard/LiteX, university and shuttle projects — §7.1's third on-ramp), not
+> a competitive front.
 | **Apple** | Reality check: Apple does not license third-party accelerator IP into its SoCs. "Apple connection" should be interpreted as (a) AMBA-compliant so any ARM-architecture licensee can drop it in, and (b) a software story that mirrors Apple's Accelerate/ANE-style APIs so code ports easily. Do not plan revenue on Apple as an integration target. |
 
 Integration deliverables: parameterizable Verilog/SystemVerilog top with clean clock/reset
@@ -578,6 +607,82 @@ likely 2030 edge architecture — analog/CIM macro running a learned policy or d
 digital solver enforcing constraints, one sequencer orchestrating both under a real-time
 deadline — is a system *we* are positioned to supply and a bare CIM macro is not.
 
+### 4.15 Market-route rulings (2026-08-07) — recorded so they stop reopening
+
+See [WHERE_WE_COMPETE.md](WHERE_WE_COMPETE.md) for the socket-by-socket evidence and the
+seven-point envelope test. These are the *route* decisions behind it.
+
+**There is no B2C route, and the question that matters is different.** We sell synthesizable
+RTL; no form of it can be sold to a consumer. Reaching one needs silicon — mask set, packaging,
+test, certification, distribution, warranty — which is a different company with a different
+capital structure. And consumers do not buy determinism; they buy range, battery life and
+"it doesn't get stuck."
+
+So the route is **consumer pull, not consumer sales**: a metric the consumer pays for → an OEM
+competes on it → a chip vendor accommodates the OEM → our licence. Arm sells to nobody's
+consumer and is in every consumer product. Under that lens the two best sockets are **consumer
+robotics** (battery life *and* reliability are the purchase criteria, workload is EKF+planning,
+rich host so all four differentiators survive) and **personal mobility** (range *is* energy, and
+FCS-MPC is our highest perf/W row — but latency is 0.62×, so energy only).
+
+A developer/maker module (FPGA board + runtime + codegen) is the only consumer-*adjacent* thing
+that works, and it should be accounted as **demand-validation expense, not revenue.**
+
+**Live learning: the strong half is online estimation, not backprop.** Backprop on-device needs
+gradients, optimiser state and stored activations — roughly 3× inference memory — which puts the
+trainable-resident envelope at ~0.07–0.2 M parameters, and it is batched GEMM, i.e. NPU/GPU/CIM
+territory. What robots actually need to learn in the field is *themselves and the world*: a worn
+joint, a changed payload, a different floor. That is **recursive estimation** — an EKF estimating
+parameters is the same machinery as one estimating states, which is our **best row** (EKF-96,
+2.1× / 21.1×) at a precision NPUs cannot provide (fp32 minimum, **no fp16/bf16 path in any
+filter form**, measured).
+
+The differentiated shape is **estimate → update model → re-solve, in fabric, in one deterministic
+tick.** Note that the G5 bug fixed on 2026-07-31 — a dirty mask refreshing an operand while
+leaving the factorisation derived from it stale — is a defect that *only occurs when the model
+changes*. The plumbing for the adaptive loop is already in place.
+
+> **OPEN, and measurable with what exists:** if the model changes every tick, the Cholesky
+> re-runs every tick. Measured in the static case it ran on **1 of 200 ticks**, which is what the
+> 46× residency figure rests on. Re-factorisation is O(n³) against O(n²) per iteration, so at
+> 200-of-200 the claim may not survive. The simulator already reports `setup_ran` per tick, so
+> this is a day's work and it decides whether "live learning" is a spec or a slogan. Physics
+> suggests it survives — joint wear does not change on millisecond timescales — but that is a
+> hypothesis, not a result.
+
+**Certification: the specific standards, since "certification" was used loosely.** For an IP
+supplier the relevant instrument is **ISO 26262:2018 as a Safety Element out of Context (SEooC)**
+— we are not certified; we ship a safety package (safety manual documenting Assumptions of Use,
+FMEDA, DFA, verification evidence) that lets a licensee achieve *their* certification. ASIL-D
+hardware metrics are SPFM ≥99%, LFM ≥90%, PMHF <10 FIT; assessment is by a third party such as
+TÜV SÜD or exida. Competitors already hold ground here: Ceva claims ASIL-B and Synopsys ships
+ARC NPX6FS for functional safety. Industrial sockets use **IEC 61508 (SIL)**, **ISO 13849 (PL)**,
+and for our motor-drive socket specifically **IEC 61800-5-2**. Aviation (DO-254) is out of
+near-term scope.
+
+Where determinism actually enters, stated precisely because it was overstated before: ISO 26262
+requires timing evidence, and the mechanism is **WCET analysis**. Our contribution is that static
+code-generated allocation with no cache makes the **per-iteration cost computable rather than
+measured**. But the *iteration count* remains data-dependent — measured p50 12 → max 60 — so a
+whole-solve WCET additionally requires **fixed-iteration or anytime operation, with the applied
+input taken from the projected (feasible) iterate.** Half hardware, half codegen contract.
+
+For the learned part the standard is **ISO 21448 (SOTIF)**, which addresses *functional
+insufficiency* rather than malfunction — the correct name for what was earlier called
+"certification" in the context of learned policies. **UL 4600** covers autonomous products
+goal-based. SOTIF's standard remedy is wrapping an unverifiable function in a verifiable
+constraint layer, which is precisely what our solver is.
+
+> **HYPOTHESIS, not a finding — "the safety filter for learned control".** As learned policies
+> reach physical systems, the network cannot be certified, so the industry answer is a runtime
+> constraint layer that provably keeps it inside a safe set — an optimisation solve at control
+> rate with a bounded worst case, i.e. our workload at our one claim that survived every audit.
+> Attraction: regulation creates non-optional demand. Against it: it is a 5–10 year thesis,
+> certification is expensive, and the incumbent position is held by **lockstep MCUs** (AURIX
+> safety islands), so it means fighting on their home ground. **Decided by one discovery question,
+> not by analysis:** "when you put a learned policy on a real machine, how do you argue safety?
+> Do you use a runtime constraint layer? Must you prove its worst-case execution time — to whom?"
+
 ### 4.2 Can this expand into a CPU or a GPU? (asked 2026-07-30)
 
 **GPU: no, and the reason is structural, not a matter of resources.** A GPU is a
@@ -809,6 +914,49 @@ ceiling, but available now, portable to any foundry, deterministic, and verifiab
 > (PHASE0_FINDINGS §5.1).
 >
 > This hold does **not** block writing the code, the docs or the CI. It blocks flipping visibility.
+>
+> ### Publication checklist, added 2026-08-07 — ordered by irreversibility
+>
+> **1. Do NOT publish *this* repository.** Its 30+ commits contain the entire internal strategy:
+> [CUSTOMER_DISCOVERY.md](CUSTOMER_DISCOVERY.md) (25 named targets, pre-registered falsifiers),
+> [PHASE0_DECISION.md](PHASE0_DECISION.md) (kill criteria, conceded weaknesses),
+> [IP_STRATEGY.md](IP_STRATEGY.md) (patent strategy and the PPU prior-art exposure), and every one
+> of the 17 modelling errors. Publishing it publishes our competitive analysis, customer list and
+> patent strategy. **Create a separate repo containing only `argmind/`, `tests/` and `examples/`,
+> with fresh history — do not fork this one.** History cannot be retracted later: forks, mirrors
+> and archives keep it.
+>
+> **2. `perf_model/results_*.txt` must not go out unmarked.** They are ±2× and non-quotable, and
+> if published someone will quote them. Exclude them or carry an explicit notice per file.
+>
+> **3. Clear the trademark before creating the GitHub org.** Brand equity accumulates in the org
+> name, PyPI name, docs, stars and citations; abandoning the name later forfeits all of it. The
+> register check is 30 minutes ([IP_STRATEGY.md](IP_STRATEGY.md) §1) and has never been done.
+>
+> **4. File the provisional before `argmind-sim` publishes** — see the hold above. **MACIF is the
+> exception and should publish early**: it is not novel (OpenCL's `cl_khr_fp64` has been optional,
+> queryable and a compile-time error since 2008), and publishing pre-empts a CIM vendor patenting
+> the boundary and charging us to cross it.
+>
+> **5. Contribution mechanics differ by repo.** DCO for the software repos; **a CLA for
+> `argmind-lite` specifically**, because it is the only repo whose code could migrate into the paid
+> proprietary core and Apache §5 gives inbound-equals-outbound but **no relicensing right**. If a
+> CLA is too much friction for the university contributors that repo targets, the honest
+> alternative is a public commitment in CONTRIBUTING.md never to upstream community RTL. One or
+> the other must be chosen.
+>
+> **6. Avoid the NVDLA failure mode.** Nvidia published full RTL, the software languished, the
+> community died. Keep **software as the centre of gravity** — which our build order already does,
+> since the simulator and codegen work and no RTL exists yet.
+>
+> **7. Track the funnel, not stars:** pip installs → bitstream downloads → public `argmind-lite`
+> instantiations → inbound licence conversations. And budget the support burden honestly: an open
+> repo with users generates issues, which for a solo founder is real time competing with outreach.
+>
+> **Open question for counsel:** export control. Publicly available open-source software normally
+> has exemptions, but semiconductor design IP can touch EAR. Notable evidence it is not
+> theoretical: **RISC-V International relocated its incorporation to Switzerland** explicitly to
+> reduce single-jurisdiction export-control exposure.
 
 **Model: open core.** Everything a developer needs to *evaluate, integrate, and build
 software for* Argmind is open; the full-performance parameterized RTL + verification suite +
