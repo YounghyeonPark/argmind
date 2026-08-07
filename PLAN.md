@@ -1,11 +1,37 @@
-# Argmind — Fabless Computational Module (CM) IP — Project Plan
+# Argmind — Computational Module (CM) — Plan
+
+> ## STATUS: reframed as a side project (2026-08-07). Read this first.
+>
+> This document was written as a **startup plan** — fabless IP licensing, design wins, royalties.
+> That framing is **parked**. The project is now a side project: open source, donation-funded at
+> most, realistically stopping at the software and simulator layer rather than RTL and silicon.
+>
+> What that changes:
+>
+> - **Still current and load-bearing:** everything architectural. §3 (hardware architecture,
+>   zero-copy, residency), §3.3 (scaling), §3.4 (implementation blueprint), §4.1 (in-memory
+>   computing), §4.2 (CPU/GPU expansion), and the RISC-V ruling in §3.2. These are technical
+>   conclusions and they do not depend on the business model.
+> - **Parked:** §2 (markets), §5 (deliverables), §6 (roadmap phases 2–4), §7 (business model),
+>   §8 (team/budget), §9 (risks), §10 (30/60/90 actions), and §4.15's market-route rulings.
+>   Kept rather than deleted because the analysis is not reconstructable and the framing could
+>   change back. Moved company-specific documents to [`business/`](business/).
+> - **Wrong-sized for a side project and should not be pursued:** the 17-interview customer
+>   discovery program, ISO 26262 / SEooC certification packages, PPA characterisation, foundry
+>   engagement, eval-board purchases, and the Phase-2 RTL path with its verification cost.
+> - **One decision is now conscious rather than deferred:** the §7.1 publication hold exists to
+>   preserve patentability. For a side project a provisional filing is probably wasted money and
+>   free publication is the point — but publication permanently closes European patentability
+>   (EPC Art. 54, no grace period). That door does not reopen. Decide it explicitly.
+>
+> Entry point for the project itself is now [README.md](README.md).
 
 **Product category (coined):** Computational Module (CM) — a licensable IP class that runs
 both iterative optimization algorithms and matrix-multiplication workloads on one engine.
 Category positioning: "the industry's first Computational Module."
 **Brand name:** **Argmind** (decided 2026-07-29) — argmin + *mind*: "the mind that
 minimizes." Keeps the math meaning for the optimization audience, adds the AI connotation.
-**NOT CLEARED** — and note what that means ([IP_STRATEGY.md](IP_STRATEGY.md) F-4): no trademark
+**NOT CLEARED** — and note what that means ([IP_STRATEGY.md](business/IP_STRATEGY.md) F-4): no trademark
 register was actually searched, because all ten access routes failed (USPTO search is a JS app
 with a POST-only API; EUIPO eSearch likewise; TMview has a TLS certificate mismatch;
 Justia/Trademarkia return 403). "No blocker found" therefore means *nothing was looked at*, not
@@ -59,7 +85,7 @@ worldwide, so "someone shares the name" is the normal condition, not a disqualif
 **Current status of Argmind:** the only concerning neighbour is **Argmin AI Inc.**
 (argminai.com) — concerning specifically because it is plausibly class 9/42 *and* AI-adjacent,
 unlike the consultancies. Whether it is actually registered in those classes is **unknown**: no
-register was reachable ([IP_STRATEGY.md](IP_STRATEGY.md) F-4).
+register was reachable ([IP_STRATEGY.md](business/IP_STRATEGY.md) F-4).
 
 **Rule: do not rename on the strength of a web search.** Renaming costs a rewrite of every
 document, the SKU scheme, the GitHub org and the PyPI name. The 30-minute manual register check
@@ -500,7 +526,7 @@ throughput (Ethos-U85 is INT8-weights-only; Ceva's FP32 rate is ~1% of its INT8 
 > the M4's SME block is *shared per CPU cluster* (one per four P-cores), so a thread's worst case
 > depends on what sibling cores are doing — architectural, not incidental.
 >
-> Falsifier F4 in [CUSTOMER_DISCOVERY.md](CUSTOMER_DISCOVERY.md) triggers if a PPU or
+> Falsifier F4 in [CUSTOMER_DISCOVERY.md](business/CUSTOMER_DISCOVERY.md) triggers if a PPU or
 > same-power-class SME2/RVV part runs benchmarks #1–#3 within **2×** of our modelled energy per
 > solve — and given the model's ±2×, "inside 2×" must read as *no measurable advantage*, not a
 > narrow win. Gate on the PPU is the Synopsys ARC MetaWare toolchain licence, not the board.
@@ -609,7 +635,7 @@ deadline — is a system *we* are positioned to supply and a bare CIM macro is n
 
 ### 4.15 Market-route rulings (2026-08-07) — recorded so they stop reopening
 
-See [WHERE_WE_COMPETE.md](WHERE_WE_COMPETE.md) for the socket-by-socket evidence and the
+See [WHERE_WE_COMPETE.md](business/WHERE_WE_COMPETE.md) for the socket-by-socket evidence and the
 seven-point envelope test. These are the *route* decisions behind it.
 
 **There is no B2C route, and the question that matters is different.** We sell synthesizable
@@ -821,7 +847,7 @@ ceiling, but available now, portable to any foundry, deterministic, and verifiab
 - Publish a technical whitepaper (credibility + inbound interest).
   > **SEQUENCE THIS AGAINST THE FILING.** This whitepaper is the *earliest* public disclosure of
   > all four candidate mechanisms and is currently unsequenced against any patent filing
-  > ([IP_STRATEGY.md](IP_STRATEGY.md)). Europe has **no grace period** — EPC Art. 54 is absolute
+  > ([IP_STRATEGY.md](business/IP_STRATEGY.md)). Europe has **no grace period** — EPC Art. 54 is absolute
   > novelty and Art. 55's six-month window covers only evident abuse and recognised
   > exhibitions, neither of which a publication is. Since the licensees we want are European,
   > losing EP means losing the patent where the design wins are. Reordering a document costs
@@ -906,7 +932,7 @@ ceiling, but available now, portable to any foundry, deterministic, and verifiab
 > Getting the order wrong cannot be undone — there is no way to un-publish prior art. Getting it
 > right costs a provisional filing fee and some weeks of delay.
 >
-> **Gate:** every repo in the table below stays private until [IP_STRATEGY.md](IP_STRATEGY.md)
+> **Gate:** every repo in the table below stays private until [IP_STRATEGY.md](business/IP_STRATEGY.md)
 > records, per mechanism, either (a) a filing made or deliberately forgone, or (b) a finding that
 > it is not novel and therefore free to publish. Note the live prior-art risk on the sequencer
 > claim: the AURIX TC4x PPU is a licensed Synopsys ARC EV7x — scalar core + SIMD vector unit +
@@ -918,9 +944,9 @@ ceiling, but available now, portable to any foundry, deterministic, and verifiab
 > ### Publication checklist, added 2026-08-07 — ordered by irreversibility
 >
 > **1. Do NOT publish *this* repository.** Its 30+ commits contain the entire internal strategy:
-> [CUSTOMER_DISCOVERY.md](CUSTOMER_DISCOVERY.md) (25 named targets, pre-registered falsifiers),
-> [PHASE0_DECISION.md](PHASE0_DECISION.md) (kill criteria, conceded weaknesses),
-> [IP_STRATEGY.md](IP_STRATEGY.md) (patent strategy and the PPU prior-art exposure), and every one
+> [CUSTOMER_DISCOVERY.md](business/CUSTOMER_DISCOVERY.md) (25 named targets, pre-registered falsifiers),
+> [PHASE0_DECISION.md](business/PHASE0_DECISION.md) (kill criteria, conceded weaknesses),
+> [IP_STRATEGY.md](business/IP_STRATEGY.md) (patent strategy and the PPU prior-art exposure), and every one
 > of the 17 modelling errors. Publishing it publishes our competitive analysis, customer list and
 > patent strategy. **Create a separate repo containing only `argmind/`, `tests/` and `examples/`,
 > with fresh history — do not fork this one.** History cannot be retracted later: forks, mirrors
@@ -931,7 +957,7 @@ ceiling, but available now, portable to any foundry, deterministic, and verifiab
 >
 > **3. Clear the trademark before creating the GitHub org.** Brand equity accumulates in the org
 > name, PyPI name, docs, stars and citations; abandoning the name later forfeits all of it. The
-> register check is 30 minutes ([IP_STRATEGY.md](IP_STRATEGY.md) §1) and has never been done.
+> register check is 30 minutes ([IP_STRATEGY.md](business/IP_STRATEGY.md) §1) and has never been done.
 >
 > **4. File the provisional before `argmind-sim` publishes** — see the hold above. **MACIF is the
 > exception and should publish early**: it is not novel (OpenCL's `cl_khr_fp64` has been optional,
@@ -974,7 +1000,7 @@ PPA collateral (what a chip company pays for) stays proprietary.
 Design principles behind the split:
 - **Apache-2.0 for software** (explicit patent grant — required for corporate adoption);
   **Solderpad-2.1 for open RTL** — but **not for the reason previously assumed**
-  ([IP_STRATEGY.md](IP_STRATEGY.md) F-2): SHL-2.1 excludes Patents from its definition of
+  ([IP_STRATEGY.md](business/IP_STRATEGY.md) F-2): SHL-2.1 excludes Patents from its definition of
   "Rights", which reads protectively, yet it replaces **only Apache §2 and the Appendix**.
   **Apache §3 — the patent grant — survives, and a licensee may elect to treat the work as plain
   Apache-2.0.** So publishing `argmind-lite` grants a royalty-free patent licence to make and
@@ -1011,7 +1037,7 @@ Cadence: quarterly tagged releases; simulator/codegen accept community targets.
 bitstream downloads → (c) argmind-lite instantiations in public repos → (d) inbound
 commercial-license conversations. The open stack exists to manufacture (d).
 - **IP protection — REVISED 2026-07-30, all three claims named here were wrong**
-  ([IP_STRATEGY.md](IP_STRATEGY.md) F-3). "Sequencer↔GEMM coupling / accelerator decides to
+  ([IP_STRATEGY.md](business/IP_STRATEGY.md) F-3). "Sequencer↔GEMM coupling / accelerator decides to
   iterate" is **anticipated three ways**: TI's C2000 CLA (independent programmable FP coprocessor
   with its own conditional branch `MBCNDD`, shipping since Piccolo), the AURIX PPU / Synopsys ARC
   EV7x, and an FPGA-MPC literature deep enough to have survey papers. Prior art need not perform

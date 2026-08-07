@@ -644,13 +644,13 @@ external document that presents a ±2× model output as anything else.
 
 | Claim class | Source of record |
 |---|---|
-| Benchmark definitions, baselines, kill criterion | [BENCHMARKS.md](BENCHMARKS.md) v1.1 |
-| Modelled results, corrections, teardown, citations | [PHASE0_FINDINGS.md](PHASE0_FINDINGS.md) — **§0 supersedes §1; §2/§3 tables are pre-correction** |
-| Sizing sweep, area/energy decomposition, adversarial checks | [perf_model/results_cm100_sizing.txt](perf_model/results_cm100_sizing.txt), [perf_model/results_sram_cost.txt](perf_model/results_sram_cost.txt) |
-| The only measured data we own | [perf_model/results_osqp_measured.txt](perf_model/results_osqp_measured.txt), harness [perf_model/measure_osqp_baseline.py](perf_model/measure_osqp_baseline.py) |
+| Benchmark definitions, baselines, kill criterion | [BENCHMARKS.md](../BENCHMARKS.md) v1.1 |
+| Modelled results, corrections, teardown, citations | [PHASE0_FINDINGS.md](../PHASE0_FINDINGS.md) — **§0 supersedes §1; §2/§3 tables are pre-correction** |
+| Sizing sweep, area/energy decomposition, adversarial checks | [perf_model/results_cm100_sizing.txt](../perf_model/results_cm100_sizing.txt), [perf_model/results_sram_cost.txt](../perf_model/results_sram_cost.txt) |
+| The only measured data we own | [perf_model/results_osqp_measured.txt](../perf_model/results_osqp_measured.txt), harness [perf_model/measure_osqp_baseline.py](../perf_model/measure_osqp_baseline.py) |
 | Discovery program, pre-registered falsifiers §7 | [CUSTOMER_DISCOVERY.md](CUSTOMER_DISCOVERY.md) v1.0, frozen 2026-07-29 |
-| Test suite, encoded error regressions, environment gaps | [TESTING.md](TESTING.md), `tests/` |
-| Roadmap, business model, IMC durability analysis | [PLAN.md](PLAN.md) |
+| Test suite, encoded error regressions, environment gaps | [TESTING.md](../TESTING.md), `tests/` |
+| Roadmap, business model, IMC durability analysis | [PLAN.md](../PLAN.md) |
 | Correction chronology | `git log` — four commits, 2026-07-30 |
 
 Run `python -m pytest` before quoting any modelled number from this memo.

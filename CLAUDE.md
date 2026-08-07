@@ -1,15 +1,24 @@
 # Argmind — project context
 
-Fabless semiconductor IP startup, pre-revenue, Phase 0, solo founder.
-Detail: [PLAN.md](PLAN.md) · [PHASE0_FINDINGS.md](PHASE0_FINDINGS.md) ·
-[BENCHMARKS.md](BENCHMARKS.md) · [agent team](.claude/agents/README.md).
+**A side project** (reframed 2026-08-07): open source, donation-funded at most, realistically
+ending at the software and simulator layer rather than RTL and silicon. It was previously scoped
+as a fabless IP startup; that framing is parked in [`business/`](business/) and flagged at the
+top of [PLAN.md](PLAN.md). Entry point: [README.md](README.md).
+Detail: [PHASE0_FINDINGS.md](PHASE0_FINDINGS.md) · [BENCHMARKS.md](BENCHMARKS.md) ·
+[TESTING.md](TESTING.md) · [agent team](.claude/agents/README.md).
 
-**Argmind CM**: licensable SystemVerilog IP in a category we coin, the **Computational Module
-(CM)**; SKUs `Argmind CM-<n>`. One engine for iterative solvers (ADMM/OSQP, interior-point, SQP,
-MPC, EKF) and edge ML matmul. Mechanisms: a sequencer coupled to the datapath so convergence
-loops run in-fabric with no host round-trip, plus zero-copy host memory and call-to-call
-residency. Open-core licensing; beachhead is embedded MPC/state estimation in robotics and
-automotive.
+**What it is technically** — and this part is unchanged by the reframe. A **Computational Module
+(CM)**: one engine for iterative solvers (ADMM/OSQP, interior-point, SQP, MPC, EKF) and small
+resident-network inference. Mechanisms: a sequencer coupled to the datapath so convergence loops
+run in-fabric with no host round-trip, plus zero-copy host memory and call-to-call residency.
+
+**Working scope now**: `argmind/` (runtime API, simulator, descriptor v0.1, codegen),
+`perf_model/` (architecture model and measurement harnesses), `cpu_backend/`, `tests/`.
+**Out of scope**: RTL, verification, PPA, certification, customer discovery, licensing.
+Do not propose those as next steps; if a finding implies one, record it and move on.
+
+**Everything below is still load-bearing** — the technical conclusions do not depend on the
+business model, and re-deriving them is expensive.
 
 **Know which differentiator applies to which rival** (PHASE0_FINDINGS §5/§5.1):
 - vs **NPU IP** — sequencer, coherency and residency are all real, structural gaps.
