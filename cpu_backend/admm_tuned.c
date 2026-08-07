@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: Apache-2.0 */
 /* Tuned CPU implementation of the reduced-form condensed ADMM.
  * =============================================================
  *

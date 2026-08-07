@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """ADMM on the functional simulator, validated against reference OSQP.
 
 The milestone test. Three levels, deliberately:

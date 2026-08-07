@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """
 Argmind CM — scratchpad banking cost model (area + energy vs bandwidth)
 =======================================================================

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """
 Numerical demonstration of the precision floors the silicon must provide.
 ========================================================================

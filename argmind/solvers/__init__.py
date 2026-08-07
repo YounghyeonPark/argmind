@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """Hand-written solver programs.
 
 These are v0 reference sequences, written by hand and checked against a reference

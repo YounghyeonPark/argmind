@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """
 fp64 datapath — closing the largest un-costed item in the CM-100 area budget
 ============================================================================

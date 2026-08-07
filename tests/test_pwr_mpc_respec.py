@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """
 Invariants for the PWR-MPC resolution (2026-07-30).
 ===================================================

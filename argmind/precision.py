@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """Numeric formats, and their encoding in the descriptor precision fields.
 
 The integer values here ARE the wire encoding of descriptor v0.1 field

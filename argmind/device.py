@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """The runtime API and the functional simulator behind it.
 
 This is the interface that must be byte-for-byte identical across the simulator,

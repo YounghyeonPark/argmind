@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """What generating the program found, kept in code next to the generator.
 
 Implementing descriptor v0 found seven gaps and they are recorded in

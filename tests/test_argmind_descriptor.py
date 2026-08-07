@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """Descriptor format v0.1: encoding, field widths, and every ruling as a test.
 
 This file IS the executable half of the v0.1 specification. Where a ruling made a

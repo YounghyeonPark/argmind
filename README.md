@@ -112,10 +112,12 @@ a later change cannot quietly optimise away a row that loses.
 
 ## Status
 
-Side project. **Nothing here is published yet** — two decisions are outstanding: a trademark
-register check on the name, and whether to preserve patentability (publication permanently closes
-European patentability, since the EPC has no grace period). See
-[PLAN.md](PLAN.md) §7.1.
+Side project. **Licensed Apache-2.0** (`LICENSE`, `NOTICE`) — the patent path was deliberately
+forgone rather than deferred; see [PLAN.md](PLAN.md) §7.1 for what that trade cost.
+
+**Not published yet.** Two things remain, neither a licensing question: a trademark register check
+on the name, and publishing a *clean* repository rather than this one, whose history contains the
+parked business material including named third-party assessments.
 
 `business/` contains a customer-discovery program, a go/no-go memo and an IP strategy from when
 this was scoped as a startup. Parked rather than deleted: the analysis is not reconstructable and

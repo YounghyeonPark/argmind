@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """
 Argmind CM — scaling analysis: which axes scale, where each wall is, SKU family
 ==============================================================================

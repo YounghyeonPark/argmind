@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """Descriptor format **v0.1** -- the 8-word command word the sequencer hands the datapath.
 
 v0.1 is the ruling on the seven gaps that building the functional simulator found

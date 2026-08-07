@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """Every kernel against a numpy reference, through real descriptors.
 
 Executed the way the hardware would: the descriptor names addresses, dimensions

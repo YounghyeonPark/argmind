@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """Solver code generation: a problem description in, a descriptor program out.
 
 This is the moat, stated plainly: nobody is going to hand-write accelerator

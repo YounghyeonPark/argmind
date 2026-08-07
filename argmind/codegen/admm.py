@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """Lowering a QP to an ADMM kernel graph.
 
 This is the solver-specific half of the generator: everything that knows what

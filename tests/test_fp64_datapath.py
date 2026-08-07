@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """
 Invariants for the fp64 datapath costing (perf_model/fp64_datapath.py).
 =======================================================================

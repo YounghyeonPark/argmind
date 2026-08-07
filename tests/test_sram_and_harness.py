@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """
 Invariants for the SRAM cost model and the OSQP measurement harness.
 ====================================================================

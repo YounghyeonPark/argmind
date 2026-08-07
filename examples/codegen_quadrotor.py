@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """End-to-end code generation: QUAD-MPC from a problem description to descriptors.
 
 The hand-written descriptor sequence in ``examples/quadrotor_admm.py`` proved the

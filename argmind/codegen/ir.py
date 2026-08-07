@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """The code generator's intermediate representation, and the passes over it.
 
 The IR is deliberately thin: a :class:`Kernel` is **a descriptor whose operands

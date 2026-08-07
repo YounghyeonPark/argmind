@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """The pointer contract, the static allocation plan, and generation tags.
 
 The generation-tag tests are the important ones. A stale read in a control loop

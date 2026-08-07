@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """End-to-end validation: QUAD-MPC condensed QP on the Argmind functional simulator.
 
 Takes the coupled quadrotor model and condensed QP from

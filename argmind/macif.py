@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """MACIF -- the Macro-Agnostic Compute InterFace, and its precision contract.
 
 MACIF is the versioned boundary between the sequencer/scratchpad layer and the

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """
 Sequencer / descriptor-issue analysis — closing the open item from the fp64 work
 ===============================================================================

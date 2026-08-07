@@ -1,0 +1,49 @@
+Argmind — a Computational Module for iterative solvers
+Copyright 2026 the Argmind contributors
+
+Licensed under the Apache License, Version 2.0 (the "License"); you may not use
+these files except in compliance with the License. You may obtain a copy of the
+License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software distributed
+under the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR
+CONDITIONS OF ANY KIND, either express or implied. See the License for the
+specific language governing permissions and limitations under the License.
+
+-------------------------------------------------------------------------------
+ON THE NUMBERS IN THIS PROJECT
+
+Please read this before quoting anything from here.
+
+Figures produced by the architecture model in perf_model/ are FIRST-ORDER
+ESTIMATES, good to roughly a factor of two. They come from an analytical model,
+not from synthesis, not from silicon, and not from measurement. Nothing has been
+taped out or even synthesised. Seventeen modelling errors were found and
+corrected during this work and most of them flattered the design, so treat any
+figure that has not survived an adversarial read with suspicion — including the
+ones here.
+
+A smaller set of results IS measured, and is labelled as such in
+PHASE0_FINDINGS.md and README.md: solver iteration counts from real OSQP,
+numerical precision floors, and CPU timings on a stated host. Where a document
+says MEASURED it means the numerics or the wall clock were actually observed on
+the machine named; it does not mean silicon.
+
+Efficiency figures elsewhere in the industry are frequently quoted without a
+process node or a precision attached, which makes them uncomparable. This project
+tries not to do that. If you find a figure here missing its node, precision, or
+evidence class, that is a bug — please report it.
+
+-------------------------------------------------------------------------------
+THIRD-PARTY REFERENCES
+
+This project validates against and interoperates with, but does not include:
+
+  OSQP        https://osqp.org/            (Apache-2.0) — reference solver
+  CVXPY       https://www.cvxpy.org/       (Apache-2.0) — optional front end
+  NumPy/SciPy https://numpy.org/           (BSD-3-Clause)
+
+Published specifications, papers and vendor documentation consulted during the
+architecture study are cited inline at the point of use, with URLs.

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """The problem description a code generator consumes, and the options it takes.
 
 A :class:`QPProblem` is the *whole* input to codegen: the numerical data, plus one

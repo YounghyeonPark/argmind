@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """Dependency tokens: assignment, hazard detection, and what v0's one token costs.
 
 The hazard checker matters because a missing dependency is invisible on an

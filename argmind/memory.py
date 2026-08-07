@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """Buffers, lifetimes, generation tags, and the static scratchpad allocation plan.
 
 Two memories, deliberately

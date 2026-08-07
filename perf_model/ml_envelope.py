@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """
 Argmind CM — the on-device AI envelope: where the two ML regimes divide
 ======================================================================

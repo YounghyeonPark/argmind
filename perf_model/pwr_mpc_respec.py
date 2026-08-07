@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """
 PWR-MPC resolution: re-specification, 16-bit operands, and the MCU-class tier.
 =============================================================================

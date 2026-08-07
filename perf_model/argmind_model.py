@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """
 Argmind CM — Phase 0 first-order performance model (v0)
 =======================================================

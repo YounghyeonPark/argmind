@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """
 Descriptor format v0, and the instruction cost of emitting one.
 ==============================================================

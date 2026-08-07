@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """Argmind CM -- runtime API and functional simulator.
 
 The runtime API is the constitution of this product: it is identical across the

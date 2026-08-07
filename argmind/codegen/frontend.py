@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """Front ends: getting a :class:`~argmind.codegen.problem.QPProblem` out of a
 problem a user already has.
 

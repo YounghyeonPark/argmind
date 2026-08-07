@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """
 Invariant tests for the on-device AI envelope (perf_model/ml_envelope.py).
 =========================================================================

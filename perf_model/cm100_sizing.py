@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """
 CM-100 baseline SKU sizing — scratchpad bandwidth / capacity / MAC array
 =======================================================================

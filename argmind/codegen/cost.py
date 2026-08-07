@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """A per-descriptor datapath cost model, and the bank arithmetic behind rule C2.
 
 The sequencer contract is stated in **datapath cycles per descriptor**, so a code

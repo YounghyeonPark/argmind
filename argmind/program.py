@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """Programs: descriptor blocks, their static analysis, and the convergence loop.
 
 A :class:`Program` is an ordered descriptor block. A :class:`SolverProgram` is

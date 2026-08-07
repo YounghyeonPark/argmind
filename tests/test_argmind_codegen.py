@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """The code generator: does it emit the right program, and does it police itself.
 
 Three things are being tested and they are different claims:

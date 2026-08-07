@@ -920,26 +920,37 @@ ceiling, but available now, portable to any foundry, deterministic, and verifiab
 
 ### 7.1 Open-source distribution & adoption strategy (GitHub)
 
-> ## ⛔ HOLD — do not make any repository public until the filing question is settled
+> ## ✅ HOLD LIFTED — Apache-2.0, patents deliberately forgone (2026-08-07)
 >
-> Added 2026-07-30. **Publication is irreversible and is prior art against our own later
-> patent filings.** Apache-2.0 additionally grants patent rights in the contributed code. The
-> mechanisms this plan intends to publish now exist in concrete form and are exactly the ones
-> worth claiming: generation-tag call-to-call residency, the descriptor format plus
-> multi-template hardware generator, the MACIF precision-declaration contract, and
-> sequencer↔datapath convergence-loop control.
+> **Decision: licence the work under Apache-2.0 and abandon the patent path.** `LICENSE` and
+> `NOTICE` are in the repository and publishable source carries SPDX headers.
 >
-> Getting the order wrong cannot be undone — there is no way to un-publish prior art. Getting it
-> right costs a provisional filing fee and some weeks of delay.
+> This was a conscious trade, not a default, so the cost is recorded plainly:
 >
-> **Gate:** every repo in the table below stays private until [IP_STRATEGY.md](business/IP_STRATEGY.md)
-> records, per mechanism, either (a) a filing made or deliberately forgone, or (b) a finding that
-> it is not novel and therefore free to publish. Note the live prior-art risk on the sequencer
-> claim: the AURIX TC4x PPU is a licensed Synopsys ARC EV7x — scalar core + SIMD vector unit +
-> closely-coupled memory with its own instruction stream — which may already read on it
-> (PHASE0_FINDINGS §5.1).
+> - **European patentability is now permanently closed** on publication. EPC Art. 54 is absolute
+>   novelty and Art. 55's six-month window covers only evident abuse and recognised exhibitions,
+>   neither of which a release is. The US 12-month window under 35 USC §102(b)(1)(A) is also
+>   forfeited once the clock runs out. **This door does not reopen.**
+> - **Apache-2.0 §3 grants a patent licence to every user anyway**, so even a filed patent would
+>   have had no force against our own users — only against a third party reimplementing in
+>   silicon. That asymmetry is what made the trade easy for a side project with no business to
+>   defend.
+> - **What was given up**, per [IP_STRATEGY.md](business/IP_STRATEGY.md): one omnibus provisional
+>   on generation-tag call-to-call residency plus the sequencer quantitative contracts. Roughly
+>   $2–6k plus attorney review. The other candidate claims were already dead — sequencer↔datapath
+>   convergence control is anticipated by the TI C2000 CLA, the AURIX PPU / Synopsys ARC EV7x and
+>   the FPGA-MPC literature, and "small-matrix scheduling" and "deterministic-latency execution"
+>   were unpatentable as phrased.
+> - **What is retained:** the trademark. Apache-2.0 §6 grants no trademark rights, so anyone may
+>   use the code and only we ship under the project name. For open source that is the real
+>   moat — which makes the outstanding register check *more* important, not less.
 >
-> This hold does **not** block writing the code, the docs or the CI. It blocks flipping visibility.
+> **Still outstanding before anything goes public** — neither is a licensing question:
+> 1. **Trademark register check** (30 min, [IP_STRATEGY.md](business/IP_STRATEGY.md) §1). Brand
+>    equity accumulates in the org name, package name, docs and citations; abandoning the name
+>    later forfeits all of it.
+> 2. **Publish a clean repository, not this one.** See the checklist below — this repo's history
+>    contains `business/`, including named third-party assessments.
 >
 > ### Publication checklist, added 2026-08-07 — ordered by irreversibility
 >

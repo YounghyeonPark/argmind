@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """
 Invariant tests for the scaling analysis (perf_model/scaling_study.py).
 ======================================================================

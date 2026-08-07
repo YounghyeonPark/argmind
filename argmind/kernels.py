@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """Functional kernel implementations, one per descriptor opcode.
 
 Every kernel takes the scratchpad byte array and a decoded descriptor, reads its

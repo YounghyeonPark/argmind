@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """The residency planner: what stays on the CM, and what crosses the bus per call.
 
 This is derived, not configured. Given the kernel graph and the one declaration

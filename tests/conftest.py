@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """Make perf_model importable without turning it into an installed package."""
 
 import sys

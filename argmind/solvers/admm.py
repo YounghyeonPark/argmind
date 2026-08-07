@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """ADMM for the OSQP problem form, as a descriptor sequence.
 
 Problem::

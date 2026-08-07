@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """The generator driver: problem description in, runnable descriptor program out.
 
 ``generate(problem, options)`` runs the passes in order and returns a

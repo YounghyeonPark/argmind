@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """
 Meta-tests: prove the invariants in test_model_invariants.py are load-bearing.
 =============================================================================

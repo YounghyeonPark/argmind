@@ -3,6 +3,8 @@ name = "argmind"
 version = "0.1.0.dev0"
 description = "Argmind CM — runtime API, functional simulator, and Phase 0 performance model"
 requires-python = ">=3.12"
+license = "Apache-2.0"
+license-files = ["LICENSE", "NOTICE"]
 
 # Phase 0 needs only these. The RTL flow (Verilator/cocotb) is Phase 2 and is
 # blocked on a Linux environment — see TESTING.md.
@@ -32,10 +34,8 @@ filterwarnings = [
 line-length = 90
 target-version = "py312"
 
-# The `argmind/` package is the runtime API and functional simulator. It is
-# destined for public release as `argmind-sim` under Apache-2.0, so it is written
-# to be read by outsiders. It carries NO licence headers yet: publication is on
-# hold until the filing question is settled (PLAN.md 7.1), and a licence header
-# implies a grant we have not decided to make.
+# Apache-2.0 as of 2026-08-07; publishable source carries SPDX headers. The
+# patent path was deliberately forgone (PLAN.md 7.1), so the header is an
+# intentional grant rather than a placeholder. business/ is NOT published.
 [tool.setuptools]
 packages = ["argmind", "argmind.codegen", "argmind.solvers"]

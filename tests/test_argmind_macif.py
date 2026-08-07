@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """The MACIF precision contract: it must refuse, never substitute."""
 
 from __future__ import annotations

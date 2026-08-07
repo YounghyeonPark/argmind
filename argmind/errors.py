@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """Exception hierarchy for the Argmind runtime.
 
 Every failure mode that the hardware would detect (or that a code generator must

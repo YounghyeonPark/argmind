@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """The codegen contract, and the report that checks it.
 
 Phase 0 accumulated eight obligations on generated code. Every one of them exists
