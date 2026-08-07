@@ -391,6 +391,35 @@ model, and it exposed two flattering model errors rather than one implementation
 **Note the format change is not a capacity remedy:** v0.1 moves the measured footprint by 0.2%
 (167736 → 167440 B, from deleting the σ·ones(n) vector). The capacity ruling stands on its own.
 
+## MEASURED 2026-08-07 — CPU software headroom (`cpu_backend/`)
+
+Three implementations of the *same* reduced-form ADMM, same problem (coupled QUAD-MPC,
+tight bounds, active set present), same 22 iterations, x86 i9-13900HX, single core, fp64:
+
+| | best µs | GFLOP/s | % of machine peak | vs OSQP |
+|---|---|---|---|---|
+| OSQP (solve only, sparse LDLᵀ) | 283.0 | n/a | n/a | 1.00× |
+| numpy / OpenBLAS (dense) | 1201.3 | 1.64 | 0.7% | **0.24×** |
+| tuned C, strict IEEE | 154.1 | 12.77 | 5.7% | 1.84× |
+| tuned C, `-ffast-math` | 93.6 | 21.02 | 9.3% | **3.02×** |
+
+- **Software headroom is real but bounded: 1.8–3.0×.** Worth having, not transformative.
+- **numpy/OpenBLAS is 12.8× SLOWER than a plain C loop** — at n=80 a BLAS call's dispatch
+  overhead exceeds the arithmetic it performs. Library ≠ fast at solver scale.
+- **The model's CPU baseline is ~3× OPTIMISTIC.** It assumes 25–35% of SIMD peak; the best
+  tuned implementation reaches **9.3%**. Direction matters: correcting this makes our
+  accelerator look *better*, so it must be re-measured on **Arm at fp32** before being banked
+  — x86/fp64 does not transfer.
+- **Why nobody reaches peak confirms the central finding, now measured on a CPU rather than
+  modelled on our datapath**: `Γᵀv` and `Γx` read every element exactly once with no reuse,
+  and the two triangular solves are loop-carried and cannot vectorise across rows. **A GPU or
+  NPU fails here for the same reason** — so "SIMD is weak next to a GPU/NPU" does not hold on
+  this workload; all three sit in the same operand-fetch regime and only the CPU gets the
+  control plane for free.
+- Limits: cache-resident working set (~250 KB, favours the CPU), single core, fp64, and it
+  measures **time, not energy** — so the perf/W and determinism claims are untouched. Same
+  silicon at the same voltage cannot yield a structural energy win.
+
 ## Evidence standards (non-negotiable — one bad number costs the company)
 
 - Efficiency figures always carry **process node + precision**.

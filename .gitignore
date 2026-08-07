@@ -18,3 +18,5 @@ desktop.ini
 # generated evidence behind claims in PHASE0_FINDINGS.md, and versioning them is
 # how we see a number change and find out what changed it. That traceability is
 # the whole reason this repo exists.
+cpu_backend/*.exe
+cpu_backend/problem.bin
