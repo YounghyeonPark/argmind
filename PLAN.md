@@ -966,9 +966,19 @@ ceiling, but available now, portable to any foundry, deterministic, and verifiab
 > **2. `perf_model/results_*.txt` must not go out unmarked.** They are ±2× and non-quotable, and
 > if published someone will quote them. Exclude them or carry an explicit notice per file.
 >
-> **3. Clear the trademark before creating the GitHub org.** Brand equity accumulates in the org
-> name, PyPI name, docs, stars and citations; abandoning the name later forfeits all of it. The
-> register check is 30 minutes ([IP_STRATEGY.md](business/IP_STRATEGY.md) §1) and has never been done.
+> **3. Trademark: one identity actually matters, and it is not the GitHub org.** The project will
+> live under a personal account (`github.com/younghyeonpark/...`), so the `argmind` *organisation*
+> name is irrelevant — that item is void. What survives is **PyPI**, because it is a global flat
+> namespace with no per-account scoping: `pip install argmind` is one string, first come first
+> served, and it is the only identity someone else can take. Free to claim; worth doing only if a
+> package will actually be published. A custom domain drops to optional, since
+> `younghyeonpark.github.io/argmind` hosts docs for nothing.
+>
+> The register check ([IP_STRATEGY.md](business/IP_STRATEGY.md) §1, 30 minutes, requires a browser)
+> is still worth doing, but the stakes are now low: a personal repo under a personal account with
+> a permissive licence, and the patent path already forgone, leaves renaming a repo and a package
+> as the entire realistic downside. **Proceeding on a good-faith knock-out search is a defensible
+> risk acceptance at this scale** — do not treat the check as a blocker.
 >
 > **4. File the provisional before `argmind-sim` publishes** — see the hold above. **MACIF is the
 > exception and should publish early**: it is not novel (OpenCL's `cl_khr_fp64` has been optional,

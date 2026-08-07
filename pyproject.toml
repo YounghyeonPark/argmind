@@ -3,6 +3,7 @@ name = "argmind"
 version = "0.1.0.dev0"
 description = "Argmind CM — runtime API, functional simulator, and Phase 0 performance model"
 requires-python = ">=3.12"
+authors = [{ name = "Younghyeon Park" }]
 license = "Apache-2.0"
 license-files = ["LICENSE", "NOTICE"]
 

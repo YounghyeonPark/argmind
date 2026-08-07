@@ -158,6 +158,14 @@ Everything below is a research input for a clearance search, not a substitute fo
 
 Do these in this order. This is the entire manual task, and it is short enough to do in one sitting.
 
+> **The registers cannot be scripted — established 2026-08-07, so nobody wastes time retrying.**
+> A second attempt with a shell and POST requests failed on every route: `tmsearch.uspto.gov`
+> serves only static objects (`MethodNotAllowed` on POST, `NoSuchKey` on a Solr-style GET), the
+> TMview results endpoint returns an empty body, EUIPO's endpoint does not connect, and WIPO's
+> Global Brand Database answers with an **altcha proof-of-work challenge page** rather than data.
+> This is not a missing API key or a wrong URL — the registers are deliberately bot-protected.
+> **The check below genuinely requires a human in a browser.** Budget 30 minutes and do it once.
+
 1. **USPTO** — [tmsearch.uspto.gov](https://tmsearch.uspto.gov/). Run each of these as a *basic*
    search (the register's default is exact-ish; you want the fuzzy neighbourhood too):
    - `argmind` · `arg mind` · `argmin` · `argmin ai` · `argmine` · `argmynd` · `argmind*`
@@ -169,14 +177,16 @@ Do these in this order. This is the entire manual task, and it is short enough t
    [TMview](https://www.tmdn.org/tmview/) for the same strings. TMview also covers national
    registers (DE, FR, IT, ES) and WIPO, which matters because a German national mark blocks an EUTM
    just as effectively as an EUTM does.
-3. **UKIPO** separately (post-Brexit, an EUTM does not cover the UK, and Arm/Imagination-adjacent
+3. **KIPRIS** — [engdb.kipris.or.kr](http://engdb.kipris.or.kr). Omitted from the original list.
+   Worth checking KR classes 9 and 42 given where the author is based.
+4. **UKIPO** separately (post-Brexit, an EUTM does not cover the UK, and Arm/Imagination-adjacent
    naming collisions are likeliest to be UK-registered).
-4. **Whether Argmin AI Inc. has filed.** Search the owner name in USPTO and EUIPO, and check state
+5. **Whether Argmin AI Inc. has filed.** Search the owner name in USPTO and EUIPO, and check state
    corporate registries (likely Delaware). This is the single most valuable manual lookup on the
    list — it converts F-4 from "unknown" to "known."
-5. **WHOIS**, for `argmind.com` / `.io` / `.ai` / `.dev` and `argmind-semi.com` — I had no shell and
+6. **WHOIS**, for `argmind.com` / `.io` / `.ai` / `.dev` and `argmind-semi.com` — I had no shell and
    no reachable WHOIS API in this pass, so registrant status is genuinely unknown (§1.4).
-6. **A dated screenshot record** of the GitHub org, domains and search results on the day you check
+7. **A dated screenshot record** of the GitHub org, domains and search results on the day you check
    them, filed with the eventual application. Cheap; occasionally decisive later.
 
 ## 1.3 Common-law and unregistered use — "Argmind"
@@ -209,27 +219,28 @@ stop others using "argmin" and the distinctiveness lives entirely in the coined 
 weaker moat than "Argmind is unusual" suggests, and it matters because §2 concludes the brand *is*
 the moat once the source is public.
 
-## 1.4 Domains
+## 1.4 Domains — RESOLVED 2026-08-07 (was "could not establish")
 
-**Could not establish.** No shell for `whois`, and no reachable WHOIS/RDAP endpoint in this pass.
-Recording the honest state rather than guessing:
+Checked with a shell, which the earlier pass did not have.
 
-| Domain | What I could determine | What is unknown |
-|---|---|---|
-| argmind.com | No operating site surfaced in web search | Registered vs available; registrant; parked/squatter status |
-| argmind.io | Same | Same |
-| argmind.ai | Same | Same. Note `.ai` is the Anguilla ccTLD ([.ai](https://en.wikipedia.org/wiki/.ai)) with its own registry pricing and renewal terms — budget accordingly |
-| argmind.dev | Same | Same |
+| Domain | Result |
+|---|---|
+| argmind.com / .io / .ai / .dev / .org | **NXDOMAIN — no DNS record**, so most likely unregistered |
+| argminai.com | 89.167.6.32 — live (Argmin AI Inc.) |
 
-Absence of an operating site says nothing about registration — parked and squatter-held domains do
-not surface in search. A registrar lookup resolves all four in under two minutes and should be done
-in the same sitting as §1.2.
+Caveat: no DNS record is not identical to "unregistered" — a domain can be registered with no
+nameservers delegated. Confirming needs a registrar or RDAP lookup, which is 30 seconds in a
+browser.
 
-**Sequencing note:** claiming `github.com/argmind` and the domains is cheap and time-sensitive
-(someone else can take the org name any day). It is also **not** a trademark right — domain
-registration and org creation are not use in commerce and create no priority. Do them because they
-are cheap insurance, not because they clear anything. If Argmind turns out blocked, the sunk cost is
-a few hundred dollars.
+**The first attempt at this was WRONG and the failure mode is worth recording**, because it is the
+same shape as several modelling errors in this project. Queried through the local (ISP) resolver,
+*all six* domains resolved to one identical address, 210.94.0.73 — which reads as "all registered."
+A control query for a domain that certainly does not exist returned the **same address**, exposing
+it as ISP NXDOMAIN hijacking: the resolver fabricates an answer instead of admitting the name is
+absent. Re-querying through a public resolver (1.1.1.1) gave the real result above.
+
+Lesson, restated because it keeps recurring here: **a uniformly tidy result is evidence the
+measurement is broken, not that the world is simple.**
 
 ## 1.5 Fallback names — one-line reads, so a rename is not a research project
 
