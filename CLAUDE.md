@@ -32,6 +32,16 @@ they bear on sensor/estimation work:
   floors appeared across one workload set. Do not assume a single precision policy works
   everywhere.
 
+Measured *here*, on 2026-08-08, for RLS — deliberately re-derived rather than inherited from the
+above, because carrying a conclusion across algorithms is the borrowed-assumption error:
+
+- **fp16 fails the RLS covariance recursion even at κ=1**, losing positive-definiteness by step
+  115 with every regressor inside fp16's range, so it is arithmetic and not dynamic range. It is
+  refused at construction.
+- **fp32 survives but does not hold positive-definiteness exactly** — a negative eigenvalue at
+  roundoff scale (≈-5e-7 against tr(P)~1e2) on the first update when `p0·‖x‖² >> 1`. The fix if
+  it ever bites is a square-root/UD form, not more precision. Both halves have tests.
+
 Full detail lives in the tag, not in this tree: `git show accelerator-final:accelerator/PHASE0_FINDINGS.md`.
 
 ## Standards of evidence — carried over deliberately
@@ -83,20 +93,35 @@ estimator with online bias calibration. Sensor-agnostic in the API, specific in 
 handle.
 
 **Built:** `argmind/stream.py` (fixed-capacity ring buffers, counted drops, monotonic time
-enforced at the source) and `argmind/align.py` (four explicit alignment policies, signed
-staleness, causal/non-causal declared). 16 tests pass; several exist to prove failures are
-visible rather than silent.
+enforced at the source), `argmind/align.py` (four explicit alignment policies, signed staleness,
+causal/non-causal declared), and `argmind/adapt.py` (the `Adapter` contract and
+`RecursiveLeastSquares`). 45 tests pass; several exist to prove failures are visible rather than
+silent, and the adapter suite was mutation-checked — eight deliberate bugs, all eight caught.
+
+**The adapter contract, since everything after it fits into it** (full reasoning in DESIGN.md):
+state is one flat contiguous block so persistence is a copy and the C ABI needs no serialisation;
+`update()` always returns an `UpdateReport` because the `Guard` is written against those fields;
+shape errors raise but bad *values* are rejected-and-counted, since a sensor NaN is a runtime
+event and not a programming error; and covariance windup is reported rather than clamped, because
+bounding it inside the adapter would make the guard optional.
+
+RLS was verified against the closed-form exponentially weighted least squares solution, not
+against itself. Two apparent failures turned out to be real properties worth pinning: the residual
+error on noiseless data is the `P0⁻¹` prior term and scales as exactly `1/p0` across four decades,
+and the unexcited covariance direction grows as exactly `p0·λ⁻ᵏ` (12 digits). The tests assert
+those laws rather than loose tolerances.
 
 **Next, in order** — the ordering is deliberate and the reasoning is in DESIGN.md:
 
-1. `Adapter`, starting with recursive least squares with a forgetting factor. Python reference
-   first; it sets the contract every later method must fit.
-2. **`Guard` second, not fifth.** Half the reason this library exists is that online adaptation
-   diverges in the field, so the freeze path must be the default shape of the API rather than
-   something a user remembers to add. Building it late would quietly make it optional.
-3. `Pipeline` — stream to align to adapt to predict, behind one bounded `step()`.
-4. Persistence, because adaptation state that does not survive a power cycle is useless in the
-   field.
+1. **`Guard`, and it is genuinely next.** Half the reason this library exists is that online
+   adaptation diverges in the field, so the freeze path must be the default shape of the API
+   rather than something a user remembers to add. Building it late would quietly make it
+   optional. The windup and burst reproduced in `tests/test_adapt.py` are its first concrete
+   target.
+2. `Pipeline` — stream to align to adapt to predict, behind one bounded `step()`.
+3. Persistence, because adaptation state that does not survive a power cycle is useless in the
+   field. The flat state block is already the format; cadence and framing are not decided.
+4. The C++ core, verified against the Python reference.
 
 **Before any optimisation lands, a benchmark that can report a regression must exist.** An
 optimisation with no way to fail is not an optimisation, it is a hope.

@@ -93,6 +93,26 @@ generally, **precision floors are a property of the algorithm, not of the platfo
 Adapter declares the precision it requires and the framework refuses an unsafe configuration at
 construction time rather than producing quiet garbage at hour six.
 
+**That floor was re-measured for RLS rather than inherited** (2026-08-08). Carrying the EKF
+conclusion across would have been the borrowed-assumption error the standards below exist to
+catch, so the same recursion was run at f2/f4/f8 with every regressor held inside fp16's range,
+varying only the conditioning — so a failure is the arithmetic's, not the format's dynamic range.
+Measured, at n=6, λ=0.98, p0=1e2:
+
+- **fp16 fails outright even at κ=1**, losing positive-definiteness by step 115; at κ=10 by step
+  3, with the parameter error reaching NaN. `RecursiveLeastSquares` refuses it at construction.
+- **fp32 survives but does not maintain positive-definiteness exactly.** With well-conditioned
+  regressors of magnitude ≥1e2 against p0=1e2, it showed a negative eigenvalue on the *first*
+  update — at roundoff scale (≈-5e-7 against a trace of order 1e2), not a blowup, and the
+  parameters stayed sound. fp64 never lost it up to magnitude 1e6.
+
+So fp32 is the floor and it is not a comfortable one. If the roundoff-scale indefiniteness ever
+matters on a target, **the fix is a factored form (square-root/UD), not more precision** —
+the conventional recursion is the weak one. Both halves are protected by tests, including the
+unflattering half. `p0` is a prior covariance and interacts with the regressor scale: it is
+`p0 * ||x||²  >> 1` that puts the first update in the cancellation regime, so it should be
+scaled to the problem rather than left large by default.
+
 **Alignment policy is explicit and never defaulted silently.** `nearest`, `hold-last`,
 `interpolate`, `drop-if-stale` give different answers. The user chooses; the framework records
 the choice and reports staleness.
@@ -134,7 +154,9 @@ logging afterthought; it is the return value.
 Chosen for stability that can be argued about, not for novelty.
 
 1. **Recursive least squares** with a forgetting factor — the workhorse. Bounded state, well
-   understood, and directly useful for online calibration.
+   understood, and directly useful for online calibration. **Built** (Python reference,
+   `argmind/adapt.py`), checked against the closed-form exponentially weighted solution rather
+   than against itself.
 2. **Kalman-family parameter estimation** — an EKF whose state is the parameters. Carries the
    covariance conditioning problem, and therefore the precision floor above.
 3. **Online gradient methods** for the cases the first two cannot express, with explicit step-size
@@ -252,24 +274,42 @@ a p99 that misses is the shape that fails in the field.
 ## Where this stands, and what comes next
 
 **Built:** `Stream` (fixed-capacity ring buffers, counted overflow, monotonic-time
-enforcement) and `Aligner` (four explicit policies, staleness reporting, causal/non-causal
-declared). 16 tests, several of which exist to prove failures are visible rather than silent.
+enforcement), `Aligner` (four explicit policies, staleness reporting, causal/non-causal
+declared), and `Adapter` + `RecursiveLeastSquares` (flat state block, forgetting factor,
+per-update report, measured precision floor). 45 tests, several of which exist to prove failures
+are visible rather than silent.
+
+**What the adapter contract settled**, since everything after it has to fit:
+
+- State is **one flat contiguous block** (`adapter.state`, `theta` then `P`). Persistence is a
+  copy of that block and nothing else, and it is what crosses the C ABI later without a
+  serialisation format in the middle. Loading one validates it, because flash comes back
+  truncated and bit-flipped and a stored NaN poisons every subsequent update.
+- **`update()` returns an `UpdateReport`, never nothing** — a priori and a posteriori residual,
+  gain norm, `tr(P)`, and the smallest diagonal of `P`. The `Guard` is written against exactly
+  these fields; an adapter that only mutated state silently would make the guard impossible.
+  `p_min_diag` is an O(n) proxy for the O(n³) eigenvalue test, chosen because it has to be
+  affordable on every update on an MCU.
+- **Shape errors raise; bad values do not.** A wrong shape is a bug at the call site. A NaN from
+  a sensor is a runtime event: it is rejected, counted, named in the report, and leaves the state
+  untouched. Taking the estimator down with it is the wrong response in a deployed system.
+- **Covariance windup is left visible, not clamped.** Under poor excitation `P` grows exactly as
+  `p0·λ^-k` in the unexcited direction (verified to 12 digits) and the next off-axis sample
+  bursts. Bounding it inside the adapter would make the `Guard` optional — which is the mistake
+  this design explicitly refuses. It is reported; deciding what to do about it is the guard's job.
 
 **Next, in order:**
 
-1. **`Adapter`, starting with recursive least squares** with a forgetting factor. Bounded state,
-   stability that can be argued about, and immediately useful for the driving example. Its
-   `update`/`predict` shape sets the contract every later method must fit.
-   **Write it twice, deliberately**: Python first as the executable specification and oracle,
-   then C++ verified against it. Doing Python first is not wasted work — it is how the C++ gets a
-   correctness anchor before anyone starts making it fast.
-2. **`Guard`, immediately after — not later.** Half the reason this library exists is that online
+1. **`Guard`, and it is genuinely next.** Half the reason this library exists is that online
    adaptation can diverge in the field, so the freeze path has to be the default shape of the API
    rather than something a user remembers to add. Building it second keeps that honest; building
-   it fifth would not.
-3. **`Pipeline`** to wire stream → align → adapt → predict behind one bounded `step()`.
-4. **Persistence**, because adaptation state that does not survive a power cycle is useless in the
-   field.
+   it fifth would not. The windup and burst reproduced in `tests/test_adapt.py` are its first
+   concrete target, and `UpdateReport` already carries what it needs to trip on.
+2. **`Pipeline`** to wire stream → align → adapt → predict behind one bounded `step()`.
+3. **Persistence**, because adaptation state that does not survive a power cycle is useless in the
+   field. The flat state block is already the format; what is undecided is cadence and framing.
+4. **The C++ core**, verified against the Python reference — same inputs, same outputs, to the
+   tolerance the declared precision allows.
 
 **Now decided (see "Language and structure" above), so the `Adapter` contract must be shaped for
 a C ABI from the start:** fixed dimensions known at construction, no allocation after it, state
