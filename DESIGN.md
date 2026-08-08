@@ -145,10 +145,9 @@ Chosen for stability that can be argued about, not for novelty.
 
 Genuinely open, listed rather than guessed:
 
-- **Language.** Python is right for the reference implementation and the API design. But
-  "embedded/edge" spans a Jetson running Python comfortably and an MCU that cannot. Whether this
-  ends as Python-only, Python with a C core, or a C library with Python bindings is unresolved
-  and depends on how far down the target range it must go.
+- ~~Language~~ — **DECIDED 2026-08-08: a C++ core with a C ABI, optimised for speed.** See
+  "Language and structure" below. What remains open is whether the target range includes MCUs,
+  which decides the matrix-type question.
 - **How much of a timebase to own.** Does the library assume a monotonic clock per stream, or
   handle clock skew estimation between sources?
 - **Where inference sits.** The library adapts parameters and estimates. Whether it also wraps a
@@ -156,6 +155,68 @@ Genuinely open, listed rather than guessed:
   not yet drawn.
 - **Persistence.** Adaptation state must survive a power cycle for any of this to be useful in
   the field. Format and cadence are undecided.
+
+## Language and structure — decided 2026-08-08
+
+**A C++ core behind a C ABI. Python becomes bindings and the reference oracle.**
+
+### C++ rather than C
+
+Not for the usual reasons. This library lives at small fixed matrix sizes — sensor-fusion state
+dimensions are typically 3 to 30 — and at those sizes runtime is dominated by call overhead,
+memory layout, and whether the compiler can unroll and vectorise. **Compile-time dimensions and
+precision are what make that possible**, and in C the same thing is macro duplication or a
+runtime `n` the optimiser cannot exploit. Templates give it for free:
+
+```cpp
+Rls<float, 6> rls;        // dimensions known at compile time: unrolled, no bounds
+                          // checks, no allocation, SIMD-friendly
+```
+
+C++ costs are real and are paid deliberately: **no exceptions, no RTTI, no dynamic allocation**
+(`-fno-exceptions -fno-rtti`), so the core stays usable in a freestanding environment.
+
+### A C ABI at the boundary
+
+Everything crossing the library boundary is `extern "C"` with plain structs and pointers. Two
+reasons: it lets a plain-C firmware, Python, Rust or MATLAB call in without knowing C++ is
+inside; and it insulates callers from C++ ABI instability across compilers and versions, which
+is a genuine hazard for a library shipped as a binary.
+
+### Own the matrix types, at least initially
+
+Eigen is excellent and is the default in robotics state estimation, but it is heavy for a
+library that may need to run on a Cortex-M — header bloat, compile times, and a C++14+
+requirement. Start with a minimal fixed-size type covering exactly what the adapters need.
+**Revisit if the target range turns out to exclude MCUs**, which is the one open question left.
+
+### Do not call a BLAS at these sizes
+
+This is evidence, not preference. Measured in the parked project on the same class of problem:
+at n=80, **numpy/OpenBLAS ran 12.8× SLOWER than a plain C loop**, because the per-call dispatch
+overhead of a tuned BLAS exceeded the arithmetic it was asked to perform. Sensor-fusion matrices
+are smaller still. Write the loops.
+
+### What happens to the Python already written
+
+`Stream` and `Aligner` become the **reference implementation and test oracle**, not throwaway
+prototype. The C++ is verified against them — same inputs, same outputs, to the tolerance the
+precision allows. This pattern worked well in the parked project, where a functional simulator
+matched a reference solver bit-for-bit and that agreement is what made later optimisation safe.
+
+### Before "optimised for speed" means anything
+
+**A benchmark that can report a regression has to exist first**, or the criterion is
+unfalsifiable and every change looks like an improvement. Required before the first optimisation
+lands, not after:
+
+1. A fixed workload derived from the design driver — declared rates, declared dimensions.
+2. The Python reference as the correctness oracle, so speed work cannot quietly change answers.
+3. Reporting that separates **per-sample cost** from **per-frame cost**, because they scale with
+   different things and an average hides which one moved.
+
+Carried from the parked project: measure worst case, not just typical. A p50 that looks good and
+a p99 that misses is the shape that fails in the field.
 
 ## Where this stands, and what comes next
 
@@ -168,6 +229,9 @@ declared). 16 tests, several of which exist to prove failures are visible rather
 1. **`Adapter`, starting with recursive least squares** with a forgetting factor. Bounded state,
    stability that can be argued about, and immediately useful for the driving example. Its
    `update`/`predict` shape sets the contract every later method must fit.
+   **Write it twice, deliberately**: Python first as the executable specification and oracle,
+   then C++ verified against it. Doing Python first is not wasted work — it is how the C++ gets a
+   correctness anchor before anyone starts making it fast.
 2. **`Guard`, immediately after — not later.** Half the reason this library exists is that online
    adaptation can diverge in the field, so the freeze path has to be the default shape of the API
    rather than something a user remembers to add. Building it second keeps that honest; building
@@ -176,9 +240,13 @@ declared). 16 tests, several of which exist to prove failures are visible rather
 4. **Persistence**, because adaptation state that does not survive a power cycle is useless in the
    field.
 
-**Decide before (1) is finalised:** the language question in the open list below. It does not
-block the Python reference implementation, but it decides whether the `Adapter` contract should
-be shaped for a future C core.
+**Now decided (see "Language and structure" above), so the `Adapter` contract must be shaped for
+a C ABI from the start:** fixed dimensions known at construction, no allocation after it, state
+addressable as a flat block so it can be persisted or crossed over a C boundary without
+serialisation, and no Python-only conveniences in the core interface.
+
+**Before any of it is called fast:** the benchmark harness. It is listed after the adapters only
+because there must be something to measure — not because optimisation may start without it.
 
 ## Standards
 
