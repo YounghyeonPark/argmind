@@ -95,9 +95,10 @@ handle.
 **Built:** `argmind/stream.py` (fixed-capacity ring buffers, counted drops, monotonic time
 enforced at the source), `argmind/align.py` (four explicit alignment policies, signed staleness,
 causal/non-causal declared), `argmind/adapt.py` (the `Adapter` contract and
-`RecursiveLeastSquares`), and `argmind/guard.py` (`Check`/`Bound`/`Divergence`, freeze, bounded
-rollback, explicit recovery). 81 tests pass; several exist to prove failures are visible rather
-than silent, and both new suites were mutation-checked — nineteen deliberate bugs, all caught.
+`RecursiveLeastSquares`), `argmind/guard.py` (`Check`/`Bound`/`Divergence`, freeze, bounded
+rollback, explicit recovery), and `argmind/pipeline.py` (`FrameMap`, input gate, bounded
+`step()`). 109 tests pass; several exist to prove failures are visible rather than silent, and
+every new suite was mutation-checked — thirty-one deliberate bugs, all caught.
 
 **The adapter contract, since everything after it fits into it** (full reasoning in DESIGN.md):
 state is one flat contiguous block so persistence is a copy and the C ABI needs no serialisation;
@@ -123,14 +124,27 @@ and the first fix — holding the baseline per sample — ratcheted it down unti
 tripped it. The rule that works is per-*freeze*. The tidy-looking version was the broken one,
 twice.
 
+**The pipeline maps a `Frame` to `(x, y)` through a declared index table, not a callable** — a
+callable is the obvious Python answer and does not cross a C ABI. `FrameMap` resolves convenient
+forms once at construction. Feature order is parameter order, so a persisted state block restored
+against a different order is wrong undetectably.
+
+**Two gates at two different times**, and they must not merge: the pipeline checks *input* health
+(staleness, sensor validity) before the update; the guard checks *model* health after it, because
+those quantities do not exist until the update is computed.
+
+A test found a real observability gap here: 200 frames against a 64-deep ring adapted 64 times and
+reported nothing wrong. The first fix was wrong the other way — `Stream.dropped` counts
+*overwrites*, which a healthy ring does on every push, so it false-alarms on every working system.
+`StepReport.lost_frames` counts what is actually knowable: reference samples overwritten before
+they could become frames. `Stream.dropped`'s docstring was overclaiming and is corrected.
+
 **Next, in order** — the ordering is deliberate and the reasoning is in DESIGN.md:
 
-1. `Pipeline` — stream to align to adapt to predict, behind one bounded `step()`. First place the
-   aligner and adapter meet, so it is where `Frame` becomes `(x, y)` and where staleness becomes
-   a guard input rather than a number nobody reads.
-2. Persistence, because adaptation state that does not survive a power cycle is useless in the
-   field. The flat state block is already the format; cadence, framing, and whether the guard's
-   own state belongs in it are not decided.
+1. Persistence — the last piece of the Python reference. The flat state block is already the
+   format; cadence, framing, and whether the guard's own state belongs in it are not decided.
+2. The benchmark harness, before any optimisation. A fixed workload from the design driver, the
+   Python reference as oracle, per-sample cost reported separately from per-frame cost.
 3. The C++ core, verified against the Python reference.
 
 **Before any optimisation lands, a benchmark that can report a regression must exist.** An

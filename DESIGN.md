@@ -302,9 +302,35 @@ a p99 that misses is the shape that fails in the field.
 **Built:** `Stream` (fixed-capacity ring buffers, counted overflow, monotonic-time
 enforcement), `Aligner` (four explicit policies, staleness reporting, causal/non-causal
 declared), `Adapter` + `RecursiveLeastSquares` (flat state block, forgetting factor, per-update
-report, measured precision floor), and `Guard` + `Bound` + `Divergence` (checks, freeze, bounded
-rollback, explicit recovery). 81 tests, several of which exist to prove failures are visible
+report, measured precision floor), `Guard` + `Bound` + `Divergence` (checks, freeze, bounded
+rollback, explicit recovery), and `Pipeline` + `FrameMap` (frame to regressor by index table,
+input gate, bounded `step()`). 109 tests, several of which exist to prove failures are visible
 rather than silent.
+
+**What the pipeline settled:**
+
+- **A `Frame` becomes `(x, y)` through a declared index table, not a callable.** A callable is the
+  obvious Python answer and does not cross a C ABI; a pair of `(stream, component)` lists is two
+  integer arrays on the other side. `FrameMap` takes convenient forms — a bare name, `(name, i)`,
+  a list, a slice — and resolves them *once* at construction against the streams that exist, so
+  the convenience costs nothing at run time and a typo fails at construction rather than at 3am.
+  Order is the parameter order, and a persisted state block restored against a different order is
+  wrong in a way nothing downstream can detect.
+- **Two gates, at two different times.** The pipeline gates on *input* health — staleness, sensor
+  validity — before the update, because bad input should not reach the learner. The `Guard` gates
+  on *model* health after it, because those quantities do not exist until the update has been
+  computed. Collapsing them would mean either checking the model before it moved or letting
+  known-bad data into it first.
+- **A non-causal aligner policy has to be asked for.** The `Aligner` alone permits `nearest` and
+  `interpolate` and records that they are non-causal, which is right for offline use. A pipeline
+  *is* the causal loop, so it refuses them unless `allow_non_causal=True`.
+- **`StepReport.lost_frames` exists because a test found the gap.** A 200-frame workload against a
+  64-deep ring adapted 64 times, reported nothing amiss, and produced a plausible fit from a third
+  of the data. The first fix was wrong in the other direction: `Stream.dropped` counts
+  *overwrites*, which a healthy ring does on every push, so reporting those raises an alarm on
+  every working system. What is actually countable is reference samples that were overwritten
+  before they could become frames — each one a frame that will never exist. `Stream.dropped`'s
+  docstring was overclaiming and has been corrected.
 
 **What the adapter contract settled**, since everything after it has to fit:
 
@@ -341,12 +367,12 @@ lesson is the one already in the standards: the tidy-looking version was the bro
 
 **Next, in order:**
 
-1. **`Pipeline`** to wire stream → align → adapt → predict behind one bounded `step()`. It is the
-   first place the aligner and the adapter meet, so it is where `Frame` has to become `(x, y)` —
-   and where staleness becomes a guard input rather than a number nobody reads.
-2. **Persistence**, because adaptation state that does not survive a power cycle is useless in the
+1. **Persistence**, because adaptation state that does not survive a power cycle is useless in the
    field. The flat state block is already the format; what is undecided is cadence, framing, and
-   whether the guard's own state belongs in it.
+   whether the guard's own state belongs in it. This is the last piece of the Python reference.
+2. **The benchmark harness**, before any optimisation. Requirements are already stated above:
+   a fixed workload from the design driver, the Python reference as the correctness oracle, and
+   per-sample cost reported separately from per-frame cost.
 3. **The C++ core**, verified against the Python reference — same inputs, same outputs, to the
    tolerance the declared precision allows.
 

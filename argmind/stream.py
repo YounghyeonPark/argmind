@@ -95,8 +95,19 @@ class Stream:
 
     @property
     def dropped(self) -> int:
-        """Samples overwritten before being consumed. Non-zero means the buffer
-        is too small or the consumer too slow; either way the caller should know."""
+        """Samples overwritten because the ring was full.
+
+        Note what this is *not*: a stream has no idea whether anyone read a
+        sample before it was overwritten, so this cannot mean "lost". In steady
+        state a correctly sized ring overwrites on every push and this climbs
+        forever with nothing wrong. Treating it as a loss signal produces a false
+        alarm on every healthy system — `Pipeline` computes actual loss instead,
+        by comparing arrivals against what the aligner consumed.
+
+        Since nothing is ever removed, ``dropped + len(stream)`` is the total
+        number of samples ever pushed, which is what makes that comparison
+        possible.
+        """
         return self._dropped
 
     @property
