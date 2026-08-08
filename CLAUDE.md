@@ -100,10 +100,11 @@ causal/non-causal declared), `argmind/adapt.py` (the `Adapter` contract and
 rollback, explicit recovery), `argmind/pipeline.py` (`FrameMap`, input gate, bounded `step()`),
 `argmind/persist.py` (two-slot atomic store, CRC, configuration fingerprint, declared cadence),
 `argmind/bench.py` (fixed workload, correctness digest, leak detector, regression gate), and
-`cpp/` (the C++ core: `mat.hpp`, `rls.hpp`, `guard.hpp`, `persist.hpp`, the C ABI, two parity
-tools `xcheck`/`pcheck`, 679 self-checks).
-**The Python reference is complete; RLS, the guard and persistence are across to C++.**
-251 Python tests and 679 C++ checks pass; several exist to prove failures are visible
+`cpp/` (the C++ core: `mat.hpp`, `rls.hpp`, `guard.hpp`, `persist.hpp`, `stream.hpp`,
+`align.hpp`, the C ABI, three parity tools `xcheck`/`pcheck`/`scheck`, 785 self-checks).
+**The Python reference is complete; RLS, the guard, persistence, streams and alignment are
+across to C++.**
+283 Python tests and 792 C++ checks pass; several exist to prove failures are visible
 rather than silent. Every suite is mutation-checked, and surviving mutants are recorded where
 they live rather than tallied here — including the ones that turn out to be **equivalent on a
 64-bit host**, a distinction worth keeping rather than rounding away. Cumulative counts are
@@ -298,8 +299,35 @@ wrong while every finding in it was correct; and **the most valuable single run 
 aimed at my own prose**, which is the argument for running it before every commit that states
 a number rather than after.
 
-**Next:** `Pipeline`, `Stream` and `Aligner` in C++, then the on-target build once a
-cross-compiler and hardware exist.
+**`Stream` and `Aligner` are across** (`cpp/include/argmind/{stream,align}.hpp`). The
+structural decision, and it was challenged and upheld in review: an aligner must see streams
+of *different* widths at once, and this core has no virtuals for a base class and cannot name
+a variadic `Aligner<Streams...>` from a C ABI. So `Stream<T, Dim, Capacity>` keeps its shape
+in the type and hands out a **`StreamView` with a runtime `dim`** to anything that treats
+several streams uniformly. `dim` only ever drives an O(dim) copy at the slow stream's rate;
+the compile-time shape stays where it buys inlining, in `rls.hpp`.
+
+**The port found a third reference bug, from a single disagreeing push.** `Stream.push`'s
+ordering check cannot catch a NaN — `NaN <= last` is False, so the sample was accepted,
+`_last_t` became NaN, and *every later comparison was False too*: monotonicity was gone for
+the life of the stream, leaving rings like `[1.0, 1.5, nan, 0.1]`. That is not cosmetic —
+every alignment policy scans the ring assuming order, so one NaN can make `hold_last`,
+`nearest` and `interpolate` all return the wrong sample. Non-finite timestamps now have their
+own check, and a test demonstrates the hazard by corrupting the ring directly.
+
+**Parity is decisions, not arithmetic.** The checked-in sweeps compare bit-exactly — staleness
+by bit pattern, values by raw bytes — and the negative control says the three *distinguishable*
+policies differ at 292 of 300 instants. `drop_if_stale` is not one of the three: it shares a
+branch with `hold_last` and never reads the staleness limit, so an earlier claim of "four
+policies, 872 of 942" was wrong twice over, and the decision that actually distinguishes it was
+compared nowhere until an audit found that. Interpolation's float64-then-narrow blend is
+bit-identical, its precondition is recorded (an FMA contraction breaks f64 exactness, which the
+M4F cannot do but an M7 can), and so is the cost the target *does* pay: that widening is soft
+float on a single-precision FPU — the largest unstated cost in the header until the audit named
+it.
+
+**Next:** `Pipeline` in C++ — the last piece — then the on-target build once a cross-compiler
+and hardware exist.
 
 **Before any optimisation lands, a benchmark that can report a regression must exist.** An
 optimisation with no way to fail is not an optimisation, it is a hope.

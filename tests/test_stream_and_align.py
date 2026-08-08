@@ -210,3 +210,58 @@ def test_no_frame_before_the_slow_stream_has_any_data():
     al = Aligner.hold_last("fast")
     assert al.drain({"fast": fast, "slow": slow}) == []
     assert al.stats["no_data"] == 1
+
+
+def test_a_non_finite_timestamp_is_refused_before_it_destroys_the_ordering():
+    """A defect the C++ port exposed by disagreeing about a single push.
+
+    The ordering check cannot catch a NaN: `NaN <= last` is False, so the sample was
+    accepted, `_last_t` became NaN, and then *every* later comparison was False too — the
+    monotonicity guarantee was gone for the life of the stream. Observed before the fix:
+    pushing 1.0, 1.5, NaN, then 0.1 left the ring holding [1.0, 1.5, nan, 0.1].
+
+    That matters beyond tidiness. Every alignment policy reads the ring through a scan that
+    assumes the timestamps are ordered, so one NaN makes `newest_at_or_before` — and with
+    it hold_last, nearest and interpolate — capable of returning the wrong sample.
+    """
+    s = Stream("s", dim=1, capacity=8, dtype="f8")
+    s.push(t=1.0, values=[1.0])
+    s.push(t=1.5, values=[2.0])
+
+    for bad in (float("nan"), float("inf"), -float("inf")):
+        with pytest.raises(ValueError, match="must be finite"):
+            s.push(t=bad, values=[3.0])
+
+    # The ordering check still works afterwards, which is the property the NaN destroyed.
+    with pytest.raises(ValueError, match="must increase"):
+        s.push(t=0.1, values=[4.0])
+    s.push(t=2.0, values=[5.0])
+
+    times = list(s.times())
+    assert times == [1.0, 1.5, 2.0]
+    assert all(a < b for a, b in zip(times, times[1:])), (
+        "the retained timestamps are no longer increasing, which every alignment policy "
+        "assumes when it scans the ring")
+
+
+def test_the_ordering_scan_would_have_been_wrong_with_a_poisoned_ring():
+    """Why the check above is worth having rather than merely tidy.
+
+    Constructed directly on the ring's storage, since `push` now refuses to build it: a
+    ring whose timestamps are out of order makes `newest_at_or_before` return a sample that
+    is not the newest one at or before the query. This is what a single accepted NaN used
+    to leave behind.
+    """
+    s = Stream("s", dim=1, capacity=4, dtype="f8")
+    for t, v in ((1.0, 10.0), (1.5, 15.0), (2.0, 20.0)):
+        s.push(t=t, values=[v])
+    assert s.newest_at_or_before(1.7).values[0] == 15.0
+
+    s._t[2] = 0.1                      # what the NaN path used to allow
+    got = s.newest_at_or_before(1.7)
+    # The fixture fixes this exactly: the scan runs from the newest end and the newest slot
+    # now claims t=0.1, which is <= 1.7, so it returns 20.0 — a sample that is neither the
+    # newest at or before 1.7 nor anywhere near it. `!= 15.0` would have passed on any
+    # wrong answer at all, including a crash-adjacent one.
+    assert got.values[0] == 20.0, (
+        f"expected the scan to be fooled into returning 20.0, got {got.values[0]}")

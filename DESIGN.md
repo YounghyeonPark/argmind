@@ -419,11 +419,11 @@ report, measured precision floor), `Guard` + `Bound` + `Divergence` (checks, fre
 rollback, explicit recovery), `Pipeline` + `FrameMap` (frame to regressor by index table,
 input gate, bounded `step()`), and `Store` (two-slot atomic persistence, CRC, configuration
 fingerprint, declared cadence), `bench` (fixed workload, correctness digest, leak detector,
-regression gate), and **the C++ core — RLS behind a C ABI, plus the guard and the record
-format as headers — verified against the Python to about 1.5 ulp and, for the record format,
-byte for byte**. (Only RLS has ABI entry points; `am_guard_*` and `am_persist_*` do not
-exist.)
-251 Python tests plus 679 C++ checks, several of which exist to prove failures are visible
+regression gate), and **the C++ core — RLS behind a C ABI, plus the guard, the record format,
+streams and alignment as headers — verified against the Python to about 1.5 ulp, and byte for
+byte for the record format**. (Only RLS has ABI entry points; `am_guard_*`, `am_persist_*`,
+`am_stream_*` and `am_align_*` do not exist.)
+283 Python tests plus 792 C++ checks, several of which exist to prove failures are visible
 rather than silent.
 
 **What the pipeline settled:**
@@ -514,8 +514,8 @@ for a C ABI, a reference anchored to closed-form solutions rather than to itself
 that is already the persistence format, and a benchmark that can report a regression.
 
 **STARTED 2026-08-08** — `cpp/`, and RLS is across. `mat.hpp` (fixed-size primitives),
-`rls.hpp` (`Rls<T, N, M>`), `argmind.h` + `src/abi.cpp` (the C ABI), `tools/xcheck.cpp` and `tools/pcheck.cpp` (the two
-parity tools), `tests/test_core.cpp` (679 checks the C++ side can make on its own), and a
+`rls.hpp` (`Rls<T, N, M>`), `argmind.h` + `src/abi.cpp` (the C ABI), `tools/xcheck.cpp`, `tools/pcheck.cpp` and `tools/scheck.cpp` (the three
+parity tools), `tests/test_core.cpp` (785 checks the C++ side can make on its own), and a
 `CMakeLists.txt` that knows the cross-compilation recipe.
 
 **The C ABI had one real tension to resolve.** Compile-time dimensions are the reason C++ was
@@ -732,6 +732,84 @@ separate, arbitration logic. And a bounds check added to the parity *tool* had m
 library's own clamp unreachable, so a mutant removing it survived. Both are closed; the tool
 gained a mode that calls `select_newest` directly, and it now hands `pack` the true length
 and lets the library clamp.
+
+### Streams and alignment, across 2026-08-08
+
+`cpp/include/argmind/stream.hpp` and `align.hpp`. `Stream<T, Dim, Capacity>` is a ring whose
+memory is declared by its type; `Aligner` carries the four policies.
+
+**The structural decision, challenged in review and upheld.** An aligner has to see streams
+of *different* widths at once. A base class with a virtual `sample_at` is the obvious answer
+and this core has no virtuals; a variadic `Aligner<Streams...>` keeps every dimension at
+compile time and cannot be named from a C ABI, which is the same wall the ABI's explicit
+instantiation list already exists to avoid. So `Stream` keeps `Dim` and `Capacity` in the
+type — its storage and its push loop stay compile-time sized — and hands out a **`StreamView`
+with a runtime `dim`** to anything that must treat several streams uniformly. Review
+confirmed `dim` only ever drives an O(dim) copy and pointer arithmetic, never an O(n²)
+accumulation: the compile-time shape stays where it buys inlining.
+
+**A third reference bug, found by one disagreeing push.** `Stream.push`'s ordering check
+cannot catch a NaN: `NaN <= last` is False, so the sample was accepted, `_last_t` became NaN,
+and every later comparison was False too. Monotonicity was gone for the life of the stream —
+observed leaving a ring holding `[1.0, 1.5, nan, 0.1]`. Every alignment policy scans that ring
+assuming order, so one NaN can make hold_last, nearest and interpolate all return the wrong
+sample. Non-finite timestamps now have their own check on both sides — though for different reasons,
+which is worth not blurring. The C++ ordering test is `!(t > last_t_)`, which already refuses
+NaN and -inf; its finiteness check exists for **+inf** alone, which passes the ordering test
+and then makes every later push impossible. The Python's `t <= last` was the comparison that
+let a NaN through. A test demonstrates the hazard by corrupting a ring directly rather than
+asserting it in the abstract.
+
+**Parity here is decisions rather than arithmetic**, and it holds. The suite's own sweeps are
+checked in, so the numbers below come from running the tests: four streams of differing widths
+and rates over 300 instants per policy, compared **bit-exactly** — staleness by bit pattern,
+values by raw bytes — so a signed zero or a NaN payload shows. A `pytest.approx` comparator was
+there first and would not have.
+
+The negative control needs stating carefully. The three *distinguishable* policies return
+different samples at **292 of 300** instants, so a port that collapsed two of them cannot pass.
+`drop_if_stale` is excluded from that count deliberately: it shares a branch with `hold_last`
+in `pick()` and never consults the staleness limit, so counting it as a fourth distinct policy
+inflated the figure. An earlier version of this paragraph said "four policies … 872 of 942" and
+was wrong on both halves. What actually distinguishes `drop_if_stale` is the stale-drop
+decision, and until an audit pointed it out that decision was compared nowhere. It is now
+checked on every pick.
+
+A one-off run against scratchpad scripts covered far more — 30,144 picks, 96,160 blends, and a
+soak after roughly 915 overwrites per stream, which is about 14 wraps of a 64-deep ring rather
+than 915 wraps — and found zero disagreements. Those scripts are not in the tree, so that is a
+reported result rather than one anyone can re-run here, and it is labelled rather than quoted
+as if the suite produced it.
+
+**The one arithmetic detail, and its precondition.** Interpolation blends in float64 and
+narrows back even for an f32 stream, because the reference does. A checked-in test counts how
+many of the weights it sweeps would land on a different float32 under an f32 blend and asserts
+that count is large enough for the comparison to have grip, so the agreement is a measurement
+rather than a formality. (A one-off run over a much wider sweep put that at 18,342; the
+checked-in version is smaller and reproducible.) It also depends on the blend *not* being contracted into
+an FMA: with `-march=x86-64-v3 -ffp-contract=fast`, 1506 of 9995 f64 blends differ by one ulp
+of the bracket's scale — one ulp of `max(|a|,|b|)` exactly, confirmed separately. The M4F's
+double path is soft float and so cannot contract; that is reasoning from the declared flags
+rather than a measurement, since no cross-compiler exists here. An M7 or a host `-march=native`
+build can, and the answer there is `-ffp-contract=off` rather than a tolerance.
+
+**And the cost that paragraph was quietly not mentioning.** The declared floor has a *single*-
+precision FPU, so widening to double means every interpolated pick runs a double divide plus
+two double multiplies and an add per element **in software** on an M4F. It is the most
+expensive thing in that header on the target, it is the price of matching the reference's
+arithmetic, and it sits on the precision axis the target decision was made on — exactly the
+kind of cost that looks free because nothing in the model expresses it.
+
+**Two review findings worth keeping.** The dimension cap on interpolation's blend buffer used
+to sit ahead of the policy dispatch, refusing wide streams under `HoldLast` and `Nearest` as
+well — for a buffer those policies never touch — and its refusal was indistinguishable from
+"no sample", so a wiring mistake read as a dead sensor. And `dropped` was a `uint32_t`, which
+wraps in 49.7 days at 1 kHz — arithmetic, not a measurement. `dropped + size()` is the identity
+the Python pipeline's lost-frame count is built on, so an identity that stops holding is not one
+a C++ pipeline should be built on either; the Python's own counter is an unbounded int and
+cannot wrap, so the hazard is for the port rather than for today. The widening turned out to
+cost **nothing** — `sizeof(Stream)` is unchanged, because padding before the 8-aligned timestamp
+absorbs it. An earlier version of this sentence claimed four bytes.
 
 ## Standards
 

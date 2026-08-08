@@ -13,9 +13,11 @@
 #include <stdio.h>
 
 #include "argmind/argmind.h"
+#include "argmind/align.hpp"
 #include "argmind/guard.hpp"
 #include "argmind/persist.hpp"
 #include "argmind/rls.hpp"
+#include "argmind/stream.hpp"
 
 namespace {
 
@@ -761,6 +763,219 @@ void test_select_newest_and_next_slot() {
     CHECK(argmind::persist::select_newest<float>(b, nb, b, nb, &rec, &sa, &sb) == 0);
 }
 
+
+// -- stream.hpp and align.hpp -------------------------------------------------
+//
+// `cpp/tools/scheck.cpp` drives the aligner through a hand-built ring, because the aligner
+// has to see several widths at once and a width is a template parameter. That means the
+// parity tests never execute `Stream<>::push` at all — the shipped class was covered by a
+// copy of itself. This is where it gets exercised, along with the things only this side can
+// reach: the dimension cap, the 64-bit drop counter, and the scan that had to stay
+// tie-compatible when it gained an early exit.
+
+void test_stream_push_refuses_what_the_reference_refuses() {
+    argmind::Stream<double, 2, 8> s;
+    const double v[2] = {1.0, 2.0};
+
+    CHECK(s.push(1.0, v));
+    CHECK(!s.push(1.0, v));           // equal is refused
+    CHECK(!s.push(0.9, v));           // backwards is refused
+    CHECK(s.push(1.5, v));
+
+    // Which check refuses which value, because they differ and an earlier version of this
+    // comment got it backwards. `!(t > last_t_)` already refuses NaN and -inf; only +inf
+    // reaches the finiteness test — and only that CHECK fails if the test is removed,
+    // which a mutation run confirmed. The Python's hole was the other one: `t <= last` is
+    // False for NaN, so a NaN was accepted and poisoned the comparison for good.
+    CHECK(!s.push(__builtin_nan(""), v));       // caught by the ordering test
+    CHECK(!s.push(-__builtin_inf(), v));        // likewise
+    CHECK(!s.push(__builtin_inf(), v));         // ONLY the finiteness test catches this
+    // ...and the reason +inf has to be refused: it passes the ordering test and then makes
+    // every later push impossible, killing the stream in silence.
+    CHECK(s.push(2.0, v));
+    CHECK(s.push(2.5, v));            // and ordering still works afterwards
+    CHECK(s.size() == 4);
+}
+
+void test_stream_overwrites_and_counts() {
+    argmind::Stream<float, 1, 4> s;
+    for (int i = 0; i < 10; ++i) {
+        const float v[1] = {static_cast<float>(i)};
+        CHECK(s.push(0.1 * (i + 1), v));
+    }
+    CHECK(s.size() == 4);
+    CHECK(s.dropped() == 6u);
+    for (int age = 0; age < 4; ++age) CHECK(s.at(age).values[0] == float(6 + age));
+
+    // The counter is 64-bit on purpose: `dropped + size()` is the total ever pushed and the
+    // pipeline derives lost frames from that identity, so a 32-bit wrap would make reported
+    // loss go negative rather than merely lose a statistic. At 1 kHz that wrap is 49.7 days.
+    CHECK(sizeof(s.dropped()) == 8);
+}
+
+void test_the_ring_index_survives_wrapping() {
+    // The conditional-add form of `slot()` replaced two modulos; it has to agree with the
+    // modulo form for every (head, count, age) a ring can reach.
+    argmind::Stream<double, 1, 5> s;
+    for (int i = 0; i < 23; ++i) {
+        const double v[1] = {static_cast<double>(i)};
+        CHECK(s.push(double(i + 1), v));
+    }
+    const argmind::StreamView<double> view = s.view();
+    CHECK(view.count == 5);
+    for (int age = 0; age < view.count; ++age) {
+        const int expect = ((view.head - view.count + age) % view.capacity +
+                            view.capacity) % view.capacity;
+        CHECK(view.slot(age) == expect);
+    }
+    for (int age = 0; age < 5; ++age) CHECK(s.at(age).values[0] == double(18 + age));
+}
+
+void test_nearest_resolves_a_tie_to_the_earlier_sample() {
+    argmind::Stream<double, 1, 8> s;
+    for (int i = 1; i <= 5; ++i) {
+        const double v[1] = {double(i)};
+        CHECK(s.push(double(i), v));       // t = 1..5
+    }
+    const argmind::StreamView<double> v = s.view();
+    CHECK(v.nearest(0.0).values[0] == 1.0);
+    CHECK(v.nearest(3.2).values[0] == 3.0);
+    CHECK(v.nearest(3.6).values[0] == 4.0);
+    CHECK(v.nearest(99.0).values[0] == 5.0);
+    // A tie must resolve to the EARLIER sample, which is what the reference's strict
+    // `d < best_d` does — and it is that comparison, not the early exit, that does the
+    // work. Mutating `d < best_d` to `d <= best_d` fails this line; loosening or removing
+    // the break changes nothing observable, which is why this test is named for the tie
+    // rather than for the exit.
+    CHECK(v.nearest(3.5).values[0] == 3.0);
+}
+
+void test_bracketing_refuses_to_extrapolate() {
+    argmind::Stream<double, 1, 8> s;
+    const double a[1] = {10.0};
+    const double b[1] = {20.0};
+    CHECK(s.push(1.0, a));
+    CHECK(s.push(2.0, b));
+    const argmind::StreamView<double> v = s.view();
+
+    argmind::SampleRef<double> lo;
+    argmind::SampleRef<double> hi;
+    CHECK(v.bracketing(1.5, &lo, &hi));
+    CHECK(lo.values[0] == 10.0 && hi.values[0] == 20.0);
+    CHECK(!v.bracketing(0.5, &lo, &hi));    // before the first
+    CHECK(!v.bracketing(2.5, &lo, &hi));    // after the last
+    CHECK(v.bracketing(2.0, &lo, &hi));     // exactly on a sample
+    CHECK(lo.values[0] == 20.0 && hi.values[0] == 20.0);
+}
+
+void test_only_interpolation_is_bounded_by_the_blend_buffer() {
+    // The cap exists because interpolation has to synthesise a value and there is no heap.
+    // Every other policy hands back a pointer into the ring, so a wide stream must still
+    // work under them — the guard used to sit ahead of the policy dispatch and refused all
+    // four, which reported a wiring mistake as a dead sensor.
+    constexpr int wide = argmind::Pick<double>::MAX_DIM + 1;
+    static double values[2 * wide];
+    static double times[2] = {1.0, 2.0};
+    static uint8_t valid[2] = {1, 1};
+    for (int i = 0; i < 2 * wide; ++i) values[i] = double(i);
+
+    argmind::StreamView<double> v;
+    v.times = times;
+    v.values = values;
+    v.valid = valid;
+    v.dim = wide;
+    v.capacity = 2;
+    v.head = 0;
+    v.count = 2;
+
+    argmind::Pick<double> p;
+    // A plain array rather than a braced-init range-for: that form needs
+    // <initializer_list>, which is a hosted header this core does without.
+    const argmind::Policy borrowing[3] = {argmind::Policy::HoldLast,
+                                          argmind::Policy::Nearest,
+                                          argmind::Policy::DropIfStale};
+    for (int k = 0; k < 3; ++k) {
+        const argmind::Aligner al(borrowing[k], 0.0);
+        CHECK(al.pick<double>(v, 1.5, &p));
+        CHECK(p.status == argmind::PickStatus::Ok);
+        CHECK(p.values[0] == 0.0);
+    }
+
+    const argmind::Aligner interp(argmind::Policy::Interpolate, 0.0);
+    CHECK(!interp.pick<double>(v, 1.5, &p));
+    CHECK(p.status == argmind::PickStatus::DimTooLarge);
+    CHECK(!p.present);
+
+    // ...and a stream exactly at the cap still interpolates.
+    v.dim = argmind::Pick<double>::MAX_DIM;
+    CHECK(interp.pick<double>(v, 1.5, &p));
+    CHECK(p.status == argmind::PickStatus::Ok);
+}
+
+void test_a_missing_sample_and_a_too_wide_stream_are_distinguishable() {
+    // Both halves, since the name promises both. An empty ring under any policy is
+    // NoSample; a stream too wide to interpolate is DimTooLarge. They used to be the same
+    // return value and the same `present == false`, so a wiring mistake read as a dead
+    // sensor — which is the one thing the staleness reporting exists to prevent.
+    argmind::Stream<double, 1, 4> s;
+    const argmind::Aligner hold(argmind::Policy::HoldLast, 0.0);
+    argmind::Pick<double> p;
+    CHECK(!hold.pick<double>(s.view(), 1.0, &p));
+    CHECK(p.status == argmind::PickStatus::NoSample);
+    CHECK(!p.present);
+
+    constexpr int wide = argmind::Pick<double>::MAX_DIM + 1;
+    static double values[2 * wide] = {0};
+    static double times[2] = {1.0, 2.0};
+    static uint8_t valid[2] = {1, 1};
+    argmind::StreamView<double> v;
+    v.times = times;
+    v.values = values;
+    v.valid = valid;
+    v.dim = wide;
+    v.capacity = 2;
+    v.head = 0;
+    v.count = 2;
+
+    const argmind::Aligner interp(argmind::Policy::Interpolate, 0.0);
+    CHECK(!interp.pick<double>(v, 1.5, &p));
+    CHECK(p.status == argmind::PickStatus::DimTooLarge);
+    CHECK(p.status != argmind::PickStatus::NoSample);
+}
+
+void test_the_causal_flag_names_the_policies_that_look_ahead() {
+    CHECK(argmind::is_causal(argmind::Policy::HoldLast));
+    CHECK(argmind::is_causal(argmind::Policy::DropIfStale));
+    CHECK(!argmind::is_causal(argmind::Policy::Nearest));
+    CHECK(!argmind::is_causal(argmind::Policy::Interpolate));
+}
+
+void test_drop_if_stale_is_the_only_policy_that_refuses() {
+    const argmind::Aligner hold(argmind::Policy::HoldLast, 0.5);
+    const argmind::Aligner drop(argmind::Policy::DropIfStale, 0.5);
+    const argmind::Aligner unlimited(argmind::Policy::DropIfStale, 0.0);
+    CHECK(!hold.refuses_stale(-10.0));
+    CHECK(drop.refuses_stale(-10.0));
+    CHECK(drop.refuses_stale(10.0));       // the magnitude is what matters
+    CHECK(!drop.refuses_stale(-0.25));
+    CHECK(!unlimited.refuses_stale(-1e9));  // a non-positive limit means no limit
+}
+
+void test_the_declared_ring_memory_matches_the_shape() {
+    using S = argmind::Stream<float, 6, 64>;
+    CHECK(S::payload_bytes == 64 * 6 * 4 + 64 * 8 + 64);
+    CHECK(argmind::Stream<double, 1, 8>::payload_bytes == 8 * 1 * 8 + 8 * 8 + 8);
+
+    // The constant restated its own definition and never met `sizeof`, while the header
+    // told a caller to budget from it — 24 bytes short per stream on this host. What is
+    // true and worth pinning is the relation: the payload is part of the object, never the
+    // whole of it, and the gap is bookkeeping plus padding rather than anything unbounded.
+    CHECK(sizeof(S) >= static_cast<size_t>(S::payload_bytes));
+    CHECK(sizeof(S) - static_cast<size_t>(S::payload_bytes) < 64u);
+    CHECK(sizeof(argmind::Stream<double, 1, 8>) >=
+          static_cast<size_t>(argmind::Stream<double, 1, 8>::payload_bytes));
+}
+
 }  // namespace
 
 int main() {
@@ -805,6 +1020,17 @@ int main() {
     test_unpack_reports_each_failure_distinctly();
     test_read_state_round_trips_and_refuses_a_mismatched_count();
     test_select_newest_and_next_slot();
+
+    test_stream_push_refuses_what_the_reference_refuses();
+    test_stream_overwrites_and_counts();
+    test_the_ring_index_survives_wrapping();
+    test_nearest_resolves_a_tie_to_the_earlier_sample();
+    test_bracketing_refuses_to_extrapolate();
+    test_only_interpolation_is_bounded_by_the_blend_buffer();
+    test_a_missing_sample_and_a_too_wide_stream_are_distinguishable();
+    test_the_causal_flag_names_the_policies_that_look_ahead();
+    test_drop_if_stale_is_the_only_policy_that_refuses();
+    test_the_declared_ring_memory_matches_the_shape();
 
     printf("%d checks, %d failures\n", checks, failures);
     return failures == 0 ? 0 : 1;

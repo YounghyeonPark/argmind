@@ -128,7 +128,18 @@ class Stream:
         of order, and both break every alignment policy downstream. Failing here
         localises the bug to the source instead of producing a subtly wrong fused
         estimate somewhere far away.
+
+        Non-finite timestamps are refused by a **separate** check, because the
+        ordering one cannot catch them: `NaN <= last` is False, so a NaN was
+        accepted, `_last_t` became NaN, and every later comparison was False too
+        — the ordering guarantee was gone for the life of the stream. Observed
+        leaving a ring holding `[1.0, 1.5, nan, 0.1]`, which every alignment
+        policy then reads through a scan that assumes order. Found by the C++
+        port refusing the sample and disagreeing.
         """
+        if not np.isfinite(t):
+            raise ValueError(
+                f"{self.name}: timestamp must be finite, got t={t!r}")
         if t <= self._last_t:
             raise ValueError(
                 f"{self.name}: timestamps must increase, got t={t!r} after "
