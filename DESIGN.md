@@ -298,6 +298,55 @@ lands, not after:
 Carried from the parked project: measure worst case, not just typical. A p50 that looks good and
 a p99 that misses is the shape that fails in the field.
 
+**BUILT 2026-08-08** — `argmind/bench.py`, all three requirements met, plus two things the writing
+of it turned up.
+
+**Absolute timings are not committed as a gate**, and that is a decision rather than an omission.
+A recorded baseline is a statement about one machine, one CPU governor and one Python build; as a
+repository gate it fails on everyone else's laptop and gets switched off within a week. Record
+locally with `--record`, compare with `--compare`, which exits non-zero. What the *test suite*
+gates on is what survives moving between machines: the exact counters, the state digest, the
+memory leak rate, and ratios measured inside one run. The comparison tolerance is widened by the
+run-to-run spread `--record` measures on that machine, rather than by a guessed constant.
+
+**Measured on this codebase, and it confirms the C++ argument above rather than echoing it.**
+`argmind.bench.scaling` times one RLS update against the state dimension:
+
+| n | ns/update | ratio |
+|---|---|---|
+| 4 | 22525 | — |
+| 8 | 22416 | ×1.00 |
+| 16 | 22356 | ×1.00 |
+| 32 | 24410 | ×1.09 |
+| 64 | 32127 | ×1.32 |
+| 128 | 70231 | ×2.19 |
+
+RLS is O(n²), so cost should rise 64-fold from n=4 to n=32. It rises 1.09-fold. **At the design
+driver's dimension of six, essentially all of the time is call overhead and none of it is
+arithmetic** — the exact regime the language decision was made for, now measured here rather than
+inferred from the parked project. It also sets an expectation for the port: the C++ core must not
+be judged against these figures, because it is not paying the cost they are made of. A naive
+scaling test asserting O(n²) would have failed, which is why it was measured before being
+asserted.
+
+**"Memory is a function of configuration, not of uptime" is now checked**, having been asserted
+throughout this document with nothing behind it. Getting a trustworthy answer took two corrections
+and both are worth keeping:
+
+- *Fitting a trend line to successive batches reports growth that is a settling transient.* The
+  series converges — buffers fill, caches settle — and a straight line through it gave +414
+  bytes/batch on deltas that ran 1126, 375, 375, 179, 211 and then repeatedly exactly 0. What
+  works is a discriminator: measure at several batch *sizes* and fit `cost = fixed + leak ×
+  frames`. Cost per frame is not the leak rate; only the slope is.
+- *`tracemalloc` allocates while it measures*, and its own bookkeeping dominated the residual it
+  was being used to find. `sys.getallocatedblocks` does not.
+
+The measurement then found one real thing: `Adapter.state` built a fresh read-only view on every
+access, on a path the guard takes at every checkpoint. It is now built once at construction. After
+that the leak rate is −0.004 blocks/frame, i.e. zero within noise. The detector is kept honest by
+a positive control — an adapter that keeps every report it has produced is detected at over 1
+block/frame — because a leak detector that has never detected a leak is not evidence.
+
 ## Where this stands, and what comes next
 
 **Built:** `Stream` (fixed-capacity ring buffers, counted overflow, monotonic-time
@@ -306,7 +355,8 @@ declared), `Adapter` + `RecursiveLeastSquares` (flat state block, forgetting fac
 report, measured precision floor), `Guard` + `Bound` + `Divergence` (checks, freeze, bounded
 rollback, explicit recovery), `Pipeline` + `FrameMap` (frame to regressor by index table,
 input gate, bounded `step()`), and `Store` (two-slot atomic persistence, CRC, configuration
-fingerprint, declared cadence). **The Python reference is complete.** 142 tests, several of which
+fingerprint, declared cadence), and `bench` (fixed workload, correctness digest, leak detector,
+regression gate). **The Python reference is complete and measurable.** 166 tests, several of which
 exist to prove failures are visible rather than silent.
 
 **What the pipeline settled:**
@@ -389,15 +439,16 @@ on a device:
   normal and should not need a try/except around every start-up. A mismatched block is a
   configuration error, and continuing from one is worse than not starting.
 
-**Next, in order:**
+**Next:**
 
-1. **The benchmark harness**, before any optimisation. Requirements are already stated above:
-   a fixed workload from the design driver, the Python reference as the correctness oracle, and
-   per-sample cost reported separately from per-frame cost.
-2. **The C++ core**, verified against the Python reference — same inputs, same outputs, to the
-   tolerance the declared precision allows. The one open question that gates it is unchanged:
-   whether the target range reaches down to MCUs, which decides own-minimal-matrix-types versus
-   Eigen and the `-mcpu` set.
+**The C++ core**, verified against the Python reference — same inputs, same outputs, to the
+tolerance the declared precision allows. Everything it needs is now in place: a contract shaped
+for a C ABI, a reference anchored to closed-form solutions rather than to itself, a state block
+that is already the persistence format, and a benchmark that can report a regression.
+
+The one open question that gates it is unchanged and is now the only one left: **whether the
+target range reaches down to MCUs**, which decides own-minimal-matrix-types versus Eigen and the
+`-mcpu` set. It did not block the Python reference and it does block this.
 
 **Now decided (see "Language and structure" above), so the `Adapter` contract must be shaped for
 a C ABI from the start:** fixed dimensions known at construction, no allocation after it, state

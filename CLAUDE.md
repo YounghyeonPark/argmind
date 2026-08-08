@@ -97,10 +97,11 @@ enforced at the source), `argmind/align.py` (four explicit alignment policies, s
 causal/non-causal declared), `argmind/adapt.py` (the `Adapter` contract and
 `RecursiveLeastSquares`), `argmind/guard.py` (`Check`/`Bound`/`Divergence`, freeze, bounded
 rollback, explicit recovery), `argmind/pipeline.py` (`FrameMap`, input gate, bounded `step()`),
-and `argmind/persist.py` (two-slot atomic store, CRC, configuration fingerprint, declared
-cadence). **The Python reference is complete.** 142 tests pass; several exist to prove failures
-are visible rather than silent, and every new suite was mutation-checked — forty-eight deliberate
-bugs, all caught.
+`argmind/persist.py` (two-slot atomic store, CRC, configuration fingerprint, declared cadence),
+and `argmind/bench.py` (fixed workload, correctness digest, leak detector, regression gate).
+**The Python reference is complete and measurable.** 166 tests pass; several exist to prove
+failures are visible rather than silent, and every new suite was mutation-checked — fifty-nine
+deliberate bugs, all caught.
 
 **The adapter contract, since everything after it fits into it** (full reasoning in DESIGN.md):
 state is one flat contiguous block so persistence is a copy and the C ABI needs no serialisation;
@@ -153,12 +154,30 @@ persisted; the frozen flag and its cause are, because they are a conclusion. Wha
 with a freeze is the caller's call (`on_frozen="thaw"|"keep"|"refuse"`) — thawing risks re-learning
 into the same trouble, keeping risks stranding a device a power cycle would have fixed.
 
-**Next, in order** — the ordering is deliberate and the reasoning is in DESIGN.md:
+**The benchmark refuses to commit absolute timings as a gate.** A baseline is a statement about
+one machine; as a repository gate it fails on everyone else's laptop and gets switched off. Record
+locally (`python -m argmind.bench --record`), compare with `--compare`, which exits non-zero. The
+suite gates only what survives moving machines: exact counters, the state digest, the memory leak
+rate, and ratios measured inside one run. The tolerance is widened by *measured* run-to-run
+spread, not a guessed constant.
 
-1. The benchmark harness, before any optimisation. A fixed workload from the design driver, the
-   Python reference as oracle, per-sample cost reported separately from per-frame cost.
-2. The C++ core, verified against the Python reference. Still gated on the one open question:
-   whether the target range reaches down to MCUs.
+**Two measured results from building it**, both of which contradicted a plausible first guess:
+
+- **RLS update cost is flat from n=4 to n=32** (~22 µs) and only climbs at n=64. RLS is O(n²), so
+  a naive scaling test asserting ×64 would have failed. At the design driver's n=6 the time is
+  *all* call overhead — the regime the C++ decision was made for, now measured here rather than
+  inherited.
+- **Memory does not grow with uptime**, but proving it needed two corrections. Fitting a trend
+  line to successive batches reports a settling transient as growth; the right tool is a
+  discriminator across batch *sizes*, fitting `cost = fixed + leak × frames`. And `tracemalloc`
+  allocates while measuring, so its own bookkeeping swamped the residual — `sys.getallocatedblocks`
+  does not. The measurement found one real thing: `Adapter.state` built a fresh view per call, on
+  a path the guard takes every checkpoint. Fixed. A positive control (an adapter that hoards every
+  report) keeps the detector honest.
+
+**Next:** the C++ core, verified against the Python reference. Everything it needs is in place.
+Still gated on the one remaining open question: whether the target range reaches down to MCUs,
+which decides own-minimal-matrix-types versus Eigen and the `-mcpu` set.
 
 **Before any optimisation lands, a benchmark that can report a regression must exist.** An
 optimisation with no way to fail is not an optimisation, it is a hope.

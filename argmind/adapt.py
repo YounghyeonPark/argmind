@@ -256,7 +256,7 @@ class RecursiveLeastSquares(Adapter):
     min_dtype = "f4"
 
     __slots__ = ("n_features", "n_outputs", "dtype", "forgetting", "p0",
-                 "_state", "_theta", "_p", "_px", "_k", "_e", "_e_post",
+                 "_state", "_state_ro", "_theta", "_p", "_px", "_k", "_e", "_e_post",
                  "_yhat", "_pn", "_tn", "_psym",
                  "_updates", "_rejected_nonfinite", "_rejected_denominator")
 
@@ -287,6 +287,8 @@ class RecursiveLeastSquares(Adapter):
         self._state = np.zeros(n * m + n * n, dtype=self.dtype)
         self._theta = self._state[:n * m].reshape(n, m)      # views, not copies
         self._p = self._state[n * m:].reshape(n, n)
+        self._state_ro = self._state.view()
+        self._state_ro.flags.writeable = False
 
         # Scratch, preallocated. The recursion below allocates nothing.
         self._px = np.zeros(n, dtype=self.dtype)
@@ -313,9 +315,15 @@ class RecursiveLeastSquares(Adapter):
 
     @property
     def state(self) -> np.ndarray:
-        v = self._state.view()
-        v.flags.writeable = False
-        return v
+        """The persistence block, read-only.
+
+        The view is built once at construction and handed out unchanged. Building
+        a fresh one per call allocated a small object every time, on a path the
+        guard takes on every checkpoint — the sort of thing that is invisible
+        until something measures it. It stays valid because `reset` and
+        `load_state` write *into* the buffer rather than replacing it.
+        """
+        return self._state_ro
 
     @property
     def state_size(self) -> int:
