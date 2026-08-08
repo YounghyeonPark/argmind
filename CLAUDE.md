@@ -87,6 +87,7 @@ and not to be re-litigated without a reason:
 | sensors | **sensor-agnostic**, general framework |
 | deliverable | **a library**, not an application |
 | language | **C++ core behind a C ABI**, optimised for speed (see DESIGN.md) |
+| target floor | **Cortex-M4F class** — ARMv7E-M with an fp32 FPU; own matrix types, no Eigen |
 
 The design driver, chosen so the API is shaped against something real: an inertial + aiding-sensor
 estimator with online bias calibration. Sensor-agnostic in the API, specific in what it must
@@ -175,15 +176,37 @@ spread, not a guessed constant.
   a path the guard takes every checkpoint. Fixed. A positive control (an adapter that hoards every
   report) keeps the detector honest.
 
-**Next:** the C++ core, verified against the Python reference. Everything it needs is in place.
-Still gated on the one remaining open question: whether the target range reaches down to MCUs,
-which decides own-minimal-matrix-types versus Eigen and the `-mcpu` set.
+**Next:** the C++ core, verified against the Python reference. Everything it needs is in place and
+nothing gates it any more.
 
 **Before any optimisation lands, a benchmark that can report a regression must exist.** An
 optimisation with no way to fail is not an optimisation, it is a hope.
 
-**One question still open:** whether the target range reaches down to MCUs. It decides the matrix
-types (own minimal types vs Eigen) and the `-mcpu` set. It does not block the Python reference.
+**Target range — settled 2026-08-08. The floor is Cortex-M4F class**: ARMv7E-M with a
+single-precision hardware FPU (M4F/M33/M7, or RISC-V with F). fp32 FPU required, 8 KB RAM for the
+library, 32 KB flash, C++17 freestanding with no exceptions/RTTI/heap, reference flags
+`-mcpu=cortex-m4 -mfpu=fpv4-sp-d16 -mfloat-abi=hard`. That closes the matrix-type question: **own
+minimal fixed-size types, no Eigen.**
+
+**What decided it was the precision floor, not size or speed, which was not the expected answer.**
+Computed from the reference's declared shapes: the driver configuration needs 3.3 KB of RAM, and an
+analytic flop count puts n=6 at 5 Hz at 1.3 kflop/s — even n=30 at 200 Hz is ~2% of a 48 MHz M4F
+(that ratio an estimate from published cycle counts, not measured). Both comfortable. The binding
+constraint is that every covariance operation is fp32 with no fp16 path, so without an FPU it is
+soft float at 20–100 cycles per op on data-dependent paths, and this project bounds the *worst*
+case. An FPU is what makes the timing analysable.
+
+**M0+/M3 are not supported and not claimed** — they would probably work (n=6 computes to 0.27 ms
+per soft-float update, 0.14% duty at 5 Hz) but nobody has run it on one, and writing untested
+support down is how a claim becomes a fiction. No ARM cross-compiler or target hardware exists on
+this machine: flash/RAM will come from a link map, execution is verified on the host, and **any
+on-target timing claim stays absent rather than interpolated from host numbers.**
+
+**Two port notes** from that review, deliberately not applied to Python where call overhead hides
+them: `P /= lambda` is n² divisions (36 at n=6; `VDIV.F32` is 14 cycles on an M4F, so ~500 cycles
+for one line) and must become one reciprocal plus n² multiplies, as must `k = Px / den`. And the
+Python timings are **not** a baseline for the C++ — they are interpreter and numpy dispatch cost,
+which the port does not pay, so comparing them would flatter it for reasons unrelated to the port.
 
 ## Working state
 

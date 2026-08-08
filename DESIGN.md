@@ -188,8 +188,11 @@ Chosen for stability that can be argued about, not for novelty.
 Genuinely open, listed rather than guessed:
 
 - ~~Language~~ — **DECIDED 2026-08-08: a C++ core with a C ABI, optimised for speed.** See
-  "Language and structure" below. What remains open is whether the target range includes MCUs,
-  which decides the matrix-type question.
+  "Language and structure" below.
+- ~~Target range~~ — **DECIDED 2026-08-08: the floor is Cortex-M4F class**, ARMv7E-M with a
+  single-precision hardware FPU. Set by the measured fp32 precision floor rather than by memory or
+  speed, both of which are comfortable. See "Target range" below. This closes the matrix-type
+  question with own minimal fixed-size types and no Eigen.
 - **How much of a timebase to own.** Does the library assume a monotonic clock per stream, or
   handle clock skew estimation between sources?
 - **Where inference sits.** The library adapts parameters and estimates. Whether it also wraps a
@@ -232,12 +235,72 @@ reasons: it lets a plain-C firmware, Python, Rust or MATLAB call in without know
 inside; and it insulates callers from C++ ABI instability across compilers and versions, which
 is a genuine hazard for a library shipped as a binary.
 
-### Own the matrix types, at least initially
+### Target range — decided 2026-08-08: Cortex-M4F class
+
+**The floor is ARMv7E-M with a single-precision hardware FPU** — Cortex-M4F, M33, M7 and up, or
+a RISC-V core with the F extension. Concretely, as a testable contract:
+
+| | |
+|---|---|
+| FPU | fp32 in hardware, required |
+| RAM for the library | 8 KB (the design driver's configuration computes to 3.3 KB) |
+| flash | 32 KB, code plus the two persistence slots |
+| language | C++17, freestanding, `-fno-exceptions -fno-rtti`, no heap |
+| reference flags | `-mcpu=cortex-m4 -mfpu=fpv4-sp-d16 -mfloat-abi=hard` |
+
+**What decided it was the precision floor, not size or speed** — which was not the expected
+answer. RAM and compute are both comfortable by a wide margin. Computed from the reference's own
+declared shapes, and marked as computed because nothing here has been measured on a device:
+
+| configuration | RAM | note |
+|---|---|---|
+| driver, n=6 f4, rollback depth 4, capacity 64 | 3.3 KB | the workload the API was designed against |
+| minimal, n=6 f4, depth 1, capacity 16 | 1.4 KB | |
+| n=30 f8, depth 10, capacity 128 | 125 KB | only the top end needs real memory |
+
+Compute is smaller still: an analytic flop count gives ~262 flops per RLS update at n=6, so 1.3
+kflop/s at the driver's 5 Hz aiding rate. Even n=30 driven at 200 Hz is 1.1 Mflop/s, roughly 2% of
+a 48 MHz M4F — that last figure being an *estimate* from the core's published cycle counts rather
+than a measurement.
+
+So the binding constraint is the measured fp32 floor (see the precision section above). Every
+covariance operation is fp32 and there is no fp16 path in any filter form. Without an FPU that
+becomes software floating point at 20–100 cycles per operation, on data-dependent paths — and this
+project's standard is to bound the *worst* case, which soft-float division makes hard. An FPU is
+what makes the timing analysable, and that is the boundary.
+
+**M0+ and M3 are not supported and are not claimed.** They would probably work: n=6 in soft float
+computes to about 0.27 ms per update, a 0.14% duty cycle at 5 Hz. But "probably works, by
+calculation, on hardware nobody has run it on" is not support, and writing it down as support is
+how a claim becomes a fiction.
+
+**Verification, and its honest limit.** There is no ARM cross-compiler on the development machine
+at the time of writing, and no target hardware. What can be verified without either is that the
+core cross-compiles freestanding under the flags above and what it costs — flash and RAM come out
+of the link map, which is real evidence. Execution will be verified on the host against the Python
+reference. **Any on-target timing claim must be labelled as absent until a device exists**, not
+interpolated from host numbers.
+
+### Own the matrix types — settled by the decision above
 
 Eigen is excellent and is the default in robotics state estimation, but it is heavy for a
-library that may need to run on a Cortex-M — header bloat, compile times, and a C++14+
-requirement. Start with a minimal fixed-size type covering exactly what the adapters need.
-**Revisit if the target range turns out to exclude MCUs**, which is the one open question left.
+Cortex-M4F: header bloat, compile times, and a C++14+ requirement. With MCUs in range the question
+is closed — **a minimal fixed-size type covering exactly what the adapters need, and no Eigen.** At
+n=6 Eigen would buy nothing anyway: the measurement above says the cost at these sizes is call
+overhead, not arithmetic.
+
+### Port notes, collected while deciding the target
+
+Things that are invisible in the Python reference because call overhead swamps them, and that
+matter on an M4F. Recorded rather than acted on, since changing them in Python would be optimising
+a number nobody should be reading:
+
+- **`P /= lambda` is n² divisions.** At n=6 that is 36, and `VDIV.F32` on an M4F is 14 cycles —
+  about 500 cycles for one line. The C++ must compute one reciprocal and do n² multiplies. The
+  same applies to `k = Px / den`: one reciprocal, n multiplies.
+- **The Python timings are not a baseline for the C++.** They are dominated by interpreter and
+  numpy dispatch overhead, which the C++ does not pay. Comparing the two would flatter the port by
+  a factor that has nothing to do with the port.
 
 ### Do not call a BLAS at these sizes — which is not the same as forgoing hardware acceleration
 
@@ -446,9 +509,10 @@ tolerance the declared precision allows. Everything it needs is now in place: a 
 for a C ABI, a reference anchored to closed-form solutions rather than to itself, a state block
 that is already the persistence format, and a benchmark that can report a regression.
 
-The one open question that gates it is unchanged and is now the only one left: **whether the
-target range reaches down to MCUs**, which decides own-minimal-matrix-types versus Eigen and the
-`-mcpu` set. It did not block the Python reference and it does block this.
+**Nothing gates it any more.** The target range was the last blocking question and it is settled:
+Cortex-M4F class, own minimal fixed-size matrix types, no Eigen, `-mcpu=cortex-m4
+-mfpu=fpv4-sp-d16 -mfloat-abi=hard -fno-exceptions -fno-rtti`. The port notes collected while
+deciding it are in "Target range" above and should be read before writing the first line of it.
 
 **Now decided (see "Language and structure" above), so the `Adapter` contract must be shaped for
 a C ABI from the start:** fixed dimensions known at construction, no allocation after it, state
