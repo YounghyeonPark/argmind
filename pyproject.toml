@@ -1,0 +1,29 @@
+[project]
+name = "argmind"
+version = "0.0.1.dev0"
+description = "Sensor-agnostic on-device online adaptation and inference for embedded targets"
+requires-python = ">=3.11"
+authors = [{ name = "Younghyeon Park", email = "ypark.dev@gmail.com" }]
+license = "Apache-2.0"
+license-files = ["LICENSE", "NOTICE"]
+
+# Deliberately minimal. This targets embedded and edge devices, so every
+# dependency is a portability cost. numpy is the one concession -- it is the
+# lingua franca for sample buffers and is available wherever Python is.
+dependencies = ["numpy>=1.24"]
+
+[project.optional-dependencies]
+dev = ["pytest>=8", "ruff>=0.6"]
+
+[tool.pytest.ini_options]
+# accelerator/ is parked and its 429 tests do not gate work on this project.
+# Run them explicitly with: python -m pytest accelerator/tests
+testpaths = ["tests"]
+addopts = "-q --strict-markers --strict-config"
+
+[tool.ruff]
+line-length = 90
+target-version = "py311"
+
+[tool.setuptools]
+packages = ["argmind"]
