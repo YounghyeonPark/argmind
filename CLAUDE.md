@@ -236,6 +236,26 @@ for one line) and must become one reciprocal plus n² multiplies, as must `k = P
 Python timings are **not** a baseline for the C++ — they are interpreter and numpy dispatch cost,
 which the port does not pay, so comparing them would flatter it for reasons unrelated to the port.
 
+## Sub-agent team
+
+Five project-scoped agents in `.claude/agents/`, checked in for the same reason `.githooks/`
+is — the discipline belongs to the project, not to one machine. Each covers work that was
+done by hand at least twice, with this project's actual mistakes encoded in it. See
+`.claude/agents/README.md` for why these five and what was deliberately left out.
+
+| agent | when to reach for it |
+|---|---|
+| `evidence-auditor` | before a commit stating a number; after editing DESIGN.md or CLAUDE.md; when a result looks good |
+| `numerics-reviewer` | before declaring a precision floor or a tolerance; when an estimator misbehaves |
+| `mutation-tester` | after writing a module and its tests; before claiming a suite protects something |
+| `parity-verifier` | after any change to `cpp/` or the Python adapters; when a tolerance is under pressure |
+| `embedded-reviewer` | after any change under `cpp/`; before adding an ABI entry point |
+
+After a change under `cpp/`, run `embedded-reviewer` and `parity-verifier` together: does it
+still fit the target, and does it still compute the right thing. Independent questions.
+
+A sub-agent's conclusion is a claim about the repository, and claims get verified.
+
 ## Working state
 
 No git remote is configured — deliberately, so a stray `push` cannot write to the retired Google
