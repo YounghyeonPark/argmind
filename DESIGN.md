@@ -425,7 +425,7 @@ byte for byte for the record format, and exactly for every decision and counter 
 The runtime library is fully across; `argmind/bench.py` has no C++ counterpart and is not
 getting one, being a host measurement harness rather than part of what ships. (Everything the library does is reachable from C: RLS, the
 guard, the record format, caller-owned rings and the composed pipeline.)
-328 Python tests plus 4597 C++ checks, several of which exist to prove failures are visible
+344 Python tests plus 4597 C++ checks, several of which exist to prove failures are visible
 rather than silent.
 
 **What the pipeline settled:**
@@ -1270,6 +1270,75 @@ numpy dispatch overhead dominate at the design driver's dimension. These figures
 baseline the C++ core should be judged against, for the same reason DESIGN.md already gives
 about the port. What they are good for is exactly what a benchmark is for here: noticing when
 a change makes one of them worse.
+
+### The target build, 2026-08-09 — a cross-compiler exists now, and it found things
+
+Every size figure this project quoted before today was an x86-64 shape, said so each time,
+and DESIGN.md promised that flash and RAM would come from a **link map**. An
+`arm-none-eabi` toolchain is now installed (Arm GNU Toolchain 14.2.Rel1, per-user from Arm's
+own zip with the published SHA-256 checked — `winget`'s package is a machine-scope NSIS
+installer and needs elevation this session did not have). So the promise is kept, and it
+was worth keeping: the link found three things a host build cannot.
+
+**1. `norm()` was calling into libm, and `-ffreestanding` was not the reason.** GCC will not
+emit `VSQRT.F32` for `sqrtf` unless told it need not set `errno` on a negative argument.
+Measured: without `-fno-math-errno`, three `sqrtf` call sites and zero `VSQRT.F32`; with it,
+zero calls and five inlined instructions. `Rls::update` calls `norm()` three times, so this
+is on the hot path. The flag is now in the CMake embedded profile and in the test's flag
+list, and it is **not** a fast-math option — it changes no result, only the promise to set
+`errno`, which for a sum of squares was never meaningful. No cycle figure is quoted for the
+difference, because there is still no hardware.
+
+**2. The core needs `memcpy` and `memset` from its environment** — 48 and 69 call sites. GCC
+is permitted to emit calls to those even in a freestanding build and it does, from struct
+assignment and from `__builtin_memcpy` on a runtime length. Nothing in this project said so
+before, and a bare-metal integrator has to supply them. Beyond those it needs only libgcc's
+soft-float double helpers (`__aeabi_dadd`, `__aeabi_ddiv`, the comparisons and the
+conversions), which are the cost `align.hpp` already documented for a single-precision FPU —
+now confirmed as a symbol list rather than an argument. The whole set is **pinned as a set**
+in `tests/test_target_build.py`, so a new external dependency fails a test and has to be
+argued for.
+
+**3. The checked-in CMake cross recipe did not work.** It was written before any toolchain
+existed and had therefore never been run. `project()` runs a compiler check that links a
+full executable, which fails bare-metal because newlib's stdio wants `_read`, `_write` and
+`_sbrk`; the fix is `CMAKE_TRY_COMPILE_TARGET_TYPE STATIC_LIBRARY` before `project()`. Same
+category as `select_newest` being compiled but never called: a thing that looks maintained
+because nothing had asked it to run.
+
+**Flash and RAM, from a link map at last.** `--gc-sections` means there is no single "size of
+the library" — what reaches flash depends on which entry points a caller touches. So
+`cpp/target/usage.c` is a firmware-shaped caller in four configurations, linked separately
+against `cpp/target/cortex-m4.ld`. Cortex-M4F, `-Os`, newlib-nano:
+
+| configuration | flash | of which argmind | libc/libgcc | static RAM |
+|---|---|---|---|---|
+| bare RLS f32 6×1 | 2,340 | 1,258 | 916 | 272 |
+| + guard | 5,936 | 3,314 | 2,264 | 1,296 |
+| + record format | 6,376 | 3,804 | 2,264 | 1,972 |
+| full composed pipeline | 10,380 | 7,374 | 2,424 | 3,264 |
+
+Against the declared 32 KB flash and 8 KB RAM, the whole composed pipeline is **32% of the
+flash budget and 40% of the RAM**. The linker script carries those budgets so overflowing
+them is a link error rather than a number somebody has to notice.
+
+**Every byte of that RAM is the caller's.** The library defines **zero** bytes of `.data` and
+`.bss` and 72 bytes of `.rodata` — checked directly, and the `.bss` figures above are exactly
+the storage `usage.c` declares: the handle, the rings, the two flash slots, the restore
+buffer. That is the storage-is-the-caller's design confirmed rather than asserted, and it is
+now a test.
+
+**What is still absent, deliberately: any on-target timing.** There is no hardware and no
+emulator on this machine, so a cycle count would be interpolated from a host measurement,
+which DESIGN.md has refused to do since the target range was settled. The figures above are
+sizes and dependencies, which a link can establish; speed is not one of them.
+
+Two smaller notes. The f64 instantiations pull a soft-float `sqrt`; `--gc-sections` keeps it
+out of an image that only touches f32 entry points, verified rather than assumed. And
+`cpp/target/cortex-m4.ld` is **not a board support file** — no vector table, no startup code,
+no peripheral regions. Its only job is to give the linker somewhere to put sections so a map
+exists. A real firmware replaces it and adds its own drivers, so these are the library's
+contribution to a budget rather than an image anyone could flash.
 
 ## Standards
 

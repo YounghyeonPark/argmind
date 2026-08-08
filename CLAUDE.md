@@ -107,7 +107,7 @@ rollback, explicit recovery), `argmind/pipeline.py` (`FrameMap`, input gate, bou
 pipeline. `argmind/bench.py` has no C++ counterpart and is not getting one: it is a host
 measurement harness, and DESIGN.md already records that Python timings are not a baseline the
 C++ can be compared against.
-328 Python tests and 4597 C++ checks pass; several exist to prove failures are visible
+344 Python tests and 4597 C++ checks pass; several exist to prove failures are visible
 rather than silent. Every suite is mutation-checked, and surviving mutants are recorded where
 they live rather than tallied here — including the ones that turn out to be **equivalent on a
 64-bit host**, a distinction worth keeping rather than rounding away. Cumulative counts are
@@ -263,10 +263,12 @@ cancellation-produced near-zero entries (reads 1e-13/1e-4), and the a posteriori
 belong in a *relative* comparison at all — nor does its ratio to the a priori one, which inherits
 the same cancellation (1.06e5 ulp). It is bounded absolutely against the target scale instead.
 
-**Verification limits, unchanged and important**: execution is host-only. `rls.hpp` is checked to
-compile `-ffreestanding` and `argmind.h` to be valid C99, on the host. Host `-Os` code size is 576
-bytes for `Rls<float,6,1>::update` — **x86-64, a shape, not a target figure**. Flash/RAM for the
-M4F floor must come from a link map, and on-target timing claims stay absent.
+**Verification limits, narrowed on 2026-08-09 and still important**: execution is host-only.
+Compilation is no longer — every core header now builds for Cortex-M4F and the ABI links into
+four firmware-shaped images, so flash and RAM come from a link map rather than from an x86-64
+shape. What remains host-only is *running* the code: **on-target timing claims stay absent**
+because there is no hardware and no emulator, and interpolating one from a host measurement is
+the thing this project decided not to do.
 
 **The Guard is across too** (`cpp/include/argmind/guard.hpp`). `Guard<Adapter, Depth,
 MaxBounds>` — the checkpoint ring and check capacity live in the type, so the memory is
@@ -471,9 +473,40 @@ All of it is Python, so ~41 us/frame is interpreter and numpy dispatch, not arit
 `scaling` already showed RLS flat from n=4 to n=32. Not a baseline for the C++ core, for the
 reason DESIGN.md already gives.
 
-**Next:** the on-target build. Checked on 2026-08-09: no `arm-none-eabi-*`, no clang, no
-qemu on this machine, so it cannot start and no on-target figure is quoted. Flash and RAM must
-come from a link map; the host figures above are shapes.
+**The cross-compiler exists now (2026-08-09) and the target build is real.** Arm GNU
+Toolchain 14.2.Rel1, installed per-user from Arm's own zip with the published SHA-256
+verified — `winget`'s package is a machine-scope NSIS installer needing elevation. Flash and
+RAM now come from a **link map**, as promised, and the link found three things a host build
+cannot:
+
+- **`norm()` was calling into libm**, and `-ffreestanding` was not why. GCC will not emit
+  `VSQRT.F32` for `sqrtf` unless told it need not set `errno`. Measured: three call sites and
+  zero `VSQRT.F32` without `-fno-math-errno`; zero calls and five inlined instructions with
+  it. `Rls::update` calls `norm()` three times. The flag is now in the embedded profile; it is
+  **not** fast-math and changes no result.
+- **The core needs `memcpy` and `memset` from its environment** — 48 and 69 call sites, which
+  GCC may emit even freestanding. Nothing here said so before. Beyond those, only libgcc's
+  soft-float double helpers, which confirms `align.hpp`'s documented cost as a symbol list.
+  The whole external set is pinned in `tests/test_target_build.py`.
+- **The checked-in CMake cross recipe did not work.** Written before a toolchain existed and
+  therefore never run: `project()`'s compiler check links an executable, which fails
+  bare-metal. Same category as `select_newest` being compiled but never called.
+
+**Measured sizes, Cortex-M4F, `-Os`, newlib-nano, from the map.** `--gc-sections` means there
+is no one "size of the library", so four firmware-shaped configurations are linked separately:
+bare RLS **2,340 B** flash / 272 B RAM; guarded **5,936 / 1,296**; plus records **6,376 /
+1,972**; full composed pipeline **10,380 / 3,264** — **32% of the 32 KB flash budget and 40% of
+the 8 KB RAM**. Of the full pipeline's flash, 7,374 B is argmind and 2,424 B is libc/libgcc.
+
+**Every byte of that RAM is the caller's**: the library defines zero `.data` and zero `.bss`,
+72 B of `.rodata`. The storage-is-the-caller's design, confirmed and now tested.
+
+**Still absent, deliberately: any on-target timing.** No hardware, no emulator, so a cycle
+count would be interpolated — which this project has refused since the target range was
+settled. A link establishes sizes and dependencies; it does not establish speed.
+
+**Next:** on-target execution, once hardware or an emulator exists. That is what would turn
+the timing question from refused into answered.
 
 **Before any optimisation lands, a benchmark that can report a regression must exist.** An
 optimisation with no way to fail is not an optimisation, it is a hope.
