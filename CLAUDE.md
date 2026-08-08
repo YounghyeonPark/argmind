@@ -99,10 +99,11 @@ causal/non-causal declared), `argmind/adapt.py` (the `Adapter` contract and
 `RecursiveLeastSquares`), `argmind/guard.py` (`Check`/`Bound`/`Divergence`, freeze, bounded
 rollback, explicit recovery), `argmind/pipeline.py` (`FrameMap`, input gate, bounded `step()`),
 `argmind/persist.py` (two-slot atomic store, CRC, configuration fingerprint, declared cadence),
-and `argmind/bench.py` (fixed workload, correctness digest, leak detector, regression gate).
-**The Python reference is complete and measurable.** 166 tests pass; several exist to prove
-failures are visible rather than silent, and every new suite was mutation-checked — fifty-nine
-deliberate bugs, all caught.
+`argmind/bench.py` (fixed workload, correctness digest, leak detector, regression gate), and
+`cpp/` (the C++ core: `mat.hpp`, `rls.hpp`, the C ABI, the parity tool, 521 self-checks).
+**The Python reference is complete and RLS is across to C++.** 185 Python tests pass; several
+exist to prove failures are visible rather than silent, and every suite was mutation-checked —
+seventy-five deliberate bugs, all caught.
 
 **The adapter contract, since everything after it fits into it** (full reasoning in DESIGN.md):
 state is one flat contiguous block so persistence is a copy and the C ABI needs no serialisation;
@@ -176,8 +177,35 @@ spread, not a guessed constant.
   a path the guard takes every checkpoint. Fixed. A positive control (an adapter that hoards every
   report) keeps the detector honest.
 
-**Next:** the C++ core, verified against the Python reference. Everything it needs is in place and
-nothing gates it any more.
+**The C++ core — started 2026-08-08, RLS across.** `cpp/include/argmind/{mat,rls}.hpp`,
+`argmind.h` + `cpp/src/abi.cpp`, `cpp/tools/xcheck.cpp`, `cpp/tests/test_core.cpp`, `CMakeLists.txt`.
+Build and run it through `python -m pytest` — `tests/test_cpp_parity.py` invokes the compiler
+directly and skips if there is none, so a clone without a toolchain still tests the Python.
+
+**The C ABI's real tension**: compile-time dimensions are why C++ was chosen, and a C ABI wants
+runtime arguments. Runtime `n` would discard the reason, so the ABI exports an **explicit
+instantiation list** — adding a dimension is one line plus a rebuild. Storage is the caller's;
+`AM_*_MAX_BYTES` is an upper bound held to being one by a `static_assert`.
+
+**Parity: ~1.5 ulp on the state block, and the same ulp count at f32 as at f64** — which is what
+says the difference is algorithmic rounding, not a precision-dependent bug. Worst quantity is the a
+posteriori residual at 597 ulp, and that is cancellation, not error: it is `y - x'θ` after fitting
+to that sample. Three divergences are deliberate (two reciprocal multiplies from the port notes,
+plus BLAS reduction order).
+
+**The parity metric took two corrections**, both non-obvious and both recorded in
+`tests/test_cpp_parity.py`: element-wise relative error is meaningless on a block with
+cancellation-produced near-zero entries (reads 1e-13/1e-4), and the a posteriori residual does not
+belong in a *relative* comparison at all — nor does its ratio to the a priori one, which inherits
+the same cancellation (1.06e5 ulp). It is bounded absolutely against the target scale instead.
+
+**Verification limits, unchanged and important**: execution is host-only. `rls.hpp` is checked to
+compile `-ffreestanding` and `argmind.h` to be valid C99, on the host. Host `-Os` code size is 576
+bytes for `Rls<float,6,1>::update` — **x86-64, a shape, not a target figure**. Flash/RAM for the
+M4F floor must come from a link map, and on-target timing claims stay absent.
+
+**Next:** the Guard, Pipeline and persistence in C++, then the on-target build once a
+cross-compiler and hardware exist.
 
 **Before any optimisation lands, a benchmark that can report a regression must exist.** An
 optimisation with no way to fail is not an optimisation, it is a hope.

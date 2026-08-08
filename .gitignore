@@ -20,3 +20,6 @@ desktop.ini
 # the whole reason this repo exists.
 cpu_backend/*.exe
 cpu_backend/problem.bin
+
+# C++ build trees. The sources are tracked; the objects are not.
+cpp/build*/

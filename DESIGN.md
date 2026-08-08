@@ -418,9 +418,10 @@ declared), `Adapter` + `RecursiveLeastSquares` (flat state block, forgetting fac
 report, measured precision floor), `Guard` + `Bound` + `Divergence` (checks, freeze, bounded
 rollback, explicit recovery), `Pipeline` + `FrameMap` (frame to regressor by index table,
 input gate, bounded `step()`), and `Store` (two-slot atomic persistence, CRC, configuration
-fingerprint, declared cadence), and `bench` (fixed workload, correctness digest, leak detector,
-regression gate). **The Python reference is complete and measurable.** 166 tests, several of which
-exist to prove failures are visible rather than silent.
+fingerprint, declared cadence), `bench` (fixed workload, correctness digest, leak detector,
+regression gate), and **the C++ core's RLS behind a C ABI, verified against the Python to about
+1.5 ulp**. 185 Python tests plus 521 C++ checks, several of which exist to prove failures are
+visible rather than silent.
 
 **What the pipeline settled:**
 
@@ -509,10 +510,62 @@ tolerance the declared precision allows. Everything it needs is now in place: a 
 for a C ABI, a reference anchored to closed-form solutions rather than to itself, a state block
 that is already the persistence format, and a benchmark that can report a regression.
 
-**Nothing gates it any more.** The target range was the last blocking question and it is settled:
-Cortex-M4F class, own minimal fixed-size matrix types, no Eigen, `-mcpu=cortex-m4
--mfpu=fpv4-sp-d16 -mfloat-abi=hard -fno-exceptions -fno-rtti`. The port notes collected while
-deciding it are in "Target range" above and should be read before writing the first line of it.
+**STARTED 2026-08-08** — `cpp/`, and RLS is across. `mat.hpp` (fixed-size primitives),
+`rls.hpp` (`Rls<T, N, M>`), `argmind.h` + `src/abi.cpp` (the C ABI), `tools/xcheck.cpp` (the
+parity tool), `tests/test_core.cpp` (521 checks the C++ side can make on its own), and a
+`CMakeLists.txt` that knows the cross-compilation recipe.
+
+**The C ABI had one real tension to resolve.** Compile-time dimensions are the reason C++ was
+chosen; a C ABI wants runtime arguments. Taking `n` at runtime resolves it by discarding the
+reason, so it is resolved the other way: **the ABI exports an explicit list of instantiations**,
+and adding a dimension is one line plus a rebuild. That is a real cost and it is the honest one.
+Storage is the caller's — nothing allocates — with `am_rls_*_bytes()` for the true size and an
+`AM_*_MAX_BYTES` compile-time *upper bound* for statically declared arrays, held to being a bound
+by a `static_assert` per instantiation.
+
+**Parity: the two agree to about 1.5 ulp on the state block, at whichever precision they run at.**
+That last clause is the finding. Measured maxima in ulp, across n=2/6/12, one and three outputs,
+300 to 1600 steps, λ=0.97 and 0.99:
+
+| quantity | f64 | f32 |
+|---|---|---|
+| whole state block, and θ | 1.5 | 1.5 |
+| tr(P) | 1.4 | 4.9 |
+| min diag P | 2.4 | 1.9 |
+| residual norm | 8.4 | 14.2 |
+| P alone | 26.7 | 37.6 |
+| gain norm | 58.0 | 64.6 |
+| a posteriori residual norm | 597 | 597 |
+
+**Differing by the same number of ulp at both precisions is what says the difference is
+algorithmic rounding rather than a precision-dependent bug.** Three divergences are deliberate and
+declared in `rls.hpp`: `P /= λ` and `k = Px/den` become reciprocal multiplies (the port notes
+above), and numpy's BLAS reductions sum in a different order than an ordered loop.
+
+**The parity metric took two corrections, and neither was obvious.** Element-wise relative error —
+the obvious choice — reads 1e-13 at f64 and 1e-4 at f32 on a state block, because such a block
+contains entries that are near zero *through cancellation* and a relative error there measures the
+cancellation. Deviation relative to the block's scale is the honest measure. Then the a posteriori
+residual turned out not to belong in a relative comparison at all: it is `y - x'θ` after fitting to
+that very sample, so at the worst step the two agree on 6.72e-5 and disagree by 1.5e-15 — a few ulp
+of the ~3-magnitude predictor amplified by a cancellation factor of ~5e4. An attempt to escape that
+by comparing the *ratio* e_post/e failed too, at 1.06e5 ulp: a ratio inherits its numerator's
+cancellation. It is now bounded absolutely against the target scale, and its *property* — never
+exceeding the a priori error — is asserted directly.
+
+**Sixteen mutants, all caught**: transposed row-major access, a flipped θ layout, symmetrisation
+removed, the forgetting factor dropped, the rank-1 term dropped, the trace accumulated in `T`
+instead of double, `is_finite` accepting NaN, both rejection paths silently applying, the state
+layout swapped to P-then-θ, and λ used where the reciprocal belongs.
+
+**What is verified and what is not.** Execution is host-only. There is still no ARM cross-compiler
+or target hardware on this machine, so: `rls.hpp` is checked to compile `-ffreestanding
+-fno-exceptions -fno-rtti` and `argmind.h` to be valid C99, both on the host, which catches an
+accidental `<cmath>` or a C++-only header the moment it appears. Code size on the host at `-Os` is
+576 bytes of text for `Rls<float,6,1>::update` and 8468 for all four instantiations plus the ABI —
+**a rough shape and explicitly not a target figure**, since it is x86-64. The flash and RAM numbers
+for the declared floor must come from a link map, and **any on-target timing claim stays absent
+rather than interpolated.**
 
 **Now decided (see "Language and structure" above), so the `Adapter` contract must be shaped for
 a C ABI from the start:** fixed dimensions known at construction, no allocation after it, state
