@@ -537,7 +537,7 @@ def test_the_cpp_unit_tests_pass(tmp_path):
     # ...and that the checks did not quietly disappear. The count is quoted in DESIGN.md and
     # CLAUDE.md, and "0 failures" alone is equally true of a suite that stopped running.
     m = re.search(r"(\d+) checks", run.stdout)
-    assert m and int(m.group(1)) >= 780, (
+    assert m and int(m.group(1)) >= 850, (
         f"the C++ self-check count fell to {m.group(1) if m else '?'}; the documented "
         "figure is a claim about this number")
 
@@ -552,7 +552,7 @@ def test_the_core_headers_build_freestanding(tmp_path):
     # Every core header, not just rls.hpp. An audit found persist.hpp was in neither this
     # gate nor the C99 one, so an accidental <cstring> in it would have gone unnoticed.
     for header in ("mat.hpp", "rls.hpp", "guard.hpp", "persist.hpp",
-                   "stream.hpp", "align.hpp"):
+                   "stream.hpp", "align.hpp", "pipeline.hpp"):
         obj = tmp_path / (header.replace(".hpp", ".o"))
         done = subprocess.run(
             [cxx, "-std=c++17", "-O2", "-ffreestanding", "-fno-exceptions",

@@ -75,6 +75,10 @@ if(NOT CMAKE_CROSSCOMPILING)
     target_include_directories(argmind_scheck PRIVATE include)
     target_compile_options(argmind_scheck PRIVATE -fno-exceptions -fno-rtti)
 
+    add_executable(argmind_pipecheck tools/pipecheck.cpp)
+    target_include_directories(argmind_pipecheck PRIVATE include)
+    target_compile_options(argmind_pipecheck PRIVATE -fno-exceptions -fno-rtti)
+
     enable_testing()
     add_test(NAME core COMMAND argmind_test_core)
 endif()

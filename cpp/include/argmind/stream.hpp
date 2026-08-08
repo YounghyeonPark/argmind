@@ -66,6 +66,11 @@ struct StreamView {
     int capacity = 0;
     int head = 0;    ///< next write position
     int count = 0;   ///< samples currently held
+    /// Samples overwritten because the ring was full — carried on the view because
+    /// `dropped + count` is the total ever pushed, and that identity is the only honest
+    /// basis for a pipeline's lost-frame count. Without it here the pipeline would need the
+    /// concrete `Stream<T, Dim, Capacity>`, which is the type it exists to avoid naming.
+    uint64_t dropped = 0;
 
     /// Map age index (0 = oldest held) to a physical slot.
     ///
@@ -253,6 +258,7 @@ public:
         s.capacity = Capacity;
         s.head = head_;
         s.count = count_;
+        s.dropped = dropped_;
         return s;
     }
 

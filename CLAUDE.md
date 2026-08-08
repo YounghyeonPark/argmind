@@ -101,10 +101,13 @@ rollback, explicit recovery), `argmind/pipeline.py` (`FrameMap`, input gate, bou
 `argmind/persist.py` (two-slot atomic store, CRC, configuration fingerprint, declared cadence),
 `argmind/bench.py` (fixed workload, correctness digest, leak detector, regression gate), and
 `cpp/` (the C++ core: `mat.hpp`, `rls.hpp`, `guard.hpp`, `persist.hpp`, `stream.hpp`,
-`align.hpp`, the C ABI, three parity tools `xcheck`/`pcheck`/`scheck`, 785 self-checks).
-**The Python reference is complete; RLS, the guard, persistence, streams and alignment are
-across to C++.**
-283 Python tests and 792 C++ checks pass; several exist to prove failures are visible
+`align.hpp`, `pipeline.hpp`, the C ABI, four parity tools
+`xcheck`/`pcheck`/`scheck`/`pipecheck`).
+**The runtime library is fully across to C++** — stream, align, adapt, guard, persist and
+pipeline. `argmind/bench.py` has no C++ counterpart and is not getting one: it is a host
+measurement harness, and DESIGN.md already records that Python timings are not a baseline the
+C++ can be compared against.
+306 Python tests and 868 C++ checks pass; several exist to prove failures are visible
 rather than silent. Every suite is mutation-checked, and surviving mutants are recorded where
 they live rather than tallied here — including the ones that turn out to be **equivalent on a
 64-bit host**, a distinction worth keeping rather than rounding away. Cumulative counts are
@@ -326,8 +329,40 @@ M4F cannot do but an M7 can), and so is the cost the target *does* pay: that wid
 float on a single-precision FPU — the largest unstated cost in the header until the audit named
 it.
 
-**Next:** `Pipeline` in C++ — the last piece — then the on-target build once a cross-compiler
-and hardware exist.
+**The `Pipeline` is across, and it was the last piece** (`cpp/include/argmind/pipeline.hpp`).
+What has to agree at this level is *bookkeeping*, not arithmetic — a pipeline is driven by two
+independent clocks, samples arriving and `step()` being called, and every figure it reports is a
+difference between counters taken at different moments. So the parity job file is an **event
+log** with `push` and `step` interleaved, which is the only way to reach a ring that overflowed
+between two steps or a guard that froze half-way through one. Zero disagreements across the
+checked-in suite and a 120-case randomised sweep, everything but the state block compared
+exactly; the state block's worst deviation is 149.8 ulp against 400 allowed.
+
+**Frames are never materialised** — the reference's list of `Frame` objects needs a heap, so
+alignment writes straight into the preallocated `x`/`y` one instant at a time. That keeps one
+`Pick` alive rather than `MaxStreams` of them (280 bytes against 1,120 for a `double` pipeline
+at four streams) and costs one thing: a frame that fails half-way leaves `x` mixing two
+instants, so `frame_ready()` is false and `predict_last()` refuses. **Views are passed to
+`step()`, never stored**, because a `StreamView` snapshots head and count and a cached one
+would align against a ring frozen at construction forever. And **every stream in one C++
+pipeline shares a scalar type**, which the Python does not require — a real reduction, so the
+parity cases only ever use matched dtypes.
+
+**Sixteen of seventeen mutants caught, and the survivor is the finding.** The `lost_frames`
+clamp survives because it is *dead*: each visited instant increments exactly one of
+frames/no_data/dropped_stale, and every unconsumed reference sample arrived after the last
+successful step, so `considered <= owed` holds by construction — the reference's `max(0, ...)`
+is dead for the same reason. It stays because the C++ subtraction is unsigned and a wrap would
+report ~1.8e19, and it is **recorded as unreachable rather than described as tested**. Two
+tests written to kill that mutant failed to, which is the more useful half: the deltas are
+sampled *inside* `step()`, so advancing the aligner between calls cannot reach the clamp.
+**A test written without checking that its bug would fail it is a guess** — twice now.
+
+The run did find a real gap next door: using the aligner's *absolute* counters instead of the
+step's delta survived the whole suite, because no case had both declined instants and an
+overflowing ring in one run. One was added and it is caught.
+
+**Next:** the on-target build, once a cross-compiler and hardware exist.
 
 **Before any optimisation lands, a benchmark that can report a regression must exist.** An
 optimisation with no way to fail is not an optimisation, it is a hope.
@@ -377,6 +412,13 @@ After a change under `cpp/`, run `embedded-reviewer` and `parity-verifier` toget
 still fit the target, and does it still compute the right thing. Independent questions.
 
 A sub-agent's conclusion is a claim about the repository, and claims get verified.
+
+**They are also a dependency, which the pipeline port found out.** The embedded review and the
+independent parity verification for it were both launched and both terminated on an API spend
+limit before reporting; every figure in that section was measured directly instead. The numbers
+are real, but the independence is not — the mutation list, the sweep and the memory figures were
+designed by the same hand that wrote the code, and this project's history says that is exactly
+the arrangement under which a flattering result survives. Re-run both before the next component.
 
 ## Working state
 

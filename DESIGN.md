@@ -420,10 +420,12 @@ rollback, explicit recovery), `Pipeline` + `FrameMap` (frame to regressor by ind
 input gate, bounded `step()`), and `Store` (two-slot atomic persistence, CRC, configuration
 fingerprint, declared cadence), `bench` (fixed workload, correctness digest, leak detector,
 regression gate), and **the C++ core — RLS behind a C ABI, plus the guard, the record format,
-streams and alignment as headers — verified against the Python to about 1.5 ulp, and byte for
-byte for the record format**. (Only RLS has ABI entry points; `am_guard_*`, `am_persist_*`,
-`am_stream_*` and `am_align_*` do not exist.)
-283 Python tests plus 792 C++ checks, several of which exist to prove failures are visible
+streams, alignment and the pipeline as headers — verified against the Python to about 1.5 ulp,
+byte for byte for the record format, and exactly for every decision and counter above that**.
+The runtime library is fully across; `argmind/bench.py` has no C++ counterpart and is not
+getting one, being a host measurement harness rather than part of what ships. (Only RLS has ABI entry points; `am_guard_*`, `am_persist_*`,
+`am_stream_*`, `am_align_*` and `am_pipeline_*` do not exist.)
+306 Python tests plus 868 C++ checks, several of which exist to prove failures are visible
 rather than silent.
 
 **What the pipeline settled:**
@@ -514,8 +516,8 @@ for a C ABI, a reference anchored to closed-form solutions rather than to itself
 that is already the persistence format, and a benchmark that can report a regression.
 
 **STARTED 2026-08-08** — `cpp/`, and RLS is across. `mat.hpp` (fixed-size primitives),
-`rls.hpp` (`Rls<T, N, M>`), `argmind.h` + `src/abi.cpp` (the C ABI), `tools/xcheck.cpp`, `tools/pcheck.cpp` and `tools/scheck.cpp` (the three
-parity tools), `tests/test_core.cpp` (785 checks the C++ side can make on its own), and a
+`rls.hpp` (`Rls<T, N, M>`), `argmind.h` + `src/abi.cpp` (the C ABI), `tools/xcheck.cpp`, `tools/pcheck.cpp`, `tools/scheck.cpp` and
+`tools/pipecheck.cpp` (the four parity tools), `tests/test_core.cpp` (868 checks the C++ side can make on its own), and a
 `CMakeLists.txt` that knows the cross-compilation recipe.
 
 **The C ABI had one real tension to resolve.** Compile-time dimensions are the reason C++ was
@@ -810,6 +812,120 @@ a C++ pipeline should be built on either; the Python's own counter is an unbound
 cannot wrap, so the hazard is for the port rather than for today. The widening turned out to
 cost **nothing** — `sizeof(Stream)` is unchanged, because padding before the 8-aligned timestamp
 absorbs it. An earlier version of this sentence claimed four bytes.
+
+### The pipeline, across 2026-08-09 — the last piece of the core
+
+`cpp/include/argmind/pipeline.hpp`. `Pipeline<Adapter, MaxStreams>` plus `FrameMap<N, M>`,
+with a fourth parity tool (`cpp/tools/pipecheck.cpp`) and 23 tests in
+`tests/test_cpp_pipeline_parity.py`.
+
+**What has to agree here is bookkeeping, not arithmetic.** `xcheck` settled that RLS and the
+guard compute the same numbers and `scheck` that the aligner picks the same samples. What is
+new at this level is that a pipeline is driven by two independent clocks — samples arriving,
+and `step()` being called — and every quantity it reports is a difference between counters
+taken at different moments. So the job file is an **event log**: `push` and `step` interleave
+in whatever order a case wants, which is the only way to reach a ring that overflowed between
+two steps, a step with nothing new, or a guard that froze half-way through one.
+
+Everything except the model state is compared **exactly** — integer counters, and doubles by
+bit pattern so a signed zero shows. Across the checked-in suite plus a 120-case randomised
+sweep (policies, both precisions, capacities 4/8/64, guard depths, dims 1–3, adversarial
+interleavings) there were **zero disagreements** in any counter, flag, staleness figure or
+reference time. The state block is the one place a tolerance belongs, since it is RLS
+arithmetic: worst measured deviation **149.8 ulp** against the 400 the suite allows, which is
+the headroom `rls.hpp`'s three declared divergences need and not much more.
+
+**Three structural differences, all forced rather than chosen.**
+
+- **Frames are never materialised.** The Python builds a list of `Frame` objects in
+  `Aligner.drain()` and loops over it; a list needs a heap and a `Frame` needs a dict of
+  arrays. So the two are fused: one reference instant is aligned straight into the
+  preallocated `x`/`y` and updated, then the next. Observationally identical as long as
+  nothing pushes mid-step — alignment does not mutate a stream and neither does an update —
+  and it is the difference between one `Pick` alive at a time and `MaxStreams` of them: for
+  `Pick<double>`, 280 bytes against 1,120 at four streams, on a target budgeting 8 KB.
+- **Views are passed to `step()`, never stored.** A `StreamView` snapshots `head` and `count`.
+  A pipeline that captured one at construction would align against a picture of the ring
+  frozen at that moment forever — a bug that looks like a sensor that stopped.
+- **Every stream in one pipeline shares a scalar type.** The Python allows an f8 stream and an
+  f4 stream in the same frame; here the aligner is `pick<T>` and the array is
+  `StreamView<T>*`. A mixture needs a tagged union with a switch on every element copy, or a
+  variadic pipeline type a C ABI cannot name. This is a real reduction in what the port
+  accepts, and the parity cases therefore only ever use matched dtypes — said plainly so
+  "parity holds" is not read as covering a case nobody ran.
+
+**The cost of writing into `x` before the frame is known to exist.** A frame that fails
+half-way leaves `x` holding some of this instant's streams and some of the last one's.
+Predicting from that produces a plausible wrong answer and no error, which is the failure
+shape this project keeps finding. `frame_ready()` is false after a partial write and
+`predict_last()` refuses; a unit test drives the case where the reference stream answers and
+a later one does not, because that is the only ordering in which the mixture actually occurs.
+
+**One difference from `align.hpp` deliberately not repeated.** `Aligner` folds "no limit" and
+"a limit of zero" into one non-positive sentinel, so a caller passing 0 meaning zero-tolerance
+silently gets no check — recorded there as a real divergence. The pipeline's own input gate
+keeps a separate flag, so `None` and `0.0` stay distinguishable and a zero limit is *refused*
+by `configure()` exactly as the reference's constructor raises on it.
+
+**`StreamView` gained a `dropped` field**, because `dropped + count` is the total ever pushed
+and that identity is the only honest basis for a lost-frame count. Without it the pipeline
+would need the concrete `Stream<T, Dim, Capacity>` — the type `StreamView` exists to avoid
+naming. Measured cost: `sizeof(StreamView<float>)` 40 to 48 bytes; `sizeof(Stream<float,6,64>)`
+unchanged at 2136.
+
+**Declared memory, host figures on x86-64 and not target figures.**
+`Pipeline<Guard<Rls<float,6,1>,4,4>, 4>` is 1616 bytes, of which the guard is 1208 and the
+pipeline's own parts 408 — the `Pick<float>` scratch buffer is 152 of those. `pick_bytes` is
+`sizeof(Pick<T>)` rather than a hand-summed payload, and a unit check pins it against `sizeof`:
+`stream.hpp` shipped a constant that added up the payload, told callers to budget from it, and
+was 24 bytes short of the object.
+
+**Seventeen mutants, sixteen caught, and the survivor is the finding.** Caught: the drain
+watermark re-offering the boundary instant; the watermark advancing only on frames that were
+built; the staleness gate turned inclusive; worst staleness taking the smallest; the constant
+term zeroed; a sensor's invalid flag ignored; the arrival watermark frozen; `frozen` never
+reported; the validity gate dropped; a declined instant uncounted; the feature scatter
+transposed; the target scatter ignoring the map; a view whose width changed accepted;
+`configure` accepting a component past the end of its sensor; a partial frame still looking
+ready; and `StreamView::dropped` reporting zero.
+
+The survivor is the **`lost_frames` clamp**, and it survives because it is dead. Each visited
+instant increments exactly one of frames/no_data/dropped_stale, so `considered` is the number
+of instants visited; every unconsumed reference sample in the ring arrived after the last
+successful step; therefore `considered <= owed` by construction. The reference's `max(0, ...)`
+is dead for the same reason. It stays on both sides because the C++ subtraction is unsigned and
+a wrap would report about 1.8e19 lost frames rather than a small wrong number — but it is
+recorded as unreachable rather than described as tested.
+
+**Two tests written to kill that mutant failed to, and that is the more useful lesson.** The
+first advanced the aligner from outside between steps, on the theory that external counter
+movement would reach the clamp. It does not: the deltas are sampled *inside* `step()`, so
+anything that happened between calls is invisible to them. The second — asserting the figure
+survives such interference — turned out to assert nothing the clamp was needed for. Both were
+guesses, and the rule that has now failed twice in this project is the same one: **a test
+written without checking that its bug would fail it is a guess.**
+
+Chasing that survivor found a real coverage gap next door, and this one was an eighteenth
+mutant built afterwards rather than part of the scripted seventeen. Baselining `before_no_data`
+at zero — using the aligner's *absolute* counters instead of the step's delta — survived the
+entire suite, because no case had both declined instants and an overflowing ring in one run.
+With one added (four instants declined while s1 is silent, then four framed while six are
+overwritten) it is caught: a cumulative `considered` would report two lost in the second phase
+instead of six.
+
+**`SkipReason::Rejected` is unreachable** with the adapters this core ships, and so is the
+reference's `or "rejected"` fallback: `Rls::update` refuses only for non-finite input or a
+non-positive denominator, and `Guard` either passes one of those through or sets
+`guard_reason`. It exists for a future adapter. There is no test asserting it stays at zero,
+because that assertion could not fail.
+
+**One reduction in what the suite covers, stated rather than left implied.** Two sub-agent runs
+— an embedded review of the header and an independent parity verification — were launched and
+both terminated on an API spend limit before reporting. Everything above was measured directly
+instead. What that costs is the independence: the mutation list, the sweep and the memory
+figures were all designed by the same hand that wrote the code, and this project's own history
+says that is exactly the arrangement under which a flattering result survives. The two reviews
+are worth re-running before the next component lands.
 
 ## Standards
 

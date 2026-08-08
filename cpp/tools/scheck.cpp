@@ -132,6 +132,7 @@ struct Ring {
         s.capacity = capacity;
         s.head = head;
         s.count = count;
+        s.dropped = dropped;
         return s;
     }
 };

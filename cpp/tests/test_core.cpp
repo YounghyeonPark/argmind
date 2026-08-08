@@ -16,6 +16,7 @@
 #include "argmind/align.hpp"
 #include "argmind/guard.hpp"
 #include "argmind/persist.hpp"
+#include "argmind/pipeline.hpp"
 #include "argmind/rls.hpp"
 #include "argmind/stream.hpp"
 
@@ -976,6 +977,295 @@ void test_the_declared_ring_memory_matches_the_shape() {
           static_cast<size_t>(argmind::Stream<double, 1, 8>::payload_bytes));
 }
 
+
+// -- pipeline.hpp -------------------------------------------------------------
+//
+// `cpp/tools/pipecheck.cpp` drives whole runs and compares them against the reference, which
+// is the right shape for bookkeeping under interleaving and reaches almost none of the
+// *refusals*. A configuration the pipeline rejects produces no run to compare, so every
+// `configure()` guard, the frame-map arithmetic and the two prediction paths are invisible to
+// it. That gap is not hypothetical: the last port shipped with `Stream<>::push` covered only
+// by a copy of itself, and a parity harness can only test what its tool exercises.
+
+void test_a_frame_map_must_fill_the_adapter_exactly() {
+    argmind::FrameMap<3, 1> map;
+    CHECK(!map.valid());                  // nothing declared
+    CHECK(map.add_feature(1, 0));
+    CHECK(map.add_feature(1, 1));
+    CHECK(map.add_target(0, 0));
+    CHECK(!map.valid());                  // two features, three wanted
+    map.set_constant(true);
+    CHECK(map.valid());                   // the constant makes up the difference
+
+    // A short map would leave an element of x holding whatever the previous frame put there,
+    // which is a wrong answer rather than a missing feature.
+    argmind::FrameMap<3, 1> over;
+    CHECK(over.add_feature(0, 0));
+    CHECK(over.add_feature(0, 1));
+    CHECK(over.add_feature(0, 2));
+    CHECK(!over.add_feature(0, 3));       // full; refused rather than written past the end
+    CHECK(over.add_target(0, 0));
+    CHECK(!over.add_target(0, 1));        // M is 1
+    CHECK(over.valid());
+    over.set_constant(true);
+    CHECK(!over.valid());                 // now four features for a three-feature adapter
+
+    CHECK(!over.add_feature(-1, 0));
+    CHECK(!over.add_feature(0, -1));
+}
+
+namespace pipe_fixture {
+
+using Rls6 = argmind::Rls<float, 3, 1>;
+using Pipe = argmind::Pipeline<Rls6, 3>;
+
+/// Two streams: s0 the 1-wide reference carrying the target, s1 a 2-wide sensor.
+struct Rig {
+    argmind::Stream<float, 1, 8> ref;
+    argmind::Stream<float, 2, 8> aux;
+    argmind::StreamView<float> views[2];
+
+    void refresh() {
+        views[0] = ref.view();
+        views[1] = aux.view();
+    }
+};
+
+argmind::FrameMap<3, 1> good_map() {
+    argmind::FrameMap<3, 1> map;
+    map.add_feature(1, 0);
+    map.add_feature(1, 1);
+    map.add_target(0, 0);
+    map.set_constant(true);
+    return map;
+}
+
+Pipe make(argmind::Policy policy = argmind::Policy::HoldLast) {
+    return Pipe(Rls6(0.99f, 10.0f), argmind::Aligner(policy, 0.0), good_map(), 0);
+}
+
+}  // namespace pipe_fixture
+
+void test_configure_refuses_what_the_reference_raises_on() {
+    using namespace pipe_fixture;
+    Rig rig;
+    rig.refresh();
+
+    // A reference index outside the stream set.
+    {
+        Pipe p(Rls6(0.99f, 10.0f), argmind::Aligner(argmind::Policy::HoldLast, 0.0),
+               good_map(), 2);
+        CHECK(!p.configure(rig.views, 2));
+        CHECK(!p.configured());
+    }
+    // A component past the end of the sensor it names. The reference raises at construction
+    // for the same reason: at 3am on the first frame is the wrong time to find out.
+    {
+        argmind::FrameMap<3, 1> map;
+        map.add_feature(1, 0);
+        map.add_feature(1, 5);            // s1 is 2 wide
+        map.add_target(0, 0);
+        map.set_constant(true);
+        Pipe p(Rls6(0.99f, 10.0f), argmind::Aligner(argmind::Policy::HoldLast, 0.0), map, 0);
+        CHECK(!p.configure(rig.views, 2));
+    }
+    // A non-causal policy in a causal loop. Legitimate offline, a correctness bug here, so it
+    // has to be said out loud even though the aligner alone permits it.
+    {
+        Pipe p = make(argmind::Policy::Interpolate);
+        CHECK(!p.configure(rig.views, 2));
+        p.set_allow_non_causal(true);
+        CHECK(p.configure(rig.views, 2));
+    }
+    // A zero staleness limit. `Aligner` folds "no limit" and "a limit of zero" into one
+    // non-positive sentinel and that is recorded there as a real difference from the
+    // reference; this gate deliberately does not repeat it, so a caller meaning
+    // zero-tolerance is refused rather than silently given no check at all.
+    {
+        Pipe p = make();
+        p.set_max_stale_s(0.0);
+        CHECK(!p.configure(rig.views, 2));
+        p.set_max_stale_s(0.5);
+        CHECK(p.configure(rig.views, 2));
+        p.clear_max_stale_s();
+        CHECK(p.configure(rig.views, 2));
+    }
+    {
+        Pipe p = make();
+        CHECK(!p.configure(nullptr, 2));
+        CHECK(!p.configure(rig.views, 0));
+        CHECK(!p.configure(rig.views, 4));   // more than MaxStreams
+    }
+}
+
+void test_an_unconfigured_step_reports_that_rather_than_idling() {
+    using namespace pipe_fixture;
+    Rig rig;
+    rig.refresh();
+    Pipe p = make();
+    const auto rep = p.step(rig.views);
+    // `ok == false` and `idle()` must not be confused: one means nothing arrived, the other
+    // means nothing was attempted. A pipeline that never ran would otherwise look healthy
+    // forever.
+    CHECK(!rep.ok);
+    CHECK(!rep.healthy());
+    CHECK(rep.idle());
+    CHECK(p.steps() == 0);
+}
+
+void test_a_view_whose_width_changed_is_refused() {
+    using namespace pipe_fixture;
+    Rig rig;
+    rig.refresh();
+    Pipe p = make();
+    CHECK(p.configure(rig.views, 2));
+
+    const float v[2] = {1.0f, 2.0f};
+    const float y[1] = {3.0f};
+    CHECK(rig.aux.push(0.5, v));
+    CHECK(rig.ref.push(1.0, y));
+    rig.refresh();
+    CHECK(p.step(rig.views).frames == 1);
+
+    // A different stream wearing the same index. The map's components were bounds-checked
+    // against the old width, so proceeding would read past the end of the ring.
+    argmind::StreamView<float> lied[2] = {rig.views[0], rig.views[1]};
+    lied[1].dim = 1;
+    const auto rep = p.step(lied);
+    CHECK(!rep.ok);
+    CHECK(rep.frames == 0);
+}
+
+void test_a_partial_frame_is_not_predictable_from() {
+    using namespace pipe_fixture;
+    Rig rig;
+    rig.refresh();
+    Pipe p = make();
+    CHECK(p.configure(rig.views, 2));
+    CHECK(!p.frame_ready());
+
+    const float v[2] = {1.0f, 2.0f};
+    const float y[1] = {3.0f};
+    // s0 gets an early sample s1 cannot answer for, which is what makes the failure PARTIAL
+    // rather than immediate: the reference is stream 0 and is extracted first, so a frame
+    // that dies on stream 1 has already written y.
+    CHECK(rig.ref.push(0.2, y));
+    CHECK(rig.aux.push(0.5, v));
+    CHECK(rig.ref.push(1.0, y));
+    rig.refresh();
+    CHECK(p.step(rig.views).frames == 1);
+    CHECK(p.frame_ready());
+    float out[1] = {0.0f};
+    CHECK(p.predict_last(out));
+
+    // t = 0.3: s0 answers with its 0.2 sample and s1 has nothing yet. y is now this
+    // instant's and x is still the last frame's -- exactly the mixture that predicts a
+    // plausible wrong answer with no error anywhere.
+    CHECK(!p.predict_at(rig.views, 0.3, out));
+    CHECK(!p.frame_ready());
+    CHECK(!p.predict_last(out));
+}
+
+void test_predicting_consumes_nothing() {
+    using namespace pipe_fixture;
+    Rig rig;
+    rig.refresh();
+    Pipe p = make();
+    CHECK(p.configure(rig.views, 2));
+
+    const float v[2] = {1.0f, 2.0f};
+    const float y[1] = {3.0f};
+    CHECK(rig.aux.push(0.5, v));
+    CHECK(rig.ref.push(1.0, y));
+    rig.refresh();
+    CHECK(p.step(rig.views).frames == 1);
+
+    const uint64_t frames = p.aligner().frames();
+    const uint64_t no_data = p.aligner().no_data();
+    const double watermark = p.aligner().consumed_to();
+    float out[1] = {0.0f};
+    CHECK(p.predict_at(rig.views, 1.0, out));
+    CHECK(!p.predict_at(rig.views, 0.25, out));   // before s1 has anything
+    // A prediction is not a consumption. If it moved the watermark it would eat a frame the
+    // next step is owed; if it moved `no_data` the pipeline's own loss arithmetic would drift.
+    CHECK(p.aligner().frames() == frames);
+    CHECK(p.aligner().no_data() == no_data);
+    CHECK(p.aligner().consumed_to() == watermark);
+}
+
+void test_the_guarded_and_unguarded_forms_are_both_constructible() {
+    using namespace pipe_fixture;
+    // The Python decides this with getattr; here it is a trait, and the reason is the same:
+    // the reference has to be runnable UNGUARDED to serve as the oracle this core is verified
+    // against. Guarding is the right default in the field and is not enforced in the type.
+    using Guarded = argmind::Guard<Rls6, 2, 4>;
+    CHECK(!argmind::Pipeline<Rls6, 3>::guarded);
+    CHECK(argmind::Pipeline<Guarded, 3>::guarded);
+
+    Guarded g(Rls6(0.99f, 10.0f), 1, 0);
+    CHECK(g.add_bound(argmind::Bound::at_most(argmind::Field::PTrace, 1e6)));
+    CHECK(g.valid());
+    argmind::Pipeline<Guarded, 3> p(g, argmind::Aligner(argmind::Policy::HoldLast, 0.0),
+                                    good_map(), 0);
+    Rig rig;
+    rig.refresh();
+    CHECK(p.configure(rig.views, 2));
+    CHECK(!p.frozen());
+}
+
+void test_a_step_with_nothing_to_visit_touches_no_counter() {
+    using namespace pipe_fixture;
+    // What this pins: a step that finds no unconsumed reference instant increments nothing.
+    // Not the loss arithmetic -- that is pinned in tests/test_cpp_pipeline_parity.py, by the
+    // one case where declined instants and an overflowing ring appear in the same run.
+    // Separating the two matters because both were nearly tested here by accident and
+    // neither would have been.
+    //
+    // And a finding recorded where it lives rather than tallied. `lost = arrived -
+    // considered` is clamped at zero on both sides, and the clamp is DEAD: each visited
+    // instant increments exactly one of frames/no_data/dropped_stale, so `considered` is the
+    // count of instants visited, and every unconsumed reference sample in the ring arrived
+    // after the last successful step -- `considered <= owed` holds by construction. A
+    // mutation check confirms it: removing the clamp survives the whole suite, including a
+    // test written specifically to kill it, and including advancing the aligner from outside
+    // between steps (which cannot reach it either, since the deltas are sampled inside the
+    // step). It stays because an unsigned subtraction that wrapped would report about 1.8e19
+    // lost frames, and a branch nobody can reach is a cheap price for that.
+    Rig rig;
+    rig.refresh();
+    Pipe p = make();
+    CHECK(p.configure(rig.views, 2));
+
+    const float v[2] = {1.0f, 2.0f};
+    const float y[1] = {3.0f};
+    CHECK(rig.aux.push(0.5, v));
+    CHECK(rig.ref.push(1.0, y));
+    rig.refresh();
+    CHECK(p.step(rig.views).frames == 1);
+
+    p.aligner_mutable().note_no_data();
+    p.aligner_mutable().note_dropped_stale();
+    const auto rep = p.step(rig.views);   // the only instant there is has been consumed
+    CHECK(rep.ok);
+    CHECK(rep.frames == 0);
+    CHECK(rep.lost_frames == 0);
+    CHECK(p.aligner().frames() == 1);
+    CHECK(p.aligner().no_data() == 1);        // exactly the one injected above
+    CHECK(p.aligner().dropped_stale() == 1);  // likewise
+}
+
+void test_the_declared_pipeline_memory_is_what_it_says() {
+    using namespace pipe_fixture;
+    // The blend buffer is the one allocation-shaped thing here and it is larger than it
+    // looks: `Pick<T>` carries MAX_DIM elements whether or not the policy interpolates. One
+    // of these is held, not MaxStreams of them -- that is what fusing the frame loop bought,
+    // and the number is here so a change to it shows up as a failing test rather than as
+    // quietly more RAM.
+    CHECK(Pipe::pick_bytes == static_cast<int>(sizeof(argmind::Pick<float>)));
+    CHECK(sizeof(Pipe) >= static_cast<size_t>(Pipe::pick_bytes));
+    CHECK(sizeof(Pipe) < static_cast<size_t>(Pipe::pick_bytes) + 512u);
+}
+
 }  // namespace
 
 int main() {
@@ -1030,6 +1320,16 @@ int main() {
     test_a_missing_sample_and_a_too_wide_stream_are_distinguishable();
     test_the_causal_flag_names_the_policies_that_look_ahead();
     test_drop_if_stale_is_the_only_policy_that_refuses();
+
+    test_a_frame_map_must_fill_the_adapter_exactly();
+    test_configure_refuses_what_the_reference_raises_on();
+    test_an_unconfigured_step_reports_that_rather_than_idling();
+    test_a_view_whose_width_changed_is_refused();
+    test_a_partial_frame_is_not_predictable_from();
+    test_predicting_consumes_nothing();
+    test_the_guarded_and_unguarded_forms_are_both_constructible();
+    test_a_step_with_nothing_to_visit_touches_no_counter();
+    test_the_declared_pipeline_memory_is_what_it_says();
     test_the_declared_ring_memory_matches_the_shape();
 
     printf("%d checks, %d failures\n", checks, failures);
