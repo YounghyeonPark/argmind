@@ -195,14 +195,15 @@ Genuinely open, listed rather than guessed:
 - **Where inference sits.** The library adapts parameters and estimates. Whether it also wraps a
   third-party inference runtime, or simply provides adapted inputs to one, is a scope boundary
   not yet drawn.
-- **Persistence.** Adaptation state must survive a power cycle for any of this to be useful in
-  the field. The flat state block is already the format; cadence and framing are undecided.
-- **Whether a guard's own state should persist.** `Guard.state` delegates to the wrapped adapter,
-  so the block that crosses the C ABI stays the adapter's alone and the guard comes back
-  *unfrozen* after a power cycle. That is a v1 boundary, not a considered answer: a system that
-  froze for a reason and reboots ready to adapt will re-learn its way into the same trouble. The
-  argument the other way is that a persisted freeze can strand a device that only needed a
-  reboot, with no way back except a technician.
+- ~~**Persistence**~~ — **BUILT 2026-08-08** (`argmind/persist.py`). See below.
+- ~~**Whether a guard's own state should persist**~~ — **ANSWERED 2026-08-08.** The checkpoints
+  and the EWMAs inside checks are not persisted: they describe a run, and a run ends at power-off,
+  so restoring them would assert a continuity that does not exist. The *frozen flag* is carried,
+  with what tripped it, because it is a conclusion rather than working state. What to do with it
+  on load is a real decision with no correct default, so it is the caller's — `on_frozen` is
+  `"thaw"` (default), `"keep"` or `"refuse"`. Both arguments stand and neither wins in general:
+  thawing risks re-learning into the same trouble; keeping risks stranding a device that a power
+  cycle would have fixed, with no way back except a site visit. The record says which happened.
 
 ## Language and structure — decided 2026-08-08
 
@@ -303,9 +304,10 @@ a p99 that misses is the shape that fails in the field.
 enforcement), `Aligner` (four explicit policies, staleness reporting, causal/non-causal
 declared), `Adapter` + `RecursiveLeastSquares` (flat state block, forgetting factor, per-update
 report, measured precision floor), `Guard` + `Bound` + `Divergence` (checks, freeze, bounded
-rollback, explicit recovery), and `Pipeline` + `FrameMap` (frame to regressor by index table,
-input gate, bounded `step()`). 109 tests, several of which exist to prove failures are visible
-rather than silent.
+rollback, explicit recovery), `Pipeline` + `FrameMap` (frame to regressor by index table,
+input gate, bounded `step()`), and `Store` (two-slot atomic persistence, CRC, configuration
+fingerprint, declared cadence). **The Python reference is complete.** 142 tests, several of which
+exist to prove failures are visible rather than silent.
 
 **What the pipeline settled:**
 
@@ -365,16 +367,37 @@ by tests, both in the same place — what a stateful detector should do while th
 Both are protected by tests, and both survive as named mutants in the mutation check. The general
 lesson is the one already in the standards: the tidy-looking version was the broken one.
 
+**What persistence settled**, each piece present because of a specific way stored state goes wrong
+on a device:
+
+- **Two slots, written alternately, each with a sequence number and CRC.** A write interrupted by
+  power loss can destroy at most the slot being written, which is never the one in use. The
+  reference writes files but models the raw-flash scheme faithfully — the C side will not have
+  `os.replace`, so a design leaning on rename would not survive the port.
+- **A configuration fingerprint, refused on mismatch.** Shape and precision catch the crude cases.
+  The dangerous case is `FrameMap` order: a block restored after two features were swapped is
+  numerically valid, silently wrong, and undetectable downstream. `fingerprint_of` is `crc32` over
+  a canonical rendering rather than Python's `hash()`, which is salted per process and would
+  reject every valid block on the second run — a failure that only appears in the field.
+- **Cadence is a declared policy, not caller discipline.** A sector rated for 100k erase cycles,
+  written on every update at 100 Hz, is gone in about seventeen minutes.
+- **Little-endian with explicit widths.** The writer and the reader may be different machines, and
+  "whatever this compiler does" is not a format. Worth noting that this one cannot be verified by
+  comparing bytes on an x86 host, where `<` and `=` are identical — the declaration itself is what
+  the test pins, and the test says so.
+- **No state at all is a return value; a state that does not fit is an exception.** First boot is
+  normal and should not need a try/except around every start-up. A mismatched block is a
+  configuration error, and continuing from one is worse than not starting.
+
 **Next, in order:**
 
-1. **Persistence**, because adaptation state that does not survive a power cycle is useless in the
-   field. The flat state block is already the format; what is undecided is cadence, framing, and
-   whether the guard's own state belongs in it. This is the last piece of the Python reference.
-2. **The benchmark harness**, before any optimisation. Requirements are already stated above:
+1. **The benchmark harness**, before any optimisation. Requirements are already stated above:
    a fixed workload from the design driver, the Python reference as the correctness oracle, and
    per-sample cost reported separately from per-frame cost.
-3. **The C++ core**, verified against the Python reference — same inputs, same outputs, to the
-   tolerance the declared precision allows.
+2. **The C++ core**, verified against the Python reference — same inputs, same outputs, to the
+   tolerance the declared precision allows. The one open question that gates it is unchanged:
+   whether the target range reaches down to MCUs, which decides own-minimal-matrix-types versus
+   Eigen and the `-mcpu` set.
 
 **Now decided (see "Language and structure" above), so the `Adapter` contract must be shaped for
 a C ABI from the start:** fixed dimensions known at construction, no allocation after it, state

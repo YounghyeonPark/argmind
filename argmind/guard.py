@@ -62,15 +62,17 @@ The caveat that follows from that, stated rather than discovered later: a check 
 configured that way plus `recover_after` will never recover. `Guard` refuses that
 combination at construction rather than deadlocking in the field.
 
-What is not persisted
----------------------
+What is and is not persisted
+----------------------------
 `state` and `load_state` delegate to the wrapped adapter, so the flat block that
-crosses the C ABI stays the adapter's and nothing else. The guard's own state —
-frozen or not, the checkpoints, the EWMAs inside stateful checks — is **not** in
-it. A power cycle therefore restores the parameters and comes back unfrozen. That
-is a deliberate v1 boundary and not obviously the right answer: a system that
-froze for a reason and reboots into an unfrozen state will re-learn its way back
-into the same trouble. It is listed as an open question in DESIGN.md.
+crosses the C ABI stays the adapter's and nothing else. The checkpoints and the
+EWMAs inside stateful checks are **not** in it and are not persisted: they are
+descriptions of a run, and a run ends at power-off.
+
+The frozen flag is different, because it is a *conclusion* rather than working
+state, and `argmind.persist` carries it alongside the block with `frozen_by`. What
+to do with it on load is the caller's decision and not a default this library
+should make silently — see `persist.load` and its `on_frozen` policy.
 """
 
 from __future__ import annotations
@@ -314,7 +316,7 @@ class Guard(Adapter):
     __slots__ = ("adapter", "checks", "rollback_depth", "checkpoint_every",
                  "recover_after", "_ckpt", "_ckpt_health", "_ckpt_head",
                  "_ckpt_count", "_since_ckpt", "_frozen", "_healthy_run",
-                 "_frozen_health", "_stats")
+                 "_frozen_health", "_frozen_by", "_stats")
 
     def __init__(self, adapter: Adapter, checks, rollback_depth: int = 1,
                  checkpoint_every: int = 1, recover_after: int | None = None) -> None:
@@ -358,6 +360,7 @@ class Guard(Adapter):
         self._frozen = False
         self._healthy_run = 0
         self._frozen_health = adapter.health()
+        self._frozen_by: tuple[str, ...] = ()
         self._stats = {"applied": 0, "trips": 0, "rollbacks": 0,
                        "blocked_frozen": 0, "rejected_by_adapter": 0, "thaws": 0}
         self._store_checkpoint(*adapter.health())
@@ -410,6 +413,7 @@ class Guard(Adapter):
         self._since_ckpt = 0
         self._frozen = False
         self._healthy_run = 0
+        self._frozen_by = ()
         self._frozen_health = self.adapter.health()
         self._store_checkpoint(*self._frozen_health)
 
@@ -418,6 +422,13 @@ class Guard(Adapter):
     @property
     def frozen(self) -> bool:
         return self._frozen
+
+    @property
+    def frozen_by(self) -> tuple[str, ...]:
+        """What froze it last — the checks that tripped, or the reason given to
+        `freeze()`. Kept after `thaw()` as well, because "why did this device
+        freeze yesterday" is the question someone actually asks."""
+        return self._frozen_by
 
     @property
     def stats(self) -> dict[str, int]:
@@ -432,6 +443,7 @@ class Guard(Adapter):
         open, a known-bad sensor."""
         self._frozen = True
         self._healthy_run = 0
+        self._frozen_by = (reason,)
         self._frozen_health = tuple(self._ckpt_health[self._newest()])
 
     def thaw(self) -> None:
@@ -530,6 +542,7 @@ class Guard(Adapter):
             health = self._roll_back()
             self._frozen = True
             self._frozen_health = health
+            self._frozen_by = tripped
             self._healthy_run = 0
             # Stateful checks are deliberately NOT reset here. Their history is
             # what tells the frozen probes whether the world has come back, and

@@ -96,9 +96,11 @@ handle.
 enforced at the source), `argmind/align.py` (four explicit alignment policies, signed staleness,
 causal/non-causal declared), `argmind/adapt.py` (the `Adapter` contract and
 `RecursiveLeastSquares`), `argmind/guard.py` (`Check`/`Bound`/`Divergence`, freeze, bounded
-rollback, explicit recovery), and `argmind/pipeline.py` (`FrameMap`, input gate, bounded
-`step()`). 109 tests pass; several exist to prove failures are visible rather than silent, and
-every new suite was mutation-checked — thirty-one deliberate bugs, all caught.
+rollback, explicit recovery), `argmind/pipeline.py` (`FrameMap`, input gate, bounded `step()`),
+and `argmind/persist.py` (two-slot atomic store, CRC, configuration fingerprint, declared
+cadence). **The Python reference is complete.** 142 tests pass; several exist to prove failures
+are visible rather than silent, and every new suite was mutation-checked — forty-eight deliberate
+bugs, all caught.
 
 **The adapter contract, since everything after it fits into it** (full reasoning in DESIGN.md):
 state is one flat contiguous block so persistence is a copy and the C ABI needs no serialisation;
@@ -139,13 +141,24 @@ reported nothing wrong. The first fix was wrong the other way — `Stream.droppe
 `StepReport.lost_frames` counts what is actually knowable: reference samples overwritten before
 they could become frames. `Stream.dropped`'s docstring was overclaiming and is corrected.
 
+**Persistence is two slots written alternately**, each with a sequence number and CRC, so a write
+interrupted by power loss destroys at most the slot not in use. The reference writes files but
+models the raw-flash scheme faithfully, because the C side has no `os.replace`. A configuration
+fingerprint (`crc32`, never Python's salted `hash()`) refuses a block whose `FrameMap` order
+differs — the one corruption nothing downstream can detect. Cadence is declared, because a sector
+rated for 100k erase cycles written at 100 Hz is gone in seventeen minutes.
+
+**The guard-state question is answered**: checkpoints and check EWMAs describe a run and are not
+persisted; the frozen flag and its cause are, because they are a conclusion. What a reboot does
+with a freeze is the caller's call (`on_frozen="thaw"|"keep"|"refuse"`) — thawing risks re-learning
+into the same trouble, keeping risks stranding a device a power cycle would have fixed.
+
 **Next, in order** — the ordering is deliberate and the reasoning is in DESIGN.md:
 
-1. Persistence — the last piece of the Python reference. The flat state block is already the
-   format; cadence, framing, and whether the guard's own state belongs in it are not decided.
-2. The benchmark harness, before any optimisation. A fixed workload from the design driver, the
+1. The benchmark harness, before any optimisation. A fixed workload from the design driver, the
    Python reference as oracle, per-sample cost reported separately from per-frame cost.
-3. The C++ core, verified against the Python reference.
+2. The C++ core, verified against the Python reference. Still gated on the one open question:
+   whether the target range reaches down to MCUs.
 
 **Before any optimisation lands, a benchmark that can report a regression must exist.** An
 optimisation with no way to fail is not an optimisation, it is a hope.
