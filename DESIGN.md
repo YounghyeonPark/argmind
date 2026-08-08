@@ -157,6 +157,29 @@ Genuinely open, listed rather than guessed:
 - **Persistence.** Adaptation state must survive a power cycle for any of this to be useful in
   the field. Format and cadence are undecided.
 
+## Where this stands, and what comes next
+
+**Built:** `Stream` (fixed-capacity ring buffers, counted overflow, monotonic-time
+enforcement) and `Aligner` (four explicit policies, staleness reporting, causal/non-causal
+declared). 16 tests, several of which exist to prove failures are visible rather than silent.
+
+**Next, in order:**
+
+1. **`Adapter`, starting with recursive least squares** with a forgetting factor. Bounded state,
+   stability that can be argued about, and immediately useful for the driving example. Its
+   `update`/`predict` shape sets the contract every later method must fit.
+2. **`Guard`, immediately after — not later.** Half the reason this library exists is that online
+   adaptation can diverge in the field, so the freeze path has to be the default shape of the API
+   rather than something a user remembers to add. Building it second keeps that honest; building
+   it fifth would not.
+3. **`Pipeline`** to wire stream → align → adapt → predict behind one bounded `step()`.
+4. **Persistence**, because adaptation state that does not survive a power cycle is useless in the
+   field.
+
+**Decide before (1) is finalised:** the language question in the open list below. It does not
+block the Python reference implementation, but it decides whether the `Adapter` contract should
+be shaped for a future C core.
+
 ## Standards
 
 Carried from the parked project, where seventeen modelling errors were found and most flattered
