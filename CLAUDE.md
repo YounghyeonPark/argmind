@@ -107,7 +107,7 @@ rollback, explicit recovery), `argmind/pipeline.py` (`FrameMap`, input gate, bou
 pipeline. `argmind/bench.py` has no C++ counterpart and is not getting one: it is a host
 measurement harness, and DESIGN.md already records that Python timings are not a baseline the
 C++ can be compared against.
-306 Python tests and 868 C++ checks pass; several exist to prove failures are visible
+307 Python tests and 2438 C++ checks pass; several exist to prove failures are visible
 rather than silent. Every suite is mutation-checked, and surviving mutants are recorded where
 they live rather than tallied here — including the ones that turn out to be **equivalent on a
 64-bit host**, a distinction worth keeping rather than rounding away. Cumulative counts are
@@ -195,6 +195,33 @@ directly and skips if there is none, so a clone without a toolchain still tests 
 runtime arguments. Runtime `n` would discard the reason, so the ABI exports an **explicit
 instantiation list** — adding a dimension is one line plus a rebuild. Storage is the caller's;
 `AM_*_MAX_BYTES` is an upper bound held to being one by a `static_assert`.
+
+**The ABI now exports the guard and the record format too (2026-08-09), and that started as an
+inconsistency rather than a feature.** The rule the guard was designed around is that it *is*
+an adapter so "no guard" is not expressible — and the C boundary exported bare `Rls`, making
+the guard unreachable from C. Likewise `am_rls_*_state()` handed out the block a device must
+survive a power cut with and there was no way to frame it. `Depth` and `MaxBounds` are fixed
+at 4 in the ABI because they are the memory; `checkpoint_every` stays runtime. Measured on
+x86-64 (a shape, not a target figure): the guarded adapters are 1208/1448/3488/2064 bytes, the
+checkpoint ring being the majority at every shape — **`f32_12_1` at 3488 is 43% of the
+declared 8 KB budget for one adapter**, which is arithmetic on the budget and worth seeing
+before a target build rather than after.
+
+The `MAX_BYTES` `static_assert` earned its keep on the first build: the bounds were written
+before measuring and `AM_GUARD_F32_12_1_MAX_BYTES` was 3328 against a real 3488. And the C99
+gate turned out weaker than it read — it compiled the header and stopped, which says nothing
+about symbols being callable. A C99 program now compiles with gcc, links against the C++ core
+and runs end to end: configure a guard, drive a fault, pack the state, restore it.
+
+Seventeen mutants on the shim, sixteen caught. The survivor is **equivalent, not untested**:
+`am_guard_*_state(nullptr)` checks for null, and dropping the check is undetectable because
+`state()` sits at offset 0 of the guard — measured. It stays because a null dereference is
+undefined whatever the address arithmetic produces.
+
+**Still absent from C, deliberately**: `am_stream_*`, `am_align_*`, `am_pipeline_*`.
+`Pipeline::step()` takes `StreamView<T>*`, and `Stream<T, Dim, Capacity>` would put two more
+axes into a list that multiplies against the adapter's. The shape that avoids the explosion is
+one composed handle per wiring, and that is a decision to make deliberately.
 
 **Parity: ~1.5 ulp on the state block, and the same ulp count at f32 as at f64** — which is what
 says the difference is algorithmic rounding, not a precision-dependent bug. Worst quantity is the a
@@ -362,7 +389,9 @@ The run did find a real gap next door: using the aligner's *absolute* counters i
 step's delta survived the whole suite, because no case had both declined instants and an
 overflowing ring in one run. One was added and it is caught.
 
-**Next:** the on-target build, once a cross-compiler and hardware exist.
+**Next:** the on-target build. Checked on 2026-08-09: no `arm-none-eabi-*`, no clang, no
+qemu on this machine, so it cannot start and no on-target figure is quoted. The other open
+piece is the composed-handle ABI described above.
 
 **Before any optimisation lands, a benchmark that can report a regression must exist.** An
 optimisation with no way to fail is not an optimisation, it is a hope.

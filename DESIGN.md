@@ -423,9 +423,10 @@ regression gate), and **the C++ core — RLS behind a C ABI, plus the guard, the
 streams, alignment and the pipeline as headers — verified against the Python to about 1.5 ulp,
 byte for byte for the record format, and exactly for every decision and counter above that**.
 The runtime library is fully across; `argmind/bench.py` has no C++ counterpart and is not
-getting one, being a host measurement harness rather than part of what ships. (Only RLS has ABI entry points; `am_guard_*`, `am_persist_*`,
-`am_stream_*`, `am_align_*` and `am_pipeline_*` do not exist.)
-306 Python tests plus 868 C++ checks, several of which exist to prove failures are visible
+getting one, being a host measurement harness rather than part of what ships. (RLS, the guard and the record format have ABI entry points;
+`am_stream_*`, `am_align_*` and `am_pipeline_*` do not — see the ABI section for why that
+is a scope decision rather than an oversight.)
+307 Python tests plus 2438 C++ checks, several of which exist to prove failures are visible
 rather than silent.
 
 **What the pipeline settled:**
@@ -517,7 +518,7 @@ that is already the persistence format, and a benchmark that can report a regres
 
 **STARTED 2026-08-08** — `cpp/`, and RLS is across. `mat.hpp` (fixed-size primitives),
 `rls.hpp` (`Rls<T, N, M>`), `argmind.h` + `src/abi.cpp` (the C ABI), `tools/xcheck.cpp`, `tools/pcheck.cpp`, `tools/scheck.cpp` and
-`tools/pipecheck.cpp` (the four parity tools), `tests/test_core.cpp` (868 checks the C++ side can make on its own), and a
+`tools/pipecheck.cpp` (the four parity tools), `tests/test_core.cpp` (2438 checks the C++ side can make on its own), and a
 `CMakeLists.txt` that knows the cross-compilation recipe.
 
 **The C ABI had one real tension to resolve.** Compile-time dimensions are the reason C++ was
@@ -926,6 +927,103 @@ instead. What that costs is the independence: the mutation list, the sweep and t
 figures were all designed by the same hand that wrote the code, and this project's own history
 says that is exactly the arrangement under which a flattering result survives. The two reviews
 are worth re-running before the next component lands.
+
+### The C ABI grows a guard and the record format, 2026-08-09
+
+`cpp/include/argmind/argmind.h` and `cpp/src/abi.cpp`.
+
+**This started as an inconsistency, not a feature request.** The rule this project designed
+the guard around is that a `Guard` *is* an `Adapter`, deliberately, so that "no guard" is not
+expressible — a safety mechanism that can be left out gets left out. The C ABI exported bare
+`Rls` and nothing else, so from C the guard was not merely optional, it was **unreachable**.
+The boundary contradicted the principle it was supposed to carry. The same argument, weaker
+but real, applies to persistence: `am_rls_*_state()` handed out the block a device has to
+survive a power cut with, and there was no way to frame it from C, so the state block
+dead-ended at the boundary.
+
+**What was added.** `am_guard_*` over four instantiations matching the RLS list, and
+`am_persist_*` over f32 and f64. `Depth` and `MaxBounds` are fixed at 4 in the ABI rather
+than exported per value: they are the memory, and taking them per call would put them in the
+type and back into the instantiation list. `checkpoint_every` stays a runtime argument, and
+it is the tunable that matters — rollback reaches `depth * checkpoint_every` updates back.
+The record format needs no instantiation list at all; everything but the scalar type is
+already a runtime argument there.
+
+**Declared memory, measured on x86-64 — a shape, not a target figure, and AAPCS will differ.**
+
+| instantiation | sizeof | of which the checkpoint ring |
+|---|---|---|
+| `am_guard_f32_6_1` | 1208 | 736 |
+| `am_guard_f32_6_3` | 1448 | 928 |
+| `am_guard_f32_12_1` | 3488 | 2560 |
+| `am_guard_f64_6_1` | 2064 | 1408 |
+
+The ring is the majority at every shape, which is the thing a caller weighing rollback depth
+needs to see and the reason `am_guard_*_checkpoint_bytes()` reports it separately rather than
+leaving it to be inferred. **`f32_12_1` is worth looking at twice: 3488 bytes is 43% of the
+declared 8 KB RAM budget for one guarded adapter.** That is arithmetic on the declared budget,
+not a measurement of a real firmware, and it is the kind of number that should be seen before
+a target build rather than after.
+
+**The `MAX_BYTES` static assertion earned its keep immediately.** The four bounds were written
+into the header before anything was measured, and `AM_GUARD_F32_12_1_MAX_BYTES` was 3328
+against a real 3488. The build failed with the macro named. That is exactly the failure the
+assertion exists for — a compile-time promise a C header makes without being able to compute
+the C++ layout — and it is worth recording that the first draft was wrong, because the
+temptation with a bound is to write a comfortable number and move on. The bounds now carry a
+small margin over measured sizes, and a test asserts each is within 2x of the real size:
+`sizeof <= 99999` is true forever while telling a caller to reserve 100 KB.
+
+**The C99 gate was weaker than it read.** `test_the_c_header_is_valid_c99` compiles the header
+as C and stops, which says nothing about whether the entry points are callable and linkable —
+a header can parse perfectly while every symbol is mangled out of reach. There is now a test
+that compiles a C99 translation unit with **gcc**, links it against the C++ core, and runs it:
+it configures a guard, drives 80 updates through a fault, checks the trip, packs the state,
+unpacks it and compares. The claim "a plain-C firmware can call in" is exercised rather than
+asserted, and the test goes end to end because each half working says nothing about the two
+meeting.
+
+**Seventeen mutants on the shim, sixteen caught, one equivalent.** Caught: a field code
+outside the enum cast in anyway; an unusable guard reported as usable; `add_bound` accepting a
+check that can never fail; a divergence whose "fast" average is the slower of the two; the
+report dropping `rolled_back` or the `tripped` mask; the a posteriori residual reported as the
+a priori one; `init` accepting storage smaller than the object; a dropped counter;
+`load_state` accepting a non-finite block; `unpack` reporting `Ok` whatever the status;
+`read_state` ignoring a length mismatch; `select_newest` always naming slot 0; the record's
+frozen flag or sequence number dropped; and `next_slot` writing over the newest record.
+
+The survivor is **equivalent, not untested**, and the distinction is the point.
+`am_guard_*_state(nullptr)` tests for null before dereferencing; removing that test survives
+everything, because — measured — `state()` sits at offset 0 of the guard: `state_` is the
+first member of `Rls` and `Rls` is the first member of `Guard`, so the mutant returns null for
+a null argument too. No test can separate them. The check stays because dereferencing a null
+pointer is undefined whatever the address arithmetic happens to produce, and because that
+offset is a layout accident rather than a guarantee.
+
+**One API constraint found by a test that failed, and it bites on real flash.**
+`persist::unpack` compares the length it is given against the one the header describes
+*exactly*, so a caller must pass the **record's** length, not the capacity of the buffer it
+was read into. That refusal is the right one — a torn write looks exactly like a short record
+— but it means a slot rounded up to an erase page cannot be handed in whole. The header now
+says so and says what to do instead (keep the length beside the slot, or re-derive it with
+`am_persist_record_bytes`).
+
+**What a C caller still cannot do**, written into the header rather than left to be
+discovered: there are no `am_stream_*`, `am_align_*` or `am_pipeline_*` entry points.
+`Pipeline::step()` takes an array of `StreamView<T>`, a C++ template, so exposing it needs a C
+mirror of that struct plus a stream ABI — and `Stream<T, Dim, Capacity>` puts two more axes
+into an instantiation list that would then multiply against the adapter's. The shape that
+avoids the explosion is one composed handle per wiring, streams and aligner and guard and
+adapter chosen together and exported as a single instantiation, and that is a design decision
+worth making deliberately rather than tacking onto a list. So a C caller today gets a guarded
+or unguarded adapter and the record format to persist it, and must do its own buffering and
+alignment. That is a real limit on the declared deliverable — "a library, not an application"
+— and it is a scope decision rather than an oversight.
+
+**A note on the C++ check count.** It moved from 868 to 2438 in this change, and most of that
+is one loop: the ABI-versus-header comparison runs 120 updates and makes ten checks on each.
+The number is a floor to catch checks silently disappearing, not a measure of coverage, and
+reading it as the latter would be reading a loop bound.
 
 ## Standards
 

@@ -537,7 +537,7 @@ def test_the_cpp_unit_tests_pass(tmp_path):
     # ...and that the checks did not quietly disappear. The count is quoted in DESIGN.md and
     # CLAUDE.md, and "0 failures" alone is equally true of a suite that stopped running.
     m = re.search(r"(\d+) checks", run.stdout)
-    assert m and int(m.group(1)) >= 850, (
+    assert m and int(m.group(1)) >= 2400, (
         f"the C++ self-check count fell to {m.group(1) if m else '?'}; the documented "
         "figure is a claim about this number")
 
@@ -575,6 +575,105 @@ def test_the_c_header_is_valid_c99(tmp_path):
          str(CPP / "include" / "argmind" / "argmind.h"), "-o", str(obj)],
         capture_output=True, text=True)
     assert done.returncode == 0, f"argmind.h is not valid C99:\n{done.stderr}"
+
+
+
+#: A plain-C caller, compiled by a C compiler and linked against the C++ core. It uses the
+#: guard rather than the bare adapter deliberately: DESIGN.md's rule is that a safety
+#: mechanism which can be left out gets left out, and until the guard had ABI entry points
+#: the C boundary made "no guard" the only option there was.
+_C_CALLER = r"""
+#include <stdio.h>
+#include <string.h>
+#include "argmind/argmind.h"
+
+int main(void) {
+    static am_rls_storage store[AM_GUARD_F32_6_1_MAX_BYTES / sizeof(am_rls_storage)];
+    float x[6];
+    float y[1];
+    float restored[AM_RLS_F32_6_1_STATE];
+    static unsigned char slot[512];
+    am_guard_report r;
+    am_guard_counters c;
+    am_record rec;
+    unsigned int seed = 7u;
+    size_t n;
+    int k, j;
+
+    if (am_guard_f32_6_1_init(store, sizeof(store), 0.98f, 10.0f, 1, 0) != AM_OK)
+        return 1;
+    if (am_guard_f32_6_1_add_bound(store, AM_FIELD_RESIDUAL_NORM, 0, 0.0, 1, 8.0)
+        != AM_OK) return 2;
+    if (am_guard_f32_6_1_valid(store) != AM_OK) return 3;
+
+    for (k = 0; k < 80; ++k) {
+        for (j = 0; j < 6; ++j) {
+            seed = seed * 1664525u + 1013904223u;
+            x[j] = (float)((int)(seed >> 8) % 1000) / 500.0f;
+        }
+        y[0] = x[0] + 2.0f * x[1] - 0.5f + (k == 50 ? 60.0f : 0.0f);
+        if (am_guard_f32_6_1_update(store, x, y, &r, NULL) != AM_OK) return 4;
+    }
+    if (!am_guard_f32_6_1_frozen(store)) return 5;
+    if (am_guard_f32_6_1_frozen_by(store) == 0u) return 6;
+    if (am_guard_f32_6_1_counters(store, &c) != AM_OK) return 7;
+    if (c.trips != 1u) return 8;
+
+    n = am_persist_pack_f32(am_guard_f32_6_1_state(store), AM_RLS_F32_6_1_STATE, 6, 1,
+                            1, 0xFEEDu, 1, "residual", 8, slot, sizeof(slot));
+    if (n == 0u) return 9;
+    if (am_persist_unpack_f32(slot, n, &rec) != AM_PERSIST_OK) return 10;
+    if (rec.sequence != 1u || rec.frozen != 1) return 11;
+    if (am_persist_read_state_f32(slot, n, restored, AM_RLS_F32_6_1_STATE)
+        != AM_PERSIST_OK) return 12;
+    if (memcmp(restored, am_guard_f32_6_1_state(store),
+               sizeof(restored)) != 0) return 13;
+    if (am_persist_next_slot(0) != 1) return 14;
+
+    printf("ok trips=%u frozen_by=%u bytes=%u\n", c.trips,
+           am_guard_f32_6_1_frozen_by(store), (unsigned)n);
+    return 0;
+}
+"""
+
+
+def test_a_plain_c_program_can_drive_the_guard_and_the_record_format(tmp_path):
+    """The C ABI's whole claim, exercised rather than asserted.
+
+    `test_the_c_header_is_valid_c99` compiles the header and stops there, which says
+    nothing about whether the symbols are callable and linkable from C — a header can
+    parse perfectly while every entry point is name-mangled out of reach. This compiles a
+    C99 translation unit with a *C* compiler, links it against the C++ core, and runs it.
+
+    It also goes end to end on purpose: adapt, trip the guard, pack the state, read it
+    back. Each half working says nothing about the two meeting, and the reason the guard
+    and the record format got ABI entry points at all is that `am_rls_*_state()` used to
+    hand out a block a C caller had no way to frame.
+    """
+    cc = shutil.which("gcc")
+    cxx = _compiler()
+    if cc is None or cxx is None:
+        pytest.skip("need both a C and a C++ compiler on PATH")
+    src = tmp_path / "caller.c"
+    src.write_text(_C_CALLER, encoding="utf-8")
+    obj = tmp_path / "caller.o"
+    done = subprocess.run(
+        [cc, "-std=c99", "-Wall", "-Wextra", "-Wpedantic", "-I", str(CPP / "include"),
+         "-c", str(src), "-o", str(obj)], capture_output=True, text=True)
+    assert done.returncode == 0, f"the C caller does not compile as C99:\n{done.stderr}"
+
+    exe = tmp_path / ("caller.exe" if sys.platform == "win32" else "caller")
+    done = subprocess.run(
+        [cxx, "-std=c++17", "-O2", "-fno-exceptions", "-fno-rtti",
+         "-I", str(CPP / "include"), str(obj), str(CPP / "src" / "abi.cpp"),
+         "-o", str(exe)], capture_output=True, text=True)
+    assert done.returncode == 0, f"the C caller does not link:\n{done.stderr}"
+
+    run = subprocess.run([str(exe)], capture_output=True, text=True)
+    assert run.returncode == 0, (
+        f"the C caller returned {run.returncode}; the number is the failing step in "
+        f"caller.c\n{run.stdout}\n{run.stderr}")
+    assert run.stdout.startswith("ok trips=1"), run.stdout
 
 
 # ---------------------------------------------------------------------------

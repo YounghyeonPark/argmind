@@ -22,6 +22,17 @@
 
 namespace {
 
+/// Compare two doubles by bit pattern. Across an ABI boundary the two sides are the same
+/// arithmetic, so anything but bit identity is a plumbing bug and a tolerance would hide it.
+inline bool bits_equal(double a, double b) {
+    uint64_t ua;
+    uint64_t ub;
+    __builtin_memcpy(&ua, &a, sizeof(ua));
+    __builtin_memcpy(&ub, &b, sizeof(ub));
+    return ua == ub;
+}
+
+
 int failures = 0;
 int checks = 0;
 
@@ -1266,6 +1277,291 @@ void test_the_declared_pipeline_memory_is_what_it_says() {
     CHECK(sizeof(Pipe) < static_cast<size_t>(Pipe::pick_bytes) + 512u);
 }
 
+
+// -- the guard and record ABI -------------------------------------------------
+//
+// What these test is the PLUMBING, not the algorithm: guard.hpp and persist.hpp are
+// already verified against the Python reference, so the question at the boundary is
+// whether the shim carries the same answers across it. The strongest form of that
+// question is to run the same inputs through both paths and demand agreement bit for
+// bit, which is what the first test does -- a tolerance here would be measuring
+// nothing, since it is the same code on both sides of the comparison.
+
+void test_the_guard_abi_agrees_with_the_header_bit_for_bit() {
+    static am_rls_storage store[AM_GUARD_F32_6_1_MAX_BYTES / sizeof(am_rls_storage)];
+    CHECK(am_guard_f32_6_1_init(store, sizeof(store), 0.98f, 10.0f, 2, 0) == AM_OK);
+    CHECK(am_guard_f32_6_1_add_bound(store, AM_FIELD_RESIDUAL_NORM, 0, 0.0, 1, 6.0) ==
+          AM_OK);
+    CHECK(am_guard_f32_6_1_set_divergence(store, 4.0, 0.4, 0.05, 1e-3, 10) == AM_OK);
+    CHECK(am_guard_f32_6_1_valid(store) == AM_OK);
+
+    argmind::Guard<argmind::Rls<float, 6, 1>, 4, 4> ref(
+        argmind::Rls<float, 6, 1>(0.98f, 10.0f), 2, 0);
+    CHECK(ref.add_bound(argmind::Bound::at_most(argmind::Field::ResidualNorm, 6.0)));
+    argmind::Divergence d;
+    d.ratio = 4.0;
+    d.fast_alpha = 0.4;
+    d.slow_alpha = 0.05;
+    d.floor = 1e-3;
+    d.warmup = 10;
+    ref.set_divergence(d);
+    CHECK(ref.valid());
+
+    uint32_t seed = 12345u;
+    for (int k = 0; k < 120; ++k) {
+        float x[6];
+        for (int j = 0; j < 6; ++j) {
+            seed = seed * 1664525u + 1013904223u;
+            x[j] = static_cast<float>(static_cast<int32_t>(seed >> 8) % 2000) / 1000.0f;
+        }
+        // A fault at step 60, so the trip, the rollback and the frozen probes all cross
+        // the boundary rather than only the healthy path.
+        float y[1] = {2.0f * x[0] - x[3] + 0.5f + (k == 60 ? 40.0f : 0.0f)};
+
+        am_guard_report r;
+        float residual[1];
+        CHECK(am_guard_f32_6_1_update(store, x, y, &r, residual) == AM_OK);
+        const argmind::GuardReport<float, 1> want = ref.update(x, y);
+
+        CHECK(r.applied == (want.applied ? 1 : 0));
+        CHECK(r.reason == static_cast<int32_t>(want.reason));
+        CHECK(r.frozen == (want.frozen ? 1 : 0));
+        CHECK(r.rolled_back == (want.rolled_back ? 1 : 0));
+        CHECK(r.tripped == want.tripped);
+        CHECK(r.guard_reason == static_cast<int32_t>(want.guard_reason));
+        CHECK(bits_equal(r.residual_norm, want.residual_norm));
+        CHECK(bits_equal(r.p_trace, want.p_trace));
+        CHECK(bits_equal(r.gain_norm, want.gain_norm));
+        CHECK(residual[0] == want.residual[0]);
+    }
+    // The fixture has to have exercised the fault, or every CHECK above ran on the
+    // healthy path and the frozen and rolled-back fields were compared as false == false.
+    CHECK(am_guard_f32_6_1_frozen(store) == 1);
+    CHECK(am_guard_f32_6_1_frozen_by(store) != 0u);
+
+    am_guard_counters c;
+    CHECK(am_guard_f32_6_1_counters(store, &c) == AM_OK);
+    CHECK(c.trips == 1u);
+    CHECK(c.rollbacks == 1u);
+    CHECK(c.blocked_frozen > 0u);
+    CHECK(c.applied + c.trips + c.blocked_frozen + c.rejected_by_adapter == 120u);
+
+    const float* a = am_guard_f32_6_1_state(store);
+    const float* b = ref.state();
+    for (int i = 0; i < am_guard_f32_6_1_state_size(); ++i) CHECK(a[i] == b[i]);
+}
+
+void test_the_guard_abi_refuses_at_the_boundary_rather_than_trusting() {
+    static am_rls_storage store[AM_GUARD_F32_6_1_MAX_BYTES / sizeof(am_rls_storage)];
+    CHECK(am_guard_f32_6_1_init(nullptr, 64, 0.98f, 10.0f, 1, 0) == AM_ERR_NULL);
+    CHECK(am_guard_f32_6_1_init(store, 8, 0.98f, 10.0f, 1, 0) == AM_ERR_TOO_SMALL);
+    CHECK(am_guard_f32_6_1_init(store, sizeof(store), 0.0f, 10.0f, 1, 0) ==
+          AM_ERR_CONFIG);
+    CHECK(am_guard_f32_6_1_init(store, sizeof(store), 0.98f, 10.0f, 1, 0) == AM_OK);
+
+    // A guard with no checks can never freeze, which makes it a wrapper that looks like a
+    // safety mechanism. Refused, as the header path refuses it.
+    CHECK(am_guard_f32_6_1_valid(store) == AM_ERR_UNUSABLE);
+
+    // A field code the enum does not have. The C++ side cannot make this mistake because
+    // the enum is the parameter; the C side can, and casting it in would produce a check
+    // that watches nothing and never fires.
+    CHECK(am_guard_f32_6_1_add_bound(store, 99, 0, 0.0, 1, 1.0) == AM_ERR_CONFIG);
+    CHECK(am_guard_f32_6_1_add_bound(store, -1, 0, 0.0, 1, 1.0) == AM_ERR_CONFIG);
+    // A bound that sets neither end can never fail.
+    CHECK(am_guard_f32_6_1_add_bound(store, AM_FIELD_P_TRACE, 0, 0.0, 0, 0.0) ==
+          AM_ERR_CONFIG);
+    // lo above hi.
+    CHECK(am_guard_f32_6_1_add_bound(store, AM_FIELD_P_TRACE, 1, 9.0, 1, 1.0) ==
+          AM_ERR_CONFIG);
+    // A divergence whose "fast" average is the slower of the two detects the opposite of
+    // what it claims to.
+    CHECK(am_guard_f32_6_1_set_divergence(store, 4.0, 0.02, 0.4, 0.0, 10) ==
+          AM_ERR_CONFIG);
+    CHECK(am_guard_f32_6_1_set_divergence(store, 0.5, 0.4, 0.02, 0.0, 10) ==
+          AM_ERR_CONFIG);
+
+    for (int i = 0; i < 4; ++i) {
+        CHECK(am_guard_f32_6_1_add_bound(store, AM_FIELD_P_TRACE, 0, 0.0, 1,
+                                         1e9 + i) == AM_OK);
+    }
+    CHECK(am_guard_f32_6_1_add_bound(store, AM_FIELD_P_TRACE, 0, 0.0, 1, 1e9) ==
+          AM_ERR_FULL);
+    CHECK(am_guard_f32_6_1_valid(store) == AM_OK);
+
+    float x[6] = {1, 0, 0, 0, 0, 0};
+    float y[1] = {1};
+    am_guard_report r;
+    CHECK(am_guard_f32_6_1_update(nullptr, x, y, &r, nullptr) == AM_ERR_NULL);
+    CHECK(am_guard_f32_6_1_update(store, x, y, nullptr, nullptr) == AM_ERR_NULL);
+    CHECK(am_guard_f32_6_1_state(nullptr) == nullptr);
+    CHECK(am_guard_f32_6_1_counters(store, nullptr) == AM_ERR_NULL);
+    CHECK(am_guard_f32_6_1_frozen(nullptr) == 0);
+}
+
+void test_the_declared_guard_bounds_are_bounds_and_not_fantasies() {
+    // A bound that is merely true is not useful: `sizeof <= 99999` would pass forever
+    // while telling a caller to reserve 100 KB. The second half of each pair is what
+    // keeps the promise tight enough to budget from.
+    CHECK(am_guard_f32_6_1_bytes() <= AM_GUARD_F32_6_1_MAX_BYTES);
+    CHECK(am_guard_f32_6_3_bytes() <= AM_GUARD_F32_6_3_MAX_BYTES);
+    CHECK(am_guard_f32_12_1_bytes() <= AM_GUARD_F32_12_1_MAX_BYTES);
+    CHECK(am_guard_f64_6_1_bytes() <= AM_GUARD_F64_6_1_MAX_BYTES);
+    CHECK(am_guard_f32_6_1_bytes() * 2 >= AM_GUARD_F32_6_1_MAX_BYTES);
+    CHECK(am_guard_f32_12_1_bytes() * 2 >= AM_GUARD_F32_12_1_MAX_BYTES);
+
+    // Where the memory goes, reported rather than inferred. The ring is the majority of
+    // it at every shape, which is the thing a caller weighing rollback depth needs to see.
+    CHECK(am_guard_f32_6_1_checkpoint_bytes() ==
+          4 * (AM_RLS_F32_6_1_STATE * 4 + 16));
+    CHECK(am_guard_f32_6_1_checkpoint_bytes() * 2 >
+          static_cast<int>(am_guard_f32_6_1_bytes()));
+    CHECK(am_guard_f32_6_1_state_size() == AM_RLS_F32_6_1_STATE);
+    CHECK(am_guard_f64_6_1_state_size() == AM_RLS_F64_6_1_STATE);
+}
+
+void test_the_record_abi_round_trips_and_arbitrates() {
+    static float state[AM_RLS_F32_6_1_STATE];
+    for (int i = 0; i < AM_RLS_F32_6_1_STATE; ++i) state[i] = 0.25f * i - 3.0f;
+    const char cause[] = "p_trace";
+    const size_t need = am_persist_record_bytes(AM_RLS_F32_6_1_STATE, sizeof(float),
+                                                sizeof(cause) - 1);
+    static uint8_t slot0[512];
+    static uint8_t slot1[512];
+    CHECK(need <= sizeof(slot0));
+
+    CHECK(am_persist_pack_f32(state, AM_RLS_F32_6_1_STATE, 6, 1, 7, 0xABCD1234u, 1,
+                              cause, sizeof(cause) - 1, slot0, need) == need);
+    // One byte short must write nothing rather than a truncated record: a slot that is
+    // half a record is the torn write two slots exist to survive.
+    CHECK(am_persist_pack_f32(state, AM_RLS_F32_6_1_STATE, 6, 1, 7, 0xABCD1234u, 1,
+                              cause, sizeof(cause) - 1, slot1, need - 1) == 0u);
+
+    am_record rec;
+    CHECK(am_persist_unpack_f32(slot0, need, &rec) == AM_PERSIST_OK);
+    CHECK(rec.sequence == 7u);
+    CHECK(rec.fingerprint == 0xABCD1234u);
+    CHECK(rec.n_features == 6 && rec.n_outputs == 1);
+    CHECK(rec.frozen == 1);
+    CHECK(rec.count == static_cast<uint32_t>(AM_RLS_F32_6_1_STATE));
+    CHECK(rec.cause_len == sizeof(cause) - 1);
+    CHECK(rec.cause != nullptr && rec.cause[0] == 'p');
+
+    static float back[AM_RLS_F32_6_1_STATE];
+    CHECK(am_persist_read_state_f32(slot0, need, back, AM_RLS_F32_6_1_STATE) ==
+          AM_PERSIST_OK);
+    for (int i = 0; i < AM_RLS_F32_6_1_STATE; ++i) CHECK(back[i] == state[i]);
+    CHECK(am_persist_read_state_f32(slot0, need, back, AM_RLS_F32_6_1_STATE - 1) ==
+          AM_PERSIST_LENGTH_MISMATCH);
+
+    // A single flipped bit anywhere must be refused, which is the whole reason the CRC is
+    // there. Checked at three places rather than one, because the header, the payload and
+    // the CRC field itself are protected by different parts of the check.
+    const size_t spots[3] = {6, need / 2, need - 1};
+    for (int i = 0; i < 3; ++i) {
+        slot0[spots[i]] ^= 0x01u;
+        CHECK(am_persist_unpack_f32(slot0, need, &rec) != AM_PERSIST_OK);
+        slot0[spots[i]] ^= 0x01u;
+    }
+    CHECK(am_persist_unpack_f32(slot0, need, &rec) == AM_PERSIST_OK);
+
+    // Arbitration, and the rule the reference got wrong: the next write goes to the slot
+    // that is NOT newest, or a reboot after an odd number of saves destroys the record it
+    // has just loaded.
+    const size_t n1 = am_persist_pack_f32(state, AM_RLS_F32_6_1_STATE, 6, 1, 9,
+                                          0xABCD1234u, 0, nullptr, 0, slot1,
+                                          sizeof(slot1));
+    CHECK(n1 > 0u);
+    CHECK(n1 < need);          // no cause this time, so a shorter record
+    int32_t sa = -1;
+    int32_t sb = -1;
+    // `in_bytes` is the RECORD's length, not the buffer's capacity -- `unpack` compares it
+    // exactly, so a slot read into an oversized buffer is rejected as a length mismatch.
+    // That is the right refusal (a torn write looks exactly like a short record) and it is
+    // a real constraint on how a caller sizes flash slots, now said in argmind.h.
+    CHECK(am_persist_unpack_f32(slot1, sizeof(slot1), &rec) ==
+          AM_PERSIST_LENGTH_MISMATCH);
+    const int newest = am_persist_select_newest_f32(slot0, need, slot1, n1,
+                                                    &rec, &sa, &sb);
+    CHECK(newest == 1);
+    CHECK(rec.sequence == 9u);
+    CHECK(sa == AM_PERSIST_OK && sb == AM_PERSIST_OK);
+    CHECK(am_persist_next_slot(newest) == 0);
+    CHECK(am_persist_next_slot(-1) == 0);
+
+    // Both slots unreadable is a first boot, not an error to abort on -- and WHY each was
+    // rejected comes back, because "it started from scratch" and "it started from scratch
+    // because slot 1 had a CRC mismatch" are very different mornings.
+    static uint8_t junk[64];
+    for (size_t i = 0; i < sizeof(junk); ++i) junk[i] = 0xFFu;
+    CHECK(am_persist_select_newest_f32(junk, sizeof(junk), nullptr, 0, &rec, &sa, &sb) ==
+          -1);
+    CHECK(sa == AM_PERSIST_BAD_MAGIC);
+    CHECK(sb == AM_PERSIST_TOO_SHORT);
+
+    // A record packed as f32 must not be read as f64. Nothing downstream could detect it:
+    // the bytes are a valid block of half the length.
+    CHECK(am_persist_unpack_f64(slot0, need, &rec) == AM_PERSIST_BAD_DTYPE);
+}
+
+void test_the_abi_closes_the_loop_from_a_guard_to_a_slot_and_back() {
+    // The reason this section exists at all: `am_rls_*_state()` handed out the block a
+    // device must survive a power cut with, and there was no way to frame it from C. This
+    // is that loop end to end -- adapt, pack, reboot, arbitrate, restore -- because each
+    // half working says nothing about the two meeting.
+    static am_rls_storage store[AM_GUARD_F32_6_1_MAX_BYTES / sizeof(am_rls_storage)];
+    CHECK(am_guard_f32_6_1_init(store, sizeof(store), 0.98f, 10.0f, 1, 0) == AM_OK);
+    CHECK(am_guard_f32_6_1_add_bound(store, AM_FIELD_P_TRACE, 0, 0.0, 1, 1e6) == AM_OK);
+
+    uint32_t seed = 99u;
+    for (int k = 0; k < 40; ++k) {
+        float x[6];
+        for (int j = 0; j < 6; ++j) {
+            seed = seed * 1664525u + 1013904223u;
+            x[j] = static_cast<float>(static_cast<int32_t>(seed >> 8) % 1000) / 500.0f;
+        }
+        const float y[1] = {x[0] + 2.0f * x[1] - 0.5f};
+        am_guard_report r;
+        CHECK(am_guard_f32_6_1_update(store, x, y, &r, nullptr) == AM_OK);
+    }
+    static float saved[AM_RLS_F32_6_1_STATE];
+    const float* live = am_guard_f32_6_1_state(store);
+    for (int i = 0; i < AM_RLS_F32_6_1_STATE; ++i) saved[i] = live[i];
+
+    static uint8_t slot[512];
+    const size_t n = am_persist_pack_f32(saved, AM_RLS_F32_6_1_STATE, 6, 1, 1,
+                                         0xFEEDu, am_guard_f32_6_1_frozen(store),
+                                         nullptr, 0, slot, sizeof(slot));
+    CHECK(n > 0u);
+
+    // Reboot: a fresh guard, restored from the slot.
+    static am_rls_storage fresh[AM_GUARD_F32_6_1_MAX_BYTES / sizeof(am_rls_storage)];
+    CHECK(am_guard_f32_6_1_init(fresh, sizeof(fresh), 0.98f, 10.0f, 1, 0) == AM_OK);
+    static float restored[AM_RLS_F32_6_1_STATE];
+    CHECK(am_persist_read_state_f32(slot, n, restored, AM_RLS_F32_6_1_STATE) ==
+          AM_PERSIST_OK);
+    CHECK(am_guard_f32_6_1_load_state(fresh, restored) == AM_OK);
+
+    const float* a = am_guard_f32_6_1_state(store);
+    const float* b = am_guard_f32_6_1_state(fresh);
+    for (int i = 0; i < AM_RLS_F32_6_1_STATE; ++i) CHECK(a[i] == b[i]);
+
+    // ...and the same input now predicts the same thing on both, which is the property a
+    // caller actually cares about and is not implied by the blocks matching only if the
+    // restore silently reset something else.
+    const float probe[6] = {0.3f, -1.2f, 0.75f, 0.0f, 2.5f, -0.4f};
+    float pa[1];
+    float pb[1];
+    CHECK(am_guard_f32_6_1_predict(store, probe, pa) == AM_OK);
+    CHECK(am_guard_f32_6_1_predict(fresh, probe, pb) == AM_OK);
+    CHECK(pa[0] == pb[0]);
+
+    // A non-finite block must be refused rather than poisoning every later update: flash
+    // is exactly where a torn write or a bit flip shows up.
+    restored[3] = __builtin_nanf("");
+    CHECK(am_guard_f32_6_1_load_state(fresh, restored) == AM_ERR_STATE);
+}
+
 }  // namespace
 
 int main() {
@@ -1330,6 +1626,12 @@ int main() {
     test_the_guarded_and_unguarded_forms_are_both_constructible();
     test_a_step_with_nothing_to_visit_touches_no_counter();
     test_the_declared_pipeline_memory_is_what_it_says();
+
+    test_the_guard_abi_agrees_with_the_header_bit_for_bit();
+    test_the_guard_abi_refuses_at_the_boundary_rather_than_trusting();
+    test_the_declared_guard_bounds_are_bounds_and_not_fantasies();
+    test_the_record_abi_round_trips_and_arbitrates();
+    test_the_abi_closes_the_loop_from_a_guard_to_a_slot_and_back();
     test_the_declared_ring_memory_matches_the_shape();
 
     printf("%d checks, %d failures\n", checks, failures);
