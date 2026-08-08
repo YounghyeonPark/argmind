@@ -532,3 +532,52 @@ def test_invalid_guard_configuration_is_refused(kwargs):
 def test_non_checks_are_refused():
     with pytest.raises(TypeError, match="not a Check"):
         Guard(make_rls(), ["divergence"])
+
+
+def test_a_manual_freeze_reports_the_live_covariance_not_a_stale_checkpoint():
+    """A bug found by a mutation check on the C++ port, not by review.
+
+    `freeze()` used to take its health scalars from the newest checkpoint. After a *trip*
+    that is exact, because the state has just been restored to that checkpoint. After a
+    *manual* freeze nothing was restored, so the newest checkpoint can be up to
+    `checkpoint_every` updates stale — and a `Bound` on `p_trace` evaluated during the
+    freeze then read a number describing a state the adapter was no longer in.
+
+    Measured before the fix: 300.0 reported against a live 104.1, three updates into a
+    cadence of five.
+    """
+    rls = RecursiveLeastSquares(3, forgetting=0.99, p0=100.0, dtype="f8")
+    g = Guard(rls, [Bound("p_trace", hi=1e9)], rollback_depth=4, checkpoint_every=5)
+    for i in range(3):                       # mid-cadence: no checkpoint since construction
+        g.update([1.0 + i, -2.0, 0.5], [3.0])
+
+    live_trace, live_min = g.health()
+    stale_trace = float(g._ckpt_health[g._newest()][0])
+    assert abs(stale_trace - live_trace) > 1.0, (
+        "the fixture is no longer mid-cadence, so a stale checkpoint would look correct")
+
+    g.freeze("bay door open")
+    probe = g.update([1.0, -2.0, 0.5], [3.0])
+    assert probe.frozen and not probe.applied
+    assert probe.p_trace == pytest.approx(live_trace), (
+        f"the probe reported {probe.p_trace}, not the live {live_trace}")
+    assert probe.p_min_diag == pytest.approx(live_min)
+
+
+def test_a_probe_after_a_trip_still_reports_the_restored_state():
+    """The other half: after a trip the restored state *is* the checkpoint, so the probe's
+    scalars must equal the checkpoint's. Fixing the manual-freeze path must not break
+    this one."""
+    rls = RecursiveLeastSquares(2, forgetting=0.95, p0=1.0, dtype="f8")
+    g = Guard(rls, [Bound("p_trace", hi=10.0)], rollback_depth=1)
+    rng = np.random.default_rng(31)
+    for _ in range(200):
+        r = g.update([rng.standard_normal(), 0.0], [0.0])
+        if r.frozen:
+            break
+    assert g.frozen
+
+    live_trace, live_min = g.health()
+    probe = g.update([rng.standard_normal(), 0.0], [0.0])
+    assert probe.p_trace == pytest.approx(live_trace)
+    assert probe.p_min_diag == pytest.approx(live_min)

@@ -86,6 +86,10 @@ class Rls {
                   "half-precision path in any filter form");
 
 public:
+    /// Exposed so that wrappers (the guard) can name the precision they are
+    /// wrapping without being told it separately.
+    using scalar = T;
+
     static constexpr int n_features = N;
     static constexpr int n_outputs = M;
     /// Elements in the persistence block. Fixed at compile time, by design.

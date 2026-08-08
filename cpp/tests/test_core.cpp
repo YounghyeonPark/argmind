@@ -13,6 +13,7 @@
 #include <stdio.h>
 
 #include "argmind/argmind.h"
+#include "argmind/guard.hpp"
 #include "argmind/rls.hpp"
 
 namespace {
@@ -350,6 +351,253 @@ void test_reset_returns_to_the_construction_state() {
         CHECK(am_rls_f32_6_1_state(store)[i] == fresh[i]);
 }
 
+
+// -- Guard -------------------------------------------------------------------
+//
+// These exist because a mutation check found eight survivors in the guarded parity
+// suite, and several of them were unreachable from the parity tool by construction: it
+// never builds an invalid guard, never calls load_state on one, and never produces a
+// non-finite report scalar. A harness can only test what it exercises, so the checks
+// that only the C++ side can reach belong here.
+
+using GuardedD = argmind::Guard<argmind::Rls<double, 3, 1>, 4, 4>;
+
+GuardedD make_guard(double hi = 1e9) {
+    GuardedD g(argmind::Rls<double, 3, 1>(0.99, 100.0));
+    g.add_bound(argmind::Bound::at_most(argmind::Field::PTrace, hi));
+    return g;
+}
+
+void test_bound_treats_non_finite_as_unhealthy() {
+    // A NaN compares false against everything, so without saying so explicitly it slips
+    // through every comparison as "not out of range". Unreachable from the parity tool,
+    // which never produces a non-finite report scalar.
+    argmind::GuardReport<double, 1> r;
+    r.p_trace = 1.0;
+    const argmind::Bound b = argmind::Bound::between(argmind::Field::PTrace, 0.0, 1e6);
+    CHECK(b.evaluate(r));
+    r.p_trace = __builtin_nan("");
+    CHECK(!b.evaluate(r));
+    r.p_trace = __builtin_inf();
+    CHECK(!b.evaluate(r));
+    r.p_trace = -__builtin_inf();
+    CHECK(!b.evaluate(r));
+}
+
+void test_a_bound_that_cannot_fail_is_invalid() {
+    argmind::Bound none;                       // neither limit set
+    CHECK(!none.valid());
+    CHECK(argmind::Bound::at_least(argmind::Field::PMinDiag, 0.0).valid());
+    CHECK(argmind::Bound::at_most(argmind::Field::PTrace, 1.0).valid());
+    argmind::Bound inverted =
+        argmind::Bound::between(argmind::Field::PTrace, 10.0, 1.0);
+    CHECK(!inverted.valid());
+}
+
+void test_a_guard_with_no_checks_is_invalid() {
+    // A guard that can never freeze is a wrapper that looks like a safety mechanism.
+    GuardedD bare(argmind::Rls<double, 3, 1>(0.99, 100.0));
+    CHECK(!bare.valid());
+    CHECK(make_guard().valid());
+}
+
+void test_a_recovery_configuration_that_could_never_recover_is_invalid() {
+    // gain_norm is identically zero while frozen, so a positive lower bound on it can
+    // never be satisfied and the guard would never thaw.
+    GuardedD deadlocked(argmind::Rls<double, 3, 1>(0.99, 100.0), 1, 10);
+    CHECK(deadlocked.add_bound(
+        argmind::Bound::at_least(argmind::Field::GainNorm, 0.1)));
+    CHECK(!deadlocked.valid());
+
+    // ...and the same check is fine without automatic recovery.
+    GuardedD manual_only(argmind::Rls<double, 3, 1>(0.99, 100.0), 1, 0);
+    CHECK(manual_only.add_bound(
+        argmind::Bound::at_least(argmind::Field::GainNorm, 0.1)));
+    CHECK(manual_only.valid());
+}
+
+void test_an_invalid_divergence_configuration_is_invalid() {
+    GuardedD g = make_guard();
+    argmind::Divergence d;
+    d.ratio = 1.0;                             // at or below 1 fires on ordinary noise
+    g.set_divergence(d);
+    CHECK(!g.valid());
+
+    argmind::Divergence slower_fast;
+    slower_fast.fast_alpha = 0.01;
+    slower_fast.slow_alpha = 0.5;              // the "fast" average is the slower one
+    g.set_divergence(slower_fast);
+    CHECK(!g.valid());
+
+    argmind::Divergence good;
+    g.set_divergence(good);
+    CHECK(g.valid());
+}
+
+void test_bounds_beyond_capacity_are_refused_rather_than_dropped() {
+    GuardedD g(argmind::Rls<double, 3, 1>(0.99, 100.0));
+    for (int i = 0; i < 4; ++i) {
+        CHECK(g.add_bound(argmind::Bound::at_most(argmind::Field::PTrace, 1e9)));
+    }
+    CHECK(!g.add_bound(argmind::Bound::at_most(argmind::Field::PTrace, 1e9)));
+    CHECK(!g.add_bound(argmind::Bound()));      // and an unusable one is refused too
+}
+
+void test_load_state_re_arms_the_guard() {
+    // Every checkpoint describes a state that no longer exists, so keeping them would let
+    // a later trip roll "back" to a state that was never reached. Unreachable from the
+    // parity tool, which never loads state into a guard.
+    GuardedD g = make_guard(1.0);              // trips immediately
+    const double x[3] = {1.0, 2.0, 3.0};
+    const double y[1] = {1.0};
+    g.update(x, y);
+    CHECK(g.frozen());
+
+    argmind::Rls<double, 3, 1> fresh(0.99, 100.0);
+    CHECK(g.load_state(fresh.state()));
+    CHECK(!g.frozen());
+    for (int i = 0; i < GuardedD::state_size; ++i)
+        CHECK(g.state()[i] == fresh.state()[i]);
+
+    // A refused load must not re-arm either, since nothing moved.
+    double corrupt[GuardedD::state_size];
+    argmind::copy<double, GuardedD::state_size>(fresh.state(), corrupt);
+    corrupt[0] = __builtin_nan("");
+    CHECK(!g.load_state(corrupt));
+    CHECK(g.state()[0] == fresh.state()[0]);
+}
+
+void test_manual_freeze_stops_adaptation_without_rolling_back() {
+    // For a supervisor that knows something the checks cannot see. Note that after a
+    // manual freeze the state is NOT a checkpoint, which is the one path where the probe's
+    // stored covariance scalars differ from a freshly computed pair.
+    GuardedD g = make_guard();
+    const double x[3] = {1.0, -2.0, 0.5};
+    const double y[1] = {3.0};
+    for (int i = 0; i < 10; ++i) g.update(x, y);
+    double here[GuardedD::state_size];
+    argmind::copy<double, GuardedD::state_size>(g.state(), here);
+
+    g.freeze();
+    CHECK(g.frozen());
+    CHECK(g.rollbacks() == 0);
+    for (int i = 0; i < GuardedD::state_size; ++i) CHECK(g.state()[i] == here[i]);
+
+    const argmind::GuardReport<double, 1> probe = g.update(x, y);
+    CHECK(!probe.applied);
+    CHECK(probe.frozen);
+    CHECK(probe.gain_norm == 0.0);
+    for (int i = 0; i < GuardedD::state_size; ++i) CHECK(g.state()[i] == here[i]);
+    // The covariance scalars must describe the LIVE state, not the newest checkpoint.
+    // Reading the checkpoint was a bug in the Python reference, found by a mutation check
+    // on this port: after a manual freeze nothing was restored, so a checkpoint can be up
+    // to checkpoint_every updates stale. Here the cadence is 1, so this only confirms the
+    // easy case; test_a_manual_freeze_mid_cadence_reports_the_live_covariance is the one
+    // that discriminates.
+    double live_trace = 0.0, live_min = 0.0;
+    g.health(&live_trace, &live_min);
+    CHECK(probe.p_trace == live_trace);
+    CHECK(probe.p_min_diag == live_min);
+
+    g.thaw();
+    CHECK(!g.frozen());
+    CHECK(g.thaws() == 1);
+    CHECK(g.update(x, y).applied);
+}
+
+void test_a_manual_freeze_mid_cadence_reports_the_live_covariance() {
+    // The discriminating case: three updates into a cadence of five, so the newest
+    // checkpoint is the construction state and the live state is far from it. Measured in
+    // the Python reference before the fix: 300.0 reported against a live 104.1.
+    using G = argmind::Guard<argmind::Rls<double, 3, 1>, 4, 4>;
+    G g(argmind::Rls<double, 3, 1>(0.99, 100.0), 5, 0);
+    CHECK(g.add_bound(argmind::Bound::at_most(argmind::Field::PTrace, 1e9)));
+    for (int i = 0; i < 3; ++i) {
+        const double x[3] = {1.0 + i, -2.0, 0.5};
+        const double y[1] = {3.0};
+        g.update(x, y);
+    }
+    double live_trace = 0.0, live_min = 0.0;
+    g.health(&live_trace, &live_min);
+    CHECK(live_trace < 200.0);                 // well away from the 300 at construction
+
+    g.freeze();
+    const double x[3] = {1.0, -2.0, 0.5};
+    const double y[1] = {3.0};
+    const argmind::GuardReport<double, 1> probe = g.update(x, y);
+    CHECK(probe.frozen);
+    CHECK(probe.p_trace == live_trace);
+    CHECK(probe.p_min_diag == live_min);
+}
+
+void test_the_checkpoint_memory_is_declared_and_matches_the_ring() {
+    // Memory is a function of configuration, never of uptime.
+    using G4 = argmind::Guard<argmind::Rls<float, 6, 1>, 4, 4>;
+    using G1 = argmind::Guard<argmind::Rls<float, 6, 1>, 1, 4>;
+    CHECK(G4::checkpoint_bytes == 4 * (42 * 4 + 16));
+    CHECK(G1::checkpoint_bytes == 1 * (42 * 4 + 16));
+    CHECK(G4::checkpoint_bytes == 4 * G1::checkpoint_bytes);
+    CHECK(sizeof(G4) > sizeof(G1));
+    CHECK(G4::state_size == argmind::Rls<float, 6, 1>::state_size);
+}
+
+void test_a_rejected_sample_is_not_a_guard_trip() {
+    GuardedD g = make_guard();
+    const double x[3] = {1.0, 2.0, 3.0};
+    const double y[1] = {1.0};
+    g.update(x, y);
+
+    const double bad[3] = {__builtin_nan(""), 1.0, 1.0};
+    const argmind::GuardReport<double, 1> r = g.update(bad, y);
+    CHECK(!r.applied);
+    CHECK(r.reason == argmind::Reason::NonFiniteInput);
+    CHECK(!r.frozen);
+    CHECK(!r.rolled_back);
+    CHECK(r.tripped == 0);
+    CHECK(!g.frozen());
+    CHECK(g.rejected_by_adapter() == 1);
+    CHECK(g.trips() == 0);
+}
+
+void test_a_second_trip_does_not_roll_forward() {
+    // After a rollback the retained checkpoints are all at or after the restored state, so
+    // keeping them would let the next trip restore a moment that came *afterwards*. Only
+    // reachable with depth > 1 and two trips, which is why a mutation that kept them
+    // survived a suite that had neither.
+    //
+    // Windup gives a trip at a real step rather than on the first update: excitation is
+    // confined to the first two axes, so tr(P) grows as p0*lambda^-k in the third and
+    // crosses the bound around step ln(5)/ln(1/0.95) = 31.
+    using G = argmind::Guard<argmind::Rls<double, 3, 1>, 4, 4>;
+    G g(argmind::Rls<double, 3, 1>(0.95, 1.0), 1, 0);
+    CHECK(g.add_bound(argmind::Bound::at_most(argmind::Field::PTrace, 5.0)));
+    CHECK(g.valid());
+
+    int trip = -1;
+    for (int k = 0; k < 200 && trip < 0; ++k) {
+        const double x[3] = {1.0 + (k % 5), (k % 7) - 3.0, 0.0};
+        const double y[1] = {x[0] - 2.0 * x[1]};
+        if (g.update(x, y).rolled_back) trip = k;
+    }
+    CHECK(trip > 4);          // several checkpoints must exist behind the trip
+    CHECK(g.frozen());
+    double first[G::state_size];
+    argmind::copy<double, G::state_size>(g.state(), first);
+
+    g.thaw();
+    int second = -1;
+    for (int k = 0; k < 200 && second < 0; ++k) {
+        const double x[3] = {1.0 + (k % 5), (k % 7) - 3.0, 0.0};
+        const double y[1] = {x[0] - 2.0 * x[1]};
+        if (g.update(x, y).rolled_back) second = k;
+    }
+    CHECK(second >= 0);
+    CHECK(g.trips() == 2);
+    // The second rollback must land on the state the first one restored, never later:
+    // after a rollback the only checkpoint still in play is the one just restored.
+    for (int i = 0; i < G::state_size; ++i) CHECK(g.state()[i] == first[i]);
+}
+
 }  // namespace
 
 int main() {
@@ -373,6 +621,19 @@ int main() {
     test_the_abi_carries_the_report_and_the_residual();
     test_the_abi_round_trips_a_state_block();
     test_reset_returns_to_the_construction_state();
+
+    test_bound_treats_non_finite_as_unhealthy();
+    test_a_bound_that_cannot_fail_is_invalid();
+    test_a_guard_with_no_checks_is_invalid();
+    test_a_recovery_configuration_that_could_never_recover_is_invalid();
+    test_an_invalid_divergence_configuration_is_invalid();
+    test_bounds_beyond_capacity_are_refused_rather_than_dropped();
+    test_load_state_re_arms_the_guard();
+    test_manual_freeze_stops_adaptation_without_rolling_back();
+    test_a_manual_freeze_mid_cadence_reports_the_live_covariance();
+    test_the_checkpoint_memory_is_declared_and_matches_the_ring();
+    test_a_rejected_sample_is_not_a_guard_trip();
+    test_a_second_trip_does_not_roll_forward();
 
     printf("%d checks, %d failures\n", checks, failures);
     return failures == 0 ? 0 : 1;

@@ -558,6 +558,81 @@ removed, the forgetting factor dropped, the rank-1 term dropped, the trace accum
 instead of double, `is_finite` accepting NaN, both rejection paths silently applying, the state
 layout swapped to P-then-θ, and λ used where the reciprocal belongs.
 
+### The Guard, across 2026-08-08
+
+`cpp/include/argmind/guard.hpp`. `Guard<Adapter, Depth, MaxBounds>`, with the checkpoint ring
+and the check capacity in the type so the memory is declared: `Guard<Rls<float,6,1>, 4, 4>` is
+1208 bytes, of which 736 is the ring, reported by `checkpoint_bytes`.
+
+**The structural difference is forced rather than chosen.** The Python holds a list of `Check`
+subclasses and calls `evaluate` on each; that needs virtual dispatch and heap objects, and the
+core has neither. So checks become concrete members with declared capacity — an array of `Bound`
+plus one optional `Divergence` — and their identities become an enum rather than a string, which
+is what a `tripped` bitmask can be built from. **The cost is that a user cannot supply their own
+check type;** adding a kind of check means adding it here. That is the same trade the C ABI makes
+for compile-time dimensions, made for the same reason: a function pointer per check would restore
+the flexibility and give up the inlining the core exists for.
+
+Because a guard *decides* rather than computes, parity here is about decisions, and a decision
+that differs is not a rounding difference. Measured to match exactly, at both precisions, across
+depths 1/2/4/10 and cadences 1 and 5: the freeze step, the thaw step, the whole frozen vector,
+which steps were rolled back, the set of failing checks, and which checkpoint a trip restores.
+Report scalars stay at the levels in the table above.
+
+**Two tests were vacuous before a measurement said so, and both had one cause.** With `p0=100`
+and six features `tr(P)` starts at 600, so a `p_trace` bound anywhere below that trips on the
+first update — and a sweep over four bounds then compared step 0 against step 0 four times. A
+swept axis that does not move the outcome is not evidence. The fixture is now a windup scenario
+with excitation confined to one axis, where `tr(P)` grows as exactly `p0·λ^-k` and a bound of
+`hi` is crossed at `k = ln(hi)/ln(1/λ)`: 45, 90 and 135 predicted against 44, 89 and 134
+measured. The tests pin the predicted step, not merely that the two agree, so the fixture cannot
+degrade back into `0 == 0` unnoticed.
+
+**The same broken fixture produced a flattering result that had to be withdrawn.** With the trip
+at step 0 the two implementations' restored states were bit-identical, which looked like proof
+that a rollback copies rather than recomputes. It proved nothing: both had rolled back to the
+*construction* state, identical by definition. At a real trip step they differ by about 41 ulp —
+the recursion's own disagreement, carried into the checkpoint. Bit-identity was never available
+here. What *is* verifiable is which checkpoint each side chose, and that is now tested by
+comparing each implementation's restored state against **its own** unguarded trajectory, which is
+bit-exact within one implementation and therefore identifies the step rather than merely being
+consistent with it.
+
+**A mutation check on the port found a bug in the reference.** `Guard.freeze()` took its health
+scalars from the newest checkpoint. After a *trip* that is exact, because the state has just been
+restored to that checkpoint — and `_probe`'s docstring justified it on exactly that ground. After a
+*manual* freeze nothing was restored, so the value could be up to `checkpoint_every` updates stale:
+measured at 300.0 reported against a live 104.1, three updates into a cadence of five. A `Bound` on
+`p_trace` evaluated during a manual freeze therefore read a number describing a state the adapter
+was no longer in. Both implementations now take the live values, which are exact in both paths, and
+the docstring's over-broad justification is corrected.
+
+That leaves the checkpoint ring's stored health scalars redundant — they are now only ever equal to
+what `health()` returns for the state being restored. Removing them would drop the declared
+checkpoint cost from `Depth * (state_size + 2)` to `Depth * state_size`, which is a change to a
+figure quoted in several places. **Not done yet**, recorded here rather than half-done.
+
+**Eighteen mutants against the C++ guard.** The first run left eight survivors, and the cause was
+one thing: a parity harness can only test what the tool exercises, and there were no Guard tests in
+the C++ unit suite at all. Several survivors were unreachable from the tool by construction — it
+never builds an invalid guard, never calls `load_state` on one, never produces a non-finite report
+scalar, and cannot trigger a manual freeze — and those became `cpp/tests/test_core.cpp` tests.
+
+The four that belonged in the parity suite were then **designed against their mutants**, and the
+first attempt at all four failed to discriminate, for four different reasons worth keeping:
+
+- a second spike one sample after the first lands while the guard is still frozen, so it never
+  becomes a second trip;
+- a second fault 240 samples after a thaw arrives once the exponential averages have re-converged,
+  making a missing reset invisible;
+- bounds that a rejected report satisfies anyway make a rejection reaching the check path
+  behaviourally identical — the observable that works is the *checkpoint* it stores, not the trip
+  step;
+- one clean sample in three is not enough for the fast average to fall below the threshold, so
+  there are no healthy probes at all and nothing accumulates.
+
+A test written without checking that the bug it is meant to catch would actually fail it is a guess.
+
 **What is verified and what is not.** Execution is host-only. There is still no ARM cross-compiler
 or target hardware on this machine, so: `rls.hpp` is checked to compile `-ffreestanding
 -fno-exceptions -fno-rtti` and `argmind.h` to be valid C99, both on the host, which catches an

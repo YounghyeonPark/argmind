@@ -54,8 +54,8 @@ Recovery
 Frozen is terminal until `thaw()`, unless `recover_after` is set. While frozen the
 guard still evaluates a *probe* report each sample — the a priori residual is
 real, the gain is genuinely zero because nothing was applied, and the covariance
-scalars are exactly those of the checkpoint that was restored, since the state has
-not moved since. `recover_after` consecutive healthy probes thaw the guard.
+scalars are those of the state the guard is sitting on, which is exact because
+adaptation is stopped. `recover_after` consecutive healthy probes thaw the guard.
 
 The caveat that follows from that, stated rather than discovered later: a check on
 `gain_norm` with a positive lower bound can never pass while frozen, so a guard
@@ -438,13 +438,21 @@ class Guard(Adapter):
         return dict(self._stats)
 
     def freeze(self, reason: str = "manual") -> None:
-        """Stop adaptation without rolling back. For a supervisor that knows
-        something the checks cannot see — a calibration in progress, a bay door
-        open, a known-bad sensor."""
+        """Stop adaptation without rolling back. For a supervisor that knows something the
+        checks cannot see — a calibration in progress, a bay door open, a known-bad sensor.
+
+        The health scalars come from the adapter as it stands, not from the newest
+        checkpoint. That was a bug, and it was found by a mutation check on the C++ port
+        rather than by review: a manual freeze does not move the state, so the live values
+        are exactly right, while the newest checkpoint can be up to `checkpoint_every`
+        updates stale — measured at 300.0 against a live 104.1 three updates into a cadence
+        of five. A `Bound` on `p_trace` evaluated during a manual freeze therefore read a
+        number describing a state the adapter was no longer in.
+        """
         self._frozen = True
         self._healthy_run = 0
         self._frozen_by = (reason,)
-        self._frozen_health = tuple(self._ckpt_health[self._newest()])
+        self._frozen_health = self.adapter.health()
 
     def thaw(self) -> None:
         """Resume adaptation from the current parameters."""
@@ -491,9 +499,13 @@ class Guard(Adapter):
         """What the sample looks like without adapting to it.
 
         The residual is real. `gain_norm` is zero because nothing was applied. The
-        covariance scalars come from the checkpoint the guard is sitting on, which
-        is exact rather than approximate: the state has not moved since it was
-        restored.
+        covariance scalars describe the state the guard is sitting on — the restored
+        checkpoint after a trip, the live state after a manual `freeze()` — and are exact
+        in both cases, because adaptation is stopped and the state is not moving.
+
+        An earlier version justified reading the stored checkpoint value by saying the
+        state had not moved *since it was restored*. That is true after a trip and false
+        after a manual freeze, where nothing was restored at all.
         """
         ya = np.asarray(y, dtype=self.adapter.dtype).reshape(-1)
         if ya.size != self.n_outputs:

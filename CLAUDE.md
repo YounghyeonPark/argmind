@@ -100,7 +100,8 @@ causal/non-causal declared), `argmind/adapt.py` (the `Adapter` contract and
 rollback, explicit recovery), `argmind/pipeline.py` (`FrameMap`, input gate, bounded `step()`),
 `argmind/persist.py` (two-slot atomic store, CRC, configuration fingerprint, declared cadence),
 `argmind/bench.py` (fixed workload, correctness digest, leak detector, regression gate), and
-`cpp/` (the C++ core: `mat.hpp`, `rls.hpp`, the C ABI, the parity tool, 521 self-checks).
+`cpp/` (the C++ core: `mat.hpp`, `rls.hpp`, `guard.hpp`, the C ABI, the parity tool, 631
+self-checks).
 **The Python reference is complete and RLS is across to C++.** 185 Python tests pass; several
 exist to prove failures are visible rather than silent, and every suite was mutation-checked —
 seventy-five deliberate bugs, all caught.
@@ -204,8 +205,53 @@ compile `-ffreestanding` and `argmind.h` to be valid C99, on the host. Host `-Os
 bytes for `Rls<float,6,1>::update` — **x86-64, a shape, not a target figure**. Flash/RAM for the
 M4F floor must come from a link map, and on-target timing claims stay absent.
 
-**Next:** the Guard, Pipeline and persistence in C++, then the on-target build once a
-cross-compiler and hardware exist.
+**The Guard is across too** (`cpp/include/argmind/guard.hpp`). `Guard<Adapter, Depth,
+MaxBounds>` — the checkpoint ring and check capacity live in the type, so the memory is
+declared: `Guard<Rls<float,6,1>, 4, 4>` is 1208 bytes of which 736 is the ring.
+
+**One structural difference, forced not chosen**: the Python's list of polymorphic `Check`
+objects needs virtuals and a heap, and the core has neither. Checks become concrete members
+with declared capacity and their identities become an enum, which is what a `tripped` bitmask
+is built from. The cost is that a user cannot supply their own check type — the same trade the
+C ABI makes for compile-time dimensions.
+
+A guard *decides* rather than computes, so parity here is about decisions and a decision that
+differs is not a rounding difference. Matching exactly at both precisions, across depths
+1/2/4/10 and cadences 1 and 5: freeze step, thaw step, the whole frozen vector, which steps
+rolled back, the set of failing checks, and which checkpoint a trip restores.
+
+**A mutation check on the port found a bug in the reference.** `Guard.freeze()` read its health
+scalars from the newest checkpoint. Exact after a *trip* — the state has just been restored to
+that checkpoint, and `_probe`'s docstring justified it on that ground — but after a *manual*
+freeze nothing was restored, so the value could be `checkpoint_every` updates stale: 300.0
+reported against a live 104.1, three updates into a cadence of five. A `Bound` on `p_trace`
+during a manual freeze read a state the adapter was no longer in. Both implementations now take
+the live values. That leaves the ring's stored health scalars redundant; removing them would
+drop the declared cost to `Depth * state_size`, and it is **recorded in DESIGN.md rather than
+half-done.**
+
+**Two flattering results had to be withdrawn, both from one broken fixture.** With `p0=100` and
+six features `tr(P)` starts at 600, so a `p_trace` bound below that trips on the *first* update
+— a sweep over four bounds compared step 0 against step 0 four times. The fixture is now a
+windup scenario where `tr(P)` grows as exactly `p0·λ^-k`, and the tests pin the *predicted* step
+(`ln(hi)/ln(1/λ)`: 45/90/135 predicted, 44/89/134 measured). With that broken fixture the
+restored states also came out bit-identical, which looked like proof that a rollback copies
+rather than recomputes — it proved nothing, since both rolled back to the *construction* state.
+At a real trip step they differ by ~41 ulp. What is verifiable is *which* checkpoint each side
+chose, tested by comparing each side against **its own** unguarded trajectory.
+
+**How to write these tests, learned the expensive way.** Eight of eighteen mutants survived the
+first run because there were no Guard tests in the C++ unit suite at all — a parity harness can
+only test what the tool exercises. The four that belonged in the parity suite were then designed
+*against their mutants*, and the first attempt at all four failed to discriminate: a second
+spike one sample later lands while still frozen; a second fault 240 samples after a thaw arrives
+once the EWMAs have re-converged; bounds a rejected report satisfies anyway make a leaked
+rejection identical (the observable that works is the *checkpoint* it stores); and one clean
+sample in three never lets the fast average fall below the threshold. **A test written without
+checking that its bug would fail it is a guess.**
+
+**Next:** `Pipeline` and persistence in C++, then the on-target build once a cross-compiler and
+hardware exist.
 
 **Before any optimisation lands, a benchmark that can report a regression must exist.** An
 optimisation with no way to fail is not an optimisation, it is a hope.
