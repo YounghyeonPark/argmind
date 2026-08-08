@@ -107,7 +107,7 @@ rollback, explicit recovery), `argmind/pipeline.py` (`FrameMap`, input gate, bou
 pipeline. `argmind/bench.py` has no C++ counterpart and is not getting one: it is a host
 measurement harness, and DESIGN.md already records that Python timings are not a baseline the
 C++ can be compared against.
-307 Python tests and 2438 C++ checks pass; several exist to prove failures are visible
+307 Python tests and 3351 C++ checks pass; several exist to prove failures are visible
 rather than silent. Every suite is mutation-checked, and surviving mutants are recorded where
 they live rather than tallied here — including the ones that turn out to be **equivalent on a
 64-bit host**, a distinction worth keeping rather than rounding away. Cumulative counts are
@@ -218,10 +218,38 @@ Seventeen mutants on the shim, sixteen caught. The survivor is **equivalent, not
 `state()` sits at offset 0 of the guard — measured. It stays because a null dereference is
 undefined whatever the address arithmetic produces.
 
-**Still absent from C, deliberately**: `am_stream_*`, `am_align_*`, `am_pipeline_*`.
-`Pipeline::step()` takes `StreamView<T>*`, and `Stream<T, Dim, Capacity>` would put two more
-axes into a list that multiplies against the adapter's. The shape that avoids the explosion is
-one composed handle per wiring, and that is a decision to make deliberately.
+**The composed handle followed the same day, and everything the library does is now reachable
+from C.** The instantiation explosion is avoided by moving the two stream axes out of the type
+entirely: **the caller owns the sample storage**, so `am_ring_f32`'s `dim` and `capacity` are
+runtime values and only the adapter stays in the type. Same trade `StreamView` already makes
+inside the core.
+
+**One push, not two — and it took two attempts and a measurement.** A C ring and a
+`Stream<T,Dim,Capacity>` would hold two copies of the monotonicity and finiteness refusals, so
+both now call a shared `ring_push`. Taking a `Ring<T>*` cost **+32 bytes** of code at `-Os`
+(160→192 for `Stream<float,6,64>::push`); passing members separately still cost +16, because
+the rewritten wrap used compare-and-branch where `% Capacity` folds to an AND on a
+power-of-two capacity. Restoring the modulo lands back on exactly 160. The comment saying the
+extraction was free was written before measuring and was wrong twice. That modulo is a
+division where `slot()` avoids one, and the two do not conflict: this is once per *push*, that
+was twice per element of every *scan*.
+
+Pipelines, x86-64 shapes: bare 600 / 936 bytes, guarded 1616 / 1864 / 3936 / 2624 — a guarded
+pipeline is its guard plus about 400. `map_mutable()` **clears the configuration** on purpose:
+the map is what `configure()` bounds-checked, so mutating it and staying configured would let
+a caller widen a component past a sensor's width after the check.
+
+**Sixteen mutants, two survived long enough to be findings.** `am_ring_*_init` setting `last_t`
+to 0 rather than `-inf` survived — a **real defect the C path had and the C++ path did not**,
+silently refusing the first sample of any device whose timebase is milliseconds-since-boot.
+And zeroing `lost_frames` survived because nothing on that side ever overflowed a reference
+ring: the field was present, compared, and compared *against zero* — the quietest way for a
+field to go untested. Both closed.
+
+**A fixture that agreed while testing nothing**, caught by three assertions at the end: the
+pipeline ABI comparison mapped the reference stream's own value — the *target* — into the
+regressor, so the model read the answer off its input, the residual sat at zero, and the
+injected fault did nothing while everything else matched perfectly.
 
 **Parity: ~1.5 ulp on the state block, and the same ulp count at f32 as at f64** — which is what
 says the difference is algorithmic rounding, not a precision-dependent bug. Worst quantity is the a
@@ -390,8 +418,8 @@ step's delta survived the whole suite, because no case had both declined instant
 overflowing ring in one run. One was added and it is caught.
 
 **Next:** the on-target build. Checked on 2026-08-09: no `arm-none-eabi-*`, no clang, no
-qemu on this machine, so it cannot start and no on-target figure is quoted. The other open
-piece is the composed-handle ABI described above.
+qemu on this machine, so it cannot start and no on-target figure is quoted. Flash and RAM must
+come from a link map; the host figures above are shapes.
 
 **Before any optimisation lands, a benchmark that can report a regression must exist.** An
 optimisation with no way to fail is not an optimisation, it is a hope.

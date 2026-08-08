@@ -332,22 +332,194 @@ AM_DECLARE_PERSIST(f32, float)
 AM_DECLARE_PERSIST(f64, double)
 
 /* ==========================================================================
- * What a C caller still cannot do, said here rather than left to be discovered.
+ * Streams and the pipeline: the composed handle.
  *
- * There are no `am_stream_*`, `am_align_*` or `am_pipeline_*` entry points. That is
- * a scope decision, not an oversight, and the reason is the same tension this header
- * opens with. `Pipeline::step()` takes an array of `StreamView<T>`, which is a C++
- * template; exposing it needs a C mirror of that struct plus a stream ABI, and
- * `Stream<T, Dim, Capacity>` puts two more axes into an instantiation list that would
- * then multiply against the adapter's. The shape that avoids the explosion is one
- * composed handle per wiring -- streams, aligner, guard and adapter chosen together
- * and exported as a single instantiation -- and that is a design decision worth
- * making deliberately rather than tacking onto this list.
+ * The previous version of this header ended by saying a C caller could not reach
+ * the pipeline, and why: `Pipeline::step()` takes an array of `StreamView<T>`, and
+ * `Stream<T, Dim, Capacity>` would put two more axes into an instantiation list
+ * that then multiplies against the adapter's.
  *
- * So a C caller today gets: a guarded or unguarded adapter, and the record format to
- * persist it. It must do its own buffering and alignment. That is a real limit on the
- * declared deliverable -- "a library, not an application" -- and it is written down.
+ * The resolution is to move the two axes out of the type entirely: **the caller
+ * owns the sample storage**. `am_ring_f32` is a plain C descriptor over buffers the
+ * caller declares, so `dim` and `capacity` are runtime values on this side and
+ * nothing about a stream's shape reaches the instantiation list. What is left in
+ * the type is the adapter -- which is where the compile-time shape was earning its
+ * keep all along, in the arithmetic -- plus `AM_MAX_STREAMS`.
+ *
+ * That is the same trade `StreamView` already makes inside the C++ core, made once
+ * more at the boundary. There is no second copy of the ring logic: `am_ring_*_push`
+ * calls the same `ring_push` that `Stream<T, Dim, Capacity>::push` does, because a
+ * refusal implemented twice is one that will eventually disagree with itself.
+ *
+ * The cost, stated: the C ring's push loop is bounded by a runtime `dim` and its
+ * wrap is a runtime modulo, where the C++ `Stream<>` folds both to constants. That
+ * is one integer division and an unfoldable loop per push, at the sensor's rate.
  * ========================================================================== */
+
+/* Streams per pipeline. In the type, because the staleness array and the shape
+ * table are, so the memory stays declared. */
+#define AM_MAX_STREAMS 4
+
+/* Alignment policies. `nearest` and `interpolate` consult samples from AFTER the
+ * reference instant: legitimate offline, a correctness bug in a causal loop, which
+ * is what a pipeline is. `am_pipe_*_configure` refuses them unless
+ * `set_allow_non_causal` said so out loud. */
+#define AM_POLICY_HOLD_LAST     0
+#define AM_POLICY_NEAREST       1
+#define AM_POLICY_INTERPOLATE   2
+#define AM_POLICY_DROP_IF_STALE 3
+
+/* Why a frame that existed did not adapt the model. Indices into
+ * `am_step_report.skipped`. `AM_SKIP_REJECTED` is unreachable with the adapters
+ * this library ships and exists for a future one. */
+#define AM_SKIP_STALE                    0
+#define AM_SKIP_INVALID                  1
+#define AM_SKIP_FROZEN                   2
+#define AM_SKIP_GUARD_TRIPPED            3
+#define AM_SKIP_NONFINITE_INPUT          4
+#define AM_SKIP_NONPOSITIVE_DENOMINATOR  5
+#define AM_SKIP_REJECTED                 6
+#define AM_SKIP_COUNT                    7
+
+#define AM_ERR_UNCONFIGURED (-7)  /* step() before a successful configure()        */
+
+/* A caller-owned ring of timestamped samples.
+ *
+ * Declare the three buffers, call `am_ring_*_init`, and never touch the fields
+ * afterwards -- they are visible because this is C and the struct has to be
+ * declarable, not because they are an interface. Sizes:
+ *
+ *     values[capacity * dim]   times[capacity]   valid[capacity]
+ *
+ * `dropped` counts samples overwritten because the ring was full. Note what it is
+ * NOT: a ring has no idea whether anyone read a sample before it was overwritten,
+ * so this cannot mean "lost". In steady state a correctly sized ring overwrites on
+ * every push and this climbs forever with nothing wrong. What can honestly be
+ * called lost is `am_step_report.lost_frames`. */
+typedef struct {
+    float* values;
+    double* times;
+    uint8_t* valid;
+    int32_t dim;
+    int32_t capacity;
+    int32_t head;
+    int32_t count;
+    uint64_t dropped;
+    double last_t;
+} am_ring_f32;
+
+typedef struct {
+    double* values;
+    double* times;
+    uint8_t* valid;
+    int32_t dim;
+    int32_t capacity;
+    int32_t head;
+    int32_t count;
+    uint64_t dropped;
+    double last_t;
+} am_ring_f64;
+
+#define AM_DECLARE_RING(NAME, SCALAR)                                          \
+    int am_ring_##NAME##_init(am_ring_##NAME* r, SCALAR* values, double* times, \
+                              uint8_t* valid, int32_t dim, int32_t capacity);   \
+    int am_ring_##NAME##_reset(am_ring_##NAME* r);                             \
+    int am_ring_##NAME##_push(am_ring_##NAME* r, double t, const SCALAR* values,\
+                              int32_t valid);
+
+AM_DECLARE_RING(f32, float)
+AM_DECLARE_RING(f64, double)
+
+/* What one `step()` did. Observability is the return value, not a logging
+ * afterthought.
+ *
+ * `lost_frames` is reference-stream samples overwritten before they could become
+ * frames -- input the pipeline will never see. Non-zero means `step()` is being
+ * called too rarely for the ring size. It counts the reference stream only, and
+ * that is the whole of what can honestly be counted. */
+typedef struct {
+    int32_t ok;              /* 0 when unconfigured or the rings do not match     */
+    int32_t frozen;
+    int32_t has_t;
+    int32_t n_staleness;
+    uint32_t frames;
+    uint32_t updated;
+    uint32_t lost_frames;
+    uint32_t frozen_by;      /* checks that tripped this step; 0 when unguarded   */
+    uint32_t skipped[AM_SKIP_COUNT];
+    uint32_t pad;
+    double worst_staleness;  /* the one to alarm on                               */
+    double t;
+    double staleness[AM_MAX_STREAMS];  /* signed, of the most recent frame        */
+} am_step_report;
+
+/* The shared surface of every pipeline instantiation, guarded or not. */
+#define AM_DECLARE_PIPE_COMMON(NAME, SCALAR, RING)                             \
+    size_t am_pipe_##NAME##_bytes(void);                                       \
+    int am_pipe_##NAME##_n_features(void);                                     \
+    int am_pipe_##NAME##_state_size(void);                                     \
+    int am_pipe_##NAME##_add_feature(void* obj, int32_t stream,                 \
+                                     int32_t component);                       \
+    int am_pipe_##NAME##_add_target(void* obj, int32_t stream,                  \
+                                    int32_t component);                        \
+    int am_pipe_##NAME##_set_constant(void* obj, int32_t on);                   \
+    int am_pipe_##NAME##_set_max_stale_s(void* obj, int32_t enable,             \
+                                         double limit);                        \
+    int am_pipe_##NAME##_set_require_valid(void* obj, int32_t on);              \
+    int am_pipe_##NAME##_set_allow_non_causal(void* obj, int32_t on);           \
+    int am_pipe_##NAME##_configure(void* obj, const RING* rings, int32_t n);    \
+    int am_pipe_##NAME##_step(void* obj, const RING* rings, int32_t n,          \
+                              am_step_report* out);                            \
+    int am_pipe_##NAME##_predict(const void* obj, const SCALAR* x, SCALAR* out); \
+    const SCALAR* am_pipe_##NAME##_state(const void* obj);                      \
+    int am_pipe_##NAME##_load_state(void* obj, const SCALAR* flat);             \
+    int am_pipe_##NAME##_frozen(const void* obj);
+
+/* Unguarded. Legitimate for an offline reference run over recorded data and a bad
+ * idea in the field, which is why the guarded names are the shorter ones to reach
+ * for. */
+#define AM_DECLARE_PIPE_BARE(NAME, SCALAR, RING)                               \
+    int am_pipe_##NAME##_init(void* obj, size_t obj_bytes, SCALAR lambda,       \
+                              SCALAR p0, int32_t policy, double max_stale_s,    \
+                              int32_t reference);                              \
+    AM_DECLARE_PIPE_COMMON(NAME, SCALAR, RING)
+
+/* Guarded. `Depth` and `MaxBounds` are 4, as for `am_guard_*` and for the same
+ * reason: they are the memory. */
+#define AM_DECLARE_PIPE_GUARDED(NAME, SCALAR, RING)                            \
+    int am_pipe_##NAME##_init(void* obj, size_t obj_bytes, SCALAR lambda,       \
+                              SCALAR p0, uint32_t checkpoint_every,             \
+                              uint32_t recover_after, int32_t policy,           \
+                              double max_stale_s, int32_t reference);          \
+    int am_pipe_##NAME##_add_bound(void* obj, int32_t field, int32_t has_lo,     \
+                                   double lo, int32_t has_hi, double hi);      \
+    int am_pipe_##NAME##_set_divergence(void* obj, double ratio,                \
+                                        double fast_alpha, double slow_alpha,   \
+                                        double floor, uint32_t warmup);        \
+    int am_pipe_##NAME##_frozen_by(const void* obj, uint32_t* out);             \
+    int am_pipe_##NAME##_counters(const void* obj, am_guard_counters* out);     \
+    AM_DECLARE_PIPE_COMMON(NAME, SCALAR, RING)
+
+AM_DECLARE_PIPE_BARE(f32_6_1, float, am_ring_f32)
+AM_DECLARE_PIPE_BARE(f64_6_1, double, am_ring_f64)
+AM_DECLARE_PIPE_GUARDED(g_f32_6_1, float, am_ring_f32)
+AM_DECLARE_PIPE_GUARDED(g_f32_6_3, float, am_ring_f32)
+AM_DECLARE_PIPE_GUARDED(g_f32_12_1, float, am_ring_f32)
+AM_DECLARE_PIPE_GUARDED(g_f64_6_1, double, am_ring_f64)
+
+/* Upper bounds, static-asserted in the implementation. A guarded pipeline is its
+ * guard plus about 400 bytes; the guard is mostly its checkpoint ring. Measured on
+ * x86-64 and therefore a shape rather than a target figure. */
+#define AM_PIPE_F32_6_1_MAX_BYTES     768
+#define AM_PIPE_F64_6_1_MAX_BYTES     1024
+#define AM_PIPE_G_F32_6_1_MAX_BYTES   1792
+#define AM_PIPE_G_F32_6_3_MAX_BYTES   2048
+#define AM_PIPE_G_F32_12_1_MAX_BYTES  4096
+#define AM_PIPE_G_F64_6_1_MAX_BYTES   2816
+
+/* Six instantiations is a lot of code for a caller who wants one. Build with
+ * `-ffunction-sections -fdata-sections` and link with `--gc-sections`, which the
+ * embedded CMake path already sets, and the unused ones do not reach flash. */
 
 #ifdef __cplusplus
 }  /* extern "C" */

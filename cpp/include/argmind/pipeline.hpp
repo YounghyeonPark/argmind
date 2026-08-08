@@ -372,6 +372,19 @@ public:
     const Aligner& aligner() const { return aligner_; }
     Aligner& aligner_mutable() { return aligner_; }
     const Map& map() const { return map_; }
+
+    /// Mutable access to the frame map, for a caller that builds it in pieces — which the C
+    /// ABI has to, since a C caller cannot construct a `FrameMap<N, M>` and hand it to a
+    /// constructor.
+    ///
+    /// It **clears the configuration**, and that is the point rather than a side effect. The
+    /// map is exactly what `configure()` bounds-checked against the streams; leaving the
+    /// pipeline configured would let a caller widen a component past a sensor's width after
+    /// the check had passed, and the next `step()` would read off the end of a ring.
+    Map& map_mutable() {
+        configured_ = false;
+        return map_;
+    }
     int reference() const { return reference_; }
 
     /// Cumulative across every `step()`. 64-bit for the same reason `Stream::dropped` is:

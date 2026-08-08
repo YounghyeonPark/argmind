@@ -14,9 +14,13 @@
 
 #include "argmind/argmind.h"
 
+#include <stddef.h>
+
 #include "argmind/guard.hpp"
 #include "argmind/persist.hpp"
+#include "argmind/pipeline.hpp"
 #include "argmind/rls.hpp"
+#include "argmind/stream.hpp"
 
 namespace {
 
@@ -386,3 +390,321 @@ static_assert(static_cast<int>(argmind::persist::Status::CrcMismatch) ==
 static_assert(static_cast<int>(argmind::Field::PMinDiag) == AM_FIELD_P_MIN_DIAG, "");
 static_assert(static_cast<int>(argmind::GuardReason::Tripped) == AM_GUARD_TRIPPED, "");
 static_assert(argmind::DIVERGENCE_BIT == AM_TRIPPED_DIVERGENCE, "");
+
+// -- caller-owned rings -----------------------------------------------------------------
+//
+// `am_ring_*` is layout-identical to `argmind::Ring<T>` and is reinterpreted rather than
+// copied field by field, so the two cannot drift into disagreeing about what a ring is. The
+// assertions below are what makes that reinterpretation legal to rely on rather than a habit
+// that happens to work on this compiler.
+
+#define AM_ASSERT_RING_LAYOUT(CNAME, SCALAR)                                    \
+    static_assert(sizeof(CNAME) == sizeof(argmind::Ring<SCALAR>),               \
+                  #CNAME " has drifted from argmind::Ring");                    \
+    static_assert(alignof(CNAME) == alignof(argmind::Ring<SCALAR>), "");        \
+    static_assert(offsetof(CNAME, values) ==                                    \
+                      offsetof(argmind::Ring<SCALAR>, values), "");             \
+    static_assert(offsetof(CNAME, times) ==                                     \
+                      offsetof(argmind::Ring<SCALAR>, times), "");              \
+    static_assert(offsetof(CNAME, valid) ==                                     \
+                      offsetof(argmind::Ring<SCALAR>, valid), "");              \
+    static_assert(offsetof(CNAME, dim) == offsetof(argmind::Ring<SCALAR>, dim), \
+                  "");                                                          \
+    static_assert(offsetof(CNAME, capacity) ==                                  \
+                      offsetof(argmind::Ring<SCALAR>, capacity), "");           \
+    static_assert(offsetof(CNAME, head) ==                                      \
+                      offsetof(argmind::Ring<SCALAR>, head), "");               \
+    static_assert(offsetof(CNAME, count) ==                                     \
+                      offsetof(argmind::Ring<SCALAR>, count), "");              \
+    static_assert(offsetof(CNAME, dropped) ==                                   \
+                      offsetof(argmind::Ring<SCALAR>, dropped), "");            \
+    static_assert(offsetof(CNAME, last_t) ==                                    \
+                      offsetof(argmind::Ring<SCALAR>, last_t), "");
+
+AM_ASSERT_RING_LAYOUT(am_ring_f32, float)
+AM_ASSERT_RING_LAYOUT(am_ring_f64, double)
+
+#define AM_DEFINE_RING(NAME, SCALAR)                                            \
+    extern "C" int am_ring_##NAME##_init(am_ring_##NAME* r, SCALAR* values,      \
+                                         double* times, uint8_t* valid,          \
+                                         int32_t dim, int32_t capacity) {       \
+        if (!r || !values || !times || !valid) return AM_ERR_NULL;               \
+        if (dim < 1 || capacity < 1) return AM_ERR_CONFIG;                       \
+        r->values = values;                                                      \
+        r->times = times;                                                        \
+        r->valid = valid;                                                        \
+        r->dim = dim;                                                            \
+        r->capacity = capacity;                                                  \
+        r->head = 0;                                                             \
+        r->count = 0;                                                            \
+        r->dropped = 0;                                                          \
+        r->last_t = -__builtin_inf();                                            \
+        return AM_OK;                                                            \
+    }                                                                            \
+    extern "C" int am_ring_##NAME##_reset(am_ring_##NAME* r) {                   \
+        if (!r) return AM_ERR_NULL;                                              \
+        r->head = 0;                                                             \
+        r->count = 0;                                                            \
+        r->dropped = 0;                                                          \
+        r->last_t = -__builtin_inf();                                            \
+        return AM_OK;                                                            \
+    }                                                                            \
+    extern "C" int am_ring_##NAME##_push(am_ring_##NAME* r, double t,            \
+                                         const SCALAR* values, int32_t valid) {  \
+        if (!r || !values || !r->values) return AM_ERR_NULL;                     \
+        return argmind::ring_push<SCALAR>(                                       \
+                   reinterpret_cast<argmind::Ring<SCALAR>*>(r), t, values,       \
+                   valid != 0)                                                   \
+                   ? AM_OK                                                       \
+                   : AM_ERR_CONFIG;                                              \
+    }
+
+AM_DEFINE_RING(f32, float)
+AM_DEFINE_RING(f64, double)
+
+// -- the composed pipeline --------------------------------------------------------------
+
+namespace {
+
+constexpr int kPipeStreams = AM_MAX_STREAMS;
+
+static_assert(AM_SKIP_COUNT == argmind::SKIP_REASON_COUNT,
+              "the C skip-reason list and SkipReason have diverged");
+static_assert(static_cast<int>(argmind::SkipReason::Rejected) == AM_SKIP_REJECTED, "");
+static_assert(static_cast<int>(argmind::Policy::DropIfStale) == AM_POLICY_DROP_IF_STALE,
+              "");
+
+template <typename Pipe, typename Ring>
+int views_from(const Ring* rings, int32_t n, argmind::StreamView<typename Pipe::T>* out) {
+    if (!rings || n < 1 || n > kPipeStreams) return AM_ERR_CONFIG;
+    for (int32_t i = 0; i < n; ++i) {
+        if (!rings[i].values || !rings[i].times || !rings[i].valid) return AM_ERR_NULL;
+        out[i] = argmind::ring_view<typename Pipe::T>(
+            *reinterpret_cast<const argmind::Ring<typename Pipe::T>*>(&rings[i]));
+    }
+    return AM_OK;
+}
+
+template <typename Pipe>
+void fill_step(const typename Pipe::Step& src, am_step_report* dst) {
+    dst->ok = src.ok ? 1 : 0;
+    dst->frozen = src.frozen ? 1 : 0;
+    dst->has_t = src.has_t ? 1 : 0;
+    dst->n_staleness = src.n_staleness;
+    dst->frames = src.frames;
+    dst->updated = src.updated;
+    dst->lost_frames = src.lost_frames;
+    dst->frozen_by = src.frozen_by;
+    for (int i = 0; i < AM_SKIP_COUNT; ++i) dst->skipped[i] = src.skipped[i];
+    dst->pad = 0;
+    dst->worst_staleness = src.worst_staleness;
+    dst->t = src.t;
+    for (int i = 0; i < AM_MAX_STREAMS; ++i) dst->staleness[i] = src.staleness[i];
+}
+
+bool valid_policy(int32_t p) {
+    return p >= AM_POLICY_HOLD_LAST && p <= AM_POLICY_DROP_IF_STALE;
+}
+
+}  // namespace
+
+#define AM_DEFINE_PIPE_COMMON(NAME, SCALAR, RING, PIPE, MAX_BYTES)              \
+    static_assert(sizeof(PIPE) <= (MAX_BYTES),                                  \
+                  "AM_PIPE_" #NAME "_MAX_BYTES is no longer an upper bound; "   \
+                  "raise the macro in argmind.h");                              \
+    static_assert(alignof(PIPE) <= alignof(am_rls_storage), "");                \
+    static_assert(PIPE::max_streams == AM_MAX_STREAMS, "");                     \
+                                                                                \
+    extern "C" size_t am_pipe_##NAME##_bytes(void) { return sizeof(PIPE); }     \
+    extern "C" int am_pipe_##NAME##_n_features(void) {                          \
+        return PIPE::n_features;                                                \
+    }                                                                           \
+    extern "C" int am_pipe_##NAME##_state_size(void) {                          \
+        return PIPE::n_features * PIPE::n_outputs +                             \
+               PIPE::n_features * PIPE::n_features;                             \
+    }                                                                           \
+    extern "C" int am_pipe_##NAME##_add_feature(void* obj, int32_t stream,       \
+                                                int32_t component) {            \
+        if (!obj) return AM_ERR_NULL;                                           \
+        return static_cast<PIPE*>(obj)->map_mutable().add_feature(stream,        \
+                                                                 component)      \
+                   ? AM_OK                                                      \
+                   : AM_ERR_FULL;                                               \
+    }                                                                           \
+    extern "C" int am_pipe_##NAME##_add_target(void* obj, int32_t stream,        \
+                                               int32_t component) {             \
+        if (!obj) return AM_ERR_NULL;                                           \
+        return static_cast<PIPE*>(obj)->map_mutable().add_target(stream,         \
+                                                                component)       \
+                   ? AM_OK                                                      \
+                   : AM_ERR_FULL;                                               \
+    }                                                                           \
+    extern "C" int am_pipe_##NAME##_set_constant(void* obj, int32_t on) {        \
+        if (!obj) return AM_ERR_NULL;                                           \
+        static_cast<PIPE*>(obj)->map_mutable().set_constant(on != 0);           \
+        return AM_OK;                                                           \
+    }                                                                           \
+    extern "C" int am_pipe_##NAME##_set_max_stale_s(void* obj, int32_t enable,   \
+                                                    double limit) {             \
+        if (!obj) return AM_ERR_NULL;                                           \
+        if (enable) {                                                           \
+            static_cast<PIPE*>(obj)->set_max_stale_s(limit);                    \
+        } else {                                                                \
+            static_cast<PIPE*>(obj)->clear_max_stale_s();                       \
+        }                                                                       \
+        return AM_OK;                                                           \
+    }                                                                           \
+    extern "C" int am_pipe_##NAME##_set_require_valid(void* obj, int32_t on) {   \
+        if (!obj) return AM_ERR_NULL;                                           \
+        static_cast<PIPE*>(obj)->set_require_valid(on != 0);                    \
+        return AM_OK;                                                           \
+    }                                                                           \
+    extern "C" int am_pipe_##NAME##_set_allow_non_causal(void* obj, int32_t on) {\
+        if (!obj) return AM_ERR_NULL;                                           \
+        static_cast<PIPE*>(obj)->set_allow_non_causal(on != 0);                 \
+        return AM_OK;                                                           \
+    }                                                                           \
+    extern "C" int am_pipe_##NAME##_configure(void* obj, const RING* rings,      \
+                                              int32_t n) {                      \
+        if (!obj) return AM_ERR_NULL;                                           \
+        argmind::StreamView<SCALAR> views[kPipeStreams];                        \
+        const int rc = views_from<PIPE, RING>(rings, n, views);                 \
+        if (rc != AM_OK) return rc;                                             \
+        return static_cast<PIPE*>(obj)->configure(views, n) ? AM_OK             \
+                                                            : AM_ERR_CONFIG;    \
+    }                                                                           \
+    extern "C" int am_pipe_##NAME##_step(void* obj, const RING* rings, int32_t n,\
+                                         am_step_report* out) {                 \
+        if (!obj || !out) return AM_ERR_NULL;                                   \
+        argmind::StreamView<SCALAR> views[kPipeStreams];                        \
+        const int rc = views_from<PIPE, RING>(rings, n, views);                 \
+        if (rc != AM_OK) return rc;                                             \
+        PIPE* p = static_cast<PIPE*>(obj);                                      \
+        if (!p->configured()) return AM_ERR_UNCONFIGURED;                       \
+        fill_step<PIPE>(p->step(views), out);                                   \
+        return AM_OK;                                                           \
+    }                                                                           \
+    extern "C" int am_pipe_##NAME##_predict(const void* obj, const SCALAR* x,    \
+                                            SCALAR* out) {                      \
+        if (!obj || !x || !out) return AM_ERR_NULL;                             \
+        static_cast<const PIPE*>(obj)->predict(x, out);                         \
+        return AM_OK;                                                           \
+    }                                                                           \
+    extern "C" const SCALAR* am_pipe_##NAME##_state(const void* obj) {           \
+        return obj ? static_cast<const PIPE*>(obj)->adapter().state() : nullptr; \
+    }                                                                           \
+    extern "C" int am_pipe_##NAME##_load_state(void* obj, const SCALAR* flat) {  \
+        if (!obj || !flat) return AM_ERR_NULL;                                  \
+        return static_cast<PIPE*>(obj)->adapter_mutable().load_state(flat)       \
+                   ? AM_OK                                                      \
+                   : AM_ERR_STATE;                                              \
+    }                                                                           \
+    extern "C" int am_pipe_##NAME##_frozen(const void* obj) {                    \
+        return obj && static_cast<const PIPE*>(obj)->frozen() ? 1 : 0;          \
+    }
+
+#define AM_DEFINE_PIPE_GUARDED(NAME, SCALAR, N, M, RING, MAX_BYTES)             \
+    using Adapter_##NAME =                                                      \
+        argmind::Guard<argmind::Rls<SCALAR, N, M>, kGuardDepth, kGuardBounds>;   \
+    using Pipe_##NAME = argmind::Pipeline<Adapter_##NAME, AM_MAX_STREAMS>;       \
+    extern "C" int am_pipe_##NAME##_init(void* obj, size_t obj_bytes,            \
+                                         SCALAR lambda, SCALAR p0,              \
+                                         uint32_t checkpoint_every,             \
+                                         uint32_t recover_after, int32_t policy, \
+                                         double max_stale_s, int32_t reference) {\
+        if (!obj) return AM_ERR_NULL;                                           \
+        if (obj_bytes < sizeof(Pipe_##NAME)) return AM_ERR_TOO_SMALL;            \
+        if (!valid_policy(policy)) return AM_ERR_CONFIG;                        \
+        argmind::Rls<SCALAR, N, M> inner(lambda, p0);                           \
+        if (!inner.valid()) return AM_ERR_CONFIG;                               \
+        const Adapter_##NAME g(inner, checkpoint_every, recover_after);          \
+        const argmind::Aligner al(static_cast<argmind::Policy>(policy),          \
+                                  max_stale_s);                                 \
+        *static_cast<Pipe_##NAME*>(obj) =                                       \
+            Pipe_##NAME(g, al, argmind::FrameMap<N, M>(), reference);            \
+        return AM_OK;                                                           \
+    }                                                                           \
+    extern "C" int am_pipe_##NAME##_add_bound(void* obj, int32_t field,          \
+                                              int32_t has_lo, double lo,         \
+                                              int32_t has_hi, double hi) {      \
+        if (!obj) return AM_ERR_NULL;                                           \
+        if (!valid_field(field)) return AM_ERR_CONFIG;                          \
+        argmind::Bound b;                                                       \
+        b.field = static_cast<argmind::Field>(field);                           \
+        b.has_lo = has_lo != 0;                                                 \
+        b.has_hi = has_hi != 0;                                                 \
+        b.lo = lo;                                                              \
+        b.hi = hi;                                                              \
+        if (!b.valid()) return AM_ERR_CONFIG;                                   \
+        return static_cast<Pipe_##NAME*>(obj)->adapter_mutable().add_bound(b)    \
+                   ? AM_OK                                                      \
+                   : AM_ERR_FULL;                                               \
+    }                                                                           \
+    extern "C" int am_pipe_##NAME##_set_divergence(                             \
+        void* obj, double ratio, double fast_alpha, double slow_alpha,          \
+        double floor, uint32_t warmup) {                                        \
+        if (!obj) return AM_ERR_NULL;                                           \
+        argmind::Divergence d;                                                  \
+        d.enabled = true;                                                       \
+        d.ratio = ratio;                                                        \
+        d.fast_alpha = fast_alpha;                                              \
+        d.slow_alpha = slow_alpha;                                              \
+        d.floor = floor;                                                        \
+        d.warmup = warmup;                                                      \
+        if (!d.valid()) return AM_ERR_CONFIG;                                   \
+        static_cast<Pipe_##NAME*>(obj)->adapter_mutable().set_divergence(d);     \
+        return AM_OK;                                                           \
+    }                                                                           \
+    extern "C" int am_pipe_##NAME##_frozen_by(const void* obj, uint32_t* out) {  \
+        if (!obj || !out) return AM_ERR_NULL;                                   \
+        *out = static_cast<const Pipe_##NAME*>(obj)->adapter().frozen_by();      \
+        return AM_OK;                                                           \
+    }                                                                           \
+    extern "C" int am_pipe_##NAME##_counters(const void* obj,                    \
+                                             am_guard_counters* out) {          \
+        if (!obj || !out) return AM_ERR_NULL;                                   \
+        const Adapter_##NAME& g =                                               \
+            static_cast<const Pipe_##NAME*>(obj)->adapter();                    \
+        out->applied = g.applied();                                             \
+        out->trips = g.trips();                                                 \
+        out->rollbacks = g.rollbacks();                                         \
+        out->blocked_frozen = g.blocked_frozen();                               \
+        out->rejected_by_adapter = g.rejected_by_adapter();                     \
+        out->thaws = g.thaws();                                                 \
+        return AM_OK;                                                           \
+    }                                                                           \
+    AM_DEFINE_PIPE_COMMON(NAME, SCALAR, RING, Pipe_##NAME, MAX_BYTES)
+
+// The ring type is a macro parameter rather than pasted from the scalar name: `am_ring_##float`
+// would be `am_ring_float`, which is not a type. A macro that is clever about types is a macro
+// whose error messages are useless.
+#define AM_DEFINE_PIPE_BARE(NAME, SCALAR, N, M, RING, MAX_BYTES)                \
+    using Pipe_##NAME = argmind::Pipeline<argmind::Rls<SCALAR, N, M>,           \
+                                          AM_MAX_STREAMS>;                      \
+    extern "C" int am_pipe_##NAME##_init(void* obj, size_t obj_bytes,            \
+                                         SCALAR lambda, SCALAR p0,              \
+                                         int32_t policy, double max_stale_s,     \
+                                         int32_t reference) {                   \
+        if (!obj) return AM_ERR_NULL;                                           \
+        if (obj_bytes < sizeof(Pipe_##NAME)) return AM_ERR_TOO_SMALL;            \
+        if (!valid_policy(policy)) return AM_ERR_CONFIG;                        \
+        argmind::Rls<SCALAR, N, M> inner(lambda, p0);                           \
+        if (!inner.valid()) return AM_ERR_CONFIG;                               \
+        const argmind::Aligner al(static_cast<argmind::Policy>(policy),          \
+                                  max_stale_s);                                 \
+        *static_cast<Pipe_##NAME*>(obj) = Pipe_##NAME(                          \
+            inner, al, argmind::FrameMap<N, M>(), reference);                    \
+        return AM_OK;                                                           \
+    }                                                                           \
+    AM_DEFINE_PIPE_COMMON(NAME, SCALAR, RING, Pipe_##NAME, MAX_BYTES)
+
+AM_DEFINE_PIPE_BARE(f32_6_1, float, 6, 1, am_ring_f32, AM_PIPE_F32_6_1_MAX_BYTES)
+AM_DEFINE_PIPE_BARE(f64_6_1, double, 6, 1, am_ring_f64, AM_PIPE_F64_6_1_MAX_BYTES)
+AM_DEFINE_PIPE_GUARDED(g_f32_6_1, float, 6, 1, am_ring_f32,
+                       AM_PIPE_G_F32_6_1_MAX_BYTES)
+AM_DEFINE_PIPE_GUARDED(g_f32_6_3, float, 6, 3, am_ring_f32,
+                       AM_PIPE_G_F32_6_3_MAX_BYTES)
+AM_DEFINE_PIPE_GUARDED(g_f32_12_1, float, 12, 1, am_ring_f32,
+                       AM_PIPE_G_F32_12_1_MAX_BYTES)
+AM_DEFINE_PIPE_GUARDED(g_f64_6_1, double, 6, 1, am_ring_f64,
+                       AM_PIPE_G_F64_6_1_MAX_BYTES)

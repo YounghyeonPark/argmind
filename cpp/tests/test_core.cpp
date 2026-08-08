@@ -1562,6 +1562,394 @@ void test_the_abi_closes_the_loop_from_a_guard_to_a_slot_and_back() {
     CHECK(am_guard_f32_6_1_load_state(fresh, restored) == AM_ERR_STATE);
 }
 
+
+// -- the stream and pipeline ABI ----------------------------------------------
+//
+// The composed handle is the piece the previous ABI section said was missing, and the way it
+// avoids the instantiation explosion is that the caller owns the sample storage: `dim` and
+// `capacity` are runtime values on the C side. That makes one question worth asking hardest --
+// does the runtime-shaped ring behave exactly like `Stream<T, Dim, Capacity>`? It should by
+// construction, since both call `ring_push`, but "by construction" is what this project keeps
+// finding to be untrue.
+
+void test_the_caller_owned_ring_behaves_exactly_like_the_typed_one() {
+    static float values[8 * 2];
+    static double times[8];
+    static uint8_t valid[8];
+    am_ring_f32 r;
+    CHECK(am_ring_f32_init(&r, values, times, valid, 2, 8) == AM_OK);
+    argmind::Stream<float, 2, 8> s;
+
+    const double stamps[10] = {1.0, 1.0, 0.5, 1.5, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0};
+    for (int k = 0; k < 10; ++k) {
+        const float v[2] = {static_cast<float>(k), -static_cast<float>(k)};
+        const bool ok = (k % 3) != 0;
+        const int a = am_ring_f32_push(&r, stamps[k], v, ok ? 1 : 0);
+        const bool b = s.push(stamps[k], v, ok);
+        // Refusals have to match too: from the first disagreement the two hold different
+        // histories and every later comparison is against the wrong thing.
+        CHECK((a == AM_OK) == b);
+    }
+    // ...and the non-finite cases, which is where the Python reference had a real defect.
+    const float v[2] = {0.0f, 0.0f};
+    CHECK((am_ring_f32_push(&r, __builtin_nanf(""), v, 1) == AM_OK) ==
+          s.push(__builtin_nanf(""), v));
+    CHECK((am_ring_f32_push(&r, __builtin_inff(), v, 1) == AM_OK) ==
+          s.push(__builtin_inff(), v));
+
+    CHECK(r.count == s.size());
+    CHECK(r.dropped == s.dropped());
+    const argmind::StreamView<float> ra =
+        argmind::ring_view<float>(*reinterpret_cast<argmind::Ring<float>*>(&r));
+    const argmind::StreamView<float> rb = s.view();
+    CHECK(ra.head == rb.head);
+    for (int age = 0; age < ra.count; ++age) {
+        CHECK(ra.at(age).t == rb.at(age).t);
+        CHECK(ra.at(age).valid == rb.at(age).valid);
+        CHECK(ra.at(age).values[0] == rb.at(age).values[0]);
+        CHECK(ra.at(age).values[1] == rb.at(age).values[1]);
+    }
+
+    // A freshly initialised ring must accept t = 0 and negative times, because `last_t`
+    // starts at -inf and not at zero. Found by a mutation check: setting it to 0.0 survived
+    // the whole suite, and it would silently refuse the first sample of any device whose
+    // timebase is milliseconds-since-boot -- which is most of them. `Stream<>::reset` had
+    // this right; nothing compared the two on a fresh ring until now.
+    am_ring_f32 zero;
+    static float zv[4 * 1];
+    static double zt[4];
+    static uint8_t zk[4];
+    argmind::Stream<float, 1, 4> zs;
+    CHECK(am_ring_f32_init(&zero, zv, zt, zk, 1, 4) == AM_OK);
+    const float one[1] = {1.0f};
+    CHECK((am_ring_f32_push(&zero, -5.0, one, 1) == AM_OK) == zs.push(-5.0, one));
+    CHECK((am_ring_f32_push(&zero, 0.0, one, 1) == AM_OK) == zs.push(0.0, one));
+    CHECK(zero.count == 2 && zs.size() == 2);
+    CHECK(am_ring_f32_reset(&zero) == AM_OK);
+    zs.reset();
+    CHECK((am_ring_f32_push(&zero, 0.0, one, 1) == AM_OK) == zs.push(0.0, one));
+    CHECK(zero.count == 1 && zs.size() == 1);
+
+    CHECK(am_ring_f32_init(&r, nullptr, times, valid, 2, 8) == AM_ERR_NULL);
+    CHECK(am_ring_f32_init(&r, values, times, valid, 0, 8) == AM_ERR_CONFIG);
+    CHECK(am_ring_f32_init(&r, values, times, valid, 2, 0) == AM_ERR_CONFIG);
+    CHECK(am_ring_f32_push(nullptr, 1.0, v, 1) == AM_ERR_NULL);
+}
+
+void test_the_pipeline_abi_agrees_with_the_header_bit_for_bit() {
+    // Three streams of different widths and rates: s0 the 1-wide reference carrying the
+    // target, s1 a 3-wide sensor and s2 a 2-wide one, both phase-offset so a reference
+    // instant never lands on one of their samples. A single-rate fixture would agree under
+    // any alignment policy and prove nothing about the wiring.
+    //
+    // The target is NOT among the features, which the first version of this fixture got
+    // wrong: it mapped (0, 0) -- the reference stream's own value -- into the regressor, so
+    // the model read the answer off its own input, the residual sat at zero, and the fault
+    // injected to trip the guard did nothing. The tell was three failing CHECKs at the end
+    // saying nothing had frozen, and everything else agreeing perfectly. A fixture that
+    // agrees while testing nothing is the shape this project keeps finding.
+    static float v0[16 * 1];
+    static double t0[16];
+    static uint8_t k0[16];
+    static float v1[16 * 3];
+    static double t1[16];
+    static uint8_t k1[16];
+    static float v2[16 * 2];
+    static double t2[16];
+    static uint8_t k2[16];
+    am_ring_f32 rings[3];
+    CHECK(am_ring_f32_init(&rings[0], v0, t0, k0, 1, 16) == AM_OK);
+    CHECK(am_ring_f32_init(&rings[1], v1, t1, k1, 3, 16) == AM_OK);
+    CHECK(am_ring_f32_init(&rings[2], v2, t2, k2, 2, 16) == AM_OK);
+
+    static am_rls_storage store[AM_PIPE_G_F32_6_1_MAX_BYTES / sizeof(am_rls_storage)];
+    CHECK(am_pipe_g_f32_6_1_init(store, sizeof(store), 0.98f, 10.0f, 2, 0,
+                                 AM_POLICY_HOLD_LAST, 0.0, 0) == AM_OK);
+    // Interleaved across the two sensors on purpose: the C++ extracts by scattering from one
+    // stream at a time, so a map that took every component from one stream would agree under
+    // a transposed scatter too.
+    CHECK(am_pipe_g_f32_6_1_add_feature(store, 1, 0) == AM_OK);
+    CHECK(am_pipe_g_f32_6_1_add_feature(store, 2, 1) == AM_OK);
+    CHECK(am_pipe_g_f32_6_1_add_feature(store, 1, 2) == AM_OK);
+    CHECK(am_pipe_g_f32_6_1_add_feature(store, 2, 0) == AM_OK);
+    CHECK(am_pipe_g_f32_6_1_add_feature(store, 1, 1) == AM_OK);
+    CHECK(am_pipe_g_f32_6_1_add_target(store, 0, 0) == AM_OK);
+    CHECK(am_pipe_g_f32_6_1_set_constant(store, 1) == AM_OK);
+    CHECK(am_pipe_g_f32_6_1_add_bound(store, AM_FIELD_RESIDUAL_NORM, 0, 0.0, 1, 8.0) ==
+          AM_OK);
+    CHECK(am_pipe_g_f32_6_1_set_max_stale_s(store, 1, 2.0) == AM_OK);
+    CHECK(am_pipe_g_f32_6_1_configure(store, rings, 3) == AM_OK);
+
+    // The same wiring through the header.
+    using Adapter = argmind::Guard<argmind::Rls<float, 6, 1>, 4, 4>;
+    argmind::Stream<float, 1, 16> s0;
+    argmind::Stream<float, 3, 16> s1;
+    argmind::Stream<float, 2, 16> s2;
+    argmind::FrameMap<6, 1> map;
+    map.add_feature(1, 0);
+    map.add_feature(2, 1);
+    map.add_feature(1, 2);
+    map.add_feature(2, 0);
+    map.add_feature(1, 1);
+    map.add_target(0, 0);
+    map.set_constant(true);
+    Adapter g(argmind::Rls<float, 6, 1>(0.98f, 10.0f), 2, 0);
+    CHECK(g.add_bound(argmind::Bound::at_most(argmind::Field::ResidualNorm, 8.0)));
+    argmind::Pipeline<Adapter, 4> ref(
+        g, argmind::Aligner(argmind::Policy::HoldLast, 0.0), map, 0);
+    ref.set_max_stale_s(2.0);
+    argmind::StreamView<float> views[3] = {s0.view(), s1.view(), s2.view()};
+    CHECK(ref.configure(views, 3));
+
+    uint32_t seed = 4242u;
+    int steps = 0;
+    int with_frames = 0;
+    for (int k = 1; k <= 60; ++k) {
+        float a[3];
+        float b[2];
+        for (int j = 0; j < 3; ++j) {
+            seed = seed * 1664525u + 1013904223u;
+            a[j] = static_cast<float>(static_cast<int32_t>(seed >> 9) % 1000) / 500.0f;
+        }
+        for (int j = 0; j < 2; ++j) {
+            seed = seed * 1664525u + 1013904223u;
+            b[j] = static_cast<float>(static_cast<int32_t>(seed >> 9) % 1000) / 500.0f;
+        }
+        // Occasionally invalid rather than routinely: `require_valid` is on, and marking the
+        // newest sample before each reference instant bad made EVERY frame skip the learner.
+        const bool ok = (k % 11) != 0;
+        CHECK((am_ring_f32_push(&rings[1], k - 0.85, a, ok ? 1 : 0) == AM_OK) ==
+              s1.push(k - 0.85, a, ok));
+        CHECK((am_ring_f32_push(&rings[2], k - 0.45, b, 1) == AM_OK) ==
+              s2.push(k - 0.45, b, true));
+
+        // A model the adapter can actually learn, so the ordinary residual settles well
+        // below the bound and the injected fault is the only thing that crosses it.
+        const float y[1] = {2.0f * a[0] - b[1] + 0.5f * a[2] + 0.25f * b[0] - 1.5f * a[1] +
+                            0.3f + (k == 35 ? 90.0f : 0.0f)};
+        CHECK((am_ring_f32_push(&rings[0], double(k), y, 1) == AM_OK) ==
+              s0.push(double(k), y, true));
+
+        if (k % 3 != 0) continue;
+        am_step_report got;
+        CHECK(am_pipe_g_f32_6_1_step(store, rings, 3, &got) == AM_OK);
+        views[0] = s0.view();
+        views[1] = s1.view();
+        views[2] = s2.view();
+        const argmind::StepReport<4> want = ref.step(views);
+        ++steps;
+        if (want.frames) ++with_frames;
+
+        CHECK(got.ok == (want.ok ? 1 : 0));
+        CHECK(got.frames == want.frames);
+        CHECK(got.updated == want.updated);
+        CHECK(got.lost_frames == want.lost_frames);
+        CHECK(got.frozen == (want.frozen ? 1 : 0));
+        CHECK(got.frozen_by == want.frozen_by);
+        CHECK(got.has_t == (want.has_t ? 1 : 0));
+        CHECK(got.n_staleness == want.n_staleness);
+        CHECK(bits_equal(got.t, want.t));
+        CHECK(bits_equal(got.worst_staleness, want.worst_staleness));
+        for (int i = 0; i < AM_SKIP_COUNT; ++i) CHECK(got.skipped[i] == want.skipped[i]);
+        for (int i = 0; i < 3; ++i) {
+            CHECK(bits_equal(got.staleness[i], want.staleness[i]));
+        }
+    }
+    // The fixture has to have done something, or every comparison above ran on zeros.
+    CHECK(steps == 20);
+    CHECK(with_frames >= 15);
+    CHECK(am_pipe_g_f32_6_1_frozen(store) == 1);
+
+    const float* pa = am_pipe_g_f32_6_1_state(store);
+    const float* pb = ref.adapter().state();
+    for (int i = 0; i < am_pipe_g_f32_6_1_state_size(); ++i) CHECK(pa[i] == pb[i]);
+
+    am_guard_counters c;
+    CHECK(am_pipe_g_f32_6_1_counters(store, &c) == AM_OK);
+    CHECK(c.trips == 1u);
+    CHECK(c.blocked_frozen > 0u);
+    uint32_t mask = 0;
+    CHECK(am_pipe_g_f32_6_1_frozen_by(store, &mask) == AM_OK);
+    CHECK(mask == 1u);
+}
+
+void test_the_pipeline_abi_carries_lost_frames_across() {
+    // Found by a mutation check: zeroing `lost_frames` in the ABI's report survived the whole
+    // suite, because nothing on this side of the boundary ever overflowed a reference ring.
+    // Every other field had a non-zero value somewhere and this one did not, which is the
+    // quietest way for a field to go untested -- it is present, it is compared, and it is
+    // compared against zero.
+    //
+    // `lost_frames` is the field that says input never reached the learner, so it is a poor
+    // one to lose. Four-deep rings and ten arrivals between steps: six frames per step can
+    // never exist.
+    static float v0[4 * 1];
+    static double t0[4];
+    static uint8_t k0[4];
+    static float v1[4 * 1];
+    static double t1[4];
+    static uint8_t k1[4];
+    am_ring_f32 rings[2];
+    CHECK(am_ring_f32_init(&rings[0], v0, t0, k0, 1, 4) == AM_OK);
+    CHECK(am_ring_f32_init(&rings[1], v1, t1, k1, 1, 4) == AM_OK);
+
+    static am_rls_storage store[AM_PIPE_F32_6_1_MAX_BYTES / sizeof(am_rls_storage)];
+    CHECK(am_pipe_f32_6_1_init(store, sizeof(store), 0.98f, 10.0f, AM_POLICY_HOLD_LAST,
+                               0.0, 0) == AM_OK);
+    for (int i = 0; i < 5; ++i) CHECK(am_pipe_f32_6_1_add_feature(store, 1, 0) == AM_OK);
+    CHECK(am_pipe_f32_6_1_add_target(store, 0, 0) == AM_OK);
+    CHECK(am_pipe_f32_6_1_set_constant(store, 1) == AM_OK);
+    CHECK(am_pipe_f32_6_1_configure(store, rings, 2) == AM_OK);
+
+    argmind::Stream<float, 1, 4> s0;
+    argmind::Stream<float, 1, 4> s1;
+    argmind::FrameMap<6, 1> map;
+    for (int i = 0; i < 5; ++i) map.add_feature(1, 0);
+    map.add_target(0, 0);
+    map.set_constant(true);
+    argmind::Pipeline<argmind::Rls<float, 6, 1>, 4> ref(
+        argmind::Rls<float, 6, 1>(0.98f, 10.0f),
+        argmind::Aligner(argmind::Policy::HoldLast, 0.0), map, 0);
+    argmind::StreamView<float> views[2] = {s0.view(), s1.view()};
+    CHECK(ref.configure(views, 2));
+
+    uint32_t total_lost = 0;
+    double t = 0.0;
+    for (int round = 0; round < 5; ++round) {
+        for (int i = 0; i < 10; ++i) {
+            t += 1.0;
+            const float x[1] = {static_cast<float>(i) * 0.5f};
+            const float y[1] = {static_cast<float>(round)};
+            CHECK((am_ring_f32_push(&rings[1], t, x, 1) == AM_OK) == s1.push(t, x));
+            CHECK((am_ring_f32_push(&rings[0], t, y, 1) == AM_OK) == s0.push(t, y));
+        }
+        am_step_report got;
+        CHECK(am_pipe_f32_6_1_step(store, rings, 2, &got) == AM_OK);
+        views[0] = s0.view();
+        views[1] = s1.view();
+        const argmind::StepReport<4> want = ref.step(views);
+        CHECK(got.frames == want.frames);
+        CHECK(got.lost_frames == want.lost_frames);
+        CHECK(got.updated == want.updated);
+        total_lost += got.lost_frames;
+    }
+    // The fixture has to actually lose frames, or this is another comparison against zero.
+    CHECK(total_lost == 30u);
+    // ...and never more than the ring can hold per step, which is the other way the
+    // arithmetic could be wrong.
+    CHECK(am_pipe_f32_6_1_frozen(store) == 0);
+}
+
+void test_changing_the_map_forces_a_reconfigure() {
+    // The hazard this closes: `configure()` bounds-checks every map entry against the width
+    // of the stream it names. A caller that widened a component afterwards would have a
+    // pipeline that still says it is configured and reads off the end of a ring on the next
+    // step. Mutating the map clears the flag, and `step()` refuses until it is set again.
+    static float v0[8];
+    static double t0[8];
+    static uint8_t k0[8];
+    am_ring_f32 rings[1];
+    CHECK(am_ring_f32_init(&rings[0], v0, t0, k0, 1, 8) == AM_OK);
+
+    static am_rls_storage store[AM_PIPE_F32_6_1_MAX_BYTES / sizeof(am_rls_storage)];
+    CHECK(am_pipe_f32_6_1_init(store, sizeof(store), 0.98f, 10.0f,
+                               AM_POLICY_HOLD_LAST, 0.0, 0) == AM_OK);
+    am_step_report rep;
+    CHECK(am_pipe_f32_6_1_step(store, rings, 1, &rep) == AM_ERR_UNCONFIGURED);
+
+    for (int i = 0; i < 5; ++i) CHECK(am_pipe_f32_6_1_add_feature(store, 0, 0) == AM_OK);
+    CHECK(am_pipe_f32_6_1_add_target(store, 0, 0) == AM_OK);
+    CHECK(am_pipe_f32_6_1_set_constant(store, 1) == AM_OK);
+    CHECK(am_pipe_f32_6_1_configure(store, rings, 1) == AM_OK);
+    CHECK(am_pipe_f32_6_1_step(store, rings, 1, &rep) == AM_OK);
+
+    CHECK(am_pipe_f32_6_1_set_constant(store, 0) == AM_OK);   // the map moved
+    CHECK(am_pipe_f32_6_1_step(store, rings, 1, &rep) == AM_ERR_UNCONFIGURED);
+    // ...and it now describes five features for a six-feature adapter, so re-configuring
+    // fails rather than quietly leaving x[5] holding whatever was there.
+    CHECK(am_pipe_f32_6_1_configure(store, rings, 1) == AM_ERR_CONFIG);
+}
+
+void test_the_pipeline_abi_refuses_at_the_boundary() {
+    static float v0[8];
+    static double t0[8];
+    static uint8_t k0[8];
+    am_ring_f32 rings[1];
+    CHECK(am_ring_f32_init(&rings[0], v0, t0, k0, 1, 8) == AM_OK);
+    static am_rls_storage store[AM_PIPE_F32_6_1_MAX_BYTES / sizeof(am_rls_storage)];
+
+    CHECK(am_pipe_f32_6_1_init(nullptr, 64, 0.98f, 10.0f, AM_POLICY_HOLD_LAST, 0.0, 0) ==
+          AM_ERR_NULL);
+    CHECK(am_pipe_f32_6_1_init(store, 8, 0.98f, 10.0f, AM_POLICY_HOLD_LAST, 0.0, 0) ==
+          AM_ERR_TOO_SMALL);
+    CHECK(am_pipe_f32_6_1_init(store, sizeof(store), 0.98f, 10.0f, 99, 0.0, 0) ==
+          AM_ERR_CONFIG);
+    CHECK(am_pipe_f32_6_1_init(store, sizeof(store), 0.0f, 10.0f, AM_POLICY_HOLD_LAST,
+                               0.0, 0) == AM_ERR_CONFIG);
+
+    // A non-causal policy inside a causal loop is a correctness bug, not a tuning choice, so
+    // it has to be said out loud even though the aligner alone permits it.
+    CHECK(am_pipe_f32_6_1_init(store, sizeof(store), 0.98f, 10.0f, AM_POLICY_INTERPOLATE,
+                               0.0, 0) == AM_OK);
+    for (int i = 0; i < 5; ++i) CHECK(am_pipe_f32_6_1_add_feature(store, 0, 0) == AM_OK);
+    CHECK(am_pipe_f32_6_1_add_target(store, 0, 0) == AM_OK);
+    CHECK(am_pipe_f32_6_1_set_constant(store, 1) == AM_OK);
+    CHECK(am_pipe_f32_6_1_configure(store, rings, 1) == AM_ERR_CONFIG);
+    CHECK(am_pipe_f32_6_1_set_allow_non_causal(store, 1) == AM_OK);
+    CHECK(am_pipe_f32_6_1_configure(store, rings, 1) == AM_OK);
+
+    // A staleness limit of zero. `Aligner` folds "no limit" and "zero" into one sentinel and
+    // that is recorded as a real divergence; the pipeline's own gate does not, so a caller
+    // meaning zero-tolerance is refused rather than silently given no check.
+    CHECK(am_pipe_f32_6_1_set_max_stale_s(store, 1, 0.0) == AM_OK);
+    CHECK(am_pipe_f32_6_1_configure(store, rings, 1) == AM_ERR_CONFIG);
+    CHECK(am_pipe_f32_6_1_set_max_stale_s(store, 0, 0.0) == AM_OK);
+    CHECK(am_pipe_f32_6_1_configure(store, rings, 1) == AM_OK);
+
+    // Too many streams, a null ring array, and a ring whose buffers were never set.
+    am_ring_f32 many[AM_MAX_STREAMS + 1];
+    for (int i = 0; i <= AM_MAX_STREAMS; ++i) many[i] = rings[0];
+    CHECK(am_pipe_f32_6_1_configure(store, many, AM_MAX_STREAMS + 1) == AM_ERR_CONFIG);
+    CHECK(am_pipe_f32_6_1_configure(store, nullptr, 1) == AM_ERR_CONFIG);
+    am_ring_f32 empty;
+    empty.values = nullptr;
+    empty.times = nullptr;
+    empty.valid = nullptr;
+    empty.dim = 1;
+    empty.capacity = 8;
+    empty.head = 0;
+    empty.count = 0;
+    empty.dropped = 0;
+    empty.last_t = 0.0;
+    CHECK(am_pipe_f32_6_1_configure(store, &empty, 1) == AM_ERR_NULL);
+
+    am_step_report rep;
+    CHECK(am_pipe_f32_6_1_step(nullptr, rings, 1, &rep) == AM_ERR_NULL);
+    CHECK(am_pipe_f32_6_1_step(store, rings, 1, nullptr) == AM_ERR_NULL);
+    CHECK(am_pipe_f32_6_1_state(nullptr) == nullptr);
+}
+
+void test_the_declared_pipeline_bounds_are_bounds_and_not_fantasies() {
+    CHECK(am_pipe_f32_6_1_bytes() <= AM_PIPE_F32_6_1_MAX_BYTES);
+    CHECK(am_pipe_f64_6_1_bytes() <= AM_PIPE_F64_6_1_MAX_BYTES);
+    CHECK(am_pipe_g_f32_6_1_bytes() <= AM_PIPE_G_F32_6_1_MAX_BYTES);
+    CHECK(am_pipe_g_f32_6_3_bytes() <= AM_PIPE_G_F32_6_3_MAX_BYTES);
+    CHECK(am_pipe_g_f32_12_1_bytes() <= AM_PIPE_G_F32_12_1_MAX_BYTES);
+    CHECK(am_pipe_g_f64_6_1_bytes() <= AM_PIPE_G_F64_6_1_MAX_BYTES);
+    // Tight enough to budget from, as for the guard: a bound that is merely true would say
+    // "reserve 100 KB" forever.
+    CHECK(am_pipe_f32_6_1_bytes() * 2 >= AM_PIPE_F32_6_1_MAX_BYTES);
+    CHECK(am_pipe_g_f32_6_1_bytes() * 2 >= AM_PIPE_G_F32_6_1_MAX_BYTES);
+    CHECK(am_pipe_g_f32_12_1_bytes() * 2 >= AM_PIPE_G_F32_12_1_MAX_BYTES);
+
+    // A guarded pipeline is its guard plus the pipeline's own parts, which is the
+    // decomposition a caller weighing rollback depth needs.
+    CHECK(am_pipe_g_f32_6_1_bytes() > am_guard_f32_6_1_bytes());
+    CHECK(am_pipe_g_f32_6_1_bytes() - am_guard_f32_6_1_bytes() < 600u);
+    CHECK(am_pipe_g_f32_6_1_state_size() == AM_RLS_F32_6_1_STATE);
+    CHECK(am_pipe_f32_6_1_n_features() == 6);
+}
+
 }  // namespace
 
 int main() {
@@ -1632,6 +2020,13 @@ int main() {
     test_the_declared_guard_bounds_are_bounds_and_not_fantasies();
     test_the_record_abi_round_trips_and_arbitrates();
     test_the_abi_closes_the_loop_from_a_guard_to_a_slot_and_back();
+
+    test_the_caller_owned_ring_behaves_exactly_like_the_typed_one();
+    test_the_pipeline_abi_agrees_with_the_header_bit_for_bit();
+    test_the_pipeline_abi_carries_lost_frames_across();
+    test_changing_the_map_forces_a_reconfigure();
+    test_the_pipeline_abi_refuses_at_the_boundary();
+    test_the_declared_pipeline_bounds_are_bounds_and_not_fantasies();
     test_the_declared_ring_memory_matches_the_shape();
 
     printf("%d checks, %d failures\n", checks, failures);

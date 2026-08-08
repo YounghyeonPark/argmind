@@ -537,7 +537,7 @@ def test_the_cpp_unit_tests_pass(tmp_path):
     # ...and that the checks did not quietly disappear. The count is quoted in DESIGN.md and
     # CLAUDE.md, and "0 failures" alone is equally true of a suite that stopped running.
     m = re.search(r"(\d+) checks", run.stdout)
-    assert m and int(m.group(1)) >= 2400, (
+    assert m and int(m.group(1)) >= 3340, (
         f"the C++ self-check count fell to {m.group(1) if m else '?'}; the documented "
         "figure is a claim about this number")
 
@@ -587,6 +587,8 @@ _C_CALLER = r"""
 #include <string.h>
 #include "argmind/argmind.h"
 
+int drive_pipeline(void);
+
 int main(void) {
     static am_rls_storage store[AM_GUARD_F32_6_1_MAX_BYTES / sizeof(am_rls_storage)];
     float x[6];
@@ -630,8 +632,84 @@ int main(void) {
                sizeof(restored)) != 0) return 13;
     if (am_persist_next_slot(0) != 1) return 14;
 
+    if (drive_pipeline() != 0) return 15;
+
     printf("ok trips=%u frozen_by=%u bytes=%u\n", c.trips,
            am_guard_f32_6_1_frozen_by(store), (unsigned)n);
+    return 0;
+}
+"""
+
+#: The composed handle, driven from C: three caller-owned rings of different widths, a
+#: guarded six-feature adapter, an index frame map built one entry at a time, and `step()`.
+#: This is the shape an integrator actually wires up, and until the pipeline had ABI entry
+#: points none of it was reachable from C at all.
+_C_PIPELINE = r"""
+#include "argmind/argmind.h"
+
+static float  pv0[16 * 1], pv1[16 * 3], pv2[16 * 2];
+static double pt0[16], pt1[16], pt2[16];
+static unsigned char pk0[16], pk1[16], pk2[16];
+static am_rls_storage pipe[AM_PIPE_G_F32_6_1_MAX_BYTES / sizeof(am_rls_storage)];
+
+int drive_pipeline(void) {
+    am_ring_f32 rings[3];
+    am_step_report rep;
+    am_guard_counters c;
+    unsigned int seed = 4242u;
+    unsigned int frames = 0, updated = 0;
+    float a[3], b[2], y[1];
+    int k, j;
+
+    if (am_ring_f32_init(&rings[0], pv0, pt0, pk0, 1, 16) != AM_OK) return 1;
+    if (am_ring_f32_init(&rings[1], pv1, pt1, pk1, 3, 16) != AM_OK) return 1;
+    if (am_ring_f32_init(&rings[2], pv2, pt2, pk2, 2, 16) != AM_OK) return 1;
+
+    if (am_pipe_g_f32_6_1_init(pipe, sizeof(pipe), 0.98f, 10.0f, 2, 0,
+                               AM_POLICY_HOLD_LAST, 0.0, 0) != AM_OK) return 2;
+    if (am_pipe_g_f32_6_1_add_feature(pipe, 1, 0) != AM_OK) return 3;
+    if (am_pipe_g_f32_6_1_add_feature(pipe, 2, 1) != AM_OK) return 3;
+    if (am_pipe_g_f32_6_1_add_feature(pipe, 1, 2) != AM_OK) return 3;
+    if (am_pipe_g_f32_6_1_add_feature(pipe, 2, 0) != AM_OK) return 3;
+    if (am_pipe_g_f32_6_1_add_feature(pipe, 1, 1) != AM_OK) return 3;
+    if (am_pipe_g_f32_6_1_add_target(pipe, 0, 0) != AM_OK) return 3;
+    if (am_pipe_g_f32_6_1_set_constant(pipe, 1) != AM_OK) return 3;
+    if (am_pipe_g_f32_6_1_add_bound(pipe, AM_FIELD_RESIDUAL_NORM, 0, 0.0, 1, 8.0)
+        != AM_OK) return 4;
+    if (am_pipe_g_f32_6_1_configure(pipe, rings, 3) != AM_OK) return 5;
+
+    for (k = 1; k <= 60; ++k) {
+        for (j = 0; j < 3; ++j) {
+            seed = seed * 1664525u + 1013904223u;
+            a[j] = (float)((int)(seed >> 9) % 1000) / 500.0f;
+        }
+        for (j = 0; j < 2; ++j) {
+            seed = seed * 1664525u + 1013904223u;
+            b[j] = (float)((int)(seed >> 9) % 1000) / 500.0f;
+        }
+        y[0] = 2.0f * a[0] - b[1] + 0.5f * a[2] + 0.25f * b[0] - 1.5f * a[1] + 0.3f
+             + (k == 35 ? 90.0f : 0.0f);
+        if (am_ring_f32_push(&rings[1], k - 0.85, a, 1) != AM_OK) return 6;
+        if (am_ring_f32_push(&rings[2], k - 0.45, b, 1) != AM_OK) return 6;
+        if (am_ring_f32_push(&rings[0], (double)k, y, 1) != AM_OK) return 6;
+        if (k % 3) continue;
+        if (am_pipe_g_f32_6_1_step(pipe, rings, 3, &rep) != AM_OK) return 7;
+        if (!rep.ok) return 8;
+        frames += rep.frames;
+        updated += rep.updated;
+    }
+    /* The fault has to have tripped the guard, or this exercised only the healthy path. */
+    if (!am_pipe_g_f32_6_1_frozen(pipe)) return 9;
+    if (am_pipe_g_f32_6_1_counters(pipe, &c) != AM_OK) return 10;
+    if (c.trips != 1u) return 11;
+    /* Every reference sample became a frame: the ring is 16 deep and step() runs every
+       third one, so nothing was overwritten unseen. */
+    if (frames != 60u) return 12;
+    /* And roughly the pre-fault half of them adapted. The guard freezes at k=35 and blocks
+       everything after, so an `updated` near 60 would mean the freeze did not take -- the
+       first version of this check demanded 50 and failed for exactly that reason. */
+    if (updated < 28u || updated > 40u) return 13;
+    if (c.blocked_frozen < 15u) return 14;
     return 0;
 }
 """
@@ -654,18 +732,23 @@ def test_a_plain_c_program_can_drive_the_guard_and_the_record_format(tmp_path):
     cxx = _compiler()
     if cc is None or cxx is None:
         pytest.skip("need both a C and a C++ compiler on PATH")
-    src = tmp_path / "caller.c"
-    src.write_text(_C_CALLER, encoding="utf-8")
-    obj = tmp_path / "caller.o"
-    done = subprocess.run(
-        [cc, "-std=c99", "-Wall", "-Wextra", "-Wpedantic", "-I", str(CPP / "include"),
-         "-c", str(src), "-o", str(obj)], capture_output=True, text=True)
-    assert done.returncode == 0, f"the C caller does not compile as C99:\n{done.stderr}"
+    objs = []
+    for name, text in (("pipeline.c", _C_PIPELINE), ("caller.c", _C_CALLER)):
+        src = tmp_path / name
+        src.write_text(text, encoding="utf-8")
+        obj = tmp_path / (name[:-2] + ".o")
+        done = subprocess.run(
+            [cc, "-std=c99", "-Wall", "-Wextra", "-Wpedantic",
+             "-I", str(CPP / "include"), "-c", str(src), "-o", str(obj)],
+            capture_output=True, text=True)
+        assert done.returncode == 0, (
+            f"{name} does not compile as C99:\n{done.stderr}")
+        objs.append(str(obj))
 
     exe = tmp_path / ("caller.exe" if sys.platform == "win32" else "caller")
     done = subprocess.run(
         [cxx, "-std=c++17", "-O2", "-fno-exceptions", "-fno-rtti",
-         "-I", str(CPP / "include"), str(obj), str(CPP / "src" / "abi.cpp"),
+         "-I", str(CPP / "include"), *objs, str(CPP / "src" / "abi.cpp"),
          "-o", str(exe)], capture_output=True, text=True)
     assert done.returncode == 0, f"the C caller does not link:\n{done.stderr}"
 

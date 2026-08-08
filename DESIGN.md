@@ -423,10 +423,9 @@ regression gate), and **the C++ core — RLS behind a C ABI, plus the guard, the
 streams, alignment and the pipeline as headers — verified against the Python to about 1.5 ulp,
 byte for byte for the record format, and exactly for every decision and counter above that**.
 The runtime library is fully across; `argmind/bench.py` has no C++ counterpart and is not
-getting one, being a host measurement harness rather than part of what ships. (RLS, the guard and the record format have ABI entry points;
-`am_stream_*`, `am_align_*` and `am_pipeline_*` do not — see the ABI section for why that
-is a scope decision rather than an oversight.)
-307 Python tests plus 2438 C++ checks, several of which exist to prove failures are visible
+getting one, being a host measurement harness rather than part of what ships. (Everything the library does is reachable from C: RLS, the
+guard, the record format, caller-owned rings and the composed pipeline.)
+307 Python tests plus 3351 C++ checks, several of which exist to prove failures are visible
 rather than silent.
 
 **What the pipeline settled:**
@@ -518,7 +517,7 @@ that is already the persistence format, and a benchmark that can report a regres
 
 **STARTED 2026-08-08** — `cpp/`, and RLS is across. `mat.hpp` (fixed-size primitives),
 `rls.hpp` (`Rls<T, N, M>`), `argmind.h` + `src/abi.cpp` (the C ABI), `tools/xcheck.cpp`, `tools/pcheck.cpp`, `tools/scheck.cpp` and
-`tools/pipecheck.cpp` (the four parity tools), `tests/test_core.cpp` (2438 checks the C++ side can make on its own), and a
+`tools/pipecheck.cpp` (the four parity tools), `tests/test_core.cpp` (3351 checks the C++ side can make on its own), and a
 `CMakeLists.txt` that knows the cross-compilation recipe.
 
 **The C ABI had one real tension to resolve.** Compile-time dimensions are the reason C++ was
@@ -1008,22 +1007,106 @@ was read into. That refusal is the right one — a torn write looks exactly like
 says so and says what to do instead (keep the length beside the slot, or re-derive it with
 `am_persist_record_bytes`).
 
-**What a C caller still cannot do**, written into the header rather than left to be
-discovered: there are no `am_stream_*`, `am_align_*` or `am_pipeline_*` entry points.
-`Pipeline::step()` takes an array of `StreamView<T>`, a C++ template, so exposing it needs a C
-mirror of that struct plus a stream ABI — and `Stream<T, Dim, Capacity>` puts two more axes
-into an instantiation list that would then multiply against the adapter's. The shape that
-avoids the explosion is one composed handle per wiring, streams and aligner and guard and
-adapter chosen together and exported as a single instantiation, and that is a design decision
-worth making deliberately rather than tacking onto a list. So a C caller today gets a guarded
-or unguarded adapter and the record format to persist it, and must do its own buffering and
-alignment. That is a real limit on the declared deliverable — "a library, not an application"
-— and it is a scope decision rather than an oversight.
+**What a C caller could not do at this point**, and the reason, kept because the next
+section is the answer to it: there were no `am_stream_*`, `am_align_*` or `am_pipeline_*`
+entry points. `Pipeline::step()` takes an array of `StreamView<T>`, a C++ template, so
+exposing it needs a C mirror of that struct plus a stream ABI — and `Stream<T, Dim, Capacity>`
+puts two more axes into an instantiation list that would then multiply against the adapter's.
+The shape that avoids the explosion is one composed handle per wiring, and that was a design
+decision worth making deliberately rather than tacking onto a list.
 
-**A note on the C++ check count.** It moved from 868 to 2438 in this change, and most of that
-is one loop: the ABI-versus-header comparison runs 120 updates and makes ten checks on each.
-The number is a floor to catch checks silently disappearing, not a measure of coverage, and
-reading it as the latter would be reading a loop bound.
+**A note on the C++ check count.** It moved from 868 to 3351 across the two ABI changes, and
+most of that growth is two loops rather than two thousand distinct properties: the
+ABI-versus-header comparisons run their fixtures for 120 and 20 iterations and make ten to
+fifteen checks on each. The number is a floor to catch checks silently disappearing, not a
+measure of coverage, and reading it as the latter would be reading a loop bound.
+
+### The composed handle: streams and the pipeline reach C, 2026-08-09
+
+The previous ABI section ended by saying a C caller could not reach the pipeline, and why:
+`Pipeline::step()` takes an array of `StreamView<T>`, and `Stream<T, Dim, Capacity>` would put
+two more axes into an instantiation list that then multiplies against the adapter's.
+
+**The resolution is to move those two axes out of the type entirely: the caller owns the
+sample storage.** `am_ring_f32` is a plain C descriptor over buffers the caller declares, so
+`dim` and `capacity` are runtime values on that side and nothing about a stream's shape
+reaches the instantiation list. What stays in the type is the adapter — which is where the
+compile-time shape was earning its keep all along, in the arithmetic — plus `AM_MAX_STREAMS`.
+That is the same trade `StreamView` already makes inside the core, made once more at the
+boundary.
+
+**One push, not two, and getting there took two attempts and a measurement.** A C ring and a
+`Stream<T, Dim, Capacity>` would otherwise hold two copies of the monotonicity and finiteness
+refusals, and `persist.hpp` already argues that a refusal implemented in two places is one
+that will eventually disagree with itself. So `push` moved into a shared `ring_push` that both
+call.
+
+The first version took a `Ring<T>*`, which meant `Stream::push` had to materialise one and
+write four fields back: **+32 bytes of code** per instantiation at `-Os` on x86-64, 160 to 192
+for `Stream<float,6,64>::push`. Passing the members as separate pointers brought it to 176 —
+still +16, because the rewritten wrap used a compare-and-branch where the original used
+`% Capacity`, which a power-of-two capacity folds to a single AND. Restoring the modulo lands
+back on exactly 160. The comment claiming the extraction was free was written before any of
+this was measured and was wrong twice before it was right.
+
+That modulo is a division where `slot()` twelve lines away deliberately avoids one, and the
+two are not in conflict: this runs **once per push** and that ran twice per element of every
+scan. The C ring, whose capacity is a runtime value, pays one integer division per push — a
+single `SDIV` at the sensor's rate on the declared floor, which is not worth making the
+compile-time path larger to avoid.
+
+**Declared memory, measured on x86-64 — a shape, not a target figure.** Bare `f32_6_1` 600
+bytes, `f64_6_1` 936. Guarded: `g_f32_6_1` 1616, `g_f32_6_3` 1864, `g_f32_12_1` 3936,
+`g_f64_6_1` 2624. A guarded pipeline is its guard plus about 400 bytes, and the guard is
+mostly its checkpoint ring, so the composition a caller needs to see is
+`ring + adapter + ~400`. Six instantiations is a lot of code for a caller who wants one;
+`-ffunction-sections -fdata-sections` with `--gc-sections`, which the embedded CMake path
+already sets, keeps the unused ones out of flash.
+
+**`map_mutable()` clears the configuration, and that is the point rather than a side effect.**
+A C caller cannot construct a `FrameMap<N, M>` and hand it to a constructor, so it builds one
+entry at a time after `init`. The map is exactly what `configure()` bounds-checked against the
+streams; leaving the pipeline configured through a mutation would let a caller widen a
+component past a sensor's width after the check passed, and the next `step()` would read off
+the end of a ring. `step()` returns `AM_ERR_UNCONFIGURED` until `configure()` runs again.
+
+**Sixteen mutants on the new surface, and two survived long enough to be findings.**
+
+The first is a **real defect the C path had and the C++ path did not**. `am_ring_*_init`
+setting `last_t` to zero rather than `-inf` survived the whole suite — and it would silently
+refuse the first sample of any device whose timebase is milliseconds since boot, which is most
+of them. `Stream<>::reset` had this right; nothing compared the two on a *fresh* ring, only on
+one that had already accepted a sample. A test now pushes `t = 0` and a negative `t` into both
+and demands they agree.
+
+The second is quieter and worth naming as a category: **zeroing `lost_frames` in the report
+survived**, because no case on this side of the boundary ever overflowed a reference ring.
+Every other field had a non-zero value somewhere and that one did not, so it was present,
+compared, and compared against zero. It is also the field that says input never reached the
+learner, which makes it a poor one to lose. Four-deep rings and ten arrivals between steps now
+lose thirty frames across five steps, and the mutant fails.
+
+The rest were caught: an equal or `+inf` timestamp accepted; overwrites uncounted; the ring
+wrapping a slot early; a mutated map leaving the pipeline configured; a policy code outside
+the enum cast in anyway; `step()` running unconfigured; a ring with null buffers accepted;
+staleness, the skip counters or `frozen` dropped; `updated` reported as `frames`; and
+`configure()`'s failure reported as success. One of them — accepting more streams than
+`AM_MAX_STREAMS` — was caught by the test binary dying rather than by an assertion, which is
+what a stack array overrun looks like and is the reason the bound is there.
+
+**The C caller test grew a second translation unit** that drives the whole composed handle:
+three caller-owned rings of different widths, a guarded six-feature adapter, an index frame
+map built one entry at a time, sixty pushes with a fault at the thirty-fifth, and a check that
+the guard froze and blocked the rest. That is the shape an integrator actually wires up, and
+none of it was reachable from C before this change.
+
+**A fixture that agreed while testing nothing, caught by three failing assertions at the
+end.** The first version of the pipeline ABI comparison mapped `(0, 0)` — the reference
+stream's own value, which is the *target* — into the regressor. The model read the answer off
+its own input, the residual sat at zero, and the fault injected to trip the guard did nothing.
+Everything else matched perfectly. The fixture is now three streams with the target outside
+the regressor, and the features interleaved across the two sensors so a transposed scatter
+would show.
 
 ## Standards
 

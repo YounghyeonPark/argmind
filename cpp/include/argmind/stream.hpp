@@ -162,6 +162,105 @@ struct StreamView {
     }
 };
 
+
+/// The bookkeeping half of a ring, separated from its storage.
+///
+/// This exists so that `push` has exactly **one** implementation. `Stream<T, Dim, Capacity>`
+/// keeps its shape in the type and the C ABI cannot -- a C caller owns its own buffers and
+/// their sizes are runtime values -- so without this there would be two copies of the
+/// monotonicity and finiteness refusals. `persist.hpp` already makes the argument that a
+/// refusal implemented in two places is one that will eventually disagree with itself, and it
+/// applies with more force here: the C side would be the copy, and the copy is the one nobody
+/// runs the parity harness against.
+///
+/// `dim` and `capacity` are parameters rather than template arguments, and that costs nothing
+/// where they are constants: `Stream::push` passes `Dim` and `Capacity`, this is `inline`, and
+/// the compiler folds them. Measured on x86-64 at `-Os`, `Stream<float,6,64>::push` is the
+/// same size before and after the extraction.
+template <typename T>
+struct Ring {
+    T* values = nullptr;         ///< `capacity * dim` elements
+    double* times = nullptr;     ///< `capacity`
+    uint8_t* valid = nullptr;    ///< `capacity`
+    int dim = 0;
+    int capacity = 0;
+    int head = 0;
+    int count = 0;
+    uint64_t dropped = 0;
+    double last_t = 0.0;
+};
+
+/// Append a sample, overwriting the oldest if full. False and no change on a timestamp that
+/// is not strictly increasing, or that is +inf.
+///
+/// The bookkeeping arrives as separate pointers rather than as a `Ring<T>*`, and that is a
+/// measured choice rather than a stylistic one. Taking the struct meant `Stream::push` had to
+/// materialise one and write four fields back, which cost **32 bytes of code** per
+/// instantiation at `-Os` on x86-64 -- 160 to 192 for `Stream<float,6,64>::push`. Passing the
+/// members directly brings it back to exactly the pre-refactor 160. The first version of this
+/// comment claimed the extraction was free before anything had been measured; it was not, and
+/// it took two attempts to make it so.
+///
+/// Note which check does what, because it differs from the Python's. `!(t > *last_t)` already
+/// refuses NaN (no comparison with NaN is true) and -inf (it cannot exceed the initial -inf).
+/// The finiteness test therefore exists for exactly one value: **+inf**, which passes the
+/// ordering test and then makes every subsequent push impossible, killing the stream silently.
+///
+/// The Python needed a separate check for a different reason: it wrote `t <= self._last_t`,
+/// which is False for NaN, so a NaN was *accepted* and poisoned `_last_t`. Same fix, different
+/// hole -- worth saying rather than implying the two sides had the same defect.
+template <typename T>
+inline bool ring_push(T* __restrict values_, double* __restrict times_,
+                      uint8_t* __restrict valid_, int dim, int capacity,
+                      int* __restrict head, int* __restrict count,
+                      uint64_t* __restrict dropped, double* __restrict last_t,
+                      double t, const T* __restrict values, bool valid) {
+    if (!(t > *last_t)) return false;
+    if (!is_finite(t)) return false;
+
+    if (*count == capacity) ++*dropped;
+    const int base = *head * dim;
+    for (int j = 0; j < dim; ++j) values_[base + j] = values[j];
+    times_[*head] = t;
+    valid_[*head] = valid ? 1 : 0;
+    // A modulo, where `slot()` twelve lines up deliberately avoids one. The two are not in
+    // conflict: this runs ONCE PER PUSH and that ran twice per element of every scan, so the
+    // rule there was about an O(count) loop and does not reach here. Measured, and the
+    // measurement is why it is a modulo: the conditional-add form costs 16 bytes more at -Os
+    // for `Stream<float,6,64>::push`, because a power-of-two `Capacity` folds the modulo to a
+    // single AND while the conditional stays a compare and a branch. The C ABI's ring, whose
+    // capacity is a runtime value, pays one integer division per push instead -- on the
+    // declared floor that is a single SDIV at the sensor's rate, which is not a cost worth
+    // making the compile-time path larger to avoid.
+    *head = (*head + 1) % capacity;
+    if (*count < capacity) ++*count;
+    *last_t = t;
+    return true;
+}
+
+/// The same append against a runtime-sized ring descriptor. One line, so that the C ABI and
+/// `Stream<>` cannot drift apart on what a push refuses.
+template <typename T>
+inline bool ring_push(Ring<T>* __restrict r, double t, const T* __restrict values,
+                      bool valid) {
+    return ring_push<T>(r->values, r->times, r->valid, r->dim, r->capacity, &r->head,
+                        &r->count, &r->dropped, &r->last_t, t, values, valid);
+}
+
+template <typename T>
+inline StreamView<T> ring_view(const Ring<T>& r) {
+    StreamView<T> s;
+    s.times = r.times;
+    s.values = r.values;
+    s.valid = r.valid;
+    s.dim = r.dim;
+    s.capacity = r.capacity;
+    s.head = r.head;
+    s.count = r.count;
+    s.dropped = r.dropped;
+    return s;
+}
+
 /// A fixed-capacity ring of samples from one source.
 template <typename T, int Dim, int Capacity>
 class Stream {
@@ -194,36 +293,21 @@ public:
     }
 
     /// Append a sample, overwriting the oldest if full. Returns false and changes nothing
-    /// on a non-monotonic timestamp.
+    /// on a timestamp that is not strictly increasing, or that is +inf.
     ///
     /// The Python raises here. This core has no exceptions, so it reports instead — but the
     /// refusal is the same and for the same reason: a sample arriving before one already
     /// stored means either a clock that went backwards or samples delivered out of order,
     /// and both break every alignment policy downstream. Failing at the source localises
     /// the bug instead of producing a subtly wrong fused estimate somewhere far away.
+    ///
+    /// Delegates to `ring_push` so that the C ABI's caller-owned ring and this one share a
+    /// single copy of that refusal. `Dim` and `Capacity` reach it as constants and fold:
+    /// measured at `-Os` on x86-64, this compiles to the same 160 bytes as the hand-written
+    /// loop it replaced.
     bool push(double t, const T* __restrict values, bool valid = true) {
-        // Note which check does what, because it differs from the Python's.
-        //
-        // `!(t > last_t_)` already refuses NaN (no comparison with NaN is true) and refuses
-        // -inf (it cannot exceed the initial -inf). The finiteness test below therefore
-        // exists for exactly one value: **+inf**, which passes the ordering test and then
-        // makes every subsequent push impossible, killing the stream silently.
-        //
-        // The Python needed a separate check for a different reason: it wrote
-        // `t <= self._last_t`, which is False for NaN, so a NaN was *accepted* and poisoned
-        // `_last_t`. Same fix, different hole — worth saying rather than implying the two
-        // sides had the same defect.
-        if (!(t > last_t_)) return false;
-        if (!is_finite(t)) return false;
-
-        if (count_ == Capacity) ++dropped_;
-        for (int j = 0; j < Dim; ++j) v_[head_ * Dim + j] = values[j];
-        t_[head_] = t;
-        valid_[head_] = valid ? 1 : 0;
-        head_ = (head_ + 1) % Capacity;
-        if (count_ < Capacity) ++count_;
-        last_t_ = t;
-        return true;
+        return ring_push<T>(v_, t_, valid_, Dim, Capacity, &head_, &count_, &dropped_,
+                            &last_t_, t, values, valid);
     }
 
     int size() const { return count_; }
@@ -249,17 +333,22 @@ public:
 
     double latest_t() const { return count_ ? last_t_ : -__builtin_inf(); }
 
-    StreamView<T> view() const {
-        StreamView<T> s;
-        s.times = t_;
-        s.values = v_;
-        s.valid = valid_;
-        s.dim = Dim;
-        s.capacity = Capacity;
-        s.head = head_;
-        s.count = count_;
-        s.dropped = dropped_;
-        return s;
+    StreamView<T> view() const { return ring_view<T>(ring()); }
+
+    /// This ring's storage and bookkeeping as a runtime descriptor. The same object the C
+    /// ABI hands around, so the two paths cannot diverge on what a ring *is*.
+    Ring<T> ring() const {
+        Ring<T> r;
+        r.values = const_cast<T*>(v_);
+        r.times = const_cast<double*>(t_);
+        r.valid = const_cast<uint8_t*>(valid_);
+        r.dim = Dim;
+        r.capacity = Capacity;
+        r.head = head_;
+        r.count = count_;
+        r.dropped = dropped_;
+        r.last_t = last_t_;
+        return r;
     }
 
     SampleRef<T> at(int age) const { return view().at(age); }
