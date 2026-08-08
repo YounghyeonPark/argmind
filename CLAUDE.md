@@ -57,6 +57,10 @@ them flattered the design. They cost real time to learn and they apply to anythi
 
 ## Conventions
 
+**Location: `C:\devrgmind`.** Moved off Google Drive on 2026-08-08 — Drive sync can corrupt a
+git repository by uploading partial writes or creating conflict copies of `.git/index` and loose
+objects. Backup belongs on a remote, not on a syncing filesystem.
+
 Windows, PowerShell primary; Python 3.14; git repo. `python -m pytest` before quoting any
 number. A tracked pre-commit hook in `.githooks/` runs the suite and blocks on failure —
 install once per clone with `git config core.hooksPath .githooks`.
