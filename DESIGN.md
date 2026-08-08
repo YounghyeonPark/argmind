@@ -190,12 +190,43 @@ library that may need to run on a Cortex-M — header bloat, compile times, and 
 requirement. Start with a minimal fixed-size type covering exactly what the adapters need.
 **Revisit if the target range turns out to exclude MCUs**, which is the one open question left.
 
-### Do not call a BLAS at these sizes
+### Do not call a BLAS at these sizes — which is not the same as forgoing hardware acceleration
 
 This is evidence, not preference. Measured in the parked project on the same class of problem:
 at n=80, **numpy/OpenBLAS ran 12.8× SLOWER than a plain C loop**, because the per-call dispatch
 overhead of a tuned BLAS exceeded the arithmetic it was asked to perform. Sensor-fusion matrices
-are smaller still. Write the loops.
+are smaller still, and the ratio gets worse as they shrink.
+
+**BLAS is a library, not silicon.** What is being avoided is the call cost — dispatch, runtime
+CPU feature detection, threading decisions, argument validation — not the SIMD units. Those are
+still used, reached a different way:
+
+| approach | suits | here |
+|---|---|---|
+| compiler auto-vectorisation of inlined fixed-size loops | small, fixed sizes | **this** — portable, zero dependency |
+| hand-written SIMD intrinsics | where auto-vectorisation measurably failed | later, and only where measured |
+| a BLAS | large matrices | no |
+| offload to an NPU/DSP/accelerator | large batched work | **no — see below** |
+
+With dimensions fixed at compile time the compiler can fully unroll, keep operands in registers,
+and emit NEON/AVX/SVE without runtime checks. Same silicon, no call overhead.
+
+**Offloading to a dedicated accelerator would lose here, and that is also measured.** The parked
+project found an invocation cost of ~0.8 µs, and any workload smaller than that is net-negative
+to offload — it recorded a case where the accelerator computed a tick 1.24× faster than the host
+core and then spent 0.8 µs being *asked*, ending below parity. A 6×6 recursive update sits well
+inside that regime. Run it on the CPU and use the CPU's vector units.
+
+**Auto-vectorisation is not guaranteed, so it must be verified rather than assumed.** Compilers
+give up on aliasing uncertainty, non-contiguous access, and reductions under strict
+floating-point semantics. Therefore: mark pointers `__restrict`, keep data contiguous and
+aligned, and **check `-fopt-info-vec` or the emitted assembly**. Assuming acceleration one does
+not have is exactly the class of error this project's standards exist to catch.
+
+One expectation to set: the tuned C measured in the parked project reached **9.3% of the
+machine's SIMD peak**, not 80%. At these sizes the work is operand-fetch-bound rather than
+compute-bound, so peak is unreachable — by any method, BLAS included. That is normal and not a
+sign of a bad implementation.
 
 ### What happens to the Python already written
 
