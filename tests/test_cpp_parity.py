@@ -542,14 +542,17 @@ def test_the_core_headers_build_freestanding(tmp_path):
     cxx = _compiler()
     if cxx is None:
         pytest.skip("no C++ compiler on PATH")
-    obj = tmp_path / "rls.o"
-    done = subprocess.run(
-        [cxx, "-std=c++17", "-O2", "-ffreestanding", "-fno-exceptions",
-         "-fno-rtti", "-Wall", "-Wextra", "-I", str(CPP / "include"),
-         "-c", "-x", "c++", str(CPP / "include" / "argmind" / "rls.hpp"),
-         "-o", str(obj)], capture_output=True, text=True)
-    assert done.returncode == 0, (
-        f"the core no longer builds freestanding:\n{done.stderr}")
+    # Every core header, not just rls.hpp. An audit found persist.hpp was in neither this
+    # gate nor the C99 one, so an accidental <cstring> in it would have gone unnoticed.
+    for header in ("mat.hpp", "rls.hpp", "guard.hpp", "persist.hpp"):
+        obj = tmp_path / (header.replace(".hpp", ".o"))
+        done = subprocess.run(
+            [cxx, "-std=c++17", "-O2", "-ffreestanding", "-fno-exceptions",
+             "-fno-rtti", "-Wall", "-Wextra", "-Wpedantic", "-I", str(CPP / "include"),
+             "-c", "-x", "c++", str(CPP / "include" / "argmind" / header),
+             "-o", str(obj)], capture_output=True, text=True)
+        assert done.returncode == 0, (
+            f"{header} no longer builds freestanding:\n{done.stderr}")
 
 
 def test_the_c_header_is_valid_c99(tmp_path):

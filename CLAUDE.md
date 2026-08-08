@@ -100,11 +100,15 @@ causal/non-causal declared), `argmind/adapt.py` (the `Adapter` contract and
 rollback, explicit recovery), `argmind/pipeline.py` (`FrameMap`, input gate, bounded `step()`),
 `argmind/persist.py` (two-slot atomic store, CRC, configuration fingerprint, declared cadence),
 `argmind/bench.py` (fixed workload, correctness digest, leak detector, regression gate), and
-`cpp/` (the C++ core: `mat.hpp`, `rls.hpp`, `guard.hpp`, the C ABI, the parity tool, 631
-self-checks).
-**The Python reference is complete and RLS is across to C++.** 185 Python tests pass; several
-exist to prove failures are visible rather than silent, and every suite was mutation-checked —
-seventy-five deliberate bugs, all caught.
+`cpp/` (the C++ core: `mat.hpp`, `rls.hpp`, `guard.hpp`, `persist.hpp`, the C ABI, two parity
+tools `xcheck`/`pcheck`, 679 self-checks).
+**The Python reference is complete; RLS, the guard and persistence are across to C++.**
+251 Python tests and 679 C++ checks pass; several exist to prove failures are visible
+rather than silent. Every suite is mutation-checked, and surviving mutants are recorded where
+they live rather than tallied here — including the ones that turn out to be **equivalent on a
+64-bit host**, a distinction worth keeping rather than rounding away. Cumulative counts are
+avoided on purpose: the two that used to sit in this paragraph were both wrong until an audit
+measured them.
 
 **The adapter contract, since everything after it fits into it** (full reasoning in DESIGN.md):
 state is one flat contiguous block so persistence is a copy and the C ABI needs no serialisation;
@@ -250,8 +254,52 @@ rejection identical (the observable that works is the *checkpoint* it stores); a
 sample in three never lets the fast average fall below the threshold. **A test written without
 checking that its bug would fail it is a guess.**
 
-**Next:** `Pipeline` and persistence in C++, then the on-target build once a cross-compiler and
-hardware exist.
+**Persistence is across** (`cpp/include/argmind/persist.hpp`). Format only — pack, validate,
+unpack, arbitrate two slots. It does **not** write flash: erase granularity, write width and
+the driver API are platform-specific, and guessing at them would be wrong everywhere.
+
+**Parity here is byte identity, not a tolerance**, because serialisation has no rounding.
+The sweeps are checked in so the figures are reproducible: 840 pack configurations, every
+single-bit flip in a 78-byte record (624), every truncation length (78), and 400 seeded
+fuzz blobs — zero differences. They also pin *check ordering* (version, dtype and length all
+before the CRC), which needed saying because a mutant moving the C++ version check after the
+CRC passed the whole suite: every test touching versioning repaired the CRC first.
+
+**The first real run of the sub-agent team happened here, and it earned its place.** Three
+findings neither the tests nor I had:
+
+- **The reference destroyed the record it had just loaded.** `Store.__init__` starts at slot 0
+  and `load()` updated only the sequence, so after an *odd* number of writes in the previous
+  session the first write after a reboot landed on the newest record. Measured: three saves
+  leave `{0: 3, 1: 2}`, and the next save destroys 3. Exactly the failure two slots prevent.
+- **A 32-bit overflow that cannot be reproduced on the host.** `count` is untrusted and
+  `size_t` is 32 bits on the target, so `count * sizeof(T)` can wrap. The CRC still catches
+  it, which made the safety depend on an unstated invariant. **The rule that host figures are
+  not target figures, applied to behaviour rather than timing.** Guarding `unpack` and not
+  `pack` was an omission a later audit caught — the same multiplication, unguarded, on the
+  path that writes.
+- **`select_newest` was compiled but never called by any binary the suite built**, and a bounds
+  check added to the parity *tool* had made the library's own clamp unreachable. Both closed.
+
+**And the auditor falsified my own summary of all this.** I had written "exactly one mutant
+survives anywhere"; it built a second one in minutes — moving the C++ version check after the
+CRC — which passes the whole suite and is not host-equivalent. It also found that the sweep
+figures I quoted came from a run that left no trace, that `persist.hpp` had **zero coverage**
+in the C++ unit suite and was in neither the freestanding nor the C99 gate, that `next_slot`
+had no caller anywhere, and four tests whose assertions could not fail. All fixed; the sweeps
+are checked in, and `persist.hpp` is now in the freestanding gate and the C++ unit suite —
+not the C99 gate, which covers the ABI header alone and cannot cover a C++ header that has no
+ABI surface.
+
+**Three operational lessons about the team**, all now in `.claude/agents/`: an agent ran
+`git checkout -- <file>` to undo a mutant and discarded uncommitted work (it recovered, but
+the instruction was missing and is now explicit); one report's cumulative mutant count was
+wrong while every finding in it was correct; and **the most valuable single run was the one
+aimed at my own prose**, which is the argument for running it before every commit that states
+a number rather than after.
+
+**Next:** `Pipeline`, `Stream` and `Aligner` in C++, then the on-target build once a
+cross-compiler and hardware exist.
 
 **Before any optimisation lands, a benchmark that can report a regression must exist.** An
 optimisation with no way to fail is not an optimisation, it is a hope.

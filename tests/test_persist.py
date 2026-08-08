@@ -434,3 +434,151 @@ def test_the_record_is_little_endian_whatever_the_host_is():
     # p0 defaults to 100.0; the first covariance element must be there in LE f4
     assert struct.pack("<f", 100.0) in blob
     assert unpack(blob).state.dtype.byteorder in ("=", "<")
+
+
+def test_a_reboot_never_writes_over_the_record_it_just_loaded(tmp_path):
+    """A bug found by the parity verifier while checking the C++ port, not by review.
+
+    `__init__` starts at slot 0 and `load()` used to update only the sequence number, so
+    after any ODD number of writes in the previous session the newest record sat in slot 0
+    and the first write after a reboot landed on top of it. Measured before the fix: three
+    saves leave sequences {slot 0: 3, slot 1: 2}, and the next save destroys 3.
+
+    That is precisely the failure two slots exist to prevent. The scheme's promise is that
+    an interrupted write can destroy at most the copy *not* in use; aimed at the copy that
+    is, it destroys a generation more than it should.
+    """
+    a = trained()
+    store = Store(tmp_path / "state")
+    for _ in range(3):                          # odd, so the newest lands back in slot 0
+        store.save(a)
+    seqs = {i: unpack(store.slot_path(i).read_bytes()).sequence for i in (0, 1)}
+    assert seqs == {0: 3, 1: 2}, f"the fixture no longer sets this up: {seqs}"
+
+    rebooted = Store(tmp_path / "state")
+    rec = rebooted.load(RecursiveLeastSquares(4, forgetting=0.99, dtype="f8"))
+    assert rec.sequence == 3
+    assert rebooted.live_slot == 0, "the record in use came from slot 0"
+
+    rebooted.save(a)
+    after = {i: unpack(store.slot_path(i).read_bytes()).sequence for i in (0, 1)}
+    assert 3 in after.values(), (
+        f"the write after the reboot destroyed the record it had just loaded: {after}")
+    assert after[1] == 4, f"the new record should have gone to slot 1: {after}"
+
+
+@pytest.mark.parametrize("writes", [1, 2, 3, 4, 5])
+def test_the_newest_record_survives_a_reboot_and_a_write_at_any_parity(tmp_path, writes):
+    """The general form. Whichever slot the newest record is in, the next write must go to
+    the other one — so a power failure during it leaves the newest intact.
+
+    Only the odd cases discriminate: after an even number of writes the newest record is
+    already in slot 1 and the naive slot-0 start happens to be right. They are kept because
+    a fix that broke the even case would be a different bug, and this is where it would
+    show. An audit pointed out that the name says "any parity" while half the cases cannot
+    fail — so the asymmetry is written down rather than implied.
+    """
+    a = trained()
+    store = Store(tmp_path / f"s{writes}")
+    for _ in range(writes):
+        store.save(a)
+    newest = max(unpack(store.slot_path(i).read_bytes()).sequence
+                 for i in (0, 1) if store.slot_path(i).exists())
+
+    rebooted = Store(tmp_path / f"s{writes}")
+    rebooted.load(RecursiveLeastSquares(4, forgetting=0.99, dtype="f8"))
+    target = rebooted._slot
+    held = unpack(store.slot_path(target).read_bytes()).sequence \
+        if store.slot_path(target).exists() else None
+    assert held != newest, (
+        f"after {writes} writes the next write targets slot {target}, which holds the "
+        f"newest record (sequence {newest})")
+
+
+def test_live_slot_reports_nothing_before_anything_is_written(tmp_path):
+    store = Store(tmp_path / "fresh")
+    assert store.live_slot == -1
+    store.load(RecursiveLeastSquares(4, forgetting=0.99, dtype="f8"))
+    assert store.live_slot == -1, "a first boot has no live slot to report"
+
+
+def test_a_corrupted_dtype_code_is_rejected():
+    """A gap a mutation check found: removing the check left `_CODE_DTYPE[code]` to raise
+    `KeyError` two lines later, and nothing in the suite distinguished that from the
+    `ValueError` the format contract promises. A caller catching `ValueError` around a
+    load — which is what every other refusal here raises — would not have caught it."""
+    import zlib
+    blob = bytearray(pack(trained()))
+    struct.pack_into("<B", blob, 16, 99)          # neither 4 nor 8
+    struct.pack_into("<I", blob, len(blob) - 4,
+                     zlib.crc32(bytes(blob[:-4])) & 0xFFFFFFFF)
+    with pytest.raises(ValueError, match="unknown dtype code"):
+        unpack(bytes(blob))
+
+
+def test_an_overlong_freeze_cause_is_truncated_rather_than_crashing():
+    """The cause length is one byte in the header, so `pack` truncates at 255. Without
+    that clamp `struct.pack` raises `struct.error` — a crash while trying to save state,
+    which is the worst possible moment for one. No test reached this path before, because
+    the only over-length case went through the C++ side."""
+    class Frozen:
+        def __init__(self, inner):
+            self.inner = inner
+            self.frozen = True
+            self.frozen_by = tuple(f"check_number_{i}" for i in range(40))
+        n_features = property(lambda s: s.inner.n_features)
+        n_outputs = property(lambda s: s.inner.n_outputs)
+        dtype = property(lambda s: s.inner.dtype)
+        state = property(lambda s: s.inner.state)
+
+    frozen = Frozen(trained())
+    assert len(",".join(frozen.frozen_by)) > 255, "the fixture no longer overflows"
+
+    rec = unpack(pack(frozen))
+    assert rec.frozen is True
+    assert len(",".join(rec.frozen_by)) <= 255
+    assert rec.frozen_by[0] == "check_number_0", "truncation lost the leading causes"
+
+
+def test_a_store_that_writes_before_it_reads_does_not_clobber_the_newest(tmp_path):
+    """The other half of the reboot bug, and the half whose fix had no test.
+
+    An audit found that deleting `_arbitrate_once()` from `save()` left the entire suite
+    green: `load()` was protected and `save()` was not. Writing without loading first is an
+    ordinary thing for a caller to do — a supervisor that only ever persists, say — and
+    before the fix it destroyed the newest record *and regressed the sequence*, so from
+    then on the older record won arbitration and the device silently reverted a generation.
+
+    Measured before the fix: three saves leave {0: 3, 1: 2}; a fresh Store calling save()
+    with no load() leaves {0: 1, 1: 2}.
+    """
+    a = trained()
+    store = Store(tmp_path / "state")
+    for _ in range(3):                          # odd, so the newest lands in slot 0
+        store.save(a)
+    assert {i: unpack(store.slot_path(i).read_bytes()).sequence
+            for i in (0, 1)} == {0: 3, 1: 2}, "the fixture no longer sets this up"
+
+    writer = Store(tmp_path / "state")           # a reboot that never loads
+    assert writer.live_slot == -1, "it has not looked at the slots yet"
+    seq = writer.save(a)
+
+    after = {i: unpack(store.slot_path(i).read_bytes()).sequence for i in (0, 1)}
+    assert 3 in after.values(), (
+        f"the write destroyed the newest record without ever reading it: {after}")
+    assert seq == 4, f"the sequence regressed to {seq} instead of advancing to 4"
+    assert after == {0: 3, 1: 4}, after
+
+
+def test_maybe_save_also_arbitrates_before_its_first_write(tmp_path):
+    """`maybe_save` goes through `save`, so the same protection has to reach it — a cadence
+    that writes on its first call must not aim that write at the live slot either."""
+    a = trained()
+    store = Store(tmp_path / "state")
+    for _ in range(3):
+        store.save(a)
+
+    writer = Store(tmp_path / "state", every_updates=10)
+    assert writer.maybe_save(a, updates=0) is True, "the first cadence call should write"
+    after = {i: unpack(store.slot_path(i).read_bytes()).sequence for i in (0, 1)}
+    assert after == {0: 3, 1: 4}, after

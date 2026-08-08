@@ -14,6 +14,7 @@
 
 #include "argmind/argmind.h"
 #include "argmind/guard.hpp"
+#include "argmind/persist.hpp"
 #include "argmind/rls.hpp"
 
 namespace {
@@ -598,6 +599,168 @@ void test_a_second_trip_does_not_roll_forward() {
     for (int i = 0; i < G::state_size; ++i) CHECK(g.state()[i] == first[i]);
 }
 
+
+// -- persist.hpp -------------------------------------------------------------
+//
+// These exist because an audit noticed `persist.hpp` had zero coverage in this file and
+// was not in the freestanding or C99 gates either. That is the same position `guard.hpp`
+// was in when eight of eighteen mutants survived: a parity harness can only test what its
+// tool exercises, and the tool cannot reach a header's own edge cases.
+
+void test_crc32_matches_the_known_vectors() {
+    // The reflected IEEE 802.3 CRC, which is what zlib computes. The check vector for
+    // "123456789" is 0xCBF43926 and is quoted in every catalogue of this polynomial; a
+    // non-reflected implementation of the same polynomial gives a different value, and
+    // that is precisely the substitution a port makes by accident.
+    const char nine[] = "123456789";
+    CHECK(argmind::persist::crc32(reinterpret_cast<const uint8_t*>(nine), 9) ==
+          0xCBF43926u);
+    CHECK(argmind::persist::crc32(nullptr, 0) == 0u);
+    const uint8_t zero = 0;
+    CHECK(argmind::persist::crc32(&zero, 1) == 0xD202EF8Du);
+}
+
+void test_the_byte_accessors_are_little_endian_whatever_the_host_is() {
+    uint8_t buf[4] = {0, 0, 0, 0};
+    argmind::persist::write_u32(buf, 0x11223344u);
+    CHECK(buf[0] == 0x44 && buf[1] == 0x33 && buf[2] == 0x22 && buf[3] == 0x11);
+    CHECK(argmind::persist::read_u32(buf) == 0x11223344u);
+
+    argmind::persist::write_u16(buf, 0xBEEFu);
+    CHECK(buf[0] == 0xEF && buf[1] == 0xBE);
+    CHECK(argmind::persist::read_u16(buf) == 0xBEEFu);
+}
+
+void test_pack_refuses_a_buffer_that_is_too_small() {
+    const double state[3] = {1.0, 2.0, 3.0};
+    uint8_t out[64];
+    const size_t need = argmind::persist::record_bytes(3, sizeof(double), 0);
+    CHECK(need == 26 + 24 + 4);
+    CHECK(argmind::persist::pack<double>(state, 3, 3, 1, 1, 0, false, nullptr, 0, out,
+                                         need - 1) == 0);
+    CHECK(argmind::persist::pack<double>(state, 3, 3, 1, 1, 0, false, nullptr, 0, out,
+                                         need) == need);
+    CHECK(argmind::persist::pack<double>(nullptr, 3, 3, 1, 1, 0, false, nullptr, 0, out,
+                                         need) == 0);
+    CHECK(argmind::persist::pack<double>(state, 3, 3, 1, 1, 0, false, nullptr, 0, nullptr,
+                                         need) == 0);
+}
+
+void test_pack_clamps_an_overlong_cause() {
+    // The length is one byte in the header, so anything past 255 is discarded. Reachable
+    // only from here: the parity tool bounds its own read long before this matters.
+    const float state[2] = {1.0f, 2.0f};
+    static char cause[600];
+    for (int i = 0; i < 600; ++i) cause[i] = 'x';
+    uint8_t out[1024];
+    const size_t n = argmind::persist::pack<float>(state, 2, 2, 1, 1, 0, true, cause, 600,
+                                                   out, sizeof(out));
+    CHECK(n == argmind::persist::record_bytes(2, sizeof(float), 255));
+    CHECK(out[17] == 255);
+}
+
+void test_unpack_reports_each_failure_distinctly() {
+    const float state[2] = {1.5f, -2.5f};
+    uint8_t out[256];
+    const size_t n = argmind::persist::pack<float>(state, 2, 2, 1, 9, 0x1234, false,
+                                                   nullptr, 0, out, sizeof(out));
+    CHECK(n > 0);
+
+    argmind::persist::Record<float> rec;
+    CHECK(argmind::persist::unpack<float>(out, n, &rec) == argmind::persist::Status::Ok);
+    CHECK(rec.sequence == 9);
+    CHECK(rec.fingerprint == 0x1234u);
+    CHECK(rec.count == 2);
+    CHECK(!rec.frozen);
+
+    CHECK(argmind::persist::unpack<float>(out, 8, &rec) ==
+          argmind::persist::Status::TooShort);
+
+    uint8_t bad[256];
+    argmind::copy<uint8_t, 256>(out, bad);
+    bad[0] = 'X';
+    CHECK(argmind::persist::unpack<float>(bad, n, &rec) ==
+          argmind::persist::Status::BadMagic);
+
+    argmind::copy<uint8_t, 256>(out, bad);
+    argmind::persist::write_u16(bad + 4, argmind::persist::FORMAT_VERSION + 1);
+    CHECK(argmind::persist::unpack<float>(bad, n, &rec) ==
+          argmind::persist::Status::FutureVersion);
+
+    // Note what the block above proves: the version is reported even though that edit
+    // also broke the CRC. Ordering matters — a newer writer is a more useful diagnosis
+    // than a corrupt slot — and a mutant moving that check after the CRC passed the whole
+    // Python-side suite before this existed.
+
+    argmind::copy<uint8_t, 256>(out, bad);
+    bad[16] = 7;  // neither 4 nor 8
+    CHECK(argmind::persist::unpack<float>(bad, n, &rec) ==
+          argmind::persist::Status::BadDtype);
+
+    argmind::copy<uint8_t, 256>(out, bad);
+    bad[30] ^= 0x01;
+    CHECK(argmind::persist::unpack<float>(bad, n, &rec) ==
+          argmind::persist::Status::CrcMismatch);
+
+    argmind::copy<uint8_t, 256>(out, bad);
+    argmind::persist::write_u32(bad + 22, 99);  // a count the length cannot match
+    CHECK(argmind::persist::unpack<float>(bad, n, &rec) ==
+          argmind::persist::Status::LengthMismatch);
+}
+
+void test_read_state_round_trips_and_refuses_a_mismatched_count() {
+    const double state[4] = {1.0, -0.0, 1e308, 4.5};
+    uint8_t out[256];
+    const size_t n = argmind::persist::pack<double>(state, 4, 2, 2, 1, 0, false, nullptr,
+                                                    0, out, sizeof(out));
+    argmind::persist::Record<double> rec;
+    CHECK(argmind::persist::unpack<double>(out, n, &rec) == argmind::persist::Status::Ok);
+
+    double back[4] = {0, 0, 0, 0};
+    CHECK(argmind::persist::read_state<double>(rec, back, 4));
+    for (int i = 0; i < 4; ++i) CHECK(back[i] == state[i]);
+    // -0.0 must survive as -0.0, which `==` cannot tell from +0.0; check the sign bit.
+    CHECK(__builtin_signbit(back[1]));
+
+    // The rejection no binary was exercising.
+    CHECK(!argmind::persist::read_state<double>(rec, back, 3));
+    CHECK(!argmind::persist::read_state<double>(rec, back, 5));
+}
+
+void test_select_newest_and_next_slot() {
+    const float state[2] = {1.0f, 2.0f};
+    uint8_t a[256];
+    uint8_t b[256];
+    const size_t na = argmind::persist::pack<float>(state, 2, 2, 1, 4, 0, false, nullptr,
+                                                    0, a, sizeof(a));
+    const size_t nb = argmind::persist::pack<float>(state, 2, 2, 1, 9, 0, false, nullptr,
+                                                    0, b, sizeof(b));
+    argmind::persist::Record<float> rec;
+    argmind::persist::Status sa;
+    argmind::persist::Status sb;
+
+    CHECK(argmind::persist::select_newest<float>(a, na, b, nb, &rec, &sa, &sb) == 1);
+    CHECK(rec.sequence == 9);
+    CHECK(sa == argmind::persist::Status::Ok && sb == argmind::persist::Status::Ok);
+    CHECK(argmind::persist::next_slot(1) == 0);
+
+    CHECK(argmind::persist::select_newest<float>(b, nb, a, na, &rec, &sa, &sb) == 0);
+    CHECK(rec.sequence == 9);
+    CHECK(argmind::persist::next_slot(0) == 1);
+
+    // A torn slot must lose to an intact one whichever side it is on.
+    CHECK(argmind::persist::select_newest<float>(b, 12, a, na, &rec, &sa, &sb) == 1);
+    CHECK(rec.sequence == 4);
+    CHECK(sa == argmind::persist::Status::TooShort);
+
+    // Neither valid: -1, and the next write starts at slot 0.
+    CHECK(argmind::persist::select_newest<float>(a, 4, b, 4, &rec, &sa, &sb) == -1);
+    CHECK(argmind::persist::next_slot(-1) == 0);
+
+    // Equal sequences resolve to slot 0, deterministically.
+    CHECK(argmind::persist::select_newest<float>(b, nb, b, nb, &rec, &sa, &sb) == 0);
+}
+
 }  // namespace
 
 int main() {
@@ -634,6 +797,14 @@ int main() {
     test_the_checkpoint_memory_is_declared_and_matches_the_ring();
     test_a_rejected_sample_is_not_a_guard_trip();
     test_a_second_trip_does_not_roll_forward();
+
+    test_crc32_matches_the_known_vectors();
+    test_the_byte_accessors_are_little_endian_whatever_the_host_is();
+    test_pack_refuses_a_buffer_that_is_too_small();
+    test_pack_clamps_an_overlong_cause();
+    test_unpack_reports_each_failure_distinctly();
+    test_read_state_round_trips_and_refuses_a_mismatched_count();
+    test_select_newest_and_next_slot();
 
     printf("%d checks, %d failures\n", checks, failures);
     return failures == 0 ? 0 : 1;

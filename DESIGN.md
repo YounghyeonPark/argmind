@@ -419,9 +419,12 @@ report, measured precision floor), `Guard` + `Bound` + `Divergence` (checks, fre
 rollback, explicit recovery), `Pipeline` + `FrameMap` (frame to regressor by index table,
 input gate, bounded `step()`), and `Store` (two-slot atomic persistence, CRC, configuration
 fingerprint, declared cadence), `bench` (fixed workload, correctness digest, leak detector,
-regression gate), and **the C++ core's RLS behind a C ABI, verified against the Python to about
-1.5 ulp**. 185 Python tests plus 521 C++ checks, several of which exist to prove failures are
-visible rather than silent.
+regression gate), and **the C++ core — RLS behind a C ABI, plus the guard and the record
+format as headers — verified against the Python to about 1.5 ulp and, for the record format,
+byte for byte**. (Only RLS has ABI entry points; `am_guard_*` and `am_persist_*` do not
+exist.)
+251 Python tests plus 679 C++ checks, several of which exist to prove failures are visible
+rather than silent.
 
 **What the pipeline settled:**
 
@@ -511,8 +514,8 @@ for a C ABI, a reference anchored to closed-form solutions rather than to itself
 that is already the persistence format, and a benchmark that can report a regression.
 
 **STARTED 2026-08-08** — `cpp/`, and RLS is across. `mat.hpp` (fixed-size primitives),
-`rls.hpp` (`Rls<T, N, M>`), `argmind.h` + `src/abi.cpp` (the C ABI), `tools/xcheck.cpp` (the
-parity tool), `tests/test_core.cpp` (521 checks the C++ side can make on its own), and a
+`rls.hpp` (`Rls<T, N, M>`), `argmind.h` + `src/abi.cpp` (the C ABI), `tools/xcheck.cpp` and `tools/pcheck.cpp` (the two
+parity tools), `tests/test_core.cpp` (679 checks the C++ side can make on its own), and a
 `CMakeLists.txt` that knows the cross-compilation recipe.
 
 **The C ABI had one real tension to resolve.** Compile-time dimensions are the reason C++ was
@@ -649,6 +652,86 @@ serialisation, and no Python-only conveniences in the core interface.
 
 **Before any of it is called fast:** the benchmark harness. It is listed after the adapters only
 because there must be something to measure — not because optimisation may start without it.
+
+### Persistence, across 2026-08-08
+
+`cpp/include/argmind/persist.hpp` and `cpp/tools/pcheck.cpp`. This is the piece the format
+was designed for: the Python writes files but models the raw-flash scheme faithfully because
+*this* side has no `os.replace`.
+
+**Scope is deliberately narrow.** The header does the format — pack, validate, unpack,
+arbitrate between two slots — and does **not** write to flash. Erase granularity, write
+width, wear levelling and the driver API are all platform-specific, and a library that
+guessed at them would be wrong everywhere.
+
+**Parity here is byte identity, not a tolerance**, because serialisation has no rounding.
+The suite runs the sweeps rather than sampling: **840 pack configurations** (two precisions
+× four shapes × seven sequence values including both ends of the range × five fingerprints ×
+three cause lengths), **every single-bit flip in a 78-byte record** (624 of them), **every
+truncation length** (78), and **400 seeded differential fuzz blobs**. Zero byte differences,
+zero status disagreements.
+
+Those numbers were quoted here once from an ephemeral sub-agent run — "1008 configurations,
+80,000 fuzz blobs" — against a harness that no longer existed, while the suite itself did
+eight configurations, one bit flip and two truncations. An audit caught it. **The sweeps are
+now checked in, so the figures above are reproducible by running the tests**, which was the
+only honest way to keep making the claim. Batching them through the parity tool rather than
+one process per case took the file from 53 seconds to under 4. The 4 is reproducible by
+running the file; the 53 was measured here against the unbatched version, which is not in the
+tree — a before-figure rather than something anyone can re-check.
+
+The bit-flip sweep pins *check ordering* as well as agreement: version, dtype and length are
+all checked before the CRC on both sides, so a flip in the version field reports
+`future_version` even though it has broken the CRC too. That ordering needed its own test —
+a mutant moving the C++ version check after the CRC passed the entire suite, because every
+test that touched versioning repaired the CRC first, which is exactly what removes the
+ordering from what they test.
+
+**Three things byte identity depends on.** The header is 26 unpadded bytes with
+`fingerprint` at offset 18 and `count` at 22, neither four-byte aligned, so nothing may be
+pointer-cast onto the buffer. The CRC is zlib's *reflected* IEEE 802.3, not the same
+polynomial unreflected — pinned by the standard check vector for `"123456789"`, 0xCBF43926.
+And element bytes are little-endian by declaration rather than by inheriting the host's;
+that last one **cannot be distinguished by comparing output on an x86 host**, so what the
+test pins is that a known value appears in the known order, and the limitation is stated in
+the test rather than implied away.
+
+**Reviewing this port found two bugs that neither the tests nor I had caught**, and both
+were outside the new header:
+
+- **The reference destroyed the record it had just loaded.** `Store.__init__` starts at slot
+  0 and `load()` updated only the sequence number, so after any *odd* number of writes in the
+  previous session the newest record sat in slot 0 and the first write after a reboot landed
+  on top of it. Measured: three saves leave `{slot 0: 3, slot 1: 2}` and the next save
+  destroys 3. That is exactly the failure two slots exist to prevent — the promise is that an
+  interrupted write destroys at most the copy *not* in use. `load()` now targets the other
+  slot and `live_slot` reports which one is live.
+
+  Fixing `load()` turned out to be half a fix, and an audit found the other half: a `Store`
+  that *writes before it reads* knows nothing about what is on disk either. Measured — three
+  saves leave `{0: 3, 1: 2}`, and a fresh `Store` calling `save()` without `load()` leaves
+  `{0: 1, 1: 2}`. The newest record is destroyed **and the sequence counter regresses**, so
+  from then on the older record wins arbitration and the device silently reverts a
+  generation. `save()` now arbitrates once if nothing has been loaded.
+- **A 32-bit overflow that cannot be reproduced on the host.** `count` is read straight out
+  of the record and `size_t` is 32 bits on the M4F floor, so `count * sizeof(T)` can wrap and
+  make a forged length look correct. The CRC still catches it in every case anyone could
+  construct — but that made the safety depend on an unstated invariant between two
+  independent checks. **This is the project's rule that host figures are not target figures,
+  applied to behaviour rather than to timing.** The guard added for `unpack` left the
+  identical multiplication in `pack` unguarded, which a later audit found: on a 32-bit target
+  `pack(count = 0x20000000)` at `T=double` wraps the total to 30 bytes, passes the
+  buffer-size check and then writes half a gigabyte past the caller's buffer. Both
+  directions are guarded now. Guarding one and not the other was an omission, not a
+  decision.
+
+**And two ways a suite can look complete while testing nothing.** A mutation check found
+`select_newest` was compiled but never called by any binary the suite built — the
+arbitration test decoded each slot separately and compared against the Python's own,
+separate, arbitration logic. And a bounds check added to the parity *tool* had made the
+library's own clamp unreachable, so a mutant removing it survived. Both are closed; the tool
+gained a mode that calls `select_newest` directly, and it now hands `pack` the true length
+and lets the library clamp.
 
 ## Standards
 

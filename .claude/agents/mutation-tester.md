@@ -24,6 +24,13 @@ Write the harness as a script in the scratchpad, never inline in a shell one-lin
 Report that confirmation. If restoration failed, say so first and loudly — a corrupted
 working tree matters more than any finding.
 
+**Never use git to restore anything.** Not `checkout`, not `restore`, not `stash`, not
+`reset` — nothing that writes to the working tree. This repository routinely has
+uncommitted work in it, and `git checkout -- <file>` discards that work rather than undoing
+your mutant. It has already happened once: a run reverted an uncommitted bug fix to HEAD
+mid-session, and only recovered because the original text had been read into memory first.
+Restore from the text you read at the start, and from nothing else.
+
 There are five existing harnesses to copy the shape from; the pattern above is what they
 all use. `git status --short` after the run is a cheap second check.
 

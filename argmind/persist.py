@@ -213,7 +213,7 @@ class Store:
     """
 
     __slots__ = ("path", "every_updates", "every_seconds", "_sequence",
-                 "_slot", "_last_updates", "_last_t", "_writes")
+                 "_slot", "_last_updates", "_last_t", "_writes", "_arbitrated")
 
     def __init__(self, path, every_updates: int | None = None,
                  every_seconds: float | None = None) -> None:
@@ -229,6 +229,7 @@ class Store:
         self._last_updates: int | None = None
         self._last_t: float | None = None
         self._writes = 0
+        self._arbitrated = False
 
     def slot_path(self, i: int) -> Path:
         return self.path.with_name(self.path.name + f".{i}")
@@ -245,9 +246,35 @@ class Store:
 
     # -- writing -------------------------------------------------------------
 
+    def _arbitrate_once(self) -> None:
+        """Find out which slot is live, if this instance has not already.
+
+        A `Store` that writes before it reads knows nothing about what is on disk: it
+        starts at slot 0 with sequence 0. Measured before this existed — three saves leave
+        {slot 0: 3, slot 1: 2}, and a fresh Store calling `save()` without `load()` leaves
+        {slot 0: 1, slot 1: 2}. The newest record is destroyed *and* the sequence counter
+        regresses, so from then on the older record wins arbitration and the device
+        silently reverts a generation.
+
+        `load()` fixing its own path was not enough, because writing without loading is a
+        perfectly ordinary thing for a caller to do.
+        """
+        if self._arbitrated:
+            return
+        self._arbitrated = True
+        rec, from_slot, _ = self._newest()
+        if rec is not None:
+            self._sequence = max(self._sequence, rec.sequence)
+            self._slot = 1 - from_slot
+
     def save(self, adapter: Adapter, fingerprint: int = 0) -> int:
-        """Write unconditionally to the slot not currently holding the newest
-        record, and return the sequence number written."""
+        """Write to the slot not holding the newest record, and return the sequence
+        number written.
+
+        On the first call this consults the slots if nothing has been loaded, so the
+        promise above holds for a `Store` that writes before it reads.
+        """
+        self._arbitrate_once()
         self._sequence += 1
         blob = pack(adapter, sequence=self._sequence, fingerprint=fingerprint)
         target = self.slot_path(self._slot)
@@ -294,14 +321,10 @@ class Store:
 
     # -- reading -------------------------------------------------------------
 
-    def read(self) -> tuple[Record | None, list[str]]:
-        """The newest valid record and why the rejected slots were rejected.
-
-        The reasons come back rather than being logged and forgotten: "it started
-        from scratch" and "it started from scratch because slot 1 had a CRC
-        mismatch" are very different mornings.
-        """
+    def _newest(self) -> tuple[Record | None, int, list[str]]:
+        """The newest valid record, the slot it came from, and why the others failed."""
         best: Record | None = None
+        best_slot = -1
         problems: list[str] = []
         for i in (0, 1):
             p = self.slot_path(i)
@@ -316,8 +339,31 @@ class Store:
                 problems.append(f"slot {i}: {exc}")
                 continue
             if best is None or rec.sequence > best.sequence:
-                best = rec
+                best, best_slot = rec, i
+        return best, best_slot, problems
+
+    def read(self) -> tuple[Record | None, list[str]]:
+        """The newest valid record and why the rejected slots were rejected.
+
+        The reasons come back rather than being logged and forgotten: "it started
+        from scratch" and "it started from scratch because slot 1 had a CRC
+        mismatch" are very different mornings.
+        """
+        best, _slot, problems = self._newest()
         return best, problems
+
+    @property
+    def live_slot(self) -> int:
+        """The slot this `Store` is treating as live, or -1 if it has not looked yet.
+
+        Deliberately does not go and read the slots: a fresh `Store` over a path full of
+        valid records reports -1 until it loads or saves, because until then it genuinely
+        does not know. An earlier docstring said "the slot holding the record currently in
+        use", which claimed knowledge this property does not have — and a first attempt at
+        fixing it changed the condition instead of the sentence, which then reported a live
+        slot after a load that found nothing.
+        """
+        return 1 - self._slot if self._sequence else -1
 
     def load(self, adapter: Adapter, fingerprint: int = 0,
              on_frozen: str = "thaw") -> Record | None:
@@ -332,7 +378,8 @@ class Store:
         if on_frozen not in ("thaw", "keep", "refuse"):
             raise ValueError(f"on_frozen must be thaw/keep/refuse, got "
                              f"{on_frozen!r}")
-        rec, _ = self.read()
+        self._arbitrated = True
+        rec, from_slot, _ = self._newest()
         if rec is None:
             return None
 
@@ -356,6 +403,12 @@ class Store:
 
         adapter.load_state(rec.state)
         self._sequence = max(self._sequence, rec.sequence)
+        # Write to the OTHER slot next. Without this the first write after a reboot lands
+        # on the record just loaded, because __init__ starts at slot 0 and nothing moved
+        # it — so after any odd number of writes in the previous session, the newest
+        # record is the one destroyed. That is precisely the failure two slots exist to
+        # prevent: an interrupted write must never be aimed at the copy in use.
+        self._slot = 1 - from_slot
         if rec.frozen and on_frozen == "keep":
             freeze = getattr(adapter, "freeze", None)
             if freeze is None:

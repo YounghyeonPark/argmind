@@ -64,6 +64,13 @@ if(NOT CMAKE_CROSSCOMPILING)
     target_include_directories(argmind_xcheck PRIVATE include)
     target_compile_options(argmind_xcheck PRIVATE -fno-exceptions -fno-rtti)
 
+    # The record-format parity tool. Every byte-identity claim rests on it, and it was
+    # missing here while the pytest path built it directly with g++ — so the checked-in
+    # build description had stopped covering the tree.
+    add_executable(argmind_pcheck tools/pcheck.cpp)
+    target_include_directories(argmind_pcheck PRIVATE include)
+    target_compile_options(argmind_pcheck PRIVATE -fno-exceptions -fno-rtti)
+
     enable_testing()
     add_test(NAME core COMMAND argmind_test_core)
 endif()
