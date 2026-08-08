@@ -1750,6 +1750,18 @@ void test_the_pipeline_abi_agrees_with_the_header_bit_for_bit() {
         CHECK(got.n_staleness == want.n_staleness);
         CHECK(bits_equal(got.t, want.t));
         CHECK(bits_equal(got.worst_staleness, want.worst_staleness));
+        // The output VALUES, not just the flag. Zeroing them in the shim survived a
+        // mutation run: every test compared `has_prediction` and nothing compared what it
+        // pointed at. Bit-exact here because it is the same C++ on both sides and float to
+        // double is lossless -- unlike the Python comparison, where theta itself differs.
+        CHECK(got.has_prediction == (want.has_prediction ? 1 : 0));
+        if (got.has_prediction) {
+            CHECK(bits_equal(got.prediction[0],
+                             static_cast<double>(want.prediction[0])));
+            CHECK(got.prediction[0] != 0.0);   // or the comparison above is 0 == 0
+        }
+        CHECK(got.n_outputs == 1);
+        CHECK(got.prediction[1] == 0.0 && got.prediction[2] == 0.0);
         for (int i = 0; i < AM_SKIP_COUNT; ++i) CHECK(got.skipped[i] == want.skipped[i]);
         for (int i = 0; i < 3; ++i) {
             CHECK(bits_equal(got.staleness[i], want.staleness[i]));
@@ -1929,6 +1941,174 @@ void test_the_pipeline_abi_refuses_at_the_boundary() {
     CHECK(am_pipe_f32_6_1_state(nullptr) == nullptr);
 }
 
+void test_a_fast_output_can_run_on_a_slow_target() {
+    // The configuration low latency asks for: the FASTEST stream as the reference, so a
+    // frame -- and an output -- exists at every fast sample. Hold-last then hands the same
+    // slow measurement to the learner over and over, which is not merely wasteful: RLS
+    // weights it once per frame, so P shrinks faster than the information justifies.
+    //
+    // Driven through the ABI because that is where an integrator meets it, and against a
+    // second pipeline with the gate off, so the difference is a measurement rather than an
+    // assertion about one run.
+    //
+    // The fast ring is FIVE wide and the five features are its five components. The first
+    // version of this fixture used one component five times, which leaves four directions of
+    // the regressor unexcited: their P entries sit at p0 forever and dominate tr(P) at 400
+    // on both sides, so the comparison read 1.001 and showed nothing. A ring's width is a
+    // runtime value on this side of the ABI, which is what makes the fix a one-line change.
+    static float fv[64 * 5];
+    static float sv[64];
+    static double ft[64], st[64];
+    static uint8_t fk[64], sk[64];
+    am_ring_f32 rings[2];
+    CHECK(am_ring_f32_init(&rings[0], fv, ft, fk, 5, 64) == AM_OK);
+    CHECK(am_ring_f32_init(&rings[1], sv, st, sk, 1, 64) == AM_OK);
+
+    static am_rls_storage on[AM_PIPE_F32_6_1_MAX_BYTES / sizeof(am_rls_storage)];
+    static am_rls_storage off[AM_PIPE_F32_6_1_MAX_BYTES / sizeof(am_rls_storage)];
+    for (int which = 0; which < 2; ++which) {
+        void* p = which ? static_cast<void*>(on) : static_cast<void*>(off);
+        CHECK(am_pipe_f32_6_1_init(p, AM_PIPE_F32_6_1_MAX_BYTES, 1.0f, 100.0f,
+                                   AM_POLICY_HOLD_LAST, 0.0, 0) == AM_OK);
+        for (int i = 0; i < 5; ++i) CHECK(am_pipe_f32_6_1_add_feature(p, 0, i) == AM_OK);
+        CHECK(am_pipe_f32_6_1_add_target(p, 1, 0) == AM_OK);
+        CHECK(am_pipe_f32_6_1_set_constant(p, 1) == AM_OK);
+        CHECK(am_pipe_f32_6_1_set_require_fresh_target(p, which) == AM_OK);
+        CHECK(am_pipe_f32_6_1_configure(p, rings, 2) == AM_OK);
+    }
+
+    uint32_t frames = 0, updated_on = 0, updated_off = 0, gated = 0, outputs = 0;
+    int measurements = 0;
+    uint32_t seed = 12345u;
+    for (int k = 1; k <= 200; ++k) {
+        float x[5];
+        for (int j = 0; j < 5; ++j) {
+            seed = seed * 1664525u + 1013904223u;
+            x[j] = static_cast<float>(static_cast<int32_t>(seed >> 9) % 1000) / 500.0f -
+                   1.0f;
+        }
+        CHECK(am_ring_f32_push(&rings[0], k / 10.0, x, 1) == AM_OK);
+        if (k % 10 == 0) {
+            ++measurements;
+            const float y[1] = {2.0f + 0.01f * k};
+            CHECK(am_ring_f32_push(&rings[1], k / 10.0, y, 1) == AM_OK);
+        }
+        am_step_report a, b;
+        CHECK(am_pipe_f32_6_1_step(off, rings, 2, &a) == AM_OK);
+        CHECK(am_pipe_f32_6_1_step(on, rings, 2, &b) == AM_OK);
+        CHECK(a.frames == b.frames);          // the gate changes learning, not framing
+        frames += a.frames;
+        updated_off += a.updated;
+        updated_on += b.updated;
+        gated += b.skipped[AM_SKIP_STALE_TARGET];
+        // ...and the gated pipeline still produces an output on every frame it saw. That is
+        // the whole point: refusing to LEARN from a sample is not a reason to stop
+        // PREDICTING on it.
+        CHECK(a.has_prediction == b.has_prediction);
+        if (b.has_prediction) ++outputs;
+    }
+
+    CHECK(measurements == 20);
+    CHECK(frames == 191u);
+    CHECK(updated_off == 191u);             // one adaptation per frame...
+    CHECK(updated_on == 20u);               // ...against one per measurement
+    CHECK(gated == frames - 20u);
+    CHECK(outputs == 191u);                 // an output on every frame either way
+
+    // The cost of the reuse as a number rather than an adjective: the covariance the
+    // reusing pipeline ends on is measured 12.1x smaller for exactly the same twenty
+    // measurements. Asserted at 5x so ordinary drift does not fail it while a collapse back
+    // to parity would.
+    double trace_off = 0.0, trace_on = 0.0;
+    const float* s_off = am_pipe_f32_6_1_state(off);
+    const float* s_on = am_pipe_f32_6_1_state(on);
+    for (int i = 0; i < 6; ++i) {
+        trace_off += static_cast<double>(s_off[6 + i * 6 + i]);
+        trace_on += static_cast<double>(s_on[6 + i * 6 + i]);
+    }
+    CHECK(trace_on > 5.0 * trace_off);
+}
+
+void test_the_first_target_is_learned_even_at_time_zero() {
+    // Found by a mutation check. `target_is_new()` starts `changed` at `!have_last_target_`,
+    // and dropping that survived everything -- because the remembered stamp starts at 0.0
+    // and every fixture's first target sample had a non-zero timestamp, so the inequality
+    // caught it anyway.
+    //
+    // The one case it does not catch is a first target sample at EXACTLY t = 0, which the
+    // gate would then call stale and never learn from. Zero is not exotic: it is the first
+    // tick of any device whose timebase is milliseconds since boot. This is the second
+    // finding in this session with that shape -- `am_ring_*_init` had it too -- which is
+    // reason enough to test the zero case rather than assume it is unreachable.
+    static float fv[8], sv[8];
+    static double ft[8], st[8];
+    static uint8_t fk[8], sk[8];
+    am_ring_f32 rings[2];
+    CHECK(am_ring_f32_init(&rings[0], fv, ft, fk, 1, 8) == AM_OK);
+    CHECK(am_ring_f32_init(&rings[1], sv, st, sk, 1, 8) == AM_OK);
+
+    static am_rls_storage store[AM_PIPE_F32_6_1_MAX_BYTES / sizeof(am_rls_storage)];
+    CHECK(am_pipe_f32_6_1_init(store, sizeof(store), 0.99f, 10.0f, AM_POLICY_HOLD_LAST,
+                               0.0, 0) == AM_OK);
+    for (int i = 0; i < 5; ++i) CHECK(am_pipe_f32_6_1_add_feature(store, 0, 0) == AM_OK);
+    CHECK(am_pipe_f32_6_1_add_target(store, 1, 0) == AM_OK);
+    CHECK(am_pipe_f32_6_1_set_constant(store, 1) == AM_OK);
+    CHECK(am_pipe_f32_6_1_set_require_fresh_target(store, 1) == AM_OK);
+    CHECK(am_pipe_f32_6_1_configure(store, rings, 2) == AM_OK);
+
+    const float x[1] = {1.5f};
+    const float y[1] = {3.0f};
+    CHECK(am_ring_f32_push(&rings[1], 0.0, y, 1) == AM_OK);   // the target, at t = 0
+    CHECK(am_ring_f32_push(&rings[0], 0.0, x, 1) == AM_OK);   // and the reference instant
+    am_step_report r;
+    CHECK(am_pipe_f32_6_1_step(store, rings, 2, &r) == AM_OK);
+    CHECK(r.frames == 1u);
+    CHECK(r.updated == 1u);
+    CHECK(r.skipped[AM_SKIP_STALE_TARGET] == 0u);
+
+    // ...and the very next frame, on the same target, is gated as it should be.
+    CHECK(am_ring_f32_push(&rings[0], 0.1, x, 1) == AM_OK);
+    CHECK(am_pipe_f32_6_1_step(store, rings, 2, &r) == AM_OK);
+    CHECK(r.frames == 1u);
+    CHECK(r.updated == 0u);
+    CHECK(r.skipped[AM_SKIP_STALE_TARGET] == 1u);
+}
+
+void test_the_freshness_gate_costs_nothing_where_it_cannot_help() {
+    // Two edges worth pinning, because getting either backwards would silently halve the
+    // learning rate of an ordinary configuration.
+    //
+    // If the target rides the REFERENCE stream, every frame carries a new target by
+    // construction and the gate can never fire.
+    static float v[32];
+    static double t[32];
+    static uint8_t k[32];
+    am_ring_f32 rings[1];
+    CHECK(am_ring_f32_init(&rings[0], v, t, k, 1, 32) == AM_OK);
+    static am_rls_storage store[AM_PIPE_F32_6_1_MAX_BYTES / sizeof(am_rls_storage)];
+    CHECK(am_pipe_f32_6_1_init(store, sizeof(store), 0.99f, 10.0f, AM_POLICY_HOLD_LAST,
+                               0.0, 0) == AM_OK);
+    for (int i = 0; i < 5; ++i) CHECK(am_pipe_f32_6_1_add_feature(store, 0, 0) == AM_OK);
+    CHECK(am_pipe_f32_6_1_add_target(store, 0, 0) == AM_OK);
+    CHECK(am_pipe_f32_6_1_set_constant(store, 1) == AM_OK);
+    CHECK(am_pipe_f32_6_1_set_require_fresh_target(store, 1) == AM_OK);
+    CHECK(am_pipe_f32_6_1_configure(store, rings, 1) == AM_OK);
+
+    uint32_t frames = 0, updated = 0, gated = 0;
+    for (int i = 1; i <= 20; ++i) {
+        const float x[1] = {static_cast<float>(i)};
+        CHECK(am_ring_f32_push(&rings[0], double(i), x, 1) == AM_OK);
+        am_step_report r;
+        CHECK(am_pipe_f32_6_1_step(store, rings, 1, &r) == AM_OK);
+        frames += r.frames;
+        updated += r.updated;
+        gated += r.skipped[AM_SKIP_STALE_TARGET];
+    }
+    CHECK(frames == 20u);
+    CHECK(updated == 20u);
+    CHECK(gated == 0u);
+}
+
 void test_the_declared_pipeline_bounds_are_bounds_and_not_fantasies() {
     CHECK(am_pipe_f32_6_1_bytes() <= AM_PIPE_F32_6_1_MAX_BYTES);
     CHECK(am_pipe_f64_6_1_bytes() <= AM_PIPE_F64_6_1_MAX_BYTES);
@@ -2026,6 +2206,9 @@ int main() {
     test_the_pipeline_abi_carries_lost_frames_across();
     test_changing_the_map_forces_a_reconfigure();
     test_the_pipeline_abi_refuses_at_the_boundary();
+    test_a_fast_output_can_run_on_a_slow_target();
+    test_the_first_target_is_learned_even_at_time_zero();
+    test_the_freshness_gate_costs_nothing_where_it_cannot_help();
     test_the_declared_pipeline_bounds_are_bounds_and_not_fantasies();
     test_the_declared_ring_memory_matches_the_shape();
 

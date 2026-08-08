@@ -107,7 +107,7 @@ rollback, explicit recovery), `argmind/pipeline.py` (`FrameMap`, input gate, bou
 pipeline. `argmind/bench.py` has no C++ counterpart and is not getting one: it is a host
 measurement harness, and DESIGN.md already records that Python timings are not a baseline the
 C++ can be compared against.
-307 Python tests and 3351 C++ checks pass; several exist to prove failures are visible
+322 Python tests and 4597 C++ checks pass; several exist to prove failures are visible
 rather than silent. Every suite is mutation-checked, and surviving mutants are recorded where
 they live rather than tallied here — including the ones that turn out to be **equivalent on a
 64-bit host**, a distinction worth keeping rather than rounding away. Cumulative counts are
@@ -416,6 +416,42 @@ sampled *inside* `step()`, so advancing the aligner between calls cannot reach t
 The run did find a real gap next door: using the aligner's *absolute* counters instead of the
 step's delta survived the whole suite, because no case had both declined instants and an
 overflowing ring in one run. One was added and it is caught.
+
+**Low latency and honest weighting pull against each other, and both halves are now
+measured.** With the fastest stream as the reference — which is what latency wants —
+`hold_last` and `drop_if_stale` add **0 ms**; `nearest` **degenerates to `hold_last`** (same
+sample on all 190 frames, since its future sample has not arrived); and `interpolate` builds
+**zero frames**, not merely late ones, because bracketing needs a sample after the instant and
+`drain` consumes the instant anyway. So the answer is `hold_last` + fastest reference, and
+`step()` waits for nothing: output latency is the caller's call cadence.
+
+The cost that hides: a slow target is relearned once per fast frame — 191 frames from 20
+measurements — and `tr(P)` ends 10x (Python) to 12x (C++) below where that information should
+leave it. **`max_stale_s` cannot fix it**: it is a threshold on *time* where the question is
+*identity*. Measured, 0.10 s adapts exactly 20 times at ±20 ms of jitter and 32 times without
+it — no value is right for both. **`require_fresh_target`** compares the target sample's own
+timestamp instead and needs no number; off by default. Edges tested: `interpolate` (target
+genuinely new every frame), target-on-the-reference (gate cannot fire), and a first target at
+**exactly t = 0** — the second finding this session with that shape, after `am_ring_*_init`.
+
+**`StepReport` carries the output now**, present even on a frame the gate refused: refusing to
+*learn* is not a reason to stop *predicting*, and that separation is what lets a fast output
+run on a slow target. Extraction moved ahead of the input gates in the reference to match the
+port. The buffer is preallocated and read-only, with `sys.getallocatedblocks` over 500 steps
+proving no per-step allocation crept back in.
+
+**Comparing that output took three attempts at the metric.** Bits fail (θ carries rls.hpp's
+declared divergences). Element-wise relative fails at **217 ulp at f64**, on a step where the
+prediction is near zero — against the run's own scale it is **14.0 ulp**. Third quantity in
+this project to need that treatment, after the state block and the a posteriori residual:
+**whenever a quantity can pass through zero, a relative comparison measures the cancellation
+rather than the implementations.** A NaN feature yields a NaN output on both sides, which is
+the honest answer rather than a stale number.
+
+Fifteen mutants, thirteen caught. One survivor was *equivalent* — a redundant initialiser in
+`target_is_new()` — and was deleted rather than recorded. The other was real: zeroing the
+prediction in the ABI shim survived, because everything compared `has_prediction` and nothing
+compared what it pointed at.
 
 **Next:** the on-target build. Checked on 2026-08-09: no `arm-none-eabi-*`, no clang, no
 qemu on this machine, so it cannot start and no on-target figure is quoted. Flash and RAM must

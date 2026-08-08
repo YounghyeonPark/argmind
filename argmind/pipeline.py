@@ -168,10 +168,10 @@ class StepReport:
         newest one at or before the reference instant. A reference sample that
         is overwritten, by contrast, is a frame that will never exist.
     skipped : dict[str, int]
-        Why the rest did not, by reason. Stable tokens: ``stale``, ``invalid``
-        come from the pipeline's input gate; ``frozen``, ``guard:<check>``,
-        ``nonfinite_input``, ``nonpositive_denominator`` come back from the
-        adapter or the guard.
+        Why the rest did not, by reason. Stable tokens: ``stale``, ``invalid``,
+        ``stale_target`` come from the pipeline's input gate; ``frozen``,
+        ``guard:<check>``, ``nonfinite_input``, ``nonpositive_denominator`` come
+        back from the adapter or the guard.
     frozen : bool
         Is adaptation frozen *now*. A guarded pipeline that froze mid-step
         reports True even though earlier frames in the same step applied.
@@ -185,6 +185,21 @@ class StepReport:
         alarm on; the dict above is for working out which stream to blame.
     t : float | None
         Reference time of the last frame, or None if there were none.
+    prediction : np.ndarray | None
+        The model's output for the **most recent frame**, computed after every
+        adaptation this step applied — so it is the current best estimate for the
+        newest input, which is what a control loop wants back.
+
+        Present whenever a frame existed, including one the input gate refused to
+        learn from. That is the point: refusing to *learn* from a sample is not a
+        reason to stop *predicting* on it, and separating the two is what lets a
+        fast output run on a slow target.
+
+        **The array is preallocated and overwritten by the next `step()`.** It is
+        handed out read-only so the overwrite cannot be mistaken for a caller's
+        own copy. A fresh array per step would allocate once per step, which
+        `bench.memory_growth` is built to notice and `Adapter.state` was already
+        fixed for.
     """
 
     frames: int = 0
@@ -196,6 +211,7 @@ class StepReport:
     staleness_s: dict[str, float] = field(default_factory=dict)
     worst_staleness_s: float = 0.0
     t: float | None = None
+    prediction: np.ndarray | None = None
 
     @property
     def idle(self) -> bool:
@@ -233,6 +249,32 @@ class Pipeline:
         Skip adaptation on frames where any contributing sensor set its own
         validity flag false. Default True — the sensor said the reading was bad
         and it is the only thing in the system that knows.
+    require_fresh_target : bool
+        Adapt only when the target sample has actually changed since the last
+        attempt. Default False, which preserves the behaviour every earlier
+        version had.
+
+        This exists because low latency and honest weighting pull in opposite
+        directions. Latency wants the *fastest* stream as the reference, so a
+        frame — and an output — exists at every fast sample. But when the target
+        rides a slower stream, hold-last then hands the same measurement to the
+        learner over and over: measured, a 10 Hz reference against a 1 Hz target
+        produced 191 frames from 20 measurements, each used up to ten times. RLS
+        weights that measurement ten times, so ``P`` shrinks faster than the
+        information justifies and the covariance ends up over-confident.
+
+        The obvious workaround is ``max_stale_s``, and it is a *time* threshold
+        rather than an identity check, so it breaks under jitter in both
+        directions: measured with ±20 ms of jitter, a 0.05 s gate adapted 8 times
+        out of 20 and a 0.15 s gate adapted 25.
+
+        Freshness is decided on the **sample timestamp** of every stream a target
+        component comes from, which is exactly the identity ``max_stale_s`` was
+        standing in for. Two notes on the edges. Under ``interpolate`` the target
+        is synthesised at the reference instant, so it is new every frame and this
+        gate never fires — correctly, since the value really does differ. And if
+        the target rides the reference stream itself there is a new target in
+        every frame, so the gate costs nothing and does nothing.
     allow_non_causal : bool
         `nearest` and `interpolate` consult samples from after the reference
         instant. That is legitimate offline and a correctness bug in a causal
@@ -241,13 +283,15 @@ class Pipeline:
     """
 
     __slots__ = ("streams", "aligner", "adapter", "frame_map", "max_stale_s",
-                 "require_valid", "_x", "_y", "_stats", "_last_report",
-                 "_arrived")
+                 "require_valid", "require_fresh_target", "_x", "_y", "_stats",
+                 "_last_report", "_arrived", "_pred", "_target_streams",
+                 "_last_target_t")
 
     def __init__(self, streams, aligner: Aligner, adapter: Adapter,
                  frame_map: FrameMap, max_stale_s: float | None = None,
                  require_valid: bool = True,
-                 allow_non_causal: bool = False) -> None:
+                 allow_non_causal: bool = False,
+                 require_fresh_target: bool = False) -> None:
         streams = list(streams)
         self.streams = {s.name: s for s in streams}
         if len(self.streams) != len(streams):
@@ -281,10 +325,20 @@ class Pipeline:
         self.frame_map = frame_map
         self.max_stale_s = max_stale_s
         self.require_valid = bool(require_valid)
+        self.require_fresh_target = bool(require_fresh_target)
+        # Resolved once: which streams a target component comes from. Order does not
+        # matter here, only membership, so a tuple of unique names is enough.
+        self._target_streams = tuple(dict.fromkeys(
+            name for name, _ in frame_map.slots[1]))
+        self._last_target_t: tuple[float, ...] | None = None
 
         # Preallocated. Extracting a regressor from a frame allocates nothing.
         self._x = np.zeros(adapter.n_features, dtype=adapter.dtype)
         self._y = np.zeros(adapter.n_outputs, dtype=adapter.dtype)
+        # Preallocated for the same reason as _x and _y: a fresh array per step is an
+        # allocation per step, and bench.memory_growth exists to catch exactly that.
+        self._pred = np.zeros(adapter.n_outputs, dtype=adapter.dtype)
+        self._pred.flags.writeable = False
         self._stats = {"steps": 0, "frames": 0, "updated": 0, "lost_frames": 0}
         self._last_report = StepReport()
         # Starts at zero, not at what the stream already holds: samples pushed
@@ -365,6 +419,11 @@ class Pipeline:
             staleness = frame.staleness_s
             worst = max(worst, frame.worst_staleness_s)
 
+            # Extracted for EVERY frame, before the gates, so that a frame the learner
+            # refuses still produces an output. The C++ port already did it in this order;
+            # the two were unobservably different until `prediction` gave `_x` a reader.
+            self._extract(frame)
+
             # Input gate, before the learner sees anything.
             if self.max_stale_s is not None and frame.worst_staleness_s > self.max_stale_s:
                 note("stale")
@@ -372,8 +431,20 @@ class Pipeline:
             if self.require_valid and not frame.all_valid():
                 note("invalid")
                 continue
+            if self.require_fresh_target:
+                # The sample's own timestamp, recovered from the signed staleness the
+                # aligner reports: t_sample = t_reference + staleness.
+                stamps = tuple(frame.t + frame.staleness_s[name]
+                               for name in self._target_streams)
+                if stamps == self._last_target_t:
+                    note("stale_target")
+                    continue
+                # Recorded on the ATTEMPT, not on success. A target the adapter then
+                # rejects is not retried on the next nine frames: it would be rejected
+                # nine more times and the counters would say nine faults where there was
+                # one bad measurement.
+                self._last_target_t = stamps
 
-            self._extract(frame)
             report = self.adapter.update(self._x, self._y)
             if report.applied:
                 updated += 1
@@ -382,6 +453,17 @@ class Pipeline:
             for name in getattr(report, "tripped", ()):
                 tripped.append(name)
 
+        # The output, once per step rather than once per frame: the newest frame's
+        # regressor against the parameters this step finished with. O(n*m) — six
+        # multiply-adds at the design driver's shape, which is not a cost worth making
+        # optional.
+        prediction = None
+        if frames:
+            self._pred.flags.writeable = True
+            self._pred[:] = self.adapter.predict(self._x)
+            self._pred.flags.writeable = False
+            prediction = self._pred
+
         self._stats["steps"] += 1
         self._stats["frames"] += len(frames)
         self._stats["updated"] += updated
@@ -389,7 +471,8 @@ class Pipeline:
         self._last_report = StepReport(
             frames=len(frames), updated=updated, lost_frames=lost, skipped=skipped,
             frozen=self.frozen, frozen_by=tuple(tripped),
-            staleness_s=dict(staleness), worst_staleness_s=worst, t=last_t)
+            staleness_s=dict(staleness), worst_staleness_s=worst, t=last_t,
+            prediction=prediction)
         return self._last_report
 
     def predict(self, x) -> np.ndarray:

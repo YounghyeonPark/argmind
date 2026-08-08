@@ -12,6 +12,7 @@ non-causal policy that must not be usable by accident, and a frame map that must
 refuse to build a regressor that does not match the adapter.
 """
 
+import sys
 import numpy as np
 import pytest
 
@@ -449,3 +450,229 @@ def test_stream_storage_precision_costs_a_factor_of_a_few_not_orders():
     assert err_f4 < 20.0 * err_f8, (
         f"f4 storage cost {err_f4 / err_f8:.1f}x, far outside the 2.2-6.7x "
         "measured range; something other than storage precision has changed")
+
+
+# ---------------------------------------------------------------------------
+# Low latency against honest weighting, which pull in opposite directions
+# ---------------------------------------------------------------------------
+#
+# Latency wants the fastest stream as the reference, so a frame -- and an output -- exists at
+# every fast sample. But when the target rides a slower stream, hold-last then hands the same
+# measurement to the learner over and over. These tests pin both halves: that the reuse is
+# real and costs something measurable, and that the freshness gate removes it without giving
+# the latency back.
+
+
+def _rates(fresh, jitter, gate=None, policy="hold_last", ref="fast", seed=1, n=200):
+    """A 10 Hz reference and a 1 Hz target: twenty measurements, ~190 frames."""
+    rng = np.random.default_rng(seed)
+    fast = Stream("fast", dim=1, capacity=4096)
+    slow = Stream("slow", dim=1, capacity=4096)
+    adapter = RecursiveLeastSquares(2, 1, forgetting=1.0, p0=100.0, dtype="f8")
+    pipe = Pipeline([fast, slow], Aligner(ref, policy, None), adapter,
+                    FrameMap([("fast", 0)], ("slow", 0), constant=True),
+                    max_stale_s=gate, require_fresh_target=fresh,
+                    allow_non_causal=policy in ("nearest", "interpolate"))
+    for k in range(1, n + 1):
+        fast.push(t=k / 10.0, values=np.array([float(k % 7)]))
+        if k % 10 == 0:
+            t = k / 10.0 + (float(rng.uniform(-jitter, jitter)) if jitter else 0.0)
+            slow.push(t=t, values=np.array([2.0 + 0.01 * k]))
+    return pipe.step(), adapter
+
+
+def test_a_slow_target_is_relearned_once_per_fast_frame_without_the_gate():
+    """The problem the gate exists for, pinned first so the fix has something to fix.
+
+    Twenty measurements become 191 adaptations. That is not merely wasteful: RLS weights each
+    measurement ten times, so P shrinks faster than the information justifies.
+    """
+    report, adapter = _rates(fresh=False, jitter=0.0)
+    assert report.frames == 191
+    assert report.updated == 191, "the fixture no longer reuses the target"
+    assert report.skipped == {}
+    p_trace_reused, _ = adapter.health()
+
+    fresh_report, fresh_adapter = _rates(fresh=True, jitter=0.0)
+    assert fresh_report.updated == 20, "one adaptation per distinct measurement"
+    p_trace_once, _ = fresh_adapter.health()
+
+    # The cost of the reuse, as a number rather than as an adjective: the covariance ends up
+    # an order of magnitude smaller for the same twenty measurements.
+    assert p_trace_once > 5 * p_trace_reused, (
+        f"reuse left tr(P)={p_trace_reused:.4g} against {p_trace_once:.4g} for the same "
+        "information; if these are close the fixture is no longer demonstrating anything")
+
+
+@pytest.mark.parametrize("jitter", [0.0, 0.02])
+def test_the_freshness_gate_is_unaffected_by_jitter(jitter):
+    """Twenty measurements, twenty adaptations, whatever the timestamps do.
+
+    This is the whole reason the gate is an identity check on the sample's timestamp rather
+    than a threshold on staleness.
+    """
+    report, _ = _rates(fresh=True, jitter=jitter)
+    assert report.updated == 20
+    assert report.skipped["stale_target"] == report.frames - 20
+
+
+@pytest.mark.parametrize("gate,jittered,clean", [(0.05, 12, 20), (0.15, 31, 39)])
+def test_max_stale_s_cannot_do_the_gates_job(gate, jittered, clean):
+    """The negative control, and it is what justifies adding an option at all.
+
+    `max_stale_s` looks like it can stand in for freshness: with perfect timestamps a 0.05 s
+    gate adapts exactly twenty times, once per measurement. Add ±20 ms of jitter -- nothing
+    for a real sensor -- and it fails in both directions. Too tight and measurements are lost
+    outright; too loose and some are used twice.
+
+    The numbers are pinned rather than described, because "it is fragile" is not a finding
+    and "12 of 20" is. They were also written into this test before being measured in *this*
+    fixture, and were wrong: the figures came from a scratch script whose random stream was
+    consumed differently. Measured here, they are 12 and 31.
+    """
+    report, _ = _rates(fresh=False, jitter=0.02, gate=gate)
+    assert report.updated == jittered, (
+        f"a {gate}s staleness gate adapted {report.updated} times against 20 distinct "
+        "measurements")
+    steady, _ = _rates(fresh=False, jitter=0.0, gate=gate)
+    assert steady.updated == clean
+
+
+def test_no_fixed_staleness_threshold_is_right_for_both_cases():
+    """The sharper version of the point above, and the one that actually rules the option in.
+
+    It is not that every threshold is bad -- 0.10 s happens to land on exactly twenty with
+    ±20 ms of jitter in this fixture. It is that the *same* threshold gives 32 without the
+    jitter. A value tuned on a bench recording is wrong in the field and a value tuned in the
+    field is wrong on the bench, so there is no number a caller could have chosen. The
+    freshness gate needs no number at all.
+    """
+    lucky_jittered, _ = _rates(fresh=False, jitter=0.02, gate=0.10)
+    lucky_clean, _ = _rates(fresh=False, jitter=0.0, gate=0.10)
+    assert lucky_jittered.updated == 20            # looks perfect...
+    assert lucky_clean.updated == 32               # ...and is not
+
+    for jitter in (0.0, 0.02):
+        fresh, _ = _rates(fresh=True, jitter=jitter)
+        assert fresh.updated == 20
+
+
+def test_the_first_target_is_learned_even_at_time_zero():
+    """A first target sample at exactly t = 0 must not be gated as stale.
+
+    Zero is not exotic -- it is the first tick of any device whose timebase is milliseconds
+    since boot -- and "no target yet" has to be distinguishable from "the target is 0.0".
+    The two implementations do that differently: here `_last_target_t` starts as `None`, so
+    no timestamp can equal it; the C++ core has no optional and carries a `have_last_target_`
+    flag instead. A mutation check on the C++ side is what prompted testing it on both.
+    """
+    fast = Stream("fast", dim=1, capacity=16)
+    slow = Stream("slow", dim=1, capacity=16)
+    adapter = RecursiveLeastSquares(2, 1, dtype="f8")
+    pipe = Pipeline([fast, slow], Aligner("fast", "hold_last"), adapter,
+                    FrameMap([("fast", 0)], ("slow", 0), constant=True),
+                    require_fresh_target=True)
+    slow.push(t=0.0, values=np.array([3.0]))
+    fast.push(t=0.0, values=np.array([1.5]))
+    first = pipe.step()
+    assert (first.frames, first.updated) == (1, 1)
+    assert "stale_target" not in first.skipped
+
+    fast.push(t=0.1, values=np.array([1.5]))
+    second = pipe.step()
+    assert (second.frames, second.updated) == (1, 0)
+    assert second.skipped["stale_target"] == 1
+
+
+def test_the_gate_costs_nothing_when_the_target_rides_the_reference():
+    """Every frame then carries a new target by construction, so the gate can never fire and
+    turning it on is free. Worth pinning because a gate that fired here would silently halve
+    the learning rate of the most ordinary configuration there is."""
+    off, _ = _rates(fresh=False, jitter=0.0, ref="slow")
+    on, _ = _rates(fresh=True, jitter=0.0, ref="slow")
+    assert off.updated == on.updated == off.frames
+    assert "stale_target" not in on.skipped
+
+
+def test_interpolation_produces_a_new_target_every_frame():
+    """Under interpolation the target is synthesised at the reference instant, so it really is
+    new each time and the gate correctly never fires. Stated as a test because the opposite
+    would be a defensible-looking bug: the *measurements* behind it have not changed."""
+    off, _ = _rates(fresh=False, jitter=0.0, policy="interpolate")
+    on, _ = _rates(fresh=True, jitter=0.0, policy="interpolate")
+    assert off.frames > 0, "the fixture built no frames, so this compares nothing"
+    assert on.updated == off.updated
+    assert "stale_target" not in on.skipped
+
+
+def test_a_gated_frame_still_produces_an_output():
+    """The decoupling the whole option exists to allow: refusing to *learn* from a sample is
+    not a reason to stop *predicting* on it. Without this a low-latency consumer would lose
+    nine outputs in ten."""
+    report, _ = _rates(fresh=True, jitter=0.0)
+    assert report.prediction is not None
+    assert report.skipped["stale_target"] > 0, "no frame was gated, so nothing is shown"
+
+
+def test_the_prediction_is_the_newest_frames_output():
+    fast = Stream("a", dim=1, capacity=16)
+    adapter = RecursiveLeastSquares(2, 1, dtype="f8")
+    pipe = Pipeline([fast], Aligner("a", "hold_last"), adapter,
+                    FrameMap([("a", 0)], ("a", 0), constant=True))
+    for k in range(1, 6):
+        fast.push(t=float(k), values=np.array([float(k)]))
+    report = pipe.step()
+    assert report.frames == 5
+    # The last frame's regressor against the parameters the step finished with -- not the
+    # first frame's, and not a value computed before the last update.
+    expect = adapter.predict(np.array([5.0, 1.0], dtype="f8"))
+    assert report.prediction == pytest.approx(expect)
+
+    idle = pipe.step()
+    assert idle.frames == 0
+    assert idle.prediction is None, (
+        "a step with no frames has no newest frame to predict on, and a stale answer "
+        "presented as a current one is worse than none")
+
+
+def test_the_prediction_buffer_is_shared_and_says_so():
+    """It is preallocated on purpose -- a fresh array per step is an allocation per step, and
+    `bench.memory_growth` exists to catch that. The consequence is that it is overwritten by
+    the next step, and it is read-only so nobody can mistake it for their own copy."""
+    fast = Stream("a", dim=1, capacity=16)
+    pipe = Pipeline([fast], Aligner("a", "hold_last"),
+                    RecursiveLeastSquares(2, 1, dtype="f8"),
+                    FrameMap([("a", 0)], ("a", 0), constant=True))
+    fast.push(t=1.0, values=np.array([1.0]))
+    first = pipe.step().prediction
+    assert not first.flags.writeable
+    with pytest.raises(ValueError):
+        first[0] = 0.0
+    fast.push(t=2.0, values=np.array([9.0]))
+    second = pipe.step().prediction
+    assert second is first, "the buffer is meant to be reused; see the docstring"
+
+
+def test_the_prediction_does_not_reintroduce_a_per_step_allocation():
+    """The property the preallocation exists for, measured rather than asserted. `Adapter.state`
+    was already fixed for exactly this once -- it built a fresh view per call on a path the
+    guard took every checkpoint -- so the same mistake in `step()` would be a repeat."""
+    fast = Stream("a", dim=1, capacity=64)
+    pipe = Pipeline([fast], Aligner("a", "hold_last"),
+                    RecursiveLeastSquares(2, 1, dtype="f8"),
+                    FrameMap([("a", 0)], ("a", 0), constant=True))
+    t = 0.0
+    for _ in range(50):                      # settle the interpreter's own bookkeeping
+        t += 1.0
+        fast.push(t=t, values=np.array([1.0]))
+        pipe.step()
+    before = sys.getallocatedblocks()
+    for _ in range(500):
+        t += 1.0
+        fast.push(t=t, values=np.array([1.0]))
+        pipe.step()
+    after = sys.getallocatedblocks()
+    # A fresh ndarray per step would be hundreds of blocks; the arrays pushed above are the
+    # caller's and are freed each iteration. A handful of blocks of slack absorbs the
+    # interpreter's own arenas without absorbing a real per-step leak.
+    assert after - before < 50, f"{after - before} blocks grew over 500 steps"

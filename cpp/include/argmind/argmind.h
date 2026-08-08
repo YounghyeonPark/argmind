@@ -360,6 +360,10 @@ AM_DECLARE_PERSIST(f64, double)
  * table are, so the memory stays declared. */
 #define AM_MAX_STREAMS 4
 
+/* Outputs a step report can carry back. Three, because the widest instantiation in
+ * the list below is `6_3`. */
+#define AM_MAX_OUTPUTS 3
+
 /* Alignment policies. `nearest` and `interpolate` consult samples from AFTER the
  * reference instant: legitimate offline, a correctness bug in a causal loop, which
  * is what a pipeline is. `am_pipe_*_configure` refuses them unless
@@ -379,7 +383,12 @@ AM_DECLARE_PERSIST(f64, double)
 #define AM_SKIP_NONFINITE_INPUT          4
 #define AM_SKIP_NONPOSITIVE_DENOMINATOR  5
 #define AM_SKIP_REJECTED                 6
-#define AM_SKIP_COUNT                    7
+/* Only produced when `am_pipe_*_set_require_fresh_target` is on. Appended rather
+ * than filed with the other input-gate reasons, which is where it belongs
+ * semantically: these are array indices, so inserting it would silently renumber
+ * everything after it for a caller already compiled against the old header. */
+#define AM_SKIP_STALE_TARGET             7
+#define AM_SKIP_COUNT                    8
 
 #define AM_ERR_UNCONFIGURED (-7)  /* step() before a successful configure()        */
 
@@ -451,6 +460,17 @@ typedef struct {
     double worst_staleness;  /* the one to alarm on                               */
     double t;
     double staleness[AM_MAX_STREAMS];  /* signed, of the most recent frame        */
+    /* The model's output for the most recent frame, after every adaptation this
+     * step applied. Present whenever a frame existed -- INCLUDING one the input
+     * gate refused to learn from, which is the point: refusing to learn from a
+     * sample is not a reason to stop predicting on it, and separating the two is
+     * what lets a fast output run on a slow target.
+     *
+     * A double array regardless of the pipeline's scalar type, so this struct stays
+     * one shape across every instantiation. The widening is exact for f32. */
+    int32_t has_prediction;
+    int32_t n_outputs;
+    double prediction[AM_MAX_OUTPUTS];
 } am_step_report;
 
 /* The shared surface of every pipeline instantiation, guarded or not. */
@@ -466,7 +486,7 @@ typedef struct {
     int am_pipe_##NAME##_set_max_stale_s(void* obj, int32_t enable,             \
                                          double limit);                        \
     int am_pipe_##NAME##_set_require_valid(void* obj, int32_t on);              \
-    int am_pipe_##NAME##_set_allow_non_causal(void* obj, int32_t on);           \
+    int am_pipe_##NAME##_set_allow_non_causal(void* obj, int32_t on);               int am_pipe_##NAME##_set_require_fresh_target(void* obj, int32_t on);       \
     int am_pipe_##NAME##_configure(void* obj, const RING* rings, int32_t n);    \
     int am_pipe_##NAME##_step(void* obj, const RING* rings, int32_t n,          \
                               am_step_report* out);                            \

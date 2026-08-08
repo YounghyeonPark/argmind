@@ -471,6 +471,8 @@ constexpr int kPipeStreams = AM_MAX_STREAMS;
 static_assert(AM_SKIP_COUNT == argmind::SKIP_REASON_COUNT,
               "the C skip-reason list and SkipReason have diverged");
 static_assert(static_cast<int>(argmind::SkipReason::Rejected) == AM_SKIP_REJECTED, "");
+static_assert(static_cast<int>(argmind::SkipReason::StaleTarget) == AM_SKIP_STALE_TARGET,
+              "");
 static_assert(static_cast<int>(argmind::Policy::DropIfStale) == AM_POLICY_DROP_IF_STALE,
               "");
 
@@ -500,6 +502,15 @@ void fill_step(const typename Pipe::Step& src, am_step_report* dst) {
     dst->worst_staleness = src.worst_staleness;
     dst->t = src.t;
     for (int i = 0; i < AM_MAX_STREAMS; ++i) dst->staleness[i] = src.staleness[i];
+    dst->has_prediction = src.has_prediction ? 1 : 0;
+    dst->n_outputs = Pipe::n_outputs;
+    // Widened to double so the report is one shape across every instantiation. Exact for
+    // f32, and the alternative -- a scalar-typed report per instantiation -- would put the
+    // scalar in the struct name and make a caller's code depend on which pipeline it holds.
+    for (int i = 0; i < AM_MAX_OUTPUTS; ++i) {
+        dst->prediction[i] =
+            i < Pipe::n_outputs ? static_cast<double>(src.prediction[i]) : 0.0;
+    }
 }
 
 bool valid_policy(int32_t p) {
@@ -514,6 +525,9 @@ bool valid_policy(int32_t p) {
                   "raise the macro in argmind.h");                              \
     static_assert(alignof(PIPE) <= alignof(am_rls_storage), "");                \
     static_assert(PIPE::max_streams == AM_MAX_STREAMS, "");                     \
+    static_assert(PIPE::n_outputs <= AM_MAX_OUTPUTS,                             \
+                  "am_step_report cannot carry this instantiation's outputs; "   \
+                  "raise AM_MAX_OUTPUTS in argmind.h");                          \
                                                                                 \
     extern "C" size_t am_pipe_##NAME##_bytes(void) { return sizeof(PIPE); }     \
     extern "C" int am_pipe_##NAME##_n_features(void) {                          \
@@ -562,6 +576,12 @@ bool valid_policy(int32_t p) {
     extern "C" int am_pipe_##NAME##_set_allow_non_causal(void* obj, int32_t on) {\
         if (!obj) return AM_ERR_NULL;                                           \
         static_cast<PIPE*>(obj)->set_allow_non_causal(on != 0);                 \
+        return AM_OK;                                                           \
+    }                                                                           \
+    extern "C" int am_pipe_##NAME##_set_require_fresh_target(void* obj,          \
+                                                             int32_t on) {      \
+        if (!obj) return AM_ERR_NULL;                                           \
+        static_cast<PIPE*>(obj)->set_require_fresh_target(on != 0);             \
         return AM_OK;                                                           \
     }                                                                           \
     extern "C" int am_pipe_##NAME##_configure(void* obj, const RING* rings,      \

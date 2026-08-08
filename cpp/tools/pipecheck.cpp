@@ -93,6 +93,8 @@ struct Job {
     uint8_t require_valid;
     uint8_t gate_stale;
     uint8_t allow_non_causal;
+    uint8_t require_fresh_target;
+    uint8_t pad0[3];
     uint32_t n_events;
     uint32_t depth;
     uint32_t checkpoint_every;
@@ -108,6 +110,8 @@ struct Job {
 // 216, and the number is here rather than in a comment because the Python writes this header
 // with `struct`, which packs `<` without padding while a C++ struct pads. Every size in this
 // file is asserted on both sides; the pad before `max_stale_pipeline` is the one that bites.
+// Still 216: the new flag and its padding land in the four bytes that were already
+// implicit padding before `n_events`. Measured by the assertion, not assumed.
 static_assert(sizeof(Job) == 216, "job format: header must be 216 bytes");
 
 struct StreamSpec {
@@ -141,18 +145,21 @@ struct StepOut {
     uint8_t ok;
     uint8_t frozen;
     uint8_t has_t;
-    uint8_t pad;
+    uint8_t has_prediction;
     uint32_t frames;
     uint32_t updated;
     uint32_t lost_frames;
     uint32_t frozen_by;
     uint32_t skipped[argmind::SKIP_REASON_COUNT];
     int32_t n_staleness;
-    uint32_t pad2;
+    uint32_t pad2[2];   // explicit: the eighth skip counter pushed the doubles out
     double worst_staleness;
     double t;
+    /// Widened to double so one record shape covers f32 and f64 jobs, exactly as
+    /// `am_step_report` does. Only `n_outputs` of these are meaningful.
+    double prediction[3];
 };
-static_assert(sizeof(StepOut) == 72, "result format: step record must be 72 bytes");
+static_assert(sizeof(StepOut) == 104, "result format: step record must be 104 bytes");
 
 /// The tail: what the run added up to. Written after every step record.
 struct Tail {
@@ -247,8 +254,14 @@ int drive(FILE* in, FILE* out, const Job& job, const StreamSpec* specs, Pipe& pi
         o.frozen_by = rep.frozen_by;
         for (int k = 0; k < argmind::SKIP_REASON_COUNT; ++k) o.skipped[k] = rep.skipped[k];
         o.n_staleness = rep.n_staleness;
+        o.has_prediction = rep.has_prediction ? 1u : 0u;
         o.worst_staleness = rep.worst_staleness;
         o.t = rep.t;
+        for (int j = 0; j < 3; ++j) {
+            o.prediction[j] = j < Pipe::n_outputs
+                                  ? static_cast<double>(rep.prediction[j])
+                                  : 0.0;
+        }
         if (fwrite(&o, sizeof(o), 1, out) != 1) return 3;
         double stale[kMaxStreams];
         for (int i = 0; i < kMaxStreams; ++i) stale[i] = rep.staleness[i];
@@ -328,6 +341,7 @@ int run_guarded(FILE* in, FILE* out, const Job& job, const StreamSpec* specs,
     if (job.gate_stale) pipe.set_max_stale_s(job.max_stale_pipeline);
     pipe.set_require_valid(job.require_valid != 0);
     pipe.set_allow_non_causal(job.allow_non_causal != 0);
+    pipe.set_require_fresh_target(job.require_fresh_target != 0);
     return drive<decltype(pipe), T, Cap>(in, out, job, specs, pipe);
 }
 
@@ -355,6 +369,7 @@ int run_shape(FILE* in, FILE* out, const Job& job, const StreamSpec* specs,
     if (job.gate_stale) pipe.set_max_stale_s(job.max_stale_pipeline);
     pipe.set_require_valid(job.require_valid != 0);
     pipe.set_allow_non_causal(job.allow_non_causal != 0);
+    pipe.set_require_fresh_target(job.require_fresh_target != 0);
     return drive<decltype(pipe), T, Cap>(in, out, job, specs, pipe);
 }
 

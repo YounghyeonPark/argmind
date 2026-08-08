@@ -425,7 +425,7 @@ byte for byte for the record format, and exactly for every decision and counter 
 The runtime library is fully across; `argmind/bench.py` has no C++ counterpart and is not
 getting one, being a host measurement harness rather than part of what ships. (Everything the library does is reachable from C: RLS, the
 guard, the record format, caller-owned rings and the composed pipeline.)
-307 Python tests plus 3351 C++ checks, several of which exist to prove failures are visible
+322 Python tests plus 4597 C++ checks, several of which exist to prove failures are visible
 rather than silent.
 
 **What the pipeline settled:**
@@ -517,7 +517,7 @@ that is already the persistence format, and a benchmark that can report a regres
 
 **STARTED 2026-08-08** — `cpp/`, and RLS is across. `mat.hpp` (fixed-size primitives),
 `rls.hpp` (`Rls<T, N, M>`), `argmind.h` + `src/abi.cpp` (the C ABI), `tools/xcheck.cpp`, `tools/pcheck.cpp`, `tools/scheck.cpp` and
-`tools/pipecheck.cpp` (the four parity tools), `tests/test_core.cpp` (3351 checks the C++ side can make on its own), and a
+`tools/pipecheck.cpp` (the four parity tools), `tests/test_core.cpp` (4597 checks the C++ side can make on its own), and a
 `CMakeLists.txt` that knows the cross-compilation recipe.
 
 **The C ABI had one real tension to resolve.** Compile-time dimensions are the reason C++ was
@@ -1107,6 +1107,111 @@ its own input, the residual sat at zero, and the fault injected to trip the guar
 Everything else matched perfectly. The fixture is now three streams with the target outside
 the regressor, and the features interleaved across the two sensors so a transposed scatter
 would show.
+
+### Low latency against honest weighting, 2026-08-09
+
+A requirement arrived — inputs at whatever rate each source runs, taken as fast and with as
+little latency as possible, and an output that is also fast — and it turned out to pull
+against something the framework already did. Both halves are measured here rather than
+argued.
+
+**What each alignment policy costs in latency.** Reference = the fastest stream, 10 Hz and
+1 Hz, 200 samples, drained on every arrival:
+
+| policy | frames | added latency | note |
+|---|---|---|---|
+| `hold_last` | 190/200 | **0 ms** | causal, never waits |
+| `drop_if_stale` | 190/200 | **0 ms** | same branch, abandons past its limit |
+| `nearest` | 190/200 | 0 ms | **identical to `hold_last` on all 190** |
+| `interpolate` | **0/200** | — | builds nothing at all |
+
+The ten that were never built are the interval before the slow stream's first sample, where
+no frame can exist.
+
+Two rows were not what the docstrings imply. **`nearest` degenerates to `hold_last`** in a
+streaming loop with the fastest stream as the reference — same sample, same staleness, on
+every one of the 190 frames — because the future sample it exists to consult has not arrived
+yet. It buys nothing and costs a non-causal flag. And **`interpolate` does not merely add
+latency, it produces nothing**: bracketing needs a sample later than the reference instant,
+there is never one, and `drain` consumes the instant anyway so it is not retried. That is
+consistent with what the design already says — non-causal means offline — but the magnitude
+is worth writing down.
+
+**So the answer to the requirement is `hold_last` with the fastest stream as the reference,
+and there is no latency to trade away.** `step()` is pull-based and waits for nothing; output
+latency is the caller's call cadence, which is the caller's to choose.
+
+**The cost that arrangement hides.** When the target rides a slower stream, hold-last hands
+the same measurement to the learner once per fast frame: measured, 191 frames from 20
+measurements, each used up to ten times. RLS weights it ten times, so `tr(P)` ends an order
+of magnitude below where the same information should leave it — measured 0.0185 against
+0.196, and 12.1× on the C++ side with a fully excited regressor.
+
+**`max_stale_s` looks like the lever and is not.** It is a threshold on time where the
+question is one of identity:
+
+| jitter | gate | adaptations (20 measurements) |
+|---|---|---|
+| none | 0.05 s | 20 ✓ |
+| ±20 ms | 0.05 s | **12** — eight measurements lost |
+| ±20 ms | 0.15 s | **31** — some used twice |
+| ±20 ms | 0.10 s | 20 ✓ |
+| none | 0.10 s | **32** |
+
+The last two rows are the argument. It is not that every threshold is bad — 0.10 s is exactly
+right at ±20 ms — it is that the *same* threshold is wrong without the jitter. A value tuned
+on a bench recording is wrong in the field and the reverse, so there is no number a caller
+could have picked.
+
+**`require_fresh_target` needs no number.** It compares the target sample's own timestamp,
+recovered from the signed staleness the aligner already reports (`t_sample = t_reference +
+staleness`), against the last one adapted on. Twenty measurements, twenty adaptations, with
+or without jitter. Off by default, so nothing that existed before changes.
+
+Three edges, all tested. Under `interpolate` the target is synthesised at the reference
+instant and really is new every frame, so the gate never fires. If the target rides the
+reference stream every frame carries a new target, so the gate costs nothing and does
+nothing. And a first target sample at **exactly t = 0** must not read as stale — zero is the
+first tick of any device counting milliseconds since boot. The two implementations
+distinguish "no target yet" from "the target is 0.0" differently: the reference uses a `None`
+sentinel, the core a `have_last_target_` flag, because it has no optional.
+
+**`StepReport` now carries the output**, and that is the other half of the requirement.
+Present whenever a frame existed, **including one the gate refused to learn from** — refusing
+to *learn* from a sample is not a reason to stop *predicting* on it, and separating the two
+is exactly what lets a fast output run on a slow target. It costs one `predict` per step,
+`O(n·m)`, six multiply-adds at the design driver's shape. Extraction moved ahead of the input
+gates in the reference so a gated frame still has a regressor to predict from; the port
+already did it in that order, and the two were unobservably different until `prediction` gave
+`x` a reader.
+
+The reference's array is preallocated and handed out read-only. A fresh array per step is an
+allocation per step, which `bench.memory_growth` exists to notice and which `Adapter.state`
+was already fixed for once; a test measures `sys.getallocatedblocks` across 500 steps rather
+than trusting the reasoning.
+
+**Comparing the output across the boundary took three attempts at the metric**, and each
+failure was the same lesson in a new place. Bits fail: a prediction is `x'θ` and θ already
+carries `rls.hpp`'s three declared divergences, so the f32 case differs on the tenth frame.
+Element-wise relative error fails too, at **217 ulp at f64**, on a step where the prediction
+happens to be near zero — a prediction is a sum of signed terms and can cancel. Against the
+run's own scale that same step is **14.0 ulp**. This is now the third quantity in the project
+to need that treatment, after the state block and the a posteriori residual, and the rule is
+worth stating plainly: **whenever a quantity can pass through zero, a relative comparison
+measures the cancellation rather than the implementations.**
+
+One more property fell out of it: a frame carrying a NaN feature produces a **NaN output on
+both sides**. The adapter refuses to learn from it, but handing back a number would be worse
+— a stale value presented as this frame's answer is a wrong answer, and a NaN is a thing a
+caller can test for.
+
+**Fifteen mutants, thirteen caught, and both survivors were worth the run.** One was
+*equivalent* rather than untested: `target_is_new()` initialised its flag to
+`!have_last_target_` when the loop's own condition already covered the first frame. That was
+removed rather than recorded — the shorter form has no dead branch to explain — and the guard
+that does the work, inside the loop, is caught by the `t = 0` test. The other was a real hole:
+zeroing the prediction in the ABI shim survived, because every test compared
+`has_prediction` and nothing compared what it pointed at.
 
 ## Standards
 

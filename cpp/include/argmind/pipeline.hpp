@@ -100,8 +100,16 @@ enum class SkipReason : uint8_t {
     /// reference has the same unreachable `or "rejected"` fallback. A test asserting it
     /// stays at zero would be an assertion that cannot fail, so there is not one.
     Rejected = 6,
+    /// The target sample has not changed since the last attempt. Only produced when
+    /// `set_require_fresh_target(true)` is on.
+    ///
+    /// Appended rather than filed next to the other two input-gate reasons, which is where
+    /// it belongs semantically. The C ABI exposes this enum as an array index, so inserting
+    /// it in the middle would silently renumber `Frozen` through `Rejected` for every C
+    /// caller already compiled against the old header.
+    StaleTarget = 7,
 };
-static constexpr int SKIP_REASON_COUNT = 7;
+static constexpr int SKIP_REASON_COUNT = 8;
 
 namespace detail {
 
@@ -215,7 +223,7 @@ private:
 
 /// What one `step()` did. Observability is the return value, not a logging afterthought —
 /// the same rule as `Report`, one level up.
-template <int MaxStreams>
+template <int MaxStreams, typename T = float, int NOutputs = 1>
 struct StepReport {
     /// False when the pipeline was not configured, or the views handed in do not match the
     /// shapes it was configured against. Distinct from `idle()`: this one means nothing was
@@ -247,6 +255,16 @@ struct StepReport {
     double worst_staleness = 0.0;
     bool has_t = false;
     double t = 0.0;
+    /// The model's output for the **most recent frame**, computed after every adaptation
+    /// this step applied — the current best estimate for the newest input, which is what a
+    /// control loop wants back.
+    ///
+    /// Present whenever a frame existed, including one the input gate refused to learn
+    /// from. That is the point: refusing to *learn* from a sample is not a reason to stop
+    /// *predicting* on it, and separating the two is what lets a fast output run on a slow
+    /// target.
+    bool has_prediction = false;
+    T prediction[NOutputs] = {};
 
     uint32_t total_skipped() const {
         uint32_t n = 0;
@@ -288,7 +306,7 @@ public:
     static constexpr int n_outputs = Adapter::n_outputs;
     static constexpr int max_streams = MaxStreams;
     using Map = FrameMap<n_features, n_outputs>;
-    using Step = StepReport<MaxStreams>;
+    using Step = StepReport<MaxStreams, T, n_outputs>;
 
     /// Whether this pipeline's adapter carries a freeze path. False is legitimate for an
     /// offline reference run and a bad idea in the field.
@@ -332,6 +350,28 @@ public:
     /// pipeline is, so it has to be said out loud here even though the aligner alone permits
     /// it.
     void set_allow_non_causal(bool on) { allow_non_causal_ = on; }
+
+    /// Adapt only when the target sample has actually changed since the last attempt. Off by
+    /// default, which is what every earlier version did.
+    ///
+    /// Low latency and honest weighting pull in opposite directions. Latency wants the
+    /// *fastest* stream as the reference, so a frame — and an output — exists at every fast
+    /// sample. But when the target rides a slower stream, hold-last then hands the same
+    /// measurement to the learner over and over: measured on the reference, a 10 Hz
+    /// reference against a 1 Hz target produced 191 frames from 20 measurements, each used
+    /// up to ten times, and `tr(P)` ended an order of magnitude below where the same
+    /// information should have left it.
+    ///
+    /// `max_stale_s` is the obvious workaround and it is a *time* threshold rather than an
+    /// identity check, so no fixed value is right: measured, 0.10 s adapts exactly twenty
+    /// times with ±20 ms of jitter and thirty-two times without it. A value tuned on a bench
+    /// recording is wrong in the field and the reverse. This gate needs no number.
+    ///
+    /// Two edges. Under `Interpolate` the target is synthesised at the reference instant, so
+    /// it is new every frame and this never fires — correctly, since the value really does
+    /// differ. And if the target rides the reference stream there is a new target in every
+    /// frame, so it costs nothing and does nothing.
+    void set_require_fresh_target(bool on) { require_fresh_target_ = on; }
 
     /// Validate the wiring against the streams that actually exist, once. Returns false
     /// instead of raising; a caller that ignores it gets a `step()` that reports `ok=false`
@@ -467,6 +507,10 @@ public:
                 ++rep.skipped[static_cast<int>(SkipReason::Invalid)];
                 continue;
             }
+            if (require_fresh_target_ && !target_is_new()) {
+                ++rep.skipped[static_cast<int>(SkipReason::StaleTarget)];
+                continue;
+            }
 
             const auto r = adapter_.update(x_, y_);
             if (r.applied) {
@@ -492,6 +536,15 @@ public:
         // recorded rather than claimed to be tested.
         const uint64_t lost = owed > considered ? owed - considered : 0;
         arrived_ = arrived;
+
+        // The output, once per step rather than once per frame: the newest frame's
+        // regressor against the parameters this step finished with. O(n*m) — six
+        // multiply-adds at the design driver's shape, which is not a cost worth making
+        // optional.
+        if (frames && frame_ready_) {
+            adapter_.predict(x_, rep.prediction);
+            rep.has_prediction = true;
+        }
 
         rep.frames = frames;
         rep.updated = updated;
@@ -589,6 +642,33 @@ private:
         return true;
     }
 
+    /// Has the target sample changed since the last attempt?
+    ///
+    /// Decided on the sample's own timestamp, recovered from the signed staleness the
+    /// aligner reports: `t_sample = t_reference + staleness`. Only the streams a target
+    /// component comes from are consulted, which is why the fast feature streams do not
+    /// keep re-arming it.
+    ///
+    /// Recorded on the ATTEMPT, not on success. A target the adapter then rejects is not
+    /// retried on the next nine frames: it would be rejected nine more times and the
+    /// counters would report nine faults where there was one bad measurement.
+    bool target_is_new() {
+        // `changed` starts false rather than at `!have_last_target_`: the loop's own
+        // condition already covers the first frame, and `M >= 1` is a static assertion so
+        // the loop always runs. The redundant initialiser was there first and a mutation
+        // check found it to be an equivalent mutant -- removed rather than recorded, since
+        // the shorter form has no dead branch to explain.
+        bool changed = false;
+        for (int j = 0; j < n_outputs; ++j) {
+            const int i = map_.target_stream(j);
+            const double stamp = frame_t_ + stale_[i];
+            if (!have_last_target_ || last_target_t_[j] != stamp) changed = true;
+            last_target_t_[j] = stamp;
+        }
+        have_last_target_ = true;
+        return changed;
+    }
+
     bool frozen_now() const {
         if constexpr (detail::HasFrozen<Adapter>::value) {
             return adapter_.frozen();
@@ -630,6 +710,9 @@ private:
     double max_stale_s_ = 0.0;
     bool require_valid_ = true;
     bool allow_non_causal_ = false;
+    bool require_fresh_target_ = false;
+    bool have_last_target_ = false;
+    double last_target_t_[n_outputs] = {};
 
     bool configured_ = false;
     int n_streams_ = 0;

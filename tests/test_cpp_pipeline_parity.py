@@ -48,17 +48,17 @@ CPP = REPO / "cpp"
 # without padding and a C++ struct does not; the explicit `4x` before the first double in the
 # job header is that difference, and getting it wrong has already cost this project two
 # debugging sessions on other tools.
-_JOB = struct.Struct("<4sHBBHHHHHHBBBBIIIII4xdddd")   # 80 bytes, then bounds + divergence
+_JOB = struct.Struct("<4sHBBHHHHHHBBBBB3xIIIIIdddd")   # 80 bytes, then bounds + divergence
 _BOUND = struct.Struct("<ddII")                       # 24
 _DIV = struct.Struct("<ddddII")                       # 40
 _SPEC = struct.Struct("<HHHH")                        # 8
 _MAP = struct.Struct("<HHI")                          # 8
 _EVENT = struct.Struct("<BBB5xd")                     # 16
-_STEP = struct.Struct("<4BIIII7IiI2d")                # 72
+_STEP = struct.Struct("<4BIIII8Ii8x2d3d")             # 104
 _TAIL = struct.Struct("<7QII")                        # 64
 assert _JOB.size + 4 * _BOUND.size + _DIV.size == 216, "cpp/tools/pipecheck.cpp: Job"
 assert (_BOUND.size, _DIV.size, _SPEC.size, _MAP.size) == (24, 40, 8, 8)
-assert (_EVENT.size, _STEP.size, _TAIL.size) == (16, 72, 64)
+assert (_EVENT.size, _STEP.size, _TAIL.size) == (16, 104, 64)
 
 POLICIES = {"hold_last": 0, "nearest": 1, "interpolate": 2, "drop_if_stale": 3}
 FIELDS = {"residual_norm": 0, "residual_post_norm": 1, "gain_norm": 2,
@@ -69,7 +69,7 @@ FIELDS = {"residual_norm": 0, "residual_post_norm": 1, "gain_norm": 2,
 #: instead — which names *more* of them than the string does, since the Python only ever
 #: reports the first.
 SKIP = ["stale", "invalid", "frozen", "guard", "nonfinite_input",
-        "nonpositive_denominator", "rejected"]
+        "nonpositive_denominator", "rejected", "stale_target"]
 
 
 def _bits(x: float) -> int:
@@ -111,7 +111,8 @@ class Case:
     def __init__(self, dims, capacity, features, target, *, constant=False,
                  n_features=None, policy="hold_last", reference=0, dtype="f8",
                  max_stale_pipeline=None, max_stale_aligner=0.0, require_valid=True,
-                 allow_non_causal=False, lam=0.98, p0=10.0, guard=None):
+                 allow_non_causal=False, lam=0.98, p0=10.0, guard=None,
+                 require_fresh_target=False):
         self.dims = list(dims)
         self.capacity = capacity
         self.features = list(features)      # [(stream, component)]
@@ -125,6 +126,7 @@ class Case:
         self.max_stale_aligner = max_stale_aligner
         self.require_valid = require_valid
         self.allow_non_causal = allow_non_causal
+        self.require_fresh_target = require_fresh_target
         self.lam = lam
         self.p0 = p0
         self.guard = guard                  # None, or a dict
@@ -154,6 +156,7 @@ def run_cpp(pipecheck: Path, tmp_path: Path, case: Case):
             1 if case.require_valid else 0,
             0 if case.max_stale_pipeline is None else 1,
             1 if case.allow_non_causal else 0,
+            1 if case.require_fresh_target else 0,
             len(case.events), g.get("depth", 1), g.get("checkpoint_every", 1),
             g.get("recover_after", 0), len(bounds),
             case.max_stale_pipeline or 0.0, case.max_stale_aligner,
@@ -202,10 +205,11 @@ def run_cpp(pipecheck: Path, tmp_path: Path, case: Case):
         off += 8 * n_streams
         steps.append({
             "ok": bool(row[0]), "frozen": bool(row[1]), "has_t": bool(row[2]),
+            "has_prediction": bool(row[3]),
             "frames": row[4], "updated": row[5], "lost_frames": row[6],
-            "frozen_by": row[7], "skipped": list(row[8:15]),
-            "n_staleness": row[15], "worst": row[17], "t": row[18],
-            "staleness": stale})
+            "frozen_by": row[7], "skipped": list(row[8:16]),
+            "n_staleness": row[16], "worst": row[17], "t": row[18],
+            "prediction": list(row[19:22]), "staleness": stale})
     tail = _TAIL.unpack_from(raw, off)
     off += _TAIL.size
     state_size = tail[7]
@@ -244,7 +248,8 @@ def run_python(case: Case):
     pipe = Pipeline(streams, aligner, adapter, fmap,
                     max_stale_s=case.max_stale_pipeline,
                     require_valid=case.require_valid,
-                    allow_non_causal=case.allow_non_causal)
+                    allow_non_causal=case.allow_non_causal,
+                    require_fresh_target=case.require_fresh_target)
 
     dt = np.dtype(case.dtype)
     accepted, steps = [], []
@@ -262,8 +267,11 @@ def run_python(case: Case):
         for token, n in rep.skipped.items():
             key = "guard" if token.startswith("guard:") else token
             buckets[SKIP.index(key)] += n
+        pred = ([float(v) for v in rep.prediction] + [0.0, 0.0])[:3] \
+            if rep.prediction is not None else [0.0, 0.0, 0.0]
         steps.append({
             "ok": True, "frozen": rep.frozen, "has_t": rep.t is not None,
+            "has_prediction": rep.prediction is not None, "prediction": pred,
             "frames": rep.frames, "updated": rep.updated,
             "lost_frames": rep.lost_frames,
             "frozen_by": _mask(rep.frozen_by, case),
@@ -294,20 +302,53 @@ def _mask(names, case: Case) -> int:
     return out
 
 
+#: How far a prediction may differ, in ulp of **the run's own scale** rather than of the
+#: instantaneous value. That distinction is the whole point and the project has now paid for
+#: it three times: measured, the element-relative peak is 217 ulp at f64 while the same
+#: disagreement against the run's scale is 14.0. A prediction can pass through zero — it is
+#: `x'theta` with signed terms — and a relative error there measures the cancellation, not the
+#: two implementations. The same reasoning retired an element-wise comparison of the state
+#: block and then of the a posteriori residual.
+PREDICTION_ULP = 200.0
+
+
 def compare(case: Case, py, cpp, *, state_ulps=400.0):
-    """Everything but the model state, exactly. Staleness by bit pattern."""
+    """Everything but the model state and the prediction, exactly. Staleness by bit
+    pattern; those two carry `rls.hpp`'s three declared divergences and get a tolerance."""
     assert py["accepted"] == cpp["accepted"], "the two accepted different pushes"
     assert len(py["steps"]) == len(cpp["steps"])
+    eps = float(np.finfo(np.dtype(case.dtype)).eps)
+    pred_scale = max([abs(v) for st in py["steps"] if st["has_prediction"]
+                      for v in st["prediction"]] + [1e-300])
     for i, (a, b) in enumerate(zip(py["steps"], cpp["steps"])):
         assert b["ok"], f"step {i}: the C++ pipeline refused its configuration"
         for key in ("frames", "updated", "lost_frames", "frozen", "has_t",
-                    "frozen_by", "skipped", "n_staleness"):
+                    "frozen_by", "skipped", "n_staleness", "has_prediction"):
             assert a[key] == b[key], f"step {i}: {key}: python {a[key]} != cpp {b[key]}"
         assert _bits(a["worst"]) == _bits(b["worst"]), f"step {i}: worst staleness"
         assert _bits(a["t"]) == _bits(b["t"]), f"step {i}: reference time"
         for s in range(len(case.dims)):
             assert _bits(a["staleness"][s]) == _bits(b["staleness"][s]), (
                 f"step {i}: staleness of stream {s}")
+        # The output, on every case rather than only the one named for it. Not bits: a
+        # prediction is x'theta and theta already carries rls.hpp's three declared
+        # divergences, so the output inherits them.
+        if a["has_prediction"]:
+            for j in range(len(a["prediction"])):
+                pa, pb = a["prediction"][j], b["prediction"][j]
+                # A frame carrying a NaN feature must produce a NaN output on BOTH sides.
+                # The adapter refuses to learn from it, but refusing to learn is not a
+                # reason to hand back a number: a stale value presented as this frame's
+                # answer is worse than a NaN a caller can test for. Compared as a property
+                # rather than by subtraction, since nan - nan is nan.
+                if not (math.isfinite(pa) and math.isfinite(pb)):
+                    assert math.isnan(pa) == math.isnan(pb) and (
+                        math.isnan(pa) or pa == pb), (
+                        f"step {i}: prediction[{j}] {pa!r} vs {pb!r}")
+                    continue
+                assert abs(pa - pb) <= PREDICTION_ULP * eps * pred_scale, (
+                    f"step {i}: prediction[{j}] {pa!r} != {pb!r}, which is "
+                    f"{abs(pa - pb) / eps / pred_scale:.1f} ulp of the run's scale")
     assert py["totals"] == cpp["totals"], "the cumulative counters disagree"
     assert py["frozen"] == cpp["frozen"]
 
@@ -608,6 +649,86 @@ def test_the_drain_watermark_is_not_reoffered(pipecheck, tmp_path):
         f"expected three declined instants, got {py['totals']['al_no_data']}")
     assert cpp["steps"][1]["frames"] == 0 and cpp["steps"][2]["frames"] == 0, (
         "a declined instant came back")
+
+
+def test_the_freshness_gate_agrees_across_the_boundary(pipecheck, tmp_path):
+    """The gate that lets a fast output run on a slow target, compared step for step.
+
+    A 1-wide reference at 10 Hz carrying features and a 1 Hz stream carrying the target: the
+    configuration low latency asks for and the one where hold-last hands the same measurement
+    to the learner ten times over. The two implementations decide freshness from the sample's
+    own timestamp, recovered from the signed staleness, so they have to agree on every frame
+    or one of them is learning from a different set of measurements.
+    """
+    case = Case([1, 1], 64, [(0, 0)], (1, 0), constant=True,
+                require_fresh_target=True)
+    j = 0
+    for k in range(1, 61):
+        case.push(0, k / 10.0, [float(k % 7)])
+        if k % 10 == 0:
+            j += 1
+            case.push(1, k / 10.0, [2.0 + 0.01 * k])
+        case.step()
+    py, cpp = both(pipecheck, tmp_path, case)
+    gated = sum(s["skipped"][SKIP.index("stale_target")] for s in cpp["steps"])
+    assert py["totals"]["updated"] == j, (
+        f"expected one adaptation per distinct target, got {py['totals']['updated']} "
+        f"against {j} measurements")
+    assert gated > 0, "no frame was gated, so this compares nothing"
+    assert gated + py["totals"]["updated"] == py["totals"]["frames"]
+
+
+def test_the_prediction_crosses_the_boundary_on_every_frame(pipecheck, tmp_path):
+    """Including frames the gate refused to learn from, which is the whole point of having
+    the output separate from the adaptation.
+
+    Compared with a tolerance, and the first two attempts at that tolerance were both wrong.
+    A prediction is `x'θ`, and θ already differs between the two by the three divergences
+    `rls.hpp` declares, so the output inherits them and a **bit** comparison fails on the
+    tenth frame at f32. Switching to element-wise relative error then failed too, at 217 ulp
+    on a step where the prediction happens to be small — the same cancellation artefact that
+    already retired element-wise comparisons of the state block and of the a posteriori
+    residual. Against the run's own scale that step is 14.0 ulp.
+
+    What *is* exact is the widening: the report carries the prediction as a double so one
+    record shape covers both precisions, and float32 to double is lossless. Anything beyond
+    what θ's divergence explains is a plumbing bug and this tolerance would catch it.
+    """
+    for dtype in ("f4", "f8"):
+        case = Case([1, 1], 64, [(0, 0)], (1, 0), constant=True, dtype=dtype,
+                    require_fresh_target=True)
+        for k in range(1, 41):
+            case.push(0, k / 10.0, [float(k % 5) - 2.0])
+            if k % 10 == 0:
+                case.push(1, k / 10.0, [1.5 + 0.02 * k])
+            case.step()
+        py, cpp = both(pipecheck, tmp_path, case)
+        # 31 of 40, and the nine missing ones are honest: the target stream is silent
+        # until k=10, so those steps have no frame at all and there is nothing to predict
+        # on. This assertion was written as ">= 35" before being measured and was wrong --
+        # the same mistake three times in this session, which is why the figure is exact
+        # now and carries its derivation.
+        with_pred = [s for s in cpp["steps"] if s["has_prediction"]]
+        assert len(with_pred) == 31, (
+            f"{len(with_pred)} of {len(cpp['steps'])} steps carried an output")
+        assert all(not s["has_prediction"] for s in cpp["steps"][:9])
+        # ...and a gated frame is among the ones that did produce an output, which is the
+        # property this test exists for rather than a count.
+        assert any(s["has_prediction"] and s["skipped"][SKIP.index("stale_target")]
+                   for s in cpp["steps"]), (
+            "no step both refused to learn and still produced an output")
+        for i, (a, b) in enumerate(zip(py["steps"], cpp["steps"])):
+            assert a["has_prediction"] == b["has_prediction"], f"step {i}"
+            if not a["has_prediction"]:
+                # A step with no frame must carry no output on either side, and the padding
+                # past `n_outputs` must be zero rather than whatever was there before.
+                assert b["prediction"] == [0.0, 0.0, 0.0], f"step {i}: {b['prediction']}"
+                continue
+            assert b["prediction"][1:] == [0.0, 0.0], (
+                f"step {i}: this instantiation has one output; the rest must be zeroed")
+        # The values themselves are compared by `compare()` above, on every case rather than
+        # only here; what this test adds is that the output exists on the frames the gate
+        # refused, which no other case exercises.
 
 
 def test_the_totals_are_the_sum_of_the_steps(pipecheck, tmp_path):

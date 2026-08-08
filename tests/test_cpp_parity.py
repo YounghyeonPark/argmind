@@ -537,7 +537,7 @@ def test_the_cpp_unit_tests_pass(tmp_path):
     # ...and that the checks did not quietly disappear. The count is quoted in DESIGN.md and
     # CLAUDE.md, and "0 failures" alone is equally true of a suite that stopped running.
     m = re.search(r"(\d+) checks", run.stdout)
-    assert m and int(m.group(1)) >= 3340, (
+    assert m and int(m.group(1)) >= 4580, (
         f"the C++ self-check count fell to {m.group(1) if m else '?'}; the documented "
         "figure is a claim about this number")
 
@@ -676,6 +676,10 @@ int drive_pipeline(void) {
     if (am_pipe_g_f32_6_1_set_constant(pipe, 1) != AM_OK) return 3;
     if (am_pipe_g_f32_6_1_add_bound(pipe, AM_FIELD_RESIDUAL_NORM, 0, 0.0, 1, 8.0)
         != AM_OK) return 4;
+    /* The gate that lets a fast output run on a slow target. Here the target rides the
+       reference, so it can never fire -- which is worth the C caller proving, since a gate
+       that fired here would silently halve the learning rate of the plainest wiring. */
+    if (am_pipe_g_f32_6_1_set_require_fresh_target(pipe, 1) != AM_OK) return 4;
     if (am_pipe_g_f32_6_1_configure(pipe, rings, 3) != AM_OK) return 5;
 
     for (k = 1; k <= 60; ++k) {
@@ -697,6 +701,8 @@ int drive_pipeline(void) {
         if (!rep.ok) return 8;
         frames += rep.frames;
         updated += rep.updated;
+        if (rep.frames && !rep.has_prediction) return 15;
+        if (rep.skipped[AM_SKIP_STALE_TARGET]) return 16;
     }
     /* The fault has to have tripped the guard, or this exercised only the healthy path. */
     if (!am_pipe_g_f32_6_1_frozen(pipe)) return 9;
