@@ -8,13 +8,19 @@ Side project — open source, not a product, no support commitment.
 
 ## Working scope
 
-Everything under the repository root except `accelerator/`.
+The whole repository. There is one project here.
 
-**`accelerator/` is STOPPED and parked.** It holds a previous, unrelated project — a
-hardware accelerator IP study with a functional simulator, a performance model and a solver code
-generator. It is finished work, committed and preserved. **Do not continue it, do not extend it,
-and do not propose work on it.** If something there is genuinely reusable, copy it forward
-deliberately rather than reviving the directory.
+**A previous, unrelated project — a hardware accelerator IP study — was stopped and removed from
+the working tree on 2026-08-08.** It is not deleted: it lives in history under the tag
+`accelerator-final`, which is where an archive belongs. It is out of the tree because carrying
+forty files and ten documents of a different project taxes every search and every exploration
+from here on, and makes the repository look like two projects to anyone reading it.
+
+    git show accelerator-final:accelerator/README.md      # browse
+    git checkout accelerator-final -- accelerator/        # restore, if ever needed
+
+**Do not restore it to continue it.** Everything worth carrying forward was extracted into this
+file before removal.
 
 Two things from it are still worth knowing, because they were measured rather than assumed and
 they bear on sensor/estimation work:
@@ -26,7 +32,7 @@ they bear on sensor/estimation work:
   floors appeared across one workload set. Do not assume a single precision policy works
   everywhere.
 
-Full detail: [accelerator/README.md](accelerator/README.md).
+Full detail lives in the tag, not in this tree: `git show accelerator-final:accelerator/PHASE0_FINDINGS.md`.
 
 ## Standards of evidence — carried over deliberately
 
