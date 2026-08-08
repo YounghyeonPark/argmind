@@ -57,7 +57,7 @@ them flattered the design. They cost real time to learn and they apply to anythi
 
 ## Conventions
 
-**Location: `C:\devrgmind`.** Moved off Google Drive on 2026-08-08 — Drive sync can corrupt a
+**Location: `C:\dev\argmind`.** Moved off Google Drive on 2026-08-08 — Drive sync can corrupt a
 git repository by uploading partial writes or creating conflict copies of `.git/index` and loose
 objects. Backup belongs on a remote, not on a syncing filesystem.
 
@@ -65,8 +65,46 @@ Windows, PowerShell primary; Python 3.14; git repo. `python -m pytest` before qu
 number. A tracked pre-commit hook in `.githooks/` runs the suite and blocks on failure —
 install once per clone with `git config core.hooksPath .githooks`.
 
-## Status
+## Status — settled 2026-08-08
 
-**Requirements are not yet settled.** Scope, target platform, sensor set and what "learning"
-means on-device are open. Do not start building until they are — the design space is wide enough
-that guessing wastes more than asking.
+**Requirements are settled. Building has started.** The four scope decisions, made explicitly
+and not to be re-litigated without a reason:
+
+| axis | decision |
+|---|---|
+| platform | **embedded / edge** |
+| learning | **on-device online adaptation** — not offline training |
+| sensors | **sensor-agnostic**, general framework |
+| deliverable | **a library**, not an application |
+| language | **C++ core behind a C ABI**, optimised for speed (see DESIGN.md) |
+
+The design driver, chosen so the API is shaped against something real: an inertial + aiding-sensor
+estimator with online bias calibration. Sensor-agnostic in the API, specific in what it must
+handle.
+
+**Built:** `argmind/stream.py` (fixed-capacity ring buffers, counted drops, monotonic time
+enforced at the source) and `argmind/align.py` (four explicit alignment policies, signed
+staleness, causal/non-causal declared). 16 tests pass; several exist to prove failures are
+visible rather than silent.
+
+**Next, in order** — the ordering is deliberate and the reasoning is in DESIGN.md:
+
+1. `Adapter`, starting with recursive least squares with a forgetting factor. Python reference
+   first; it sets the contract every later method must fit.
+2. **`Guard` second, not fifth.** Half the reason this library exists is that online adaptation
+   diverges in the field, so the freeze path must be the default shape of the API rather than
+   something a user remembers to add. Building it late would quietly make it optional.
+3. `Pipeline` — stream to align to adapt to predict, behind one bounded `step()`.
+4. Persistence, because adaptation state that does not survive a power cycle is useless in the
+   field.
+
+**Before any optimisation lands, a benchmark that can report a regression must exist.** An
+optimisation with no way to fail is not an optimisation, it is a hope.
+
+**One question still open:** whether the target range reaches down to MCUs. It decides the matrix
+types (own minimal types vs Eigen) and the `-mcpu` set. It does not block the Python reference.
+
+## Working state
+
+No git remote is configured — deliberately, so a stray `push` cannot write to the retired Google
+Drive location. Add one when publishing.
