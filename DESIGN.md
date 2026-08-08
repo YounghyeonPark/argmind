@@ -85,6 +85,19 @@ health check does not silently apply. The framework's opinion is that *shipping 
 without a freeze path is negligent*, so the API makes the freeze path the default shape rather
 than something the user remembers to add.
 
+**Built 2026-08-08, and it changed the API sketch below: a `Guard` wraps an `Adapter` and *is*
+an `Adapter`,** rather than sitting beside one in the pipeline. Side by side leaves "no guard"
+expressible, and a safety mechanism that can be left out is one that gets left out. Wrapping
+makes the guarded object interchangeable with the raw one, so a caller holds exactly one adapter
+and cannot tell whether it is guarded except by the extra fields on the report.
+
+Checks run *after* the update, because the quantities worth checking only exist once the update
+has been computed. That is why rollback exists rather than pure prevention — the state has already
+moved by the time anything is known about it, so the guard restores a checkpoint instead of
+vetoing in advance. Checkpoints cost `rollback_depth * (state_size + 2)` elements, fixed at
+construction, and the guard rolls back to the *deepest* retained one: divergence is detected after
+it starts, so undoing a single update lands inside the bad stretch.
+
 **Precision is declared and checked, not assumed.** Carried forward from measurement in the
 parked accelerator project: **the EKF covariance recursion needs fp32 minimum, and there is no
 fp16/bf16 path in any filter form** — conventional, Joseph and square-root all lose
@@ -119,8 +132,12 @@ the choice and reports staleness.
 
 ## API sketch — for review, not final
 
+Updated 2026-08-08 for the guard as built — it wraps rather than sits beside, for the reason
+given above.
+
 ```python
-from argmind import Stream, Pipeline, Aligner, Guard
+from argmind import (Stream, Pipeline, Aligner, Guard, Bound, Divergence,
+                     RecursiveLeastSquares)
 
 imu   = Stream("imu",  dim=6, rate_hz=200, dtype="f4")
 aid   = Stream("aid",  dim=3, rate_hz=5,   dtype="f4")
@@ -128,11 +145,14 @@ aid   = Stream("aid",  dim=3, rate_hz=5,   dtype="f4")
 pipe = Pipeline(
     streams=[imu, aid],
     aligner=Aligner.hold_last(reference="imu", max_stale_s=0.5),
-    adapter=RecursiveLeastSquares(n_features=6, forgetting=0.999, dtype="f4"),
-    guard=Guard(
-        freeze_on=["divergence", "stale_reference"],
-        bounds={"residual_rms": (0.0, 10.0)},
-        rollback_window=50,
+    adapter=Guard(
+        RecursiveLeastSquares(n_features=6, forgetting=0.999, dtype="f4"),
+        checks=[Divergence(ratio=5.0, floor=1e-3),
+                Bound("p_trace", hi=1e4),
+                Bound("p_min_diag", lo=0.0)],
+        rollback_depth=10,
+        checkpoint_every=5,       # reaches 50 updates back, for 10 * (state+2)
+        recover_after=None,       # thaw() is deliberate; nothing thaws itself
     ),
 )
 
@@ -176,7 +196,13 @@ Genuinely open, listed rather than guessed:
   third-party inference runtime, or simply provides adapted inputs to one, is a scope boundary
   not yet drawn.
 - **Persistence.** Adaptation state must survive a power cycle for any of this to be useful in
-  the field. Format and cadence are undecided.
+  the field. The flat state block is already the format; cadence and framing are undecided.
+- **Whether a guard's own state should persist.** `Guard.state` delegates to the wrapped adapter,
+  so the block that crosses the C ABI stays the adapter's alone and the guard comes back
+  *unfrozen* after a power cycle. That is a v1 boundary, not a considered answer: a system that
+  froze for a reason and reboots ready to adapt will re-learn its way into the same trouble. The
+  argument the other way is that a persisted freeze can strand a device that only needed a
+  reboot, with no way back except a technician.
 
 ## Language and structure — decided 2026-08-08
 
@@ -275,9 +301,10 @@ a p99 that misses is the shape that fails in the field.
 
 **Built:** `Stream` (fixed-capacity ring buffers, counted overflow, monotonic-time
 enforcement), `Aligner` (four explicit policies, staleness reporting, causal/non-causal
-declared), and `Adapter` + `RecursiveLeastSquares` (flat state block, forgetting factor,
-per-update report, measured precision floor). 45 tests, several of which exist to prove failures
-are visible rather than silent.
+declared), `Adapter` + `RecursiveLeastSquares` (flat state block, forgetting factor, per-update
+report, measured precision floor), and `Guard` + `Bound` + `Divergence` (checks, freeze, bounded
+rollback, explicit recovery). 81 tests, several of which exist to prove failures are visible
+rather than silent.
 
 **What the adapter contract settled**, since everything after it has to fit:
 
@@ -298,17 +325,29 @@ are visible rather than silent.
   bursts. Bounding it inside the adapter would make the `Guard` optional — which is the mistake
   this design explicitly refuses. It is reported; deciding what to do about it is the guard's job.
 
+**What the guard settled, and what it cost to get right.** Two design errors were made and caught
+by tests, both in the same place — what a stateful detector should do while the guard is frozen:
+
+- Resetting the checks on a trip looked tidy and threw away the only reference the frozen probes
+  have. A fault that had plateaued then read as normal and **the guard thawed itself in the middle
+  of the fault.** Checks are now reset on `thaw()` instead.
+- Holding the detector's baseline *per sample* — refusing any sample the check disliked — was the
+  first fix and was worse: the baseline only ever absorbs the smaller residuals, so it ratchets
+  downward until ordinary noise trips it. The hold is per-*freeze*, so during normal operation the
+  baseline stays unbiased and during a fault it stays a reference.
+
+Both are protected by tests, and both survive as named mutants in the mutation check. The general
+lesson is the one already in the standards: the tidy-looking version was the broken one.
+
 **Next, in order:**
 
-1. **`Guard`, and it is genuinely next.** Half the reason this library exists is that online
-   adaptation can diverge in the field, so the freeze path has to be the default shape of the API
-   rather than something a user remembers to add. Building it second keeps that honest; building
-   it fifth would not. The windup and burst reproduced in `tests/test_adapt.py` are its first
-   concrete target, and `UpdateReport` already carries what it needs to trip on.
-2. **`Pipeline`** to wire stream → align → adapt → predict behind one bounded `step()`.
-3. **Persistence**, because adaptation state that does not survive a power cycle is useless in the
-   field. The flat state block is already the format; what is undecided is cadence and framing.
-4. **The C++ core**, verified against the Python reference — same inputs, same outputs, to the
+1. **`Pipeline`** to wire stream → align → adapt → predict behind one bounded `step()`. It is the
+   first place the aligner and the adapter meet, so it is where `Frame` has to become `(x, y)` —
+   and where staleness becomes a guard input rather than a number nobody reads.
+2. **Persistence**, because adaptation state that does not survive a power cycle is useless in the
+   field. The flat state block is already the format; what is undecided is cadence, framing, and
+   whether the guard's own state belongs in it.
+3. **The C++ core**, verified against the Python reference — same inputs, same outputs, to the
    tolerance the declared precision allows.
 
 **Now decided (see "Language and structure" above), so the `Adapter` contract must be shaped for

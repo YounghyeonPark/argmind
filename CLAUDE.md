@@ -94,9 +94,10 @@ handle.
 
 **Built:** `argmind/stream.py` (fixed-capacity ring buffers, counted drops, monotonic time
 enforced at the source), `argmind/align.py` (four explicit alignment policies, signed staleness,
-causal/non-causal declared), and `argmind/adapt.py` (the `Adapter` contract and
-`RecursiveLeastSquares`). 45 tests pass; several exist to prove failures are visible rather than
-silent, and the adapter suite was mutation-checked — eight deliberate bugs, all eight caught.
+causal/non-causal declared), `argmind/adapt.py` (the `Adapter` contract and
+`RecursiveLeastSquares`), and `argmind/guard.py` (`Check`/`Bound`/`Divergence`, freeze, bounded
+rollback, explicit recovery). 81 tests pass; several exist to prove failures are visible rather
+than silent, and both new suites were mutation-checked — nineteen deliberate bugs, all caught.
 
 **The adapter contract, since everything after it fits into it** (full reasoning in DESIGN.md):
 state is one flat contiguous block so persistence is a copy and the C ABI needs no serialisation;
@@ -111,17 +112,26 @@ error on noiseless data is the `P0⁻¹` prior term and scales as exactly `1/p0`
 and the unexcited covariance direction grows as exactly `p0·λ⁻ᵏ` (12 digits). The tests assert
 those laws rather than loose tolerances.
 
+**The guard wraps the adapter and *is* an `Adapter`** — a deliberate change from the API sketch,
+which had them side by side in the pipeline. Side by side leaves "no guard" expressible, and a
+safety mechanism that can be left out gets left out. Checks run after the update (the quantities
+worth checking do not exist until then), which is why rollback exists rather than prevention.
+
+Two design errors were made here and caught by tests, both about what a stateful detector does
+while frozen: resetting checks on a trip made the guard **thaw itself in the middle of a fault**,
+and the first fix — holding the baseline per sample — ratcheted it down until ordinary noise
+tripped it. The rule that works is per-*freeze*. The tidy-looking version was the broken one,
+twice.
+
 **Next, in order** — the ordering is deliberate and the reasoning is in DESIGN.md:
 
-1. **`Guard`, and it is genuinely next.** Half the reason this library exists is that online
-   adaptation diverges in the field, so the freeze path must be the default shape of the API
-   rather than something a user remembers to add. Building it late would quietly make it
-   optional. The windup and burst reproduced in `tests/test_adapt.py` are its first concrete
-   target.
-2. `Pipeline` — stream to align to adapt to predict, behind one bounded `step()`.
-3. Persistence, because adaptation state that does not survive a power cycle is useless in the
-   field. The flat state block is already the format; cadence and framing are not decided.
-4. The C++ core, verified against the Python reference.
+1. `Pipeline` — stream to align to adapt to predict, behind one bounded `step()`. First place the
+   aligner and adapter meet, so it is where `Frame` becomes `(x, y)` and where staleness becomes
+   a guard input rather than a number nobody reads.
+2. Persistence, because adaptation state that does not survive a power cycle is useless in the
+   field. The flat state block is already the format; cadence, framing, and whether the guard's
+   own state belongs in it are not decided.
+3. The C++ core, verified against the Python reference.
 
 **Before any optimisation lands, a benchmark that can report a regression must exist.** An
 optimisation with no way to fail is not an optimisation, it is a hope.

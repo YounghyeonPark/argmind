@@ -128,6 +128,12 @@ class UpdateReport:
 class Adapter(abc.ABC):
     """The online learner contract. See the module docstring for why this shape."""
 
+    #: Declared empty so that subclasses declaring `__slots__` actually get them.
+    #: Without this the base contributes a `__dict__` and every "slotted" adapter
+    #: silently carries one, which on the reference side is only untidy but sets
+    #: the wrong expectation for a type that is supposed to be a fixed block.
+    __slots__ = ()
+
     #: The coarsest storage precision this method may be built with. Declared per
     #: adapter because the floor belongs to the algorithm, not to the platform.
     min_dtype: str = "f4"
@@ -143,6 +149,21 @@ class Adapter(abc.ABC):
     @abc.abstractmethod
     def predict(self, x) -> np.ndarray:
         """Current model output for `x`, shape ``(n_outputs,)``."""
+
+    @abc.abstractmethod
+    def health(self) -> tuple[float, float]:
+        """``(p_trace, p_min_diag)`` for the state as it stands, without updating.
+
+        The same two scalars `UpdateReport` carries, available without consuming a
+        sample. A `Guard` needs them at moments when no update happened — when it
+        checkpoints the construction state, and while it is frozen — and inventing
+        a plausible-looking zero there would be fabricating a number, which is
+        precisely what this project's standards forbid.
+
+        Adapters with no covariance report the nearest analogue of "how uncertain
+        am I" and "is my internal state still valid"; nothing reads these except
+        by name, through a `Bound`.
+        """
 
     @property
     @abc.abstractmethod
@@ -358,14 +379,19 @@ class RecursiveLeastSquares(Adapter):
             raise ValueError(f"y must have {self.n_outputs} outputs, got {arr.size}")
         return arr
 
+    def health(self) -> tuple[float, float]:
+        return (float(np.trace(self._p.astype(np.float64))),
+                float(np.min(np.diagonal(self._p))))
+
     def _report(self, applied: bool, reason: str | None) -> UpdateReport:
+        trace, min_diag = self.health()
         return UpdateReport(
             applied=applied,
             residual=self._e.copy(),
             residual_post=self._e_post.copy(),
             gain_norm=float(np.linalg.norm(self._k)),
-            p_trace=float(np.trace(self._p.astype(np.float64))),
-            p_min_diag=float(np.min(np.diagonal(self._p))),
+            p_trace=trace,
+            p_min_diag=min_diag,
             reason=reason)
 
     def update(self, x, y) -> UpdateReport:
