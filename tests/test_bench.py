@@ -19,7 +19,8 @@ import pytest
 from argmind.adapt import Adapter, RecursiveLeastSquares
 from argmind.align import Aligner
 from argmind.bench import (Regression, Result, Timing, Workload, compare,
-                           fit_leak, main, measure, memory_growth, scaling)
+                           fit_leak, fit_step, gate_saving, main, measure,
+                           memory_growth, scaling, step_cost)
 from argmind.pipeline import FrameMap, Pipeline
 from argmind.stream import Stream
 
@@ -381,3 +382,89 @@ def test_both_precisions_are_benchmarkable(dtype):
     r = measure(Workload(frames=40, dtype=dtype), warmup_frames=5)
     assert r.counters["updated"] == 40
     assert np.isfinite(r.update_ns.p50)
+
+
+# ---------------------------------------------------------------------------
+# step() cost against frames drained, which is the latency question
+# ---------------------------------------------------------------------------
+
+
+def test_fit_step_recovers_a_known_line():
+    """The part that can be checked without a stopwatch, and the reason it is a separate
+    function. Same argument as `fit_leak`: cost divided by frames at one batch size cannot
+    tell fixed overhead from per-frame work."""
+    rows = [{"frames": k, "ns_per_step": 5000.0 + 800.0 * k}
+            for k in (1, 2, 4, 8, 16)]
+    per_frame, fixed = fit_step(rows)
+    assert per_frame == pytest.approx(800.0, rel=1e-9)
+    assert fixed == pytest.approx(5000.0, rel=1e-9)
+
+
+def test_cost_per_frame_at_one_batch_size_cannot_separate_the_two():
+    """The negative control for the function above, and the whole reason the sweep exists.
+
+    A pipeline with heavy fixed overhead and a cheap frame, and one with no overhead and a
+    dearer frame, cost exactly the same at one frame per step. Only the slope tells them
+    apart, and a benchmark that reported the one-frame figure alone would call them equal.
+    """
+    heavy_fixed = [{"frames": k, "ns_per_step": 9000.0 + 1000.0 * k} for k in (1, 2, 4, 8)]
+    no_fixed = [{"frames": k, "ns_per_step": 0.0 + 10000.0 * k} for k in (1, 2, 4, 8)]
+    assert heavy_fixed[0]["ns_per_step"] == no_fixed[0]["ns_per_step"]
+    assert fit_step(heavy_fixed)[0] == pytest.approx(1000.0)
+    assert fit_step(no_fixed)[0] == pytest.approx(10000.0)
+
+
+def test_a_slope_through_one_point_is_refused_rather_than_invented():
+    """numpy will fit a line to a single point and warn about the conditioning in a message
+    nobody reads. A fabricated slope in a benchmark is worse than no slope: it would be
+    quoted. So one point, or several at the same frame count, reports NaN."""
+    import math
+    assert all(math.isnan(v) for v in fit_step([{"frames": 4, "ns_per_step": 1000.0}]))
+    assert all(math.isnan(v) for v in fit_step(
+        [{"frames": 4, "ns_per_step": 1000.0}, {"frames": 4, "ns_per_step": 1200.0}]))
+    got = step_cost(frames_per_step=(8,), steps=10, warmup=2, guarded=False)
+    assert math.isnan(got["ns_per_frame"])
+    # ...and the directly measured figure is still there, because it needed no fit.
+    assert got["measured_one_frame_ns"] is None      # no one-frame row in this sweep
+    assert got["rows"][0]["ns_per_step"] > 0
+
+
+def test_step_cost_sweeps_and_the_counters_say_what_ran():
+    """The timings are machine-specific and are not asserted. The counters are not: they say
+    the sweep actually drained the frames it claims to, which is what makes the slope a
+    measurement of `step()` rather than of an empty loop."""
+    r = step_cost(frames_per_step=(1, 2, 4), steps=40, warmup=5, guarded=False)
+    assert [row["frames"] for row in r["rows"]] == [1, 2, 4]
+    for row in r["rows"]:
+        # Every frame adapts with the gate off, so the count is steps x frames plus the
+        # warmup. Asserted as a lower bound because the very first frames of a run can be
+        # refused while the slower stream has nothing to offer.
+        assert row["updated"] >= 40 * row["frames"], row
+    assert r["ns_per_frame"] > 0.0
+    assert r["measured_one_frame_ns"] == r["rows"][0]["ns_per_step"]
+
+
+def test_the_freshness_gate_adapts_once_per_step_however_many_frames_are_drained():
+    """The counter half of `gate_saving`, which is deterministic where the timings are not.
+
+    This is the option's whole behaviour in one number: with the gate on, a sixteen-frame
+    step carrying one target adapts once, not sixteen times.
+    """
+    off = step_cost(frames_per_step=(8,), steps=40, warmup=5, guarded=False,
+                          fresh_target=False)
+    on = step_cost(frames_per_step=(8,), steps=40, warmup=5, guarded=False,
+                         fresh_target=True)
+    assert off["rows"][0]["updated"] >= 8 * 40
+    assert on["rows"][0]["updated"] <= 45, (
+        f"the gate let {on['rows'][0]['updated']} adaptations through where one per step "
+        "was expected")
+
+
+def test_the_gate_is_cheaper_per_frame_than_adapting():
+    """A ratio measured inside one run, so the machine cancels out — the only kind of timing
+    this suite is willing to assert. The margin is wide (measured about 0.23) because a
+    loaded machine widens everything; what would fail is the gate becoming no cheaper than
+    the update it skips, which would mean it had stopped skipping."""
+    gs = gate_saving(frames_per_step=(1, 4, 16), steps=60, guarded=False)
+    assert gs["per_frame_ratio"] < 0.7, gs["per_frame_ratio"]
+    assert gs["adaptations_on"] * 4 < gs["adaptations_off"]

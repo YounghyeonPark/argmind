@@ -68,7 +68,8 @@ from .pipeline import FrameMap, Pipeline
 from .stream import Stream
 
 __all__ = ["Workload", "Timing", "Result", "measure", "compare", "Regression",
-           "memory_growth", "scaling", "main"]
+           "memory_growth", "scaling", "step_cost", "fit_step", "gate_saving",
+           "main"]
 
 _NS = time.perf_counter_ns
 
@@ -354,6 +355,135 @@ def scaling(dims=(4, 8, 16, 32, 64, 128), updates: int = 2000,
     return out
 
 
+
+def step_cost(frames_per_step=(1, 2, 4, 8, 16), steps: int = 300,
+              n_features: int = 6, dtype: str = "f4", guarded: bool = True,
+              fresh_target: bool = False, warmup: int = 30) -> dict:
+    """Cost of one `step()` split into ``fixed + per_frame * frames``.
+
+    This is the latency question in the form that can actually be answered. The
+    low-latency wiring puts the **fastest** stream on the reference and calls
+    `step()` after every one of its samples, so each call drains a single frame
+    and pays the call's fixed overhead in full. Calling less often amortises that
+    overhead across more frames and costs latency instead. Which of the two
+    dominates is a property of this implementation, not a matter of taste, and it
+    is not visible in a single per-step figure.
+
+    So the cost is swept against frames drained and the line is fitted. The
+    technique is `fit_leak`'s and is reused deliberately: a cost per frame at one
+    batch size cannot tell fixed overhead from real per-frame work, and only the
+    slope separates them. That distinction was already worth a correction once in
+    this file.
+
+    Returns absolute nanosecond figures, which are **machine-specific and are not
+    a gate**. What travels is the ratio in ``fixed_fraction_at_one``: the share of
+    a single-frame step that is overhead rather than work.
+    """
+    rows = []
+    for k in frames_per_step:
+        fast = Stream("fast", dim=n_features - 1, capacity=max(16, 4 * k),
+                      dtype=dtype)
+        slow = Stream("slow", dim=1, capacity=16, dtype=dtype)
+        adapter = RecursiveLeastSquares(n_features=n_features, forgetting=0.999,
+                                        p0=1e2, dtype=dtype)
+        if guarded:
+            adapter = Guard(adapter,
+                            [Bound("p_min_diag", lo=0.0), Bound("p_trace", hi=1e9)],
+                            rollback_depth=4, checkpoint_every=5)
+        pipe = Pipeline(streams=[fast, slow], aligner=Aligner.hold_last("fast"),
+                        adapter=adapter,
+                        frame_map=FrameMap(features="fast", target="slow",
+                                           constant=True),
+                        require_fresh_target=fresh_target)
+        rng = np.random.default_rng(9001)
+        t = 0.0
+        # The target arrives once per step, so the freshness gate lets exactly one
+        # frame per step adapt however many are drained. That is the configuration
+        # the option exists for, and it is what makes the two sweeps comparable.
+        samples = np.zeros(steps, dtype=np.int64)
+        for i in range(steps + warmup):
+            for _ in range(k):
+                t += 1e-3
+                fast.push(t, rng.standard_normal(n_features - 1))
+            slow.push(t, [float(rng.standard_normal())])
+            t += 1e-6
+            a = _NS()
+            pipe.step()
+            d = _NS() - a
+            if i >= warmup:
+                samples[i - warmup] = d
+        rows.append({"frames": k, "ns_per_step": float(np.percentile(samples, 50)),
+                     "updated": int(pipe.stats["updated"])})
+
+    per_frame, fixed = fit_step(rows)
+    one = fixed + per_frame if np.isfinite(fixed) else float("nan")
+    measured_one = next((r["ns_per_step"] for r in rows if r["frames"] == 1), None)
+    return {"rows": rows, "ns_per_frame": per_frame, "fixed_ns_per_step": fixed,
+            "fixed_fraction_at_one": (fixed / one if np.isfinite(one) and one > 0
+                                      else float("nan")),
+            "measured_one_frame_ns": measured_one,
+            "guarded": guarded, "fresh_target": fresh_target}
+
+
+def fit_step(rows) -> tuple[float, float]:
+    """Split measured step cost into ``fixed + per_frame * frames``; return
+    (per_frame, fixed).
+
+    Separate for the same reason `fit_leak` is: it is the whole idea and it is the
+    only part that can be checked without a stopwatch. Note which of the two
+    figures is trustworthy. The slope is measured across the sweep and is well
+    determined; **the intercept is an extrapolation to zero frames** from a line
+    whose slope dominates, so it carries the fit's error rather than a
+    measurement's. Anything that turns on the intercept should use the directly
+    measured one-frame figure instead, which is why `step_cost` returns that too.
+    """
+    xs = np.array([r["frames"] for r in rows], dtype=np.float64)
+    ys = np.array([r["ns_per_step"] for r in rows], dtype=np.float64)
+    # A line through one point is not determined, and numpy will happily return one
+    # anyway with a RankWarning nobody reads. A fabricated slope in a benchmark is
+    # worse than no slope, so this says so instead.
+    if np.unique(xs).size < 2:
+        return float("nan"), float("nan")
+    per_frame, fixed = np.polyfit(xs, ys, 1)
+    return float(per_frame), float(fixed)
+
+
+def gate_saving(steps: int = 300, **kw) -> dict:
+    """What `require_fresh_target` costs, and what it saves, in one run.
+
+    Both figures matter and they point in opposite directions. The gate adds a
+    comparison per frame; it removes an adapter update from every frame whose
+    target has not moved. In the wiring it exists for — a fast reference and a
+    slow target — the second dominates, and a caller deciding whether to turn it
+    on should see the number rather than the argument.
+
+    A ratio measured inside one run, so the machine cancels out.
+    """
+    off = step_cost(steps=steps, fresh_target=False, **kw)
+    on = step_cost(steps=steps, fresh_target=True, **kw)
+    one_off = off["measured_one_frame_ns"]
+    one_on = on["measured_one_frame_ns"]
+    # The two ratios answer different questions and an early version of this
+    # conflated them. This sweep pushes ONE target per step, so at one frame per
+    # step every frame carries a new target and the gate can never fire: that
+    # ratio is what the option costs where it cannot help, and it should sit at
+    # 1.0 within the harness's run-to-run spread. The slope is where it can help,
+    # because the extra frames in a multi-frame step all share one target.
+    #
+    # The intercepts are deliberately not compared. They are the fit's least
+    # determined parameter -- an extrapolation to zero frames from a line whose
+    # slope dominates -- and an earlier version reported their ratio as a finding
+    # when it was mostly the conditioning of a five-point fit.
+    return {"off": off, "on": on,
+            # What a frame costs when the gate skips its update: the saving.
+            "per_frame_ratio": (on["ns_per_frame"] / off["ns_per_frame"]
+                                if off["ns_per_frame"] > 0 else float("nan")),
+            # What the option costs where it cannot help: the overhead.
+            "one_frame_ratio": (one_on / one_off
+                                if one_off and one_off > 0 else float("nan")),
+            "adaptations_off": off["rows"][-1]["updated"],
+            "adaptations_on": on["rows"][-1]["updated"]}
+
 def _spread(noise: dict, key: str) -> float:
     """This metric's measured spread, floored at the machine's typical one.
 
@@ -490,6 +620,9 @@ def main(argv=None) -> int:
                    help="also report the memory leak rate")
     p.add_argument("--scaling", action="store_true",
                    help="also report update cost against state dimension")
+    p.add_argument("--latency", action="store_true",
+                   help="also report step() cost against frames drained, and what "
+                        "require_fresh_target costs")
     args = p.parse_args(argv)
 
     w = Workload(frames=args.frames, dtype=args.dtype, guarded=not args.bare)
@@ -506,6 +639,28 @@ def main(argv=None) -> int:
                   f"{row['blocks_per_frame']:>7.3f} blocks/frame")
         print(f"        leak {mg['blocks_per_frame']:+.4f} blocks/frame, "
               f"fixed {mg['fixed_blocks_per_batch']:+.1f} blocks/batch")
+
+    if args.latency:
+        sc = step_cost()
+        print("\nstep() cost against frames drained (the low-latency wiring: the "
+              "fastest\n        stream on the reference, so a step drains one frame "
+              "and pays the\n        fixed overhead in full)")
+        for row in sc["rows"]:
+            print(f"        {row['frames']:>3} frames/step  "
+                  f"{row['ns_per_step']:>9.0f} ns/step  "
+                  f"{row['ns_per_step'] / row['frames']:>9.0f} ns/frame")
+        print(f"        fit: {sc['fixed_ns_per_step']:.0f} ns fixed + "
+              f"{sc['ns_per_frame']:.0f} ns/frame  "
+              f"({sc['fixed_fraction_at_one']:.0%} of a one-frame step is overhead)")
+
+        gs = gate_saving()
+        print("\nrequire_fresh_target, measured in the wiring it exists for")
+        print(f"        saving where it can help (per frame)  "
+              f"x{gs['per_frame_ratio']:.2f}")
+        print(f"        cost where it cannot (one frame, one target)  "
+              f"x{gs['one_frame_ratio']:.2f}")
+        print(f"        adaptations: {gs['adaptations_off']} off, "
+              f"{gs['adaptations_on']} on (over the 16-frame sweep)")
 
     if args.scaling:
         print("\nupdate cost vs dimension (RLS is O(n^2); a flat region means "

@@ -425,7 +425,7 @@ byte for byte for the record format, and exactly for every decision and counter 
 The runtime library is fully across; `argmind/bench.py` has no C++ counterpart and is not
 getting one, being a host measurement harness rather than part of what ships. (Everything the library does is reachable from C: RLS, the
 guard, the record format, caller-owned rings and the composed pipeline.)
-322 Python tests plus 4597 C++ checks, several of which exist to prove failures are visible
+328 Python tests plus 4597 C++ checks, several of which exist to prove failures are visible
 rather than silent.
 
 **What the pipeline settled:**
@@ -1212,6 +1212,64 @@ removed rather than recorded — the shorter form has no dead branch to explain 
 that does the work, inside the loop, is caught by the `t = 0` test. The other was a real hole:
 zeroing the prediction in the ABI shim survived, because every test compared
 `has_prediction` and nothing compared what it pointed at.
+
+### What `step()` costs, and where the cost sits, 2026-08-09
+
+The benchmark already timed `step()` — `frame_ns` in the fixed workload — but only in the
+*slow-reference* wiring, where a step drains one frame because the reference is the aiding
+sensor. The low-latency wiring inverts that: the fastest stream is the reference, `step()` is
+called after every one of its samples, and each call pays the call's fixed overhead in full.
+Whether that overhead matters is a property of the implementation and it is not visible in a
+single per-step figure.
+
+**So `step_cost` sweeps the cost against frames drained and fits `fixed + per_frame × frames`.**
+The technique is `fit_leak`'s, reused on purpose: a cost per frame at one batch size cannot
+tell fixed overhead from real per-frame work, and only the slope separates them. That
+distinction already earned a correction once in this file.
+
+Measured on this host — **absolute nanoseconds are machine-specific and are not a gate**;
+what travels is the decomposition:
+
+| frames/step | ns/step | ns/frame |
+|---|---|---|
+| 1 | 50,600 | 50,600 |
+| 2 | 95,500 | 47,750 |
+| 4 | 184,300 | 46,075 |
+| 8 | 334,000 | 41,750 |
+| 16 | 676,900 | 42,306 |
+
+Fit: **≈11.4 µs fixed + ≈41.4 µs per frame**, so **22–29% of a one-frame step is overhead**
+rather than work. That range is three runs, not one — the slope is stable to about 0.5%
+(41065 / 40874 / 41028 ns) while the intercept, being an extrapolation to zero frames from a
+line the slope dominates, moves by a third of its own value between runs.
+
+**Which is why `fit_step` returns the intercept but nothing here compares two of them.** An
+early version of `gate_saving` reported the ratio of two intercepts as a finding; it was
+mostly the conditioning of a five-point fit. It also fitted a line through a **single** point
+when the sweep had one entry, which numpy does with a warning nobody reads. A fabricated
+slope in a benchmark is worse than no slope, because it gets quoted — `fit_step` now returns
+NaN for a sweep that cannot determine a line, and a test pins that.
+
+**What `require_fresh_target` costs, measured in one run so the machine cancels out.**
+
+- Where it can help — a multi-frame step whose frames share one target — a gated frame costs
+  **×0.22** of an adapting one (0.22 / 0.24 / 0.21 over three runs). It skips the update,
+  which is nearly all of the work.
+- Where it cannot — one frame per step, a new target every time — it costs **×1.07**, which
+  is 1.00 inside the harness's own spread (0.94 / 1.08 / 0.91). The comparison is free when
+  the gate never fires.
+
+Those two answer different questions and an earlier version of this conflated them into one
+number. The counters behind them are deterministic and are what the tests actually gate on: a
+sixteen-frame step carrying one target adapts once with the gate on and sixteen times without
+it — 330 against 5,265 over the sweep.
+
+**The honest limit of all of this: it is Python.** At ~41 µs per frame the arithmetic is not
+the cost — `scaling` already showed RLS is flat from n=4 to n=32, which means interpreter and
+numpy dispatch overhead dominate at the design driver's dimension. These figures are not a
+baseline the C++ core should be judged against, for the same reason DESIGN.md already gives
+about the port. What they are good for is exactly what a benchmark is for here: noticing when
+a change makes one of them worse.
 
 ## Standards
 

@@ -107,7 +107,7 @@ rollback, explicit recovery), `argmind/pipeline.py` (`FrameMap`, input gate, bou
 pipeline. `argmind/bench.py` has no C++ counterpart and is not getting one: it is a host
 measurement harness, and DESIGN.md already records that Python timings are not a baseline the
 C++ can be compared against.
-322 Python tests and 4597 C++ checks pass; several exist to prove failures are visible
+328 Python tests and 4597 C++ checks pass; several exist to prove failures are visible
 rather than silent. Every suite is mutation-checked, and surviving mutants are recorded where
 they live rather than tallied here — including the ones that turn out to be **equivalent on a
 64-bit host**, a distinction worth keeping rather than rounding away. Cumulative counts are
@@ -452,6 +452,24 @@ Fifteen mutants, thirteen caught. One survivor was *equivalent* — a redundant 
 `target_is_new()` — and was deleted rather than recorded. The other was real: zeroing the
 prediction in the ABI shim survived, because everything compared `has_prediction` and nothing
 compared what it pointed at.
+
+**And `step()`'s cost is now decomposed, because a single per-step figure hides the thing
+latency turns on.** `step_cost` sweeps cost against frames drained and fits
+`fixed + per_frame x frames` — `fit_leak`'s technique, reused because a per-frame cost at one
+batch size cannot tell overhead from work. Measured: **~11.4 us fixed + ~41.4 us per frame**,
+so **22-29% of a one-frame step is overhead**. The slope is stable to 0.5% across runs; the
+intercept moves by a third of itself, being an extrapolation, which is why nothing compares
+two intercepts — an early `gate_saving` did and it was mostly fit conditioning. `fit_step`
+also returns **NaN** rather than a line through one point: numpy fits it with a warning nobody
+reads, and a fabricated slope gets quoted.
+
+`require_fresh_target` measured in one run: **x0.22 per frame where it can help** (it skips
+the update, which is nearly all the work) and **x1.07 where it cannot** — 1.00 inside the
+harness's spread. Two different questions, conflated into one number in the first version.
+
+All of it is Python, so ~41 us/frame is interpreter and numpy dispatch, not arithmetic —
+`scaling` already showed RLS flat from n=4 to n=32. Not a baseline for the C++ core, for the
+reason DESIGN.md already gives.
 
 **Next:** the on-target build. Checked on 2026-08-09: no `arm-none-eabi-*`, no clang, no
 qemu on this machine, so it cannot start and no on-target figure is quoted. Flash and RAM must
