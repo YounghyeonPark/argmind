@@ -425,7 +425,7 @@ byte for byte for the record format, and exactly for every decision and counter 
 The runtime library is fully across; `argmind/bench.py` has no C++ counterpart and is not
 getting one, being a host measurement harness rather than part of what ships. (Everything the library does is reachable from C: RLS, the
 guard, the record format, caller-owned rings and the composed pipeline.)
-368 Python tests plus 4632 C++ checks, several of which exist to prove failures are visible
+479 Python tests plus 4632 C++ checks, several of which exist to prove failures are visible
 rather than silent.
 
 **What the pipeline settled:**
@@ -1575,17 +1575,7 @@ other reading as one.
   values being subtracted — here `max_j |x_j θ_j|`. The two coincide when θ and x are O(1),
   which is why the fixtures pass, and diverge under covariance windup. Worst over the grid:
   472.6 ulp at f32 against the 200 allowed.
-- **The cross-architecture subset has almost no discriminating power.** It passes unchanged
-  when the host binaries are substituted for the target ones. A reviewer patched the target's
-  reset handler to set round-toward-zero in FPSCR — which costs 19× in state deviation — and
-  all twelve tests still passed. The one path this repository documents as host-unreachable,
-  the 32-bit wraparound guard, is not in the subset; with the guard removed a forged count
-  takes a **BusFault** on the target (`cfsr 0x00008200`, `bfar 0x24000000`) and is equivalent
-  on the host.
-- **And the reason given for the subset was wrong.** "Each QEMU invocation is about a second"
-  overstates by six times: it is **157 ms**, and all four parity suites — 127 tests — run on
-  the target in about 38 seconds including the cross build. There is no cost argument for
-  sampling; the subset should become the whole thing.
+- ~~The cross-architecture subset has almost no discriminating power, and the cost argument behind it was wrong by six times.~~ **Closed** — see below.
 - Two smaller ones. The baseline ulp table says its maxima are over λ ∈ {0.97, 0.99} and every
   figure reproduces only at 0.99; at 0.97, `gain_norm` is 110 against the tabulated 58 and
   `p_trace` is 10.0 against 1.4. And `pipecheck` instantiates only `Rls<T, N, 1>`, so no
@@ -1596,6 +1586,34 @@ The gate itself came through clean: sixteen targeted edge cases and sixty random
 both the host and the target, with no disagreement — including timestamps at 1e15 where
 `t_ref + staleness` no longer round-trips, staleness overflowing to −∞, and a NaN target
 recorded on the attempt rather than on success.
+
+### The subset became the whole thing, 2026-08-09
+
+The parity review left two findings about the cross-architecture suite that were really one:
+its dozen hand-picked cases discriminated nothing, and the reason given for picking a dozen
+was wrong by six times. A QEMU invocation is **157 ms**, not "about a second".
+
+So there is no subset. `tests/_toolbuild.py` builds a parity tool for either architecture and
+the four suites take their tool fixture from it, parametrised `[host]` / `[target]`. Every
+parity case runs on both: **479 tests in 105 seconds** with the toolchains present, and the
+target half skips cleanly without them. The tools are unchanged — semihosting carries `argv`
+in and file I/O out, so a target build is invoked through a wrapper that looks like a program
+taking `(job, out)`, which is what the harnesses already called.
+
+**What is left in `test_target_parity.py` is the one question the parametrised suites cannot
+ask.** Each of them compares one build against the reference; none compares the two builds
+against each other. A target whose arithmetic is subtly not IEEE would agree with the
+reference to within its own tolerance and be an order of magnitude worse than the host, and
+every other test in this repository would pass. So that file now measures both builds'
+deviation on the same case and bounds the ratio.
+
+The bound is 4×, and it cannot be 1× for a stated reason rather than for slack: `VFMA.F32`
+contraction is `rls.hpp`'s fourth divergence and legitimately costs about 2.5× on the worst
+quantity at f32. **Verified rather than assumed**: the review's round-toward-zero fault was
+rebuilt here and pointed at the new check, which reports 37.5× on the state block and fails.
+f64 is asserted *identical* between the two builds as the control — soft float has nothing to
+contract and nothing for a rounding mode to change, so if it ever drifts the 4× above is
+masking something rather than tolerating a known difference.
 
 ## Standards
 

@@ -80,6 +80,8 @@ from pathlib import Path
 import numpy as np
 import pytest
 
+import _toolbuild
+
 from argmind.adapt import RecursiveLeastSquares
 from argmind.guard import Bound, Divergence, Guard
 
@@ -116,21 +118,17 @@ def _compiler() -> str | None:
     return None
 
 
-@pytest.fixture(scope="session")
-def xcheck(tmp_path_factory) -> Path:
-    """Build the parity tool once per session, or skip the module."""
-    cxx = _compiler()
-    if cxx is None:
-        pytest.skip("no C++ compiler on PATH; the Python reference stands alone")
-    out = tmp_path_factory.mktemp("cpp") / ("xcheck.exe" if sys.platform == "win32"
-                                            else "xcheck")
-    cmd = [cxx, "-std=c++17", "-O2", "-fno-exceptions", "-fno-rtti",
-           "-I", str(CPP / "include"), str(CPP / "tools" / "xcheck.cpp"),
-           "-o", str(out)]
-    done = subprocess.run(cmd, capture_output=True, text=True)
-    if done.returncode != 0:
-        pytest.fail(f"xcheck did not build:\n{done.stdout}\n{done.stderr}")
-    return out
+@pytest.fixture(scope="session", params=_toolbuild.ARCHES)
+def xcheck(request, tmp_path_factory) -> Path:
+    """The parity tool, built for the host and for the declared target.
+
+    Both, on every case: a review measured a QEMU invocation at 157 ms and showed
+    that the hand-picked subset which used to stand in for the target passed with
+    the host binaries substituted, and passed again with the target FPU set to
+    round-toward-zero. See tests/_toolbuild.py.
+    """
+    work = tmp_path_factory.mktemp("cpp_" + request.param)
+    return _toolbuild.build_tool("xcheck", request.param, work)
 
 
 def _write_case(path: Path, xs, ys, lam, p0, dtype, guard=None) -> None:

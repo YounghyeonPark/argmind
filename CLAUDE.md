@@ -107,7 +107,7 @@ rollback, explicit recovery), `argmind/pipeline.py` (`FrameMap`, input gate, bou
 pipeline. `argmind/bench.py` has no C++ counterpart and is not getting one: it is a host
 measurement harness, and DESIGN.md already records that Python timings are not a baseline the
 C++ can be compared against.
-368 Python tests and 4632 C++ checks pass; several exist to prove failures are visible
+479 Python tests and 4632 C++ checks pass; several exist to prove failures are visible
 rather than silent. Every suite is mutation-checked, and surviving mutants are recorded where
 they live rather than tallied here — including the ones that turn out to be **equivalent on a
 64-bit host**, a distinction worth keeping rather than rounding away. Cumulative counts are
@@ -578,10 +578,15 @@ Open, all measured: the 400-ulp state tolerance is exceeded (1008 f32 / 472 f64)
 harness's expressible grid — *not* the pipeline, identical through plain RLS, so it is the
 declared divergence at conditions the 1.5-ulp headline never swept (`excited()` has SNR ≈ 200).
 The prediction metric normalises by the run's largest prediction where the project's own rule
-says `max_j|x_j θ_j|`. The cross-architecture subset **passes with the host binaries
-substituted** and with an FPU set to round-toward-zero, so it discriminates nothing — and its
-stated justification is wrong: a QEMU call is 157 ms, not "about a second", and all four
-suites run on the target in ~38 s, so the subset should become the whole thing. Smaller: the
+says `max_j|x_j θ_j|`. ~~The cross-architecture subset discriminates nothing and its cost argument was wrong.~~
+**Closed the same day: there is no subset.** `tests/_toolbuild.py` builds a tool for either
+architecture and the four suites are parametrised `[host]` / `[target]`, so every parity case
+runs on both — 479 tests in 105 s, skipping cleanly without the toolchains. What is left in
+`test_target_parity.py` is the question the suites cannot ask, since each compares one build
+against the reference and never the two against each other: the target's deviation must stay
+within **4×** the host's. Not 1×, because `VFMA.F32` contraction legitimately costs ~2.5× at
+f32; and verified rather than assumed — the round-toward-zero fault was rebuilt and the check
+reports **37.5×** and fails. f64 is asserted identical between builds as the control. Smaller: the
 baseline ulp table reproduces at λ=0.99 only (gain_norm 110 vs 58 at 0.97), and `pipecheck`
 instantiates only M=1 so no multi-output case has run through the freshness gate.
 

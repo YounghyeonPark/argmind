@@ -35,6 +35,8 @@ from pathlib import Path
 import numpy as np
 import pytest
 
+import _toolbuild
+
 from argmind.adapt import RecursiveLeastSquares
 from argmind.align import Aligner
 from argmind.guard import Bound, Divergence, Guard
@@ -84,20 +86,17 @@ def _compiler() -> str | None:
     return None
 
 
-@pytest.fixture(scope="session")
-def pipecheck(tmp_path_factory) -> Path:
-    cxx = _compiler()
-    if cxx is None:
-        pytest.skip("no C++ compiler on PATH; the Python reference stands alone")
-    out = tmp_path_factory.mktemp("cpp_pl") / ("pipecheck.exe" if sys.platform == "win32"
-                                               else "pipecheck")
-    done = subprocess.run(
-        [cxx, "-std=c++17", "-O2", "-Wall", "-Wextra", "-Wpedantic", "-fno-exceptions",
-         "-fno-rtti", "-I", str(CPP / "include"), str(CPP / "tools" / "pipecheck.cpp"),
-         "-o", str(out)], capture_output=True, text=True)
-    if done.returncode != 0:
-        pytest.fail(f"pipecheck did not build:\n{done.stdout}\n{done.stderr}")
-    return out
+@pytest.fixture(scope="session", params=_toolbuild.ARCHES)
+def pipecheck(request, tmp_path_factory) -> Path:
+    """The parity tool, built for the host and for the declared target.
+
+    Both, on every case: a review measured a QEMU invocation at 157 ms and showed
+    that the hand-picked subset which used to stand in for the target passed with
+    the host binaries substituted, and passed again with the target FPU set to
+    round-toward-zero. See tests/_toolbuild.py.
+    """
+    work = tmp_path_factory.mktemp("cpp_pl_" + request.param)
+    return _toolbuild.build_tool("pipecheck", request.param, work)
 
 
 class Case:
