@@ -107,7 +107,7 @@ rollback, explicit recovery), `argmind/pipeline.py` (`FrameMap`, input gate, bou
 pipeline. `argmind/bench.py` has no C++ counterpart and is not getting one: it is a host
 measurement harness, and DESIGN.md already records that Python timings are not a baseline the
 C++ can be compared against.
-347 Python tests and 4603 C++ checks pass; several exist to prove failures are visible
+359 Python tests and 4603 C++ checks pass; several exist to prove failures are visible
 rather than silent. Every suite is mutation-checked, and surviving mutants are recorded where
 they live rather than tallied here — including the ones that turn out to be **equivalent on a
 64-bit host**, a distinction worth keeping rather than rounding away. Cumulative counts are
@@ -533,6 +533,21 @@ dressed as measurement. An *instruction* count would be honest, being architectu
 than temporal, but the Windows build ships no TCG plugins. The claim stays absent — what
 changed is that the reason is now "nobody has measured it on hardware" rather than "nothing
 can run the code".
+
+**Parity now crosses architectures too.** Every parity claim had been x86-64 against
+x86-64; the record format's own declaration that "the writer and the reader may be different
+machines" had only ever been checked on one. All four tools now build for Cortex-M4 and run
+under QEMU against the same Python reference — unchanged, because semihosting carries argv in
+and file I/O out, so `tests/test_target_parity.py` reuses the existing harnesses' encoders and
+comparators rather than growing a second set that could drift.
+
+Holding on the target: record bytes identical at f4/f8 and 6x1/12x3, a host-written record
+unpacking with every field intact and a bit-flip still refused; RLS to the same ulp at both
+precisions; the guard's freeze step and applied/blocked sequence exact over 400 steps; the
+aligner's picks bit-identical under three policies; the pipeline step-for-step including the
+freshness gate. **A curated subset, not the whole suite** — a QEMU invocation is about a
+second and the host sweeps run to hundreds of configurations — and which cases run is stated
+rather than left to be assumed.
 
 **Next:** hardware, for the timing question. Everything else the project set out to build is
 built and verified on the declared floor.

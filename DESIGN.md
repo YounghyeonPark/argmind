@@ -425,7 +425,7 @@ byte for byte for the record format, and exactly for every decision and counter 
 The runtime library is fully across; `argmind/bench.py` has no C++ counterpart and is not
 getting one, being a host measurement harness rather than part of what ships. (Everything the library does is reachable from C: RLS, the
 guard, the record format, caller-owned rings and the composed pipeline.)
-347 Python tests plus 4603 C++ checks, several of which exist to prove failures are visible
+359 Python tests plus 4603 C++ checks, several of which exist to prove failures are visible
 rather than silent.
 
 **What the pipeline settled:**
@@ -1399,6 +1399,44 @@ architectural rather than temporal — but the Windows QEMU build ships no TCG p
 needs one built first and was not attempted. The on-target timing claim therefore stays
 absent, as it has since the target range was settled; what changed is that the reason is now
 "nobody has measured it on hardware" rather than "nothing can run the code at all".
+
+### Parity across architectures, 2026-08-09
+
+Every parity claim this project had made was x86-64 C++ against x86-64 Python. That is a real
+gap, and the record format makes it obvious: `persist.hpp` declares that "the writer and the
+reader may be different machines" and had only ever been checked on one. The others are
+quieter but the same shape — AAPCS lays structs out differently, `size_t` is half the width,
+and a VFPv4 single-precision unit is not an SSE unit.
+
+All four parity tools now build for Cortex-M4 and run under QEMU against the **same** Python
+reference the host build is compared to. No tool changed: semihosting carries `argv` in and
+file I/O out, so each is invoked through a wrapper that looks like a program taking
+`(job, out)` — which is exactly what the existing harnesses already call. `tests/
+test_target_parity.py` therefore reuses their encoders and their comparison functions rather
+than growing a second set that could drift out of agreement with the first.
+
+What holds, on the target:
+
+- **The record format is byte-identical** to the reference at f4 and f8, at 6×1 and 12×3. A
+  record the host wrote unpacks on the target with every header field intact, and a
+  single-bit corruption in it is still refused with `crc_mismatch` — so the agreement is not
+  the CRC being skipped on a machine where the arithmetic differs.
+- **RLS agrees to the same handful of ulp** as the host build does, at both precisions, over
+  300 excited steps.
+- **The guard makes the same decisions**: the freeze step and the applied/blocked sequence
+  match exactly across 400 steps with a divergence check and an injected fault. A guard
+  decides rather than computes, so a decision that differed would not be a rounding
+  difference.
+- **Alignment picks the same samples** under hold-last, nearest and interpolate — compared by
+  bit pattern for staleness and raw bytes for values, as on the host.
+- **The pipeline agrees step for step**, including the freshness gate: frames, updated,
+  lost_frames, every skip counter, the tripped mask and the output.
+
+**What runs there is a curated subset and not the whole suite**, and the reason is cost:
+each QEMU invocation is about a second and the host suites sweep hundreds of configurations —
+840 pack configurations for the record format alone. The subset covers each tool's
+distinguishing claim rather than sampling evenly. Saying "parity holds on ARM" without saying
+which cases ran would be the kind of unbounded claim this project has had to withdraw before.
 
 ## Standards
 
