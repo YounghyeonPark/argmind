@@ -19,7 +19,10 @@
 // in the search rather than in the arithmetic.
 //
 // That exactness has a precondition worth stating: **the blend must not be contracted into
-// an FMA.** Measured — rebuilding the parity tool with `-march=x86-64-v3 -ffp-contract=fast`
+// an FMA.** (This paragraph says below that the M4F cannot contract. That is true of the
+// *double* path it is about -- soft float has nothing to fuse -- and false of the core's f32
+// arithmetic, where VFPv4's `VFMA.F32` is contracted and is `rls.hpp`'s fourth declared
+// divergence. The two statements sat next to each other for a day reading as one.) Measured — rebuilding the parity tool with `-march=x86-64-v3 -ffp-contract=fast`
 // lets the compiler fuse `(1-w)*a + w*b`, and 1506 of 9995 f64 blends then differ by one ulp
 // of the bracket's scale. f32 is unaffected, because narrowing absorbs it, and the M4F's
 // double path is soft float and cannot contract either — but an M7 with `fpv5-d16`, or any

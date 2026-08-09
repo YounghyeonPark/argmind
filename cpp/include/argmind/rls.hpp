@@ -30,6 +30,21 @@
 //   3. Reductions are ordered loops. numpy dispatches these to BLAS, which may
 //      block or vectorise them and therefore sum in a different order. Neither is
 //      more correct; they simply are not bit-identical.
+//   4. **On a target with a fused multiply-add, GCC contracts `a*b + c` into one.**
+//      Added after a parity review measured it rather than after anyone chose it:
+//      VFPv4 on the Cortex-M4F has `VFMA.F32`, the x86-64 SSE2 baseline does not, and
+//      the target's f32 figures are therefore not the host's. Measured over sixty
+//      configurations -- state 2.0 ulp on the host against 5.0 on the target,
+//      residual_norm 14.2 against 38.0, gain_norm 87.4 against 134.0 -- and
+//      `-ffp-contract=off` on the target build reproduces the host figures *exactly*,
+//      which is what identifies the cause. One rounding instead of two is not worse
+//      arithmetic; it is different arithmetic, and a divergence list that omitted it
+//      would make a target-versus-host ulp count look like a bug.
+//
+//      f64 is untouched: doubles are soft float on a single-precision FPU and there is
+//      nothing to contract. `align.hpp` records the f64 half of this and, until the
+//      measurement above, said the M4F "cannot" contract -- true of the double blend it
+//      was describing and false of everything in this file.
 //
 // Everything else — the order of the steps, where the a priori residual is taken,
 // the symmetrisation, the trace accumulated in double, the rejection conditions —

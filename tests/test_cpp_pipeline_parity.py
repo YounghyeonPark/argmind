@@ -731,6 +731,56 @@ def test_the_prediction_crosses_the_boundary_on_every_frame(pipecheck, tmp_path)
         # refused, which no other case exercises.
 
 
+def test_a_step_whose_last_instant_fails_still_reports_its_output(pipecheck, tmp_path):
+    """The shape that found a real divergence, kept so it cannot come back.
+
+    One step drains two reference instants; the first builds a frame and the second does not.
+    The C++ used to clear its frame-ready flag on the failed build and then withhold the
+    step's output, while the reference -- which only ever sees frames that exist -- predicted
+    normally. A parity review reproduced it 118 times in 250 randomised cases, identically on
+    the host and the target, so it was logic rather than rounding.
+
+    `drop_if_stale` is the reachable way to make a later instant fail: streams are monotonic,
+    so a second instant cannot predate the first stream's data, but a policy can abandon it.
+
+    What this catches, checked rather than assumed: restoring **both** halves of the old
+    behaviour -- clearing the flag on entry to `build_frame` and gating the output on it --
+    fails this test. Restoring the gate alone does not, because the fix also stopped a failed
+    build from touching the flag, so the gate now reads a value that is always true once a
+    frame exists. The gate alone is an equivalent mutant, and saying which mutant a test kills
+    matters more than saying that it kills one.
+    """
+    case = Case([1, 1], 8, [(1, 0)], (0, 0), constant=True,
+                policy="drop_if_stale", max_stale_aligner=0.4)
+    case.push(1, 1.0, [2.0])
+    case.push(0, 1.1, [3.0])          # staleness -0.1: kept
+    case.push(0, 1.9, [3.0])          # staleness -0.9: abandoned, and it is the last
+    case.step()
+    py, cpp = both(pipecheck, tmp_path, case)
+    assert py["steps"][0]["frames"] == 1
+    assert py["steps"][0]["has_prediction"], "the reference should predict on the good frame"
+    assert cpp["steps"][0]["has_prediction"], (
+        "the port withheld the output because a later instant failed")
+    assert py["totals"]["al_dropped_stale"] == 1, "the fixture no longer abandons anything"
+
+
+def test_a_refused_push_is_visible_to_the_comparison(pipecheck, tmp_path):
+    """`pipecheck` calls a refusal "data", and until now it was data no case produced: an
+    audit instrumented the harness and found `accepted` held the single value 1 across the
+    entire suite, so a tool that hardcoded it would have passed everything."""
+    case = Case([1, 1], 8, [(1, 0)], (0, 0), constant=True)
+    case.push(1, 1.0, [2.0])
+    case.push(0, 1.0, [3.0])
+    case.push(0, 1.0, [4.0])                        # equal timestamp: refused
+    case.push(0, 0.5, [5.0])                        # backwards: refused
+    case.push(0, float("nan"), [6.0])               # not finite: refused
+    case.push(0, 2.0, [7.0])                        # and ordering still works after
+    case.step()
+    py, cpp = both(pipecheck, tmp_path, case)
+    assert py["accepted"] == cpp["accepted"]
+    assert py["accepted"] == [1, 1, 0, 0, 0, 1], py["accepted"]
+
+
 def test_the_totals_are_the_sum_of_the_steps(pipecheck, tmp_path):
     """A cheap internal consistency check on both sides at once. It has caught nothing yet;
     it is here because `lost_frames` is a difference of counters and a per-step figure that

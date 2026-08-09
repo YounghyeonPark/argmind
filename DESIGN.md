@@ -425,7 +425,7 @@ byte for byte for the record format, and exactly for every decision and counter 
 The runtime library is fully across; `argmind/bench.py` has no C++ counterpart and is not
 getting one, being a host measurement harness rather than part of what ships. (Everything the library does is reachable from C: RLS, the
 guard, the record format, caller-owned rings and the composed pipeline.)
-366 Python tests plus 4614 C++ checks, several of which exist to prove failures are visible
+368 Python tests plus 4632 C++ checks, several of which exist to prove failures are visible
 rather than silent.
 
 **What the pipeline settled:**
@@ -1520,6 +1520,82 @@ each QEMU invocation is about a second and the host suites sweep hundreds of con
 840 pack configurations for the record format alone. The subset covers each tool's
 distinguishing claim rather than sampling evenly. Saying "parity holds on ARM" without saying
 which cases ran would be the kind of unbounded claim this project has had to withdraw before.
+
+### What the parity audit found, 2026-08-09
+
+The third of three independent reviews, and the sharpest. It found a **real bug**, an
+**undeclared divergence**, and four places where a tolerance or a fixture set is narrower
+than the claim resting on it. The first two are fixed; the rest are recorded here as open,
+because writing them down is cheaper than pretending and much cheaper than forgetting.
+
+**Fixed: the port withheld an output the reference produced.** `Pipeline::step` emitted its
+prediction only `if (frames && frame_ready_)`, and `build_frame` cleared `frame_ready_` on
+entry. So a step in which an earlier reference instant built a frame and a later one failed
+reported frames, a reference time and staleness — and no output. The reference loops over the
+frames `drain()` returned, all of which exist, so it never sees a failed instant at all.
+Measured: **118 disagreeing steps in 250 randomised cases**, identically on the host and the
+target, which is what says logic rather than rounding.
+
+The fix is the one that removes the hazard rather than guarding it: extraction builds into
+scratch and commits on success, so `x` always holds the last *complete* frame and the mixture
+of two instants that `frame_ready_` existed to mark cannot arise. 28 bytes at the design
+driver's shape. The test that pinned the old behaviour asserted the opposite of what it now
+asserts, which is what a test pinning a divergence looks like.
+
+Worth one more note, because it is the session's recurring mistake in miniature: the parity
+case added for this **does not catch the gate alone**. Restoring both halves of the old
+behaviour fails it; restoring only the `&& frame_ready_` does not, because the same fix
+stopped a failed build from touching the flag. The gate on its own is now an equivalent
+mutant. Checking which mutant a test kills is a different act from writing the test, and
+skipping it is how this project keeps producing tests that pass for the wrong reason.
+
+**Declared: a fourth divergence, on the target only.** `rls.hpp` listed three deliberate
+differences from the reference. There is a fourth and nobody chose it: GCC contracts `a*b + c`
+into `VFMA.F32`, which VFPv4 on the Cortex-M4F has and the x86-64 SSE2 baseline does not. Over
+sixty configurations the target's f32 figures are not the host's — state 2.0 ulp against 5.0,
+`residual_norm` 14.2 against 38.0, `gain_norm` 87.4 against 134.0 — and `-ffp-contract=off` on
+the target build reproduces the host numbers *exactly*, which is what identifies the cause
+rather than merely correlating with it. f64 is untouched, having nothing to contract on a
+single-precision FPU. `align.hpp` had said the M4F "cannot" contract; true of the double blend
+it was describing, false of everything in `rls.hpp`, and the two sentences sat next to each
+other reading as one.
+
+**Open, with the measurement that shows it.**
+
+- **The state tolerance of 400 ulp is generous for the fixtures and is exceeded by what the
+  harness can express.** Over a 486-configuration grid the worst is 1008 ulp at f32 and 472 at
+  f64. It is not the pipeline: replaying the same `(x, y)` through plain RLS gives the
+  identical figure to the last digit. It is the **declared** RLS divergence at conditions the
+  baseline never swept — the "about 1.5 ulp on theta" headline is a property of `excited()`,
+  whose SNR is about 200. At SNR ≈ 1 the same code disagrees by 30–100 ulp; at `p0 = 1000`
+  over a short run, by several hundred, peaking in the transient and decaying. The honest fix
+  is a noisy fixture and a re-derived tolerance, not a looser number.
+- **The prediction metric normalises by the wrong scale.** It bounds against the run's largest
+  *prediction*, where the project's own rule for a cancelled quantity is the scale of the
+  values being subtracted — here `max_j |x_j θ_j|`. The two coincide when θ and x are O(1),
+  which is why the fixtures pass, and diverge under covariance windup. Worst over the grid:
+  472.6 ulp at f32 against the 200 allowed.
+- **The cross-architecture subset has almost no discriminating power.** It passes unchanged
+  when the host binaries are substituted for the target ones. A reviewer patched the target's
+  reset handler to set round-toward-zero in FPSCR — which costs 19× in state deviation — and
+  all twelve tests still passed. The one path this repository documents as host-unreachable,
+  the 32-bit wraparound guard, is not in the subset; with the guard removed a forged count
+  takes a **BusFault** on the target (`cfsr 0x00008200`, `bfar 0x24000000`) and is equivalent
+  on the host.
+- **And the reason given for the subset was wrong.** "Each QEMU invocation is about a second"
+  overstates by six times: it is **157 ms**, and all four parity suites — 127 tests — run on
+  the target in about 38 seconds including the cross build. There is no cost argument for
+  sampling; the subset should become the whole thing.
+- Two smaller ones. The baseline ulp table says its maxima are over λ ∈ {0.97, 0.99} and every
+  figure reproduces only at 0.99; at 0.97, `gain_norm` is 110 against the tabulated 58 and
+  `p_trace` is 10.0 against 1.4. And `pipecheck` instantiates only `Rls<T, N, 1>`, so no
+  multi-output case has ever run through the freshness gate — which the reviewer checked by
+  construction and could not check by execution.
+
+The gate itself came through clean: sixteen targeted edge cases and sixty randomised seeds, on
+both the host and the target, with no disagreement — including timestamps at 1e15 where
+`t_ref + staleness` no longer round-trips, staleness overflowing to −∞, and a NaN target
+recorded on the attempt rather than on success.
 
 ## Standards
 

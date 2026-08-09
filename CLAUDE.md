@@ -107,7 +107,7 @@ rollback, explicit recovery), `argmind/pipeline.py` (`FrameMap`, input gate, bou
 pipeline. `argmind/bench.py` has no C++ counterpart and is not getting one: it is a host
 measurement harness, and DESIGN.md already records that Python timings are not a baseline the
 C++ can be compared against.
-366 Python tests and 4614 C++ checks pass; several exist to prove failures are visible
+368 Python tests and 4632 C++ checks pass; several exist to prove failures are visible
 rather than silent. Every suite is mutation-checked, and surviving mutants are recorded where
 they live rather than tallied here — including the ones that turn out to be **equivalent on a
 64-bit host**, a distinction worth keeping rather than rounding away. Cumulative counts are
@@ -557,6 +557,33 @@ aligner's picks bit-identical under three policies; the pipeline step-for-step i
 freshness gate. **A curated subset, not the whole suite** — a QEMU invocation is about a
 second and the host sweeps run to hundreds of configurations — and which cases run is stated
 rather than left to be assumed.
+
+**The parity audit found a real bug and an undeclared divergence, and left four things
+open.** Fixed: `Pipeline::step` emitted its prediction only `if (frames && frame_ready_)`,
+and `build_frame` cleared that flag on entry — so a step whose *later* instant failed reported
+frames and no output, while the reference, which only sees frames that exist, predicted.
+**118 disagreeing steps in 250 randomised cases**, host and target alike. Extraction builds
+into scratch and commits on success now, which removes the hazard the flag was marking rather
+than guarding it. The parity case added for it catches both halves of the old behaviour and
+**not** the gate alone — that is an equivalent mutant now, and checking which mutant a test
+kills is a separate act from writing it.
+
+Declared: **a fourth divergence in `rls.hpp`**, target-only and nobody's choice. GCC contracts
+`a*b + c` into `VFMA.F32`, which VFPv4 has and SSE2 does not, so target f32 figures are not
+host f32 figures (state 2.0 → 5.0 ulp, gain_norm 87.4 → 134.0); `-ffp-contract=off` reproduces
+the host exactly. `align.hpp` said the M4F "cannot" contract — true of its double blend, false
+of the f32 core, and the two sentences read as one.
+
+Open, all measured: the 400-ulp state tolerance is exceeded (1008 f32 / 472 f64) over the
+harness's expressible grid — *not* the pipeline, identical through plain RLS, so it is the
+declared divergence at conditions the 1.5-ulp headline never swept (`excited()` has SNR ≈ 200).
+The prediction metric normalises by the run's largest prediction where the project's own rule
+says `max_j|x_j θ_j|`. The cross-architecture subset **passes with the host binaries
+substituted** and with an FPU set to round-toward-zero, so it discriminates nothing — and its
+stated justification is wrong: a QEMU call is 157 ms, not "about a second", and all four
+suites run on the target in ~38 s, so the subset should become the whole thing. Smaller: the
+baseline ulp table reproduces at λ=0.99 only (gain_norm 110 vs 58 at 0.97), and `pipecheck`
+instantiates only M=1 so no multi-output case has run through the freshness gate.
 
 **Next:** hardware, for the timing question. Everything else the project set out to build is
 built and verified on the declared floor.

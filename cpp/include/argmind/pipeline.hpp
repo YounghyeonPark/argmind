@@ -33,11 +33,13 @@
 // `MaxStreams` of them. For `Pick<double>` that is 280 bytes against 1,120 at four streams,
 // on a target budgeting 8 KB.
 //
-// The cost of writing into `x` before the frame is known to exist: a frame that fails
-// half-way leaves `x` holding some of this instant's streams and some of the last one's.
-// Predicting from that would produce a plausible wrong answer and no error, which is the
-// exact failure mode this project keeps finding. `frame_ready()` is false after a partial
-// write and `predict_last()` refuses.
+// Writing into `x` before the frame is known to exist would leave a frame that fails
+// half-way holding some of this instant's streams and some of the last one's, which predicts
+// a plausible wrong answer with no error anywhere. The first version did exactly that and
+// guarded it with a `frame_ready()` flag; a parity review found the guard itself diverged
+// from the reference, which never sees a failed frame at all. Extraction builds into scratch
+// and commits on success now, so the mixture cannot arise -- 28 bytes at the design driver's
+// shape, against a class of silent wrong answer.
 //
 // **2. Views are passed to `step()`, never stored.** A `StreamView` snapshots `head` and
 // `count`. A pipeline that captured one at construction would hold a picture of the ring
@@ -437,9 +439,16 @@ public:
 
     bool frozen() const { return frozen_now(); }
 
-    /// The regressor and target the last **complete** frame produced. Meaningless — and
-    /// declared so — after a frame that failed part-way, because the extraction writes as it
-    /// goes and a failed frame leaves a mixture of two instants behind.
+        /// Whether a complete frame has ever been extracted, and therefore whether `last_x()`,
+    /// `last_y()` and `predict_last()` mean anything.
+    ///
+    /// It used to mean "the last `build_frame` call succeeded", because extraction wrote
+    /// straight into `x_` and a frame that failed half-way left a mixture of two instants
+    /// there. That was a real divergence from the reference and a parity review found it:
+    /// the Python loops over the frames `drain()` returned -- all of which exist -- so a
+    /// failed instant never touches its regressor. Extraction now builds into scratch and
+    /// commits on success, so `x_` always holds the last COMPLETE frame and the mixture
+    /// cannot occur.
     bool frame_ready() const { return frame_ready_; }
     const T* last_x() const { return x_; }
     const T* last_y() const { return y_; }
@@ -541,7 +550,13 @@ public:
         // regressor against the parameters this step finished with. O(n*m) — six
         // multiply-adds at the design driver's shape, which is not a cost worth making
         // optional.
-        if (frames && frame_ready_) {
+                // `frames` alone, not `frames && frame_ready_`. The second condition was a bug and a
+        // parity review caught it: when an earlier reference instant in a step built a frame
+        // and a later one failed, `build_frame` had cleared `frame_ready_` and the step
+        // reported frames but no output -- while the reference, which only ever sees frames
+        // that exist, predicted. Measured across randomised cases: 118 disagreeing steps in
+        // 250, identically on the host and the target, so it was logic rather than rounding.
+        if (frames) {
             adapter_.predict(x_, rep.prediction);
             rep.has_prediction = true;
         }
@@ -603,8 +618,7 @@ private:
     /// limit.
     ///
     /// `count` is false for prediction, where nothing is being consumed.
-    bool build_frame(const StreamView<T>* __restrict views, double t, bool count) {
-        frame_ready_ = false;
+        bool build_frame(const StreamView<T>* __restrict views, double t, bool count) {
         frame_all_valid_ = true;
         frame_worst_ = 0.0;
         for (int i = 0; i < n_streams_; ++i) {
@@ -625,18 +639,24 @@ private:
             // everything the frame map wants from it has to be taken now. O(streams x N)
             // with both small, against holding every stream's `Pick` at once.
             for (int j = 0; j < map_.declared_features(); ++j) {
-                if (map_.feature_stream(j) == i) {
-                    x_[j] = pick_.values[map_.feature_component(j)];
+                                if (map_.feature_stream(j) == i) {
+                    sx_[j] = pick_.values[map_.feature_component(j)];
                 }
             }
             for (int j = 0; j < n_outputs; ++j) {
-                if (map_.target_stream(j) == i) {
-                    y_[j] = pick_.values[map_.target_component(j)];
+                                if (map_.target_stream(j) == i) {
+                    sy_[j] = pick_.values[map_.target_component(j)];
                 }
             }
         }
-        // Last, as the reference puts it: `self._x[-1] = 1.0`.
-        if (map_.constant()) x_[n_features - 1] = T(1);
+                // Last, as the reference puts it: `self._x[-1] = 1.0`.
+        if (map_.constant()) sx_[n_features - 1] = T(1);
+        // Commit. Scratch until here, so an instant that fails part-way leaves the previous
+        // complete frame intact instead of a mixture of two -- which is what the reference
+        // does by construction, since it only ever extracts frames that exist. The cost is
+        // one extra regressor and target: 28 bytes at the design driver's shape.
+        for (int j = 0; j < n_features; ++j) x_[j] = sx_[j];
+        for (int j = 0; j < n_outputs; ++j) y_[j] = sy_[j];
         frame_t_ = t;
         frame_ready_ = true;
         return true;
@@ -718,9 +738,13 @@ private:
     int n_streams_ = 0;
     int dims_[MaxStreams] = {};
 
-    // Preallocated. Extracting a regressor from a frame allocates nothing.
+        // Preallocated. Extracting a regressor from a frame allocates nothing.
     T x_[n_features] = {};
     T y_[n_outputs] = {};
+    // Scratch, so a frame that fails part-way cannot leave a mixture of two instants in the
+    // committed pair. See `build_frame`.
+    T sx_[n_features] = {};
+    T sy_[n_outputs] = {};
     double stale_[MaxStreams] = {};
     Pick<T> pick_;
 

@@ -1239,8 +1239,22 @@ void test_a_view_whose_width_changed_is_refused() {
     CHECK(rep.frames == 0);
 }
 
-void test_a_partial_frame_is_not_predictable_from() {
+void test_a_failed_instant_leaves_the_last_complete_frame_alone() {
     using namespace pipe_fixture;
+    // This test used to be called "a partial frame is not predictable from" and asserted the
+    // opposite of what it now asserts, because the implementation it pinned was wrong.
+    //
+    // Extraction wrote straight into `x`, so an instant that failed half-way left a mixture
+    // of two instants there, and a `frame_ready()` flag was added to make that state
+    // unpredictable-from. A parity review then found the flag itself diverged from the
+    // reference: the Python only ever extracts frames that `drain()` returned -- all of
+    // which exist -- so a failed instant never touches its regressor at all. The C++ was
+    // reporting frames from a step and withholding the output, on 118 of 250 randomised
+    // cases.
+    //
+    // Extraction builds into scratch and commits on success now, which is the reference's
+    // behaviour rather than a guard against a self-inflicted hazard. So what this pins is
+    // that a failed instant is invisible to everything downstream.
     Rig rig;
     rig.refresh();
     Pipe p = make();
@@ -1249,24 +1263,75 @@ void test_a_partial_frame_is_not_predictable_from() {
 
     const float v[2] = {1.0f, 2.0f};
     const float y[1] = {3.0f};
-    // s0 gets an early sample s1 cannot answer for, which is what makes the failure PARTIAL
+    // s0 gets an early sample s1 cannot answer for, which is what makes a failure PARTIAL
     // rather than immediate: the reference is stream 0 and is extracted first, so a frame
-    // that dies on stream 1 has already written y.
+    // that dies on stream 1 has already written the target.
     CHECK(rig.ref.push(0.2, y));
     CHECK(rig.aux.push(0.5, v));
     CHECK(rig.ref.push(1.0, y));
     rig.refresh();
     CHECK(p.step(rig.views).frames == 1);
     CHECK(p.frame_ready());
-    float out[1] = {0.0f};
-    CHECK(p.predict_last(out));
+    float good[1] = {0.0f};
+    CHECK(p.predict_last(good));
 
-    // t = 0.3: s0 answers with its 0.2 sample and s1 has nothing yet. y is now this
-    // instant's and x is still the last frame's -- exactly the mixture that predicts a
-    // plausible wrong answer with no error anywhere.
+    // t = 0.3: s0 answers with its 0.2 sample and s1 has nothing yet, so the build fails
+    // after touching the target. The committed pair must be untouched.
+    float out[1] = {0.0f};
     CHECK(!p.predict_at(rig.views, 0.3, out));
-    CHECK(!p.frame_ready());
-    CHECK(!p.predict_last(out));
+    CHECK(p.frame_ready());
+    CHECK(p.predict_last(out));
+    CHECK(out[0] == good[0]);
+    CHECK(p.last_y()[0] == y[0]);
+    CHECK(p.last_x()[0] == v[0] && p.last_x()[1] == v[1]);
+}
+
+void test_a_step_reports_its_output_even_when_a_later_instant_fails() {
+    using namespace pipe_fixture;
+    // The disagreement itself, pinned. One step drains two reference instants: the first
+    // builds, the second cannot. The step has frames, so it must carry an output -- which is
+    // what the reference does and what `frames && frame_ready_` used to prevent.
+    Rig rig;
+    rig.refresh();
+    Pipe p = make();
+    CHECK(p.configure(rig.views, 2));
+
+    const float v[2] = {1.0f, 2.0f};
+    const float y[1] = {3.0f};
+    CHECK(rig.aux.push(0.5, v));
+    CHECK(rig.ref.push(1.0, y));      // builds: s1 has 0.5
+    rig.refresh();
+    CHECK(p.step(rig.views).frames == 1);
+
+    // Now two instants in one step. The aligner is drained from the oldest unconsumed, so
+    // 2.0 builds (s1 still holds 0.5) -- to make the SECOND fail, the second stream has to
+    // stop answering, which hold-last cannot do once it holds a sample. So instead: a fresh
+    // pipeline whose first instant builds and whose second is before s1's first sample.
+    Rig r2;
+    r2.refresh();
+    Pipe q = make();
+    CHECK(q.configure(r2.views, 2));
+    CHECK(r2.aux.push(0.5, v));
+    CHECK(r2.ref.push(1.0, y));
+    r2.refresh();
+    CHECK(q.step(r2.views).frames == 1);
+
+    // A second reference instant that predates the aux stream is impossible (monotonic), so
+    // the reachable shape is the one `drop_if_stale` gives: a frame, then an instant the
+    // policy abandons.
+    Pipe d(Rls6(0.99f, 10.0f), argmind::Aligner(argmind::Policy::DropIfStale, 0.4),
+           good_map(), 0);
+    Rig r3;
+    r3.refresh();
+    CHECK(d.configure(r3.views, 2));
+    CHECK(r3.aux.push(1.0, v));
+    CHECK(r3.ref.push(1.1, y));       // staleness 0.1: kept
+    CHECK(r3.ref.push(1.9, y));       // staleness 0.9: abandoned, and it is the LAST instant
+    r3.refresh();
+    const auto rep = d.step(r3.views);
+    CHECK(rep.frames == 1);
+    CHECK(rep.has_prediction);        // the whole point: frames > 0 means an output
+    CHECK(d.aligner().dropped_stale() == 1);
 }
 
 void test_predicting_consumes_nothing() {
@@ -2288,7 +2353,8 @@ int main() {
     test_configure_refuses_what_the_reference_raises_on();
     test_an_unconfigured_step_reports_that_rather_than_idling();
     test_a_view_whose_width_changed_is_refused();
-    test_a_partial_frame_is_not_predictable_from();
+    test_a_failed_instant_leaves_the_last_complete_frame_alone();
+    test_a_step_reports_its_output_even_when_a_later_instant_fails();
     test_predicting_consumes_nothing();
     test_the_guarded_and_unguarded_forms_are_both_constructible();
     test_a_step_with_nothing_to_visit_touches_no_counter();
