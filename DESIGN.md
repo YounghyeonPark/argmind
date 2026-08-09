@@ -188,6 +188,77 @@ exactly where it is and the higher tier declaring Cortex-M55 + NPU. That keeps n
 no-exceptions, no-libm and the whole verification chain, and it is the only option of the three
 that has been *run* rather than reasoned about.
 
+### Can learning and inference be integrated, or only placed side by side?
+
+Reviewed 2026-08-09, because a network foundation written from scratch could in principle put
+them together rather than bolting one onto the other. **They can be integrated, at exactly one
+place, and the place is forced rather than chosen.**
+
+**The NPU does not learn.** Arm describes Ethos-U55 as an *inference* accelerator, its software
+path is TensorFlow Lite **Micro** — an inference runtime — and the documentation makes no
+provision for training or backward operators
+([Arm, Ethos-U55](https://developer.arm.com/Processors/Ethos-U55)). ST presents Neural-ART the
+same way. So "learning on an NPU-equipped MCU" is never the NPU learning; it is the CPU learning
+beside it. That is a constraint on the design, not a preference within it.
+
+**Backprop's cost is activations, not weights, and that is what closes the door on the rest.**
+Forward-only inference can release each layer's activations as it moves; a backward pass must
+retain them. Against 4.2 MB of SRAM and a no-heap contract, end-to-end on-device training of a
+backbone is not available at this floor, and no amount of care in a new foundation changes it.
+
+**Which leaves the head — and the head is where argmind already is.** Frozen backbone on the NPU
+in int8, forward only, emitting a feature vector; the last layer adapted online by an `Adapter`
+under a `Guard`. That is not a fallback shape, it is the standard one, and it happens to be
+exactly the contract this library already has. The integration is *organic* in the sense that
+matters: the forward pass's output **is** the regressor, so inference and learning share the
+computation rather than duplicating it, and one flat state block still holds everything
+persistence needs.
+
+**Measured on the target cores rather than argued.** A 128-wide head — the range a small vision
+backbone emits — driven 4,000 samples through the full guard:
+
+| | guard object | error after 4,000 |
+|---|---|---|
+| `Guard<Rls<float,128,1>,4,4>` | **330,608 B** | **−5.8e−07** |
+| `Guard<Nlms<float,128,1>,4,4>` | **2,912 B** | 1.0e−02 |
+
+Both run on Cortex-M4F under `mps2-an386` and on Cortex-M55 under `mps3-an547`. **113× the
+memory for ~17,000× the accuracy on this fixture** is the trade, and having a second adapter is
+what makes it a choice instead of a default.
+
+**The wall is RLS's n², and head width is the design variable.** State is `N·M + N²`, and the
+guard's ring multiplies it by `Depth`:
+
+| head N | RLS state + ring(4) | of STM32N6's 4.2 MB | NLMS state + ring(4) |
+|---|---|---|---|
+| 32 | 21 KB | 0.5 % | 704 B |
+| 128 | 330 KB | 7.5 % | 2.6 KB |
+| 256 | 1.32 MB | 30 % | 5.2 KB |
+| 512 | 5.25 MB | **119 % — does not fit** | 10 KB |
+
+So a head wider than about 256 forces either a square-root/UD form, a lower rollback depth, or
+NLMS. That is a real design boundary and it should be recorded before anyone picks a backbone.
+
+**Getting it to run found a harness fact worth keeping:** the AN547's DTCM at `0x20000000` is
+512 KB, not the 4 MB `mps2.ld` declares for the AN386, so a 662 KB `.bss` locked the board up
+with `SP=0x200a1c50` and "can't escalate 3 to HardFault". The regions were then probed by
+writing and reading back rather than taken from a document: `0x00000000`, `0x01000000`,
+`0x20000000`, `0x21000000`, `0x60000000`, `0x70000000` and `0x80000000` are backed and
+`0x28000000` is not, with `0x60000000` good for at least 64 MB. A head-sized image has to place
+its data there.
+
+**What this does not give, said plainly so nobody expects it.** No representation learning: the
+backbone is frozen, and if the world changes in a way its features do not capture, no head can
+recover it. "Situation assessment" is the backbone's job and the backbone does not learn on
+device. And the head is linear in the parameters unless a different adapter is written.
+
+**What it does give is the reason argmind belongs in this at all.** An online-adapted head is
+precisely the component that drifts silently — it is the only part still moving after
+deployment. Freezing, bounded rollback, checkpointing, the two-slot record, the staleness gate
+and the refusal to watch a field the adapter cannot report all transfer unchanged. A frozen
+network with an unguarded adapted head is a system that can learn garbage and keep answering
+confidently, which is the failure this library was built around.
+
 ## The design driver
 
 The framework is sensor-agnostic, but designing against nothing produces an API that fits

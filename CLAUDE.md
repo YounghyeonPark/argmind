@@ -158,6 +158,23 @@ person, hear a call, answer with a sound) fits an MCU+NPU at ~1 W and the floor 
 *converse* (speech recognition, dialogue, natural TTS) needs an SBC at 10–25 W, and on tomcat's
 own figures — 41.8 Wh battery, ~14.9 W standing — that costs **40–63 % of standing endurance**.
 
+**Learning and inference can be integrated, at one forced place: the head.** The NPU does not
+learn — Arm calls Ethos-U55 an *inference* accelerator and its path is TFLite **Micro**
+([Arm](https://developer.arm.com/Processors/Ethos-U55)) — and backprop's cost is retained
+*activations*, not weights, so end-to-end on-device training is not available under 4.2 MB and
+no heap. What is available is a frozen int8 backbone on the NPU whose feature vector **is** the
+regressor for an `Adapter` under a `Guard`: inference and learning share the computation rather
+than duplicating it, and one flat state block still covers persistence. Measured on both cores,
+a 128-wide head over 4,000 samples: `Guard<Rls<f32,128,1>,4,4>` is **330,608 B** and converges
+to **−5.8e−07**; `Guard<Nlms<...>>` is **2,912 B** and reaches 1.0e−02 — **113× the memory for
+~17,000× the accuracy**, which is a choice only because a second adapter now exists. **The wall
+is RLS's n²**: head 128 costs 7.5% of the SRAM, 256 costs 30%, and **512 does not fit at 119%**,
+so a wide head forces a square-root form, a shallower ring, or NLMS. What it does *not* give:
+no representation learning, the backbone is frozen, and "situation assessment" is the backbone's
+job. What it does give is the reason argmind belongs here — an online-adapted head is the only
+part still moving after deployment, so freezing, rollback, checkpointing and the record format
+all transfer unchanged.
+
 **Still undecided:** whether inference is *hosted* (an interface to ONNX Runtime/TFLite) or
 *embedded*, and whether the tiers ship as one library or two. Nothing on the camera/audio/speech
 path is built.
