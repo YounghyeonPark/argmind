@@ -107,7 +107,7 @@ rollback, explicit recovery), `argmind/pipeline.py` (`FrameMap`, input gate, bou
 pipeline. `argmind/bench.py` has no C++ counterpart and is not getting one: it is a host
 measurement harness, and DESIGN.md already records that Python timings are not a baseline the
 C++ can be compared against.
-491 Python tests and 4632 C++ checks pass; several exist to prove failures are visible
+495 Python tests and 4632 C++ checks pass; several exist to prove failures are visible
 rather than silent. Every suite is mutation-checked, and surviving mutants are recorded where
 they live rather than tallied here — including the ones that turn out to be **equivalent on a
 64-bit host**, a distinction worth keeping rather than rounding away. Cumulative counts are
@@ -604,6 +604,18 @@ other twelve cases. The deviation is conditioning, not the port: the same data t
 RLS gives the identical figure, so the "1.5 ulp on theta" headline is a property of
 `excited()`. The host-to-target ratio bound moved 4 -> 8 for the same reason in miniature: 4
 came from one fixture at 2.5x and the sweep found 4.7 on a noisier one.
+
+**The last two audit items are closed.** The baseline ulp table said its maxima came from
+"λ=0.97 and 0.99" and reproduced only at 0.99 — `gain_norm` 58 where 0.97 gives 110, `p_trace`
+1.4 where it gives 10.0; an axis named in the prose and not swept in the measurement. It is
+re-measured over every shape `xcheck` instantiates, both λ, and now both architectures. That
+also exposed uneven headroom in `FIELD_ULP`: twenty times for `p_trace`, **1.5 times** for
+`gain_norm` at f32 on the target, where DESIGN.md had said "three to eight". And `pipecheck`
+now instantiates three outputs, so the freshness gate finally runs with more than one — the
+reference compares a tuple over unique target streams and the core iterates outputs, which had
+been checked by reading and never by running. The first version of that fixture put the
+targets on the reference stream so the gate could not fire; it failed its own guard, the third
+time this session.
 
 **Next:** hardware, for the timing question. Everything else the project set out to build is
 built and verified on the declared floor.

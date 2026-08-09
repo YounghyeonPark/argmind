@@ -50,7 +50,7 @@ CPP = REPO / "cpp"
 # without padding and a C++ struct does not; the explicit `4x` before the first double in the
 # job header is that difference, and getting it wrong has already cost this project two
 # debugging sessions on other tools.
-_JOB = struct.Struct("<4sHBBHHHHHHBBBBB3xIIIIIdddd")   # 80 bytes, then bounds + divergence
+_JOB = struct.Struct("<4sHBBHHHHHHHBBBBBBIIIIIdddd")  # 80 bytes, then bounds + divergence
 _BOUND = struct.Struct("<ddII")                       # 24
 _DIV = struct.Struct("<ddddII")                       # 40
 _SPEC = struct.Struct("<HHHH")                        # 8
@@ -108,14 +108,21 @@ class Case:
     """
 
     def __init__(self, dims, capacity, features, target, *, constant=False,
-                 n_features=None, policy="hold_last", reference=0, dtype="f8",
+                 n_features=None, n_outputs=None, policy="hold_last", reference=0,
+                 dtype="f8",
                  max_stale_pipeline=None, max_stale_aligner=0.0, require_valid=True,
                  allow_non_causal=False, lam=0.98, p0=10.0, guard=None,
                  require_fresh_target=False):
         self.dims = list(dims)
         self.capacity = capacity
         self.features = list(features)      # [(stream, component)]
-        self.target = target                # (stream, component)
+        # One `(stream, component)` or a list of them. A list is how the freshness gate gets
+        # exercised with more than one output at all: the reference compares a tuple over
+        # unique target streams and the core iterates outputs, and an audit could check that
+        # equivalence by reading but not by running.
+        self.targets = list(target) if isinstance(target, list) else [target]
+        self.target = self.targets[0]
+        self.n_outputs = n_outputs or len(self.targets)
         self.constant = constant
         self.n_features = n_features or (len(features) + (1 if constant else 0))
         self.policy = policy
@@ -150,12 +157,12 @@ def run_cpp(pipecheck: Path, tmp_path: Path, case: Case):
     with open(job, "wb") as fh:
         fh.write(_JOB.pack(
             b"AMPL", 1, dt.itemsize, 1 if case.guard else 0, case.n_features,
-            len(case.dims), case.capacity, POLICIES[case.policy], case.reference,
-            len(case.features), 1 if case.constant else 0,
+            case.n_outputs, len(case.dims), case.capacity, POLICIES[case.policy],
+            case.reference, len(case.features), 1 if case.constant else 0,
             1 if case.require_valid else 0,
             0 if case.max_stale_pipeline is None else 1,
             1 if case.allow_non_causal else 0,
-            1 if case.require_fresh_target else 0,
+            1 if case.require_fresh_target else 0, 0,
             len(case.events), g.get("depth", 1), g.get("checkpoint_every", 1),
             g.get("recover_after", 0), len(bounds),
             case.max_stale_pipeline or 0.0, case.max_stale_aligner,
@@ -176,7 +183,8 @@ def run_cpp(pipecheck: Path, tmp_path: Path, case: Case):
             fh.write(_SPEC.pack(d, 0, 0, 0))
         for s, c in case.features:
             fh.write(_MAP.pack(s, c, 0))
-        fh.write(_MAP.pack(case.target[0], case.target[1], 0))
+        for t in case.targets:
+            fh.write(_MAP.pack(t[0], t[1], 0))
         for ev in case.events:
             if ev[0] == "push":
                 _, s, t, values, valid = ev
@@ -225,8 +233,8 @@ def run_cpp(pipecheck: Path, tmp_path: Path, case: Case):
 def run_python(case: Case):
     streams = [Stream(f"s{i}", dim=d, capacity=case.capacity, dtype=case.dtype)
                for i, d in enumerate(case.dims)]
-    adapter = RecursiveLeastSquares(case.n_features, 1, forgetting=case.lam,
-                                    p0=case.p0, dtype=case.dtype)
+    adapter = RecursiveLeastSquares(case.n_features, case.n_outputs,
+                                    forgetting=case.lam, p0=case.p0, dtype=case.dtype)
     if case.guard:
         g = case.guard
         checks = [Bound(field, lo, hi, name=f"b{i}")
@@ -241,7 +249,7 @@ def run_python(case: Case):
                         recover_after=g.get("recover_after") or None)
 
     fmap = FrameMap([(f"s{s}", c) for s, c in case.features],
-                    (f"s{case.target[0]}", case.target[1]), constant=case.constant)
+                    [(f"s{t[0]}", t[1]) for t in case.targets], constant=case.constant)
     aligner = Aligner(f"s{case.reference}", case.policy,
                       case.max_stale_aligner if case.max_stale_aligner > 0 else None)
     pipe = Pipeline(streams, aligner, adapter, fmap,
@@ -270,8 +278,11 @@ def run_python(case: Case):
             if rep.prediction is not None else [0.0, 0.0, 0.0]
         # The scale the cancellation happens at: the largest term summed to make the
         # prediction, not the prediction itself. See PREDICTION_ULP.
-        theta = np.asarray(adapter.state[:case.n_features], dtype=np.float64)
-        terms = np.abs(np.asarray(pipe._x, dtype=np.float64) * theta)
+        n_theta = case.n_features * case.n_outputs
+        theta = np.asarray(adapter.state[:n_theta], dtype=np.float64)
+        terms = np.abs(np.outer(np.asarray(pipe._x, dtype=np.float64),
+                                np.ones(case.n_outputs)).ravel()
+                       * theta.reshape(case.n_features, case.n_outputs).ravel())
         # Finite terms only: a NaN feature makes the whole product NaN, and a NaN scale
         # turns every later comparison into `0.0 <= nan`, which is False. The floor in
         # `compare()` covers the case where nothing is finite.
@@ -882,6 +893,43 @@ def test_a_refused_push_is_visible_to_the_comparison(pipecheck, tmp_path):
     py, cpp = both(pipecheck, tmp_path, case)
     assert py["accepted"] == cpp["accepted"]
     assert py["accepted"] == [1, 1, 0, 0, 0, 1], py["accepted"]
+
+
+@pytest.mark.parametrize("fresh", [False, True])
+def test_three_outputs_through_the_freshness_gate(pipecheck, tmp_path, fresh):
+    """The axis that had never been executed.
+
+    The gate decides from the target sample's timestamp, and the two implementations get there
+    differently: the reference builds a tuple over the *unique target streams* and compares it
+    whole, the core iterates *outputs* and ORs "changed". Equivalent by construction — and
+    `pipecheck` instantiated only `Rls<T, N, 1>`, so an audit could check that by reading and
+    not by running. It can now.
+
+    Two of the three targets share a stream and the third has its own, which is the case where
+    "unique streams" and "per output" are genuinely different loops. The reference is the fast
+    feature stream, because that is the wiring the gate exists for -- with a slow reference
+    every frame carries a new target and the gate can never fire, which is how the first
+    version of this fixture managed to test nothing.
+    """
+    case = Case([2, 1, 3], 64,
+                [(2, 0), (2, 1), (2, 2), (0, 0), (1, 0)],
+                [(0, 0), (0, 1), (1, 0)], constant=True, n_features=6, n_outputs=3,
+                dtype="f4", reference=2, require_fresh_target=fresh)
+    rng = np.random.default_rng(19)
+    for k in range(1, 41):
+        case.push(2, k - 0.3, list(rng.normal(size=3)))
+        if k % 5 == 0:                       # the two-target stream, slower
+            case.push(0, k - 0.1, list(rng.normal(size=2)))
+        if k % 3 == 0:                       # the one-target stream, slower still
+            case.push(1, k - 0.15, [float(rng.normal())])
+        case.push(2, float(k), list(rng.normal(size=3)))
+        case.step()
+    py, cpp = both(pipecheck, tmp_path, case)
+    gated = sum(s["skipped"][SKIP.index("stale_target")] for s in cpp["steps"])
+    if fresh:
+        assert gated > 0, "no frame was gated, so the multi-output path is untested"
+    else:
+        assert gated == 0
 
 
 def test_the_totals_are_the_sum_of_the_steps(pipecheck, tmp_path):

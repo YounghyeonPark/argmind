@@ -268,9 +268,16 @@ def ulps(dtype, n=200.0) -> float:
     return n * float(np.finfo(np.dtype(dtype)).eps)
 
 
-#: Per-quantity relative tolerances, in ulp. `residual_post_norm` is absent
-#: deliberately: it is a cancelled quantity and a relative comparison of one measures
-#: the cancellation. It is checked absolutely instead, against `absolute_ulps`.
+#: Per-quantity relative tolerances, in ulp. `residual_post_norm` is absent deliberately: it
+#: is a cancelled quantity and a relative comparison of one measures the cancellation. It is
+#: checked absolutely instead, against `absolute_ulps`.
+#:
+#: The headroom is uneven and worth knowing rather than assuming. Measured over every shape
+#: this tool instantiates, at 300/800/1600 steps and lambda 0.97 and 0.99, on both
+#: architectures: `p_trace` peaks at 10 and `p_min_diag` at 10.1, so 200 is twenty times what
+#: they need -- while `gain_norm` peaks at 134 on the target at f32, which is 1.5x. An earlier
+#: version of DESIGN.md described this as "three to eight times the worst measured"; for
+#: `gain_norm` it never was, and the figure it compared against had been taken at one lambda.
 FIELD_ULP = {
     "residual_norm": 200.0,
     "gain_norm": 200.0,

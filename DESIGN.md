@@ -425,7 +425,7 @@ byte for byte for the record format, and exactly for every decision and counter 
 The runtime library is fully across; `argmind/bench.py` has no C++ counterpart and is not
 getting one, being a host measurement harness rather than part of what ships. (Everything the library does is reachable from C: RLS, the
 guard, the record format, caller-owned rings and the composed pipeline.)
-491 Python tests plus 4632 C++ checks, several of which exist to prove failures are visible
+495 Python tests plus 4632 C++ checks, several of which exist to prove failures are visible
 rather than silent.
 
 **What the pipeline settled:**
@@ -528,19 +528,36 @@ Storage is the caller's — nothing allocates — with `am_rls_*_bytes()` for th
 `AM_*_MAX_BYTES` compile-time *upper bound* for statically declared arrays, held to being a bound
 by a `static_assert` per instantiation.
 
-**Parity: the two agree to about 1.5 ulp on the state block, at whichever precision they run at.**
-That last clause is the finding. Measured maxima in ulp, across n=2/6/12, one and three outputs,
-300 to 1600 steps, λ=0.97 and 0.99:
+**Parity: the two agree to a handful of ulp on the state block, at whichever precision they
+run at.** That last clause is the finding. Measured maxima in ulp over every shape `xcheck`
+instantiates -- (n, m) of (2,1), (3,1), (6,1), (12,1) and (6,3) -- at 300, 800 and 1600 steps,
+λ = 0.97 and 0.99, p0 = 100, on both architectures:
 
-| quantity | f64 | f32 |
-|---|---|---|
-| whole state block, and θ | 1.5 | 1.5 |
-| tr(P) | 1.4 | 4.9 |
-| min diag P | 2.4 | 1.9 |
-| residual norm | 8.4 | 14.2 |
-| P alone | 26.7 | 37.6 |
-| gain norm | 58.0 | 64.6 |
-| a posteriori residual norm | 597 | 597 |
+| quantity | host f64 | host f32 | target f64 | target f32 |
+|---|---|---|---|---|
+| whole state block, and θ | 2.0 | 2.0 | 2.0 | 5.0 |
+| tr(P) | 10.0 | 4.9 | 10.0 | 2.2 |
+| min diag P | 8.4 | 10.1 | 8.4 | 8.4 |
+| residual norm | 30.1 | 14.2 | 30.1 | 38.0 |
+| P alone | 29.6 | 43.2 | 29.6 | 40.8 |
+| gain norm | 110.0 | 87.4 | 110.0 | 134.0 |
+| a posteriori residual norm, against max\|y\| | 1.8 | 1.4 | 1.8 | 3.6 |
+
+**This table replaces one that was understated on almost every row**, and how it got that way
+is the useful part. It said its maxima were taken over "n=2/6/12, one and three outputs,
+λ=0.97 and 0.99", and an audit found every figure reproducing only at λ=0.99: `gain_norm` was
+58 where 0.97 gives 110, `p_trace` 1.4 where it gives 10.0. The axis was named in the prose and
+not swept in the measurement. The same description also implied three outputs at every n, and
+`xcheck` instantiates (6,3) alone.
+
+Two columns are new because they have to be: `VFMA.F32` contraction makes the target's f32
+figures its own (`rls.hpp`'s fourth divergence), and f64 is identical between the two, having
+nothing to contract on a single-precision FPU.
+
+The last row is a different metric from the rest and is not comparable to the 597 the old table
+carried: that was element-wise relative error on a quantity produced by cancellation, which is
+what the paragraphs below explain the project stopped doing. It is bounded absolutely against
+the scale of the values being subtracted.
 
 **Differing by the same number of ulp at both precisions is what says the difference is
 algorithmic rounding rather than a precision-dependent bug.** Three divergences are deliberate and
@@ -1655,6 +1672,37 @@ derived from one fixture, where the FMA divergence costs 2.5×. The SNR sweep fo
 noisier one — so the bound would have failed the moment the fixture set grew, which it just
 did. Eight covers the measured range and still fails a round-toward-zero FPU, at 37.5, by a
 factor of five.
+
+### The last two audit items, 2026-08-09
+
+**The baseline ulp table was understated on almost every row, and the reason is instructive.**
+It said its maxima came from "n=2/6/12, one and three outputs, λ=0.97 and 0.99". Every figure
+reproduced at λ=0.99 and none at 0.97 — `gain_norm` was 58 where 0.97 gives 110, `p_trace` 1.4
+where it gives 10.0. The axis was named in the prose and not swept in the measurement. The
+same sentence implied three outputs at every n, and `xcheck` instantiates (6,3) alone. The
+table is re-measured over every shape that exists, at three run lengths, both λ, and now both
+architectures — that last pair of columns being new because `VFMA.F32` contraction makes the
+target's f32 figures its own.
+
+It also changed what the tolerances look like. `FIELD_ULP` is 200 for four quantities and the
+headroom is not uniform: twenty times for `p_trace` and `p_min_diag`, **1.5 times** for
+`gain_norm` at f32 on the target. DESIGN.md had called it "three to eight times the worst
+measured"; for `gain_norm` it never was, and the worst it compared against had been taken at
+one λ.
+
+**And no multi-output case had ever run through the freshness gate.** The gate decides from
+the target sample's timestamp, and the two implementations get there differently: the
+reference builds a tuple over the *unique target streams* and compares it whole, the core
+iterates *outputs* and ORs "changed". Equivalent by construction — and `pipecheck` instantiated
+only `Rls<T, N, 1>`, so the review could check that by reading and not by running. It now has
+a three-output axis (at six features, where the ABI's `6_3` shape already lives), and a case
+where two targets share a stream and the third has its own, which is where "unique streams"
+and "per output" are genuinely different loops.
+
+The first version of that fixture put the targets on the reference stream, so every frame
+carried a new target and the gate could not fire. It failed its own "no frame was gated"
+guard, which is the third time this session a fixture has been caught testing nothing by an
+assertion written for exactly that.
 
 ## Standards
 

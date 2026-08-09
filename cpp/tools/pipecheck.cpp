@@ -57,8 +57,13 @@ constexpr int kMaxFeatures = 8;
 //
 //   dtype       f4, f8
 //   n_features  2, 3, 6
+//   n_outputs   1, and 3 at n_features 6
 //   capacity    4, 8, 64
 //   guard       absent, depth 1, depth 4
+//
+// Three outputs exists at six features alone, and only because the freshness gate decides per
+// output: the reference compares a tuple over unique target streams while the core iterates
+// outputs, and until this axis existed that equivalence had been read rather than run.
 
 struct BoundSlot {
     double lo;
@@ -83,7 +88,8 @@ struct Job {
     uint16_t version;
     uint8_t dtype;    // 4 or 8
     uint8_t guarded;  // 0 = bare adapter
-    uint16_t n_features;
+        uint16_t n_features;
+    uint16_t n_outputs;
     uint16_t n_streams;
     uint16_t capacity;
     uint16_t policy;
@@ -93,8 +99,8 @@ struct Job {
     uint8_t require_valid;
     uint8_t gate_stale;
     uint8_t allow_non_causal;
-    uint8_t require_fresh_target;
-    uint8_t pad0[3];
+        uint8_t require_fresh_target;
+    uint8_t pad0;
     uint32_t n_events;
     uint32_t depth;
     uint32_t checkpoint_every;
@@ -291,32 +297,34 @@ int drive(FILE* in, FILE* out, const Job& job, const StreamSpec* specs, Pipe& pi
     return 0;
 }
 
-template <typename T, int N>
-argmind::FrameMap<N, 1> build_map(const Job& job, const MapEntry* feats,
-                                  const MapEntry& targ, bool* ok) {
-    argmind::FrameMap<N, 1> map;
+template <typename T, int N, int M>
+argmind::FrameMap<N, M> build_map(const Job& job, const MapEntry* feats,
+                                  const MapEntry* targs, bool* ok) {
+    argmind::FrameMap<N, M> map;
     map.set_constant(job.constant != 0);
     *ok = true;
     for (uint16_t j = 0; j < job.n_map_features; ++j) {
         if (!map.add_feature(feats[j].stream, feats[j].component)) *ok = false;
     }
-    if (!map.add_target(targ.stream, targ.component)) *ok = false;
+    for (int j = 0; j < M; ++j) {
+        if (!map.add_target(targs[j].stream, targs[j].component)) *ok = false;
+    }
     if (!map.valid()) *ok = false;
     return map;
 }
 
-template <typename T, int N, int Cap, int Depth>
+template <typename T, int N, int M, int Cap, int Depth>
 int run_guarded(FILE* in, FILE* out, const Job& job, const StreamSpec* specs,
-                const MapEntry* feats, const MapEntry& targ) {
+                const MapEntry* feats, const MapEntry* targs) {
     bool ok = false;
-    const auto map = build_map<T, N>(job, feats, targ, &ok);
+    const auto map = build_map<T, N, M>(job, feats, targs, &ok);
     if (!ok) {
         fprintf(stderr, "pipecheck: the frame map does not fill the adapter\n");
         return 6;
     }
-    argmind::Rls<T, N, 1> rls(static_cast<T>(job.lambda), static_cast<T>(job.p0));
+    argmind::Rls<T, N, M> rls(static_cast<T>(job.lambda), static_cast<T>(job.p0));
     if (!rls.valid()) return 6;
-    argmind::Guard<argmind::Rls<T, N, 1>, Depth, 4> guard(rls, job.checkpoint_every,
+    argmind::Guard<argmind::Rls<T, N, M>, Depth, 4> guard(rls, job.checkpoint_every,
                                                           job.recover_after);
     for (uint32_t i = 0; i < job.n_bounds && i < 4; ++i) {
         if (!guard.add_bound(bound_from(job.bounds[i]))) return 6;
@@ -336,7 +344,7 @@ int run_guarded(FILE* in, FILE* out, const Job& job, const StreamSpec* specs,
     }
     const argmind::Aligner aligner(static_cast<argmind::Policy>(job.policy),
                                    job.max_stale_aligner);
-    argmind::Pipeline<argmind::Guard<argmind::Rls<T, N, 1>, Depth, 4>, kMaxStreams> pipe(
+    argmind::Pipeline<argmind::Guard<argmind::Rls<T, N, M>, Depth, 4>, kMaxStreams> pipe(
         guard, aligner, map, job.reference);
     if (job.gate_stale) pipe.set_max_stale_s(job.max_stale_pipeline);
     pipe.set_require_valid(job.require_valid != 0);
@@ -345,26 +353,26 @@ int run_guarded(FILE* in, FILE* out, const Job& job, const StreamSpec* specs,
     return drive<decltype(pipe), T, Cap>(in, out, job, specs, pipe);
 }
 
-template <typename T, int N, int Cap>
+template <typename T, int N, int M, int Cap>
 int run_shape(FILE* in, FILE* out, const Job& job, const StreamSpec* specs,
-              const MapEntry* feats, const MapEntry& targ) {
+              const MapEntry* feats, const MapEntry* targs) {
     if (job.guarded) {
-        if (job.depth == 1) return run_guarded<T, N, Cap, 1>(in, out, job, specs, feats, targ);
-        if (job.depth == 4) return run_guarded<T, N, Cap, 4>(in, out, job, specs, feats, targ);
+        if (job.depth == 1) return run_guarded<T, N, M, Cap, 1>(in, out, job, specs, feats, targs);
+        if (job.depth == 4) return run_guarded<T, N, M, Cap, 4>(in, out, job, specs, feats, targs);
         fprintf(stderr, "pipecheck: depth %u is not in the instantiation list\n", job.depth);
         return 2;
     }
     bool ok = false;
-    const auto map = build_map<T, N>(job, feats, targ, &ok);
+    const auto map = build_map<T, N, M>(job, feats, targs, &ok);
     if (!ok) {
         fprintf(stderr, "pipecheck: the frame map does not fill the adapter\n");
         return 6;
     }
-    argmind::Rls<T, N, 1> rls(static_cast<T>(job.lambda), static_cast<T>(job.p0));
+    argmind::Rls<T, N, M> rls(static_cast<T>(job.lambda), static_cast<T>(job.p0));
     if (!rls.valid()) return 6;
     const argmind::Aligner aligner(static_cast<argmind::Policy>(job.policy),
                                    job.max_stale_aligner);
-    argmind::Pipeline<argmind::Rls<T, N, 1>, kMaxStreams> pipe(rls, aligner, map,
+    argmind::Pipeline<argmind::Rls<T, N, M>, kMaxStreams> pipe(rls, aligner, map,
                                                                job.reference);
     if (job.gate_stale) pipe.set_max_stale_s(job.max_stale_pipeline);
     pipe.set_require_valid(job.require_valid != 0);
@@ -373,12 +381,12 @@ int run_shape(FILE* in, FILE* out, const Job& job, const StreamSpec* specs,
     return drive<decltype(pipe), T, Cap>(in, out, job, specs, pipe);
 }
 
-template <typename T, int N>
+template <typename T, int N, int M>
 int run_capacity(FILE* in, FILE* out, const Job& job, const StreamSpec* specs,
-                 const MapEntry* feats, const MapEntry& targ) {
-    if (job.capacity == 4) return run_shape<T, N, 4>(in, out, job, specs, feats, targ);
-    if (job.capacity == 8) return run_shape<T, N, 8>(in, out, job, specs, feats, targ);
-    if (job.capacity == 64) return run_shape<T, N, 64>(in, out, job, specs, feats, targ);
+                 const MapEntry* feats, const MapEntry* targs) {
+    if (job.capacity == 4) return run_shape<T, N, M, 4>(in, out, job, specs, feats, targs);
+    if (job.capacity == 8) return run_shape<T, N, M, 8>(in, out, job, specs, feats, targs);
+    if (job.capacity == 64) return run_shape<T, N, M, 64>(in, out, job, specs, feats, targs);
     fprintf(stderr, "pipecheck: capacity %u is not in the instantiation list\n",
             job.capacity);
     return 2;
@@ -386,10 +394,16 @@ int run_capacity(FILE* in, FILE* out, const Job& job, const StreamSpec* specs,
 
 template <typename T>
 int run(FILE* in, FILE* out, const Job& job, const StreamSpec* specs,
-        const MapEntry* feats, const MapEntry& targ) {
-    if (job.n_features == 2) return run_capacity<T, 2>(in, out, job, specs, feats, targ);
-    if (job.n_features == 3) return run_capacity<T, 3>(in, out, job, specs, feats, targ);
-    if (job.n_features == 6) return run_capacity<T, 6>(in, out, job, specs, feats, targ);
+        const MapEntry* feats, const MapEntry* targs) {
+    if (job.n_outputs == 3) {
+        if (job.n_features == 6) return run_capacity<T, 6, 3>(in, out, job, specs, feats,
+                                                              targs);
+        fprintf(stderr, "pipecheck: three outputs exists at six features only\n");
+        return 2;
+    }
+    if (job.n_features == 2) return run_capacity<T, 2, 1>(in, out, job, specs, feats, targs);
+    if (job.n_features == 3) return run_capacity<T, 3, 1>(in, out, job, specs, feats, targs);
+    if (job.n_features == 6) return run_capacity<T, 6, 1>(in, out, job, specs, feats, targs);
     fprintf(stderr, "pipecheck: n_features %u is not in the instantiation list\n",
             job.n_features);
     return 2;
@@ -440,18 +454,25 @@ int main(int argc, char** argv) {
             return 4;
         }
     }
-    MapEntry targ;
-    if (fread(&targ, sizeof(MapEntry), 1, in) != 1) {
+    MapEntry targs[3];
+    const uint16_t n_targ = job.n_outputs ? job.n_outputs : 1;
+    if (n_targ > 3) {
         fclose(in);
-        return 4;
+        return 5;
+    }
+    for (uint16_t j = 0; j < n_targ; ++j) {
+        if (fread(&targs[j], sizeof(MapEntry), 1, in) != 1) {
+            fclose(in);
+            return 4;
+        }
     }
     FILE* out = fopen(argv[2], "wb");
     if (!out) {
         fclose(in);
         return 1;
     }
-    const int rc = job.dtype == 4 ? run<float>(in, out, job, specs, feats, targ)
-                                  : run<double>(in, out, job, specs, feats, targ);
+    const int rc = job.dtype == 4 ? run<float>(in, out, job, specs, feats, targs)
+                                  : run<double>(in, out, job, specs, feats, targs);
     fclose(in);
     fclose(out);
     return rc;
