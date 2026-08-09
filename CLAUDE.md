@@ -1,7 +1,22 @@
 # Argmind — project context
 
-**Multi-sensor AI software: fusion, on-device learning, and inference.**
+**A sensor-agnostic library for on-device online adaptation and inference.**
 Started 2026-08-08. This is the active project.
+
+**One algorithm: recursive least squares, linear in the parameters.** The first line here used
+to read "Multi-sensor AI software: fusion, on-device learning, and inference", which oversold
+what is built — `RecursiveLeastSquares` and a `Guard` that wraps it are the only two `Adapter`
+implementations in the repository. At n=6 the learned model is **24 bytes of θ** and inference
+is **six multiply-adds**; of a composed pipeline's 3,264 B of RAM, model plus covariance is 168
+(5.1%) and the other 95% is the guard's checkpoint ring, the sensor rings and the flash slots.
+The library is small because the model is small, not because the implementation is clever.
+
+**The caller supplies the basis, and nothing with memory of its own input can be fitted.**
+Hysteresis, stiction and backlash depend on the input's *history*; no choice of instantaneous
+features represents them. What RLS is genuinely for is tracking a **drift** in something whose
+form is already known. DESIGN.md's *What it is not* carries the full statement — it was added
+after a hardware-scoping answer proposed an application this model class cannot support, citing
+a source that said so in the same paragraph.
 
 Author: Younghyeon Park <ypark.dev@gmail.com>. Apache-2.0 (`LICENSE`, `NOTICE`).
 Side project — open source, not a product, no support commitment.

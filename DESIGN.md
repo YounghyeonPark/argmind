@@ -1,7 +1,13 @@
 # Argmind — design
 
 **A sensor-agnostic library for on-device online adaptation and inference, for embedded and
-edge targets.** Started 2026-08-08. Status: design under review, nothing built yet.
+edge targets.** Started 2026-08-08. Status: built and verified on the declared floor — the
+runtime is across to C++, and what is absent is timing on real silicon.
+
+**The adaptation is one algorithm: recursive least squares, linear in the parameters.** That
+sentence belongs at the top rather than three sections down, because it is the single fact
+that decides whether this library can do a given job. See *What it is not* below for what
+that rules out.
 
 ## What it is
 
@@ -25,6 +31,31 @@ Naming these now because a sensor-agnostic framework drifts into "everything" ot
   threads, and does not depend on ROS. You feed it samples.
 - **Not a research playground for online deep learning.** The adaptation methods here are ones
   whose stability can be reasoned about.
+- **Not a model that can learn a representation, and this is the load-bearing limit.** Every
+  bullet above says what the *implementation* is not. None of them said what the *model class*
+  cannot express, and until 2026-08-09 the phrase "linear in the parameters" appeared nowhere
+  in this repository — the most important property of the only algorithm here was undocumented
+  while four sentences explained that it is not a CNN.
+
+  `Rls` fits `y = xᵀθ`. `predict` is one `vec_mat` — at n=6, M=1 that is six multiply-adds
+  over a 24-byte θ, and **those 24 bytes are the whole of what is learned**. So:
+
+  - **You supply the basis.** The library will not discover that `sign(v)` matters, that a
+    product term is needed, or that a feature should be logged. Feature choice is the
+    modelling work and it stays with the caller — which is also why `FrameMap` makes feature
+    order a declared, fingerprinted thing rather than a convenience.
+  - **Nothing with memory of its own input can be fitted memorylessly.** Hysteresis, stiction
+    state, backlash and rate-dependent friction all depend on the input's *history*, and no
+    choice of instantaneous features represents them. Fitting one needs a state-carrying basis
+    (LuGre, Bouc-Wen, a lagged term) built by the caller and fed in as features.
+  - **What it is genuinely good at** is tracking a *drift* in something whose form is already
+    known: a bias that moves with temperature, a gain that ages, a mount that shifts. The
+    forgetting factor is exactly a statement that the coefficients are expected to move.
+
+  This bullet exists because a hardware-scoping question produced an over-optimistic
+  application for this library, and the source cited to justify it said in the same paragraph
+  that the phenomenon "requir[es] dedicated compensation models, not a scalar correction".
+  The favourable half of a sentence was quoted and the unfavourable half was not.
 
 ## The design driver
 
