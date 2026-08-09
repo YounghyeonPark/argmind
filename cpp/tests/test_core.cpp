@@ -265,7 +265,13 @@ void test_the_declared_size_bounds_are_bounds() {
     CHECK(am_rls_f32_12_1_bytes() <= AM_RLS_F32_12_1_MAX_BYTES);
     CHECK(am_rls_f64_6_1_bytes() <= AM_RLS_F64_6_1_MAX_BYTES);
     // ...and not absurdly loose, or the macro stops being useful for sizing.
+    // Both directions for every bound, not just the first. DESIGN.md said "a test
+    // asserts each is within 2x of the real size" while four of fourteen bounds had the
+    // check -- an audit counted them. A bound that is merely true is useless to budget from.
     CHECK(am_rls_f32_6_1_bytes() * 2 >= AM_RLS_F32_6_1_MAX_BYTES);
+    CHECK(am_rls_f32_6_3_bytes() * 2 >= AM_RLS_F32_6_3_MAX_BYTES);
+    CHECK(am_rls_f32_12_1_bytes() * 2 >= AM_RLS_F32_12_1_MAX_BYTES);
+    CHECK(am_rls_f64_6_1_bytes() * 2 >= AM_RLS_F64_6_1_MAX_BYTES);
     CHECK(am_rls_f32_6_1_state_size() == AM_RLS_F32_6_1_STATE);
     CHECK(am_rls_f32_6_3_state_size() == AM_RLS_F32_6_3_STATE);
     CHECK(am_rls_f64_6_1_state_size() == AM_RLS_F64_6_1_STATE);
@@ -739,6 +745,40 @@ void test_read_state_round_trips_and_refuses_a_mismatched_count() {
     // The rejection no binary was exercising.
     CHECK(!argmind::persist::read_state<double>(rec, back, 3));
     CHECK(!argmind::persist::read_state<double>(rec, back, 5));
+}
+
+void test_the_write_path_refuses_a_count_that_wraps_too() {
+    // `pack` carries the same wraparound guard as `unpack` and the same comment claiming it
+    // is an equivalent mutant on a 64-bit host. The on-target run tested only the UNPACK
+    // side; an audit removed each guard separately and found the pack one still equivalent
+    // on ARM -- so the headline "running on the target made the guard testable" covered one
+    // of two identical guards.
+    //
+    // This is the write path's version. `count` here comes from the caller rather than from
+    // a record, which is the argument for guarding it at all: `am_persist_pack_*` takes it
+    // as a uint32_t across the ABI, so a caller with a corrupted length reaches it directly.
+    double state[1] = {1.5};
+    uint8_t buf[64];
+
+    // Sane call first, so the refusal below is about the count and not about the buffer.
+    CHECK(argmind::persist::pack<double>(state, 1, 1, 1, 7, 0, false, nullptr, 0, buf,
+                                         sizeof(buf)) > 0u);
+
+    // The same forged count the unpack test uses: count * 8 wraps to 8 on a 32-bit size_t,
+    // so `record_bytes` reports 38 and the buffer looks big enough. Without the guard a
+    // 32-bit build would then walk 536,870,913 doubles out of a one-element array.
+    const uint32_t forged = 1u + (1u << 29);
+    CHECK(argmind::persist::pack<double>(state, forged, 1, 1, 7, 0, false, nullptr, 0, buf,
+                                         sizeof(buf)) == 0u);
+
+    // On a 64-bit host the product does not wrap, so the buffer check refuses it instead --
+    // the same answer for a different reason, which is why this passes on both and only the
+    // ARM run makes the guard itself non-equivalent.
+    if (sizeof(size_t) == 4) {
+        CHECK(static_cast<size_t>(forged) * sizeof(double) == 8u);
+    } else {
+        CHECK(static_cast<size_t>(forged) * sizeof(double) > 4294967295u);
+    }
 }
 
 void test_a_forged_count_that_wraps_a_32_bit_size_t_is_refused() {
@@ -1460,7 +1500,9 @@ void test_the_declared_guard_bounds_are_bounds_and_not_fantasies() {
     CHECK(am_guard_f32_12_1_bytes() <= AM_GUARD_F32_12_1_MAX_BYTES);
     CHECK(am_guard_f64_6_1_bytes() <= AM_GUARD_F64_6_1_MAX_BYTES);
     CHECK(am_guard_f32_6_1_bytes() * 2 >= AM_GUARD_F32_6_1_MAX_BYTES);
+    CHECK(am_guard_f32_6_3_bytes() * 2 >= AM_GUARD_F32_6_3_MAX_BYTES);
     CHECK(am_guard_f32_12_1_bytes() * 2 >= AM_GUARD_F32_12_1_MAX_BYTES);
+    CHECK(am_guard_f64_6_1_bytes() * 2 >= AM_GUARD_F64_6_1_MAX_BYTES);
 
     // Where the memory goes, reported rather than inferred. The ring is the majority of
     // it at every shape, which is the thing a caller weighing rollback depth needs to see.
@@ -2171,8 +2213,11 @@ void test_the_declared_pipeline_bounds_are_bounds_and_not_fantasies() {
     // Tight enough to budget from, as for the guard: a bound that is merely true would say
     // "reserve 100 KB" forever.
     CHECK(am_pipe_f32_6_1_bytes() * 2 >= AM_PIPE_F32_6_1_MAX_BYTES);
+    CHECK(am_pipe_f64_6_1_bytes() * 2 >= AM_PIPE_F64_6_1_MAX_BYTES);
     CHECK(am_pipe_g_f32_6_1_bytes() * 2 >= AM_PIPE_G_F32_6_1_MAX_BYTES);
+    CHECK(am_pipe_g_f32_6_3_bytes() * 2 >= AM_PIPE_G_F32_6_3_MAX_BYTES);
     CHECK(am_pipe_g_f32_12_1_bytes() * 2 >= AM_PIPE_G_F32_12_1_MAX_BYTES);
+    CHECK(am_pipe_g_f64_6_1_bytes() * 2 >= AM_PIPE_G_F64_6_1_MAX_BYTES);
 
     // A guarded pipeline is its guard plus the pipeline's own parts, which is the
     // decomposition a caller weighing rollback depth needs.
@@ -2225,6 +2270,7 @@ int main() {
     test_pack_clamps_an_overlong_cause();
     test_unpack_reports_each_failure_distinctly();
     test_read_state_round_trips_and_refuses_a_mismatched_count();
+    test_the_write_path_refuses_a_count_that_wraps_too();
     test_a_forged_count_that_wraps_a_32_bit_size_t_is_refused();
     test_select_newest_and_next_slot();
 

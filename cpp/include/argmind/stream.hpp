@@ -193,13 +193,24 @@ struct Ring {
 /// Append a sample, overwriting the oldest if full. False and no change on a timestamp that
 /// is not strictly increasing, or that is +inf.
 ///
-/// The bookkeeping arrives as separate pointers rather than as a `Ring<T>*`, and that is a
-/// measured choice rather than a stylistic one. Taking the struct meant `Stream::push` had to
-/// materialise one and write four fields back, which cost **32 bytes of code** per
-/// instantiation at `-Os` on x86-64 -- 160 to 192 for `Stream<float,6,64>::push`. Passing the
-/// members directly brings it back to exactly the pre-refactor 160. The first version of this
-/// comment claimed the extraction was free before anything had been measured; it was not, and
-/// it took two attempts to make it so.
+/// The bookkeeping arrives as separate pointers rather than as a `Ring<T>*`, and there are two
+/// reasons, one measured and one structural.
+///
+/// Measured: taking the struct meant `Stream::push` had to materialise one and write four
+/// fields back. `Stream<float,6,64>::push` at `-Os` is **160 bytes in this form and 176 in the
+/// struct-pointer form** -- x86-64, g++ 16.1.0, measured in separate translation
+/// units so neither shape can inline into the other, which is worth pinning because an earlier
+/// version of this comment recorded 192 and a 32-byte delta on a different compiler and a
+/// reviewer could not reproduce it. The direction reproduces; the magnitude is
+/// compiler-specific, and the number without its compiler was not a measurement anyone else
+/// could check. (The version before *that* claimed the extraction was free, having measured
+/// nothing at all.)
+///
+/// Structural, and pointed out by a review rather than by me: `__restrict` on each of
+/// `values_`, `times_` and `valid_` says something a single `Ring<T>* __restrict` cannot.
+/// Marking the struct pointer non-aliasing says nothing about whether the pointers *loaded
+/// out of it* alias each other or the incoming `values`, which is exactly what the per-element
+/// copy loop needs to know.
 ///
 /// Note which check does what, because it differs from the Python's. `!(t > *last_t)` already
 /// refuses NaN (no comparison with NaN is true) and -inf (it cannot exceed the initial -inf).

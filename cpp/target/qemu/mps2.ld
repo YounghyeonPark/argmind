@@ -74,8 +74,15 @@ SECTIONS
     __bss_end__ = .;
   } > SRAM
 
-  /* newlib's crt0 wants `__end__` for the heap base and `_sbrk` grows from it. The checks
-     allocate nothing themselves; printf's buffers do. */
+  /* newlib's crt0 wants `__end__` to link at all, and this is where it comes from. But note
+     what actually bounds the running image, because it is NOT these numbers and a review had
+     to establish it: `rdimon-crt0.o` opens with a `SYS_HEAPINFO` semihosting call and, when
+     the host answers, overwrites the stack pointer and its own `__heap_limit` with QEMU's
+     values. Measured on this harness: the linked `_estack` is 0x20050398 and the live SP at
+     `main()` is 0x21fffff0. So `_estack` is used for exactly one thing -- the initial MSP the
+     hardware reads from the vector table before `Reset_Handler` runs -- and the 64 K and
+     256 K below are a floor, not the bound. They are kept because the link needs the symbols
+     and because a build without semihosting would then have somewhere to put them. */
   .heap (NOLOAD) :
   {
     . = ALIGN(8);

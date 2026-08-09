@@ -107,7 +107,7 @@ rollback, explicit recovery), `argmind/pipeline.py` (`FrameMap`, input gate, bou
 pipeline. `argmind/bench.py` has no C++ counterpart and is not getting one: it is a host
 measurement harness, and DESIGN.md already records that Python timings are not a baseline the
 C++ can be compared against.
-359 Python tests and 4603 C++ checks pass; several exist to prove failures are visible
+366 Python tests and 4614 C++ checks pass; several exist to prove failures are visible
 rather than silent. Every suite is mutation-checked, and surviving mutants are recorded where
 they live rather than tallied here — including the ones that turn out to be **equivalent on a
 64-bit host**, a distinction worth keeping rather than rounding away. Cumulative counts are
@@ -234,8 +234,10 @@ extraction was free was written before measuring and was wrong twice. That modul
 division where `slot()` avoids one, and the two do not conflict: this is once per *push*, that
 was twice per element of every *scan*.
 
-Pipelines, x86-64 shapes: bare 600 / 936 bytes, guarded 1616 / 1864 / 3936 / 2624 — a guarded
-pipeline is its guard plus about 400. `map_mutable()` **clears the configuration** on purpose:
+Pipelines, x86-64 shapes: bare 616 / 952 bytes, guarded 1632 / 1896 / 3952 / 2640 — a guarded
+pipeline is its guard plus 424 to 576, not "about 400" as this line first said, and 16 to 32
+bytes larger than first published because the freshness gate added three members and nothing
+pinned the figure more tightly than its `MAX_BYTES` bound. An audit caught both. `map_mutable()` **clears the configuration** on purpose:
 the map is what `configure()` bounds-checked, so mutating it and staying configured would let
 a caller widen a component past a sensor's width after the check.
 
@@ -459,9 +461,11 @@ compared what it pointed at.
 latency turns on.** `step_cost` sweeps cost against frames drained and fits
 `fixed + per_frame x frames` — `fit_leak`'s technique, reused because a per-frame cost at one
 batch size cannot tell overhead from work. Measured: **~11.4 us fixed + ~41.4 us per frame**,
-so **22-29% of a one-frame step is overhead**. The slope is stable to 0.5% across runs; the
-intercept moves by a third of itself, being an extrapolation, which is why nothing compares
-two intercepts — an early `gate_saving` did and it was mostly fit conditioning. `fit_step`
+so roughly a quarter of a one-frame step is overhead on that run. **The 0.5% run-to-run
+stability this line first claimed was not real**: three consecutive runs agree that closely,
+ten interleaved ones move 10.9% and the overhead fraction ranges 19.9-37.2%. A drifting mean
+impersonating a stable one, which is what sampling three times in a row measures. The
+intercept is worse still, being an extrapolation, which is why nothing compares two intercepts — an early `gate_saving` did and it was mostly fit conditioning. `fit_step`
 also returns **NaN** rather than a line through one point: numpy fits it with a warning nobody
 reads, and a fabricated slope gets quoted.
 
@@ -494,8 +498,10 @@ cannot:
 
 **Measured sizes, Cortex-M4F, `-Os`, newlib-nano, from the map.** `--gc-sections` means there
 is no one "size of the library", so four firmware-shaped configurations are linked separately:
-bare RLS **2,340 B** flash / 272 B RAM; guarded **5,936 / 1,296**; plus records **6,376 /
-1,972**; full composed pipeline **10,380 / 3,264** — **32% of the 32 KB flash budget and 40% of
+bare RLS **2,340 B** flash / 272 B RAM; guarded **6,144 / 1,296**; plus records **6,376 /
+1,972**; full composed pipeline **10,380 / 3,264** — the guarded row grew 208 bytes once an
+audit noticed `usage.c` never called freeze/thaw/reset/counters/frozen_by, so `--gc-sections`
+had stripped six entry points out of the configuration called "what the field should run" — **32% of the 32 KB flash budget and 40% of
 the 8 KB RAM**. Of the full pipeline's flash, 7,374 B is argmind and 2,424 B is libc/libgcc.
 
 **Every byte of that RAM is the caller's**: the library defines zero `.data` and zero `.bss`,
@@ -511,9 +517,12 @@ first.
 mutant on a 64-bit host* — threshold 2.3e18 against a `uint32_t count`. On a 32-bit target it
 is 536,870,876. A test now forges a `count` of `1 + 2^29`, chosen so the wrapped product makes
 the length check *agree* with the real buffer, and repairs the CRC so it is rejected for its
-length rather than for corruption. Measured both ways: removing the guard gives **2 failures
-on ARM and 0 on x86-64**. A guard that could only be argued for is tested, and the claim of
-host-untestability is itself verified.
+length rather than for corruption. Measured both ways: removing the guard gives **2 failures on ARM and 0 on x86-64**. A guard
+that could only be argued for is tested, and the claim of host-untestability is itself
+verified. **That covered one of two identical guards** — `pack` carries the same check with
+the same comment, and removing *it* still passed on ARM until an audit found it. Both are
+covered now, and the write path matters more: its `count` arrives from a caller across the C
+ABI rather than out of a CRC-protected record.
 
 **Three harness bugs the host build would have hidden**, each a way a cross build that
 compiles perfectly still does not run: a two-entry vector table (a fault has nowhere to go, so
@@ -571,8 +580,7 @@ case. An FPU is what makes the timing analysable.
 
 **M0+/M3 are not supported and not claimed** — they would probably work (n=6 computes to 0.27 ms
 per soft-float update, 0.14% duty at 5 Hz) but nobody has run it on one, and writing untested
-support down is how a claim becomes a fiction. No ARM cross-compiler or target hardware exists on
-this machine: flash/RAM will come from a link map, execution is verified on the host, and **any
+support down is how a claim becomes a fiction. No target hardware exists on this machine (a cross-compiler and QEMU arrived on 2026-08-09): flash/RAM will come from a link map, execution is verified on the host, and **any
 on-target timing claim stays absent rather than interpolated from host numbers.**
 
 **Two port notes** from that review, deliberately not applied to Python where call overhead hides

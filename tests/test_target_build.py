@@ -3,7 +3,7 @@
 
 Every size figure this project quoted before 2026-08-09 was an x86-64 shape, because there
 was no ARM toolchain on the machine. DESIGN.md said so each time and said flash and RAM would
-have to come from a **link map**. This is that link, and it found two things a host build
+have to come from a **link map**. This is that link, and it found three things a host build
 cannot:
 
 1. `norm()` compiles to a call into libm unless `-fno-math-errno` is given. It is not
@@ -13,14 +13,17 @@ cannot:
 2. The core needs `memcpy` and `memset` from its environment. GCC is permitted to emit calls
    to those even in a freestanding build, and it does — 48 and 69 call sites. A bare-metal
    integrator has to provide them; nothing in this project said so before.
+3. The checked-in CMake cross recipe did not work, having been written before any toolchain
+   existed. `project()`'s compiler check links a full executable, which fails bare-metal.
 
 Skipped, not failed, without `arm-none-eabi-gcc` on PATH: a clone with no cross toolchain
 still tests everything else, the same arrangement `test_cpp_parity.py` uses for the host
 compiler.
 
-**No timing figure appears here or anywhere else.** There is no hardware and no emulator on
-this machine, so a cycle count would be interpolated rather than measured, and DESIGN.md is
-explicit that an on-target timing claim stays absent until it can be taken.
+**No timing figure appears here or anywhere else.** There is no hardware, and QEMU -- which
+`tests/test_target_run.py` now drives -- models the instruction set rather than the pipeline,
+so a cycle count taken either way would be interpolated rather than measured. DESIGN.md is
+explicit that an on-target timing claim stays absent until it can be taken on silicon.
 """
 
 import re
@@ -132,7 +135,15 @@ def test_the_core_needs_nothing_from_outside_but_these(cross, abi_object):
 
 def test_the_library_defines_no_writable_static_memory(cross, abi_object):
     """The claim the whole storage-is-the-caller's design rests on, checked rather than
-    asserted. Measured: 0 bytes of `.data`, 0 of `.bss`, and 72 of `.rodata`."""
+    asserted. Measured: 0 bytes of writable static memory and 72 of `.rodata`.
+
+    The first version of this test read the sections named exactly `.data` and `.bss` and
+    asserted they were zero. They are **always** zero under `-fdata-sections`, which puts
+    every object in `.data.<name>` or `.bss.<name>` -- an audit compiled a probe declaring
+    288 bytes of globals and this test passed. It now sums every section whose name starts
+    with either prefix, and pins `.rodata` to the figure the documentation quotes rather
+    than to a guessed ceiling.
+    """
     done = _run([cross["size"], "-A", abi_object])
     assert done.returncode == 0, done.stderr
     sizes = {}
@@ -143,9 +154,14 @@ def test_the_library_defines_no_writable_static_memory(cross, abi_object):
                 sizes[parts[0]] = int(parts[1])
             except ValueError:
                 pass
-    assert sizes.get(".data", 0) == 0, sizes
-    assert sizes.get(".bss", 0) == 0, sizes
-    assert sizes.get(".rodata", 0) < 512, sizes
+
+    def total(prefix):
+        return sum(v for k, v in sizes.items() if k == prefix or k.startswith(prefix + "."))
+
+    assert total(".data") == 0, {k: v for k, v in sizes.items() if k.startswith(".data")}
+    assert total(".bss") == 0, {k: v for k, v in sizes.items() if k.startswith(".bss")}
+    assert total(".rodata") == 72, (
+        f"the library's read-only data is {total('.rodata')} bytes; DESIGN.md quotes 72")
 
 
 def test_math_errno_is_what_stands_between_norm_and_the_fpu(cross, tmp_path):

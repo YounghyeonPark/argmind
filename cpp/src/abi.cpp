@@ -480,9 +480,24 @@ template <typename Pipe, typename Ring>
 int views_from(const Ring* rings, int32_t n, argmind::StreamView<typename Pipe::T>* out) {
     if (!rings || n < 1 || n > kPipeStreams) return AM_ERR_CONFIG;
     for (int32_t i = 0; i < n; ++i) {
-        if (!rings[i].values || !rings[i].times || !rings[i].valid) return AM_ERR_NULL;
-        out[i] = argmind::ring_view<typename Pipe::T>(
-            *reinterpret_cast<const argmind::Ring<typename Pipe::T>*>(&rings[i]));
+        // Cast ONCE and read only through the result. The first version null-checked the
+        // fields through the caller's `am_ring_*` type and then re-read the same fields
+        // through `argmind::Ring<T>` two lines later -- two accesses to one object through
+        // two unrelated types in one scope, which is exactly what -fstrict-aliasing is
+        // licensed to reorder. It could not produce a wrong value here (no write sits
+        // between the reads) and it was still undefined; a review found it and the fix is
+        // free.
+        //
+        // What remains, recorded rather than removed: the layout static_asserts above make
+        // the reinterpretation *correct in practice* on every ABI this targets, but they do
+        // not make it legal in the object model -- that needs a union, a memcpy, or C++20's
+        // start_lifetime_as. The header's instruction to callers, to fill the struct through
+        // `am_ring_*_init` and then leave the fields alone, is what keeps the blast radius
+        // to nothing.
+        const argmind::Ring<typename Pipe::T>* r =
+            reinterpret_cast<const argmind::Ring<typename Pipe::T>*>(&rings[i]);
+        if (!r->values || !r->times || !r->valid) return AM_ERR_NULL;
+        out[i] = argmind::ring_view<typename Pipe::T>(*r);
     }
     return AM_OK;
 }

@@ -265,3 +265,116 @@ def test_the_ordering_scan_would_have_been_wrong_with_a_poisoned_ring():
     # wrong answer at all, including a crash-adjacent one.
     assert got.values[0] == 20.0, (
         f"expected the scan to be fooled into returning 20.0, got {got.values[0]}")
+
+
+# ---------------------------------------------------------------------------
+# What each policy costs in latency, with the fixture stated
+# ---------------------------------------------------------------------------
+#
+# DESIGN.md carried this table for a day with no test behind it, and an audit could not
+# reproduce it: the frame count disagreed with another number in the same section, the
+# `drop_if_stale` row did not say what staleness limit produced it, and the `interpolate`
+# row depended on a phase relationship nobody had written down. All three are pinned here.
+
+
+def _drain_per_arrival(policy, max_stale=None, n_fast=200, fast_hz=10.0, slow_hz=1.0,
+                       slow_phase=0.0):
+    """Push in timestamp order and drain after EVERY arrival, which is what a low-latency
+    caller does. Returns (frames, worst added delay in seconds, aligner stats).
+
+    The drain cadence is the whole point and it is why this fixture is not the one in
+    `test_pipeline.py`. There, 200 fast samples are pushed and `step()` runs once at the
+    end, so the frame at t=1.0 is built after the slow stream's first sample has arrived and
+    the count is 191. Here the drain at t=1.0 happens before it, so that instant is declined
+    and the count is 190. Both are right for their own cadence; quoting them side by side
+    without saying which is which is what made the documentation look self-contradictory.
+    """
+    fast = Stream("fast", dim=1, capacity=4096)
+    slow = Stream("slow", dim=1, capacity=4096)
+    aligner = Aligner("fast", policy, max_stale)
+    events = sorted([(k / fast_hz, "f", k) for k in range(1, n_fast + 1)] +
+                    [(j / slow_hz + slow_phase, "s", j)
+                     for j in range(1, int(n_fast / (fast_hz / slow_hz)) + 1)])
+    pending, delays, frames = {}, [], 0
+    for now, kind, idx in events:
+        if kind == "f":
+            fast.push(t=now, values=np.array([float(idx % 7)]))
+            pending[now] = now
+        else:
+            slow.push(t=now, values=np.array([2.0 + 0.01 * idx]))
+        for fr in aligner.drain({"fast": fast, "slow": slow}):
+            if fr.t in pending:
+                delays.append(now - pending.pop(fr.t))
+                frames += 1
+    return frames, (max(delays) if delays else 0.0), aligner.stats
+
+
+def test_the_causal_policies_add_no_latency():
+    """A causal policy can answer for instant t the moment t arrives. The measurement is
+    close to tautological -- that is the point of choosing a causal policy -- but it is
+    measured rather than argued, and it would catch a change that made `drain` wait."""
+    for policy in ("hold_last", "nearest"):
+        frames, worst, _ = _drain_per_arrival(policy)
+        assert frames == 190, f"{policy}: {frames}"
+        assert worst == 0.0, f"{policy} added {worst * 1000:.1f} ms"
+
+
+def test_ten_instants_cannot_be_framed_and_that_is_all_of_them():
+    """200 fast samples, 190 frames. The ten are the instants at and before the slow
+    stream's first sample: nine strictly before t=1.0, plus t=1.0 itself, whose drain runs
+    before the slow sample of the same timestamp arrives."""
+    frames, _worst, stats = _drain_per_arrival("hold_last")
+    assert frames == 190
+    assert stats["no_data"] == 10
+    assert stats["dropped_stale"] == 0
+
+
+def test_nearest_returns_exactly_what_hold_last_returns_here():
+    """With the fastest stream as the reference and a drain after every arrival, the future
+    sample `nearest` exists to consult has not arrived yet. It buys nothing and costs a
+    non-causal flag -- pinned because the aligner's own docstring recommends it for accuracy
+    without saying that recommendation is about offline use."""
+    def picks(policy):
+        fast = Stream("fast", dim=1, capacity=4096)
+        slow = Stream("slow", dim=1, capacity=4096)
+        aligner = Aligner("fast", policy)
+        out = []
+        events = sorted([(k / 10.0, "f", k) for k in range(1, 201)] +
+                        [(float(j), "s", j) for j in range(1, 21)])
+        for now, kind, idx in events:
+            (fast if kind == "f" else slow).push(
+                t=now,
+                values=np.array([2.0 + 0.01 * idx if kind == "s" else float(idx % 7)]))
+            for fr in aligner.drain({"fast": fast, "slow": slow}):
+                out.append((fr.t, float(fr.values["slow"][0]), fr.staleness_s["slow"]))
+        return out
+
+    h, n = picks("hold_last"), picks("nearest")
+    assert len(h) == len(n) == 190
+    assert h == n, "nearest chose differently somewhere; the degeneracy claim is wrong"
+
+
+def test_interpolation_builds_nothing_in_a_streaming_loop():
+    """Not "adds latency" -- nothing. Bracketing needs a sample later than the reference
+    instant, there never is one when the reference is the fastest stream, and `drain`
+    consumes the instant anyway so it is never retried.
+
+    Checked at two phases of the slow stream, because the first version of this claim was
+    measured at one and an audit reasonably asked whether the phase was load-bearing.
+    """
+    for phase in (0.0, 0.05):
+        frames, _worst, stats = _drain_per_arrival("interpolate", slow_phase=phase)
+        assert frames == 0, f"phase {phase}: {frames} frames"
+        assert stats["no_data"] == 200
+
+
+@pytest.mark.parametrize("limit,frames,dropped", [(0.05, 0, 190), (0.5, 95, 95),
+                                                  (2.0, 190, 0)])
+def test_drop_if_stale_costs_what_its_limit_says(limit, frames, dropped):
+    """The row DESIGN.md printed without its limit. At 2 s the policy abandons nothing and
+    looks identical to hold-last, which is a row that looks free because the axis that
+    costs was switched off. At 0.05 s it abandons everything. The middle is the only
+    interesting one, and none of the three is the policy's cost -- the limit is."""
+    got_frames, worst, stats = _drain_per_arrival("drop_if_stale", max_stale=limit)
+    assert (got_frames, stats["dropped_stale"]) == (frames, dropped)
+    assert worst == 0.0

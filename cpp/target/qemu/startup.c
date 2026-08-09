@@ -2,6 +2,12 @@
  *
  * Just enough Cortex-M4 to run the self-checks under QEMU's mps2-an386.
  *
+ * THIS COULD NEVER BE FIRMWARE, and the reason is stronger than the usual "no clock setup, no
+ * drivers". The image is linked against `--specs=rdimon.specs`, so its stdio and its heap
+ * come from semihosting: real silicon with no debug host attached faults on the first
+ * `bkpt 0xAB`. `cpp/target/cortex-m4.ld` and `cpp/target/usage.c` are the product-shaped
+ * pair; this one exists to run tests and nothing else.
+ *
  * Three jobs and no more.
  *
  * The vector table gives the core an initial stack pointer and a reset entry, because that

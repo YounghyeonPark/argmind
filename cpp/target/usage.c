@@ -77,11 +77,26 @@ void _am_entry(void) {
     am_sink_i = am_guard_f32_6_1_valid(obj);
     for (;;) {
         am_guard_report r;
+        am_guard_counters c;
         am_sink_i = am_guard_f32_6_1_update(obj, x, y, &r, 0);
         am_sink_d = r.residual_norm + r.p_trace;
         am_sink_i = (int)r.tripped + am_guard_f32_6_1_frozen(obj);
         am_sink_i = am_guard_f32_6_1_predict(obj, x, out);
         am_sink_f = out[0];
+        /* The rest of the guard's control surface. A review pointed out that leaving these
+           out let --gc-sections strip six entry points and still call the result "the
+           configuration DESIGN.md says the field should run" -- and DESIGN.md's own
+           on_frozen policy and its "a silent guard is an undebuggable one" both assume a
+           fielded device reads the counters and can thaw. Measured cost of putting them
+           back: 232 bytes, about 4% of this configuration. */
+        am_sink_i = (int)am_guard_f32_6_1_frozen_by(obj);
+        am_sink_i = am_guard_f32_6_1_counters(obj, &c);
+        am_sink_i = (int)(c.trips + c.rollbacks + c.blocked_frozen + c.thaws);
+        if (am_sink_i < 0) {
+            am_sink_i = am_guard_f32_6_1_freeze(obj);
+            am_sink_i = am_guard_f32_6_1_thaw(obj);
+            am_sink_i = am_guard_f32_6_1_reset(obj);
+        }
     }
 
 #elif AM_CFG == 3

@@ -425,7 +425,7 @@ byte for byte for the record format, and exactly for every decision and counter 
 The runtime library is fully across; `argmind/bench.py` has no C++ counterpart and is not
 getting one, being a host measurement harness rather than part of what ships. (Everything the library does is reachable from C: RLS, the
 guard, the record format, caller-owned rings and the composed pipeline.)
-359 Python tests plus 4603 C++ checks, several of which exist to prove failures are visible
+366 Python tests plus 4614 C++ checks, several of which exist to prove failures are visible
 rather than silent.
 
 **What the pipeline settled:**
@@ -638,8 +638,7 @@ first attempt at all four failed to discriminate, for four different reasons wor
 
 A test written without checking that the bug it is meant to catch would actually fail it is a guess.
 
-**What is verified and what is not.** Execution is host-only. There is still no ARM cross-compiler
-or target hardware on this machine, so: `rls.hpp` is checked to compile `-ffreestanding
+**What is verified and what is not.** Execution was host-only when this was written; a cross-compiler and an emulator arrived on 2026-08-09 and the section below records what they found. There is still no target hardware, so: `rls.hpp` is checked to compile `-ffreestanding
 -fno-exceptions -fno-rtti` and `argmind.h` to be valid C99, both on the host, which catches an
 accidental `<cmath>` or a C++-only header the moment it appears. Code size on the host at `-Os` is
 576 bytes of text for `Rls<float,6,1>::update` and 8468 for all four instantiations plus the ABI —
@@ -1055,11 +1054,15 @@ scan. The C ring, whose capacity is a runtime value, pays one integer division p
 single `SDIV` at the sensor's rate on the declared floor, which is not worth making the
 compile-time path larger to avoid.
 
-**Declared memory, measured on x86-64 — a shape, not a target figure.** Bare `f32_6_1` 600
-bytes, `f64_6_1` 936. Guarded: `g_f32_6_1` 1616, `g_f32_6_3` 1864, `g_f32_12_1` 3936,
-`g_f64_6_1` 2624. A guarded pipeline is its guard plus about 400 bytes, and the guard is
-mostly its checkpoint ring, so the composition a caller needs to see is
-`ring + adapter + ~400`. Six instantiations is a lot of code for a caller who wants one;
+**Declared memory, measured on x86-64 — a shape, not a target figure.** Bare `f32_6_1` 616
+bytes, `f64_6_1` 952. Guarded: `g_f32_6_1` 1632, `g_f32_6_3` 1896, `g_f32_12_1` 3952,
+`g_f64_6_1` 2640. A guarded pipeline is its guard plus **424 to 576 bytes** — 424 / 448 / 464
+/ 576 across the four — and the guard is mostly its checkpoint ring.
+
+These figures were 16 to 32 bytes smaller when first written and an audit caught the drift:
+adding `require_fresh_target` put three members into `Pipeline`, and nothing pinned the
+numbers. `cpp/tests/test_core.cpp` only checked them against their `MAX_BYTES` bounds, which a
+16-byte growth passes comfortably. "About 400 bytes" was also wrong at f64 by 44%. Six instantiations is a lot of code for a caller who wants one;
 `-ffunction-sections -fdata-sections` with `--gc-sections`, which the embedded CMake path
 already sets, keeps the unused ones out of flash.
 
@@ -1118,15 +1121,38 @@ argued.
 **What each alignment policy costs in latency.** Reference = the fastest stream, 10 Hz and
 1 Hz, 200 samples, drained on every arrival:
 
-| policy | frames | added latency | note |
-|---|---|---|---|
-| `hold_last` | 190/200 | **0 ms** | causal, never waits |
-| `drop_if_stale` | 190/200 | **0 ms** | same branch, abandons past its limit |
-| `nearest` | 190/200 | 0 ms | **identical to `hold_last` on all 190** |
-| `interpolate` | **0/200** | — | builds nothing at all |
+**The fixture, because it decides the numbers**: reference is the fast stream, 200 fast
+samples at 10 Hz, 20 slow ones at 1 Hz, and `drain` runs **after every arrival** — which is
+what a low-latency caller does.
 
-The ten that were never built are the interval before the slow stream's first sample, where
-no frame can exist.
+| policy | limit | frames | max added latency | abandoned |
+|---|---|---|---|---|
+| `hold_last` | — | 190/200 | 0.0 ms | 0 |
+| `nearest` | — | 190/200 | 0.0 ms | 0 |
+| `interpolate` | — | **0/200** | — | 0 |
+| `drop_if_stale` | 0.05 s | 0/200 | — | 190 |
+| `drop_if_stale` | 0.5 s | 95/200 | 0.0 ms | 95 |
+| `drop_if_stale` | 2.0 s | 190/200 | 0.0 ms | 0 |
+
+Three things an audit had to correct here. The `drop_if_stale` row originally appeared without
+its staleness limit, and the only limit that reproduces 190/200 is one large enough that the
+policy never abandons anything — **a row that looked free because the axis that costs was
+switched off**. The `interpolate` row was measured at one phase of the slow stream and the
+phase was not stated; checked at two, it is 0 either way, but that was luck rather than
+knowledge. And "0 ms" sat in the same column as the counts as though it were the same kind of
+measurement: it is measured, but for a causal policy it is close to tautological — the harness
+times how long after a reference sample its frame becomes buildable, and a policy that never
+looks ahead answers immediately by construction. It confirms rather than discovers.
+
+The ten instants that cannot be framed are the nine before the slow stream's first sample plus
+`t = 1.0` itself, whose drain runs before the slow sample of the same timestamp arrives.
+
+**190 here and 191 elsewhere in this document are different fixtures, not a contradiction.**
+`test_pipeline.py`'s `_rates` pushes everything and calls `step()` once at the end, so the
+frame at `t = 1.0` is built after the slow sample exists. The drain cadence is the difference,
+and printing the two counts in the same section without saying so is what made it look like
+one of them was wrong. Every row above is now pinned by
+`tests/test_stream_and_align.py`.
 
 Two rows were not what the docstrings imply. **`nearest` degenerates to `hold_last`** in a
 streaming loop with the fastest stream as the reference — same sample, same staleness, on
@@ -1144,8 +1170,12 @@ latency is the caller's call cadence, which is the caller's to choose.
 **The cost that arrangement hides.** When the target rides a slower stream, hold-last hands
 the same measurement to the learner once per fast frame: measured, 191 frames from 20
 measurements, each used up to ten times. RLS weights it ten times, so `tr(P)` ends an order
-of magnitude below where the same information should leave it — measured 0.0185 against
-0.196, and 12.1× on the C++ side with a fully excited regressor.
+of magnitude below where the same information should leave it: measured **0.0185 against
+0.196** in the reference. The C++ side
+shows **12.1×** on a fully excited five-wide regressor — a figure taken from a scratch
+programme rather than from the suite, which asserts only the weaker `> 5×` it can hold across
+compilers. Said that way because an audit pointed out the 12.1 had no fixture behind it in the
+tree.
 
 **`max_stale_s` looks like the lever and is not.** It is a threshold on time where the
 question is one of identity:
@@ -1238,10 +1268,21 @@ what travels is the decomposition:
 | 8 | 334,000 | 41,750 |
 | 16 | 676,900 | 42,306 |
 
-Fit: **≈11.4 µs fixed + ≈41.4 µs per frame**, so **22–29% of a one-frame step is overhead**
-rather than work. That range is three runs, not one — the slope is stable to about 0.5%
-(41065 / 40874 / 41028 ns) while the intercept, being an extrapolation to zero frames from a
-line the slope dominates, moves by a third of its own value between runs.
+Fit: **≈11.4 µs fixed + ≈41.4 µs per frame** on that run, so about a quarter of a one-frame
+step is overhead rather than work.
+
+**The stability this paragraph originally claimed was not real, and the way it was wrong is
+worth keeping.** It said the slope held to 0.5% across runs, citing three consecutive
+measurements of 41065 / 40874 / 41028 ns. Over ten interleaved runs the slope moves **10.9%
+about its mean** (32364 to 36043 ns) and the overhead fraction ranges from **19.9% to 37.2%**.
+Three consecutive runs of those ten agree to 2.6% — a drifting mean impersonating a stable
+one, and exactly what sampling three times in a row measures. An audit ran thirteen and found
+a 22% range.
+
+So the honest statement is qualitative: overhead is somewhere between a fifth and a third of a
+one-frame step on this machine, and any figure taken from `step_cost` needs its spread beside
+it. The one number that does travel is a ratio measured inside a single run, which is what
+`gate_saving` reports.
 
 **Which is why `fit_step` returns the intercept but nothing here compares two of them.** An
 early version of `gate_saving` reported the ratio of two intercepts as a finding; it was
@@ -1294,8 +1335,12 @@ is permitted to emit calls to those even in a freestanding build and it does, fr
 assignment and from `__builtin_memcpy` on a runtime length. Nothing in this project said so
 before, and a bare-metal integrator has to supply them. Beyond those it needs only libgcc's
 soft-float double helpers (`__aeabi_dadd`, `__aeabi_ddiv`, the comparisons and the
-conversions), which are the cost `align.hpp` already documented for a single-precision FPU —
-now confirmed as a symbol list rather than an argument. The whole set is **pinned as a set**
+conversions). It would be convenient to call those an f64-only cost and
+they are not: a review checked, and they appear in the **f32-only** image too, because
+`Report`'s health scalars — `p_trace`, `p_min_diag`, the residual norms — are `double`
+regardless of the adapter's `T`, deliberately, so that a guard's thresholds mean the same thing
+in both languages. `sqrt` is the one genuinely f64-only symbol, and `--gc-sections` does keep it
+out of an f32 image. The whole set is **pinned as a set**
 in `tests/test_target_build.py`, so a new external dependency fails a test and has to be
 argued for.
 
@@ -1314,19 +1359,33 @@ against `cpp/target/cortex-m4.ld`. Cortex-M4F, `-Os`, newlib-nano:
 | configuration | flash | of which argmind | libc/libgcc | static RAM |
 |---|---|---|---|---|
 | bare RLS f32 6×1 | 2,340 | 1,258 | 916 | 272 |
-| + guard | 5,936 | 3,314 | 2,264 | 1,296 |
+| + guard | 6,144 | 3,526 | 2,264 | 1,296 |
 | + record format | 6,376 | 3,804 | 2,264 | 1,972 |
 | full composed pipeline | 10,380 | 7,374 | 2,424 | 3,264 |
+
+Two corrections from an audit are folded into that table. The guarded row was 5,936 because
+`usage.c` never called `freeze`, `thaw`, `reset`, `counters` or `frozen_by` — so `--gc-sections`
+stripped six entry points out of the configuration commented as "what the field should run",
+while DESIGN.md's own `on_frozen` policy and its "a silent guard is an undebuggable one" both
+assume a device that reads its counters and can thaw. Calling them costs 208 bytes. And the
+`argmind` column was `.text` only, which understated the one row where the library's 72 bytes
+of `.rodata` survive `--gc-sections`; it is text plus rodata in every row now.
 
 Against the declared 32 KB flash and 8 KB RAM, the whole composed pipeline is **32% of the
 flash budget and 40% of the RAM**. The linker script carries those budgets so overflowing
 them is a link error rather than a number somebody has to notice.
 
 **Every byte of that RAM is the caller's.** The library defines **zero** bytes of `.data` and
-`.bss` and 72 bytes of `.rodata` — checked directly, and the `.bss` figures above are exactly
-the storage `usage.c` declares: the handle, the rings, the two flash slots, the restore
-buffer. That is the storage-is-the-caller's design confirmed rather than asserted, and it is
-now a test.
+`.bss` and 72 bytes of `.rodata`. The `.bss` figures above are the storage `usage.c` declares —
+the handle, the rings, the two flash slots, the restore buffer — plus 16 bytes of the
+measurement harness's own `volatile` sinks, which exist to stop the optimiser deleting the
+calls. 3,248 declared and 3,264 measured for the full pipeline; the earlier "exactly" was 16
+bytes out.
+
+That test needed fixing too. It read the sections named exactly `.data` and `.bss`, which are
+**always** zero under `-fdata-sections` because every object lands in `.data.<name>` or
+`.bss.<name>` — an audit compiled a probe with 288 bytes of globals and the test passed. It now
+sums both families and pins `.rodata` at 72 rather than under a guessed 512.
 
 **What is still absent, deliberately: any on-target timing.** There is no hardware and no
 emulator on this machine, so a cycle count would be interpolated from a host measurement,
@@ -1368,6 +1427,15 @@ running both ways:
 A guard that could only be argued for is now one that is tested, and the header's claim of
 untestability on the host is itself verified rather than taken on trust.
 
+**That covered one of two identical guards, which an audit had to point out.** `pack` carries
+the same wraparound check with the same "equivalent mutant" comment, and removing *it* still
+passed on ARM — the on-target run had made the read path testable and left the write path
+exactly where it was. Guarding one direction and not the other is already recorded in
+CLAUDE.md as an earlier omission here; testing one direction and not the other is the same
+mistake one level up. There is now a case for the write path too, and it matters more than the
+read one: `count` reaches `pack` from the caller across the C ABI rather than out of a record
+that a CRC also protects.
+
 **Three bugs in the harness, all of which the host build would have hidden.** They are worth
 recording because each is a way a cross build that compiles perfectly still does not run.
 
@@ -1391,6 +1459,21 @@ that reports rather than one that is merely short.
 returns `0x3fb504f3` exactly. And `sizeof(int)/(long)/(void*)/(size_t)` are all 4 on the
 target — asserted as its own test, so a board or toolchain change that widened `size_t` fails
 distinctly rather than confusingly.
+
+**And two things a review established about the harness itself.** Its 64 KB stack and 256 KB
+heap are not what bounds the running image: `rdimon-crt0` opens with a `SYS_HEAPINFO`
+semihosting call and overwrites the stack pointer with whatever the host reports — measured,
+the linked `_estack` is `0x20050398` and the live SP at `main()` is `0x21fffff0`. The linker
+script's numbers are a floor and the symbols the link needs, nothing more. More importantly,
+**this image could never be firmware**, and for a stronger reason than the usual absent clock
+setup: semihosting means real silicon with no debug host attached faults on the first
+`bkpt 0xAB`. `cortex-m4.ld` and `usage.c` are the product-shaped pair; the QEMU harness runs
+tests and nothing else. Both are now said in the files themselves.
+
+That review also answered a question the budget measurement had left open: a real vector table
+plus a reset handler that enables the FPU, copies `.data` and zeroes `.bss` measures **154
+bytes**, so omitting them from `cortex-m4.ld` understates a firmware's flash by under half a
+percent of the budget.
 
 **What is still absent, and now for a narrower reason.** QEMU models the instruction set, not
 the pipeline, the flash wait states or the bus, so a cycle count taken here would be fiction

@@ -375,9 +375,17 @@ def step_cost(frames_per_step=(1, 2, 4, 8, 16), steps: int = 300,
     slope separates them. That distinction was already worth a correction once in
     this file.
 
-    Returns absolute nanosecond figures, which are **machine-specific and are not
-    a gate**. What travels is the ratio in ``fixed_fraction_at_one``: the share of
-    a single-frame step that is overhead rather than work.
+    Returns absolute nanosecond figures, which are **machine-specific and are not a
+    gate**. Neither is ``fixed_fraction_at_one``, and an earlier version of this docstring
+    said that ratio was the part which travels. Measured over ten interleaved runs on one
+    idle machine, the slope moved 10.9% about its mean and the overhead fraction ranged from
+    19.9% to 37.2%. Three consecutive runs agreed to 2.6% -- which is how a drifting mean
+    impersonates a stable one, and is why DESIGN.md ended up quoting a 0.5% stability that
+    does not exist.
+
+    So what this is good for is one comparison inside one run -- `gate_saving` does exactly
+    that -- and for noticing a change large enough to clear that spread. A figure taken from
+    it should carry the spread beside it or not be quoted.
     """
     rows = []
     for k in frames_per_step:
