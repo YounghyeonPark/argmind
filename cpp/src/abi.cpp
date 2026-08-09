@@ -7,10 +7,24 @@
 // boundary rather than trust, and a static assertion per instantiation that the
 // declared upper bound is still an upper bound.
 //
-// Placement into caller storage uses a union-aligned cast rather than placement new
-// so that <new> is not needed in a freestanding build. `Rls` is trivially
-// destructible and has no virtuals, so constructing it by assignment into the
-// caller's bytes is well defined for these types.
+// Placement into caller storage uses placement new, and it used to use assignment from a
+// temporary. That was a measured mistake rather than a stylistic one.
+//
+// `*static_cast<T*>(obj) = T(...)` builds the whole object on the STACK and then copies it.
+// Nobody had measured stack until 2026-08-09, and `-fstack-usage` on the target says
+// `am_pipe_g_f32_12_1_init` wanted **8,296 bytes** -- more than the entire 8 KB RAM budget
+// this library declares, so on the floor it names, that entry point could not be called at
+// all. `am_pipe_g_f32_6_1_init` wanted 3,192. The disassembly agrees: `subw sp, sp, #3148`.
+//
+// The ABI's contract is that storage is the caller's and nothing allocates, and
+// `am_*_bytes()` reports the object. A caller who budgeted from that and gave the stack a
+// kilobyte would have been destroyed by the first call. Placement new constructs in the
+// caller's bytes directly and the frames drop to tens of bytes.
+//
+// <new> is a freestanding-conforming header in C++17 and is header-only for placement
+// syntax -- verified by compiling it for the target rather than assumed, since the comment
+// this one replaces had assumed the opposite.
+#include <new>
 
 #include "argmind/argmind.h"
 
@@ -65,7 +79,7 @@ void fill_report(const argmind::Report<T, M>& src, am_report* dst,
         if (obj_bytes < sizeof(Rls_##NAME)) return AM_ERR_TOO_SMALL;             \
         Rls_##NAME probe(lambda, p0);                                           \
         if (!probe.valid()) return AM_ERR_CONFIG;                               \
-        *static_cast<Rls_##NAME*>(obj) = probe;                                 \
+        new (obj) Rls_##NAME(probe);                                            \
         return AM_OK;                                                           \
     }                                                                           \
     extern "C" int am_rls_##NAME##_reset(void* obj) {                           \
@@ -184,8 +198,7 @@ bool valid_field(int32_t field) {
         if (obj_bytes < sizeof(Guard_##NAME)) return AM_ERR_TOO_SMALL;          \
         argmind::Rls<SCALAR, N, M> inner(lambda, p0);                           \
         if (!inner.valid()) return AM_ERR_CONFIG;                               \
-        Guard_##NAME probe(inner, checkpoint_every, recover_after);             \
-        *static_cast<Guard_##NAME*>(obj) = probe;                               \
+        new (obj) Guard_##NAME(inner, checkpoint_every, recover_after);          \
         return AM_OK;                                                           \
     }                                                                           \
     extern "C" int am_guard_##NAME##_add_bound(void* obj, int32_t field,        \
@@ -652,11 +665,11 @@ bool valid_policy(int32_t p) {
         if (!valid_policy(policy)) return AM_ERR_CONFIG;                        \
         argmind::Rls<SCALAR, N, M> inner(lambda, p0);                           \
         if (!inner.valid()) return AM_ERR_CONFIG;                               \
-        const Adapter_##NAME g(inner, checkpoint_every, recover_after);          \
         const argmind::Aligner al(static_cast<argmind::Policy>(policy),          \
                                   max_stale_s);                                 \
-        *static_cast<Pipe_##NAME*>(obj) =                                       \
-            Pipe_##NAME(g, al, argmind::FrameMap<N, M>(), reference);            \
+        new (obj) Pipe_##NAME(Adapter_##NAME(inner, checkpoint_every,            \
+                                             recover_after),                     \
+                              al, argmind::FrameMap<N, M>(), reference);         \
         return AM_OK;                                                           \
     }                                                                           \
     extern "C" int am_pipe_##NAME##_add_bound(void* obj, int32_t field,          \
@@ -727,8 +740,7 @@ bool valid_policy(int32_t p) {
         if (!inner.valid()) return AM_ERR_CONFIG;                               \
         const argmind::Aligner al(static_cast<argmind::Policy>(policy),          \
                                   max_stale_s);                                 \
-        *static_cast<Pipe_##NAME*>(obj) = Pipe_##NAME(                          \
-            inner, al, argmind::FrameMap<N, M>(), reference);                    \
+        new (obj) Pipe_##NAME(inner, al, argmind::FrameMap<N, M>(), reference);  \
         return AM_OK;                                                           \
     }                                                                           \
     AM_DEFINE_PIPE_COMMON(NAME, SCALAR, RING, Pipe_##NAME, MAX_BYTES)

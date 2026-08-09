@@ -107,7 +107,7 @@ rollback, explicit recovery), `argmind/pipeline.py` (`FrameMap`, input gate, bou
 pipeline. `argmind/bench.py` has no C++ counterpart and is not getting one: it is a host
 measurement harness, and DESIGN.md already records that Python timings are not a baseline the
 C++ can be compared against.
-495 Python tests and 4632 C++ checks pass; several exist to prove failures are visible
+496 Python tests and 4632 C++ checks pass; several exist to prove failures are visible
 rather than silent. Every suite is mutation-checked, and surviving mutants are recorded where
 they live rather than tallied here — including the ones that turn out to be **equivalent on a
 64-bit host**, a distinction worth keeping rather than rounding away. Cumulative counts are
@@ -616,6 +616,16 @@ reference compares a tuple over unique target streams and the core iterates outp
 been checked by reading and never by running. The first version of that fixture put the
 targets on the reference stream so the gate could not fire; it failed its own guard, the third
 time this session.
+
+**And the stack had never been measured**, which a hardware question exposed. `am_*_bytes()`
+reports the object; these functions also use the caller's stack. With `-fstack-usage` for
+Cortex-M4 at `-Os` the hot path is **312-328 bytes** and `init` is a transient spike — but
+before the fix `am_pipe_g_f32_12_1_init` wanted **8,296 bytes, more than the whole 8 KB RAM
+floor**, because it built the object as a temporary and copied it. On the target this library
+names, that entry point could not be called. Placement new brought it to 4,288 (and 1,536 for
+`g_f32_6_1`); the header comment that had ruled placement new out said `<new>` was unavailable
+freestanding, and it is not. One adapter-sized temporary remains, because `Pipeline` takes its
+adapter by value — recorded, not half-done. Both figures are now bounded by a test.
 
 **Next:** hardware, for the timing question. Everything else the project set out to build is
 built and verified on the declared floor.

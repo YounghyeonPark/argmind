@@ -16,11 +16,36 @@
  * explicit list of instantiations**, and adding a dimension means adding one line
  * to that list and rebuilding. That is a real cost and it is the honest one.
  *
- * Storage is the caller's
- * -----------------------
+ * Storage is the caller's, and so is the stack
+ * --------------------------------------------
  * Nothing here allocates. `am_rls_*_bytes()` reports how much storage an instance
  * needs and the caller supplies it — statically, on its own stack, or from its own
  * pool.
+ *
+ * **`*_bytes()` is the object, not the whole cost, and the difference bit once.**
+ * These functions also use the caller's stack, and until 2026-08-09 nobody had
+ * measured how much. With `-fstack-usage` for Cortex-M4 at `-Os`:
+ *
+ *   steady state    am_pipe_*_step        312 to 328 bytes
+ *                   am_guard_*_update      88 to 104
+ *                   am_rls_*_update        72 to 144
+ *   initialisation  am_pipe_g_f32_6_1_init      1,536
+ *                   am_pipe_g_f32_6_3_init      1,824
+ *                   am_pipe_g_f64_6_1_init      2,584
+ *                   am_pipe_g_f32_12_1_init     4,288
+ *
+ * The hot path is small; **`init` is a transient spike and it has to fit**. Size the
+ * stack for initialisation, or call `init` before anything else has grown it.
+ *
+ * Those are the fixed figures. `init` used to build the whole object as a temporary
+ * and copy it, which cost `am_pipe_g_f32_12_1_init` 8,296 bytes — more than the 8 KB
+ * of RAM this library declares as its floor, so on the target it names, that entry
+ * point could not be called at all. It constructs in the caller's bytes now. What is
+ * left is one adapter-sized temporary, because `Pipeline`'s constructor takes its
+ * adapter by value; removing that needs a default-constructible `Guard` and an
+ * in-place configure, which is recorded here rather than done.
+ *
+ * `tests/test_target_build.py` bounds all of it, so it cannot grow back quietly.
  *
  * `AM_*_MAX_BYTES` is a compile-time **upper bound** for callers that must size an
  * array before they can call anything. It is not the exact size: that depends on

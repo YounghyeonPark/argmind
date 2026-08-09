@@ -425,7 +425,7 @@ byte for byte for the record format, and exactly for every decision and counter 
 The runtime library is fully across; `argmind/bench.py` has no C++ counterpart and is not
 getting one, being a host measurement harness rather than part of what ships. (Everything the library does is reachable from C: RLS, the
 guard, the record format, caller-owned rings and the composed pipeline.)
-495 Python tests plus 4632 C++ checks, several of which exist to prove failures are visible
+496 Python tests plus 4632 C++ checks, several of which exist to prove failures are visible
 rather than silent.
 
 **What the pipeline settled:**
@@ -1703,6 +1703,42 @@ The first version of that fixture put the targets on the reference stream, so ev
 carried a new target and the gate could not fire. It failed its own "no frame was gated"
 guard, which is the third time this session a fixture has been caught testing nothing by an
 assertion written for exactly that.
+
+### The stack nobody had measured, 2026-08-09
+
+A question about which hardware to buy asked how much RAM the library needs, and the answer
+in this document was 3,264 bytes of static storage. That is the *object*. These functions also
+use the caller's stack, and nobody had ever measured it.
+
+Measured with `-fstack-usage` for Cortex-M4 at `-Os`:
+
+| | bytes |
+|---|---|
+| `am_pipe_*_step` — the hot path | 312 – 328 |
+| `am_guard_*_update` | 88 – 104 |
+| `am_rls_*_update` | 72 – 144 |
+| `am_pipe_g_f32_6_1_init` | 1,536 |
+| `am_pipe_g_f32_12_1_init` | 4,288 |
+
+**Those are the fixed figures.** `init` built the whole object as a temporary and copied it
+into the caller's storage, so before the fix `am_pipe_g_f32_12_1_init` wanted **8,296 bytes of
+stack** — more than the 8 KB of RAM this library declares as its floor. On the target it names,
+that entry point could not be called at all, and the disassembly agreed: `subw sp, sp, #3148`
+for the six-feature one. The ABI's contract is that storage is the caller's and nothing
+allocates, `am_*_bytes()` reports the object, and a caller who budgeted from that and gave the
+stack a kilobyte would have been destroyed on the first call.
+
+The fix is placement new — constructing in the caller's bytes instead of building a temporary
+and assigning. The header comment that ruled it out said `<new>` was unavailable freestanding;
+it is a freestanding-conforming header in C++17, which a two-line compile for the target
+settles. What remains is one adapter-sized temporary, because `Pipeline`'s constructor takes
+its adapter by value; removing it needs a default-constructible `Guard` and an in-place
+configure, and that is recorded rather than half-done.
+
+**The shape of the answer matters more than the numbers.** The steady state is a third of a
+kilobyte — nothing. Initialisation is a transient spike of up to 4.3 KB, so a device sizes its
+stack for `init` or calls `init` before anything else has grown it. `tests/test_target_build.py`
+bounds both, so neither can grow back quietly.
 
 ## Standards
 
