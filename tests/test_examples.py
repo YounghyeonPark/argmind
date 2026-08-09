@@ -64,9 +64,13 @@ def test_the_hosted_inference_example_builds_and_converges(host_toolchain, tmp_p
     assert m, out
     updates, predictions = int(m.group(1)), int(m.group(2))
     assert updates > 1000, f"only {updates} updates; the example is not exercising the head"
+    # These count the same instants, because `predictions` is only incremented when the
+    # report's `t` matches a recorded label -- so this checks the example produced an
+    # output for every frame it learned from, and NOT the wider property an earlier
+    # comment here claimed (that a gate-refused frame still predicts). The example never
+    # refuses, so it cannot observe that; `tests/test_pipeline.py` does.
     assert predictions == updates, (
-        f"{predictions} predictions against {updates} updates -- the report is supposed to "
-        "carry an output for every frame, including ones the gate refused to learn from")
+        f"{predictions} predictions against {updates} updates")
 
     m = re.search(r"error\s+(-?[\d.e+-]+)", out)
     assert m, out

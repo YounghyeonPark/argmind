@@ -482,3 +482,45 @@ def test_report_carries_what_a_guard_will_need():
     assert r.residual.shape == (1,)
     assert r.p_trace > 0
     assert r.reason is None
+
+
+def test_a_non_finite_p0_is_refused_rather_than_producing_a_dead_adapter():
+    """`not p0 > 0.0` lets `+inf` through, and for a while it did.
+
+    An independent parity check found the disagreement: `Rls` in C++ has always tested
+    `is_finite(p0)` and this reference never did, so the two differed on exactly one cell
+    of a 108-point sweep over lambda and p0.
+
+    What got through is worse than a wrong number. `eye(n) * inf` is `inf` on the diagonal
+    and `0 * inf = NaN` off it, so the adapter is born with a non-finite covariance, every
+    denominator is NaN, and **every update for the rest of its life is rejected**. It never
+    complains at construction. numpy emits a RuntimeWarning, which is the kind nobody reads.
+    """
+    with pytest.raises(ValueError, match="positive and finite"):
+        RecursiveLeastSquares(3, p0=float("inf"), dtype="f8")
+
+    # ...and the neighbours still behave, so this is one cell and not a blanket tightening.
+    for bad in (float("-inf"), float("nan"), 0.0, -1.0):
+        with pytest.raises(ValueError, match="p0 must be positive"):
+            RecursiveLeastSquares(3, p0=bad, dtype="f8")
+    RecursiveLeastSquares(3, p0=1e-300, dtype="f8")     # denormal, but finite and positive
+    RecursiveLeastSquares(3, p0=1e300, dtype="f8")
+
+    # `forgetting` needs no separate finiteness clause: the range test already covers it.
+    for bad in (float("inf"), float("nan")):
+        with pytest.raises(ValueError, match="forgetting must be"):
+            RecursiveLeastSquares(3, forgetting=bad, dtype="f8")
+
+
+def test_the_dead_adapter_a_non_finite_p0_used_to_produce_is_what_makes_it_worth_refusing():
+    """The refusal above is only justified if what it prevents is actually bad. This builds
+    that state deliberately -- past the constructor, the way the old code let it happen --
+    and shows the adapter rejects every sample forever."""
+    a = RecursiveLeastSquares(3, p0=100.0, dtype="f8")
+    with np.errstate(invalid="ignore"):              # the 0*inf IS the demonstration
+        a._p[:] = np.eye(3) * np.inf                 # what `p0=inf` used to construct
+    assert not np.isfinite(np.asarray(a.state)).all()
+    for _ in range(5):
+        r = a.update([1.0, 2.0, 3.0], [1.0])
+        assert r.applied is False
+        assert r.reason == "nonpositive_denominator"

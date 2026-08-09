@@ -148,15 +148,19 @@ scalar and vector fp32* ([Arm](https://developer.arm.com/documentation/101273/la
 so it is **strictly above** the declared floor; **STM32N6** pairs it at 800 MHz with a 600 GOPS
 NPU at 3 TOPS/W, 4.2 MB SRAM and a MIPI CSI-2 camera pipeline
 ([ST](https://www.st.com/en/microcontrollers-microprocessors/stm32n6-series.html)). Measured, no
-source changes: the composed pipeline is **7,876 B** of flash on M55 against **10,396** on M4F at
-identical RAM — moving up makes argmind *smaller* — and **all 4,650 self-checks run and pass
+source changes: the composed pipeline is **smaller** on M55 than on M4F at identical RAM (the
+two figures are in `cpp/target/SIZES.md`, because the pair quoted here went stale in a day) —
+and **all 4,650 self-checks run and pass
 under QEMU's `mps3-an547` Cortex-M55 board**. `tests/test_target_run.py` is parametrised over
 both cores, mutation-checked two ways.
 
 **The fork is what the words mean, not what the silicon can do.** React like an animal (see a
 person, hear a call, answer with a sound) fits an MCU+NPU at ~1 W and the floor is unchanged;
-*converse* (speech recognition, dialogue, natural TTS) needs an SBC at 10–25 W, and on tomcat's
-own figures — 41.8 Wh battery, ~14.9 W standing — that costs **40–63 % of standing endurance**.
+*converse* (speech recognition, dialogue, natural TTS) needs an SBC at 10–25 W, and that costs
+**40–63 % of standing endurance** — **my arithmetic**, not tomcat's figures: a 41.8 Wh battery
+and ~14.9 W standing draw are *derived* from its stated NFR6 (83.6 W trotting for 30 min, 168
+min standing, in `docs/REQUIREMENTS.md` of `YounghyeonPark/tomcat`), which itself carries an
+`[assumed]` 175 Wh/kg.
 
 **Learning and inference can be integrated, at one forced place: the head.** The NPU does not
 learn — Arm calls Ethos-U55 an *inference* accelerator and its path is TFLite **Micro**
@@ -165,9 +169,11 @@ learn — Arm calls Ethos-U55 an *inference* accelerator and its path is TFLite 
 no heap. What is available is a frozen int8 backbone on the NPU whose feature vector **is** the
 regressor for an `Adapter` under a `Guard`: inference and learning share the computation rather
 than duplicating it, and one flat state block still covers persistence. Measured on both cores,
-a 128-wide head over 4,000 samples: `Guard<Rls<f32,128,1>,4,4>` is **330,608 B** and converges
-to **−5.8e−07**; `Guard<Nlms<...>>` is **2,912 B** and reaches 1.0e−02 — **113× the memory for
-~17,000× the accuracy**, which is a choice only because a second adapter now exists. **The wall
+a 128-wide head: `Guard<Rls<f32,128,1>,4,4>` is **330,608 B** against `Guard<Nlms<...>>` at
+**2,912 B** — **113×**, which is arithmetic on the state sizes. An accuracy comparison stood
+beside it ("~17,000×") and is **withdrawn**: it came from a scratch fixture never checked in,
+an audit reconstructing it got the opposite ordering, and NLMS's μ — which sets its
+steady-state error — was never swept off its default. **The wall
 is RLS's n²**: head 128 costs 7.5% of the SRAM, 256 costs 30%, and **512 does not fit at 119%**,
 so a wide head forces a square-root form, a shallower ring, or NLMS. What it does *not* give:
 no representation learning, the backbone is frozen, and "situation assessment" is the backbone's
@@ -210,7 +216,7 @@ rollback, explicit recovery), `argmind/pipeline.py` (`FrameMap`, input gate, bou
 pipeline. `argmind/bench.py` has no C++ counterpart and is not getting one: it is a host
 measurement harness, and DESIGN.md already records that Python timings are not a baseline the
 C++ can be compared against.
-496 Python tests and 4632 C++ checks pass; several exist to prove failures are visible
+507 Python tests and 4,652 C++ checks pass; several exist to prove failures are visible
 rather than silent. Every suite is mutation-checked, and surviving mutants are recorded where
 they live rather than tallied here — including the ones that turn out to be **equivalent on a
 64-bit host**, a distinction worth keeping rather than rounding away. Cumulative counts are
@@ -296,7 +302,7 @@ directly and skips if there is none, so a clone without a toolchain still tests 
 
 **The C ABI's real tension**: compile-time dimensions are why C++ was chosen, and a C ABI wants
 runtime arguments. Runtime `n` would discard the reason, so the ABI exports an **explicit
-instantiation list** — adding a dimension is one line plus a rebuild. Storage is the caller's;
+instantiation list** — adding a dimension is three lines plus a rebuild. Storage is the caller's;
 `AM_*_MAX_BYTES` is an upper bound held to being one by a `static_assert`.
 
 **The ABI now exports the guard and the record format too (2026-08-09), and that started as an
@@ -601,18 +607,18 @@ cannot:
 
 **Measured sizes, Cortex-M4F, `-Os`, newlib-nano, from the map.** `--gc-sections` means there
 is no one "size of the library", so four firmware-shaped configurations are linked separately:
-bare RLS **2,340 B** flash / 272 B RAM; guarded **6,128 / 1,296**; plus records **6,360 /
-1,972**; full composed pipeline **10,396 / 3,264** — the guarded row grew 208 bytes once an
-audit noticed `usage.c` never called freeze/thaw/reset/counters/frozen_by, so `--gc-sections`
-had stripped six entry points out of the configuration called "what the field should run" — **32% of the 32 KB flash budget and 40% of
-the 8 KB RAM**. Of the full pipeline's flash, 7,390 B is argmind and 2,442 B is libc/libgcc.
+**the figures live in `cpp/target/SIZES.md`**, generated and gated by
+`tests/test_target_build.py`. The composed pipeline is about **32% of the 32 KB flash budget
+and 40% of the 8 KB RAM**; the guarded row grew 208 bytes once an audit noticed `usage.c`
+never called freeze/thaw/reset/counters/frozen_by, so `--gc-sections` had stripped six entry
+points out of the configuration called "what the field should run".
 
-**Three of those four figures were stale until 2026-08-09 and nothing caught it**, because the
-test bounds the numbers against the *budget* rather than pinning them — deliberately, so a
-compiler upgrade is not a failing test, but the cost is that the table only stays true if
-somebody re-runs it. It went out at `47a4dd2` (the `Pipeline::step` fix, +40 on the composed
-row) and again at `17cff2b` (placement new, ±16 on three rows). Rebuilding all six commits
-since attributes both exactly, and DESIGN.md records the method — including that summing the
+**That table went stale three times**, which is why it is generated now rather than restated.
+It drifted at `47a4dd2` (+40 on the composed row), at `17cff2b` (−16/−16/−24, and the note
+recording this said "±16 on three rows" — wrong on the third), and at `0ada177`, **the commit
+that documented the first two**. Two independent audits caught the third. Bounding against the
+budget instead of pinning was deliberate — a compiler upgrade should not be a failing test —
+and three drifts say it cost more than it saved. One method note worth keeping: summing the
 whole link map, rather than only what follows "Linker script and memory map", reads 41,072
 bytes for a 2,340-byte image.
 
@@ -621,7 +627,7 @@ bytes for a 2,340-byte image.
 
 **And the code now RUNS on a Cortex-M4 (2026-08-09), which closes the last verification
 limit.** `cpp/tests/test_core.cpp` executes under QEMU's `mps2-an386` — the declared floor —
-and all 4,603 checks pass. QEMU was extracted rather than installed, its NSIS installer being
+and all 4,652 checks pass. QEMU was extracted rather than installed, its NSIS installer being
 `requireAdministrator`; getting an extractor meant unpacking 7-Zip's own SFX with `7zr.exe`
 first.
 
@@ -693,7 +699,7 @@ The prediction metric normalises by the run's largest prediction where the proje
 says `max_j|x_j θ_j|`. ~~The cross-architecture subset discriminates nothing and its cost argument was wrong.~~
 **Closed the same day: there is no subset.** `tests/_toolbuild.py` builds a tool for either
 architecture and the four suites are parametrised `[host]` / `[target]`, so every parity case
-runs on both — 479 tests in 105 s, skipping cleanly without the toolchains. What is left in
+runs on both — 510 tests in about 150 s, skipping cleanly without the toolchains. What is left in
 `test_target_parity.py` is the question the suites cannot ask, since each compares one build
 against the reference and never the two against each other: the target's deviation must stay
 within **4×** the host's. Not 1×, because `VFMA.F32` contraction legitimately costs ~2.5× at
@@ -757,9 +763,12 @@ test forced the correction** — its failure message said "update the claim rath
 test". What remains is a tier boundary, not a defect: `f32_128_1`'s *object* is 332 KB, so it is
 not offered on this floor, and the test separately asserts the reason is the object and not the
 frame.
-Also measured, and the opposite of the RAM: **flash is flat across those shapes** — 10,404 /
-10,664 / 10,380, the twelve-feature image being the smallest — because compile-time dimensions
-change how much the loops iterate, not how much code exists. Size the RAM, not the flash.
+A per-shape flash/RAM sweep stood here (10,404 / 10,664 / 10,380) and is **withdrawn**: it came
+from an unrecorded hand-edit of `usage.c`, which has no shape knob, and one row disagreed with
+this project's own table for the same configuration. The reasoning survives — compile-time
+dimensions change how far loops iterate rather than how much code exists, and RAM grows as
+`N*M + N²` — so **size the RAM, not the flash**; the numbers do not, and redoing them needs a
+knob in `usage.c` and a row in `cpp/target/SIZES.md`.
 
 **Next:** hardware, for the timing question. Everything else the project set out to build is
 built and verified on the declared floor.
@@ -783,7 +792,7 @@ case. An FPU is what makes the timing analysable.
 
 **M0+/M3 are not supported and not claimed** — they would probably work (n=6 computes to 0.27 ms
 per soft-float update, 0.14% duty at 5 Hz) but nobody has run it on one, and writing untested
-support down is how a claim becomes a fiction. No target hardware exists on this machine (a cross-compiler and QEMU arrived on 2026-08-09): flash/RAM will come from a link map, execution is verified on the host, and **any
+support down is how a claim becomes a fiction. No target hardware exists on this machine, though a cross-compiler and QEMU arrived on 2026-08-09: flash and RAM now come from a link map and execution is verified on emulated Cortex-M4 and Cortex-M55, so what is left is **any
 on-target timing claim stays absent rather than interpolated from host numbers.**
 
 **Two port notes** from that review, deliberately not applied to Python where call overhead hides

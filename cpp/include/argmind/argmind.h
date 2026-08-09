@@ -13,8 +13,10 @@
  * compiler unroll, keep operands in registers and vectorise. A C ABI wants runtime
  * arguments. Taking `n` at runtime would resolve the tension by throwing away the
  * reason for the choice, so it is resolved the other way: **the ABI exports an
- * explicit list of instantiations**, and adding a dimension means adding one line
- * to that list and rebuilding. That is a real cost and it is the honest one.
+ * explicit list of instantiations**, and adding a dimension means adding THREE lines
+ * -- a declaration here, a definition in `abi.cpp`, and a `MAX_BYTES` -- and
+ * rebuilding. This said "one line" until someone tried it and the compiler refused
+ * the two-line version. That is a real cost and it is the honest one.
  *
  * Storage is the caller's, and so is the stack
  * --------------------------------------------
@@ -28,9 +30,14 @@
  *
  *   steady state    am_pipe_*_step        312 to 328 bytes
  *                   am_guard_*_update      88 to 104
- *                   am_rls_*_update        72 to 144
- *   initialisation  am_pipe_g_*_init          144 to 504
- *                   am_guard_*_init             32
+ *                   am_rls_*_update        72 to 88
+ *   initialisation  am_pipe_*_init        136 to 168 (first tier)
+ *                   am_pipe_g_f32_128_1_init     504 (the head shape)
+ *                   am_guard_*_init             32 to 40
+ *                   am_rls_*_init               24 to 32
+ *
+ * `cpp/target/SIZES.md` carries these and a test regenerates them, because the
+ * figures in this comment were wrong three times before that existed.
  *
  * **`init` is no longer a spike, and getting there took two goes.** It used to build
  * the whole object as a temporary and copy it, costing `am_pipe_g_f32_12_1_init`

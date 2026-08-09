@@ -77,9 +77,8 @@ void fill_report(const argmind::Report<T, M>& src, am_report* dst,
                                         SCALAR lambda, SCALAR p0) {             \
         if (!obj) return AM_ERR_NULL;                                           \
         if (obj_bytes < sizeof(Rls_##NAME)) return AM_ERR_TOO_SMALL;             \
-        Rls_##NAME probe(lambda, p0);                                           \
-        if (!probe.valid()) return AM_ERR_CONFIG;                               \
-        new (obj) Rls_##NAME(probe);                                            \
+        if (!Rls_##NAME::params_valid(lambda, p0)) return AM_ERR_CONFIG;        \
+        new (obj) Rls_##NAME(lambda, p0);                                       \
         return AM_OK;                                                           \
     }                                                                           \
     extern "C" int am_rls_##NAME##_reset(void* obj) {                           \
@@ -214,6 +213,15 @@ bool valid_field(int32_t field) {
         b.lo = lo;                                                              \
         b.hi = hi;                                                              \
         if (!b.valid()) return AM_ERR_CONFIG;                                   \
+        /* `add_bound` refuses for two reasons -- the check array is full, or the      \
+         * adapter does not declare the field -- and this returns AM_ERR_FULL for      \
+         * both, which is the wrong code for the second. Unreachable today, since       \
+         * every guard this ABI exports wraps `Rls` and `Rls` declares all five, but    \
+         * an unreachable wrong answer is still a wrong answer and it would become      \
+         * reachable the moment a second adapter is exported. Asking the mask here      \
+         * keeps one rule in `add_bound` and reports the reason accurately. */          \
+        if ((Guard_##NAME::health_fields & argmind::field_bit(b.field)) == 0)   \
+            return AM_ERR_CONFIG;                                               \
         return static_cast<Guard_##NAME*>(obj)->add_bound(b) ? AM_OK            \
                                                              : AM_ERR_FULL;     \
     }                                                                           \

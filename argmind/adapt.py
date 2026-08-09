@@ -61,6 +61,7 @@ above. Scale it to the problem rather than reaching for a large default.
 from __future__ import annotations
 
 import abc
+import math
 from dataclasses import dataclass
 
 import numpy as np
@@ -298,8 +299,22 @@ class RecursiveLeastSquares(Adapter):
                 f"forgetting must be in (0, 1], got {forgetting}. Above 1 amplifies "
                 "old data instead of discounting it; at or below 0 it is not a "
                 "weighting at all.")
-        if not p0 > 0.0:
-            raise ValueError(f"p0 must be positive, got {p0}")
+        if not p0 > 0.0 or not math.isfinite(p0):
+            # `not p0 > 0.0` alone lets `+inf` through, and an independent parity check
+            # found it: the C++ `Rls` has always tested `is_finite(p0)` and the reference
+            # never did, so the two disagreed on exactly one cell of a 108-point sweep.
+            #
+            # What it produces is worse than a wrong number. `eye(n) * inf` is `inf` on the
+            # diagonal and `0 * inf = NaN` off it, so the adapter is born with a non-finite
+            # covariance, every denominator is then NaN, and **every update for the rest of
+            # its life is rejected** as `nonpositive_denominator`. A dead adapter that said
+            # nothing at construction. numpy does emit a RuntimeWarning, which is exactly
+            # the kind of warning nobody reads.
+            #
+            # `forgetting` needs no such clause: `not 0.0 < forgetting <= 1.0` already
+            # rejects both infinities and NaN through the range test.
+            raise ValueError(
+                f"p0 must be positive and finite, got {p0}")
 
         self.dtype = self._check_dtype(dtype)
         self.n_features = n_features

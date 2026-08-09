@@ -168,8 +168,10 @@ def test_the_library_defines_no_writable_static_memory(cross, abi_object):
 #: a compiler upgrade does not fail the suite. The hot path is what runs forever; `init` is a
 #: transient spike that still has to fit inside the declared RAM.
 MAX_STEP_STACK = 512
-#: Was 5 KB when `init` copied an adapter into place; the measured worst is now 504 B
-#: at the 128-feature shape and 168 at twelve. Tightened so the copy cannot creep back.
+#: Was 5 KB when `init` copied an adapter into place. The measured worst over ALL `_init`
+#: frames -- which is what this bounds -- is now 504 B at the 128-feature head shape.
+#: An audit caught the first version of this note quoting 504 while the true worst was
+#: 664, because `am_rls_*_init` had been left out of the in-place fix.
 MAX_INIT_STACK = 1024
 
 
@@ -254,11 +256,10 @@ def test_the_stack_a_caller_must_provide_is_bounded(cross, tmp_path):
         assert fits[shape] <= RAM_BUDGET, (
             f"{shape} no longer fits the declared floor: {fits[shape]} > {RAM_BUDGET}")
 
-    # The negative result that remains, and it is now a tier boundary rather than a defect.
-    # `f32_128_1` is the network-head shape and its OBJECT is 332 KB, because RLS carries an
-    # N x N covariance. No amount of care with the stack changes that, and it is not offered
-    # on this floor. Pinned so that a shape which genuinely cannot run here cannot quietly
-    # start being described as though it can.
+    # The tier boundary. **This one cannot fail** -- a 128x128 fp32 covariance is 330 KB
+    # whatever any code does -- so it documents rather than protects, and an audit was
+    # right to say calling it "the negative result pinned" overstated it. The assertion
+    # below it on the frame is the one with teeth.
     assert fits["f32_128_1"] > RAM_BUDGET, (
         f"f32_128_1 now fits the {RAM_BUDGET}-byte floor at {fits['f32_128_1']} bytes; "
         "update the two-tier claim rather than this test.")
@@ -339,3 +340,118 @@ def test_an_f32_only_image_does_not_carry_the_double_root(cross, abi_object, tmp
     syms = _run([cross["nm"], elf]).stdout
     assert not re.search(r"^\S+ T sqrt$", syms, re.M), (
         "an f32-only image linked the soft-float double root")
+
+
+# -- the recorded sizes, pinned because bounding them was not enough ------------------
+
+SIZES_MD = TARGET / "SIZES.md"
+
+#: Configurations linked for the recorded table, as (label, AM_CFG, core flags).
+SIZE_CONFIGS = [
+    ("bare RLS f32 6x1", 1, None),
+    ("+ guard", 2, None),
+    ("+ record format", 3, None),
+    ("full composed pipeline", 4, None),
+]
+
+
+def _link_for_sizes(cross, tmp_path, cfg, core, tag):
+    """Link one configuration and return (flash, argmind, caller, libc, ram)."""
+    rest = [f for f in TARGET_CFLAGS if not f.startswith(("-mcpu", "-mfpu", "-mfloat-abi"))]
+    flags = [*core, *rest]
+    abi = tmp_path / f"abi_{tag}.o"
+    if not abi.exists():
+        done = _run([cross["g++"], "-std=c++17", *flags, "-fno-exceptions", "-fno-rtti",
+                     "-I", CPP / "include", "-c", CPP / "src" / "abi.cpp", "-o", abi])
+        assert done.returncode == 0, done.stderr
+    obj = tmp_path / f"u_{tag}_{cfg}.o"
+    done = _run([cross["gcc"], "-std=c99", *flags, f"-DAM_CFG={cfg}",
+                 "-I", CPP / "include", "-c", TARGET / "usage.c", "-o", obj])
+    assert done.returncode == 0, done.stderr
+    elf = tmp_path / f"e_{tag}_{cfg}.elf"
+    mp = tmp_path / f"m_{tag}_{cfg}.map"
+    done = _run([cross["g++"], *core, "-nostartfiles", "--specs=nano.specs",
+                 "--specs=nosys.specs", "-Wl,--gc-sections", f"-Wl,-Map={mp}",
+                 "-T", TARGET / "cortex-m4.ld", obj, abi, "-o", elf])
+    assert done.returncode == 0, done.stderr
+    text, data, bss = (int(x) for x in
+                       _run([cross["size"], elf]).stdout.splitlines()[1].split()[:3])
+    # Only what follows this line: above it is the DISCARDED input-section list, and
+    # summing the whole map reads 41,072 bytes for a 2,340-byte image.
+    whole = mp.read_text(errors="replace")
+    body = whole[whole.find("Linker script and memory map"):]
+    # The caller's code lives in `.am_entry`, not `.text`; a section list naming only the
+    # usual four attributes 24 bytes to a caller that contributes 160.
+    pat = re.compile(
+        r"^\s\.(text|rodata|am_entry)[.\S]*\s*(?:\n)?\s*0x[0-9a-f]+\s+0x([0-9a-f]+)\s+(\S+)$",
+        re.M)
+    am = caller = 0
+    for m in pat.finditer(body):
+        n, owner = int(m.group(2), 16), m.group(3)
+        if owner.endswith(f"abi_{tag}.o"):
+            am += n
+        elif re.search(r"u_\w+_\d+\.o$", owner):
+            caller += n
+    flash = text + data
+    return flash, am, caller, flash - am - caller, data + bss
+
+
+def _measure_sizes(cross, tmp_path):
+    m4 = ["-mcpu=cortex-m4", "-mfpu=fpv4-sp-d16", "-mfloat-abi=hard"]
+    m55 = ["-mcpu=cortex-m55", "-mfloat-abi=hard"]
+    rows = {label: _link_for_sizes(cross, tmp_path, cfg, m4, "m4")
+            for label, cfg, _ in SIZE_CONFIGS}
+    rows["cortex-m55 composed"] = _link_for_sizes(cross, tmp_path, 4, m55, "m55")
+    return rows
+
+
+def _recorded_sizes():
+    """Parse the tables out of SIZES.md, so the file is the single source."""
+    out = {}
+    for line in SIZES_MD.read_text(encoding="utf-8").splitlines():
+        cells = [c.strip() for c in line.strip().strip("|").split("|")]
+        if len(cells) == 6 and cells[1].isdigit():
+            out[cells[0]] = tuple(int(c) for c in cells[1:])
+        elif len(cells) == 3 and cells[1].isdigit():
+            out["cortex-m55 composed"] = (int(cells[1]), int(cells[2]))
+    return out
+
+
+def test_the_recorded_target_sizes_are_current(cross, tmp_path):
+    """`cpp/target/SIZES.md` must match a fresh link.
+
+    The four size figures used to live in DESIGN.md and CLAUDE.md as hand-copied prose,
+    bounded against the flash/RAM *budget* rather than pinned -- deliberately, so that a
+    compiler upgrade would not be a failing test. **Three staleness events say the cost of
+    that choice was higher than the benefit**, the third being the commit that documented
+    the first two. So the numbers live in one generated file now and this pins them.
+
+    A compiler upgrade will fail this. That is the intended behaviour and the failure says
+    exactly what to do: the new table is printed, so re-measure and commit the diff. It is
+    a changelog gate, not a brittle assertion.
+    """
+    measured = _measure_sizes(cross, tmp_path)
+    recorded = _recorded_sizes()
+    assert recorded, f"no tables parsed out of {SIZES_MD}"
+
+    bad = []
+    for label, got in measured.items():
+        want = recorded.get(label)
+        if want is None:
+            bad.append(f"  {label}: not in SIZES.md; measured {got}")
+        elif label == "cortex-m55 composed":
+            if (got[0], got[4]) != want:
+                bad.append(f"  {label}: recorded {want}, measured "
+                           f"{(got[0], got[4])}")
+        elif got != want:
+            bad.append(f"  {label}: recorded {want}, measured {got}")
+    assert not bad, (
+        "cpp/target/SIZES.md no longer matches a fresh link:\n" + "\n".join(bad) +
+        "\n(columns: flash, of which argmind, the caller, libc/libgcc, static RAM)")
+
+    # ...and the rows have to sum, which is the property that would have made all three
+    # earlier drifts visible in the file itself.
+    for label, (flash, am, caller, lib, _ram) in measured.items():
+        if label == "cortex-m55 composed":
+            continue
+        assert am + caller + lib == flash, f"{label}: columns do not sum to {flash}"

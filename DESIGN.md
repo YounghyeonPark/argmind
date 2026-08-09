@@ -152,9 +152,11 @@ class of part that did not exist when the floor was set: **an MCU with an NPU.**
   600 GOPS ÷ 3 TOPS/W, the accelerator only, not a system power figure, and ST's parametric
   pages resist automated fetching so it has not been checked against a datasheet table.
 
-**Measured here, same source, no changes:** the composed pipeline links to **7,876 bytes** of
-flash for Cortex-M55 against **10,396** for Cortex-M4F, at identical 3,264 bytes of static RAM —
-so moving up this way makes argmind *smaller*, not larger. And it **runs**: the whole self-check
+**Measured here, same source, no changes:** the composed pipeline is **smaller** on Cortex-M55
+than on Cortex-M4F at identical static RAM — moving up this way costs nothing and saves flash.
+The two figures are in [`cpp/target/SIZES.md`](cpp/target/SIZES.md) rather than in this
+sentence, because the pair that used to be here (7,876 / 10,396) went stale within a day and
+no test could see it. And it **runs**: the whole self-check
 suite, all 4,650 checks, executes under QEMU's `mps3-an547` Cortex-M55 board and passes.
 `tests/test_target_run.py` is parametrised over both cores, so this is a test rather than a note;
 two mutants confirm the case is real (breaking the check-count bound fails both cores, and
@@ -170,9 +172,11 @@ model size hard. So the fork is not technical, it is about what the words mean:
 | react like an animal: see a person, hear a call, answer with a sound | MCU + NPU (STM32N6 class) | ~1 W order | **unchanged** |
 | converse: speech recognition, dialogue, natural TTS | SBC + accelerator, or Jetson | 10–25 W | abandoned |
 
-The second row is expensive in a way that is specific to a small legged robot, and the figures
-come from tomcat's own: its battery is **41.8 Wh** (83.6 W × 30 min) and its *standing* draw is
-about **14.9 W**, derived from the stated 168 minutes standing. Adding 10 W takes standing from
+The second row is expensive in a way that is specific to a small legged robot. The figures below
+are **derived by me** from tomcat's stated NFR6 — 83.6 W trotting for 30 min and 168 min
+standing, in `docs/REQUIREMENTS.md` of the `YounghyeonPark/tomcat` repository, which itself
+labels its 175 Wh/kg pack density `[assumed]`. Neither the battery capacity nor the standing
+draw is stated there: **41.8 Wh** is 83.6 W × 0.5 h and **14.9 W** is 41.8 Wh ÷ 2.8 h. Adding 10 W takes standing from
 168 min to **101** (−40 %); adding 25 W takes it to **63** (−63 %). Trotting is barely affected
 (30 → 26.8 → 23.1 min) because 83.6 W dominates. NVIDIA's Jetson Orin Nano runs 15 W, 25 W and
 an uncapped MAXN SUPER mode ([NVIDIA, JetPack 6.2 Super
@@ -217,14 +221,23 @@ persistence needs.
 **Measured on the target cores rather than argued.** A 128-wide head — the range a small vision
 backbone emits — driven 4,000 samples through the full guard:
 
-| | guard object | error after 4,000 |
-|---|---|---|
-| `Guard<Rls<float,128,1>,4,4>` | **330,608 B** | **−5.8e−07** |
-| `Guard<Nlms<float,128,1>,4,4>` | **2,912 B** | 1.0e−02 |
+| | guard object |
+|---|---|
+| `Guard<Rls<float,128,1>,4,4>` | **330,608 B** |
+| `Guard<Nlms<float,128,1>,4,4>` | **2,912 B** |
 
-Both run on Cortex-M4F under `mps2-an386` and on Cortex-M55 under `mps3-an547`. **113× the
-memory for ~17,000× the accuracy on this fixture** is the trade, and having a second adapter is
-what makes it a choice instead of a default.
+Both instantiate and run on Cortex-M4F under `mps2-an386` and on Cortex-M55 under
+`mps3-an547`. The sizes are exact and independently reproduced.
+
+**An accuracy comparison stood here and is withdrawn.** It read "113× the memory for
+~17,000× the accuracy", from a scratch fixture that was never checked in — the failure this
+document already names elsewhere as "the sweep figures I quoted came from a run that left no
+trace". An audit reconstructing the fixture got the **opposite ordering**, which does not
+prove the published pair wrong but does prove it unsupported. Two things have to be fixed
+before it can be re-stated: the fixture must be in the repository, and NLMS's step size must
+be swept — μ sets its steady-state error and only μ=0.5 was ever tried, so the losing side of
+a one-point comparison had its only tuning knob left at a default. What survives is the
+memory ratio, which is arithmetic on the state sizes and needs no fixture.
 
 **The wall is RLS's n², and head width is the design variable.** State is `N·M + N²`, and the
 guard's ring multiplies it by `Depth`:
@@ -318,7 +331,7 @@ compelling advantage without owning a single kernel.
 
 **Measured, for the hosted side.** `am_ring_f32` already takes a runtime `dim` over caller
 storage, so a 128-wide backbone output pushes through the existing API with no new concepts.
-Adding the matching pipeline shape is **one instantiation line plus one `MAX_BYTES` define** —
+Adding the matching pipeline shape is **three lines** — a declaration in `argmind.h`, a definition in `abi.cpp` and a `MAX_BYTES` — which is one more than this document claimed until the compiler refused the two-line version —
 built for Cortex-M55 freestanding at `-Wall -Wextra`, clean on the first attempt, **+4,876
 bytes** of text and rodata before `--gc-sections`. That is what the boundary costs.
 
@@ -756,7 +769,8 @@ byte for byte for the record format, and exactly for every decision and counter 
 The runtime library is fully across; `argmind/bench.py` has no C++ counterpart and is not
 getting one, being a host measurement harness rather than part of what ships. (Everything the library does is reachable from C: RLS, the
 guard, the record format, caller-owned rings and the composed pipeline.)
-496 Python tests plus 4632 C++ checks, several of which exist to prove failures are visible
+510 Python tests plus 4,652 C++ checks (re-derive with `python -m pytest`; this
+number has gone stale three times), several of which exist to prove failures are visible
 rather than silent.
 
 **What the pipeline settled:**
@@ -848,13 +862,13 @@ that is already the persistence format, and a benchmark that can report a regres
 
 **STARTED 2026-08-08** — `cpp/`, and RLS is across. `mat.hpp` (fixed-size primitives),
 `rls.hpp` (`Rls<T, N, M>`), `argmind.h` + `src/abi.cpp` (the C ABI), `tools/xcheck.cpp`, `tools/pcheck.cpp`, `tools/scheck.cpp` and
-`tools/pipecheck.cpp` (the four parity tools), `tests/test_core.cpp` (4603 checks the C++ side can make on its own), and a
+`tools/pipecheck.cpp` (the four parity tools), `tests/test_core.cpp` (4,652 checks the C++ side can make on its own), and a
 `CMakeLists.txt` that knows the cross-compilation recipe.
 
 **The C ABI had one real tension to resolve.** Compile-time dimensions are the reason C++ was
 chosen; a C ABI wants runtime arguments. Taking `n` at runtime resolves it by discarding the
 reason, so it is resolved the other way: **the ABI exports an explicit list of instantiations**,
-and adding a dimension is one line plus a rebuild. That is a real cost and it is the honest one.
+and adding a dimension is three lines plus a rebuild. That is a real cost and it is the honest one.
 Storage is the caller's — nothing allocates — with `am_rls_*_bytes()` for the true size and an
 `AM_*_MAX_BYTES` compile-time *upper bound* for statically declared arrays, held to being a bound
 by a `static_assert` per instantiation.
@@ -1704,21 +1718,25 @@ the library" — what reaches flash depends on which entry points a caller touch
 `cpp/target/usage.c` is a firmware-shaped caller in four configurations, linked separately
 against `cpp/target/cortex-m4.ld`. Cortex-M4F, `-Os`, newlib-nano:
 
-| configuration | flash | of which argmind | the caller | libc/libgcc | static RAM |
-|---|---|---|---|---|---|
-| bare RLS f32 6×1 | 2,340 | 1,258 | 160 | 922 | 272 |
-| + guard | 6,128 | 3,510 | 344 | 2,274 | 1,296 |
-| + record format | 6,360 | 3,788 | 304 | 2,268 | 1,972 |
-| full composed pipeline | 10,396 | 7,390 | 564 | 2,442 | 3,264 |
+**The table lives in [`cpp/target/SIZES.md`](cpp/target/SIZES.md) now, not here.** It is
+generated, and `tests/test_target_build.py::test_the_recorded_target_sizes_are_current`
+fails if a fresh link disagrees with it.
 
-**That table went stale twice before anyone noticed, which is why it now carries a `caller`
-column that makes the rows sum to the total.** It was exactly right when written at `1639c3c`
-— 2,340 / 6,144 / 6,376 / 10,380 reproduce from that tree byte for byte. Then `47a4dd2` fixed
-the `Pipeline::step` output bug and the composed row grew 40 bytes, and `17cff2b` replaced
-construction-by-assignment with placement new and moved three rows by 16. Neither commit
-re-measured, and a table nobody re-runs is a table that drifts. The rebuild is a loop over the
-six commits since, so the attribution above is measured rather than reasoned: `2340 6144 6376
-10380` at `1639c3c`, `…10420` from `47a4dd2` through `49bb77e`, `2340 6128 6360 10396` now.
+It moved because restating it in prose did not work **three times**: it drifted at
+`47a4dd2`, again at `17cff2b`, and a third time at `0ada177` — which was the commit that
+documented the first two. Two independent audits caught the third. The test deliberately
+bounded these against the *budget* rather than pinning them, so that a compiler upgrade
+would not be a failing test; three staleness events say that cost more than it saved. A
+size change is now a failing test that prints the new table, which is a changelog gate
+rather than a brittle assertion.
+
+**The history, because it is the argument for generating the file.** The figures were exactly
+right when written at `1639c3c` — 2,340 / 6,144 / 6,376 / 10,380 reproduce from that tree byte
+for byte. `47a4dd2` fixed the `Pipeline::step` output bug and the composed row grew 40 bytes;
+`17cff2b` replaced construction-by-assignment with placement new and moved three rows by −16,
+−16 and **−24** (this paragraph said "by 16" and was wrong on the third); `0ada177` moved all
+four again while claiming to be the fix for the drift. Each attribution is a rebuild of the
+commit rather than a reading of the diff.
 
 The `argmind` column moved by exactly what the total moved by in all four rows, which is what
 says the split is being measured and not just the total. It is text plus rodata of the sections
@@ -1960,7 +1978,7 @@ was wrong by six times. A QEMU invocation is **157 ms**, not "about a second".
 
 So there is no subset. `tests/_toolbuild.py` builds a parity tool for either architecture and
 the four suites take their tool fixture from it, parametrised `[host]` / `[target]`. Every
-parity case runs on both: **479 tests in 105 seconds** with the toolchains present, and the
+parity case runs on both: **510 tests in about 150 seconds** with the toolchains present, and the
 target half skips cleanly without them. The tools are unchanged — semihosting carries `argv`
 in and file I/O out, so a target build is invoked through a wrapper that looks like a program
 taking `(job, out)`, which is what the harnesses already called.
@@ -2028,7 +2046,7 @@ It said its maxima came from "n=2/6/12, one and three outputs, λ=0.97 and 0.99"
 reproduced at λ=0.99 and none at 0.97 — `gain_norm` was 58 where 0.97 gives 110, `p_trace` 1.4
 where it gives 10.0. The axis was named in the prose and not swept in the measurement. The
 same sentence implied three outputs at every n, and `xcheck` instantiates (6,3) alone. The
-table is re-measured over every shape that exists, at three run lengths, both λ, and now both
+table is re-measured over every shape `xcheck` instantiates, at three run lengths, both λ, and now both
 architectures — that last pair of columns being new because `VFMA.F32` contraction makes the
 target's f32 figures its own.
 
@@ -2128,13 +2146,18 @@ and not the frame — otherwise the sentence would be wrong even while the asser
 DESIGN.md says it does not; update the claim rather than this test", which is exactly what
 happened.
 
-One thing the same measurement makes clear, and it is the opposite of what the RAM does:
-**flash is flat across these shapes while RAM grows as n².** The composed pipeline links to
-10,404 bytes at `f32_6_1`, 10,664 at `f32_6_3` and 10,380 at `f32_12_1` — the twelve-feature
-image is the *smallest* of the three — because the dimensions are compile-time constants over
-the same loops, so what changes is how much they iterate, not how much code there is. Static
-RAM over the same three shapes goes 3,264 → 3,888 → 7,048. Sizing a part for this library
-means sizing its RAM; the flash figure barely moves.
+**A per-shape flash and RAM sweep stood here and is withdrawn.** It reported 10,404 / 10,664 /
+10,380 flash and 3,264 → 3,888 → 7,048 RAM across `f32_6_1` / `f32_6_3` / `f32_12_1`, to
+support "flash is flat while RAM grows as n²". `cpp/target/usage.c` hard-codes one shape and
+has no knob, so those figures came from a hand-edit that was never checked in; an audit could
+not re-derive them and found that the `f32_6_1` row disagreed by 8 bytes with this document's
+own table for the same configuration at the same commit. Two measured values for one number.
+
+The *reason* to expect flat flash is still sound — the dimensions are compile-time constants
+over the same loops, so what changes is how far they iterate rather than how much code exists
+— and RAM growing as `N*M + N²` is arithmetic. But the figures are not reproducible from the
+repository and are therefore not stated. Redoing this needs a shape knob in `usage.c` and a
+row in `cpp/target/SIZES.md`, which is recorded rather than half-done.
 
 **The shape of the answer matters more than the numbers.** The steady state is a third of a
 kilobyte — nothing. Initialisation is a transient spike of up to 4.3 KB, so a device sizes its

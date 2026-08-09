@@ -140,6 +140,11 @@ public:
     /// 66 KB of stack and the `Guard` built around it another 332 KB. One rule with two
     /// callers rather than the same refusal written twice, which this project has been
     /// bitten by before.
+    ///
+    /// An audit caught this comment's first version claiming the ABI "used to"
+    /// construct and copy -- past tense, while `am_rls_*_init` still did exactly that
+    /// and carried the largest stack frame in the whole ABI at 664 bytes. All four
+    /// init paths construct in place now; that one is 24.
     static bool params_valid(T lambda, T p0) {
         return lambda > T(0) && lambda <= T(1) && p0 > T(0) &&
                is_finite(lambda) && is_finite(p0);

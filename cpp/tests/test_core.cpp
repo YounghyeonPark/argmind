@@ -2274,6 +2274,11 @@ void test_the_declared_pipeline_bounds_are_bounds_and_not_fantasies() {
     CHECK(am_pipe_g_f32_6_1_bytes() <= AM_PIPE_G_F32_6_1_MAX_BYTES);
     CHECK(am_pipe_g_f32_6_3_bytes() <= AM_PIPE_G_F32_6_3_MAX_BYTES);
     CHECK(am_pipe_g_f32_12_1_bytes() <= AM_PIPE_G_F32_12_1_MAX_BYTES);
+    /* The head shape. Added later than the rest and left out of this function, which is
+       the fifth time a bound has shipped without its runtime check -- an audit counted
+       four of fourteen once before. It never runs under QEMU (a 332 KB object cannot fit
+       the declared floor) but the check itself costs nothing anywhere. */
+    CHECK(am_pipe_g_f32_128_1_bytes() <= AM_PIPE_G_F32_128_1_MAX_BYTES);
     CHECK(am_pipe_g_f64_6_1_bytes() <= AM_PIPE_G_F64_6_1_MAX_BYTES);
     // Tight enough to budget from, as for the guard: a bound that is merely true would say
     // "reserve 100 KB" forever.
@@ -2282,6 +2287,7 @@ void test_the_declared_pipeline_bounds_are_bounds_and_not_fantasies() {
     CHECK(am_pipe_g_f32_6_1_bytes() * 2 >= AM_PIPE_G_F32_6_1_MAX_BYTES);
     CHECK(am_pipe_g_f32_6_3_bytes() * 2 >= AM_PIPE_G_F32_6_3_MAX_BYTES);
     CHECK(am_pipe_g_f32_12_1_bytes() * 2 >= AM_PIPE_G_F32_12_1_MAX_BYTES);
+    CHECK(am_pipe_g_f32_128_1_bytes() * 2 >= AM_PIPE_G_F32_128_1_MAX_BYTES);
     CHECK(am_pipe_g_f64_6_1_bytes() * 2 >= AM_PIPE_G_F64_6_1_MAX_BYTES);
 
     // A guarded pipeline is its guard plus the pipeline's own parts, which is the

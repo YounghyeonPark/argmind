@@ -131,8 +131,9 @@ def test_the_self_checks_pass_on_the_target(emulator, tmp_path, label, core_cfla
     than a note. Widening toward camera and audio read like it must move the floor up to an
     SBC; the M55 is ARMv8.1-M with native fp32, which is strictly above the declared floor,
     and it is the core in parts that also carry an NPU and a camera pipeline. Measured at
-    the same time: the composed pipeline links to 7,876 bytes of flash there against
-    10,396 on the M4, at identical static RAM.
+    the same time: the composed pipeline is smaller there than on the M4F at identical
+    static RAM. The figures are in `cpp/target/SIZES.md` rather than here, because this
+    docstring quoted 7,876/10,396 and nothing could catch it going stale.
     """
     if not _machine_available(emulator, machine):
         pytest.skip(f"this qemu-system-arm has no {machine[1]} machine")
