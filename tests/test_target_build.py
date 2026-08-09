@@ -57,8 +57,8 @@ LINKFLAGS = [
 FLASH_BUDGET = 32 * 1024
 RAM_BUDGET = 8 * 1024
 
-HEADERS = ("mat.hpp", "rls.hpp", "guard.hpp", "persist.hpp", "stream.hpp",
-           "align.hpp", "pipeline.hpp")
+HEADERS = ("mat.hpp", "rls.hpp", "nlms.hpp", "guard.hpp", "persist.hpp",
+           "stream.hpp", "align.hpp", "pipeline.hpp")
 
 #: Everything the core needs from outside, and the whole of it. Pinned as a set rather than
 #: a count so that a *new* dependency fails this test and has to be argued for. `memcpy` and

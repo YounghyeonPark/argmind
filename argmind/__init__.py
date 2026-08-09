@@ -1,12 +1,13 @@
 # SPDX-License-Identifier: Apache-2.0
 """Argmind — sensor-agnostic on-device online adaptation and inference.
 
-See DESIGN.md. Status: the Python reference is complete — streams, alignment,
-recursive least squares, the guard, the pipeline and persistence. The benchmark
-harness and the C++ core come next.
+See DESIGN.md. Status: the reference and the C++ core are both built — streams,
+alignment, two adapters, the guard, the pipeline and persistence — and the core runs
+on emulated Cortex-M4 and Cortex-M55. What is absent is timing on real silicon.
 """
 
-from .adapt import Adapter, RecursiveLeastSquares, UpdateReport
+from .adapt import (Adapter, NormalisedLeastMeanSquares, RecursiveLeastSquares,
+                    UpdateReport)
 from .align import Aligner, Frame
 from .guard import Bound, Check, Divergence, Guard, GuardReport
 from .persist import Record, Store, fingerprint_of
@@ -16,6 +17,7 @@ from .stream import Sample, Stream
 __version__ = "0.0.1.dev0"
 __all__ = ["Sample", "Stream", "Aligner", "Frame",
            "Adapter", "UpdateReport", "RecursiveLeastSquares",
+           "NormalisedLeastMeanSquares",
            "Guard", "GuardReport", "Check", "Bound", "Divergence",
            "Pipeline", "FrameMap", "StepReport",
            "Store", "Record", "fingerprint_of"]

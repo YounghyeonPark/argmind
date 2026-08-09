@@ -82,7 +82,7 @@ import pytest
 
 import _toolbuild
 
-from argmind.adapt import RecursiveLeastSquares
+from argmind.adapt import NormalisedLeastMeanSquares, RecursiveLeastSquares
 from argmind.guard import Bound, Divergence, Guard
 
 REPO = Path(__file__).resolve().parent.parent
@@ -131,7 +131,7 @@ def xcheck(request, tmp_path_factory) -> Path:
     return _toolbuild.build_tool("xcheck", request.param, work)
 
 
-def _write_case(path: Path, xs, ys, lam, p0, dtype, guard=None) -> None:
+def _write_case(path: Path, xs, ys, lam, p0, dtype, guard=None, adapter=0) -> None:
     """Write one case. `guard` is None for a bare run.
 
     A guard with no bounds and no divergence is simply not applied on the other side,
@@ -145,7 +145,10 @@ def _write_case(path: Path, xs, ys, lam, p0, dtype, guard=None) -> None:
     div = g.get("divergence")
 
     with open(path, "wb") as fh:
-        fh.write(_CASE_FIXED.pack(b"AMXC", FORMAT_VERSION, dt.itemsize, 0, n, m,
+        # The byte after `dtype` was padding and is now the adapter selector, the
+        # same trick `pipecheck`'s n_outputs used. The header stays 48 bytes.
+        fh.write(_CASE_FIXED.pack(b"AMXC", FORMAT_VERSION, dt.itemsize, adapter,
+                                  n, m,
                                   len(xs), float(lam), float(p0),
                                   int(g.get("depth", 1)),
                                   int(g.get("checkpoint_every", 1)),
@@ -169,7 +172,7 @@ def _write_case(path: Path, xs, ys, lam, p0, dtype, guard=None) -> None:
             fh.write(np.ascontiguousarray(y, dtype=dt).tobytes())
 
 
-def _read_result(path: Path):
+def _read_result(path: Path, state_size=None):
     blob = path.read_bytes()
     magic, version, code, _pad, n, m, count = _RESULT.unpack_from(blob, 0)
     assert magic == b"AMXR", "the tool did not write a result file"
@@ -186,7 +189,13 @@ def _read_result(path: Path):
                      "rolled_back": bool(flags & 2),
                      "residual_norm": rn, "residual_post_norm": rpn,
                      "gain_norm": gn, "p_trace": tr, "p_min_diag": md})
-    state = np.frombuffer(blob, dtype=dt, count=n * m + n * n, offset=off)
+    # The result header carries n and m but not the STATE size, and those stopped
+    # being the same thing when a second adapter arrived: RLS writes `n*m + n*n` and
+    # NLMS writes `n*m`. Reading the RLS size off an NLMS block is a short buffer, which
+    # is at least loud -- the reverse would have silently read past the end.
+    if state_size is None:
+        state_size = n * m + n * n
+    state = np.frombuffer(blob, dtype=dt, count=state_size, offset=off)
     return rows, np.array(state)
 
 
@@ -203,15 +212,21 @@ def _row_of(report, guarded: bool) -> dict:
     return row
 
 
-def build_reference(xs, ys, lam, p0, dtype, guard=None):
+def build_reference(xs, ys, lam, p0, dtype, guard=None, adapter=0):
     """The Python side of a case, guarded or not.
 
     The guard is built here rather than in each test so that the two sides are configured
     from one description. A mismatch between how the two are configured would look exactly
     like a parity failure, which is the most expensive kind of test bug.
     """
-    ref = RecursiveLeastSquares(n_features=xs.shape[1], n_outputs=ys.shape[1],
-                                forgetting=lam, p0=p0, dtype=dtype)
+    if adapter == 1:
+        # `lam`/`p0` carry `mu`/`eps` for this adapter; the case format has one pair of
+        # doubles and giving it a second that is null half the time would be worse.
+        ref = NormalisedLeastMeanSquares(
+            n_features=xs.shape[1], n_outputs=ys.shape[1], mu=lam, eps=p0, dtype=dtype)
+    else:
+        ref = RecursiveLeastSquares(n_features=xs.shape[1], n_outputs=ys.shape[1],
+                                    forgetting=lam, p0=p0, dtype=dtype)
     if not guard:
         return ref, []
     checks, names = [], []
@@ -232,20 +247,20 @@ def build_reference(xs, ys, lam, p0, dtype, guard=None):
 
 
 def run_both(xcheck: Path, tmp_path: Path, xs, ys, lam=0.99, p0=100.0,
-             dtype="f8", guard=None):
+             dtype="f8", guard=None, adapter=0):
     """Run the same case through both implementations. Returns (py_rows, py_state,
     cpp_rows, cpp_state)."""
     xs = np.ascontiguousarray(xs, dtype=dtype)
     ys = np.ascontiguousarray(ys, dtype=dtype)
     case, result = tmp_path / "case.bin", tmp_path / "result.bin"
-    _write_case(case, xs, ys, lam, p0, dtype, guard=guard)
+    _write_case(case, xs, ys, lam, p0, dtype, guard=guard, adapter=adapter)
     done = subprocess.run([str(xcheck), str(case), str(result)],
                           capture_output=True, text=True)
     assert done.returncode == 0, f"xcheck failed: {done.stdout}\n{done.stderr}"
 
-    ref, _names = build_reference(xs, ys, lam, p0, dtype, guard)
+    ref, _names = build_reference(xs, ys, lam, p0, dtype, guard, adapter=adapter)
     py_rows = [_row_of(ref.update(x, y), bool(guard)) for x, y in zip(xs, ys)]
-    cpp_rows, cpp_state = _read_result(result)
+    cpp_rows, cpp_state = _read_result(result, ref.state.size)
     return py_rows, np.array(ref.state), cpp_rows, cpp_state
 
 
@@ -1288,3 +1303,117 @@ def test_intermittent_recovery_during_a_fault_does_not_thaw_either(xcheck, tmp_p
         "the two disagree about staying frozen through an intermittently quiet fault; "
         f"python froze {sum(fz_py)} steps, c++ {sum(fz_cpp)}")
     assert scale_deviation(py_state, cpp_state) < ulps("f8")
+
+
+# -- the second adapter, compared the same way the first one is -----------------------
+
+@pytest.mark.parametrize("dtype", ["f4", "f8"])
+@pytest.mark.parametrize("n,m", [(2, 1), (6, 1), (12, 1), (6, 3)])
+@pytest.mark.parametrize("mu", [0.1, 0.5, 1.0, 2.0])
+def test_nlms_agrees_with_the_reference(xcheck, tmp_path, dtype, n, m, mu):
+    """NLMS is short enough to look obviously right, which is exactly why it gets the
+    same treatment RLS got rather than a reading.
+
+    `mu = 2.0` is the stability boundary and is included on purpose: it is where the two
+    implementations are most likely to part company, not a value anyone should use.
+    """
+    xs, ys = excited(n, 400, seed=17, outputs=m)
+    py, py_state, cpp, cpp_state = run_both(
+        xcheck, tmp_path, xs, ys, lam=mu, p0=1e-6, dtype=dtype, adapter=1)
+
+    assert len(py) == len(cpp)
+    for i, (a, b) in enumerate(zip(py, cpp)):
+        assert a["applied"] == b["applied"], i
+        assert a["reason"] == b["reason"], i
+
+    # `scale_deviation` returns a FRACTION; `ulps()` converts an ulp count to one. The
+    # first version of this assertion compared the fraction against 400 directly and
+    # could never fail -- caught by perturbing a state block by 1% and watching it pass.
+    dev = scale_deviation(py_state, cpp_state)
+    assert dev < ulps(dtype, 50.0), (
+        f"state block deviates by {dev / float(np.finfo(np.dtype(dtype)).eps):.1f} ulp "
+        f"at mu={mu}, n={n}, m={m}")
+
+    if dtype == "f8" and m == 1:
+        # **Bit-identical at f64 with a single output**, at every mu including the
+        # stability boundary. Worth asserting separately rather than folding into the
+        # tolerance: RLS cannot manage this -- it has two declared reciprocal-multiply
+        # divergences -- and NLMS adds none of its own, so the only thing that could
+        # separate the two sides is reduction order.
+        #
+        # **Scoped to m == 1 because that is where it was measured.** The first version
+        # of this assertion said "at f64" and was generalised from n=6, m=1; at (6,3) the
+        # two differ by 1.3 ulp at mu=0.5 and 7.6 at mu=2, because numpy takes a matvec
+        # path for a (6,3) theta that sums in a different order from `vec_mat`'s loop.
+        # That is declared divergence 3 in `rls.hpp`, not a new one -- but the claim had
+        # to shrink to what was actually measured.
+        #
+        # Measured f32, 400 steps: 0.0 at n=2, 1.0-1.5 at mu=0.5, and 7.5-13.1 at mu=2,
+        # where the recursion is marginally stable so a rounding difference persists
+        # instead of decaying.
+        assert np.array_equal(py_state, cpp_state), (
+            f"f64/m=1 is no longer bit-identical at mu={mu}, n={n}: max |diff| "
+            f"{np.max(np.abs(py_state - cpp_state)):.3e}")
+
+
+@pytest.mark.parametrize("dtype", ["f4", "f8"])
+def test_nlms_projects_a_sample_out_exactly_at_mu_one(xcheck, tmp_path, dtype):
+    """The law, on both sides. After an update the a posteriori error is exactly
+    `(1 - mu*x.x/(eps + x.x))` times the a priori one; at `mu = 1` with negligible `eps`
+    that is zero for any data whatsoever.
+
+    Asserting the LAW rather than a tolerance is what makes this a verification instead
+    of a comparison of two things that could be wrong together -- the same reason RLS is
+    checked against the closed-form weighted solution and not against itself.
+    """
+    xs, ys = excited(6, 200, seed=23, outputs=1)
+    py, _py_state, cpp, _cpp_state = run_both(
+        xcheck, tmp_path, xs, ys, lam=1.0, p0=1e-12, dtype=dtype, adapter=1)
+
+    tol = 1e-5 if dtype == "f4" else 1e-9
+    for i, row in enumerate(cpp):
+        if not row["applied"]:
+            continue
+        # a priori is O(1) here, so an a posteriori norm at the noise floor is the law
+        # holding rather than a vacuous comparison of two zeros.
+        assert row["residual_post_norm"] < tol, (
+            f"step {i}: mu=1 left {row['residual_post_norm']:.3e} of the residual")
+    assert any(r["residual_norm"] > 0.1 for r in cpp), (
+        "every a priori residual was tiny, so the assertion above proves nothing")
+    for i, (a, b) in enumerate(zip(py, cpp)):
+        assert a["applied"] == b["applied"], i
+
+
+def test_nlms_rejects_the_same_things_rls_does(xcheck, tmp_path):
+    """One vocabulary across adapters, so a guard's counters mean the same thing whichever
+    is underneath. A regressor of 1e30 squares to infinity in f32 -- finite input reaching
+    the denominator path, which is the case worth pinning."""
+    xs, ys = excited(6, 20, seed=5, outputs=1)
+    xs = np.array(xs, dtype="f4")
+    ys = np.array(ys, dtype="f4")
+    xs[5, :] = 1e30
+    ys[9, :] = np.nan
+    with np.errstate(over="ignore"):     # the 1e30 squaring IS the demonstration
+        py, _ps, cpp, _cs = run_both(xcheck, tmp_path, xs, ys, lam=0.5, p0=1e-6,
+                                     dtype="f4", adapter=1)
+    assert cpp[5]["applied"] is False, cpp[5]
+    assert cpp[5]["reason"] == "nonpositive_denominator", cpp[5]
+    assert cpp[9]["applied"] is False, cpp[9]
+    assert cpp[9]["reason"] == "nonfinite_input", cpp[9]
+    for i, (a, b) in enumerate(zip(py, cpp)):
+        assert (a["applied"], a["reason"]) == (b["applied"], b["reason"]), i
+
+
+def test_the_parity_tool_refuses_a_guarded_nlms_rather_than_substituting_rls(
+        xcheck, tmp_path):
+    """The honest gap. Guarded NLMS is exercised by the C++ unit suite and the Python
+    guard tests, but the two together have no parity harness. A tool that silently ran
+    RLS instead would make that gap invisible, so it exits non-zero."""
+    xs, ys = excited(6, 10, seed=1, outputs=1)
+    case = tmp_path / "guarded_nlms.bin"
+    _write_case(case, xs, ys, 0.5, 1e-6, "f8",
+                guard={"bounds": [("residual_norm", None, 1e6)]}, adapter=1)
+    done = subprocess.run([str(xcheck), str(case), str(tmp_path / "out.bin")],
+                          capture_output=True, text=True)
+    assert done.returncode != 0
+    assert "guarded cases are Rls only" in done.stderr

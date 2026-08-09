@@ -210,6 +210,31 @@ Both sides freeze at exactly the shift step; six mutants confirm it (3 C++, 3 Py
 **Not in the C ABI yet** — that needs a decision on how many slots the exported guards
 declare, and it is recorded rather than guessed.
 
+**There are two adapters now** (`cpp/include/argmind/nlms.hpp`, `NormalisedLeastMeanSquares`
+in the reference). Normalised LMS is O(n) in memory and time and carries no covariance, which is
+the point: at a network head's width RLS's n² is the binding constraint — 330,608 B against
+2,912 at 128 features, and 512 features do not fit an STM32N6's SRAM. The Python was written
+first, as RLS's was, and `xcheck` gained an adapter axis in the byte that was padding so the two
+are compared rather than trusted for being short.
+
+**Measured: bit-identical at f64 with one output**, at every μ including the 2.0 stability
+boundary — RLS cannot manage that, having two declared reciprocal-multiply divergences, and NLMS
+adds none. At f32 it is 0.0–1.5 ulp up to μ=1.5 and 7.5–13.1 at μ=2, where the recursion is
+marginally stable so a reduction-order difference persists instead of decaying. **That claim is
+scoped to m=1 because that is where it was measured** — at (6,3) the two differ by 1.3–7.6 ulp,
+numpy taking a matvec path that sums differently, which is declared divergence 3 and not a new
+one. The first version said "at f64" and was generalised from one shape.
+
+**The exact law is what verifies it, not a tolerance**: after an update the a posteriori error is
+exactly `(1 − μ·x·x/(ε + x·x))` times the a priori one, so μ=1 with negligible ε projects the
+sample out completely. Both sides assert the law. `ε` guards the zero regressor — an all-zero
+input does nothing instead of dividing by zero — and μ is refused outside (0, 2].
+
+**One tolerance in that suite could not fail and was caught by perturbing a state block by 1%
+and watching it pass**: `scale_deviation` returns a *fraction* and the assertion compared it
+against `400`. It goes through `ulps()` now. Guarded NLMS has no parity harness and `xcheck`
+**exits non-zero** rather than silently substituting RLS, which is tested.
+
 **Still undecided:** whether inference is *hosted* (an interface to ONNX Runtime/TFLite) or
 *embedded*, and whether the tiers ship as one library or two. Nothing on the camera/audio/speech
 path is built.

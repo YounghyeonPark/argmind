@@ -503,3 +503,192 @@ class RecursiveLeastSquares(Adapter):
         return (f"RecursiveLeastSquares(n_features={self.n_features}, "
                 f"n_outputs={self.n_outputs}, forgetting={self.forgetting}, "
                 f"dtype={self.dtype.name!r}, updates={self._updates})")
+
+class NormalisedLeastMeanSquares(Adapter):
+    """Normalised LMS: the cheap adapter, for when RLS's covariance will not fit.
+
+    ``theta += (mu / (eps + x.x)) * outer(x, y - x.theta)``
+
+    **Why a second adapter exists at all.** RLS carries an ``n x n`` covariance, so its
+    state is ``n*m + n*n`` and a `Guard`'s checkpoint ring multiplies that by its depth.
+    At the handful of sensor channels this library was designed against that is nothing;
+    at the width a network embedding has it is the binding constraint — 128 features cost
+    330 KB against this adapter's 2.6 KB, and 512 features do not fit an STM32N6's SRAM at
+    all. NLMS is ``O(n)`` in both memory and time and has no covariance whatsoever.
+
+    **What it gives up.** RLS is a recursive exact solution of a weighted least-squares
+    problem; this is gradient descent with a step normalised by the input power. It
+    converges more slowly, its steady-state error is set by ``mu`` rather than driven to
+    the prior term, and it has no notion of per-direction confidence — which is also why
+    it cannot wind up the way RLS does under poor excitation, and why it reports no
+    ``p_trace``. The trade is priced rather than asserted: see `health_fields`.
+
+    **The one exact property, and the tests assert it rather than a tolerance.** After an
+    update the a posteriori error is ``(1 - mu * x.x / (eps + x.x))`` times the a priori
+    one, exactly, for any data. At ``mu = 1`` and ``eps`` negligible that is zero: one
+    sample is projected out completely. This is the analogue of RLS being checked against
+    the closed-form weighted solution rather than against itself.
+
+    ``mu`` must be in ``(0, 2]``: outside that the recursion is unstable for the standard
+    reason, and 2 is the boundary rather than a safe value.
+
+    Precision: ``min_dtype`` is ``f4``, the same as RLS, but **for a different reason and
+    a weaker one**. RLS's floor was measured — fp16 loses positive-definiteness in the
+    covariance recursion by step 115 even at a condition number of 1. This adapter has no
+    covariance and that argument does not transfer, so fp16 might well work. Nobody has
+    measured it, and writing down untested support is how a claim becomes a fiction.
+    """
+
+    min_dtype = "f4"
+
+    #: Three of five. `p_trace` and `p_min_diag` are covariance quantities and there is
+    #: no covariance here, so they are declared absent rather than reported as zero --
+    #: a `Guard` then refuses a bound on them at construction. Reporting zeros instead
+    #: was measured to break the same bound in both directions at once.
+    health_fields = frozenset({"residual_norm", "residual_post_norm", "gain_norm"})
+
+    __slots__ = ("n_features", "n_outputs", "dtype", "mu", "eps",
+                 "_state", "_state_ro", "_theta", "_e", "_e_post", "_yhat", "_tn",
+                 "_updates", "_rejected_nonfinite", "_rejected_denominator")
+
+    def __init__(self, n_features: int, n_outputs: int = 1,
+                 mu: float = 0.5, eps: float = 1e-6, dtype: str = "f4") -> None:
+        if n_features < 1:
+            raise ValueError(f"n_features must be >= 1, got {n_features}")
+        if n_outputs < 1:
+            raise ValueError(f"n_outputs must be >= 1, got {n_outputs}")
+        if not 0.0 < mu <= 2.0 or not math.isfinite(mu):
+            raise ValueError(
+                f"mu must be in (0, 2], got {mu}. Outside that the recursion is "
+                "unstable; 2 is the boundary, not a safe value.")
+        if not eps > 0.0 or not math.isfinite(eps):
+            # Guards the zero regressor. Without it a silent stretch of all-zero input
+            # divides by zero rather than doing nothing, which is what it should do.
+            raise ValueError(f"eps must be positive and finite, got {eps}")
+
+        self.dtype = self._check_dtype(dtype)
+        self.n_features = n_features
+        self.n_outputs = n_outputs
+        self.mu = float(mu)
+        self.eps = float(eps)
+
+        # One flat contiguous block, theta only. The same layout RLS uses for its
+        # leading `n*m` elements, so `persist` needs no special case.
+        self._state = np.zeros(n_features * n_outputs, dtype=self.dtype)
+        self._state_ro = self._state.view()
+        self._state_ro.flags.writeable = False
+        self._theta = self._state.reshape(n_features, n_outputs)
+
+        self._e = np.zeros(n_outputs, dtype=self.dtype)
+        self._e_post = np.zeros(n_outputs, dtype=self.dtype)
+        self._yhat = np.zeros(n_outputs, dtype=self.dtype)
+        self._tn = np.zeros((n_features, n_outputs), dtype=self.dtype)
+        self._updates = 0
+        self._rejected_nonfinite = 0
+        self._rejected_denominator = 0
+
+    # -- Adapter contract ----------------------------------------------------
+
+    @property
+    def state(self) -> np.ndarray:
+        return self._state_ro
+
+    @property
+    def theta(self) -> np.ndarray:
+        return self._theta
+
+    @property
+    def updates(self) -> int:
+        return self._updates
+
+    def load_state(self, flat) -> None:
+        arr = np.asarray(flat, dtype=self.dtype).reshape(-1)
+        if arr.size != self._state.size:
+            raise ValueError(
+                f"state block must have {self._state.size} elements, got {arr.size}")
+        if not np.all(np.isfinite(arr)):
+            raise ValueError("refusing a state block that is not finite")
+        self._state[:] = arr
+
+    def reset(self) -> None:
+        self._state[:] = 0
+        self._e[:] = 0
+        self._e_post[:] = 0
+        self._updates = 0
+        self._rejected_nonfinite = 0
+        self._rejected_denominator = 0
+
+    def predict(self, x) -> np.ndarray:
+        return np.asarray(self._as_x(x) @ self._theta, dtype=self.dtype)
+
+    def _as_x(self, x) -> np.ndarray:
+        arr = np.asarray(x, dtype=self.dtype).reshape(-1)
+        if arr.size != self.n_features:
+            raise ValueError(
+                f"x must have {self.n_features} features, got {arr.size}")
+        return arr
+
+    def _as_y(self, y) -> np.ndarray:
+        arr = np.asarray(y, dtype=self.dtype).reshape(-1)
+        if arr.size != self.n_outputs:
+            raise ValueError(f"y must have {self.n_outputs} outputs, got {arr.size}")
+        return arr
+
+    def _report(self, applied: bool, reason: str | None,
+                gain_norm: float) -> UpdateReport:
+        return UpdateReport(
+            applied=applied,
+            residual=self._e.copy(),
+            residual_post=self._e_post.copy(),
+            gain_norm=gain_norm,
+            # Declared absent in `health_fields`, so a Guard refuses to watch these and
+            # nothing can read them. Zero because the field has to hold something.
+            p_trace=0.0,
+            p_min_diag=0.0,
+            reason=reason)
+
+    def update(self, x, y) -> UpdateReport:
+        """Take one observation and report what happened.
+
+        Same contract as RLS: shape errors raise, bad values are rejected and counted.
+        """
+        xa = self._as_x(x)
+        ya = self._as_y(y)
+
+        if not (np.all(np.isfinite(xa)) and np.all(np.isfinite(ya))):
+            self._rejected_nonfinite += 1
+            self._e[:] = 0
+            self._e_post[:] = 0
+            return self._report(False, "nonfinite_input", 0.0)
+
+        np.dot(xa, self._theta, out=self._yhat)
+        np.subtract(ya, self._yhat, out=self._e)
+
+        power = self.dtype.type(self.eps) + np.dot(xa, xa)
+        if not np.isfinite(power) or power <= 0:
+            # Reachable with FINITE input: a regressor of 1e30 squares to infinity in
+            # f32. The same vocabulary RLS uses, so a guard's counters mean the same
+            # thing whichever adapter is underneath.
+            self._rejected_denominator += 1
+            self._e_post[:] = self._e
+            return self._report(False, "nonpositive_denominator", 0.0)
+
+        g = self.dtype.type(self.mu) / power
+        np.outer(xa, self._e, out=self._tn)
+        np.multiply(self._tn, g, out=self._tn)
+        np.add(self._theta, self._tn, out=self._theta)
+
+        np.dot(xa, self._theta, out=self._yhat)
+        np.subtract(ya, self._yhat, out=self._e_post)
+
+        self._updates += 1
+        # The gain VECTOR is `g * x`, so its norm is what compares against RLS's
+        # ||k||. Reporting `g` alone would make the two adapters' `gain_norm` mean
+        # different things, and a `Guard` bound is written against the name.
+        return self._report(True, None, float(np.linalg.norm(g * xa)))
+
+    def __repr__(self) -> str:
+        return (f"NormalisedLeastMeanSquares(n_features={self.n_features}, "
+                f"n_outputs={self.n_outputs}, mu={self.mu}, "
+                f"dtype={self.dtype.name!r}, updates={self._updates})")
+

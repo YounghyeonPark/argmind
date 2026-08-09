@@ -25,6 +25,7 @@
 #include <stdio.h>
 
 #include "argmind/guard.hpp"
+#include "argmind/nlms.hpp"
 #include "argmind/rls.hpp"
 
 namespace {
@@ -51,10 +52,14 @@ struct CaseHeader {
     char magic[4];  // "AMXC"
     uint16_t version;
     uint8_t dtype;  // 4 or 8
-    uint8_t pad;
+    /// Which adapter: 0 = Rls, 1 = Nlms. Takes the byte that was padding, so the header
+    /// stays 184 bytes and every checked-in case file is still readable.
+    uint8_t adapter;
     uint16_t n;
     uint16_t m;
     uint32_t count;
+    /// `lambda`/`p0` for Rls; `mu`/`eps` for Nlms. The same two doubles either way, so
+    /// the format does not grow a second pair that is null half the time.
     double lambda;
     double p0;
     uint32_t depth;
@@ -133,11 +138,13 @@ int write_header(FILE* out, const CaseHeader& h) {
     return fwrite(&rh, sizeof(rh), 1, out) == 1 ? 0 : 3;
 }
 
-template <typename T, int N, int M>
-int run_bare(FILE* in, FILE* out, const CaseHeader& h) {
-    argmind::Rls<T, N, M> rls(static_cast<T>(h.lambda), static_cast<T>(h.p0));
-    if (!rls.valid()) {
-        fprintf(stderr, "xcheck: lambda/p0 rejected by the core\n");
+/// One driver for any adapter satisfying the contract, so a second one is a line in
+/// `dispatch_depth` rather than a copy of this function. `Adapter::state_size` differs
+/// between them and the reference reads the same field, so the trailing block just works.
+template <typename Adapter, typename T, int N, int M>
+int run_bare_adapter(FILE* in, FILE* out, const CaseHeader& h, Adapter&& a) {
+    if (!a.valid()) {
+        fprintf(stderr, "xcheck: adapter parameters rejected by the core\n");
         return 2;
     }
     if (int rc = write_header(out, h)) return rc;
@@ -148,11 +155,23 @@ int run_bare(FILE* in, FILE* out, const CaseHeader& h) {
         if (fread(x, sizeof(T), N, in) != N) return 4;
         if (fread(y, sizeof(T), M, in) != M) return 4;
         Row row;
-        fill_row(rls.update(x, y), &row);
+        fill_row(a.update(x, y), &row);
         if (fwrite(&row, sizeof(row), 1, out) != 1) return 3;
     }
-    const int size = argmind::Rls<T, N, M>::state_size;
-    return fwrite(rls.state(), sizeof(T), size, out) == static_cast<size_t>(size) ? 0 : 3;
+    const int size = Adapter::state_size;
+    return fwrite(a.state(), sizeof(T), size, out) == static_cast<size_t>(size) ? 0 : 3;
+}
+
+template <typename T, int N, int M>
+int run_bare(FILE* in, FILE* out, const CaseHeader& h) {
+    if (h.adapter == 1) {
+        return run_bare_adapter<argmind::Nlms<T, N, M>, T, N, M>(
+            in, out, h, argmind::Nlms<T, N, M>(static_cast<T>(h.lambda),
+                                               static_cast<T>(h.p0)));
+    }
+    return run_bare_adapter<argmind::Rls<T, N, M>, T, N, M>(
+        in, out, h, argmind::Rls<T, N, M>(static_cast<T>(h.lambda),
+                                          static_cast<T>(h.p0)));
 }
 
 template <typename T, int N, int M, int Depth>
@@ -203,6 +222,14 @@ template <typename T, int N, int M>
 int dispatch_depth(FILE* in, FILE* out, const CaseHeader& h) {
     const bool guarded = h.n_bounds > 0 || h.divergence.enabled;
     if (!guarded) return run_bare<T, N, M>(in, out, h);
+    if (h.adapter != 0) {
+        // Guarded NLMS runs in the C++ unit suite and the Python guard tests; what has
+        // no parity harness is the pair together, and saying so is better than a tool
+        // that silently substitutes RLS.
+        fprintf(stderr, "xcheck: guarded cases are Rls only; adapter=%u has no "
+                        "guarded instantiation here\n", h.adapter);
+        return 5;
+    }
     switch (h.depth) {
         case 1: return run_guarded<T, N, M, 1>(in, out, h);
         case 2: return run_guarded<T, N, M, 2>(in, out, h);

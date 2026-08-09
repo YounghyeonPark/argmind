@@ -17,6 +17,7 @@
 #include "argmind/guard.hpp"
 #include "argmind/persist.hpp"
 #include "argmind/pipeline.hpp"
+#include "argmind/nlms.hpp"
 #include "argmind/rls.hpp"
 #include "argmind/stream.hpp"
 
@@ -2563,6 +2564,13 @@ void test_a_non_finite_external_is_unhealthy_rather_than_ignored() {
     CHECK(g.set_external(0, 0.0 / 0.0));      // accepted at the call...
     CHECK(g.update(x, y).frozen);             // ...and unhealthy at the check
 }
+
+// `nlms.hpp` spells its mask out because `guard.hpp` includes it and not the reverse.
+// Tie the two together here, where both headers are in scope, so they cannot drift.
+static_assert(argmind::Nlms<float, 6, 1>::health_fields == argmind::RESIDUAL_FIELDS,
+              "Nlms declares a health_fields mask that is no longer the residual three");
+static_assert(argmind::Nlms<float, 6, 1>::state_size == 6,
+              "Nlms state is theta only");
 
 int main() {
     test_finiteness_predicates();

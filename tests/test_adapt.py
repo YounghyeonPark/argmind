@@ -16,7 +16,7 @@ against mathematics rather than against itself.
 import numpy as np
 import pytest
 
-from argmind.adapt import RecursiveLeastSquares, UpdateReport
+from argmind.adapt import NormalisedLeastMeanSquares, RecursiveLeastSquares, UpdateReport
 
 
 def batch_ewls(xs, ys, lam, p0, n, m):
@@ -524,3 +524,95 @@ def test_the_dead_adapter_a_non_finite_p0_used_to_produce_is_what_makes_it_worth
         r = a.update([1.0, 2.0, 3.0], [1.0])
         assert r.applied is False
         assert r.reason == "nonpositive_denominator"
+
+
+# -- the second adapter -----------------------------------------------------------
+
+def test_nlms_projects_a_sample_out_exactly_at_mu_one():
+    """The exact law, which is what makes this a verification rather than a comparison.
+
+    After an update the a posteriori error is exactly `(1 - mu*x.x/(eps + x.x))` times
+    the a priori one, for any data whatsoever. At mu=1 with negligible eps that is zero.
+    Asserting the law rather than a tolerance is the same reason RLS is checked against
+    the closed-form weighted solution instead of against itself.
+    """
+    rng = np.random.default_rng(3)
+    true = np.array([2.0, -1.0, 0.5, 0.25])
+    for mu in (0.25, 0.5, 1.0, 1.5, 2.0):
+        a = NormalisedLeastMeanSquares(4, 1, mu=mu, eps=1e-12, dtype="f8")
+        worst = 0.0
+        for _ in range(200):
+            x = rng.standard_normal(4)
+            r = a.update(x, [float(x @ true)])
+            xx = float(x @ x)
+            want = (1.0 - mu * xx / (1e-12 + xx)) * float(r.residual[0])
+            worst = max(worst, abs(float(r.residual_post[0]) - want))
+        assert worst < 1e-12, f"the law does not hold at mu={mu}: {worst:.3e}"
+
+
+def test_nlms_converges_and_is_a_quarter_of_the_state_rls_needs():
+    a = NormalisedLeastMeanSquares(4, 1, mu=1.0, eps=1e-12, dtype="f8")
+    rng = np.random.default_rng(7)
+    true = np.array([2.0, -1.0, 0.5, 0.25])
+    for _ in range(200):
+        x = rng.standard_normal(4)
+        a.update(x, [float(x @ true)])
+    x = rng.standard_normal(4)
+    assert a.predict(x)[0] == pytest.approx(float(x @ true), abs=1e-9)
+    # The reason this adapter exists: n*m against RLS's n*m + n*n.
+    assert a.state.size == 4
+    assert RecursiveLeastSquares(4, 1, dtype="f8").state.size == 20
+
+
+def test_nlms_rejects_bad_values_rather_than_raising():
+    """The same contract RLS has: shape errors raise, bad values are rejected, counted
+    and reported. One vocabulary, so a guard's counters mean the same thing whichever
+    adapter is underneath."""
+    a = NormalisedLeastMeanSquares(3, 1, mu=0.5, eps=1e-6, dtype="f4")
+    before = np.array(a.state)
+
+    r = a.update([1.0, np.nan, 3.0], [1.0])
+    assert r.applied is False and r.reason == "nonfinite_input"
+    assert np.array_equal(a.state, before)
+
+    # Finite input reaching the denominator path: 1e30 squares to infinity in f32.
+    with np.errstate(over="ignore"):
+        r = a.update([1e30, 1e30, 1e30], [1.0])
+    assert r.applied is False and r.reason == "nonpositive_denominator"
+    assert np.array_equal(a.state, before)
+
+    with pytest.raises(ValueError, match="must have 3 features"):
+        a.update([1.0, 2.0], [1.0])
+
+
+@pytest.mark.parametrize("mu", [0.0, -0.1, 2.1, float("inf"), float("nan")])
+def test_nlms_refuses_a_step_size_outside_its_stability_bound(mu):
+    with pytest.raises(ValueError, match="mu must be in"):
+        NormalisedLeastMeanSquares(3, mu=mu, dtype="f8")
+    NormalisedLeastMeanSquares(3, mu=2.0, dtype="f8")     # the boundary is inclusive
+
+
+@pytest.mark.parametrize("eps", [0.0, -1.0, float("inf"), float("nan")])
+def test_nlms_refuses_an_eps_that_would_not_guard_the_zero_regressor(eps):
+    with pytest.raises(ValueError, match="eps must be positive"):
+        NormalisedLeastMeanSquares(3, eps=eps, dtype="f8")
+
+
+def test_nlms_does_nothing_on_an_all_zero_regressor_rather_than_dividing_by_zero():
+    """What `eps` is for. A silent stretch of input should leave the model alone."""
+    a = NormalisedLeastMeanSquares(3, mu=1.0, eps=1e-6, dtype="f8")
+    a.update([1.0, 2.0, 3.0], [1.0])
+    before = np.array(a.state)
+    r = a.update([0.0, 0.0, 0.0], [5.0])
+    assert r.applied is True                    # accepted...
+    assert np.array_equal(a.state, before)      # ...and changed nothing
+
+
+def test_nlms_declares_no_covariance_so_a_guard_refuses_to_watch_one():
+    from argmind.guard import Bound, Guard
+    a = NormalisedLeastMeanSquares(4, dtype="f8")
+    assert a.health_fields == frozenset(
+        {"residual_norm", "residual_post_norm", "gain_norm"})
+    with pytest.raises(ValueError, match="does not report"):
+        Guard(a, [Bound("p_trace", hi=1e6)])
+    Guard(NormalisedLeastMeanSquares(4, dtype="f8"), [Bound("residual_norm", hi=1e6)])
