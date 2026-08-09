@@ -25,18 +25,22 @@ to the total — a `caller` column exists because without it the drift was invis
 | configuration | flash | of which argmind | the caller | libc/libgcc | static RAM |
 |---|---|---|---|---|---|
 | bare RLS f32 6x1 | 2308 | 1256 | 160 | 892 | 272 |
-| + guard | 6168 | 3546 | 344 | 2278 | 1296 |
-| + record format | 6400 | 3824 | 304 | 2272 | 1972 |
-| full composed pipeline | 10444 | 7434 | 564 | 2446 | 3264 |
+| + guard | 6168 | 3552 | 344 | 2272 | 1296 |
+| + record format | 6404 | 3830 | 304 | 2270 | 1972 |
+| full composed pipeline | 10452 | 7440 | 564 | 2448 | 3264 |
 
 Against the declared 32 KB flash and 8 KB RAM, the full composed pipeline is **31.9%** of the
 flash budget and **39.8%** of the RAM.
+
+The +0/+4/+8 against the first recorded version is the guard's caller-supplied health
+scalars (`Guard`'s `NExternal`), and **this file's gate is what reported it** — the first
+time it fired in anger, on the change immediately after it was written.
 
 ## Cortex-M55 — the second tier's core
 
 | configuration | flash | static RAM |
 |---|---|---|
-| full composed pipeline | 7932 | 3264 |
+| full composed pipeline | 7924 | 3264 |
 
 Moving up to ARMv8.1-M makes the image **smaller**, at identical static RAM.
 

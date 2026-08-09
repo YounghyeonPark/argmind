@@ -55,7 +55,23 @@ enum class Field : uint8_t {
     GainNorm = 2,
     PTrace = 3,
     PMinDiag = 4,
+    /// Scalars the CALLER supplies, not the adapter. See `Guard::set_external`.
+    External0 = 5,
+    External1 = 6,
+    External2 = 7,
+    External3 = 8,
 };
+
+/// Number of caller-supplied slots the `Field` enum has room for.
+constexpr int kMaxExternal = 4;
+
+constexpr Field external_field(int i) {
+    return static_cast<Field>(static_cast<int>(Field::External0) + i);
+}
+constexpr bool is_external(Field f) { return f >= Field::External0; }
+constexpr int external_index(Field f) {
+    return static_cast<int>(f) - static_cast<int>(Field::External0);
+}
 
 /// The bit a `Field` occupies in an adapter's `health_fields` mask.
 constexpr uint32_t field_bit(Field f) { return 1u << static_cast<uint32_t>(f); }
@@ -151,8 +167,10 @@ struct Bound {
         return !(field == Field::GainNorm && has_lo && lo > 0.0);
     }
 
+    /// `externals` may be null when the guard declares none; a bound on an external
+    /// field cannot be added in that case, so it is never dereferenced.
     template <typename T, int M>
-    bool evaluate(const GuardReport<T, M>& r) const {
+    bool evaluate(const GuardReport<T, M>& r, const double* externals = nullptr) const {
         double v = 0.0;
         switch (field) {
             case Field::ResidualNorm: v = r.residual_norm; break;
@@ -160,11 +178,34 @@ struct Bound {
             case Field::GainNorm: v = r.gain_norm; break;
             case Field::PTrace: v = r.p_trace; break;
             case Field::PMinDiag: v = r.p_min_diag; break;
+            default: v = externals[external_index(field)]; break;
         }
         if (!is_finite(v)) return false;
         if (has_lo && v < lo) return false;
         return !(has_hi && v > hi);
     }
+};
+
+/// Storage for the caller-supplied scalars, specialised away when there are none.
+///
+/// A guard that declares no externals must not grow by a byte, because most will not
+/// declare any and this project's size table is a gate. The empty specialisation is what
+/// makes that true, and a `static_assert` in `guard.hpp` checks it rather than assuming
+/// the compiler collapsed it.
+template <int N>
+struct ExternalSlots {
+    double v[N];
+    ExternalSlots() {
+        for (int i = 0; i < N; ++i) v[i] = 0.0;
+    }
+    double* data() { return v; }
+    const double* data() const { return v; }
+};
+
+template <>
+struct ExternalSlots<0> {
+    double* data() { return nullptr; }
+    const double* data() const { return nullptr; }
 };
 
 /// Fires when the residual grows against its own recent history.
@@ -232,10 +273,36 @@ struct Divergence {
 /// checkpoint, because divergence is detected after it starts and undoing one update
 /// lands inside the bad stretch. So `Depth * checkpoint_every` is how far back it
 /// reaches.
-template <typename Adapter, int Depth = 1, int MaxBounds = 4>
-class Guard {
+/// `NExternal` is how many caller-supplied scalars this guard will watch, and it is zero
+/// by default so that nothing which does not ask for them pays for them.
+///
+/// **Why the guard should see them at all.** Every check above watches the *adapter's*
+/// health, and for a frozen backbone with an adapted head that is the wrong place to
+/// look: the head stays healthy while the world moves under it, because it fits whatever
+/// it is given. An input distribution shift reaches an early layer's activation
+/// statistics long before it reaches the head's residual. Those numbers belong to the
+/// caller, who is running the backbone, so the guard cannot compute them -- but it can
+/// watch them, and then a shift freezes adaptation with a cause, a counter and automatic
+/// recovery instead of the caller open-coding all three.
+///
+/// The alternative is honest and worth naming: a caller can simply not call `update()`,
+/// or call `freeze()` itself. That works, and it puts the safety decision outside the
+/// guard, which is the arrangement this library exists to avoid -- a mechanism that can
+/// be left out gets left out. What it also loses is `frozen_by`, the counters, the
+/// rollback, and any automatic thaw when the backbone recovers.
+template <typename Adapter, int Depth = 1, int MaxBounds = 4, int NExternal = 0>
+class Guard : private ExternalSlots<NExternal> {
+    // Private BASE rather than a member, and that is not a style choice. As a member the
+    // empty specialisation still occupies a byte and alignment rounds it to eight, which
+    // measured as 1208 -> 1216 on `Guard<Rls<float,6,1>,4,4>` -- a guard that asked for no
+    // externals paying for them. Empty base optimisation makes it genuinely free, and a
+    // `static_assert` below checks that rather than trusting it.
+    using Ext = ExternalSlots<NExternal>;
+
     static_assert(Depth >= 1, "rollback depth must be >= 1");
     static_assert(MaxBounds >= 1, "a guard with no room for checks cannot ever freeze");
+    static_assert(NExternal >= 0 && NExternal <= kMaxExternal,
+                  "the Field enum has room for kMaxExternal caller-supplied scalars");
 
 public:
     using scalar = typename Adapter::scalar;
@@ -300,10 +367,34 @@ public:
     /// point it is made rather than misbehaving later.
     bool add_bound(const Bound& b) {
         if (n_bounds_ >= MaxBounds || !b.valid()) return false;
-        if ((Adapter::health_fields & field_bit(b.field)) == 0) return false;
+        if (is_external(b.field)) {
+            // Not an adapter field, so `health_fields` says nothing about it. What
+            // decides is whether this guard declared a slot to put it in.
+            if (external_index(b.field) >= NExternal) return false;
+        } else if ((Adapter::health_fields & field_bit(b.field)) == 0) {
+            return false;
+        }
         bounds_[n_bounds_++] = b;
         return true;
     }
+
+    /// Supply one of the caller's scalars, before `update()`.
+    ///
+    /// Held until overwritten, so a caller whose backbone runs slower than the head does
+    /// not have to invent a value for every sample. Non-finite is *not* refused here:
+    /// `Bound` already treats non-finite as unhealthy, and a NaN arriving from a sensor
+    /// or a runtime is a runtime event the guard should act on rather than an argument
+    /// error the caller should have caught.
+    bool set_external(int i, double v) {
+        if (i < 0 || i >= NExternal) return false;
+        Ext::data()[i] = v;
+        return true;
+    }
+
+    double external(int i) const {
+        return (i >= 0 && i < NExternal) ? Ext::data()[i] : 0.0;
+    }
+    static constexpr int n_external = NExternal;
 
     void set_divergence(const Divergence& d) {
         divergence_ = d;
@@ -511,7 +602,7 @@ private:
     uint32_t failing(GuardReport<T, n_outputs>& r) {
         uint32_t mask = 0;
         for (int i = 0; i < n_bounds_; ++i) {
-            if (!bounds_[i].evaluate(r)) mask |= (1u << i);
+            if (!bounds_[i].evaluate(r, Ext::data())) mask |= (1u << i);
         }
         if (divergence_.enabled && !divergence_.evaluate(r)) mask |= DIVERGENCE_BIT;
         return mask;
@@ -584,6 +675,19 @@ private:
     uint32_t rejected_by_adapter_ = 0;
     uint32_t thaws_ = 0;
 };
+
+// Declaring no externals must cost nothing, and this is where that is checked rather than
+// hoped. Holding `ExternalSlots<0>` as a MEMBER measured 1208 -> 1216 on this shape: an
+// empty class still occupies a byte and alignment rounds it up. As an empty private base
+// it is genuinely free. If a compiler ever stops applying empty base optimisation here,
+// this fails instead of quietly making every guard eight bytes larger.
+static_assert(sizeof(Guard<Rls<float, 6, 1>, 4, 4, 0>) ==
+                  sizeof(Guard<Rls<float, 6, 1>, 4, 4>),
+              "an explicit zero externals must equal the default");
+static_assert(sizeof(Guard<Rls<float, 6, 1>, 4, 4, 1>) >
+                  sizeof(Guard<Rls<float, 6, 1>, 4, 4, 0>),
+              "declaring an external must actually reserve storage for it -- if these are "
+              "equal the slots are not there and every external reads zero");
 
 }  // namespace argmind
 

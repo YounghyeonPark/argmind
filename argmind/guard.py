@@ -92,6 +92,22 @@ __all__ = ["Check", "Bound", "Divergence", "Guard", "GuardReport"]
 WATCHABLE: frozenset[str] = frozenset(UpdateReport.__slots__) | {
     "residual_norm", "residual_post_norm"}
 
+#: How many caller-supplied scalars a guard can watch. Matches `kMaxExternal` in
+#: `cpp/include/argmind/guard.hpp`, where the limit is the `Field` enum's room.
+MAX_EXTERNAL = 4
+
+#: Names for them. These are NOT report fields -- nothing in `UpdateReport` produces
+#: them, and the adapter cannot: they are numbers the caller computes about the world
+#: outside the adapter, which is the whole point. See `Guard.set_external`.
+EXTERNAL: frozenset[str] = frozenset(f"external_{i}" for i in range(MAX_EXTERNAL))
+
+
+def external_index(field: str) -> int | None:
+    """The slot a field name refers to, or None if it is not an external."""
+    if field in EXTERNAL:
+        return int(field.rsplit("_", 1)[1])
+    return None
+
 
 @dataclass(frozen=True, slots=True)
 class GuardReport(UpdateReport):
@@ -165,15 +181,15 @@ class Bound(Check):
     through every comparison as "not out of range".
     """
 
-    __slots__ = ("field", "lo", "hi")
+    __slots__ = ("field", "lo", "hi", "_ext")
 
     def __init__(self, field: str, lo: float | None = None,
                  hi: float | None = None, name: str | None = None) -> None:
-        if field not in WATCHABLE:
+        if field not in WATCHABLE and field not in EXTERNAL:
             raise ValueError(
                 f"{field!r} is not a report field a guard can watch; choose from "
-                f"{sorted(WATCHABLE)}. A guard watching a field that does not "
-                "exist would never fire and would look like protection.")
+                f"{sorted(WATCHABLE)} or {sorted(EXTERNAL)}. A guard watching a field "
+                "that does not exist would never fire and would look like protection.")
         if lo is None and hi is None:
             raise ValueError(f"Bound({field!r}) sets neither lo nor hi, so it can "
                              "never fail. A check that cannot fail is not a check.")
@@ -183,6 +199,13 @@ class Bound(Check):
         self.field = field
         self.lo = lo
         self.hi = hi
+        #: Set by `Guard.__init__` for an external field, so that `evaluate` keeps its
+        #: one-argument signature. The C++ passes the slots to `Bound::evaluate` instead;
+        #: either way the check reads the guard's live value and the decision is the same.
+        #: Doing it here rather than widening `Check.evaluate` avoids breaking every
+        #: check anyone has already written, including the ones in this repository's own
+        #: tests.
+        self._ext: list[float] | None = None
 
     @property
     def watches(self) -> frozenset[str]:
@@ -195,7 +218,16 @@ class Bound(Check):
         return not (self.field == "gain_norm" and self.lo is not None and self.lo > 0)
 
     def evaluate(self, report: UpdateReport) -> bool:
-        v = float(getattr(report, self.field))
+        idx = external_index(self.field)
+        if idx is not None:
+            if self._ext is None:
+                raise RuntimeError(
+                    f"{self.name!r} watches {self.field!r} but was never bound to a "
+                    "guard's slots; Guard.__init__ does that, so this check was "
+                    "evaluated outside one")
+            v = float(self._ext[idx])
+        else:
+            v = float(getattr(report, self.field))
         if not np.isfinite(v):
             return False
         if self.lo is not None and v < self.lo:
@@ -337,10 +369,12 @@ class Guard(Adapter):
     __slots__ = ("adapter", "checks", "rollback_depth", "checkpoint_every",
                  "recover_after", "_ckpt", "_ckpt_health", "_ckpt_head",
                  "_ckpt_count", "_since_ckpt", "_frozen", "_healthy_run",
-                 "_frozen_health", "_frozen_by", "_stats")
+                 "_frozen_health", "_frozen_by", "_stats",
+                 "n_external", "_external")
 
     def __init__(self, adapter: Adapter, checks, rollback_depth: int = 1,
-                 checkpoint_every: int = 1, recover_after: int | None = None) -> None:
+                 checkpoint_every: int = 1, recover_after: int | None = None,
+                 n_external: int = 0) -> None:
         checks = tuple(checks)
         if not checks:
             raise ValueError(
@@ -355,7 +389,13 @@ class Guard(Adapter):
         # directions -- `hi=1e4` could never fire while looking configured, and
         # `lo=1e-9` tripped on the first update and froze the adapter for the run.
         # Measured on a second adapter before this check existed.
-        reportable = adapter.health_fields
+        if not 0 <= n_external <= MAX_EXTERNAL:
+            raise ValueError(f"n_external must be in [0, {MAX_EXTERNAL}], "
+                             f"got {n_external}")
+        self.n_external = int(n_external)
+        self._external = [0.0] * self.n_external
+        declared = frozenset(f"external_{i}" for i in range(self.n_external))
+        reportable = adapter.health_fields | declared
         for c in checks:
             missing = sorted(c.watches - reportable)
             if missing:
@@ -379,6 +419,11 @@ class Guard(Adapter):
                     "so the guard could never thaw. Either drop recover_after and "
                     "thaw explicitly, or remove those checks.")
 
+        for c in checks:
+            for f in c.watches & EXTERNAL:
+                # Bind before the first evaluate; `Bound.evaluate` raises if this was
+                # skipped, rather than silently reading a zero.
+                c._ext = self._external
         self.adapter = adapter
         self.checks = checks
         self.rollback_depth = int(rollback_depth)
@@ -415,8 +460,40 @@ class Guard(Adapter):
     @property
     def health_fields(self) -> frozenset[str]:
         """What the wrapped adapter reports. The guard *is* an adapter, so a guard
-        wrapping a guard has to see through to the one that actually computes."""
+        wrapping a guard has to see through to the one that actually computes.
+
+        Externals are deliberately absent: they are this guard's configuration, not
+        something it can report on another's behalf.
+        """
         return self.adapter.health_fields
+
+    def set_external(self, i: int, value: float) -> None:
+        """Supply one of the caller's scalars, before `update()`.
+
+        Every check the guard has watches the **adapter's** health, and for a frozen
+        backbone feeding an adapted head that is the wrong place to look: the head stays
+        healthy while the world moves under it, because it fits whatever it is given. An
+        input distribution shift reaches an early layer's activation statistics long
+        before it reaches the head's residual, and only the caller -- who is running the
+        backbone -- can compute that. The guard cannot produce the number, but it can
+        watch it, and then a shift freezes adaptation with a cause, a counter and
+        automatic recovery.
+
+        Held until overwritten, so a backbone slower than the head need not invent a
+        value per sample. Non-finite is accepted here on purpose: `Bound` already treats
+        non-finite as unhealthy, and a NaN out of a runtime is a runtime event the guard
+        should act on rather than an argument error the caller should have caught.
+        """
+        if not 0 <= i < self.n_external:
+            raise IndexError(
+                f"external {i} was not declared; this guard has {self.n_external}")
+        self._external[i] = float(value)
+
+    def external(self, i: int) -> float:
+        if not 0 <= i < self.n_external:
+            raise IndexError(
+                f"external {i} was not declared; this guard has {self.n_external}")
+        return self._external[i]
 
     @property
     def dtype(self) -> np.dtype:

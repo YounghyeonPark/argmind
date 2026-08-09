@@ -695,3 +695,77 @@ def test_every_field_rls_declares_is_one_a_bound_can_watch():
     """The two sets are maintained separately and would drift silently otherwise."""
     from argmind.guard import WATCHABLE
     assert RecursiveLeastSquares.health_fields <= WATCHABLE
+
+
+# -- scalars the caller supplies, so the guard can see past the adapter ---------------
+
+def test_a_guard_that_declares_no_externals_refuses_a_bound_on_one():
+    """Not because the adapter cannot report it -- `health_fields` says nothing about a
+    caller's own scalar -- but because this guard has nowhere to put the value."""
+    with pytest.raises(ValueError, match="does not report"):
+        Guard(make_rls(), [Bound("external_0", lo=0.5)])
+    Guard(make_rls(), [Bound("external_0", lo=0.5)], n_external=1)   # declared: accepted
+
+    g = Guard(make_rls(), [Bound("p_trace", hi=1e6)])
+    assert g.n_external == 0
+    with pytest.raises(IndexError):
+        g.set_external(0, 1.0)
+
+
+def test_an_external_scalar_freezes_adaptation_and_thaws_when_it_recovers():
+    """The case this exists for: a frozen backbone feeds a head, the input distribution
+    shifts, and **the head stays healthy** because it fits whatever it is given. No check
+    on the adapter's own health can see that; only a number from outside can."""
+    g = Guard(RecursiveLeastSquares(2, forgetting=0.99, p0=100.0, dtype="f8"),
+              [Bound("external_0", lo=0.5)], rollback_depth=4, checkpoint_every=5,
+              recover_after=10, n_external=2)
+    assert g.n_external == 2
+    rng = np.random.default_rng(11)
+    froze_at = thawed_at = None
+    for k in range(400):
+        # backbone confidence: healthy, a shift at 150, recovery at 250
+        g.set_external(0, 0.1 if 150 <= k < 250 else 0.9)
+        x = rng.standard_normal(2)
+        r = g.update(x, [float(x @ [1.0, -2.0])])
+        if froze_at is None and r.frozen:
+            froze_at = k
+        if froze_at is not None and thawed_at is None and not g.frozen:
+            thawed_at = k
+    # Frozen exactly at the shift. The residual never moved, so nothing else could have.
+    assert froze_at == 150
+    assert thawed_at is not None and 250 < thawed_at <= 262
+    assert not g.frozen
+
+
+def test_an_external_is_an_input_and_is_not_rolled_back():
+    """Checkpoints hold adapter state. An external is the caller's reading at a sample,
+    so restoring an old one on a trip would resurrect the value that tripped."""
+    g = Guard(make_rls(), [Bound("external_0", lo=0.5)], rollback_depth=1, n_external=1)
+    for _ in range(20):
+        g.set_external(0, 0.9)
+        g.update([1.0, 2.0], [3.0])
+    g.set_external(0, 0.2)
+    r = g.update([1.0, 2.0], [3.0])
+    assert r.frozen and r.rolled_back
+    assert g.external(0) == 0.2          # the state rolled back; the reading did not
+    g.set_external(0, 0.9)
+    assert g.external(0) == 0.9          # and a held value stays held
+
+
+def test_a_non_finite_external_is_unhealthy_rather_than_refused_at_the_call():
+    """A NaN out of a runtime is a runtime event, and `Bound` already treats non-finite
+    as unhealthy. Refusing it at `set_external` would stop the guard ever seeing it."""
+    g = Guard(make_rls(), [Bound("external_0", lo=0.5)], n_external=1)
+    g.set_external(0, 0.9)
+    assert not g.update([1.0, 2.0], [3.0]).frozen
+    g.set_external(0, float("nan"))      # accepted at the call...
+    assert g.update([1.0, 2.0], [3.0]).frozen        # ...and unhealthy at the check
+
+
+def test_an_unbound_external_check_raises_rather_than_reading_a_zero():
+    """`Bound.evaluate` keeps its one-argument signature by holding a reference the guard
+    hands it. Evaluated outside a guard there is nothing to read, and a silent zero would
+    be a check quietly reporting whatever the bound's direction makes healthy."""
+    b = Bound("external_0", lo=0.5)
+    with pytest.raises(RuntimeError, match="never bound"):
+        b.evaluate(RecursiveLeastSquares(2, dtype="f8").update([1.0, 2.0], [3.0]))

@@ -194,6 +194,22 @@ the wrong one** — the adapter is healthy and `residual_norm` is low, because i
 map well; it is being asked the wrong question, and a guard cannot see that. Both halves are in
 `tests/test_pipeline.py`, mutation-checked.
 
+**The guard can watch the caller's own scalars now, which is the middle path made real.**
+Every check watched the *adapter's* health, and for a frozen backbone feeding an adapted head
+that is the wrong place to look — the head stays healthy because it fits whatever it is given,
+so an input shift reaches an early layer's statistics long before the head's residual. The
+guard cannot compute those numbers; it can watch them. `Guard<Adapter, Depth, MaxBounds,
+NExternal>` takes up to four, `set_external(i, v)` supplies them, and `Bound` on
+`external_field(i)` (`"external_i"` in Python) freezes with a cause, a counter and automatic
+recovery. Declaring none costs **zero bytes** — held as a member the empty slots measured
+1208 → 1216, so they are an empty private *base* and a `static_assert` checks the optimisation
+rather than trusting it. Externals are **inputs, not state**: a rollback does not restore them,
+or a trip would resurrect the value that caused it. Non-finite is accepted at the call and
+unhealthy at the check, because a NaN out of a runtime is the event the guard exists for.
+Both sides freeze at exactly the shift step; six mutants confirm it (3 C++, 3 Python).
+**Not in the C ABI yet** — that needs a decision on how many slots the exported guards
+declare, and it is recorded rather than guessed.
+
 **Still undecided:** whether inference is *hosted* (an interface to ONNX Runtime/TFLite) or
 *embedded*, and whether the tiers ship as one library or two. Nothing on the camera/audio/speech
 path is built.

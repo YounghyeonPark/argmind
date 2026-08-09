@@ -2466,6 +2466,104 @@ void test_divergence_is_refused_when_the_adapter_cannot_report_a_residual_norm()
     CHECK(ok.valid());
 }
 
+// -- scalars the caller supplies, so the guard can see past the adapter -----------------
+
+void test_a_guard_that_declares_no_externals_costs_nothing_and_refuses_them() {
+    using G0 = argmind::Guard<argmind::Rls<float, 6, 1>, 4, 4>;
+    using G1 = argmind::Guard<argmind::Rls<float, 6, 1>, 4, 4, 1>;
+    // The size property the whole design turns on: most guards will never declare an
+    // external and none of them should pay for the feature. Held as a member instead of
+    // an empty base this read 1216 against 1208.
+    CHECK(sizeof(G0) == 1208);
+    CHECK(sizeof(G1) == sizeof(G0) + 8);
+    CHECK(G0::n_external == 0);
+
+    G0 g{argmind::Rls<float, 6, 1>(0.98f, 100.0f), 5, 0};
+    // Refused, because this guard has nowhere to put the value -- not because the
+    // adapter cannot report it. `health_fields` says nothing about a caller's scalar.
+    CHECK(!g.add_bound(argmind::Bound::at_least(argmind::external_field(0), 0.5)));
+    CHECK(!g.set_external(0, 1.0));
+    // ...and the adapter's own fields still work, so this is not a blanket refusal.
+    CHECK(g.add_bound(argmind::Bound::at_most(argmind::Field::PTrace, 1e6)));
+}
+
+void test_an_external_scalar_freezes_adaptation_and_thaws_when_it_recovers() {
+    // The case this exists for: a frozen backbone feeds a head, the input distribution
+    // shifts, and the HEAD STAYS HEALTHY because it fits whatever it is given. Only a
+    // number from outside the adapter can see it.
+    using G = argmind::Guard<argmind::Rls<float, 6, 1>, 4, 4, 2>;
+    G g{argmind::Rls<float, 6, 1>(0.99f, 100.0f), 5, /*recover_after=*/10};
+    CHECK(G::n_external == 2);
+    CHECK(g.add_bound(argmind::Bound::at_least(argmind::external_field(0), 0.5)));
+    CHECK(g.valid());
+
+    float x[6], y[1];
+    auto sample = [&](int k) {
+        for (int i = 0; i < 6; ++i) x[i] = float((k * 7 + i * 13) % 11) - 5.0f;
+        y[0] = 3.0f * x[0] - 2.0f * x[1];
+    };
+
+    int froze_at = -1, thawed_at = -1;
+    for (int k = 0; k < 400; ++k) {
+        // backbone confidence: healthy, then a shift at 150, then recovery at 250
+        g.set_external(0, (k >= 150 && k < 250) ? 0.1 : 0.9);
+        sample(k);
+        const auto r = g.update(x, y);
+        if (froze_at < 0 && r.frozen) froze_at = k;
+        if (froze_at >= 0 && thawed_at < 0 && !g.frozen()) thawed_at = k;
+    }
+    // Frozen at the shift, not before it -- the residual never moved, so nothing else
+    // could have caused this.
+    CHECK(froze_at == 150);
+    // ...and recovered on its own once the scalar came back, which is what a caller
+    // open-coding `freeze()` would have had to build.
+    CHECK(thawed_at > 250);
+    CHECK(thawed_at <= 262);
+    CHECK(!g.frozen());
+}
+
+void test_an_external_is_an_input_and_is_not_rolled_back() {
+    // Checkpoints hold adapter state. An external is the caller's reading at a sample,
+    // not something the adapter did, so a trip must not restore an old one -- doing so
+    // would resurrect the very value that tripped and freeze again immediately.
+    using G = argmind::Guard<argmind::Rls<float, 6, 1>, 4, 4, 1>;
+    G g{argmind::Rls<float, 6, 1>(0.99f, 100.0f), 1, 0};
+    CHECK(g.add_bound(argmind::Bound::at_least(argmind::external_field(0), 0.5)));
+
+    float x[6] = {1.0f, 2.0f, 3.0f, 4.0f, 5.0f, 1.0f};
+    float y[1] = {7.0f};
+    for (int k = 0; k < 20; ++k) {
+        g.set_external(0, 0.9);
+        g.update(x, y);
+    }
+    g.set_external(0, 0.2);
+    const auto r = g.update(x, y);
+    CHECK(r.frozen);
+    CHECK(r.rolled_back);
+    CHECK(g.frozen());
+    // The state rolled back; the external did not.
+    CHECK(g.external(0) == 0.2);
+    // And a held value stays held: a backbone slower than the head does not have to
+    // invent a number for every sample.
+    g.set_external(0, 0.9);
+    CHECK(g.external(0) == 0.9);
+}
+
+void test_a_non_finite_external_is_unhealthy_rather_than_ignored() {
+    // A NaN from a runtime is a runtime event, and `Bound` already treats non-finite as
+    // unhealthy. `set_external` must therefore accept it rather than refusing at the
+    // call, or the guard would never see the fault it exists to catch.
+    using G = argmind::Guard<argmind::Rls<float, 6, 1>, 4, 4, 1>;
+    G g{argmind::Rls<float, 6, 1>(0.99f, 100.0f), 5, 0};
+    CHECK(g.add_bound(argmind::Bound::at_least(argmind::external_field(0), 0.5)));
+    float x[6] = {1.0f, 2.0f, 3.0f, 4.0f, 5.0f, 1.0f};
+    float y[1] = {7.0f};
+    g.set_external(0, 0.9);
+    CHECK(!g.update(x, y).frozen);
+    CHECK(g.set_external(0, 0.0 / 0.0));      // accepted at the call...
+    CHECK(g.update(x, y).frozen);             // ...and unhealthy at the check
+}
+
 int main() {
     test_finiteness_predicates();
     test_row_major_matches_the_declared_layout();
@@ -2551,6 +2649,10 @@ int main() {
 
     test_the_guard_and_pipeline_hold_an_adapter_that_is_not_rls();
     test_a_bound_on_a_field_the_adapter_cannot_report_is_refused();
+    test_a_guard_that_declares_no_externals_costs_nothing_and_refuses_them();
+    test_an_external_scalar_freezes_adaptation_and_thaws_when_it_recovers();
+    test_an_external_is_an_input_and_is_not_rolled_back();
+    test_a_non_finite_external_is_unhealthy_rather_than_ignored();
     test_divergence_is_refused_when_the_adapter_cannot_report_a_residual_norm();
 
     printf("%d checks, %d failures\n", checks, failures);
