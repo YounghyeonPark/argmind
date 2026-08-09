@@ -123,9 +123,9 @@ divergence guard fails one.
 
 - ~~**The second tier's floor.**~~ **Answered 2026-08-09, and the answer is that the floor does
   not move.** See below.
-- **Hosted or embedded inference.** An interface to ONNX Runtime / TFLite keeps this library's
-  size and auditability; embedding a runtime does not. DESIGN.md's own *What it is not* already
-  chose "hosted", and reversing it is a decision rather than a drift.
+- **Hosted or embedded inference.** ~~An interface to ONNX Runtime / TFLite keeps this library's
+  size and auditability; embedding a runtime does not.~~ **That argument was wrong and is
+  withdrawn** — see below. Still undecided, but on different grounds.
 - **One library or two.** Sharing the `Adapter` contract across tiers is the argument for one;
   the core tier's no-heap/no-exceptions/no-libm constraints are the argument for two.
 
@@ -258,6 +258,69 @@ deployment. Freezing, bounded rollback, checkpointing, the two-slot record, the 
 and the refusal to watch a field the adapter cannot report all transfer unchanged. A frozen
 network with an unguarded adapted head is a system that can learn garbage and keep answering
 confidently, which is the failure this library was built around.
+
+#### Hosted or embedded — and the size argument I first gave was wrong
+
+**Hosted** means argmind never sees the network: the caller runs the backbone on whatever
+runtime it has and pushes the resulting feature vector, and argmind's contract stays "give me
+`x` and `y`". **Embedded** means argmind contains tensor types, operator kernels, a graph
+format, a loader and quantisation semantics, and runs the backbone itself.
+
+**The size argument does not survive contact with the numbers.** This document said embedding
+a runtime would cost the library its size and auditability. TFLite Micro's core runtime is
+**16 KB on a Cortex-M3**, 22 KB with enough operators for a keyword-spotting model, and it
+requires **no dynamic allocation** — it works from a caller-supplied arena
+([Google, LiteRT for Microcontrollers](https://ai.google.dev/edge/litert/microcontrollers/overview)).
+Against argmind's own 10.4 KB that is a tripling, not an explosion, and the arena model is
+*aligned* with storage-is-the-caller's rather than opposed to it. The argument was made from an
+assumption and it was wrong.
+
+**What actually separates them, in order of weight:**
+
+1. **The NPU driver, and this one is structural.** Neural-ART needs ST's runtime; Ethos-U needs
+   Arm's. They are vendor-specific. Embedding means either binding a vendor-neutral Apache-2.0
+   library to one vendor, or reimplementing the accelerator path — and reimplementing it means
+   running on the CPU, which discards the entire reason for the tier. Hosted sidesteps this:
+   the vendor's runtime runs, argmind consumes its output.
+2. **The verification model would break.** This project's claim is 4,650 checks, byte-identical
+   record parity, ~1.5 ulp against a Python oracle, mutation-tested, executing on the declared
+   floor. A network runtime cannot be held to that by a few-hundred-line reference. Embedding
+   would mean shipping a component whose correctness argument is somebody else's test suite —
+   good engineering, but not *this* claim, and a claim is only as strong as its weakest part.
+3. **The external dependency set stops being pinnable.** argmind needs exactly fourteen symbols
+   — `memcpy`, `memset`, `sqrt` and eleven libgcc soft-float helpers — and a test asserts the
+   *set*, so a new one is a decision rather than an accident. TFLM plus CMSIS-NN plus a vendor
+   driver ends that. It is a small test and it is what makes "freestanding" checkable.
+4. **Format ownership.** argmind owns one format and holds it to every single-bit flip in a
+   78-byte record, every truncation length, 400 fuzz blobs, byte-identical across
+   architectures. That does not scale to a model file with a graph, quantisation parameters and
+   versioning, and owning a second format at a lower standard than the first is worse than not
+   owning it.
+
+**The fair case for embedding, which is real and is not about bytes:**
+
+1. **The guard could see inside the network** — and this is the strongest argument, because it
+   answers a limit found the same day. No guard catches a misaligned target, since the guard
+   watches the *head's* health and the head is healthy. Per-layer activation statistics are a
+   different signal: an input distribution shift shows up in an early layer long before it
+   reaches the head's residual. Hosted gives none of that.
+2. **Partial backprop.** Owning the kernels makes fine-tuning the last convolution possible
+   rather than only a linear head — a materially larger model class, still bounded by
+   activation memory.
+3. One artifact, one arena, and no version skew between backbone and head.
+
+**A middle path that should be considered before either.** Host the execution *and* declare a
+health interface: the caller runs the backbone and also pushes a few scalars from inside it —
+an early-layer activation norm, an output entropy — as an ordinary `Stream`. The guard then
+watches them through `Bound`, and the `health_fields` mechanism added the same day is exactly
+what declares which scalars an adapter can report. That recovers most of embedding's only
+compelling advantage without owning a single kernel.
+
+**Measured, for the hosted side.** `am_ring_f32` already takes a runtime `dim` over caller
+storage, so a 128-wide backbone output pushes through the existing API with no new concepts.
+Adding the matching pipeline shape is **one instantiation line plus one `MAX_BYTES` define** —
+built for Cortex-M55 freestanding at `-Wall -Wextra`, clean on the first attempt, **+4,876
+bytes** of text and rodata before `--gc-sections`. That is what the boundary costs.
 
 #### The label arrives after the features that earned it, and getting that wrong is silent
 
