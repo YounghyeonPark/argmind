@@ -141,9 +141,26 @@ Python failures, 3 C++, 1 more for divergence) rather than the suite merely pass
 parameters" appeared nowhere in the repository while four bullets of DESIGN.md's *What it is
 not* explained that it is not a CNN. That is fixed; see the first section of this file.
 
-**Not yet decided, and each changes the work:** what the second tier's floor is, whether
-inference is *hosted* (an interface to ONNX Runtime/TFLite) or *embedded*, and whether the two
-tiers ship as one library or two. Nothing about the camera/audio/speech path is built.
+**The second tier's floor is decided, and the answer is that it does not move.** The obvious
+reading — camera and audio mean an SBC — is wrong, because of a part class that did not exist
+when the floor was set: an **MCU with an NPU**. The **Cortex-M55** is ARMv8.1-M with *native
+scalar and vector fp32* ([Arm](https://developer.arm.com/documentation/101273/latest/Cortex-M55-Processor-level-components-and-system-registers---Reference-Material/Floating-point-and-MVE-support)),
+so it is **strictly above** the declared floor; **STM32N6** pairs it at 800 MHz with a 600 GOPS
+NPU at 3 TOPS/W, 4.2 MB SRAM and a MIPI CSI-2 camera pipeline
+([ST](https://www.st.com/en/microcontrollers-microprocessors/stm32n6-series.html)). Measured, no
+source changes: the composed pipeline is **7,876 B** of flash on M55 against **10,396** on M4F at
+identical RAM — moving up makes argmind *smaller* — and **all 4,650 self-checks run and pass
+under QEMU's `mps3-an547` Cortex-M55 board**. `tests/test_target_run.py` is parametrised over
+both cores, mutation-checked two ways.
+
+**The fork is what the words mean, not what the silicon can do.** React like an animal (see a
+person, hear a call, answer with a sound) fits an MCU+NPU at ~1 W and the floor is unchanged;
+*converse* (speech recognition, dialogue, natural TTS) needs an SBC at 10–25 W, and on tomcat's
+own figures — 41.8 Wh battery, ~14.9 W standing — that costs **40–63 % of standing endurance**.
+
+**Still undecided:** whether inference is *hosted* (an interface to ONNX Runtime/TFLite) or
+*embedded*, and whether the tiers ship as one library or two. Nothing on the camera/audio/speech
+path is built.
 
 The original design driver, still the one the core tier's API is shaped against: an inertial +
 aiding-sensor estimator with online bias calibration. Sensor-agnostic in the API, specific in

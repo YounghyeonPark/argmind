@@ -121,10 +121,8 @@ divergence guard fails one.
 
 **Undecided, and each changes the work materially:**
 
-- **The second tier's floor.** Vision and audio inference do not run on the Cortex-M4F this
-  document declares. Either a second, higher floor is declared with its own budget and its own
-  verification, or the core tier's floor is abandoned — and abandoning it discards the link-map
-  figures, the QEMU execution and the freestanding gate, which is most of what is verified.
+- ~~**The second tier's floor.**~~ **Answered 2026-08-09, and the answer is that the floor does
+  not move.** See below.
 - **Hosted or embedded inference.** An interface to ONNX Runtime / TFLite keeps this library's
   size and auditability; embedding a runtime does not. DESIGN.md's own *What it is not* already
   chose "hosted", and reversing it is a decision rather than a drift.
@@ -133,6 +131,62 @@ divergence guard fails one.
 
 **Nothing on the camera/audio/speech path is built.** This section exists so the documents stop
 saying the scope is settled when it is not.
+
+### The floor does not move — measured, not argued
+
+The obvious reading of "camera, microphone, situation assessment, speech" is that the
+Cortex-M4F floor has to be abandoned for an SBC, which would discard the link-map figures, the
+QEMU execution and the freestanding gate. That reading is wrong, and what makes it wrong is a
+class of part that did not exist when the floor was set: **an MCU with an NPU.**
+
+- The **Cortex-M55** implements ARMv8.1-M with *native scalar and vector fp32*, plus scalar
+  fp64 ([Arm, Floating-point and MVE
+  support](https://developer.arm.com/documentation/101273/latest/Cortex-M55-Processor-level-components-and-system-registers---Reference-Material/Floating-point-and-MVE-support)).
+  It is therefore **strictly above** the declared ARMv7E-M + fp32 floor, not beside it.
+- **STM32N6** pairs that core at 800 MHz with ST's Neural-ART NPU at 1 GHz — ~300 MAC units,
+  **600 GOPS**, **3 TOPS/W** — 4.2 MB of contiguous SRAM, and a camera pipeline with MIPI CSI-2
+  and an ISP ([ST, STM32N6
+  series](https://www.st.com/en/microcontrollers-microprocessors/stm32n6-series.html);
+  [STM32N647Z0](https://www.st.com/en/microcontrollers-microprocessors/stm32n647z0.html)).
+  At ST's own efficiency figure the NPU at full rate is **0.2 W** — that is arithmetic on
+  600 GOPS ÷ 3 TOPS/W, the accelerator only, not a system power figure, and ST's parametric
+  pages resist automated fetching so it has not been checked against a datasheet table.
+
+**Measured here, same source, no changes:** the composed pipeline links to **7,876 bytes** of
+flash for Cortex-M55 against **10,396** for Cortex-M4F, at identical 3,264 bytes of static RAM —
+so moving up this way makes argmind *smaller*, not larger. And it **runs**: the whole self-check
+suite, all 4,650 checks, executes under QEMU's `mps3-an547` Cortex-M55 board and passes.
+`tests/test_target_run.py` is parametrised over both cores, so this is a test rather than a note;
+two mutants confirm the case is real (breaking the check-count bound fails both cores, and
+pointing the M55 case at the M4 board produces no result line at all).
+
+**What that buys and what it does not.** 600 GOPS with 4.2 MB of SRAM is enough for small vision
+— detection, pose, presence — and for audio keyword spotting. It is **not** enough for large
+speech recognition or for anything an "LLM" would be a fair description of, and the SRAM bounds
+model size hard. So the fork is not technical, it is about what the words mean:
+
+| what "situation assessment and speech" means | part class | power | this floor |
+|---|---|---|---|
+| react like an animal: see a person, hear a call, answer with a sound | MCU + NPU (STM32N6 class) | ~1 W order | **unchanged** |
+| converse: speech recognition, dialogue, natural TTS | SBC + accelerator, or Jetson | 10–25 W | abandoned |
+
+The second row is expensive in a way that is specific to a small legged robot, and the figures
+come from tomcat's own: its battery is **41.8 Wh** (83.6 W × 30 min) and its *standing* draw is
+about **14.9 W**, derived from the stated 168 minutes standing. Adding 10 W takes standing from
+168 min to **101** (−40 %); adding 25 W takes it to **63** (−63 %). Trotting is barely affected
+(30 → 26.8 → 23.1 min) because 83.6 W dominates. NVIDIA's Jetson Orin Nano runs 15 W, 25 W and
+an uncapped MAXN SUPER mode ([NVIDIA, JetPack 6.2 Super
+Mode](https://developer.nvidia.com/blog/nvidia-jetpack-6-2-brings-super-mode-to-nvidia-jetson-orin-nano-and-jetson-orin-nx-modules/));
+Hailo's M.2 module is 26 TOPS ([Hailo-8
+M.2](https://hailo.ai/products/ai-accelerators/hailo-8-m2-ai-acceleration-module/)) but Hailo's
+own page states no wattage, and the 2.5 W figure in circulation could not be traced to a primary
+source here, so it is **not** quoted as one. Raspberry Pi 5 idle figures of 2.2–2.7 W come from
+Raspberry Pi *forum* threads rather than a specification, and are flagged the same way.
+
+**So the recommendation is a second tier that is still an MCU**, with the core tier's floor left
+exactly where it is and the higher tier declaring Cortex-M55 + NPU. That keeps no-heap,
+no-exceptions, no-libm and the whole verification chain, and it is the only option of the three
+that has been *run* rather than reasoned about.
 
 ## The design driver
 

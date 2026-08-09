@@ -38,6 +38,22 @@ QEMU_DIR = CPP / "target" / "qemu"
 QEMU_ARGS = ["-M", "mps2-an386", "-cpu", "cortex-m4", "-nographic",
              "-semihosting-config", "enable=on,target=native"]
 
+#: The cores the self-check suite is executed on, as (label, compile flags, QEMU machine
+#: flags). `cortex-m4` is the declared floor and the one every size figure is quoted for.
+#:
+#: `cortex-m55` is here because the scope widened on 2026-08-09 toward camera and audio
+#: work, and the obvious reading was that the floor would have to move up to an SBC. It
+#: does not: the M55 is ARMv8.1-M with native scalar and vector fp32
+#: (https://developer.arm.com/documentation/101273/latest/), so it is strictly ABOVE the
+#: declared ARMv7E-M + fp32 floor, and it is the core in parts that pair it with an NPU
+#: and a camera pipeline. Running the suite there is what turns "should work" into "does".
+CORES = [
+    ("cortex-m4", ["-mcpu=cortex-m4", "-mfpu=fpv4-sp-d16", "-mfloat-abi=hard"],
+     ["-M", "mps2-an386", "-cpu", "cortex-m4"]),
+    ("cortex-m55", ["-mcpu=cortex-m55", "-mfloat-abi=hard"],
+     ["-M", "mps3-an547", "-cpu", "cortex-m55"]),
+]
+
 TARGET_CFLAGS = ["-mcpu=cortex-m4", "-mfpu=fpv4-sp-d16", "-mfloat-abi=hard",
                  "-fno-math-errno", "-O2", "-ffunction-sections", "-fdata-sections"]
 
@@ -60,10 +76,20 @@ def _run(cmd, **kw):
     return subprocess.run([str(c) for c in cmd], capture_output=True, text=True, **kw)
 
 
-def build_image(tmp_path, extra_cflags=()):
+def _machine_available(emulator, machine):
+    """Skip rather than fail on a QEMU build without a board. Which machines ship varies
+    by packager, and an older build missing `mps3-an547` should not read as a code fault."""
+    listing = _run([emulator, "-machine", "help"]).stdout
+    return any(line.split()[:1] == [machine[1]] for line in listing.splitlines()
+               if line.strip())
+
+
+def build_image(tmp_path, extra_cflags=(), core_cflags=None):
     """Compile the self-check suite for the target and link it against the QEMU harness."""
     cxx, cc = _tool("g++"), _tool("gcc")
-    flags = [*TARGET_CFLAGS, *extra_cflags, "-I", str(CPP / "include")]
+    core = list(core_cflags) if core_cflags is not None else CORES[0][1]
+    rest = [f for f in TARGET_CFLAGS if not f.startswith(("-mcpu", "-mfpu", "-mfloat-abi"))]
+    flags = [*core, *rest, *extra_cflags, "-I", str(CPP / "include")]
     objs = []
     done = _run([cc, "-std=c99", *flags, "-c", QEMU_DIR / "startup.c",
                  "-o", tmp_path / "startup.o"])
@@ -77,9 +103,8 @@ def build_image(tmp_path, extra_cflags=()):
         objs.append(obj)
 
     elf = tmp_path / "selfcheck.elf"
-    done = _run([cxx, "-mcpu=cortex-m4", "-mfpu=fpv4-sp-d16", "-mfloat-abi=hard",
-                 "--specs=rdimon.specs", "--specs=nano.specs", "-Wl,--gc-sections",
-                 "-T", QEMU_DIR / "mps2.ld", *objs, "-o", elf])
+    done = _run([cxx, *core, "--specs=rdimon.specs", "--specs=nano.specs",
+                 "-Wl,--gc-sections", "-T", QEMU_DIR / "mps2.ld", *objs, "-o", elf])
     # The RWX warning is the linker noticing that this harness's script does not separate
     # code from data. It is a test image, not a product one.
     stderr = "\n".join(l for l in done.stderr.splitlines() if "RWX permissions" not in l)
@@ -87,16 +112,32 @@ def build_image(tmp_path, extra_cflags=()):
     return elf
 
 
-def run_image(emulator, elf, timeout=600):
-    done = _run([emulator, *QEMU_ARGS, "-kernel", elf], timeout=timeout)
+def run_image(emulator, elf, timeout=600, machine=None):
+    args = list(QEMU_ARGS) if machine is None else [
+        *machine, "-nographic", "-semihosting-config", "enable=on,target=native"]
+    done = _run([emulator, *args, "-kernel", elf], timeout=timeout)
     return done.stdout + done.stderr
 
 
-def test_the_self_checks_pass_on_a_cortex_m4(emulator, tmp_path):
-    """The whole suite, on the declared floor. Not a subset and not a smoke test: if the
-    two architectures disagreed anywhere -- AAPCS layout, single-precision FPU behaviour,
-    32-bit `size_t`, anything -- this is where it would show."""
-    out = run_image(emulator, build_image(tmp_path))
+@pytest.mark.parametrize("label,core_cflags,machine", CORES, ids=[c[0] for c in CORES])
+def test_the_self_checks_pass_on_the_target(emulator, tmp_path, label, core_cflags,
+                                            machine):
+    """The whole suite, on the declared floor and on the core the widened scope points at.
+    Not a subset and not a smoke test: if the architectures disagreed anywhere -- AAPCS
+    layout, single-precision FPU behaviour, 32-bit `size_t`, anything -- this is where it
+    would show.
+
+    The `cortex-m55` case is the evidence behind a scope decision, so it is a test rather
+    than a note. Widening toward camera and audio read like it must move the floor up to an
+    SBC; the M55 is ARMv8.1-M with native fp32, which is strictly above the declared floor,
+    and it is the core in parts that also carry an NPU and a camera pipeline. Measured at
+    the same time: the composed pipeline links to 7,876 bytes of flash there against
+    10,396 on the M4, at identical static RAM.
+    """
+    if not _machine_available(emulator, machine):
+        pytest.skip(f"this qemu-system-arm has no {machine[1]} machine")
+    out = run_image(emulator, build_image(tmp_path, core_cflags=core_cflags),
+                    machine=machine)
     m = re.search(r"(\d+) checks, (\d+) failures", out)
     assert m, f"the image produced no result line:\n{out[-3000:]}"
     checks, failures = int(m.group(1)), int(m.group(2))
@@ -169,9 +210,8 @@ def test_the_32_bit_overflow_guard_is_no_longer_an_equivalent_mutant(emulator, t
         assert done.returncode == 0, done.stderr
         objs.append(obj)
     elf = tmp_path / "mutant.elf"
-    done = _run([cxx, "-mcpu=cortex-m4", "-mfpu=fpv4-sp-d16", "-mfloat-abi=hard",
-                 "--specs=rdimon.specs", "--specs=nano.specs", "-Wl,--gc-sections",
-                 "-T", QEMU_DIR / "mps2.ld", *objs, "-o", elf])
+    done = _run([cxx, *CORES[0][1], "--specs=rdimon.specs", "--specs=nano.specs",
+                 "-Wl,--gc-sections", "-T", QEMU_DIR / "mps2.ld", *objs, "-o", elf])
     assert done.returncode == 0, done.stderr
 
     out = run_image(emulator, elf)
