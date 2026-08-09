@@ -2294,6 +2294,154 @@ void test_the_declared_pipeline_bounds_are_bounds_and_not_fantasies() {
 
 }  // namespace
 
+// -- is the Adapter contract actually model-agnostic? ------------------------------------
+//
+// `Guard` and `Pipeline` are templates over `Adapter`, and every name they use of it reads
+// generic: update, predict, state, load_state, reset, health, frozen, n_features, n_outputs,
+// state_size, scalar. Reading that is not proof. This is a SECOND adapter -- normalised LMS,
+// which is O(n) where RLS is O(n^2) and has **no covariance matrix at all** -- put through
+// both templates. The scope was widened on 2026-08-09 and this is the measurement the
+// widening rests on: the framework is the reusable part, and the adapter is the narrow one.
+
+template <typename T, int N, int M = 1>
+class ProbeNlms {
+public:
+    using scalar = T;
+    static constexpr int n_features = N;
+    static constexpr int n_outputs = M;
+    /// Theta only. A third of RLS's state at n=6, and a different SHAPE, not just a size.
+    static constexpr int state_size = N * M;
+
+    ProbeNlms() : mu_(T(0.5)), eps_(T(1e-6)) { reset(); }
+    ProbeNlms(T mu, T eps) : mu_(mu), eps_(eps) { reset(); }
+
+    bool valid() const { return mu_ > T(0) && mu_ <= T(2) && eps_ > T(0); }
+    void reset() { for (int i = 0; i < state_size; ++i) state_[i] = T(0); }
+    const T* state() const { return state_; }
+    T* state_mutable() { return state_; }
+    void load_state(const T* src) { for (int i = 0; i < state_size; ++i) state_[i] = src[i]; }
+    bool frozen() const { return false; }
+
+    void predict(const T* x, T* out) const {
+        for (int j = 0; j < M; ++j) {
+            T acc = T(0);
+            for (int i = 0; i < N; ++i) acc += x[i] * state_[i * M + j];
+            out[j] = acc;
+        }
+    }
+
+    /// **The leak.** `health` is two covariance scalars, and this adapter has no covariance.
+    /// There is nothing honest to put here, so it reports zero -- see the test below for what
+    /// that does to a guard.
+    void health(double* p_trace, double* p_min_diag) const {
+        *p_trace = 0.0;
+        *p_min_diag = 0.0;
+    }
+
+    argmind::Report<T, M> update(const T* x, const T* y) {
+        argmind::Report<T, M> r;
+        T power = eps_;
+        for (int i = 0; i < N; ++i) power += x[i] * x[i];
+        predict(x, r.residual);
+        for (int j = 0; j < M; ++j) r.residual[j] = y[j] - r.residual[j];
+        const T g = mu_ / power;
+        for (int i = 0; i < N; ++i)
+            for (int j = 0; j < M; ++j) state_[i * M + j] += g * x[i] * r.residual[j];
+        predict(x, r.residual_post);
+        for (int j = 0; j < M; ++j) r.residual_post[j] = y[j] - r.residual_post[j];
+        r.applied = true;
+        r.reason = argmind::Reason::None;
+        r.residual_norm = 0.0;
+        r.residual_post_norm = 0.0;
+        r.gain_norm = static_cast<double>(g);
+        health(&r.p_trace, &r.p_min_diag);
+        return r;
+    }
+
+private:
+    T mu_, eps_;
+    T state_[state_size];
+};
+
+void test_the_guard_and_pipeline_hold_an_adapter_that_is_not_rls() {
+    using Nlms = ProbeNlms<float, 6, 1>;
+    using GuardedNlms = argmind::Guard<Nlms, 4, 4>;
+
+    // That these two instantiate at all is most of the claim: a different algorithm, a
+    // different state shape, no covariance, and neither template needed changing.
+    GuardedNlms g{Nlms(0.5f, 1e-6f), 5, 0};
+    CHECK(sizeof(GuardedNlms) > 0);
+
+    // And the machinery scales DOWN with the smaller model rather than costing a fixed price:
+    // the checkpoint ring is Depth * state, so a sixth of the state is a much smaller guard.
+    CHECK(sizeof(GuardedNlms) < sizeof(argmind::Guard<argmind::Rls<float, 6, 1>, 4, 4>));
+    CHECK(Nlms::state_size == 6);
+    CHECK(argmind::Rls<float, 6, 1>::state_size == 42);
+
+    // It has to actually learn through the guard, or the instantiation proved only that it
+    // compiles. y = 3*x0 - 2*x1 exactly, from a standing start.
+    float x[6], y[1], out[1];
+    for (int k = 0; k < 600; ++k) {
+        for (int i = 0; i < 6; ++i) x[i] = float((k * 7 + i * 13) % 11) - 5.0f;
+        y[0] = 3.0f * x[0] - 2.0f * x[1];
+        g.update(x, y);
+    }
+    for (int i = 0; i < 6; ++i) x[i] = float((3 * 7 + i * 13) % 11) - 5.0f;
+    g.predict(x, out);
+    const float want = 3.0f * x[0] - 2.0f * x[1];
+    CHECK(out[0] > want - 0.05f && out[0] < want + 0.05f);
+}
+
+void test_a_covariance_check_on_a_covariance_free_adapter_fails_both_ways() {
+    // The contract is model-agnostic EXCEPT for `health`, which is two covariance scalars.
+    // `Field::PTrace` and `Field::PMinDiag` are two of the guard's five checkable fields, so
+    // an adapter without a covariance inherits two checks that cannot mean anything. Both
+    // directions are broken, and they are broken differently -- which is why this is pinned
+    // rather than described.
+    using Nlms = ProbeNlms<float, 6, 1>;
+    float x[6], y[1];
+
+    // Upper bound: DEAD. 0.0 <= 1e4 forever, so the check is configured, reports healthy on
+    // every sample, and can never fire. A check that cannot fail is not a check.
+    {
+        argmind::Guard<Nlms, 4, 4> g{Nlms(0.5f, 1e-6f), 5, 0};
+        CHECK(g.add_bound(argmind::Bound::at_most(argmind::Field::PTrace, 1e4)));
+        bool tripped = false;
+        for (int k = 0; k < 400; ++k) {
+            for (int i = 0; i < 6; ++i) x[i] = float((k * 7 + i * 13) % 11) - 5.0f;
+            y[0] = 3.0f * x[0] - 2.0f * x[1] + (k > 200 ? 1000.0f : 0.0f);
+            if (g.update(x, y).tripped) tripped = true;
+        }
+        CHECK(!tripped);           // ...not because the adapter is healthy
+        CHECK(!g.frozen());        // ...but because the quantity is constant zero
+    }
+
+    // Lower bound: FATAL. The same sanity bound that is reasonable on RLS -- "the covariance
+    // has not collapsed to nothing" -- trips on the first update and freezes the adapter for
+    // the rest of the run.
+    {
+        argmind::Guard<Nlms, 4, 4> g{Nlms(0.5f, 1e-6f), 5, 0};
+        CHECK(g.add_bound(argmind::Bound::at_least(argmind::Field::PTrace, 1e-9)));
+        for (int i = 0; i < 6; ++i) x[i] = 1.0f;
+        y[0] = 1.0f;
+        CHECK(g.update(x, y).tripped);
+        CHECK(g.frozen());
+    }
+
+    // The control: the identical pair of bounds on RLS does neither. So it is the adapter's
+    // missing covariance and not the bounds themselves.
+    {
+        argmind::Guard<argmind::Rls<float, 6, 1>, 4, 4> g{
+            argmind::Rls<float, 6, 1>(0.98f, 100.0f), 5, 0};
+        CHECK(g.add_bound(argmind::Bound::at_most(argmind::Field::PTrace, 1e4)));
+        CHECK(g.add_bound(argmind::Bound::at_least(argmind::Field::PTrace, 1e-9)));
+        for (int i = 0; i < 6; ++i) x[i] = 1.0f;
+        y[0] = 1.0f;
+        CHECK(!g.update(x, y).tripped);
+        CHECK(!g.frozen());
+    }
+}
+
 int main() {
     test_finiteness_predicates();
     test_row_major_matches_the_declared_layout();
@@ -2376,6 +2524,9 @@ int main() {
     test_the_freshness_gate_costs_nothing_where_it_cannot_help();
     test_the_declared_pipeline_bounds_are_bounds_and_not_fantasies();
     test_the_declared_ring_memory_matches_the_shape();
+
+    test_the_guard_and_pipeline_hold_an_adapter_that_is_not_rls();
+    test_a_covariance_check_on_a_covariance_free_adapter_fails_both_ways();
 
     printf("%d checks, %d failures\n", checks, failures);
     return failures == 0 ? 0 : 1;

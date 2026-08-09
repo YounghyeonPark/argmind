@@ -57,6 +57,54 @@ Naming these now because a sensor-agnostic framework drifts into "everything" ot
   that the phenomenon "requir[es] dedicated compensation models, not a scalar correction".
   The favourable half of a sentence was quoted and the unfavourable half was not.
 
+## Scope widened, 2026-08-09
+
+Everything above describes the library as built. **The owner reopened the scope on 2026-08-09**
+for a target application needing camera and microphone input, situation assessment, inference,
+actuator output and speech. The concern was raised that a linear model does none of that and
+that the power cost of a perception board is severe on a small legged robot; the decision was
+made with that stated, so it stands.
+
+**The framework survives; the adapter is the narrow part, and that is measured.** A second
+adapter — normalised LMS, O(n), **no covariance matrix at all**, state `N*M` rather than
+`N*M + N*N` — passes through `Guard` and `Pipeline` with **no change to either template**,
+compiling clean at `-Wall -Wextra` on the host and for Cortex-M4F freestanding, learning
+correctly through the guard, and shrinking it to 472 bytes from RLS's 1,208 at the same depth.
+So `Stream`, `Aligner`, `FrameMap`, `Guard`, `Pipeline` and the record format are the reusable
+contribution, and it was never RLS that made them worth having. `cpp/tests/test_core.cpp`
+carries the probe so this is protected, not asserted.
+
+**One leak, and it has to be closed first.** `health()` hands out two *covariance* scalars, and
+`Field::PTrace`/`Field::PMinDiag` are two of the guard's five checkable fields. An adapter with
+no covariance reports zeros, and the same bound then fails in **both** directions:
+
+| bound | on RLS | on a covariance-free adapter |
+|---|---|---|
+| `at_most(PTrace, 1e4)` | a real ceiling | **dead** — 0.0 ≤ 1e4 forever; configured, always healthy, cannot fire |
+| `at_least(PTrace, 1e-9)` | a sane sanity check | **fatal** — trips on the first update and freezes |
+
+Silently dead one way and instantly bricking the other is worse than either alone, and the type
+system permits both. The fix is for health to become an **adapter-declared set** — each adapter
+names the scalars it can report and the guard checks only those — rather than a fixed pair
+borrowed from one algorithm. Recorded here as the first item of the widening rather than
+half-done, in keeping with how the guard's redundant ring scalars and the `Pipeline` adapter
+temporary are recorded.
+
+**Undecided, and each changes the work materially:**
+
+- **The second tier's floor.** Vision and audio inference do not run on the Cortex-M4F this
+  document declares. Either a second, higher floor is declared with its own budget and its own
+  verification, or the core tier's floor is abandoned — and abandoning it discards the link-map
+  figures, the QEMU execution and the freestanding gate, which is most of what is verified.
+- **Hosted or embedded inference.** An interface to ONNX Runtime / TFLite keeps this library's
+  size and auditability; embedding a runtime does not. DESIGN.md's own *What it is not* already
+  chose "hosted", and reversing it is a decision rather than a drift.
+- **One library or two.** Sharing the `Adapter` contract across tiers is the argument for one;
+  the core tier's no-heap/no-exceptions/no-libm constraints are the argument for two.
+
+**Nothing on the camera/audio/speech path is built.** This section exists so the documents stop
+saying the scope is settled when it is not.
+
 ## The design driver
 
 The framework is sensor-agnostic, but designing against nothing produces an API that fits

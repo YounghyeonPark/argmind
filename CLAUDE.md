@@ -90,23 +90,55 @@ Windows, PowerShell primary; Python 3.14; git repo. `python -m pytest` before qu
 number. A tracked pre-commit hook in `.githooks/` runs the suite and blocks on failure —
 install once per clone with `git config core.hooksPath .githooks`.
 
-## Status — settled 2026-08-08
+## Status — scope widened 2026-08-09, and most of the widening is not built
 
-**Requirements are settled. Building has started.** The four scope decisions, made explicitly
-and not to be re-litigated without a reason:
+**The 2026-08-08 scope was deliberately reopened by the project owner on 2026-08-09.** The old
+table said the decisions were "not to be re-litigated without a reason"; the reason given is a
+target application that needs **camera and microphone input, situation assessment, inference,
+actuator output and speech output**. A 24-byte linear model does not do any of that, and saying
+so did not change the decision, so the decision stands and the scope moves.
 
-| axis | decision |
-|---|---|
-| platform | **embedded / edge** |
-| learning | **on-device online adaptation** — not offline training |
-| sensors | **sensor-agnostic**, general framework |
-| deliverable | **a library**, not an application |
-| language | **C++ core behind a C ABI**, optimised for speed (see DESIGN.md) |
-| target floor | **Cortex-M4F class** — ARMv7E-M with an fp32 FPU; own matrix types, no Eigen |
+| axis | 2026-08-08 | now |
+|---|---|---|
+| platform | embedded / edge | **embedded / edge *and* an SBC-class tier** — two floors, not one |
+| learning | on-device online adaptation | unchanged, **but no longer one algorithm** |
+| model class | (unstated — the defect below) | **was RLS only; must admit others, including hosted inference** |
+| sensors | sensor-agnostic | unchanged, and now genuinely tested against it |
+| deliverable | a library, not an application | unchanged — **speech and situation logic are a caller's, not this library's** |
+| language | C++ core behind a C ABI | unchanged for the core tier |
+| target floor | Cortex-M4F class | **unchanged for the core tier**; the new tier has its own, undecided |
 
-The design driver, chosen so the API is shaped against something real: an inertial + aiding-sensor
-estimator with online bias calibration. Sensor-agnostic in the API, specific in what it must
-handle.
+**What survives is most of it, and that is measured rather than hoped.** `Guard` and `Pipeline`
+are templates over `Adapter`, and the contract they require is small — `update`, `predict`,
+`state`, `load_state`, `reset`, `health`, `frozen`, plus `n_features`/`n_outputs`/`state_size`/
+`scalar`. A second adapter with a **different algorithm and no covariance matrix at all**
+(normalised LMS, O(n) against RLS's O(n²), state `N*M` rather than `N*M + N*N`) goes through
+both templates **unchanged, compiling clean at `-Wall -Wextra` on the host and on Cortex-M4F
+freestanding**, learns correctly through the guard, and the guard shrinks with it: 472 bytes
+against RLS's 1,208 at the same depth. `cpp/tests/test_core.cpp` carries it, so the claim the
+widening rests on is protected rather than asserted.
+
+**The one place the contract is not model-agnostic, found by that probe.** `health()` is two
+*covariance* scalars, and `Field::PTrace`/`Field::PMinDiag` are two of the guard's five
+checkable fields. An adapter without a covariance must report zeros, and then the same bound
+breaks in both directions: `at_most(PTrace, 1e4)` is **dead** — configured, reporting healthy
+on every sample, unable ever to fire — and `at_least(PTrace, 1e-9)`, a reasonable sanity bound
+on RLS, **trips on the first update and freezes the adapter**. Both are pinned by a test with
+an RLS control, and both mutants were checked: making `health` report anything real kills four
+assertions. Fixing this — health as an adapter-declared set rather than a fixed pair — is the
+first item of the widening, not a later tidy-up.
+
+**Also exposed by the reopening: the model class was never written down.** "Linear in the
+parameters" appeared nowhere in the repository while four bullets of DESIGN.md's *What it is
+not* explained that it is not a CNN. That is fixed; see the first section of this file.
+
+**Not yet decided, and each changes the work:** what the second tier's floor is, whether
+inference is *hosted* (an interface to ONNX Runtime/TFLite) or *embedded*, and whether the two
+tiers ship as one library or two. Nothing about the camera/audio/speech path is built.
+
+The original design driver, still the one the core tier's API is shaped against: an inertial +
+aiding-sensor estimator with online bias calibration. Sensor-agnostic in the API, specific in
+what it must handle.
 
 **Built:** `argmind/stream.py` (fixed-capacity ring buffers, counted drops, monotonic time
 enforced at the source), `argmind/align.py` (four explicit alignment policies, signed staleness,
