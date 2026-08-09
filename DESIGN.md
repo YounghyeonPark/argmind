@@ -1373,14 +1373,31 @@ the library" — what reaches flash depends on which entry points a caller touch
 `cpp/target/usage.c` is a firmware-shaped caller in four configurations, linked separately
 against `cpp/target/cortex-m4.ld`. Cortex-M4F, `-Os`, newlib-nano:
 
-| configuration | flash | of which argmind | libc/libgcc | static RAM |
-|---|---|---|---|---|
-| bare RLS f32 6×1 | 2,340 | 1,258 | 916 | 272 |
-| + guard | 6,144 | 3,526 | 2,264 | 1,296 |
-| + record format | 6,376 | 3,804 | 2,264 | 1,972 |
-| full composed pipeline | 10,380 | 7,374 | 2,424 | 3,264 |
+| configuration | flash | of which argmind | the caller | libc/libgcc | static RAM |
+|---|---|---|---|---|---|
+| bare RLS f32 6×1 | 2,340 | 1,258 | 160 | 922 | 272 |
+| + guard | 6,128 | 3,510 | 344 | 2,274 | 1,296 |
+| + record format | 6,360 | 3,788 | 304 | 2,268 | 1,972 |
+| full composed pipeline | 10,396 | 7,390 | 564 | 2,442 | 3,264 |
 
-Two corrections from an audit are folded into that table. The guarded row was 5,936 because
+**That table went stale twice before anyone noticed, which is why it now carries a `caller`
+column that makes the rows sum to the total.** It was exactly right when written at `1639c3c`
+— 2,340 / 6,144 / 6,376 / 10,380 reproduce from that tree byte for byte. Then `47a4dd2` fixed
+the `Pipeline::step` output bug and the composed row grew 40 bytes, and `17cff2b` replaced
+construction-by-assignment with placement new and moved three rows by 16. Neither commit
+re-measured, and a table nobody re-runs is a table that drifts. The rebuild is a loop over the
+six commits since, so the attribution above is measured rather than reasoned: `2340 6144 6376
+10380` at `1639c3c`, `…10420` from `47a4dd2` through `49bb77e`, `2340 6128 6360 10396` now.
+
+The `argmind` column moved by exactly what the total moved by in all four rows, which is what
+says the split is being measured and not just the total. It is text plus rodata of the sections
+the map attributes to `abi.o`, summed **after** the "Linker script and memory map" line — the
+first attempt summed the whole map and read 41,072 bytes for a 2,340-byte image, because the
+discarded-input-section list sits above that line and `--gc-sections` discards a great deal.
+The caller's code lives in `.am_entry`, not `.text`, so a section list that names only the
+usual four attributes 24 bytes to a caller that contributes 160.
+
+Two corrections from an earlier audit are also folded into that table. The guarded row was 5,936 because
 `usage.c` never called `freeze`, `thaw`, `reset`, `counters` or `frozen_by` — so `--gc-sections`
 stripped six entry points out of the configuration commented as "what the field should run",
 while DESIGN.md's own `on_frozen` policy and its "a silent guard is an undebuggable one" both

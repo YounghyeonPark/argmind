@@ -498,11 +498,20 @@ cannot:
 
 **Measured sizes, Cortex-M4F, `-Os`, newlib-nano, from the map.** `--gc-sections` means there
 is no one "size of the library", so four firmware-shaped configurations are linked separately:
-bare RLS **2,340 B** flash / 272 B RAM; guarded **6,144 / 1,296**; plus records **6,376 /
-1,972**; full composed pipeline **10,380 / 3,264** — the guarded row grew 208 bytes once an
+bare RLS **2,340 B** flash / 272 B RAM; guarded **6,128 / 1,296**; plus records **6,360 /
+1,972**; full composed pipeline **10,396 / 3,264** — the guarded row grew 208 bytes once an
 audit noticed `usage.c` never called freeze/thaw/reset/counters/frozen_by, so `--gc-sections`
 had stripped six entry points out of the configuration called "what the field should run" — **32% of the 32 KB flash budget and 40% of
-the 8 KB RAM**. Of the full pipeline's flash, 7,374 B is argmind and 2,424 B is libc/libgcc.
+the 8 KB RAM**. Of the full pipeline's flash, 7,390 B is argmind and 2,442 B is libc/libgcc.
+
+**Three of those four figures were stale until 2026-08-09 and nothing caught it**, because the
+test bounds the numbers against the *budget* rather than pinning them — deliberately, so a
+compiler upgrade is not a failing test, but the cost is that the table only stays true if
+somebody re-runs it. It went out at `47a4dd2` (the `Pipeline::step` fix, +40 on the composed
+row) and again at `17cff2b` (placement new, ±16 on three rows). Rebuilding all six commits
+since attributes both exactly, and DESIGN.md records the method — including that summing the
+whole link map, rather than only what follows "Linker script and memory map", reads 41,072
+bytes for a 2,340-byte image.
 
 **Every byte of that RAM is the caller's**: the library defines zero `.data` and zero `.bss`,
 72 B of `.rodata`. The storage-is-the-caller's design, confirmed and now tested.
