@@ -258,6 +258,28 @@ public:
         rearm();
     }
 
+    /// Construct the wrapped adapter **in place** from its own constructor arguments,
+    /// instead of copying one the caller already built.
+    ///
+    /// The copying constructor above needs a whole `Adapter` alive on the stack at the
+    /// same time as this one. At six features that is an annoyance; at a hundred and
+    /// twenty-eight -- the width a network head has -- it is fatal. Measured before this
+    /// existed: `am_pipe_g_f32_128_1_init` wanted **397,192 bytes of stack**, more than
+    /// the 332,392-byte object it was building, because an `Rls` temporary and a `Guard`
+    /// temporary were both live before the copy. This is the residue of the placement-new
+    /// fix, which `argmind.h` recorded as "one adapter-sized temporary ... recorded here
+    /// rather than done"; adding a wide shape is what made it urgent.
+    ///
+    /// `static_cast<A&&>` rather than `std::forward` so that `<utility>` is not needed.
+    template <typename... A>
+    explicit Guard(in_place_adapter_t, uint32_t checkpoint_every, uint32_t recover_after,
+                   A&&... args)
+        : adapter_(static_cast<A&&>(args)...),
+          checkpoint_every_(checkpoint_every ? checkpoint_every : 1),
+          recover_after_(recover_after) {
+        rearm();
+    }
+
     // -- configuration -----------------------------------------------------
     //
     // Checks are added after construction rather than passed in, because a variadic

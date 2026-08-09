@@ -330,6 +330,21 @@ public:
     Pipeline(const Adapter& adapter, const Aligner& aligner, const Map& map, int reference)
         : adapter_(adapter), aligner_(aligner), map_(map), reference_(reference) {}
 
+    /// Construct the adapter **in place** from its own arguments. See the matching
+    /// constructor in `guard.hpp` for why: copying needs a whole adapter of stack at the
+    /// same time as the object being built, and at a network head's width that exceeded
+    /// the object itself -- 397,192 bytes of frame for a 332,392-byte pipeline.
+    ///
+    /// The two nest, so a guarded pipeline is built with no temporary at any level:
+    ///
+    ///     new (obj) Pipe(in_place_adapter, aligner, map, reference,
+    ///                    in_place_adapter, checkpoint_every, recover_after, lambda, p0);
+    template <typename... A>
+    Pipeline(in_place_adapter_t, const Aligner& aligner, const Map& map, int reference,
+             A&&... args)
+        : adapter_(static_cast<A&&>(args)...),
+          aligner_(aligner), map_(map), reference_(reference) {}
+
     // -- configuration ------------------------------------------------------
 
     /// Frames whose worst staleness exceeds `limit` do not adapt. They are still counted and

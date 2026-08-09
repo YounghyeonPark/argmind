@@ -2091,23 +2091,42 @@ RAM, so what matters is the sum, and the header is what someone sizes storage fr
 
 | shape | object (declared bound) | `init` frame | sum | against the 8 KB floor |
 |---|---|---|---|---|
-| `f32_6_1` | 1,792 | 1,536 | **3,328** | fits, 4,864 to spare |
-| `f32_6_3` | 2,048 | 1,824 | **3,872** | fits |
-| `f32_12_1` | 4,096 | 4,288 | **8,384** | **does not fit** |
+| `f32_6_1` | 1,792 | 1,536 → **152** | 3,328 → **1,944** | fits |
+| `f32_6_3` | 2,048 | 1,824 → **144** | 3,872 → **2,192** | fits |
+| `f32_12_1` | 4,096 | 4,288 → **168** | 8,384 → **4,264** | ~~does not fit~~ **fits** |
 
-**The 8 KB floor is a six-feature floor, and it had been read as a property of the library.**
-At twelve features the composed pipeline cannot be constructed on a device with the declared
-minimum RAM — and that is before a single ring buffer, flash slot or restore buffer, which a
-real caller also owns. Linking one confirms the gap is not marginal: a twelve-feature composed
-pipeline with two sensors and two state-sized flash slots takes **7,048 bytes of static RAM**
-against the six-feature configuration's 3,264, so with its `init` frame it wants 11,336 of an
-8,192-byte budget.
+**This section first concluded "the 8 KB floor is a six-feature floor". That was withdrawn the
+same day, and the cause was not the shape.** `Pipeline` and `Guard` each took their adapter
+*by value*, so `init` needed a whole `Rls` and a whole `Guard` alive on the stack before
+copying them into the caller's bytes. `argmind.h` had recorded that residue as "one
+adapter-sized temporary … recorded here rather than done" after the placement-new fix, and at
+six features it was an annoyance nobody had priced.
 
-Nothing is broken by this. The shapes the floor was declared for fit, and the answer for a
-wider one is a part with more RAM rather than a change here — on an STM32G474's 128 KB the
-twelve-feature configuration is 5.5%. What was wrong was the claim's *scope*, and the negative
-result is now pinned by an assertion that fails if `f32_12_1` ever starts fitting, so the
-floor's reach cannot widen silently either.
+**Adding the network-head shape is what made it visible, and the number is absurd:
+`am_pipe_g_f32_128_1_init` wanted 397,192 bytes of stack to build a 332,392-byte object.** An
+entry point that cannot be called on any plausible stack. Both constructors now take an
+`in_place_adapter_t` tag and build the adapter from *its own* arguments, nesting so a guarded
+pipeline is constructed with no temporary at any level; `Rls::params_valid(lambda, p0)` is
+split out so the ABI can refuse a bad configuration without constructing something to ask.
+
+| entry point | before | after |
+|---|---|---|
+| `am_pipe_g_f32_128_1_init` | 397,192 | **504** |
+| `am_pipe_g_f32_12_1_init` | 4,288 | **168** |
+| `am_pipe_g_f32_6_1_init` | 1,536 | **152** |
+| `am_guard_f32_*_init` | — | **32** |
+
+788× at the wide shape and 25× at twelve, and **every shape benefited, not just the one that
+exposed it**. `MAX_INIT_STACK` is tightened from 5 KB to 1 KB so the copy cannot creep back.
+
+The negative result that remains is a tier boundary rather than a defect: `f32_128_1`'s
+*object* is 332 KB because RLS carries an N×N covariance, so it does not belong on this floor
+and is not offered there. The test pins that, and separately asserts the reason is the object
+and not the frame — otherwise the sentence would be wrong even while the assertion passed.
+
+**The test is what forced the correction.** Its failure message read "That is good news, but
+DESIGN.md says it does not; update the claim rather than this test", which is exactly what
+happened.
 
 One thing the same measurement makes clear, and it is the opposite of what the RAM does:
 **flash is flat across these shapes while RAM grows as n².** The composed pipeline links to

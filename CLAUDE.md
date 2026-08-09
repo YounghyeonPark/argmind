@@ -741,13 +741,22 @@ adapter by value — recorded, not half-done. Both figures are now bounded by a 
 
 **And the two halves had to be added up, which nothing did until a second hardware question.**
 The object and the frame that constructs it share the same RAM, so the integrator's figure is
-`AM_PIPE_G_*_MAX_BYTES` + the `init` frame: **3,328 at `f32_6_1`, 3,872 at `f32_6_3`, 8,384 at
-`f32_12_1`**. So **the declared 8 KB floor is a six-feature floor** — at twelve the composed
-pipeline cannot be constructed on it, before any ring, slot or restore buffer (a real
-twelve-feature link takes 7,048 B of static RAM against 3,264). Nothing is broken: the shapes
-the floor was declared for fit, and a wider one wants a bigger part. What was wrong was the
-claim's *scope*. The negative is pinned by an assertion that fails if `f32_12_1` starts
-fitting, and both assertions were checked against mutants rather than trusted for passing.
+`AM_PIPE_G_*_MAX_BYTES` + the `init` frame. That first read **8,384 at `f32_12_1`** and this
+file concluded "the declared 8 KB floor is a six-feature floor". **Withdrawn the same day: the
+cause was the by-value adapter, not the shape.** `Pipeline` and `Guard` each copied an adapter
+the caller had already built, the residue `argmind.h` recorded as "one adapter-sized temporary
+… recorded rather than done". Adding the 128-wide network-head shape made it absurd —
+`am_pipe_g_f32_128_1_init` wanted **397,192 bytes of stack to build a 332,392-byte object**, an
+entry point callable on nothing. Both constructors now take an `in_place_adapter_t` tag and
+build the adapter from its own arguments, nesting so a guarded pipeline has no temporary at any
+level, with `Rls::params_valid()` split out so the ABI can refuse a bad configuration without
+constructing something to ask. Measured: **397,192 → 504**, `f32_12_1` **4,288 → 168**,
+`f32_6_1` **1,536 → 152**, guards **32**. Every shape benefited, not just the one that exposed
+it, and `f32_12_1` now fits the floor at 4,264. `MAX_INIT_STACK` tightened 5 KB → 1 KB. **The
+test forced the correction** — its failure message said "update the claim rather than this
+test". What remains is a tier boundary, not a defect: `f32_128_1`'s *object* is 332 KB, so it is
+not offered on this floor, and the test separately asserts the reason is the object and not the
+frame.
 Also measured, and the opposite of the RAM: **flash is flat across those shapes** — 10,404 /
 10,664 / 10,380, the twelve-feature image being the smallest — because compile-time dimensions
 change how much the loops iterate, not how much code exists. Size the RAM, not the flash.

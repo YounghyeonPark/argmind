@@ -132,10 +132,20 @@ public:
         reset();
     }
 
-    bool valid() const {
-        return lambda_ > T(0) && lambda_ <= T(1) && p0_ > T(0) &&
-               is_finite(lambda_) && is_finite(p0_);
+    /// Whether these parameters would produce a usable adapter, **without building one**.
+    ///
+    /// Split out from `valid()` so the C ABI can refuse a bad configuration before it
+    /// constructs anything. It used to construct an `Rls`, ask it, and then copy it into
+    /// the caller's storage; at a hundred and twenty-eight features that temporary is
+    /// 66 KB of stack and the `Guard` built around it another 332 KB. One rule with two
+    /// callers rather than the same refusal written twice, which this project has been
+    /// bitten by before.
+    static bool params_valid(T lambda, T p0) {
+        return lambda > T(0) && lambda <= T(1) && p0 > T(0) &&
+               is_finite(lambda) && is_finite(p0);
     }
+
+    bool valid() const { return params_valid(lambda_, p0_); }
 
     T lambda() const { return lambda_; }
     T p0() const { return p0_; }

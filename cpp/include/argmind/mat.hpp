@@ -29,6 +29,18 @@
 
 namespace argmind {
 
+/// Tag selecting the constructor that builds a wrapped adapter **in place** from its own
+/// arguments rather than copying one the caller already made. Lives here because both
+/// `Guard` and `Pipeline` need it and neither includes the other.
+///
+/// It exists for a measured reason: copying costs a whole adapter of stack, which at six
+/// features is untidy and at a hundred and twenty-eight is more stack than the object is
+/// large. See the constructor comments in `guard.hpp`.
+struct in_place_adapter_t {
+    explicit in_place_adapter_t() = default;
+};
+inline constexpr in_place_adapter_t in_place_adapter{};
+
 // -- IEEE-754 predicates without libm ---------------------------------------
 //
 // A bit-pattern test rather than <cmath>: this header must be usable freestanding,

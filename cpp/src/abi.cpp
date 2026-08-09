@@ -196,10 +196,11 @@ bool valid_field(int32_t field) {
                                           uint32_t recover_after) {             \
         if (!obj) return AM_ERR_NULL;                                           \
         if (obj_bytes < sizeof(Guard_##NAME)) return AM_ERR_TOO_SMALL;          \
-        argmind::Rls<SCALAR, N, M> inner(lambda, p0);                           \
-        if (!inner.valid()) return AM_ERR_CONFIG;                               \
-        new (obj) Guard_##NAME(inner, checkpoint_every, recover_after);          \
-        return AM_OK;                                                           \
+        if (!argmind::Rls<SCALAR, N, M>::params_valid(lambda, p0))      \
+            return AM_ERR_CONFIG;                                       \
+        new (obj) Guard_##NAME(argmind::in_place_adapter, checkpoint_every,\
+                               recover_after, lambda, p0);              \
+        return AM_OK;                                                   \
     }                                                                           \
     extern "C" int am_guard_##NAME##_add_bound(void* obj, int32_t field,        \
                                                int32_t has_lo, double lo,       \
@@ -663,15 +664,16 @@ bool valid_policy(int32_t p) {
         if (!obj) return AM_ERR_NULL;                                           \
         if (obj_bytes < sizeof(Pipe_##NAME)) return AM_ERR_TOO_SMALL;            \
         if (!valid_policy(policy)) return AM_ERR_CONFIG;                        \
-        argmind::Rls<SCALAR, N, M> inner(lambda, p0);                           \
-        if (!inner.valid()) return AM_ERR_CONFIG;                               \
-        const argmind::Aligner al(static_cast<argmind::Policy>(policy),          \
-                                  max_stale_s);                                 \
-        new (obj) Pipe_##NAME(Adapter_##NAME(inner, checkpoint_every,            \
-                                             recover_after),                     \
-                              al, argmind::FrameMap<N, M>(), reference);         \
-        return AM_OK;                                                           \
-    }                                                                           \
+        if (!argmind::Rls<SCALAR, N, M>::params_valid(lambda, p0))      \
+            return AM_ERR_CONFIG;                                       \
+        const argmind::Aligner al(static_cast<argmind::Policy>(policy), \
+                                  max_stale_s);                         \
+        new (obj) Pipe_##NAME(argmind::in_place_adapter, al,            \
+                              argmind::FrameMap<N, M>(), reference,     \
+                              argmind::in_place_adapter, checkpoint_every,\
+                              recover_after, lambda, p0);               \
+        return AM_OK;                                                   \
+    }                                                                   \
     extern "C" int am_pipe_##NAME##_add_bound(void* obj, int32_t field,          \
                                               int32_t has_lo, double lo,         \
                                               int32_t has_hi, double hi) {      \
@@ -736,12 +738,13 @@ bool valid_policy(int32_t p) {
         if (!obj) return AM_ERR_NULL;                                           \
         if (obj_bytes < sizeof(Pipe_##NAME)) return AM_ERR_TOO_SMALL;            \
         if (!valid_policy(policy)) return AM_ERR_CONFIG;                        \
-        argmind::Rls<SCALAR, N, M> inner(lambda, p0);                           \
-        if (!inner.valid()) return AM_ERR_CONFIG;                               \
-        const argmind::Aligner al(static_cast<argmind::Policy>(policy),          \
-                                  max_stale_s);                                 \
-        new (obj) Pipe_##NAME(inner, al, argmind::FrameMap<N, M>(), reference);  \
-        return AM_OK;                                                           \
+        if (!argmind::Rls<SCALAR, N, M>::params_valid(lambda, p0))      \
+            return AM_ERR_CONFIG;                                       \
+        const argmind::Aligner al(static_cast<argmind::Policy>(policy), \
+                                  max_stale_s);                         \
+        new (obj) Pipe_##NAME(argmind::in_place_adapter, al,            \
+                              argmind::FrameMap<N, M>(), reference, lambda, p0);\
+        return AM_OK;                                                   \
     }                                                                           \
     AM_DEFINE_PIPE_COMMON(NAME, SCALAR, RING, Pipe_##NAME, MAX_BYTES)
 
@@ -753,5 +756,7 @@ AM_DEFINE_PIPE_GUARDED(g_f32_6_3, float, 6, 3, am_ring_f32,
                        AM_PIPE_G_F32_6_3_MAX_BYTES)
 AM_DEFINE_PIPE_GUARDED(g_f32_12_1, float, 12, 1, am_ring_f32,
                        AM_PIPE_G_F32_12_1_MAX_BYTES)
+AM_DEFINE_PIPE_GUARDED(g_f32_128_1, float, 128, 1, am_ring_f32,
+                       AM_PIPE_G_F32_128_1_MAX_BYTES)
 AM_DEFINE_PIPE_GUARDED(g_f64_6_1, double, 6, 1, am_ring_f64,
                        AM_PIPE_G_F64_6_1_MAX_BYTES)

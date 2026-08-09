@@ -29,21 +29,24 @@
  *   steady state    am_pipe_*_step        312 to 328 bytes
  *                   am_guard_*_update      88 to 104
  *                   am_rls_*_update        72 to 144
- *   initialisation  am_pipe_g_f32_6_1_init      1,536
- *                   am_pipe_g_f32_6_3_init      1,824
- *                   am_pipe_g_f64_6_1_init      2,584
- *                   am_pipe_g_f32_12_1_init     4,288
+ *   initialisation  am_pipe_g_*_init          144 to 504
+ *                   am_guard_*_init             32
  *
- * The hot path is small; **`init` is a transient spike and it has to fit**. Size the
- * stack for initialisation, or call `init` before anything else has grown it.
+ * **`init` is no longer a spike, and getting there took two goes.** It used to build
+ * the whole object as a temporary and copy it, costing `am_pipe_g_f32_12_1_init`
+ * 8,296 bytes — more than the 8 KB floor, so that entry point could not be called on
+ * the target this library names. Placement new fixed that and left one residue, which
+ * this comment recorded as "one adapter-sized temporary … recorded here rather than
+ * done": `Pipeline` and `Guard` each took their adapter BY VALUE, so a whole `Rls` and
+ * a whole `Guard` were alive on the stack before the copy.
  *
- * Those are the fixed figures. `init` used to build the whole object as a temporary
- * and copy it, which cost `am_pipe_g_f32_12_1_init` 8,296 bytes — more than the 8 KB
- * of RAM this library declares as its floor, so on the target it names, that entry
- * point could not be called at all. It constructs in the caller's bytes now. What is
- * left is one adapter-sized temporary, because `Pipeline`'s constructor takes its
- * adapter by value; removing that needs a default-constructible `Guard` and an
- * in-place configure, which is recorded here rather than done.
+ * Adding the 128-feature head shape made the residue absurd —
+ * `am_pipe_g_f32_128_1_init` wanted **397,192 bytes of stack to build a 332,392-byte
+ * object**. Both constructors now take an `in_place_adapter_t` tag and build the
+ * adapter from its own arguments, nesting so a guarded pipeline has no temporary at
+ * any level, and `Rls::params_valid()` lets this ABI refuse a bad configuration
+ * without constructing something to ask. Measured: 397,192 → 504 at 128 features,
+ * 4,288 → 168 at twelve, 1,536 → 152 at six. Every shape benefited.
  *
  * `tests/test_target_build.py` bounds all of it, so it cannot grow back quietly.
  *
@@ -559,6 +562,7 @@ AM_DECLARE_PIPE_BARE(f64_6_1, double, am_ring_f64)
 AM_DECLARE_PIPE_GUARDED(g_f32_6_1, float, am_ring_f32)
 AM_DECLARE_PIPE_GUARDED(g_f32_6_3, float, am_ring_f32)
 AM_DECLARE_PIPE_GUARDED(g_f32_12_1, float, am_ring_f32)
+AM_DECLARE_PIPE_GUARDED(g_f32_128_1, float, am_ring_f32)
 AM_DECLARE_PIPE_GUARDED(g_f64_6_1, double, am_ring_f64)
 
 /* Upper bounds, static-asserted in the implementation. A guarded pipeline is its
@@ -569,6 +573,20 @@ AM_DECLARE_PIPE_GUARDED(g_f64_6_1, double, am_ring_f64)
 #define AM_PIPE_G_F32_6_1_MAX_BYTES   1792
 #define AM_PIPE_G_F32_6_3_MAX_BYTES   2048
 #define AM_PIPE_G_F32_12_1_MAX_BYTES  4096
+
+/* The second tier's shape: a learnable HEAD on a frozen network, whose input is an
+ * embedding rather than a handful of sensor channels. Present because the scope widened
+ * on 2026-08-09 toward camera and audio work, where the integration point is the last
+ * layer -- the NPU runs the backbone forward-only and this adapts what follows it.
+ *
+ * **It is enormous next to the others, and that is RLS's n^2, not an accident.** State is
+ * `N*M + N*N`, so 128 features carry a 128x128 covariance, and the guard's ring multiplies
+ * it by `Depth`. Measured 332,392 bytes against the first tier's 1,792. It does NOT belong
+ * on the 8 KB floor and is not offered there; `--gc-sections` means a firmware that never
+ * touches it pays nothing. At 256 features the same arithmetic reaches 30% of an STM32N6's
+ * whole SRAM and at 512 it does not fit at all, which is the boundary to know before
+ * choosing a backbone's output width. */
+#define AM_PIPE_G_F32_128_1_MAX_BYTES 335872
 #define AM_PIPE_G_F64_6_1_MAX_BYTES   2816
 
 /* Six instantiations is a lot of code for a caller who wants one. Build with

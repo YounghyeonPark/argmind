@@ -168,7 +168,9 @@ def test_the_library_defines_no_writable_static_memory(cross, abi_object):
 #: a compiler upgrade does not fail the suite. The hot path is what runs forever; `init` is a
 #: transient spike that still has to fit inside the declared RAM.
 MAX_STEP_STACK = 512
-MAX_INIT_STACK = 5 * 1024
+#: Was 5 KB when `init` copied an adapter into place; the measured worst is now 504 B
+#: at the 128-feature shape and 168 at twelve. Tightened so the copy cannot creep back.
+MAX_INIT_STACK = 1024
 
 
 def _declared_object_bounds():
@@ -240,21 +242,33 @@ def test_the_stack_a_caller_must_provide_is_bounded(cross, tmp_path):
         assert frame, f"no init frame measured for {shape}; have {sorted(inits)}"
         fits[shape] = obj_bytes + frame
 
-    # The design driver's shape is what the floor was declared for, and it fits with room.
-    assert fits["f32_6_1"] <= RAM_BUDGET, (
-        f"the design driver's own shape no longer fits its declared floor: "
-        f"{fits['f32_6_1']} > {RAM_BUDGET}")
+    # **Every first-tier shape fits, and it did not always.** This assertion first read "the
+    # 8 KB floor is a six-feature floor", because `f32_12_1` came to 4,096 + 4,288 = 8,384
+    # against 8,192 and the twelve-feature pipeline could not be constructed on the declared
+    # minimum. That was the by-value adapter, not the shape: `Pipeline` and `Guard` each
+    # copied an adapter the caller had already built, so `init` needed a whole one of each
+    # alive on the stack. Constructing in place instead took `f32_12_1` from 4,288 bytes of
+    # frame to 168 and the sum to 4,264, and the claim was withdrawn rather than the test
+    # loosened -- which is what its own failure message asked for.
+    for shape in ("f32_6_1", "f32_6_3", "f32_12_1"):
+        assert fits[shape] <= RAM_BUDGET, (
+            f"{shape} no longer fits the declared floor: {fits[shape]} > {RAM_BUDGET}")
 
-    # And the negative result, pinned so a later change cannot quietly turn it positive
-    # without anyone noticing that the floor's reach changed. The composed pipeline at
-    # twelve features does NOT fit: 4,096 bytes of object plus a 4,288-byte `init` frame is
-    # 8,384 against 8,192, before a single ring buffer, flash slot or restore buffer. The
-    # 8 KB floor is a six-feature floor. Nothing is broken by this -- the shapes the floor
-    # was declared for fit -- but it was being read as a property of the library rather than
-    # of one shape, and a part with more RAM is the answer for the wider ones.
-    assert fits["f32_12_1"] > RAM_BUDGET, (
-        f"f32_12_1 now fits the {RAM_BUDGET}-byte floor at {fits['f32_12_1']} bytes. That is "
-        f"good news, but DESIGN.md says it does not; update the claim rather than this test.")
+    # The negative result that remains, and it is now a tier boundary rather than a defect.
+    # `f32_128_1` is the network-head shape and its OBJECT is 332 KB, because RLS carries an
+    # N x N covariance. No amount of care with the stack changes that, and it is not offered
+    # on this floor. Pinned so that a shape which genuinely cannot run here cannot quietly
+    # start being described as though it can.
+    assert fits["f32_128_1"] > RAM_BUDGET, (
+        f"f32_128_1 now fits the {RAM_BUDGET}-byte floor at {fits['f32_128_1']} bytes; "
+        "update the two-tier claim rather than this test.")
+
+    # ...and the reason has to be the object rather than the frame, or the sentence above is
+    # wrong even though the assertion passes.
+    assert bounds["f32_128_1"] > RAM_BUDGET
+    assert frames["am_pipe_g_f32_128_1_init"] < 1024, (
+        f"the wide shape's init frame grew back to {frames['am_pipe_g_f32_128_1_init']}; "
+        "it was 397,192 before the adapter stopped being copied")
 
 
 def test_math_errno_is_what_stands_between_norm_and_the_fpu(cross, tmp_path):
