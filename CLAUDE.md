@@ -107,7 +107,7 @@ rollback, explicit recovery), `argmind/pipeline.py` (`FrameMap`, input gate, bou
 pipeline. `argmind/bench.py` has no C++ counterpart and is not getting one: it is a host
 measurement harness, and DESIGN.md already records that Python timings are not a baseline the
 C++ can be compared against.
-479 Python tests and 4632 C++ checks pass; several exist to prove failures are visible
+491 Python tests and 4632 C++ checks pass; several exist to prove failures are visible
 rather than silent. Every suite is mutation-checked, and surviving mutants are recorded where
 they live rather than tallied here — including the ones that turn out to be **equivalent on a
 64-bit host**, a distinction worth keeping rather than rounding away. Cumulative counts are
@@ -589,6 +589,21 @@ f32; and verified rather than assumed — the round-toward-zero fault was rebuil
 reports **37.5×** and fails. f64 is asserted identical between builds as the control. Smaller: the
 baseline ulp table reproduces at λ=0.99 only (gain_norm 110 vs 58 at 0.97), and `pipecheck`
 instantiates only M=1 so no multi-output case has run through the freshness gate.
+
+**Both remaining tolerance findings are closed, and they were the same finding twice: a bound
+that looked comfortable because every fixture behind it was quiet.** The prediction metric
+normalised by the largest *prediction* in a run where the project's rule is the scale of the
+values being subtracted, `max_j |x_j theta_j|`; correcting it made the comparison **stricter**
+(a case reading 134 ulp now reads 401). And `excited()` puts 0.01*randn on a signal of 3, so
+there is now a fixture where the noise is the size of the signal. Re-derived across SNR 300 to
+1 and p0 1 to 1000, on both architectures: state 1.5 -> 249 ulp, prediction 4.8 -> 947, with
+p0=1000 dominating both. **One number cannot cover that, so there is not one** — the defaults
+(400 / 200) hold for any sane prior and a deliberately bad one declares its own (500 / 1500)
+with the measurement beside it. Loosening the default would have made it meaningless for the
+other twelve cases. The deviation is conditioning, not the port: the same data through plain
+RLS gives the identical figure, so the "1.5 ulp on theta" headline is a property of
+`excited()`. The host-to-target ratio bound moved 4 -> 8 for the same reason in miniature: 4
+came from one fixture at 2.5x and the sweep found 4.7 on a noisier one.
 
 **Next:** hardware, for the timing question. Everything else the project set out to build is
 built and verified on the declared floor.

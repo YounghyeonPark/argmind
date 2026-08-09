@@ -17,8 +17,9 @@ costs nineteen times in state deviation, and every one of the twelve subset test
 The bound cannot be 1.0, and the reason is a declared difference rather than slack: GCC
 contracts `a*b + c` into `VFMA.F32` on VFPv4, which the x86-64 SSE2 baseline has no equivalent
 for, so target f32 legitimately differs from host f32. That is `rls.hpp`'s fourth divergence.
-The bound here is 4× so that ordinary compiler drift does not fail it while a rounding-mode
-fault, at 19×, does.
+The bound is 8×: measured, the FMA costs 2.5× on this fixture and 4.7× on a noisier one, so a
+number derived from a single point would have failed the moment the fixture set grew. A
+rounding-mode fault reports 37.5× and still fails by a factor of five.
 
 Skipped, not failed, without the cross toolchain and `qemu-system-arm` on PATH.
 """
@@ -31,9 +32,12 @@ import pytest
 import _toolbuild
 import test_cpp_parity as X
 
-#: Four leaves room for the FMA divergence and for compiler drift, and still fails a
-#: round-toward-zero FPU by a factor of five.
-MAX_RATIO = 4.0
+#: Eight, and the number moved once. Four was derived from this one fixture, where the worst
+#: host-to-target ratio is 2.5; a later SNR sweep found 4.7 on a noisier case, so a bound taken
+#: from a single point would have failed the moment the fixture set grew. Eight covers the
+#: measured range with headroom and still fails a round-toward-zero FPU, which reports 37.5,
+#: by a factor of five.
+MAX_RATIO = 8.0
 
 #: Below this the ratio is noise: two builds can differ by one ulp on a quantity where the
 #: host happens to be exact, and dividing by that is not a finding.

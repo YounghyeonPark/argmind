@@ -425,7 +425,7 @@ byte for byte for the record format, and exactly for every decision and counter 
 The runtime library is fully across; `argmind/bench.py` has no C++ counterpart and is not
 getting one, being a host measurement harness rather than part of what ships. (Everything the library does is reachable from C: RLS, the
 guard, the record format, caller-owned rings and the composed pipeline.)
-479 Python tests plus 4632 C++ checks, several of which exist to prove failures are visible
+491 Python tests plus 4632 C++ checks, several of which exist to prove failures are visible
 rather than silent.
 
 **What the pipeline settled:**
@@ -1614,6 +1614,47 @@ rebuilt here and pointed at the new check, which reports 37.5× on the state blo
 f64 is asserted *identical* between the two builds as the control — soft float has nothing to
 contract and nothing for a rounding mode to change, so if it ever drifts the 4× above is
 masking something rather than tolerating a known difference.
+
+### Tolerances derived from the problem, not from the fixtures, 2026-08-09
+
+The parity review's last two open findings were the same finding twice: a tolerance that
+looked comfortable because every fixture behind it was quiet.
+
+**The prediction metric was normalising by the cancelled quantity.** It bounded against the
+largest *prediction* in a run, where this project's rule for a cancelled quantity is the scale
+of the values being subtracted — here `max_j |x_j theta_j|`, the largest term summed to make
+it. The two coincide when theta and x are O(1), which is why every fixture passed, and they
+diverge exactly where the cancellation is worst. Switching to the correct scale made the
+comparison **stricter**: a case that read 134 ulp under the old metric reads 401 under the new
+one. Third quantity in this project to need that treatment, and the third time the first
+attempt normalised by the wrong thing.
+
+**And the fixture set was two hundred times quieter than the problem.** `excited()` puts
+`0.01*randn` on a signal of about 3. There is now a case where the noise is the size of the
+signal, and both bounds were re-derived from a sweep across it — SNR 300 down to 1, `p0` from
+1 to 1000, on both architectures, under the corrected metric:
+
+| | SNR 300 | SNR 3 | SNR 1 | SNR 1, `p0`=1000 |
+|---|---|---|---|---|
+| state | 1.5 | 10.4 | 28.5 | **249** |
+| prediction | 4.8 | 47.7 | 152 | **947** |
+
+**One number cannot cover that, so there is not one.** The defaults — 400 on the state, 200 on
+the prediction — hold everywhere with a sane prior. A prior chosen far larger than the data
+warrants gets its own declared pair, 500 and 1500, with the measurement beside it. Loosening
+the default to cover the worst case would have made it meaningless for the other twelve, which
+is how a tolerance stops being evidence.
+
+The deviation is a property of the conditioning rather than of the port, and that is checkable:
+replaying the same `(x, y)` through plain RLS gives the identical figure to the last digit. So
+the "about 1.5 ulp on theta" headline in the RLS section is true of `excited()` and is not a
+property of the port at large.
+
+**The host-to-target ratio bound moved too, for the same reason in miniature.** Four was
+derived from one fixture, where the FMA divergence costs 2.5×. The SNR sweep found 4.7 on a
+noisier one — so the bound would have failed the moment the fixture set grew, which it just
+did. Eight covers the measured range and still fails a round-toward-zero FPU, at 37.5, by a
+factor of five.
 
 ## Standards
 
