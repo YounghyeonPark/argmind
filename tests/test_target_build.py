@@ -171,6 +171,19 @@ MAX_STEP_STACK = 512
 MAX_INIT_STACK = 5 * 1024
 
 
+def _declared_object_bounds():
+    """The composed-pipeline storage bounds, read from the header an integrator reads.
+
+    These are upper bounds held to being ones by a `static_assert`, which is the right side
+    to err on here: the sum they feed is what someone sizing storage from the header would
+    compute, not what a particular compiler happened to lay out.
+    """
+    text = (CPP / "include" / "argmind" / "argmind.h").read_text(encoding="utf-8")
+    found = dict(re.findall(r"#define AM_PIPE_G_(F32_\d+_\d+)_MAX_BYTES\s+(\d+)", text))
+    assert found, "no composed-pipeline storage bounds in the header"
+    return {k.lower(): int(v) for k, v in found.items()}
+
+
 def test_the_stack_a_caller_must_provide_is_bounded(cross, tmp_path):
     """`am_*_bytes()` reports the object; these functions also use the caller's stack, and
     nobody had measured how much until a hardware question asked for it.
@@ -215,6 +228,33 @@ def test_the_stack_a_caller_must_provide_is_bounded(cross, tmp_path):
         f"{RAM_BUDGET}, so this has to stay well inside it")
     # ...and the measurement has to have found something. An empty parse would pass both.
     assert worst_step[1] > 32, f"suspiciously small: {worst_step}"
+
+    # The two halves have to be added up, and until 2026-08-09 nothing did. `MAX_INIT_STACK`
+    # bounds the frame alone; an integrator's actual question is whether the object AND the
+    # frame that constructs it fit together, because both live in the same RAM. That sum is
+    # what the header lets someone compute: `AM_*_MAX_BYTES` plus the `init` frame.
+    bounds = _declared_object_bounds()
+    fits = {}
+    for shape, obj_bytes in bounds.items():
+        frame = frames.get(f"am_pipe_g_{shape}_init")
+        assert frame, f"no init frame measured for {shape}; have {sorted(inits)}"
+        fits[shape] = obj_bytes + frame
+
+    # The design driver's shape is what the floor was declared for, and it fits with room.
+    assert fits["f32_6_1"] <= RAM_BUDGET, (
+        f"the design driver's own shape no longer fits its declared floor: "
+        f"{fits['f32_6_1']} > {RAM_BUDGET}")
+
+    # And the negative result, pinned so a later change cannot quietly turn it positive
+    # without anyone noticing that the floor's reach changed. The composed pipeline at
+    # twelve features does NOT fit: 4,096 bytes of object plus a 4,288-byte `init` frame is
+    # 8,384 against 8,192, before a single ring buffer, flash slot or restore buffer. The
+    # 8 KB floor is a six-feature floor. Nothing is broken by this -- the shapes the floor
+    # was declared for fit -- but it was being read as a property of the library rather than
+    # of one shape, and a part with more RAM is the answer for the wider ones.
+    assert fits["f32_12_1"] > RAM_BUDGET, (
+        f"f32_12_1 now fits the {RAM_BUDGET}-byte floor at {fits['f32_12_1']} bytes. That is "
+        f"good news, but DESIGN.md says it does not; update the claim rather than this test.")
 
 
 def test_math_errno_is_what_stands_between_norm_and_the_fpu(cross, tmp_path):

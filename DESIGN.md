@@ -1752,6 +1752,40 @@ settles. What remains is one adapter-sized temporary, because `Pipeline`'s const
 its adapter by value; removing it needs a default-constructible `Guard` and an in-place
 configure, and that is recorded rather than half-done.
 
+**And the two halves still had to be added up, which nothing did until a second hardware
+question asked.** The test bounded the `init` frame *alone* against a constant, which is not
+the question an integrator has: the object and the frame that constructs it live in the same
+RAM, so what matters is the sum, and the header is what someone sizes storage from. Adding
+`AM_PIPE_G_*_MAX_BYTES` to the measured `init` frame:
+
+| shape | object (declared bound) | `init` frame | sum | against the 8 KB floor |
+|---|---|---|---|---|
+| `f32_6_1` | 1,792 | 1,536 | **3,328** | fits, 4,864 to spare |
+| `f32_6_3` | 2,048 | 1,824 | **3,872** | fits |
+| `f32_12_1` | 4,096 | 4,288 | **8,384** | **does not fit** |
+
+**The 8 KB floor is a six-feature floor, and it had been read as a property of the library.**
+At twelve features the composed pipeline cannot be constructed on a device with the declared
+minimum RAM — and that is before a single ring buffer, flash slot or restore buffer, which a
+real caller also owns. Linking one confirms the gap is not marginal: a twelve-feature composed
+pipeline with two sensors and two state-sized flash slots takes **7,048 bytes of static RAM**
+against the six-feature configuration's 3,264, so with its `init` frame it wants 11,336 of an
+8,192-byte budget.
+
+Nothing is broken by this. The shapes the floor was declared for fit, and the answer for a
+wider one is a part with more RAM rather than a change here — on an STM32G474's 128 KB the
+twelve-feature configuration is 5.5%. What was wrong was the claim's *scope*, and the negative
+result is now pinned by an assertion that fails if `f32_12_1` ever starts fitting, so the
+floor's reach cannot widen silently either.
+
+One thing the same measurement makes clear, and it is the opposite of what the RAM does:
+**flash is flat across these shapes while RAM grows as n².** The composed pipeline links to
+10,404 bytes at `f32_6_1`, 10,664 at `f32_6_3` and 10,380 at `f32_12_1` — the twelve-feature
+image is the *smallest* of the three — because the dimensions are compile-time constants over
+the same loops, so what changes is how much they iterate, not how much code there is. Static
+RAM over the same three shapes goes 3,264 → 3,888 → 7,048. Sizing a part for this library
+means sizing its RAM; the flash figure barely moves.
+
 **The shape of the answer matters more than the numbers.** The steady state is a third of a
 kilobyte — nothing. Initialisation is a transient spike of up to 4.3 KB, so a device sizes its
 stack for `init` or calls `init` before anything else has grown it. `tests/test_target_build.py`
