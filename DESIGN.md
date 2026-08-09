@@ -425,7 +425,7 @@ byte for byte for the record format, and exactly for every decision and counter 
 The runtime library is fully across; `argmind/bench.py` has no C++ counterpart and is not
 getting one, being a host measurement harness rather than part of what ships. (Everything the library does is reachable from C: RLS, the
 guard, the record format, caller-owned rings and the composed pipeline.)
-344 Python tests plus 4597 C++ checks, several of which exist to prove failures are visible
+347 Python tests plus 4603 C++ checks, several of which exist to prove failures are visible
 rather than silent.
 
 **What the pipeline settled:**
@@ -517,7 +517,7 @@ that is already the persistence format, and a benchmark that can report a regres
 
 **STARTED 2026-08-08** — `cpp/`, and RLS is across. `mat.hpp` (fixed-size primitives),
 `rls.hpp` (`Rls<T, N, M>`), `argmind.h` + `src/abi.cpp` (the C ABI), `tools/xcheck.cpp`, `tools/pcheck.cpp`, `tools/scheck.cpp` and
-`tools/pipecheck.cpp` (the four parity tools), `tests/test_core.cpp` (4597 checks the C++ side can make on its own), and a
+`tools/pipecheck.cpp` (the four parity tools), `tests/test_core.cpp` (4603 checks the C++ side can make on its own), and a
 `CMakeLists.txt` that knows the cross-compilation recipe.
 
 **The C ABI had one real tension to resolve.** Compile-time dimensions are the reason C++ was
@@ -1339,6 +1339,66 @@ out of an image that only touches f32 entry points, verified rather than assumed
 no peripheral regions. Its only job is to give the linker somewhere to put sections so a map
 exists. A real firmware replaces it and adds its own drivers, so these are the library's
 contribution to a budget rather than an image anyone could flash.
+
+### Execution on the target, 2026-08-09 — the last verification limit closes
+
+"Execution is host-only" had been this project's standing limit since the target range was
+settled. It is not any more. `cpp/tests/test_core.cpp` runs under QEMU's `mps2-an386` — the
+declared floor, ARMv7E-M with a single-precision FPU — and all of it passes there.
+
+QEMU came the same way the toolchain did: extracted rather than installed, because its
+installer is NSIS with `requireAdministrator` and this session has no elevation. Getting an
+extractor was itself a small chain — 7-Zip's own installer is a 7-Zip SFX, so the standalone
+`7zr.exe` unpacks it, and the full `7z.exe` that falls out unpacks NSIS.
+
+**What running it bought, and it is the thing that justified doing it.** `persist.hpp` guards
+`count * sizeof(T)` against wrapping, and its own comment records the guard as an *equivalent
+mutant* on a 64-bit host: the threshold is 2.3e18 for `double` and `count` is a `uint32_t`, so
+no record can express a value that reaches it. On a 32-bit target the same expression is
+536,870,876. There is now a case that forges a `count` of `1 + 2^29`, chosen so the wrapped
+product makes the length check *agree* with the real buffer, and repairs the CRC so the record
+is rejected for its length rather than for being corrupt. Measured by removing the guard and
+running both ways:
+
+| | guard present | guard removed |
+|---|---|---|
+| ARM, 32-bit `size_t` | 4,603 checks, 0 failures | **2 failures — caught** |
+| x86-64, 64-bit `size_t` | 4,603 checks, 0 failures | 0 failures — equivalent |
+
+A guard that could only be argued for is now one that is tested, and the header's claim of
+untestability on the host is itself verified rather than taken on trust.
+
+**Three bugs in the harness, all of which the host build would have hidden.** They are worth
+recording because each is a way a cross build that compiles perfectly still does not run.
+
+- **The vector table had two entries.** A UsageFault then has nowhere to go: the core reads a
+  null handler, faults again, and locks up with `PC=0` and the fault cause already gone. A
+  lockup says something went wrong and nothing about what.
+- **The fault reporter called `printf`.** The original fault was *inside* printf, so
+  re-entering stdio from the handler faulted again — a second lockup, subtler than the first.
+  A fault reporter may not depend on anything that can be the thing that broke; it uses raw
+  `bkpt 0xAB` semihosting now.
+- **Nothing copied `.data`.** newlib's crt0 zeroes `.bss` and assumes a loader put `.data` at
+  its run address, which is true for a hosted program and false for a ROM image whose LMA and
+  VMA differ. The first casualty is newlib's own `_impure_ptr`, so the symptom was
+  `__sflush_r` doing `blx r6` on a garbage write pointer — stdout's vtable read out of
+  uninitialised RAM.
+
+Diagnosing the third took the first two being fixed, which is the argument for a startup file
+that reports rather than one that is merely short.
+
+**Two smaller confirmations.** The FPU works and is enabled correctly: `VSQRT.F32` of 2.0f
+returns `0x3fb504f3` exactly. And `sizeof(int)/(long)/(void*)/(size_t)` are all 4 on the
+target — asserted as its own test, so a board or toolchain change that widened `size_t` fails
+distinctly rather than confusingly.
+
+**What is still absent, and now for a narrower reason.** QEMU models the instruction set, not
+the pipeline, the flash wait states or the bus, so a cycle count taken here would be fiction
+dressed as measurement. None is taken. An *instruction* count would be honest — it is
+architectural rather than temporal — but the Windows QEMU build ships no TCG plugins, so it
+needs one built first and was not attempted. The on-target timing claim therefore stays
+absent, as it has since the target range was settled; what changed is that the reason is now
+"nobody has measured it on hardware" rather than "nothing can run the code at all".
 
 ## Standards
 

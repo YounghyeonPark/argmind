@@ -107,7 +107,7 @@ rollback, explicit recovery), `argmind/pipeline.py` (`FrameMap`, input gate, bou
 pipeline. `argmind/bench.py` has no C++ counterpart and is not getting one: it is a host
 measurement harness, and DESIGN.md already records that Python timings are not a baseline the
 C++ can be compared against.
-344 Python tests and 4597 C++ checks pass; several exist to prove failures are visible
+347 Python tests and 4603 C++ checks pass; several exist to prove failures are visible
 rather than silent. Every suite is mutation-checked, and surviving mutants are recorded where
 they live rather than tallied here — including the ones that turn out to be **equivalent on a
 64-bit host**, a distinction worth keeping rather than rounding away. Cumulative counts are
@@ -263,12 +263,12 @@ cancellation-produced near-zero entries (reads 1e-13/1e-4), and the a posteriori
 belong in a *relative* comparison at all — nor does its ratio to the a priori one, which inherits
 the same cancellation (1.06e5 ulp). It is bounded absolutely against the target scale instead.
 
-**Verification limits, narrowed on 2026-08-09 and still important**: execution is host-only.
-Compilation is no longer — every core header now builds for Cortex-M4F and the ABI links into
-four firmware-shaped images, so flash and RAM come from a link map rather than from an x86-64
-shape. What remains host-only is *running* the code: **on-target timing claims stay absent**
-because there is no hardware and no emulator, and interpolating one from a host measurement is
-the thing this project decided not to do.
+**Verification limits, as they now stand.** Compilation, linking and *execution* all happen on
+the declared floor: every core header builds for Cortex-M4F, the ABI links into four
+firmware-shaped images so flash and RAM come from a link map, and the whole self-check suite
+runs on an emulated Cortex-M4. What is left is **timing on real silicon**. An emulator models
+the instruction set, not the pipeline, so **on-target timing claims stay absent** — the same
+refusal as before, for a smaller reason.
 
 **The Guard is across too** (`cpp/include/argmind/guard.hpp`). `Guard<Adapter, Depth,
 MaxBounds>` — the checkpoint ring and check capacity live in the type, so the memory is
@@ -501,12 +501,41 @@ the 8 KB RAM**. Of the full pipeline's flash, 7,374 B is argmind and 2,424 B is 
 **Every byte of that RAM is the caller's**: the library defines zero `.data` and zero `.bss`,
 72 B of `.rodata`. The storage-is-the-caller's design, confirmed and now tested.
 
-**Still absent, deliberately: any on-target timing.** No hardware, no emulator, so a cycle
-count would be interpolated — which this project has refused since the target range was
-settled. A link establishes sizes and dependencies; it does not establish speed.
+**And the code now RUNS on a Cortex-M4 (2026-08-09), which closes the last verification
+limit.** `cpp/tests/test_core.cpp` executes under QEMU's `mps2-an386` — the declared floor —
+and all 4,603 checks pass. QEMU was extracted rather than installed, its NSIS installer being
+`requireAdministrator`; getting an extractor meant unpacking 7-Zip's own SFX with `7zr.exe`
+first.
 
-**Next:** on-target execution, once hardware or an emulator exists. That is what would turn
-the timing question from refused into answered.
+**What running it bought.** `persist.hpp`'s wraparound guard was documented as an *equivalent
+mutant on a 64-bit host* — threshold 2.3e18 against a `uint32_t count`. On a 32-bit target it
+is 536,870,876. A test now forges a `count` of `1 + 2^29`, chosen so the wrapped product makes
+the length check *agree* with the real buffer, and repairs the CRC so it is rejected for its
+length rather than for corruption. Measured both ways: removing the guard gives **2 failures
+on ARM and 0 on x86-64**. A guard that could only be argued for is tested, and the claim of
+host-untestability is itself verified.
+
+**Three harness bugs the host build would have hidden**, each a way a cross build that
+compiles perfectly still does not run: a two-entry vector table (a fault has nowhere to go, so
+it locks up with PC=0 and no cause); a fault reporter that called `printf` when the fault was
+*inside* printf; and **nothing copying `.data`** — newlib's crt0 zeroes `.bss` and assumes a
+loader placed `.data`, which is false for a ROM image, so `_impure_ptr` came up as garbage and
+`__sflush_r` branched through stdout's uninitialised vtable. Diagnosing the third needed the
+first two fixed, which is the argument for a startup that reports rather than one that is
+short.
+
+Also confirmed: `VSQRT.F32` of 2.0f returns `0x3fb504f3` exactly, and `int`/`long`/`void*`/
+`size_t` are all 4 bytes.
+
+**Still absent, and now for a narrower reason: any on-target timing.** QEMU models the
+instruction set, not the pipeline or flash wait states, so a cycle count here would be fiction
+dressed as measurement. An *instruction* count would be honest, being architectural rather
+than temporal, but the Windows build ships no TCG plugins. The claim stays absent — what
+changed is that the reason is now "nobody has measured it on hardware" rather than "nothing
+can run the code".
+
+**Next:** hardware, for the timing question. Everything else the project set out to build is
+built and verified on the declared floor.
 
 **Before any optimisation lands, a benchmark that can report a regression must exist.** An
 optimisation with no way to fail is not an optimisation, it is a hope.

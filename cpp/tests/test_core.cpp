@@ -741,6 +741,58 @@ void test_read_state_round_trips_and_refuses_a_mismatched_count() {
     CHECK(!argmind::persist::read_state<double>(rec, back, 5));
 }
 
+void test_a_forged_count_that_wraps_a_32_bit_size_t_is_refused() {
+    // `persist::unpack` guards `count * sizeof(T)` against wrapping before it trusts the
+    // length. On a 64-bit host that guard is an EQUIVALENT MUTANT and persist.hpp says so:
+    // the threshold is 2.3e18 for double and `count` is a uint32_t, so no record can
+    // express a value that reaches it. On the declared target `size_t` is 32 bits and the
+    // same expression is 536,870,876 -- comfortably inside uint32 range.
+    //
+    // This constructs the case the comment describes and had no way to test: a count large
+    // enough to wrap, chosen so the wrapped product makes the length check AGREE with the
+    // real buffer size. Without the guard, a 32-bit build accepts the record and hands back
+    // a `count` of half a billion for a 38-byte buffer.
+    //
+    // The assertion holds on both architectures and for different reasons, which is the
+    // point rather than a weakness: on the host the length check catches it because nothing
+    // wrapped, on the target the guard does. Removing the guard therefore still passes here
+    // on x86-64 and fails on ARM -- verified by doing exactly that.
+    using argmind::persist::CRC_BYTES;
+    using argmind::persist::HEADER_BYTES;
+
+    double state[1] = {1.5};
+    uint8_t buf[64];
+    const size_t n = argmind::persist::pack<double>(state, 1, 1, 1, 7, 0xABCDu, false,
+                                                    nullptr, 0, buf, sizeof(buf));
+    CHECK(n == HEADER_BYTES + 8 + CRC_BYTES);
+
+    argmind::persist::Record<double> rec;
+    CHECK(argmind::persist::unpack<double>(buf, n, &rec) == argmind::persist::Status::Ok);
+
+    // count * 8 must wrap to 8 exactly, so count = 1 + 2^29. That is above the guard's
+    // threshold of (SIZE_MAX - 30) / 8 on a 32-bit target, and unremarkable on a 64-bit one.
+    const uint32_t forged = 1u + (1u << 29);
+    argmind::persist::write_u32(buf + 22, forged);
+    // ...and the CRC is repaired, so that the record is rejected for its length rather than
+    // for being corrupt. A test that let the CRC catch it would be testing the CRC.
+    argmind::persist::write_u32(buf + n - CRC_BYTES,
+                                argmind::persist::crc32(buf, n - CRC_BYTES));
+
+    const argmind::persist::Status st =
+        argmind::persist::unpack<double>(buf, n, &rec);
+    CHECK(st == argmind::persist::Status::LengthMismatch);
+    CHECK(st != argmind::persist::Status::Ok);
+    CHECK(st != argmind::persist::Status::CrcMismatch);
+
+    // The arithmetic this rests on, asserted rather than assumed, so a change of target
+    // that moved `size_t` would show up here rather than silently make the case unreachable.
+    if (sizeof(size_t) == 4) {
+        CHECK(static_cast<size_t>(forged) * sizeof(double) == 8u);
+    } else {
+        CHECK(static_cast<size_t>(forged) * sizeof(double) > 4294967295u);
+    }
+}
+
 void test_select_newest_and_next_slot() {
     const float state[2] = {1.0f, 2.0f};
     uint8_t a[256];
@@ -2173,6 +2225,7 @@ int main() {
     test_pack_clamps_an_overlong_cause();
     test_unpack_reports_each_failure_distinctly();
     test_read_state_round_trips_and_refuses_a_mismatched_count();
+    test_a_forged_count_that_wraps_a_32_bit_size_t_is_refused();
     test_select_newest_and_next_slot();
 
     test_stream_push_refuses_what_the_reference_refuses();
