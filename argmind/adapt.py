@@ -138,6 +138,20 @@ class Adapter(abc.ABC):
     #: adapter because the floor belongs to the algorithm, not to the platform.
     min_dtype: str = "f4"
 
+    #: Which report fields this adapter can actually report, so that a `Guard` can
+    #: refuse to watch one it cannot.
+    #:
+    #: Deliberately **not** given a default. A subclass that forgets it raises
+    #: `AttributeError` the first time a guard wraps it, which is loud; a default of
+    #: "all of them" would silently hand back the defect this attribute exists to fix.
+    #:
+    #: `p_trace` and `p_min_diag` are *covariance* quantities. Before this existed, an
+    #: adapter without a covariance had to invent two numbers, and zeros broke a bound
+    #: in both directions at once — `hi=1e4` became a check that could never fire while
+    #: looking configured, and `lo=1e-9` tripped on the first update and froze the
+    #: adapter for the whole run. Both measured on a second adapter in the C++ suite.
+    health_fields: frozenset[str]
+
     n_features: int
     n_outputs: int
     dtype: np.dtype
@@ -150,7 +164,6 @@ class Adapter(abc.ABC):
     def predict(self, x) -> np.ndarray:
         """Current model output for `x`, shape ``(n_outputs,)``."""
 
-    @abc.abstractmethod
     def health(self) -> tuple[float, float]:
         """``(p_trace, p_min_diag)`` for the state as it stands, without updating.
 
@@ -160,10 +173,17 @@ class Adapter(abc.ABC):
         a plausible-looking zero there would be fabricating a number, which is
         precisely what this project's standards forbid.
 
-        Adapters with no covariance report the nearest analogue of "how uncertain
-        am I" and "is my internal state still valid"; nothing reads these except
-        by name, through a `Bound`.
+        **Required only if `health_fields` declares `p_trace` or `p_min_diag`.**
+        This used to be abstract, and its docstring told an adapter with no
+        covariance to "report the nearest analogue" — two sentences after saying
+        that inventing a number is forbidden. It was a contradiction, and the
+        instruction was the wrong half: there is no analogue of a covariance trace
+        in an algorithm that has no covariance, and a probe adapter measured what
+        the fabricated zeros do to a guard. Declare fewer fields instead; the base
+        returns zeros that nothing can read, because a `Guard` refuses a `Bound` on
+        an undeclared field.
         """
+        return 0.0, 0.0
 
     @property
     @abc.abstractmethod
@@ -254,6 +274,12 @@ class RecursiveLeastSquares(Adapter):
     """
 
     min_dtype = "f4"
+
+    #: All five. The first three come out of any update; the last two are this
+    #: algorithm's covariance, which it has. `argmind.guard.WATCHABLE` is the set of
+    #: fields that exist at all, and a test ties the two together.
+    health_fields = frozenset({"residual_norm", "residual_post_norm", "gain_norm",
+                               "p_trace", "p_min_diag"})
 
     __slots__ = ("n_features", "n_outputs", "dtype", "forgetting", "p0",
                  "_state", "_state_ro", "_theta", "_p", "_px", "_k", "_e", "_e_post",

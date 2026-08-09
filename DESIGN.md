@@ -84,11 +84,40 @@ no covariance reports zeros, and the same bound then fails in **both** direction
 | `at_least(PTrace, 1e-9)` | a sane sanity check | **fatal** — trips on the first update and freezes |
 
 Silently dead one way and instantly bricking the other is worse than either alone, and the type
-system permits both. The fix is for health to become an **adapter-declared set** — each adapter
-names the scalars it can report and the guard checks only those — rather than a fixed pair
-borrowed from one algorithm. Recorded here as the first item of the widening rather than
-half-done, in keeping with how the guard's redundant ring scalars and the `Pipeline` adapter
-temporary are recorded.
+system permitted both.
+
+**Closed the same day.** Health is now an **adapter-declared set**: an adapter names the fields
+it can report, and a check on anything else is refused where the caller can still act on it —
+at `add_bound` in C++, at `Guard.__init__` in Python. `Rls` declares all five; the probe
+adapter declares three.
+
+- **`Divergence` is covered too, and it is the one that mattered most.** It watches
+  `residual_norm` alone, so an adapter that cannot report it would have the check comparing a
+  constant against itself — and divergence is the check that needs no units, so it is the one
+  a sensor-agnostic caller is most likely to enable and least likely to re-derive. `valid()`
+  refuses that combination.
+- **`health()` is no longer mandatory.** The guard's calls sit behind
+  `if constexpr (needs_health(Adapter::health_fields))`, so for an adapter declaring neither
+  covariance field the branch is never instantiated and the method need not exist. In Python
+  it stops being abstract and the base returns zeros nothing can read.
+- **A `Check` now declares what it `watches`**, abstract rather than defaulted, so a new check
+  has to say. That closed a second hole nobody was looking for: `WATCHABLE` admitted `applied`,
+  `reason`, `residual` and `residual_post`, and `Bound.evaluate` does `float(getattr(...))` —
+  so `Bound("reason")` constructed fine and crashed at evaluation. It is refused at
+  construction now, because `Rls` does not declare those four.
+- **The `Adapter.health` docstring was self-contradictory** and the wrong half was the
+  instruction. It said inventing a number "is precisely what this project's standards forbid"
+  and then, two sentences later, told an adapter with no covariance to "report the nearest
+  analogue". There is no analogue of a covariance trace in an algorithm without a covariance.
+  Declare fewer fields instead.
+- **No ABI query, deliberately.** Every guard the C ABI exports wraps `Rls`, so
+  `am_guard_*_health_fields()` could only ever return one constant. This project has already
+  shipped two entry points nothing called; a third is not worth the surface. Recorded in
+  `argmind.h`, to be exported when a non-RLS adapter reaches the boundary.
+
+Three mutants confirm it rather than the suite merely passing: removing the Python refusal
+fails five tests, removing the C++ `add_bound` mask check fails three, and removing the
+divergence guard fails one.
 
 **Undecided, and each changes the work materially:**
 

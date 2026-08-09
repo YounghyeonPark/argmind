@@ -15,7 +15,7 @@ deployment, which is the same as not having one.
 import numpy as np
 import pytest
 
-from argmind.adapt import RecursiveLeastSquares, UpdateReport
+from argmind.adapt import Adapter, RecursiveLeastSquares, UpdateReport
 from argmind.guard import Bound, Check, Divergence, Guard, GuardReport
 
 
@@ -29,6 +29,11 @@ class Trip(Check):
 
     def evaluate(self, report):
         return not self.armed
+
+    #: Empty: this check reads no report field at all, it fires on a flag the test
+    #: sets. Declaring the empty set means a `Guard` accepts it against any adapter,
+    #: which is right — there is nothing here for an adapter to be unable to feed.
+    watches = frozenset()
 
 
 def stationary_then_glitch(guard_or_adapter, n_stationary=200, glitch=50.0,
@@ -581,3 +586,112 @@ def test_a_probe_after_a_trip_still_reports_the_restored_state():
     probe = g.update([rng.standard_normal(), 0.0], [0.0])
     assert probe.p_trace == pytest.approx(live_trace)
     assert probe.p_min_diag == pytest.approx(live_min)
+
+
+# -- a check the adapter cannot feed is not a check ----------------------------------
+
+class Nlms(Adapter):
+    """A second adapter, so the guard is tested against something that is not RLS.
+
+    Normalised LMS: O(n) where RLS is O(n^2), and **no covariance matrix at all**, so
+    its state is `n_features * n_outputs` rather than that plus `n_features**2`. It
+    mirrors `ProbeNlms` in `cpp/tests/test_core.cpp`; the point on both sides is that
+    `Guard` is a template over the contract and not over RLS.
+    """
+
+    min_dtype = "f4"
+    #: Three of five. The two it omits are covariance scalars and it has no covariance.
+    health_fields = frozenset({"residual_norm", "residual_post_norm", "gain_norm"})
+
+    def __init__(self, n_features, n_outputs=1, mu=0.5, eps=1e-6, dtype="f8"):
+        self.n_features = int(n_features)
+        self.n_outputs = int(n_outputs)
+        self.dtype = np.dtype(dtype)
+        self.mu = float(mu)
+        self.eps = float(eps)
+        self._state = np.zeros(self.n_features * self.n_outputs, dtype=self.dtype)
+
+    @property
+    def state(self):
+        v = self._state.view()
+        v.flags.writeable = False
+        return v
+
+    def load_state(self, block):
+        self._state[:] = np.asarray(block, dtype=self.dtype).ravel()
+
+    def reset(self):
+        self._state[:] = 0
+
+    def predict(self, x):
+        theta = self._state.reshape(self.n_features, self.n_outputs)
+        return np.asarray(x, dtype=self.dtype) @ theta
+
+    def update(self, x, y):
+        x = np.asarray(x, dtype=self.dtype).ravel()
+        y = np.asarray(y, dtype=self.dtype).ravel()
+        e = y - self.predict(x)
+        g = self.mu / (self.eps + float(x @ x))
+        self._state += (g * np.outer(x, e)).ravel()
+        e_post = y - self.predict(x)
+        # `residual_norm` and `residual_post_norm` are computed properties, not fields.
+        return UpdateReport(
+            applied=True, reason=None, residual=e, residual_post=e_post,
+            gain_norm=float(g), p_trace=0.0, p_min_diag=0.0)
+
+
+def test_the_guard_holds_an_adapter_that_is_not_rls():
+    """The claim the widened scope rests on: the framework is reusable and the adapter
+    is the narrow part. `Guard` never mentions RLS, and this is what says so."""
+    g = Guard(Nlms(6), [Bound("residual_norm", hi=1e4)], rollback_depth=4,
+              checkpoint_every=5)
+    rng = np.random.default_rng(7)
+    for _ in range(600):
+        x = rng.standard_normal(6)
+        g.update(x, [3.0 * x[0] - 2.0 * x[1]])
+    x = rng.standard_normal(6)
+    assert g.predict(x)[0] == pytest.approx(3.0 * x[0] - 2.0 * x[1], abs=1e-3)
+    # A quarter of RLS's state at this shape: 6 against 42.
+    assert g.state.size == 6
+    assert RecursiveLeastSquares(6).state.size == 42
+
+
+@pytest.mark.parametrize("bound", [
+    Bound("p_trace", hi=1e4),        # would be DEAD: 0.0 <= 1e4 on every sample
+    Bound("p_trace", lo=1e-9),       # would be FATAL: trips on the first update
+    Bound("p_min_diag", hi=1.0),
+])
+def test_a_bound_on_a_field_the_adapter_cannot_report_is_refused(bound):
+    """Before `health_fields`, an adapter with no covariance had to return zeros, and
+    the same bound then broke in both directions at once — one could never fire while
+    looking configured, the other froze the adapter on its first sample. Refused at
+    construction now, which is the only moment a caller can act on it."""
+    with pytest.raises(ValueError, match="does not report"):
+        Guard(Nlms(6), [bound])
+    # ...and the control: RLS declares all five, so the identical bound is accepted.
+    Guard(RecursiveLeastSquares(6), [bound])
+
+
+def test_divergence_is_refused_when_the_adapter_cannot_report_a_residual_norm():
+    """Divergence watches `residual_norm` alone, and it is the check most likely to be
+    reached for, since it is the one that needs no units."""
+    class NoResidual(Nlms):
+        health_fields = frozenset({"gain_norm"})
+
+    with pytest.raises(ValueError, match="does not report"):
+        Guard(NoResidual(6), [Divergence(ratio=8.0)])
+    Guard(Nlms(6), [Divergence(ratio=8.0)])          # declares it, so accepted
+
+
+def test_a_guard_passes_its_adapters_declaration_through():
+    """A guard is an adapter, so wrapping one must see through to what computes."""
+    inner = Guard(Nlms(6), [Bound("residual_norm", hi=1e4)])
+    assert inner.health_fields == Nlms.health_fields
+    with pytest.raises(ValueError, match="does not report"):
+        Guard(inner, [Bound("p_trace", hi=1e4)])
+
+
+def test_every_field_rls_declares_is_one_a_bound_can_watch():
+    """The two sets are maintained separately and would drift silently otherwise."""
+    from argmind.guard import WATCHABLE
+    assert RecursiveLeastSquares.health_fields <= WATCHABLE

@@ -175,7 +175,16 @@ AM_DECLARE_RLS(f64_6_1, double)
  * ========================================================================== */
 
 /* Fields a bound may watch. A name that does not exist is rejected at add time
- * rather than becoming a check that silently never fires. */
+ * rather than becoming a check that silently never fires.
+ *
+ * `add_bound` also refuses a field the *adapter* cannot report. In C++ that is the
+ * adapter's `health_fields` mask, and the last two here are covariance quantities an
+ * adapter without a covariance does not have. **There is deliberately no
+ * `am_guard_*_health_fields()` to query it**: every guard this ABI exports wraps `Rls`,
+ * which declares all five, so the function could only ever return one constant. This
+ * project has twice shipped an entry point nothing called (`next_slot`, and
+ * `select_newest` compiled but reached by no binary), and a third is not worth the
+ * surface. Export it when a non-RLS adapter reaches this boundary. */
 #define AM_FIELD_RESIDUAL_NORM      0
 #define AM_FIELD_RESIDUAL_POST_NORM 1
 #define AM_FIELD_GAIN_NORM          2

@@ -135,6 +135,17 @@ class Check(abc.ABC):
     @abc.abstractmethod
     def evaluate(self, report: "GuardReport") -> bool: ...
 
+    @property
+    @abc.abstractmethod
+    def watches(self) -> frozenset[str]:
+        """The report fields this check reads.
+
+        Abstract rather than defaulted, so a new check has to say. `Guard` compares
+        it against the adapter's `health_fields` and refuses a check the adapter
+        cannot feed — the alternative is a check that either never fires or trips
+        at once, both of which look like a configured guard.
+        """
+
     def reset(self) -> None:
         """Stateless by default."""
 
@@ -172,6 +183,10 @@ class Bound(Check):
         self.field = field
         self.lo = lo
         self.hi = hi
+
+    @property
+    def watches(self) -> frozenset[str]:
+        return frozenset({self.field})
 
     @property
     def usable_when_frozen(self) -> bool:
@@ -230,6 +245,12 @@ class Divergence(Check):
                  "_fast", "_slow", "_seen")
 
     usable_when_frozen = True
+
+    #: `residual_norm` and nothing else. An adapter that cannot report it would leave
+    #: this comparing a constant against itself — and this is the check most likely to
+    #: be enabled by a caller who does not know the scale of the problem, since it is
+    #: the one that needs no units.
+    watches = frozenset({"residual_norm"})
 
     def __init__(self, ratio: float = 5.0, fast_alpha: float = 0.25,
                  slow_alpha: float = 0.02, floor: float = 0.0,
@@ -328,6 +349,22 @@ class Guard(Adapter):
         for c in checks:
             if not isinstance(c, Check):
                 raise TypeError(f"{c!r} is not a Check")
+        # A check the adapter cannot feed is refused here rather than misbehaving later.
+        # `p_trace` and `p_min_diag` are covariance quantities; an adapter without a
+        # covariance used to return zeros, and the same Bound then broke in BOTH
+        # directions -- `hi=1e4` could never fire while looking configured, and
+        # `lo=1e-9` tripped on the first update and froze the adapter for the run.
+        # Measured on a second adapter before this check existed.
+        reportable = adapter.health_fields
+        for c in checks:
+            missing = sorted(c.watches - reportable)
+            if missing:
+                raise ValueError(
+                    f"{c.name!r} watches {missing}, which {type(adapter).__name__} "
+                    f"does not report (it declares {sorted(reportable)}). A check on "
+                    "a field its adapter cannot produce is not a check: depending on "
+                    "the direction of the bound it either can never fire or trips "
+                    "immediately, and both look like a configured guard.")
         if rollback_depth < 1:
             raise ValueError(f"rollback_depth must be >= 1, got {rollback_depth}")
         if checkpoint_every < 1:
@@ -374,6 +411,12 @@ class Guard(Adapter):
     @property
     def n_outputs(self) -> int:
         return self.adapter.n_outputs
+
+    @property
+    def health_fields(self) -> frozenset[str]:
+        """What the wrapped adapter reports. The guard *is* an adapter, so a guard
+        wrapping a guard has to see through to the one that actually computes."""
+        return self.adapter.health_fields
 
     @property
     def dtype(self) -> np.dtype:

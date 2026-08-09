@@ -124,9 +124,18 @@ checkable fields. An adapter without a covariance must report zeros, and then th
 breaks in both directions: `at_most(PTrace, 1e4)` is **dead** — configured, reporting healthy
 on every sample, unable ever to fire — and `at_least(PTrace, 1e-9)`, a reasonable sanity bound
 on RLS, **trips on the first update and freezes the adapter**. Both are pinned by a test with
-an RLS control, and both mutants were checked: making `health` report anything real kills four
-assertions. Fixing this — health as an adapter-declared set rather than a fixed pair — is the
-first item of the widening, not a later tidy-up.
+an RLS control. **Closed the same day**: health is an **adapter-declared set** now, and a check
+on a field the adapter cannot report is refused where the caller can act on it — `add_bound` in
+C++, `Guard.__init__` in Python. `Divergence` is covered too (it watches `residual_norm` alone,
+and it is the check most likely to be enabled by someone who does not know the problem's scale);
+`health()` stops being mandatory, since the guard's calls sit behind `if constexpr` and an
+adapter declaring neither covariance field need not implement it; and a `Check` now declares
+what it `watches`. That last one closed a hole nobody was looking for — `WATCHABLE` admitted
+`applied`/`reason`/`residual`/`residual_post` and `Bound.evaluate` does `float(getattr(...))`,
+so `Bound("reason")` used to construct fine and crash at evaluation. **No ABI query was added**:
+every guard the C ABI exports wraps `Rls`, so it could only ever return one constant, and this
+project has already shipped two entry points nothing called. Three mutants confirm the fix (5
+Python failures, 3 C++, 1 more for divergence) rather than the suite merely passing.
 
 **Also exposed by the reopening: the model class was never written down.** "Linear in the
 parameters" appeared nowhere in the repository while four bullets of DESIGN.md's *What it is

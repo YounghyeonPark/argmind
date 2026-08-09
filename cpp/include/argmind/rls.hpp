@@ -110,6 +110,16 @@ public:
     /// Elements in the persistence block. Fixed at compile time, by design.
     static constexpr int state_size = N * M + N * N;
 
+    /// Which `guard.hpp` `Field`s this adapter can report, as a bitmask. All five: the
+    /// first three come out of any update, and the last two are this algorithm's
+    /// covariance, which it has.
+    ///
+    /// Declared rather than assumed because a guard must refuse to watch a quantity its
+    /// adapter cannot produce. Spelled out here instead of using `ALL_FIELDS` because
+    /// `guard.hpp` includes this header and not the other way round; a `static_assert`
+    /// there ties the two together so they cannot drift apart.
+    static constexpr uint32_t health_fields = 0x1Fu;
+
     Rls() : lambda_(T(0.999)), inv_lambda_(T(1) / T(0.999)), p0_(T(100)) {
         reset();
     }

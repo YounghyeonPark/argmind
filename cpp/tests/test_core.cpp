@@ -2312,6 +2312,12 @@ public:
     /// Theta only. A third of RLS's state at n=6, and a different SHAPE, not just a size.
     static constexpr int state_size = N * M;
 
+    /// **Three of five, and this is the fix.** The two it omits are covariance scalars
+    /// and this adapter has no covariance. Declaring them absent makes the guard refuse
+    /// a bound on them at the point it is configured; before `health_fields` existed the
+    /// adapter had to return zeros and the same bound broke in both directions.
+    static constexpr uint32_t health_fields = argmind::RESIDUAL_FIELDS;
+
     ProbeNlms() : mu_(T(0.5)), eps_(T(1e-6)) { reset(); }
     ProbeNlms(T mu, T eps) : mu_(mu), eps_(eps) { reset(); }
 
@@ -2330,13 +2336,11 @@ public:
         }
     }
 
-    /// **The leak.** `health` is two covariance scalars, and this adapter has no covariance.
-    /// There is nothing honest to put here, so it reports zero -- see the test below for what
-    /// that does to a guard.
-    void health(double* p_trace, double* p_min_diag) const {
-        *p_trace = 0.0;
-        *p_min_diag = 0.0;
-    }
+    // **No `health()` at all**, and that is the point. It used to be mandatory, so an
+    // adapter with no covariance had to invent two numbers. The guard's calls now sit
+    // behind `if constexpr (needs_health(Adapter::health_fields))`, so for an adapter
+    // that declares neither covariance field the branch is never instantiated and the
+    // method need not exist. That this file compiles is the proof.
 
     argmind::Report<T, M> update(const T* x, const T* y) {
         argmind::Report<T, M> r;
@@ -2354,7 +2358,8 @@ public:
         r.residual_norm = 0.0;
         r.residual_post_norm = 0.0;
         r.gain_norm = static_cast<double>(g);
-        health(&r.p_trace, &r.p_min_diag);
+        r.p_trace = 0.0;
+        r.p_min_diag = 0.0;
         return r;
     }
 
@@ -2392,54 +2397,67 @@ void test_the_guard_and_pipeline_hold_an_adapter_that_is_not_rls() {
     CHECK(out[0] > want - 0.05f && out[0] < want + 0.05f);
 }
 
-void test_a_covariance_check_on_a_covariance_free_adapter_fails_both_ways() {
-    // The contract is model-agnostic EXCEPT for `health`, which is two covariance scalars.
-    // `Field::PTrace` and `Field::PMinDiag` are two of the guard's five checkable fields, so
-    // an adapter without a covariance inherits two checks that cannot mean anything. Both
-    // directions are broken, and they are broken differently -- which is why this is pinned
-    // rather than described.
+void test_a_bound_on_a_field_the_adapter_cannot_report_is_refused() {
+    // The contract was model-agnostic except for `health`, which is two COVARIANCE scalars.
+    // An adapter without a covariance had to return zeros, and then the same bound broke in
+    // both directions -- `at_most(PTrace, 1e4)` was dead (always satisfied, never able to
+    // fire, and configured, so it read as protection) while `at_least(PTrace, 1e-9)`, a sane
+    // sanity bound on RLS, tripped on the first update and froze the adapter for the run.
+    //
+    // Both are now refused where the configuration is made. This tests the refusal, and the
+    // RLS control tests that it is the adapter's declaration doing it and not the bounds.
     using Nlms = ProbeNlms<float, 6, 1>;
-    float x[6], y[1];
 
-    // Upper bound: DEAD. 0.0 <= 1e4 forever, so the check is configured, reports healthy on
-    // every sample, and can never fire. A check that cannot fail is not a check.
-    {
-        argmind::Guard<Nlms, 4, 4> g{Nlms(0.5f, 1e-6f), 5, 0};
-        CHECK(g.add_bound(argmind::Bound::at_most(argmind::Field::PTrace, 1e4)));
-        bool tripped = false;
-        for (int k = 0; k < 400; ++k) {
-            for (int i = 0; i < 6; ++i) x[i] = float((k * 7 + i * 13) % 11) - 5.0f;
-            y[0] = 3.0f * x[0] - 2.0f * x[1] + (k > 200 ? 1000.0f : 0.0f);
-            if (g.update(x, y).tripped) tripped = true;
-        }
-        CHECK(!tripped);           // ...not because the adapter is healthy
-        CHECK(!g.frozen());        // ...but because the quantity is constant zero
-    }
+    argmind::Guard<Nlms, 4, 4> g{Nlms(0.5f, 1e-6f), 5, 0};
+    CHECK(Nlms::health_fields == argmind::RESIDUAL_FIELDS);
+    CHECK(!g.add_bound(argmind::Bound::at_most(argmind::Field::PTrace, 1e4)));
+    CHECK(!g.add_bound(argmind::Bound::at_least(argmind::Field::PTrace, 1e-9)));
+    CHECK(!g.add_bound(argmind::Bound::at_most(argmind::Field::PMinDiag, 1.0)));
+    // ...and it refuses only those. The three that come out of any update still work, so
+    // this is a declaration and not a blanket ban on guarding a non-RLS adapter.
+    CHECK(g.add_bound(argmind::Bound::at_most(argmind::Field::ResidualNorm, 1e4)));
+    CHECK(g.valid());
 
-    // Lower bound: FATAL. The same sanity bound that is reasonable on RLS -- "the covariance
-    // has not collapsed to nothing" -- trips on the first update and freezes the adapter for
-    // the rest of the run.
-    {
-        argmind::Guard<Nlms, 4, 4> g{Nlms(0.5f, 1e-6f), 5, 0};
-        CHECK(g.add_bound(argmind::Bound::at_least(argmind::Field::PTrace, 1e-9)));
-        for (int i = 0; i < 6; ++i) x[i] = 1.0f;
-        y[0] = 1.0f;
-        CHECK(g.update(x, y).tripped);
-        CHECK(g.frozen());
-    }
+    // The guard is an adapter, so it passes the declaration through to whatever wraps it.
+    CHECK((argmind::Guard<Nlms, 4, 4>::health_fields) == argmind::RESIDUAL_FIELDS);
+    CHECK((argmind::Guard<argmind::Rls<float, 6, 1>, 4, 4>::health_fields) ==
+          argmind::ALL_FIELDS);
 
-    // The control: the identical pair of bounds on RLS does neither. So it is the adapter's
-    // missing covariance and not the bounds themselves.
-    {
-        argmind::Guard<argmind::Rls<float, 6, 1>, 4, 4> g{
-            argmind::Rls<float, 6, 1>(0.98f, 100.0f), 5, 0};
-        CHECK(g.add_bound(argmind::Bound::at_most(argmind::Field::PTrace, 1e4)));
-        CHECK(g.add_bound(argmind::Bound::at_least(argmind::Field::PTrace, 1e-9)));
-        for (int i = 0; i < 6; ++i) x[i] = 1.0f;
-        y[0] = 1.0f;
-        CHECK(!g.update(x, y).tripped);
-        CHECK(!g.frozen());
-    }
+    // The control: RLS declares all five, so the identical bounds are accepted.
+    argmind::Guard<argmind::Rls<float, 6, 1>, 4, 4> r{
+        argmind::Rls<float, 6, 1>(0.98f, 100.0f), 5, 0};
+    CHECK(r.add_bound(argmind::Bound::at_most(argmind::Field::PTrace, 1e4)));
+    CHECK(r.add_bound(argmind::Bound::at_least(argmind::Field::PMinDiag, 1e-12)));
+    CHECK(r.valid());
+}
+
+/// An adapter that declares it cannot report a residual norm. At namespace scope because a
+/// local class may not have static data members.
+struct ProbeNoResidual : ProbeNlms<float, 6, 1> {
+    using ProbeNlms<float, 6, 1>::ProbeNlms;
+    static constexpr uint32_t health_fields = argmind::field_bit(argmind::Field::GainNorm);
+};
+
+void test_divergence_is_refused_when_the_adapter_cannot_report_a_residual_norm() {
+    // Divergence watches `residual_norm` and nothing else, so an adapter that does not
+    // declare it would be comparing a constant against itself. That is the same dead-check
+    // failure, and worse here: divergence is the check that needs no units, so it is the one
+    // a sensor-agnostic caller is most likely to enable and least likely to re-derive.
+    argmind::Divergence d;
+    d.ratio = 8.0;
+    d.fast_alpha = 0.25;
+    d.slow_alpha = 0.02;
+    d.warmup = 20;
+
+    argmind::Guard<ProbeNoResidual, 4, 4> bad{ProbeNoResidual(0.5f, 1e-6f), 5, 0};
+    bad.set_divergence(d);
+    CHECK(!bad.valid());
+
+    // The same divergence on an adapter that does declare it is fine, so it is the
+    // declaration being read and not divergence being broken.
+    argmind::Guard<ProbeNlms<float, 6, 1>, 4, 4> ok{ProbeNlms<float, 6, 1>(0.5f, 1e-6f), 5, 0};
+    ok.set_divergence(d);
+    CHECK(ok.valid());
 }
 
 int main() {
@@ -2526,7 +2544,8 @@ int main() {
     test_the_declared_ring_memory_matches_the_shape();
 
     test_the_guard_and_pipeline_hold_an_adapter_that_is_not_rls();
-    test_a_covariance_check_on_a_covariance_free_adapter_fails_both_ways();
+    test_a_bound_on_a_field_the_adapter_cannot_report_is_refused();
+    test_divergence_is_refused_when_the_adapter_cannot_report_a_residual_norm();
 
     printf("%d checks, %d failures\n", checks, failures);
     return failures == 0 ? 0 : 1;

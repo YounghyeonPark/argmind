@@ -57,6 +57,33 @@ enum class Field : uint8_t {
     PMinDiag = 4,
 };
 
+/// The bit a `Field` occupies in an adapter's `health_fields` mask.
+constexpr uint32_t field_bit(Field f) { return 1u << static_cast<uint32_t>(f); }
+
+/// For an adapter that can report every field, which `Rls` can because the last two
+/// are its covariance.
+constexpr uint32_t ALL_FIELDS =
+    field_bit(Field::ResidualNorm) | field_bit(Field::ResidualPostNorm) |
+    field_bit(Field::GainNorm) | field_bit(Field::PTrace) | field_bit(Field::PMinDiag);
+
+/// The three any adapter can report, because they come out of the update itself rather
+/// than out of a particular algorithm's internals.
+constexpr uint32_t RESIDUAL_FIELDS = field_bit(Field::ResidualNorm) |
+                                     field_bit(Field::ResidualPostNorm) |
+                                     field_bit(Field::GainNorm);
+
+/// Whether an adapter reports anything that needs `health()` at all. An adapter that
+/// declares neither covariance field need not implement it: the guard's calls sit
+/// behind `if constexpr`, so the branch is never instantiated.
+constexpr bool needs_health(uint32_t mask) {
+    return (mask & (field_bit(Field::PTrace) | field_bit(Field::PMinDiag))) != 0;
+}
+
+// `rls.hpp` cannot name `ALL_FIELDS` -- this header includes it, not the reverse -- so it
+// spells its mask out. Tie the two together here so they cannot drift apart silently.
+static_assert(Rls<float, 1, 1>::health_fields == ALL_FIELDS,
+              "Rls declares a health_fields mask that is no longer all five Fields");
+
 /// Why the guard blocked an update, when it was not the adapter's own rejection.
 enum class GuardReason : uint8_t {
     None = 0,
@@ -237,8 +264,21 @@ public:
     // constructor would put the check list in the type and the C ABI has to name the
     // type. `valid()` is what refuses a configuration that cannot work.
 
+    /// Refuses a bound on a field this adapter cannot report, which is the difference
+    /// between a check and something that looks like one.
+    ///
+    /// `Field::PTrace` and `Field::PMinDiag` are *covariance* quantities. An adapter
+    /// without a covariance used to have to return zeros from `health()`, and then the
+    /// same bound broke in both directions: `at_most(PTrace, 1e4)` was **dead** — always
+    /// satisfied, unable ever to fire, and configured, so it read as protection — while
+    /// `at_least(PTrace, 1e-9)`, a sane sanity bound on RLS, **tripped on the first
+    /// update and froze the adapter for the rest of the run**. Both measured on a
+    /// second adapter before this existed. Silently dead one way and instantly bricking
+    /// the other is worse than either alone, so the configuration is refused at the
+    /// point it is made rather than misbehaving later.
     bool add_bound(const Bound& b) {
         if (n_bounds_ >= MaxBounds || !b.valid()) return false;
+        if ((Adapter::health_fields & field_bit(b.field)) == 0) return false;
         bounds_[n_bounds_++] = b;
         return true;
     }
@@ -258,6 +298,15 @@ public:
     bool valid() const {
         if (n_bounds_ == 0 && !divergence_.enabled) return false;
         if (!divergence_.valid()) return false;
+        // The divergence check watches `residual_norm` and nothing else. An adapter that
+        // does not declare it would give the check a constant to compare against itself,
+        // which is the same dead-check failure `add_bound` refuses -- and worse here,
+        // because divergence is the check that needs no units and is therefore the one a
+        // sensor-agnostic caller is most likely to enable and least likely to re-derive.
+        if (divergence_.enabled &&
+            (Adapter::health_fields & field_bit(Field::ResidualNorm)) == 0) {
+            return false;
+        }
         for (int i = 0; i < n_bounds_; ++i) {
             if (!bounds_[i].valid()) return false;
         }
@@ -279,10 +328,23 @@ public:
         adapter_.predict(x, out);
     }
 
+    /// The guard *is* an adapter, so it reports what the one it wraps reports.
+    static constexpr uint32_t health_fields = Adapter::health_fields;
+
     /// Straight through. Correct while frozen too: the state is not moving, so the
     /// wrapped adapter's own answer is still the current one.
+    ///
+    /// Behind `if constexpr`, so an adapter declaring neither covariance field need not
+    /// implement `health()` at all — the branch is never instantiated. Zeros are safe in
+    /// the other branch precisely because `add_bound` refuses to watch a field that is
+    /// not declared, so nothing can read them.
     void health(double* __restrict p_trace, double* __restrict p_min_diag) const {
-        adapter_.health(p_trace, p_min_diag);
+        if constexpr (needs_health(Adapter::health_fields)) {
+            adapter_.health(p_trace, p_min_diag);
+        } else {
+            *p_trace = 0.0;
+            *p_min_diag = 0.0;
+        }
     }
 
     bool load_state(const T* __restrict flat) {
@@ -310,7 +372,7 @@ public:
         // state, so the live values are exactly right, while the newest checkpoint can be
         // up to checkpoint_every updates stale. Reading the checkpoint here was a bug in
         // the Python reference, found by a mutation check on this port and fixed in both.
-        adapter_.health(&frozen_trace_, &frozen_min_diag_);
+        health(&frozen_trace_, &frozen_min_diag_);
     }
 
     void thaw() {
@@ -467,7 +529,7 @@ private:
         frozen_ = false;
         frozen_by_ = 0;
         healthy_run_ = 0;
-        adapter_.health(&frozen_trace_, &frozen_min_diag_);
+        health(&frozen_trace_, &frozen_min_diag_);
         store_checkpoint(frozen_trace_, frozen_min_diag_);
     }
 
