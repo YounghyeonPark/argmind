@@ -175,6 +175,19 @@ job. What it does give is the reason argmind belongs here — an online-adapted 
 part still moving after deployment, so freezing, rollback, checkpointing and the record format
 all transfer unchanged.
 
+**The label arrives after the features that earned it, and getting that wrong is silent.** Honest
+self-supervision on a robot is late: predicted at `t`, confirmed at `t + Δ` by something slower
+and more physical. `allow_non_causal` does *not* express this — it permits a policy to pick a
+future sample, it does not declare a lag. **No library change is needed**: make the outcome the
+reference so instants are label arrivals, and **stamp each feature with the instant it is about
+rather than when it was computed**. Measured at Δ=0.30 s, features 50 Hz / labels 10 Hz —
+stamping by computation time gives relative error **1.105**, a different map entirely; stamping
+by the instant it is about gives **1.56e−04**, which is not error but the `P0⁻¹` prior term,
+confirmed by the 1/p0 law across four decades (×9.85, ×9.98, ×10.00, ×10.00). **No guard catches
+the wrong one** — the adapter is healthy and `residual_norm` is low, because it fits the wrong
+map well; it is being asked the wrong question, and a guard cannot see that. Both halves are in
+`tests/test_pipeline.py`, mutation-checked.
+
 **Still undecided:** whether inference is *hosted* (an interface to ONNX Runtime/TFLite) or
 *embedded*, and whether the tiers ship as one library or two. Nothing on the camera/audio/speech
 path is built.

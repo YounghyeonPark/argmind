@@ -259,6 +259,41 @@ and the refusal to watch a field the adapter cannot report all transfer unchange
 network with an unguarded adapted head is a system that can learn garbage and keep answering
 confidently, which is the failure this library was built around.
 
+#### The label arrives after the features that earned it, and getting that wrong is silent
+
+The head needs a `y`, and on a robot the honest ones are *self-supervised and late*: something
+is predicted at `t` and a slower, more trustworthy sensor confirms it at `t + Δ` — foot contact
+against a predicted step, measured torque against a predicted load, a second modality against
+the first. The camera is fast and cheap; the thing that grades it is slow and physical.
+
+`allow_non_causal` does **not** express this. It says a policy may pick a sample after the
+instant; it does not say "these features go with the target that arrives Δ later". Nothing in
+the pipeline declares a lag.
+
+**No library change is needed, and the arrangement that works is worth writing down because the
+one that does not is silent.** Make the *outcome* stream the reference, so instants are label
+arrivals and `hold_last` reaches back for features, and **stamp each feature vector with the
+instant it is about rather than the instant it was computed**. Measured, n=4, Δ=0.30 s,
+features at 50 Hz and labels at 10 Hz:
+
+| feature timestamp | relative error in θ |
+|---|---|
+| when it was computed (`t`) | **1.105** — a different map entirely |
+| when it is about (`t + Δ`) | **1.56e−04** |
+
+**And 1.56e−04 is not error.** It is the `P0⁻¹` prior term this project measured elsewhere,
+confirmed here across four decades — p0 of 1/10/100/1000/10000 gives 1.53e−02, 1.56e−03,
+1.56e−04, 1.56e−05, 1.56e−06, ratios ×9.85, ×9.98, ×10.00, ×10.00. The head learns the map
+exactly.
+
+**The part that matters for a safety story: no guard catches the wrong one.** Freezing, rollback
+and the divergence detector all watch the *adapter's* health, and the adapter is perfectly
+healthy — `residual_norm` is low, because it fits the wrong map well. It is being asked the
+wrong question, and a guard cannot tell the difference between a good answer to the wrong
+question and a good answer. Both halves are pinned in `tests/test_pipeline.py`, including the
+guard that the naive arrangement still fails, and mutation-checked: undoing the stamp shift
+fails both tests, and disconnecting `p0` fails the law test.
+
 ## The design driver
 
 The framework is sensor-agnostic, but designing against nothing produces an API that fits

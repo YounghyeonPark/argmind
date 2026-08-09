@@ -676,3 +676,78 @@ def test_the_prediction_does_not_reintroduce_a_per_step_allocation():
     # caller's and are freed each iteration. A handful of blocks of slack absorbs the
     # interpreter's own arenas without absorbing a real per-step leak.
     assert after - before < 50, f"{after - before} blocks grew over 500 steps"
+
+
+# -- a target that arrives after the features it grades -------------------------------
+
+def _delayed_target_run(feature_stamp_shift, p0=100.0, steps=400,
+                        n=4, delay=0.30, feat_hz=50.0, out_hz=10.0):
+    """Self-supervision with a physically delayed label, which is the shape an online
+    head has on a robot: something is predicted at t and a slower, more trustworthy
+    sensor confirms it at t + delay -- foot contact against a predicted step, measured
+    torque against a predicted load.
+
+    The reference is the OUTCOME stream, so instants are label arrivals and `hold_last`
+    picks the newest features at or before each one. `feature_stamp_shift` is the whole
+    experiment.
+    """
+    true = np.array([2.0, -1.0, 0.5, 0.25])[:n]
+    feats = Stream("feat", dim=n, capacity=256, dtype="f8")
+    outcome = Stream("outcome", dim=1, capacity=64, dtype="f8")
+    pipe = Pipeline(
+        streams=[feats, outcome],
+        aligner=Aligner(reference="outcome", policy="hold_last"),
+        adapter=RecursiveLeastSquares(n, 1, forgetting=0.999, p0=p0, dtype="f8"),
+        frame_map=FrameMap([("feat", i) for i in range(n)], ("outcome", 0)),
+    )
+    t, next_out, pending = 0.0, delay, []
+    for k in range(steps):
+        e = np.random.default_rng(1000 + k).standard_normal(n)
+        feats.push(t + feature_stamp_shift, e)
+        pending.append((t + delay, e))
+        while next_out <= t:
+            ready = [p for p in pending if p[0] <= next_out]
+            if ready:
+                outcome.push(next_out, [float(ready[-1][1] @ true)])
+            next_out += 1.0 / out_hz
+        pipe.step()
+        t += 1.0 / feat_hz
+    theta = np.asarray(pipe.adapter.state[:n], dtype=float)
+    return float(np.linalg.norm(theta - true) / np.linalg.norm(true))
+
+
+def test_a_feature_must_be_stamped_with_the_instant_it_is_about():
+    """The trap, and it is silent.
+
+    An online head is graded by a label that arrives later than the features that earned
+    it. Stamping each feature vector with the time it was COMPUTED aligns every label
+    against features from the wrong moment, and the adapter converges happily on the
+    wrong map -- `residual_norm` is *low*, because it fits that wrong map well. **No
+    guard can catch this.** Freezing, rollback and the divergence detector all watch the
+    adapter's own health, and the adapter is healthy; it is being asked the wrong
+    question.
+
+    What works needs no library feature: stamp the feature with the instant it is ABOUT
+    rather than the instant it was produced, and `hold_last` on the outcome's timebase
+    pairs them correctly.
+    """
+    wrong = _delayed_target_run(feature_stamp_shift=0.0)
+    right = _delayed_target_run(feature_stamp_shift=0.30)
+    assert wrong > 0.5, (
+        f"the naive stamping no longer learns the wrong map (error {wrong:.3e}); this "
+        "fixture no longer demonstrates the trap, so the comparison proves nothing")
+    assert right < 1e-3, f"stamping by the instant it is about did not converge: {right:.3e}"
+    assert wrong / right > 1000.0
+
+
+def test_the_delayed_target_residual_is_the_prior_term_and_not_an_error():
+    """The correct arrangement leaves ~1.6e-4 at p0=100, which could be read as "nearly
+    right" and left alone. It is not error at all: this project measured elsewhere that
+    RLS's residual on noiseless data is the `P0^-1` prior term and scales as exactly
+    1/p0, and the same law holds here across four decades. Asserting the LAW rather than
+    a tolerance is what distinguishes a converged head from an almost-converged one."""
+    errs = {p0: _delayed_target_run(0.30, p0=p0) for p0 in (10.0, 100.0, 1000.0, 10000.0)}
+    ratios = [errs[a] / errs[b] for a, b in ((10.0, 100.0), (100.0, 1000.0),
+                                             (1000.0, 10000.0))]
+    for r in ratios:
+        assert 9.5 < r < 10.5, f"the 1/p0 law does not hold here: ratios {ratios}"
