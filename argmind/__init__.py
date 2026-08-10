@@ -6,7 +6,8 @@ alignment, two adapters, the guard, the pipeline and persistence — and the cor
 on emulated Cortex-M4 and Cortex-M55. What is absent is timing on real silicon.
 """
 
-from .adapt import (Adapter, NormalisedLeastMeanSquares, RecursiveLeastSquares,
+from .adapt import (Adapter, MultilayerPerceptron, NormalisedLeastMeanSquares,
+                    RecursiveLeastSquares,
                     UpdateReport)
 from .align import Aligner, Frame
 from .guard import Bound, Check, Divergence, Guard, GuardReport
@@ -17,7 +18,7 @@ from .stream import Sample, Stream
 __version__ = "0.0.1.dev0"
 __all__ = ["Sample", "Stream", "Aligner", "Frame",
            "Adapter", "UpdateReport", "RecursiveLeastSquares",
-           "NormalisedLeastMeanSquares",
+           "NormalisedLeastMeanSquares", "MultilayerPerceptron",
            "Guard", "GuardReport", "Check", "Bound", "Divergence",
            "Pipeline", "FrameMap", "StepReport",
            "Store", "Record", "fingerprint_of"]

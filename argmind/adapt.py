@@ -210,13 +210,21 @@ class Adapter(abc.ABC):
     def _check_dtype(cls, dtype) -> np.dtype:
         dt = np.dtype(dtype)
         if dt.str[1:] not in SUPPORTED_DTYPES:
+            # The reason differs by adapter and saying the wrong one is worse than
+            # saying none: this message used to give every adapter the covariance
+            # argument, including two that have no covariance at all.
+            why = ("the covariance recursion was measured losing positive-definiteness "
+                   "in fp16 even with perfectly conditioned regressors, which is a "
+                   "property of this algorithm and not a portability limitation to work "
+                   "around — see the argmind.adapt module docstring")
+            if "p_trace" not in cls.health_fields:
+                why = ("this adapter has no covariance, so RLS's measured fp16 failure "
+                       "does not apply to it; half precision is refused here for want of "
+                       "evidence rather than because it was measured to fail — see the "
+                       "class docstring for what has and has not been measured")
             raise ValueError(
                 f"{cls.__name__}: dtype {dt.name!r} is not supported; use one of "
-                f"{SUPPORTED_DTYPES}. Half precision is refused because the "
-                "covariance recursion was measured losing positive-definiteness "
-                "in fp16 even with perfectly conditioned regressors — see the "
-                "argmind.adapt module docstring. This is a property of the "
-                "algorithm; it is not a portability limitation to work around.")
+                f"{SUPPORTED_DTYPES}. Half precision is refused because {why}.")
         if np.dtype(dt).itemsize < np.dtype(cls.min_dtype).itemsize:
             raise ValueError(
                 f"{cls.__name__}: requires at least {cls.min_dtype!r}, got {dt.name!r}")
@@ -780,3 +788,328 @@ class NormalisedLeastMeanSquares(Adapter):
                 f"n_outputs={self.n_outputs}, mu={self.mu}, "
                 f"dtype={self.dtype.name!r}, updates={self._updates})")
 
+
+#: Activation functions, by name. A **name, not a callable**: the same reason `FrameMap`
+#: takes an index table rather than a function — a callable does not cross a C ABI, and
+#: this adapter is meant to be portable to the hosted C++ tier without a second design.
+_ACTIVATIONS = ("tanh", "relu")
+
+
+class MultilayerPerceptron(Adapter):
+    """A dense feed-forward network trained by SGD, wearing the `Adapter` contract.
+
+    **Why this exists.** Until 2026-08-10 the caller supplied the basis and this library
+    only fitted coefficients on it. The scope decision of that day is that generating the
+    basis is the platform's job (DESIGN.md, *The platform generates the basis*), and the
+    measurement behind it is memory: against a target no fixed basis suits, a network
+    reaches the same accuracy at **9.5 KB** that random Fourier features through RLS need
+    **131 KB** for, because a covariance is ``n**2`` and weights are not. What it costs is
+    samples — about 4x — and in its first few hundred it is worse than a constant.
+
+    **This does not replace `RecursiveLeastSquares` and does not want to.** RLS is the
+    exact recursive solution of a weighted least-squares problem: no local minima, no
+    learning rate, and a real per-direction confidence in ``p_trace`` that the guard's
+    bounds and rollback are built on. None of that survives here. What survives is more
+    important than it looks: **once clean data resumes after a fault, RLS returns to
+    exactly where it was and this does not** — measured at 1.00x against 3.33x twenty
+    thousand samples after the fault ended. So a `Guard` is not optional decoration for
+    this adapter; it is what keeps a fault from being permanent.
+
+    State layout
+    ------------
+    One flat contiguous block, in layer order: ``W0, b0, W1, b1, ...`` with each ``W``
+    row-major ``(inputs, outputs)``. That is the same promise RLS makes, so `persist`
+    needs no special case and the `Guard`'s checkpoint ring is a plain copy. The ring is
+    ``depth * state_size``, which scales with the *model* rather than with the sensors:
+    1.6 KB total for RLS at six features, 47.5 KB for a 3-32-32-1 network at depth 4. That
+    is comfortable on the hosted tier and does not fit the 8 KB core floor, so this
+    adapter is a second-tier capability by arithmetic rather than by preference.
+
+    Two choices that were measured rather than taken on taste
+    ---------------------------------------------------------
+    **The optimiser is plain SGD, because Adam did not earn its state.** Adam keeps a
+    first and second moment per weight, so it stores 3x. Compared at *equal bytes* rather
+    than at equal architecture — which is the comparison that matters when memory is the
+    reason the network is here at all — SGD wins: at ~28 KB, ``relu`` SGD at (56,56)
+    scores **0.1314** against Adam's **0.1410** at (32,32), and with less seed-to-seed
+    spread (0.131/0.125/0.137 against 0.161/0.151/0.111). Adam is better at a *fixed*
+    architecture, which is the comparison that flatters it.
+
+    **The default activation is ``tanh``, and not because it is more accurate.** It is
+    less accurate where both work: at (32,32) over 40,000 samples ``relu`` reaches 0.1391
+    against ``tanh``'s 0.2315. It is the default because at a rate where ``tanh`` still
+    learns, ``relu`` learns **nothing**. Measured at (16,), 8,000 samples, **per seed** over
+    six, against a constant predictor's 0.7641:
+
+    ==========  ========  ==================================  ================
+    lr             0.2                    0.1                       0.05
+    ==========  ========  ==================================  ================
+    ``tanh``    all div    0.751 on all six, below 0.764       0.458 - 0.630
+    ``relu``    all div    0.772 - 0.831 and one divergence     0.592 - 0.715
+    ==========  ========  ==================================  ================
+
+    ``tanh`` is **not** unconditionally safe — at 0.2 both die — so the claim is about where
+    each fails rather than that one cannot. ``relu`` is offered because its advantage is real
+    where a caller can afford to find it, and these are the figures they are tuning against.
+
+    **Two earlier versions of this table were aggregation artifacts**, which is why it is
+    per-seed: a mean over three seeds hid that ``relu`` at 0.02 was fine, and calling a row
+    "diverged" because *any* seed diverged turned one seed in six into a property.
+
+    The one exact property, and the tests assert it rather than a tolerance
+    -----------------------------------------------------------------------
+    With ``hidden=()`` this is a single linear layer and the update is closed-form: after
+    an update the a posteriori error is exactly ``(1 - 2*lr*(x.x + 1))`` times the a
+    priori one, for any data. Verified to 1.7e-13 over 600 cases at three learning rates
+    — the analogue of NLMS's projection law and of RLS being checked against the
+    closed-form weighted solution rather than against itself.
+
+    **The ``+ 1`` is the bias**, which acts as a constant input of one, and leaving it out
+    was the first version of that law. It failed by a factor of 20 and the failure is the
+    point: a law that a wrong implementation also satisfies verifies nothing, and this one
+    is tight enough to catch a missing term.
+
+    The general case has no such law, which is exactly why the gradient is checked against
+    central differences instead — a backward pass that is subtly wrong still trains, just
+    worse, so "it learns" is not evidence. Measured to 1.5e-8 to 3.7e-11 across five
+    architectures and both activations, at the finite-difference floor.
+
+    What is *not* clamped, deliberately
+    -----------------------------------
+    A diverging step can drive the weights to non-finite and the adapter does **not**
+    refuse it. That follows the rule RLS already sets by reporting covariance windup
+    rather than bounding it: a safety mechanism inside the adapter makes the `Guard`
+    optional, and a guard that can be left out gets left out. Non-finite *input* is a
+    different thing — a sensor event — and is rejected and counted, as everywhere else.
+    A test drives a divergence and asserts the guard catches it.
+
+    Precision
+    ---------
+    ``min_dtype`` is ``f4`` and **fp16 was measured to work anyway**, which is worth
+    stating because the inherited assumption said it would not. On the reference problem
+    at 20,000 updates: fp16 reaches **0.2305** against fp32's 0.2310 at (32,32), 0.4893
+    against 0.4892 at (16,), and 0.7927 against 0.7927 with no hidden layer — no
+    non-finite weights and not one weight driven to zero. The headroom is why: a typical
+    step is ``lr*||grad|| ~ 5e-2`` against an fp16 resolution near a weight of 0.1 of
+    ``6.1e-5``, nearly three decades. RLS's fp16 failure is its **covariance recursion**
+    losing positive-definiteness, and this adapter has no covariance, so that argument
+    never transferred.
+
+    **It is still refused, and the reason is the evidence rather than the arithmetic.**
+    One problem, one architecture family, 20,000 updates, on a host. Half precision would
+    halve the state — which is the whole reason a network is here — so this is a real
+    opportunity and it is recorded as one. What it needs before ``min_dtype`` moves: more
+    than one target function, a run long enough to show accumulated rounding in the
+    weights, and the target, where fp16 arithmetic is emulated on a Cortex-M4F and native
+    on an M55.
+    """
+
+    min_dtype = "f4"
+
+    #: Three of five, for the same reason NLMS declares three: there is no covariance, so
+    #: `p_trace` and `p_min_diag` are declared absent and a `Guard` refuses a bound on
+    #: them at construction rather than reporting zeros that break the bound both ways.
+    #:
+    #: This is the one place the model class is genuinely poorer than RLS and it is worth
+    #: stating narrowly: **there is no confidence-per-direction for a backpropagated
+    #: weight**, so a windup-shaped fault — a direction nothing has excited drifting away
+    #: — has no analogue here and no check. Everything else a guard does works, on
+    #: `residual_norm`, which this adapter reports.
+    health_fields = frozenset({"residual_norm", "residual_post_norm", "gain_norm"})
+
+    __slots__ = ("n_features", "n_outputs", "dtype", "hidden", "activation",
+                 "learning_rate", "_shapes", "_state", "_state_ro", "_w", "_b",
+                 "_e", "_e_post", "_updates", "_rejected_nonfinite")
+
+    def __init__(self, n_features: int, n_outputs: int = 1, *,
+                 hidden: tuple[int, ...] = (), activation: str = "tanh",
+                 learning_rate: float = 0.01, dtype: str = "f4",
+                 seed: int = 0) -> None:
+        if n_features < 1:
+            raise ValueError(f"n_features must be >= 1, got {n_features}")
+        if n_outputs < 1:
+            raise ValueError(f"n_outputs must be >= 1, got {n_outputs}")
+        hidden = tuple(int(h) for h in hidden)
+        if any(h < 1 for h in hidden):
+            raise ValueError(f"every hidden width must be >= 1, got {hidden}")
+        if activation not in _ACTIVATIONS:
+            raise ValueError(
+                f"activation must be one of {_ACTIVATIONS}, got {activation!r}. It is a "
+                "name rather than a callable so that this adapter can cross a C ABI "
+                "unchanged, the same reason FrameMap takes an index table.")
+        if not learning_rate > 0.0 or not math.isfinite(learning_rate):
+            raise ValueError(
+                f"learning_rate must be positive and finite, got {learning_rate}")
+
+        self.dtype = self._check_dtype(dtype)
+        self.n_features = n_features
+        self.n_outputs = n_outputs
+        self.hidden = hidden
+        self.activation = activation
+        self.learning_rate = float(learning_rate)
+
+        widths = (n_features, *hidden, n_outputs)
+        self._shapes = tuple(zip(widths[:-1], widths[1:]))
+        size = sum(a * b + b for a, b in self._shapes)
+        self._state = np.zeros(size, dtype=self.dtype)
+        self._state_ro = self._state.view()
+        self._state_ro.flags.writeable = False
+
+        # Views into the flat block, so a weight update writes through to `state` and
+        # there is never a second copy that can drift from it.
+        self._w, self._b, off = [], [], 0
+        for a, b in self._shapes:
+            self._w.append(self._state[off:off + a * b].reshape(a, b))
+            off += a * b
+            self._b.append(self._state[off:off + b])
+            off += b
+
+        # Glorot: variance 2/(fan_in + fan_out). Zero would leave every hidden unit
+        # computing the same function with the same gradient, so the network would
+        # collapse to width one and stay there -- symmetry a linear adapter does not have
+        # and cannot break by learning.
+        g = np.random.default_rng(seed)
+        for w, (a, b) in zip(self._w, self._shapes):
+            w[:] = g.standard_normal((a, b)) * math.sqrt(2.0 / (a + b))
+
+        self._e = np.zeros(n_outputs, dtype=self.dtype)
+        self._e_post = np.zeros(n_outputs, dtype=self.dtype)
+        self._updates = 0
+        self._rejected_nonfinite = 0
+
+    # -- Adapter contract ----------------------------------------------------
+
+    @property
+    def state(self) -> np.ndarray:
+        return self._state_ro
+
+    @property
+    def state_size(self) -> int:
+        return int(self._state.size)
+
+    @property
+    def updates(self) -> int:
+        return self._updates
+
+    @property
+    def rejected_nonfinite(self) -> int:
+        return self._rejected_nonfinite
+
+    def load_state(self, flat) -> None:
+        arr = np.asarray(flat, dtype=self.dtype).reshape(-1)
+        if arr.size != self._state.size:
+            raise ValueError(
+                f"state block must have {self._state.size} elements, got {arr.size}")
+        if not np.all(np.isfinite(arr)):
+            raise ValueError("refusing a state block that is not finite")
+        self._state[:] = arr
+
+    def reset(self) -> None:
+        """Back to zero weights, NOT back to the initialisation.
+
+        `Adapter.reset` means "forget everything", and RLS's zero theta is the honest
+        analogue. It is also a state this network cannot learn out of, because zero
+        weights make every hidden unit identical -- so `reset` on a network with hidden
+        layers is a deliberate stop, not a restart. Construct a new adapter to restart.
+        """
+        self._state[:] = 0
+        self._e[:] = 0
+        self._e_post[:] = 0
+        self._updates = 0
+        self._rejected_nonfinite = 0
+
+    # -- forward and backward ------------------------------------------------
+
+    def _act(self, z):
+        return np.tanh(z) if self.activation == "tanh" else np.maximum(z, 0.0)
+
+    def _dact(self, a):
+        # Both derivatives are expressible in the ACTIVATION rather than the pre-
+        # activation, which is why only `acts` is kept and `pre` is not stored.
+        if self.activation == "tanh":
+            return 1.0 - a * a
+        return (a > 0.0).astype(self.dtype)
+
+    def _forward(self, x):
+        acts = [x]
+        last = len(self._w) - 1
+        for i, (w, b) in enumerate(zip(self._w, self._b)):
+            z = acts[-1] @ w + b
+            acts.append(self._act(z) if i < last else z)
+        return acts
+
+    def predict(self, x) -> np.ndarray:
+        return np.asarray(self._forward(self._as_x(x))[-1], dtype=self.dtype)
+
+    def _as_x(self, x) -> np.ndarray:
+        arr = np.asarray(x, dtype=self.dtype).reshape(-1)
+        if arr.size != self.n_features:
+            raise ValueError(f"x must have {self.n_features} features, got {arr.size}")
+        return arr
+
+    def _as_y(self, y) -> np.ndarray:
+        arr = np.asarray(y, dtype=self.dtype).reshape(-1)
+        if arr.size != self.n_outputs:
+            raise ValueError(f"y must have {self.n_outputs} outputs, got {arr.size}")
+        return arr
+
+    def _report(self, applied: bool, reason: str | None,
+                gain_norm: float) -> UpdateReport:
+        return UpdateReport(
+            applied=applied,
+            residual=self._e.copy(),
+            residual_post=self._e_post.copy(),
+            gain_norm=gain_norm,
+            p_trace=0.0,
+            p_min_diag=0.0,
+            reason=reason)
+
+    def update(self, x, y) -> UpdateReport:
+        """One observation: forward, backward, one gradient step.
+
+        Same contract as every other adapter here -- shape errors raise, bad *values* are
+        rejected and counted.
+
+        **`gain_norm` is the norm of the step actually taken**, ``lr * ||grad||``, not the
+        gradient. NLMS reports the gain *vector* for the same reason: a `Guard` bound is
+        written against the name, so the quantity has to mean the same thing whichever
+        adapter is underneath.
+        """
+        xa = self._as_x(x)
+        ya = self._as_y(y)
+
+        if not (np.all(np.isfinite(xa)) and np.all(np.isfinite(ya))):
+            self._rejected_nonfinite += 1
+            self._e[:] = 0
+            self._e_post[:] = 0
+            return self._report(False, "nonfinite_input", 0.0)
+
+        acts = self._forward(xa)
+        np.subtract(ya, acts[-1], out=self._e)
+
+        # d(||y - yhat||^2)/d(pre-activation of the output layer).
+        delta = self.dtype.type(-2.0) * self._e
+        grads = []
+        for i in range(len(self._w) - 1, -1, -1):
+            grads.append((np.outer(acts[i], delta), delta.copy()))
+            if i:
+                delta = (delta @ self._w[i].T) * self._dact(acts[i])
+        grads.reverse()
+
+        lr = self.dtype.type(self.learning_rate)
+        sq = 0.0
+        for (w, b), (gw, gb) in zip(zip(self._w, self._b), grads):
+            w -= lr * gw           # writes through the view into the flat state block
+            b -= lr * gb
+            sq += float(np.sum(gw * gw) + np.sum(gb * gb))
+
+        np.subtract(ya, self._forward(xa)[-1], out=self._e_post)
+        self._updates += 1
+        return self._report(True, None, float(self.learning_rate * math.sqrt(sq)))
+
+    def __repr__(self) -> str:
+        return (f"MultilayerPerceptron(n_features={self.n_features}, "
+                f"n_outputs={self.n_outputs}, hidden={self.hidden}, "
+                f"activation={self.activation!r}, "
+                f"learning_rate={self.learning_rate}, dtype={self.dtype.name!r}, "
+                f"updates={self._updates})")

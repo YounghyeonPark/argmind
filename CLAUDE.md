@@ -210,7 +210,56 @@ Both sides freeze at exactly the shift step; six mutants confirm it (3 C++, 3 Py
 **Not in the C ABI yet** — that needs a decision on how many slots the exported guards
 declare, and it is recorded rather than guessed.
 
-**There are two adapters now** (`cpp/include/argmind/nlms.hpp`, `NormalisedLeastMeanSquares`
+**There are three adapters now, and the third is a network** — `MultilayerPerceptron`, the
+2026-08-10 scope decision made real. Python only so far. Three of nine mutants exposed real
+gaps rather than confirming the suite, and two design choices were measured rather than taken.
+
+**SGD, because Adam did not earn its state.** Adam keeps two moments per weight, so it stores
+3x. Compared at *equal bytes* — the comparison that matters when memory is the whole reason a
+network is here — SGD wins: at ~28 KB, relu SGD at (56,56) scores **0.1314** against Adam's
+**0.1410** at (32,32), with less seed spread. Adam wins at a *fixed architecture*, which is the
+comparison that flatters it.
+
+**`tanh` by default, and it is the less accurate one.** At (32,32) over 40k samples relu reaches
+0.1391 against tanh's 0.2315. The default is tanh because at `lr=0.1` tanh beats a constant on
+all six seeds (0.751 against 0.764) and **relu beats it on none** (0.772–0.831, plus one
+divergence); at 0.05 tanh wins all six; at 0.2 both die, so tanh is not claimed safe, only
+later-failing. **Two earlier versions of that table were aggregation artifacts** — a mean over
+three seeds hid one case, and calling a row "diverged" because *any* seed did turned one seed in
+six into a property. It is per-seed now. Third aggregation artifact of the session.
+
+**The gradient is checked against central differences, not against "it learns"** — a wrong
+backward pass still trains, just worse. 1.5e-8 to 3.7e-11 over five architectures and both
+activations. And at `hidden=()` there is an exact law, the analogue of NLMS's: the a posteriori
+error is exactly `(1 - 2*lr*(x.x + 1))` times the a priori one, 1.7e-13 over 600 cases. **The
+`+1` is the bias** and the first version omitted it, failing by 20x — the law is tight enough to
+catch a missing term, which is what makes it worth having, and the test asserts the version
+without the bias does *not* hold.
+
+**fp16 works and is still refused.** RLS's fp16 failure is its *covariance recursion* and this
+adapter has no covariance, so that argument never transferred — measured, 0.2305 against fp32's
+0.2310 at (32,32), no non-finite weight and none driven to zero, because a step is ~5e-2 against
+an fp16 resolution near 0.1 of 6.1e-5. It stays refused **for want of evidence rather than
+because it fails**: one problem, one architecture family, 20k updates, on a host. That also
+exposed a real defect — the shared refusal message gave *every* adapter RLS's covariance reason,
+including two that have no covariance. It picks the right reason now, and both branches are
+tested.
+
+**A diverging step is deliberately not clamped**, following the rule RLS sets by reporting
+covariance windup rather than bounding it: a safety mechanism inside the adapter makes the guard
+optional. A test drives a real divergence, asserts the unguarded adapter goes non-finite, and
+asserts the guard catches it and leaves a finite state. And `reset()` **stops** a network rather
+than restarting it — zero weights make every hidden unit identical with identical gradients, a
+symmetry it cannot learn out of; pinned by a test because it is surprising.
+
+**Three mutants that survived and were findings.** `state` returning a copy survived both an
+equality check *and* an allocation count, because the copy is discarded immediately so live
+blocks return to baseline — it needs `shares_memory` plus a count over *retained* results. The
+same defect has been in this repository before, on the path the guard takes at every checkpoint.
+`gain_norm` reporting the raw gradient instead of the step survived because nothing compared its
+*value*; it is now exact against the distance the state moved. The third was my own dud.
+
+**There are two adapters in C++** (`cpp/include/argmind/nlms.hpp`, `NormalisedLeastMeanSquares`
 in the reference). Normalised LMS is O(n) in memory and time and carries no covariance, which is
 the point: at a network head's width RLS's n² is the binding constraint — 330,608 B against
 2,912 at 128 features, and 512 features do not fit an STM32N6's SRAM. The Python was written
