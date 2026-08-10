@@ -278,6 +278,99 @@ void test_the_declared_size_bounds_are_bounds() {
     CHECK(am_rls_f64_6_1_state_size() == AM_RLS_F64_6_1_STATE);
 }
 
+// -- NLMS across the C ABI ---------------------------------------------------------------
+
+void test_the_abi_offers_an_adapter_that_fits_a_backbone_width() {
+    // The reason NLMS is exported at all. A frozen backbone hands out a wide embedding, and
+    // at 128 features the guarded RLS pipeline is 332,328 bytes -- larger than the whole
+    // declared 8 KB floor by forty times -- while this one is 4,656 and fits it.
+    CHECK(am_pipe_g_nlms_f32_128_1_bytes() * 40u < am_pipe_g_f32_128_1_bytes());
+    CHECK(am_pipe_g_nlms_f32_128_1_bytes() < 8u * 1024u);
+    CHECK(am_pipe_g_f32_128_1_bytes() > 8u * 1024u);
+
+    // State is theta only. That IS the difference, so it is asserted rather than described.
+    CHECK(am_nlms_f32_128_1_state_size() == 128);
+    CHECK(am_rls_f32_12_1_state_size() == 12 * 1 + 12 * 12);
+    CHECK(am_guard_nlms_f32_128_1_checkpoint_bytes() == 4 * 128 * 4);
+
+    CHECK(am_nlms_f32_6_1_bytes() <= AM_NLMS_F32_6_1_MAX_BYTES);
+    CHECK(am_nlms_f32_128_1_bytes() <= AM_NLMS_F32_128_1_MAX_BYTES);
+    CHECK(am_guard_nlms_f32_6_1_bytes() <= AM_GUARD_NLMS_F32_6_1_MAX_BYTES);
+    CHECK(am_guard_nlms_f32_128_1_bytes() <= AM_GUARD_NLMS_F32_128_1_MAX_BYTES);
+    CHECK(am_pipe_g_nlms_f32_6_1_bytes() <= AM_PIPE_G_NLMS_F32_6_1_MAX_BYTES);
+    CHECK(am_pipe_g_nlms_f32_128_1_bytes() <= AM_PIPE_G_NLMS_F32_128_1_MAX_BYTES);
+}
+
+void test_the_abi_nlms_learns_and_refuses_what_it_must() {
+    static am_rls_storage store[AM_GUARD_NLMS_F32_6_1_MAX_BYTES / sizeof(am_rls_storage)];
+    void* g = store;
+
+    // The BARE adapter's own refusals, which the guarded ones above do not exercise -- a
+    // mutant that dropped `params_valid` from `am_nlms_*_init` survived until this was here.
+    static am_rls_storage bare[AM_NLMS_F32_6_1_MAX_BYTES / sizeof(am_rls_storage)];
+    CHECK(am_nlms_f32_6_1_init(nullptr, sizeof(bare), 0.5f, 1e-6f) == AM_ERR_NULL);
+    CHECK(am_nlms_f32_6_1_init(bare, 4, 0.5f, 1e-6f) == AM_ERR_TOO_SMALL);
+    CHECK(am_nlms_f32_6_1_init(bare, sizeof(bare), 0.0f, 1e-6f) == AM_ERR_CONFIG);
+    CHECK(am_nlms_f32_6_1_init(bare, sizeof(bare), 2.5f, 1e-6f) == AM_ERR_CONFIG);
+    CHECK(am_nlms_f32_6_1_init(bare, sizeof(bare), -1.0f, 1e-6f) == AM_ERR_CONFIG);
+    CHECK(am_nlms_f32_6_1_init(bare, sizeof(bare), 0.5f, 0.0f) == AM_ERR_CONFIG);
+    CHECK(am_nlms_f32_6_1_init(bare, sizeof(bare), 0.5f, -1e-6f) == AM_ERR_CONFIG);
+    // mu = 2 is the boundary and is accepted; it is not a safe value, it is the edge.
+    CHECK(am_nlms_f32_6_1_init(bare, sizeof(bare), 2.0f, 1e-6f) == AM_OK);
+    {
+        float x[6] = {1.0f, 2.0f, -1.0f, 0.5f, 0.0f, 1.0f}, y[1] = {3.0f}, out[1];
+        am_report r;
+        CHECK(am_nlms_f32_6_1_update(bare, x, y, &r, nullptr) == AM_OK);
+        // mu = 1 projects the sample out entirely; at mu = 2 the a posteriori error is the
+        // a priori one negated, which is the stability boundary made visible.
+        CHECK(r.residual_post_norm > 0.99 * r.residual_norm);
+        CHECK(am_nlms_f32_6_1_predict(bare, x, out) == AM_OK);
+        CHECK(am_nlms_f32_6_1_updates(bare) == 1u);
+    }
+
+    CHECK(am_guard_nlms_f32_6_1_init(g, 8, 0.5f, 1e-6f, 1, 0) == AM_ERR_TOO_SMALL);
+    // mu outside (0, 2] is refused at the boundary rather than absorbed.
+    CHECK(am_guard_nlms_f32_6_1_init(g, sizeof(store), 2.5f, 1e-6f, 1, 0) == AM_ERR_CONFIG);
+    CHECK(am_guard_nlms_f32_6_1_init(g, sizeof(store), 0.5f, 0.0f, 1, 0) == AM_ERR_CONFIG);
+    CHECK(am_guard_nlms_f32_6_1_init(g, sizeof(store), 0.5f, 1e-6f, 1, 0) == AM_OK);
+
+    // The covariance fields reach C as a REFUSAL, which is the only way to say it there:
+    // there is no health_fields to query and no am_guard_nlms_*_health to call.
+    CHECK(am_guard_nlms_f32_6_1_add_bound(g, AM_FIELD_P_TRACE, 0, 0.0, 1, 1e9)
+          == AM_ERR_CONFIG);
+    CHECK(am_guard_nlms_f32_6_1_add_bound(g, AM_FIELD_P_MIN_DIAG, 1, 1e-9, 0, 0.0)
+          == AM_ERR_CONFIG);
+    CHECK(am_guard_nlms_f32_6_1_add_bound(g, AM_FIELD_RESIDUAL_NORM, 0, 0.0, 1, 50.0)
+          == AM_OK);
+
+    const float truth[6] = {2.0f, -1.5f, 0.25f, 0.5f, -0.75f, 1.0f};
+    float before = 0.0f, after = 0.0f;
+    for (int k = 0; k < 400; ++k) {
+        float x[6], y[1], out[1];
+        am_guard_report r;
+        for (int i = 0; i < 6; ++i) x[i] = static_cast<float>((k * 7 + i * 13) % 11) - 5.0f;
+        x[5] = 1.0f;
+        y[0] = 0.0f;
+        for (int i = 0; i < 6; ++i) y[0] += x[i] * truth[i];
+        CHECK(am_guard_nlms_f32_6_1_update(g, x, y, &r, nullptr) == AM_OK);
+        if (k == 0) before = r.residual_norm;
+        if (k == 399) {
+            after = r.residual_norm;
+            CHECK(am_guard_nlms_f32_6_1_predict(g, x, out) == AM_OK);
+        }
+    }
+    CHECK(after < before * 0.01f);      // it learned, rather than merely running
+    CHECK(am_guard_nlms_f32_6_1_frozen(g) == 0);
+
+    // The state block is theta and a round trip through it reproduces the prediction.
+    float saved[AM_NLMS_F32_6_1_STATE];
+    for (int i = 0; i < AM_NLMS_F32_6_1_STATE; ++i) saved[i] = am_guard_nlms_f32_6_1_state(g)[i];
+    CHECK(am_guard_nlms_f32_6_1_reset(g) == AM_OK);
+    CHECK(am_guard_nlms_f32_6_1_state(g)[0] == 0.0f);
+    CHECK(am_guard_nlms_f32_6_1_load_state(g, saved) == AM_OK);
+    CHECK(am_guard_nlms_f32_6_1_state(g)[0] == saved[0]);
+}
+
 void test_the_abi_rejects_null_and_undersized_storage() {
     static am_rls_storage store[AM_RLS_F32_6_1_MAX_BYTES /
                                sizeof(am_rls_storage)];
@@ -2595,6 +2688,8 @@ int main() {
     test_the_abi_rejects_null_and_undersized_storage();
     test_the_abi_carries_the_report_and_the_residual();
     test_the_abi_round_trips_a_state_block();
+    test_the_abi_offers_an_adapter_that_fits_a_backbone_width();
+    test_the_abi_nlms_learns_and_refuses_what_it_must();
     test_reset_returns_to_the_construction_state();
 
     test_bound_treats_non_finite_as_unhealthy();

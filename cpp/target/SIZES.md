@@ -24,10 +24,10 @@ to the total — a `caller` column exists because without it the drift was invis
 
 | configuration | flash | of which argmind | the caller | libc/libgcc | static RAM |
 |---|---|---|---|---|---|
-| bare RLS f32 6x1 | 2308 | 1256 | 160 | 892 | 272 |
-| + guard | 6088 | 3468 | 344 | 2276 | 1168 |
-| + record format | 6320 | 3746 | 304 | 2270 | 1844 |
-| full composed pipeline | 10324 | 7356 | 524 | 2444 | 3408 |
+| bare RLS f32 6x1 | 2324 | 1272 | 160 | 892 | 272 |
+| + guard | 6104 | 3478 | 344 | 2282 | 1168 |
+| + record format | 6336 | 3756 | 304 | 2276 | 1844 |
+| full composed pipeline | 10344 | 7372 | 524 | 2448 | 3408 |
 
 Against the declared 32 KB flash and 8 KB RAM, the full composed pipeline is **31.5%** of the
 flash budget and **41.6%** of the RAM.
@@ -41,6 +41,14 @@ The +0/+4/+8 against the first recorded version is the guard's caller-supplied h
 scalars (`Guard`'s `NExternal`), and **this file's gate is what reported it** — the first
 time it fired in anger, on the change immediately after it was written.
 
+**+16 on every row when NLMS joined the ABI, and it is not NLMS code.** `--gc-sections`
+still drops the shims a configuration does not call. What happened is that a second adapter
+gave the compiler a reason to **outline** helpers it had been inlining per instantiation:
+`fill_report<float,1>` and `fill_guard_report<float,1>` became real functions, and
+`am_guard_f32_6_1_update` shrank from 0x82 to 0x32 because it now calls one. Net for a
+single caller, +16 bytes. Diagnosed from the symbol table rather than accepted, because
+"a size moved" and "a size moved for a reason you can state" are different claims.
+
 ## The same pipeline at three shapes — Cortex-M4F
 
 Selected with `-DAM_SHAPE=... -DAM_N=... -DAM_M=...`; the `f32 6x1` row above is the same
@@ -48,8 +56,8 @@ build at the default shape.
 
 | configuration | flash | of which argmind | the caller | libc/libgcc | static RAM |
 |---|---|---|---|---|---|
-| composed f32 6x3 | 10508 | 7540 | 532 | 2436 | 3872 |
-| composed f32 12x1 | 10200 | 7232 | 524 | 2444 | 7912 |
+| composed f32 6x3 | 10524 | 7550 | 532 | 2442 | 3872 |
+| composed f32 12x1 | 10204 | 7238 | 524 | 2442 | 7912 |
 
 **Flash barely depends on the shape and RAM entirely does.** 10,200 to 10,508 across the
 three — a 3% spread, and **12x1 is the *smallest* of them in flash** while being 2.3x the RAM.
@@ -68,7 +76,7 @@ shape, which is what stops the next person hand-editing it.
 
 | configuration | flash | static RAM |
 |---|---|---|
-| full composed pipeline | 7804 | 3408 |
+| full composed pipeline | 7816 | 3408 |
 
 Moving up to ARMv8.1-M makes the image **smaller**, at identical static RAM.
 

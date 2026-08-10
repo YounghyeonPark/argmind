@@ -825,6 +825,44 @@ Seventeen mutants on the shim, sixteen caught. The survivor is **equivalent, not
 `state()` sits at offset 0 of the guard — measured. It stays because a null dereference is
 undefined whatever the address arithmetic produces.
 
+**NLMS is in the C ABI now, and the reason is a measurement rather than symmetry.** The
+question that produced it was whether a **HAL** is needed for camera/NPU hardware. It is not,
+and that was verified rather than argued: a 127-wide backbone embedding goes into `am_ring_f32`
+— whose `dim` is a runtime value, decided for the instantiation-explosion problem years of
+commits ago — through the frame map into a guarded pipeline, and predicts. **No new API.** What
+differs per vendor (model format, load, invoke, dequantisation) all happens *before* the push,
+and it belongs to the vendor SDK: taking a dependency on ST's, Arm's and Hailo's runtimes would
+end the freestanding, zero-dependency property that lets this library link into anything.
+
+**But the check exposed a real gap that a HAL would not have fixed.** Every
+`AM_DECLARE_*` was RLS-backed, and at 128 features a guarded RLS pipeline is **332,328 bytes**
+— forty times the whole declared 8 KB floor — where NLMS is **4,656 and fits it**. So a C
+caller wiring a backbone got the adapter this project's own measurement says not to use. That
+reverses the "wait for a caller" note above: this is the caller.
+
+Exported at 6×1 and 128×1: the bare adapter, a guard over it, and a guarded pipeline.
+**Deliberately no `am_guard_nlms_*_health`** — an adapter with no covariance could only answer
+zeros, a bound on a field an adapter cannot report was measured to break in both directions at
+once, and C has no `health_fields` to query, so the *missing symbol* is how a C caller is told.
+`add_bound(AM_FIELD_P_TRACE)` returns `AM_ERR_CONFIG`, which is the same refusal reaching the
+same boundary by the only means it has.
+
+**The guard and pipeline macros were derived from the RLS ones by substitution, not
+transcribed** — two hand-copied 200-line macros drift — and the guarded pipeline's shared tail
+is factored into `_REST` so only `init`, whose signature genuinely depends on the adapter,
+exists twice.
+
+**The size gate fired again and the +16 bytes on every row are not NLMS code.** `--gc-sections`
+still drops the shims a configuration never calls. A second adapter gave the compiler a reason
+to *outline* helpers it had been inlining per instantiation: `fill_report<float,1>` and
+`fill_guard_report<float,1>` became real functions and `am_guard_f32_6_1_update` shrank from
+0x82 to 0x32. Diagnosed from the symbol table, because "a size moved" and "a size moved for a
+reason you can state" are different claims.
+
+Three mutants. One survived and was a real gap — dropping `params_valid` from the *bare*
+`am_nlms_*_init`, which the guarded tests never reach; closed. One is equivalent and recorded:
+weakening a `static_assert` cannot be detected until the invariant it guards actually breaks.
+
 **The composed handle followed the same day, and everything the library does is now reachable
 from C.** The instantiation explosion is avoided by moving the two stream axes out of the type
 entirely: **the caller owns the sample storage**, so `am_ring_f32`'s `dim` and `capacity` are

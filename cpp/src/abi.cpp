@@ -33,6 +33,7 @@
 #include "argmind/guard.hpp"
 #include "argmind/persist.hpp"
 #include "argmind/pipeline.hpp"
+#include "argmind/nlms.hpp"
 #include "argmind/rls.hpp"
 #include "argmind/stream.hpp"
 
@@ -117,6 +118,68 @@ void fill_report(const argmind::Report<T, M>& src, am_report* dst,
     extern "C" uint32_t am_rls_##NAME##_updates(const void* obj) {               \
         return obj ? static_cast<const Rls_##NAME*>(obj)->updates() : 0u;        \
     }
+
+#define AM_DEFINE_NLMS(NAME, SCALAR, N, M, MAX_BYTES)                           \
+    using Nlms_##NAME = argmind::Nlms<SCALAR, N, M>;                            \
+    static_assert(sizeof(Nlms_##NAME) <= (MAX_BYTES),                           \
+                  "AM_NLMS_" #NAME "_MAX_BYTES is no longer an upper bound; "   \
+                  "raise the macro in argmind.h");                              \
+    static_assert(alignof(Nlms_##NAME) <= alignof(am_rls_storage),              \
+                  "am_rls_storage no longer satisfies this instantiation's "     \
+                  "alignment");                                                 \
+    static_assert(Nlms_##NAME::state_size == (N) * (M),                         \
+                  "state layout changed; theta only, no covariance -- which is " \
+                  "the reason this adapter is exported at all");                \
+                                                                                \
+    extern "C" size_t am_nlms_##NAME##_bytes(void) {                            \
+        return sizeof(Nlms_##NAME);                                             \
+    }                                                                           \
+    extern "C" int am_nlms_##NAME##_state_size(void) {                          \
+        return Nlms_##NAME::state_size;                                         \
+    }                                                                           \
+    extern "C" int am_nlms_##NAME##_init(void* obj, size_t obj_bytes,           \
+                                         SCALAR mu, SCALAR eps) {               \
+        if (!obj) return AM_ERR_NULL;                                           \
+        if (obj_bytes < sizeof(Nlms_##NAME)) return AM_ERR_TOO_SMALL;           \
+        if (!Nlms_##NAME::params_valid(mu, eps)) return AM_ERR_CONFIG;          \
+        new (obj) Nlms_##NAME(mu, eps);                                         \
+        return AM_OK;                                                           \
+    }                                                                           \
+    extern "C" int am_nlms_##NAME##_reset(void* obj) {                          \
+        if (!obj) return AM_ERR_NULL;                                           \
+        static_cast<Nlms_##NAME*>(obj)->reset();                                \
+        return AM_OK;                                                           \
+    }                                                                           \
+    extern "C" int am_nlms_##NAME##_update(void* obj, const SCALAR* x,          \
+                                           const SCALAR* y, am_report* report,  \
+                                           SCALAR* residual_out) {              \
+        if (!obj || !x || !y || !report) return AM_ERR_NULL;                     \
+        fill_report<SCALAR, M>(static_cast<Nlms_##NAME*>(obj)->update(x, y),      \
+                               report, residual_out);                            \
+        return AM_OK;                                                           \
+    }                                                                           \
+    extern "C" int am_nlms_##NAME##_predict(const void* obj, const SCALAR* x,   \
+                                            SCALAR* out) {                      \
+        if (!obj || !x || !out) return AM_ERR_NULL;                             \
+        static_cast<const Nlms_##NAME*>(obj)->predict(x, out);                  \
+        return AM_OK;                                                           \
+    }                                                                           \
+    extern "C" const SCALAR* am_nlms_##NAME##_state(const void* obj) {          \
+        if (!obj) return nullptr;                                               \
+        return static_cast<const Nlms_##NAME*>(obj)->state();                   \
+    }                                                                           \
+    extern "C" int am_nlms_##NAME##_load_state(void* obj, const SCALAR* flat) { \
+        if (!obj || !flat) return AM_ERR_NULL;                                  \
+        return static_cast<Nlms_##NAME*>(obj)->load_state(flat) ? AM_OK          \
+                                                                : AM_ERR_STATE; \
+    }                                                                           \
+    extern "C" uint32_t am_nlms_##NAME##_updates(const void* obj) {             \
+        if (!obj) return 0;                                                     \
+        return static_cast<const Nlms_##NAME*>(obj)->updates();                 \
+    }
+
+AM_DEFINE_NLMS(f32_6_1, float, 6, 1, AM_NLMS_F32_6_1_MAX_BYTES)
+AM_DEFINE_NLMS(f32_128_1, float, 128, 1, AM_NLMS_F32_128_1_MAX_BYTES)
 
 AM_DEFINE_RLS(f32_6_1, float, 6, 1, AM_RLS_F32_6_1_MAX_BYTES)
 AM_DEFINE_RLS(f32_6_3, float, 6, 3, AM_RLS_F32_6_3_MAX_BYTES)
@@ -307,6 +370,146 @@ bool valid_field(int32_t field) {
         out->thaws = g->thaws();                                                \
         return AM_OK;                                                           \
     }
+
+#define AM_DEFINE_GUARD_NLMS(NAME, SCALAR, N, M, MAX_BYTES)                          \
+    using GuardNlms_##NAME =                                                        \
+        argmind::Guard<argmind::Nlms<SCALAR, N, M>, kGuardDepth, kGuardBounds>;   \
+    static_assert(sizeof(GuardNlms_##NAME) <= (MAX_BYTES),                          \
+                  "AM_GUARD_NLMS_" #NAME "_MAX_BYTES is no longer an upper bound; "  \
+                  "raise the macro in argmind.h");                              \
+    static_assert(alignof(GuardNlms_##NAME) <= alignof(am_rls_storage),             \
+                  "am_rls_storage no longer satisfies this guard's alignment"); \
+                                                                                \
+    extern "C" size_t am_guard_nlms_##NAME##_bytes(void) {                           \
+        return sizeof(GuardNlms_##NAME);                                            \
+    }                                                                           \
+    extern "C" int am_guard_nlms_##NAME##_state_size(void) {                         \
+        return GuardNlms_##NAME::state_size;                                        \
+    }                                                                           \
+    extern "C" int am_guard_nlms_##NAME##_checkpoint_bytes(void) {                   \
+        return GuardNlms_##NAME::checkpoint_bytes;                                  \
+    }                                                                           \
+    extern "C" int am_guard_nlms_##NAME##_init(void* obj, size_t obj_bytes,          \
+                                          SCALAR mu, SCALAR eps,             \
+                                          uint32_t checkpoint_every,            \
+                                          uint32_t recover_after) {             \
+        if (!obj) return AM_ERR_NULL;                                           \
+        if (obj_bytes < sizeof(GuardNlms_##NAME)) return AM_ERR_TOO_SMALL;          \
+        if (!argmind::Nlms<SCALAR, N, M>::params_valid(mu, eps))      \
+            return AM_ERR_CONFIG;                                       \
+        new (obj) GuardNlms_##NAME(argmind::in_place_adapter, checkpoint_every,\
+                               recover_after, mu, eps);              \
+        return AM_OK;                                                   \
+    }                                                                           \
+    extern "C" int am_guard_nlms_##NAME##_add_bound(void* obj, int32_t field,        \
+                                               int32_t has_lo, double lo,       \
+                                               int32_t has_hi, double hi) {     \
+        if (!obj) return AM_ERR_NULL;                                           \
+        if (!valid_field(field)) return AM_ERR_CONFIG;                          \
+        argmind::Bound b;                                                       \
+        b.field = static_cast<argmind::Field>(field);                           \
+        b.has_lo = has_lo != 0;                                                 \
+        b.has_hi = has_hi != 0;                                                 \
+        b.lo = lo;                                                              \
+        b.hi = hi;                                                              \
+        if (!b.valid()) return AM_ERR_CONFIG;                                   \
+        /* `add_bound` refuses for two reasons -- the check array is full, or the      \
+         * adapter does not declare the field -- and this returns AM_ERR_FULL for      \
+         * both, which is the wrong code for the second. Unreachable today, since       \
+         * every guard this ABI exports wraps `Rls` and `Rls` declares all five, but    \
+         * an unreachable wrong answer is still a wrong answer and it would become      \
+         * reachable the moment a second adapter is exported. Asking the mask here      \
+         * keeps one rule in `add_bound` and reports the reason accurately. */          \
+        if ((GuardNlms_##NAME::health_fields & argmind::field_bit(b.field)) == 0)   \
+            return AM_ERR_CONFIG;                                               \
+        return static_cast<GuardNlms_##NAME*>(obj)->add_bound(b) ? AM_OK            \
+                                                             : AM_ERR_FULL;     \
+    }                                                                           \
+    extern "C" int am_guard_nlms_##NAME##_set_divergence(                            \
+        void* obj, double ratio, double fast_alpha, double slow_alpha,          \
+        double floor, uint32_t warmup) {                                        \
+        if (!obj) return AM_ERR_NULL;                                           \
+        argmind::Divergence d;                                                  \
+        d.enabled = true;                                                       \
+        d.ratio = ratio;                                                        \
+        d.fast_alpha = fast_alpha;                                              \
+        d.slow_alpha = slow_alpha;                                              \
+        d.floor = floor;                                                        \
+        d.warmup = warmup;                                                      \
+        if (!d.valid()) return AM_ERR_CONFIG;                                   \
+        static_cast<GuardNlms_##NAME*>(obj)->set_divergence(d);                     \
+        return AM_OK;                                                           \
+    }                                                                           \
+    extern "C" int am_guard_nlms_##NAME##_valid(const void* obj) {                   \
+        if (!obj) return AM_ERR_NULL;                                           \
+        return static_cast<const GuardNlms_##NAME*>(obj)->valid() ? AM_OK           \
+                                                              : AM_ERR_UNUSABLE;\
+    }                                                                           \
+    extern "C" int am_guard_nlms_##NAME##_reset(void* obj) {                         \
+        if (!obj) return AM_ERR_NULL;                                           \
+        static_cast<GuardNlms_##NAME*>(obj)->reset();                               \
+        return AM_OK;                                                           \
+    }                                                                           \
+    extern "C" int am_guard_nlms_##NAME##_update(void* obj, const SCALAR* x,         \
+                                            const SCALAR* y,                    \
+                                            am_guard_report* report,            \
+                                            SCALAR* residual_out) {             \
+        if (!obj || !x || !y || !report) return AM_ERR_NULL;                    \
+        fill_guard_report<SCALAR, M>(                                           \
+            static_cast<GuardNlms_##NAME*>(obj)->update(x, y), report, residual_out);\
+        return AM_OK;                                                           \
+    }                                                                           \
+    extern "C" int am_guard_nlms_##NAME##_predict(const void* obj, const SCALAR* x,  \
+                                             SCALAR* out) {                     \
+        if (!obj || !x || !out) return AM_ERR_NULL;                             \
+        static_cast<const GuardNlms_##NAME*>(obj)->predict(x, out);                 \
+        return AM_OK;                                                           \
+    }                                                                           \
+    extern "C" const SCALAR* am_guard_nlms_##NAME##_state(const void* obj) {         \
+        return obj ? static_cast<const GuardNlms_##NAME*>(obj)->state() : nullptr;  \
+    }                                                                           \
+    extern "C" int am_guard_nlms_##NAME##_load_state(void* obj, const SCALAR* flat) { \
+        if (!obj || !flat) return AM_ERR_NULL;                                  \
+        return static_cast<GuardNlms_##NAME*>(obj)->load_state(flat) ? AM_OK        \
+                                                                 : AM_ERR_STATE;\
+    }                                                                           \
+    extern "C" int am_guard_nlms_##NAME##_freeze(void* obj) {                        \
+        if (!obj) return AM_ERR_NULL;                                           \
+        static_cast<GuardNlms_##NAME*>(obj)->freeze();                              \
+        return AM_OK;                                                           \
+    }                                                                           \
+    extern "C" int am_guard_nlms_##NAME##_thaw(void* obj) {                          \
+        if (!obj) return AM_ERR_NULL;                                           \
+        static_cast<GuardNlms_##NAME*>(obj)->thaw();                                \
+        return AM_OK;                                                           \
+    }                                                                           \
+    extern "C" int am_guard_nlms_##NAME##_frozen(const void* obj) {                  \
+        return obj && static_cast<const GuardNlms_##NAME*>(obj)->frozen() ? 1 : 0;  \
+    }                                                                           \
+    extern "C" uint32_t am_guard_nlms_##NAME##_frozen_by(const void* obj) {          \
+        return obj ? static_cast<const GuardNlms_##NAME*>(obj)->frozen_by() : 0u;   \
+    }                                                                           \
+    extern "C" int am_guard_nlms_##NAME##_counters(const void* obj,                  \
+                                              am_guard_counters* out) {         \
+        if (!obj || !out) return AM_ERR_NULL;                                   \
+        const GuardNlms_##NAME* g = static_cast<const GuardNlms_##NAME*>(obj);          \
+        out->applied = g->applied();                                            \
+        out->trips = g->trips();                                                \
+        out->rollbacks = g->rollbacks();                                        \
+        out->blocked_frozen = g->blocked_frozen();                              \
+        out->rejected_by_adapter = g->rejected_by_adapter();                    \
+        out->thaws = g->thaws();                                                \
+        return AM_OK;                                                           \
+    }
+
+/* Derived from `AM_DEFINE_GUARD` by substitution rather than transcribed, because two
+ * hand-copied 200-line macros drift. The differences are the adapter, `mu`/`eps` for
+ * `lambda`/`p0`, the symbol prefix -- and one that is a decision rather than a rename:
+ * **no `health`.** An adapter with no covariance could only answer zeros, and a bound on a
+ * field an adapter cannot report was measured to break in both directions at once. C has no
+ * `health_fields` to query, so the missing symbol is the way to say it. */
+AM_DEFINE_GUARD_NLMS(f32_6_1, float, 6, 1, AM_GUARD_NLMS_F32_6_1_MAX_BYTES)
+AM_DEFINE_GUARD_NLMS(f32_128_1, float, 128, 1, AM_GUARD_NLMS_F32_128_1_MAX_BYTES)
 
 AM_DEFINE_GUARD(f32_6_1, float, 6, 1, AM_GUARD_F32_6_1_MAX_BYTES)
 AM_DEFINE_GUARD(f32_6_3, float, 6, 3, AM_GUARD_F32_6_3_MAX_BYTES)
@@ -660,28 +863,7 @@ bool valid_policy(int32_t p) {
         return obj && static_cast<const PIPE*>(obj)->frozen() ? 1 : 0;          \
     }
 
-#define AM_DEFINE_PIPE_GUARDED(NAME, SCALAR, N, M, RING, MAX_BYTES)             \
-    using Adapter_##NAME =                                                      \
-        argmind::Guard<argmind::Rls<SCALAR, N, M>, kGuardDepth, kGuardBounds>;   \
-    using Pipe_##NAME = argmind::Pipeline<Adapter_##NAME, AM_MAX_STREAMS>;       \
-    extern "C" int am_pipe_##NAME##_init(void* obj, size_t obj_bytes,            \
-                                         SCALAR lambda, SCALAR p0,              \
-                                         uint32_t checkpoint_every,             \
-                                         uint32_t recover_after, int32_t policy, \
-                                         double max_stale_s, int32_t reference) {\
-        if (!obj) return AM_ERR_NULL;                                           \
-        if (obj_bytes < sizeof(Pipe_##NAME)) return AM_ERR_TOO_SMALL;            \
-        if (!valid_policy(policy)) return AM_ERR_CONFIG;                        \
-        if (!argmind::Rls<SCALAR, N, M>::params_valid(lambda, p0))      \
-            return AM_ERR_CONFIG;                                       \
-        const argmind::Aligner al(static_cast<argmind::Policy>(policy), \
-                                  max_stale_s);                         \
-        new (obj) Pipe_##NAME(argmind::in_place_adapter, al,            \
-                              argmind::FrameMap<N, M>(), reference,     \
-                              argmind::in_place_adapter, checkpoint_every,\
-                              recover_after, lambda, p0);               \
-        return AM_OK;                                                   \
-    }                                                                   \
+#define AM_DEFINE_PIPE_GUARDED_REST(NAME, SCALAR, RING, MAX_BYTES)            \
     extern "C" int am_pipe_##NAME##_add_bound(void* obj, int32_t field,          \
                                               int32_t has_lo, double lo,         \
                                               int32_t has_hi, double hi) {      \
@@ -733,6 +915,54 @@ bool valid_policy(int32_t p) {
     }                                                                           \
     AM_DEFINE_PIPE_COMMON(NAME, SCALAR, RING, Pipe_##NAME, MAX_BYTES)
 
+#define AM_DEFINE_PIPE_GUARDED(NAME, SCALAR, N, M, RING, MAX_BYTES)             \
+    using Adapter_##NAME =                                                      \
+        argmind::Guard<argmind::Rls<SCALAR, N, M>, kGuardDepth, kGuardBounds>;   \
+    using Pipe_##NAME = argmind::Pipeline<Adapter_##NAME, AM_MAX_STREAMS>;       \
+    extern "C" int am_pipe_##NAME##_init(void* obj, size_t obj_bytes,            \
+                                         SCALAR lambda, SCALAR p0,              \
+                                         uint32_t checkpoint_every,             \
+                                         uint32_t recover_after, int32_t policy, \
+                                         double max_stale_s, int32_t reference) {\
+        if (!obj) return AM_ERR_NULL;                                           \
+        if (obj_bytes < sizeof(Pipe_##NAME)) return AM_ERR_TOO_SMALL;            \
+        if (!valid_policy(policy)) return AM_ERR_CONFIG;                        \
+        if (!argmind::Rls<SCALAR, N, M>::params_valid(lambda, p0))      \
+            return AM_ERR_CONFIG;                                       \
+        const argmind::Aligner al(static_cast<argmind::Policy>(policy), \
+                                  max_stale_s);                         \
+        new (obj) Pipe_##NAME(argmind::in_place_adapter, al,            \
+                              argmind::FrameMap<N, M>(), reference,     \
+                              argmind::in_place_adapter, checkpoint_every,\
+                              recover_after, lambda, p0);               \
+        return AM_OK;                                                   \
+    }                                                                   \
+    AM_DEFINE_PIPE_GUARDED_REST(NAME, SCALAR, RING, MAX_BYTES)
+
+#define AM_DEFINE_PIPE_GUARDED_NLMS(NAME, SCALAR, N, M, RING, MAX_BYTES)             \
+    using Adapter_##NAME =                                                      \
+        argmind::Guard<argmind::Nlms<SCALAR, N, M>, kGuardDepth, kGuardBounds>;   \
+    using Pipe_##NAME = argmind::Pipeline<Adapter_##NAME, AM_MAX_STREAMS>;       \
+    extern "C" int am_pipe_##NAME##_init(void* obj, size_t obj_bytes,            \
+                                         SCALAR mu, SCALAR eps,              \
+                                         uint32_t checkpoint_every,             \
+                                         uint32_t recover_after, int32_t policy, \
+                                         double max_stale_s, int32_t reference) {\
+        if (!obj) return AM_ERR_NULL;                                           \
+        if (obj_bytes < sizeof(Pipe_##NAME)) return AM_ERR_TOO_SMALL;            \
+        if (!valid_policy(policy)) return AM_ERR_CONFIG;                        \
+        if (!argmind::Nlms<SCALAR, N, M>::params_valid(mu, eps))      \
+            return AM_ERR_CONFIG;                                       \
+        const argmind::Aligner al(static_cast<argmind::Policy>(policy), \
+                                  max_stale_s);                         \
+        new (obj) Pipe_##NAME(argmind::in_place_adapter, al,            \
+                              argmind::FrameMap<N, M>(), reference,     \
+                              argmind::in_place_adapter, checkpoint_every,\
+                              recover_after, mu, eps);               \
+        return AM_OK;                                                   \
+    }                                                                   \
+    AM_DEFINE_PIPE_GUARDED_REST(NAME, SCALAR, RING, MAX_BYTES)
+
 // The ring type is a macro parameter rather than pasted from the scalar name: `am_ring_##float`
 // would be `am_ring_float`, which is not a type. A macro that is clever about types is a macro
 // whose error messages are useless.
@@ -768,3 +998,7 @@ AM_DEFINE_PIPE_GUARDED(g_f32_128_1, float, 128, 1, am_ring_f32,
                        AM_PIPE_G_F32_128_1_MAX_BYTES)
 AM_DEFINE_PIPE_GUARDED(g_f64_6_1, double, 6, 1, am_ring_f64,
                        AM_PIPE_G_F64_6_1_MAX_BYTES)
+AM_DEFINE_PIPE_GUARDED_NLMS(g_nlms_f32_6_1, float, 6, 1, am_ring_f32,
+                            AM_PIPE_G_NLMS_F32_6_1_MAX_BYTES)
+AM_DEFINE_PIPE_GUARDED_NLMS(g_nlms_f32_128_1, float, 128, 1, am_ring_f32,
+                            AM_PIPE_G_NLMS_F32_128_1_MAX_BYTES)

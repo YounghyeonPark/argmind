@@ -187,6 +187,48 @@ AM_DECLARE_RLS(f32_6_3, float)
 AM_DECLARE_RLS(f32_12_1, float)
 AM_DECLARE_RLS(f64_6_1, double)
 
+/* --------------------------------------------------------------------------
+ * Normalised LMS: the same contract, without the covariance.
+ *
+ * Added because of one measurement. A frozen backbone hands out a wide embedding, and at
+ * 128 features a guarded RLS pipeline is 335,744 bytes -- not offered on the declared 8 KB
+ * floor -- against this adapter's 4,656. Exporting only RLS meant a C caller wiring a
+ * backbone got the adapter that does not fit.
+ *
+ * Three differences from `am_rls_*`, all of them deliberate:
+ *
+ *   - `mu` and `eps` rather than `lambda` and `p0`. `mu` must be in (0, 2]; `eps` guards
+ *     the all-zero regressor, which must do nothing rather than divide by zero.
+ *   - state is `N*M`, not `N*M + N*N`. That is the whole reason this exists.
+ *   - **there is no `am_nlms_*_health`, and its absence is the point.** This adapter has no
+ *     covariance, so a health call could only return zeros -- and a bound on a field an
+ *     adapter cannot report was measured to break in both directions at once, dead in one
+ *     and firing on the first update in the other. Not exporting it is how C callers are
+ *     told, since C has no `health_fields` to query.
+ * -------------------------------------------------------------------------- */
+#define AM_DECLARE_NLMS(NAME, SCALAR)                                          \
+    size_t am_nlms_##NAME##_bytes(void);                                       \
+    int am_nlms_##NAME##_state_size(void);                                     \
+    int am_nlms_##NAME##_init(void* obj, size_t obj_bytes, SCALAR mu,           \
+                              SCALAR eps);                                     \
+    int am_nlms_##NAME##_reset(void* obj);                                     \
+    int am_nlms_##NAME##_update(void* obj, const SCALAR* x, const SCALAR* y,    \
+                                am_report* report, SCALAR* residual_out);      \
+    int am_nlms_##NAME##_predict(const void* obj, const SCALAR* x,              \
+                                 SCALAR* out);                                 \
+    const SCALAR* am_nlms_##NAME##_state(const void* obj);                      \
+    int am_nlms_##NAME##_load_state(void* obj, const SCALAR* flat);             \
+    uint32_t am_nlms_##NAME##_updates(const void* obj);
+
+#define AM_NLMS_F32_6_1_STATE   (6 * 1)
+#define AM_NLMS_F32_128_1_STATE (128 * 1)
+
+AM_DECLARE_NLMS(f32_6_1, float)
+AM_DECLARE_NLMS(f32_128_1, float)
+
+#define AM_NLMS_F32_6_1_MAX_BYTES    64
+#define AM_NLMS_F32_128_1_MAX_BYTES  576
+
 /* Compile-time upper bounds on instance size, for statically declared storage.
  * The implementation static-asserts that each real object fits, so these cannot
  * drift into being wrong without failing the build. */
@@ -297,6 +339,44 @@ typedef struct {
     int am_guard_##NAME##_frozen(const void* obj);                             \
     uint32_t am_guard_##NAME##_frozen_by(const void* obj);                      \
     int am_guard_##NAME##_counters(const void* obj, am_guard_counters* out);
+
+/* A guard over NLMS. Identical to `AM_DECLARE_GUARD` but for `mu`/`eps` and the missing
+ * `health` -- see the note above `AM_DECLARE_NLMS` for why its absence is deliberate. */
+#define AM_DECLARE_GUARD_NLMS(NAME, SCALAR)                                    \
+    size_t am_guard_nlms_##NAME##_bytes(void);                                 \
+    int am_guard_nlms_##NAME##_state_size(void);                               \
+    int am_guard_nlms_##NAME##_checkpoint_bytes(void);                         \
+    int am_guard_nlms_##NAME##_init(void* obj, size_t obj_bytes, SCALAR mu,     \
+                                    SCALAR eps, uint32_t checkpoint_every,      \
+                                    uint32_t recover_after);                   \
+    int am_guard_nlms_##NAME##_add_bound(void* obj, int32_t field,              \
+                                         int32_t has_lo, double lo,             \
+                                         int32_t has_hi, double hi);           \
+    int am_guard_nlms_##NAME##_set_divergence(void* obj, double ratio,          \
+                                              double fast_alpha,                \
+                                              double slow_alpha, double floor,  \
+                                              uint32_t warmup);                \
+    int am_guard_nlms_##NAME##_valid(const void* obj);                         \
+    int am_guard_nlms_##NAME##_reset(void* obj);                               \
+    int am_guard_nlms_##NAME##_update(void* obj, const SCALAR* x,               \
+                                      const SCALAR* y, am_guard_report* report, \
+                                      SCALAR* residual_out);                   \
+    int am_guard_nlms_##NAME##_predict(const void* obj, const SCALAR* x,        \
+                                       SCALAR* out);                           \
+    const SCALAR* am_guard_nlms_##NAME##_state(const void* obj);                \
+    int am_guard_nlms_##NAME##_load_state(void* obj, const SCALAR* flat);       \
+    int am_guard_nlms_##NAME##_freeze(void* obj);                              \
+    int am_guard_nlms_##NAME##_thaw(void* obj);                                \
+    int am_guard_nlms_##NAME##_frozen(const void* obj);                        \
+    uint32_t am_guard_nlms_##NAME##_frozen_by(const void* obj);                 \
+    int am_guard_nlms_##NAME##_counters(const void* obj,                        \
+                                        am_guard_counters* out);
+
+AM_DECLARE_GUARD_NLMS(f32_6_1, float)
+AM_DECLARE_GUARD_NLMS(f32_128_1, float)
+
+#define AM_GUARD_NLMS_F32_6_1_MAX_BYTES    448
+#define AM_GUARD_NLMS_F32_128_1_MAX_BYTES  2944
 
 AM_DECLARE_GUARD(f32_6_1, float)
 AM_DECLARE_GUARD(f32_6_3, float)
@@ -579,11 +659,10 @@ typedef struct {
 
 /* Guarded. `Depth` and `MaxBounds` are 4, as for `am_guard_*` and for the same
  * reason: they are the memory. */
-#define AM_DECLARE_PIPE_GUARDED(NAME, SCALAR, RING)                            \
-    int am_pipe_##NAME##_init(void* obj, size_t obj_bytes, SCALAR lambda,       \
-                              SCALAR p0, uint32_t checkpoint_every,             \
-                              uint32_t recover_after, int32_t policy,           \
-                              double max_stale_s, int32_t reference);          \
+/* Everything a guarded pipeline exports EXCEPT `init`, which is the only entry point whose
+ * signature depends on the adapter. Factored so the NLMS variant is two lines rather than a
+ * second copy that can drift. */
+#define AM_DECLARE_PIPE_GUARDED_REST(NAME, SCALAR, RING)                       \
     int am_pipe_##NAME##_add_bound(void* obj, int32_t field, int32_t has_lo,     \
                                    double lo, int32_t has_hi, double hi);      \
     int am_pipe_##NAME##_set_divergence(void* obj, double ratio,                \
@@ -593,6 +672,20 @@ typedef struct {
     int am_pipe_##NAME##_counters(const void* obj, am_guard_counters* out);     \
     AM_DECLARE_PIPE_COMMON(NAME, SCALAR, RING)
 
+#define AM_DECLARE_PIPE_GUARDED(NAME, SCALAR, RING)                            \
+    int am_pipe_##NAME##_init(void* obj, size_t obj_bytes, SCALAR lambda,       \
+                              SCALAR p0, uint32_t checkpoint_every,             \
+                              uint32_t recover_after, int32_t policy,           \
+                              double max_stale_s, int32_t reference);          \
+    AM_DECLARE_PIPE_GUARDED_REST(NAME, SCALAR, RING)
+
+#define AM_DECLARE_PIPE_GUARDED_NLMS(NAME, SCALAR, RING)                       \
+    int am_pipe_##NAME##_init(void* obj, size_t obj_bytes, SCALAR mu,           \
+                              SCALAR eps, uint32_t checkpoint_every,            \
+                              uint32_t recover_after, int32_t policy,           \
+                              double max_stale_s, int32_t reference);          \
+    AM_DECLARE_PIPE_GUARDED_REST(NAME, SCALAR, RING)
+
 AM_DECLARE_PIPE_BARE(f32_6_1, float, am_ring_f32)
 AM_DECLARE_PIPE_BARE(f64_6_1, double, am_ring_f64)
 AM_DECLARE_PIPE_GUARDED(g_f32_6_1, float, am_ring_f32)
@@ -600,6 +693,8 @@ AM_DECLARE_PIPE_GUARDED(g_f32_6_3, float, am_ring_f32)
 AM_DECLARE_PIPE_GUARDED(g_f32_12_1, float, am_ring_f32)
 AM_DECLARE_PIPE_GUARDED(g_f32_128_1, float, am_ring_f32)
 AM_DECLARE_PIPE_GUARDED(g_f64_6_1, double, am_ring_f64)
+AM_DECLARE_PIPE_GUARDED_NLMS(g_nlms_f32_6_1, float, am_ring_f32)
+AM_DECLARE_PIPE_GUARDED_NLMS(g_nlms_f32_128_1, float, am_ring_f32)
 
 /* Upper bounds, static-asserted in the implementation. A guarded pipeline is its
  * guard plus about 400 bytes; the guard is mostly its checkpoint ring. Measured on
@@ -623,6 +718,10 @@ AM_DECLARE_PIPE_GUARDED(g_f64_6_1, double, am_ring_f64)
  * whole SRAM and at 512 it does not fit at all, which is the boundary to know before
  * choosing a backbone's output width. */
 #define AM_PIPE_G_F32_128_1_MAX_BYTES 335744
+/* The reason this adapter is here: at 128 features the RLS pipeline above is 335,744 bytes
+ * and does not fit the declared 8 KB floor, while this one is 4,656 and does. */
+#define AM_PIPE_G_NLMS_F32_6_1_MAX_BYTES    896
+#define AM_PIPE_G_NLMS_F32_128_1_MAX_BYTES  4736
 #define AM_PIPE_G_F64_6_1_MAX_BYTES   2688
 
 /* Six instantiations is a lot of code for a caller who wants one. Build with
