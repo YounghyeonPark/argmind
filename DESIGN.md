@@ -57,6 +57,41 @@ Naming these now because a sensor-agnostic framework drifts into "everything" ot
   that the phenomenon "requir[es] dedicated compensation models, not a scalar correction".
   The favourable half of a sentence was quoted and the unfavourable half was not.
 
+## A bigger board does not make a bigger model, 2026-08-10
+
+Asked directly, and the answer is no: the model's size is `n_features` and `n_outputs`, which
+are a **design choice**, not a property of the silicon. A larger part lets you *choose* a wider
+one; nothing widens by itself.
+
+**What actually grows is the machinery, not the model.** `theta` is `n·m` values — that is the
+whole of what was learned. `P` is `n²` and is how the learning is *done*. At n=6 the learned
+model is 24 bytes against 144 of covariance; at n=128 it is 512 against 65,536. **Six times over
+at the small end and a hundred and twenty-eight times at the large one**, which is why the
+memory table climbs the way it does and why a second adapter without a covariance exists at all.
+
+**Keeping the same shape on a better board already works and is verified** — `braincheck` moves
+a trained model between Cortex-M4F and Cortex-M55 in both directions and the prediction is
+identical to the last printed digit.
+
+**Changing the shape is refused, and that is correct.** The configuration fingerprint has no way
+to know which old feature belongs in which new slot, and guessing would put the right numbers on
+the wrong features — the one corruption nothing downstream detects.
+
+**What a deliberate widening would buy, measured.** Six sensors become twelve; the old six keep
+their meaning. Grafting the trained `theta` and its `P` block into the corner of a fresh n=12
+model, against starting from zero, on the error in `theta` against the truth:
+
+| updates | from zero | grafted |
+|---|---|---|
+| 10 | 1.0919 | **0.0586** |
+| 20 | 0.0152 | 0.0095 |
+| 400 | 0.0015 | 0.0013 |
+
+So it is a **head start of roughly ten to twenty samples, not a permanent advantage** — RLS
+re-converges quickly once the new features are excited. Worth building only where updates are
+expensive: a self-supervised label at a few hertz, or new features that are rarely excited. It
+is **not built**, and the measurement is here so the decision is priced rather than guessed.
+
 ## Scope widened, 2026-08-09
 
 Everything above describes the library as built. **The owner reopened the scope on 2026-08-09**
