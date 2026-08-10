@@ -1280,12 +1280,25 @@ test forced the correction** — its failure message said "update the claim rath
 test". What remains is a tier boundary, not a defect: `f32_128_1`'s *object* is 332 KB, so it is
 not offered on this floor, and the test separately asserts the reason is the object and not the
 frame.
-A per-shape flash/RAM sweep stood here (10,404 / 10,664 / 10,380) and is **withdrawn**: it came
-from an unrecorded hand-edit of `usage.c`, which has no shape knob, and one row disagreed with
-this project's own table for the same configuration. The reasoning survives — compile-time
-dimensions change how far loops iterate rather than how much code exists, and RAM grows as
-`N*M + N²` — so **size the RAM, not the flash**; the numbers do not, and redoing them needs a
-knob in `usage.c` and a row in `cpp/target/SIZES.md`.
+**The per-shape flash/RAM sweep is back, generated this time.** It was withdrawn once
+(10,404 / 10,664 / 10,380) for coming from an unrecorded hand-edit of a `usage.c` that had no
+shape knob, with one row disagreeing with this project's own table. `usage.c` has the knob now
+— `-DAM_SHAPE/-DAM_N/-DAM_M`, with the map wiring written against the dimensions rather than
+against a shape, which is what stops the next hand-edit — and the rows are in
+`cpp/target/SIZES.md` under the same gate as everything else there.
+
+Measured, composed pipeline, Cortex-M4F: **flash 10,324 / 10,508 / 10,200** at 6×1, 6×3 and
+12×1 — a **3% spread, and 12×1 is the *smallest* of the three** — against **RAM 3,408 / 3,872 /
+7,912**. The reasoning that survived the withdrawal is now the measurement: compile-time
+dimensions change how far a loop runs, not how much code exists. **Size the RAM, not the
+flash** — and 12×1 sits at **96.6% of the declared 8 KB floor**, at the edge rather than
+comfortably inside it.
+
+Two things moved in the process, both wiring rather than regressions: the composed row's RAM
+3,136 → 3,408, because the map now takes `AM_N-1` features from the reference stream and the
+constant where the hand-written version took three, one and a repeat; and the record slots are
+sized `state*4 + 96` rather than a flat 256, after the first version put 12×1 **40 bytes over
+the floor** by over-reserving them.
 
 **Next:** hardware, for the timing question. Everything else the project set out to build is
 built and verified on the declared floor.

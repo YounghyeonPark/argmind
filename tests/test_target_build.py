@@ -355,7 +355,18 @@ SIZE_CONFIGS = [
 ]
 
 
-def _link_for_sizes(cross, tmp_path, cfg, core, tag):
+#: The composed pipeline at three shapes, to answer a question that was published once from
+#: a hand-edit and withdrawn: does FLASH depend on the compile-time dimensions? The reasoning
+#: says it should barely -- template parameters change how far a loop runs, not how much code
+#: exists -- while RAM must grow as `N*M + N**2`. `usage.c` has a shape knob now, so the two
+#: halves can be measured instead of argued.
+SHAPE_CONFIGS = [
+    ("composed f32 6x3", "f32_6_3", "F32_6_3", 6, 3),
+    ("composed f32 12x1", "f32_12_1", "F32_12_1", 12, 1),
+]
+
+
+def _link_for_sizes(cross, tmp_path, cfg, core, tag, extra=(), suffix=""):
     """Link one configuration and return (flash, argmind, caller, libc, ram)."""
     rest = [f for f in TARGET_CFLAGS if not f.startswith(("-mcpu", "-mfpu", "-mfloat-abi"))]
     flags = [*core, *rest]
@@ -364,12 +375,12 @@ def _link_for_sizes(cross, tmp_path, cfg, core, tag):
         done = _run([cross["g++"], "-std=c++17", *flags, "-fno-exceptions", "-fno-rtti",
                      "-I", CPP / "include", "-c", CPP / "src" / "abi.cpp", "-o", abi])
         assert done.returncode == 0, done.stderr
-    obj = tmp_path / f"u_{tag}_{cfg}.o"
-    done = _run([cross["gcc"], "-std=c99", *flags, f"-DAM_CFG={cfg}",
+    obj = tmp_path / f"u_{tag}_{cfg}{suffix}.o"
+    done = _run([cross["gcc"], "-std=c99", *flags, f"-DAM_CFG={cfg}", *extra,
                  "-I", CPP / "include", "-c", TARGET / "usage.c", "-o", obj])
     assert done.returncode == 0, done.stderr
-    elf = tmp_path / f"e_{tag}_{cfg}.elf"
-    mp = tmp_path / f"m_{tag}_{cfg}.map"
+    elf = tmp_path / f"e_{tag}_{cfg}{suffix}.elf"
+    mp = tmp_path / f"m_{tag}_{cfg}{suffix}.map"
     done = _run([cross["g++"], *core, "-nostartfiles", "--specs=nano.specs",
                  "--specs=nosys.specs", "-Wl,--gc-sections", f"-Wl,-Map={mp}",
                  "-T", TARGET / "cortex-m4.ld", obj, abi, "-o", elf])
@@ -402,6 +413,12 @@ def _measure_sizes(cross, tmp_path):
     rows = {label: _link_for_sizes(cross, tmp_path, cfg, m4, "m4")
             for label, cfg, _ in SIZE_CONFIGS}
     rows["cortex-m55 composed"] = _link_for_sizes(cross, tmp_path, 4, m55, "m55")
+    for label, shape, uc, n, m in SHAPE_CONFIGS:
+        rows[label] = _link_for_sizes(
+            cross, tmp_path, 4, m4, "m4",
+            extra=[f"-DAM_SHAPE={shape}", f"-DAM_SHAPE_UC={uc}",
+                   f"-DAM_N={n}", f"-DAM_M={m}"],
+            suffix=f"_{shape}")
     return rows
 
 
