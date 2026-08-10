@@ -304,10 +304,31 @@ adapters, both precisions → **0.5 to 4.0 ulp**, growing with the sum length ex
 order should, and the same order at f32 as at f64. A test asserts that *classification*, not
 just the number.
 
-**There is no `RuntimeShapedGuard` yet, and that is the gap that matters most in this layer.** `Guard`
-holds `ckpt_[Depth][state_size]`, so a runtime shape cannot use it. Until it exists the hosted
-tier can adapt without a guard, which is the exact failure this library was built around, so
-`shapecheck` **exits non-zero on a guarded case** rather than running it unguarded. Next.
+**`RuntimeShapedGuard` closes the layer** (`host/runtime_shape_guard.hpp`). `Guard` holds
+`ckpt_[Depth][state_size]`, so depth, bound capacity and the external slots become constructor
+arguments and the checkpoint ring goes on the heap; the *decisions* are matched exactly. Guarded
+cases now run through `shapecheck` and are compared at 7×1, 7×2, 5×1 and 50×1: same freeze step,
+same rollback steps, **same set of tripped checks**, state within 400 ulp.
+
+**Parity found a real bug in the port, and it is the one this project has now made three times.**
+The runtime guard projects its report on to a one-output shell before evaluating checks, and the
+first version copied the scalars but not `frozen`. `Divergence` holds its slow average while
+frozen — `if (!r.frozen) slow += ...` — so the baseline tracked the very fault it was holding
+out against and **the guard thawed itself in the middle of one**: the reference thawed at step
+218 and the port at 166, with the fault running to 200. An uninitialised field reintroduced a
+design error the reference had already been fixed for.
+
+**And the first guard fixture caught none of it.** One bound, depth 1, no divergence, no rejected
+samples — four deliberate bugs survived it, each for a different reason: rolling back to the
+newest checkpoint is identical at depth 1, stopping at the first failing check is identical with
+one check, resetting divergence has nothing to reset when it is off, and no sample was ever
+rejected. Widened to depth 4, two bounds, divergence on, and a NaN in the data, plus a separate
+fault-that-ends case for the thaw. Six mutants, all caught — verified individually, because the
+batch count was itself unreliable and said two survived when they did not.
+
+One fixture is deliberately artificial and says so: nothing else crosses its bound where
+`p_trace` does (`p_min_diag` is not monotone and dips at step 40; `gain_norm` peaked at 0.50 long
+before), both measured, so "every check runs" is reached with two bounds on the same quantity.
 
 **Still undecided:** whether inference is *hosted* (an interface to ONNX Runtime/TFLite) or
 *embedded*, and whether the tiers ship as one library or two. Nothing on the camera/audio/speech

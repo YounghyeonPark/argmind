@@ -100,6 +100,11 @@ class RuntimeShapedRls {
 public:
     using scalar = T;
 
+    /// All five, matching `Rls`. Spelled out rather than naming `ALL_FIELDS`, because
+    /// `guard.hpp` includes this file's dependencies and not the reverse; the
+    /// runtime-shaped guard static-asserts the tie.
+    static constexpr uint32_t health_fields = 0x1Fu;
+
     static bool params_valid(T lambda, T p0) {
         return lambda > T(0) && lambda <= T(1) && p0 > T(0) &&
                is_finite(lambda) && is_finite(p0);
@@ -274,6 +279,10 @@ class RuntimeShapedNlms {
 
 public:
     using scalar = T;
+
+    /// Three of five, matching `Nlms`: no covariance, so a guard refuses a bound on
+    /// `p_trace` or `p_min_diag` at the point it is configured.
+    static constexpr uint32_t health_fields = 0x07u;
 
     static bool params_valid(T mu, T eps) {
         return mu > T(0) && mu <= T(2) && eps > T(0) &&

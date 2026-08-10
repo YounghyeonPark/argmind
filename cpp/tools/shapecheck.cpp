@@ -12,16 +12,17 @@
 // is n=5, n=7, n=50, m=4 -- the shapes a configuration file would produce and no
 // instantiation list contains.
 //
-// Guarded cases are refused rather than silently run unguarded:
-// `RuntimeShapedGuard` does not exist
-// yet and a tool that quietly dropped the guard would hide that.
+// Guarded cases run through `RuntimeShapedGuard`. They were refused before it existed,
+// because a tool that quietly dropped the guard would have made that gap invisible --
+// and the gap mattered more than the arithmetic, since "no guard" being expressible is
+// the failure this library is built around.
 
 #include <stdint.h>
 #include <stdio.h>
 
 #include <vector>
 
-#include "argmind/host/runtime_shape.hpp"
+#include "argmind/host/runtime_shape_guard.hpp"
 
 namespace {
 
@@ -67,8 +68,21 @@ struct Row {
 };
 static_assert(sizeof(Row) == 56, "must match xcheck's row");
 
-template <typename T, typename Adapter>
-int drive(FILE* in, FILE* out, const CaseHeader& h, Adapter& a) {
+argmind::Bound bound_from(const BoundSlot& s) {
+    argmind::Bound b;
+    b.field = static_cast<argmind::Field>(s.field);
+    b.lo = s.lo;
+    b.hi = s.hi;
+    b.has_lo = (s.flags & 1u) != 0;
+    b.has_hi = (s.flags & 2u) != 0;
+    return b;
+}
+
+/// One driver for guarded and bare alike. `Reporter` pulls the guard-only fields out,
+/// because a bare report has no `tripped` and inventing a zero for it in the bare path
+/// would be the same shape of lie the guard exists to prevent.
+template <typename T, typename Adapter, typename Reporter>
+int drive(FILE* in, FILE* out, const CaseHeader& h, Adapter& a, Reporter extra) {
     if (!a.valid()) {
         fprintf(stderr, "shapecheck: adapter parameters rejected by the core\n");
         return 2;
@@ -83,6 +97,7 @@ int drive(FILE* in, FILE* out, const CaseHeader& h, Adapter& a) {
         if (fread(y.data(), sizeof(T), h.m, in) != h.m) return 4;
         const auto rep = a.update(x.data(), y.data());
         Row row{};
+        extra(rep, &row);
         row.applied = rep.applied ? 1 : 0;
         row.reason = static_cast<int32_t>(rep.reason);
         row.residual_norm = rep.residual_norm;
@@ -94,18 +109,57 @@ int drive(FILE* in, FILE* out, const CaseHeader& h, Adapter& a) {
     }
     const size_t size = static_cast<size_t>(a.state_size());
     return fwrite(a.state(), sizeof(T), size, out) == size ? 0 : 3;
+    // `a` is the guard in a guarded run, and `state()` delegates -- so this is the state
+    // AFTER any rollback, which is what the reference's own `state` reports too.
+}
+
+auto bare_extra = [](const auto&, Row*) {};
+
+auto guarded_extra = [](const auto& rep, Row* row) {
+    row->tripped = rep.tripped;
+    row->flags = (rep.frozen ? 1u : 0u) | (rep.rolled_back ? 2u : 0u);
+};
+
+template <typename T, typename Adapter>
+int run_guarded(FILE* in, FILE* out, const CaseHeader& h, Adapter inner) {
+    argmind::host::RuntimeShapedGuard<Adapter> g(
+        inner, static_cast<int>(h.depth), h.checkpoint_every, h.recover_after,
+        4, /*n_external=*/0);
+    for (uint32_t i = 0; i < h.n_bounds && i < 4; ++i) {
+        if (!g.add_bound(bound_from(h.bounds[i]))) {
+            fprintf(stderr, "shapecheck: bound %u refused by the guard\n", i);
+            return 2;
+        }
+    }
+    if (h.divergence.enabled) {
+        argmind::Divergence d;
+        d.ratio = h.divergence.ratio;
+        d.fast_alpha = h.divergence.fast_alpha;
+        d.slow_alpha = h.divergence.slow_alpha;
+        d.floor = h.divergence.floor;
+        d.warmup = h.divergence.warmup;
+        g.set_divergence(d);
+    }
+    if (!g.valid()) {
+        fprintf(stderr, "shapecheck: the guard configuration is not usable\n");
+        return 2;
+    }
+    return drive<T>(in, out, h, g, guarded_extra);
 }
 
 template <typename T>
 int run(FILE* in, FILE* out, const CaseHeader& h) {
+    const bool guarded = h.n_bounds > 0 || h.divergence.enabled;
     if (h.adapter == 1) {
         argmind::host::RuntimeShapedNlms<T> a(h.n, h.m, static_cast<T>(h.lambda),
-                                    static_cast<T>(h.p0));
-        return drive<T>(in, out, h, a);
+                                              static_cast<T>(h.p0));
+        if (guarded) return run_guarded<T>(in, out, h, a);
+        return drive<T>(in, out, h, a, bare_extra);
     }
     argmind::host::RuntimeShapedRls<T> a(h.n, h.m, static_cast<T>(h.lambda),
-                               static_cast<T>(h.p0));
-    return drive<T>(in, out, h, a);
+                                         static_cast<T>(h.p0));
+    if (guarded) return run_guarded<T>(in, out, h, a);
+    return drive<T>(in, out, h, a, bare_extra);
 }
 
 }  // namespace
@@ -127,16 +181,6 @@ int main(int argc, char** argv) {
         fprintf(stderr, "shapecheck: not an AMXC v%u case file\n", kFormatVersion);
         fclose(in);
         return 4;
-    }
-    if (h.n_bounds > 0 || h.divergence.enabled) {
-        // Refused rather than run unguarded. There is no RuntimeShapedGuard yet,
-        // and a tool that
-        // silently dropped the guard would make the gap invisible -- which is the whole
-        // failure mode this library was built around.
-        fprintf(stderr, "shapecheck: guarded cases need a RuntimeShapedGuard, "
-                        "yet; refusing rather than running this unguarded\n");
-        fclose(in);
-        return 5;
     }
     if (h.n < 1 || h.m < 1) {
         fclose(in);
