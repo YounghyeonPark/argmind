@@ -118,8 +118,8 @@ if(NOT CMAKE_CROSSCOMPILING)
 
     # The runtime-shape parity tool. NOT -fno-exceptions: it is the hosted tier and uses
     # std::vector, which is the whole point of that tier existing separately.
-    add_executable(argmind_dyncheck tools/dyncheck.cpp)
-    target_include_directories(argmind_dyncheck PRIVATE include)
+    add_executable(argmind_shapecheck tools/shapecheck.cpp)
+    target_include_directories(argmind_shapecheck PRIVATE include)
 
     enable_testing()
     add_test(NAME core COMMAND argmind_test_core)

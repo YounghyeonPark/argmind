@@ -459,7 +459,7 @@ def test_the_recorded_target_sizes_are_current(cross, tmp_path):
 
 #: Headers that are deliberately NOT freestanding. The hosted tier uses the heap and
 #: `std::vector`; the path is the boundary and this is where it is checked.
-HOSTED_HEADERS = ("host/dyn.hpp",)
+HOSTED_HEADERS = ("host/runtime_shape.hpp",)
 
 
 def test_no_core_header_reaches_into_the_hosted_tier(cross):
@@ -482,7 +482,7 @@ def test_a_hosted_header_is_hosted_and_says_so_by_failing_freestanding(cross, tm
                                                                        header):
     """The other half, and the one that would otherwise be assumed.
 
-    If `host/dyn.hpp` happened to compile freestanding, the separation would be
+    If `host/runtime_shape.hpp` happened to compile freestanding, the separation would be
     decoration. It must not: `<vector>` is a hosted header. This asserts the split is
     real rather than aspirational -- and if it ever starts passing, that is a signal the
     header stopped needing the heap, which is a decision to make rather than a change to

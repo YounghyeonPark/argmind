@@ -12,7 +12,8 @@
 // is n=5, n=7, n=50, m=4 -- the shapes a configuration file would produce and no
 // instantiation list contains.
 //
-// Guarded cases are refused rather than silently run unguarded: `DynGuard` does not exist
+// Guarded cases are refused rather than silently run unguarded:
+// `RuntimeShapedGuard` does not exist
 // yet and a tool that quietly dropped the guard would hide that.
 
 #include <stdint.h>
@@ -20,7 +21,7 @@
 
 #include <vector>
 
-#include "argmind/host/dyn.hpp"
+#include "argmind/host/runtime_shape.hpp"
 
 namespace {
 
@@ -69,7 +70,7 @@ static_assert(sizeof(Row) == 56, "must match xcheck's row");
 template <typename T, typename Adapter>
 int drive(FILE* in, FILE* out, const CaseHeader& h, Adapter& a) {
     if (!a.valid()) {
-        fprintf(stderr, "dyncheck: adapter parameters rejected by the core\n");
+        fprintf(stderr, "shapecheck: adapter parameters rejected by the core\n");
         return 2;
     }
     ResultHeader rh = {{'A', 'M', 'X', 'R'}, kFormatVersion, h.dtype, 0, h.n, h.m,
@@ -98,11 +99,11 @@ int drive(FILE* in, FILE* out, const CaseHeader& h, Adapter& a) {
 template <typename T>
 int run(FILE* in, FILE* out, const CaseHeader& h) {
     if (h.adapter == 1) {
-        argmind::host::DynNlms<T> a(h.n, h.m, static_cast<T>(h.lambda),
+        argmind::host::RuntimeShapedNlms<T> a(h.n, h.m, static_cast<T>(h.lambda),
                                     static_cast<T>(h.p0));
         return drive<T>(in, out, h, a);
     }
-    argmind::host::DynRls<T> a(h.n, h.m, static_cast<T>(h.lambda),
+    argmind::host::RuntimeShapedRls<T> a(h.n, h.m, static_cast<T>(h.lambda),
                                static_cast<T>(h.p0));
     return drive<T>(in, out, h, a);
 }
@@ -111,7 +112,7 @@ int run(FILE* in, FILE* out, const CaseHeader& h) {
 
 int main(int argc, char** argv) {
     if (argc != 3) {
-        fprintf(stderr, "usage: dyncheck <case-file> <result-file>\n");
+        fprintf(stderr, "usage: shapecheck <case-file> <result-file>\n");
         return 1;
     }
     FILE* in = fopen(argv[1], "rb");
@@ -123,15 +124,16 @@ int main(int argc, char** argv) {
     }
     if (h.magic[0] != 'A' || h.magic[1] != 'M' || h.magic[2] != 'X' ||
         h.magic[3] != 'C' || h.version != kFormatVersion) {
-        fprintf(stderr, "dyncheck: not an AMXC v%u case file\n", kFormatVersion);
+        fprintf(stderr, "shapecheck: not an AMXC v%u case file\n", kFormatVersion);
         fclose(in);
         return 4;
     }
     if (h.n_bounds > 0 || h.divergence.enabled) {
-        // Refused rather than run unguarded. There is no DynGuard yet, and a tool that
+        // Refused rather than run unguarded. There is no RuntimeShapedGuard yet,
+        // and a tool that
         // silently dropped the guard would make the gap invisible -- which is the whole
         // failure mode this library was built around.
-        fprintf(stderr, "dyncheck: guarded cases need a DynGuard, which does not exist "
+        fprintf(stderr, "shapecheck: guarded cases need a RuntimeShapedGuard, "
                         "yet; refusing rather than running this unguarded\n");
         fclose(in);
         return 5;

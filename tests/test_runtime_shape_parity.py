@@ -1,13 +1,13 @@
 # SPDX-License-Identifier: Apache-2.0
 """The runtime-shaped adapters, against the same Python reference.
 
-`argmind/host/dyn.hpp` exists because the core takes its dimensions as template
+`argmind/host/runtime_shape.hpp` exists because the core takes its dimensions as template
 parameters and a platform above an OS wants them from a configuration file. The whole
 value of it is **the shapes the instantiation list does not contain**, so that is what
 this compares: 5x1, 7x1, 7x2, 50x1, 6x4. Comparing at 6x1 would mostly re-test the
 reference against itself.
 
-`dyncheck` reads and writes `xcheck`'s file format unchanged -- the case header already
+`shapecheck` reads and writes `xcheck`'s file format unchanged -- the case header already
 carries `n` and `m` as `uint16_t` -- so this module reuses that harness's encoder and
 reader rather than growing a second pair that could drift.
 
@@ -35,16 +35,16 @@ SHAPES = [(5, 1), (7, 1), (7, 2), (50, 1), (6, 4)]
 
 
 @pytest.fixture(scope="session")
-def dyncheck(tmp_path_factory):
+def shapecheck(tmp_path_factory):
     cxx = shutil.which("g++")
     if cxx is None:
         pytest.skip("no host g++")
-    exe = tmp_path_factory.mktemp("dyn") / "dyncheck.exe"
+    exe = tmp_path_factory.mktemp("shape") / "shapecheck.exe"
     done = subprocess.run(
         [cxx, "-std=c++17", "-O2", "-Wall", "-Wextra", "-I", str(CPP / "include"),
-         str(CPP / "tools" / "dyncheck.cpp"), "-o", str(exe)],
+         str(CPP / "tools" / "shapecheck.cpp"), "-o", str(exe)],
         capture_output=True, text=True)
-    assert done.returncode == 0, f"dyncheck does not build:\n{done.stderr}"
+    assert done.returncode == 0, f"shapecheck does not build:\n{done.stderr}"
     return exe
 
 
@@ -52,11 +52,11 @@ def dyncheck(tmp_path_factory):
 @pytest.mark.parametrize("n,m", SHAPES)
 @pytest.mark.parametrize("adapter,params", [(0, (0.99, 100.0)), (1, (0.5, 1e-6))],
                          ids=["rls", "nlms"])
-def test_a_runtime_shape_agrees_with_the_reference(dyncheck, tmp_path, dtype, n, m,
+def test_a_runtime_shape_agrees_with_the_reference(shapecheck, tmp_path, dtype, n, m,
                                                    adapter, params):
     lam, p0 = params
     xs, ys = excited(n, 300, seed=41, outputs=m)
-    py, py_state, cpp, cpp_state = run_both(dyncheck, tmp_path, xs, ys, lam=lam, p0=p0,
+    py, py_state, cpp, cpp_state = run_both(shapecheck, tmp_path, xs, ys, lam=lam, p0=p0,
                                             dtype=dtype, adapter=adapter)
 
     assert len(py) == len(cpp) == 300
@@ -73,7 +73,7 @@ def test_a_runtime_shape_agrees_with_the_reference(dyncheck, tmp_path, dtype, n,
         f"{dev / float(np.finfo(np.dtype(dtype)).eps):.1f} ulp")
 
 
-def test_the_deviation_is_reduction_order_and_grows_with_the_sum_length(dyncheck,
+def test_the_deviation_is_reduction_order_and_grows_with_the_sum_length(shapecheck,
                                                                         tmp_path):
     """Classifying it, rather than accepting a small number.
 
@@ -86,7 +86,7 @@ def test_the_deviation_is_reduction_order_and_grows_with_the_sum_length(dyncheck
     for n in (2, 6, 50):
         for dtype in ("f4", "f8"):
             xs, ys = excited(n, 300, seed=41, outputs=1)
-            _py, ps, _cpp, cs = run_both(dyncheck, tmp_path, xs, ys, lam=0.99, p0=100.0,
+            _py, ps, _cpp, cs = run_both(shapecheck, tmp_path, xs, ys, lam=0.99, p0=100.0,
                                          dtype=dtype, adapter=0)
             got[(n, dtype)] = (scale_deviation(ps, cs)
                                / float(np.finfo(np.dtype(dtype)).eps))
@@ -102,14 +102,15 @@ def test_the_deviation_is_reduction_order_and_grows_with_the_sum_length(dyncheck
             "precision-dependent bug")
 
 
-def test_a_runtime_shape_and_the_compile_time_core_hold_the_same_state_layout(dyncheck,
+def test_a_runtime_shape_and_the_compile_time_core_hold_the_same_state_layout(shapecheck,
                                                                               tmp_path):
-    """`DynRls` claims theta-then-P row-major, byte-identical to `Rls<T,N,M>`, so a block
+    """`RuntimeShapedRls` claims theta-then-P row-major, byte-identical to
+    `Rls<T,N,M>`, so a block
     written by one is readable by the other and `persist` needs no special case. Checked
     at 6x1, the one shape both can express."""
     from test_cpp_parity import _write_case  # noqa: PLC0415
     xs, ys = excited(6, 200, seed=41, outputs=1)
-    _py, dyn_state, _cpp, _ = run_both(dyncheck, tmp_path, xs, ys, lam=0.99, p0=100.0,
+    _py, dyn_state, _cpp, _ = run_both(shapecheck, tmp_path, xs, ys, lam=0.99, p0=100.0,
                                        dtype="f8", adapter=0)
     assert dyn_state.size == 6 * 1 + 6 * 6, "not theta-then-P at this shape"
     # theta first: the reference's own theta must match the leading block.
@@ -121,9 +122,10 @@ def test_a_runtime_shape_and_the_compile_time_core_hold_the_same_state_layout(dy
     assert _write_case is not None
 
 
-def test_dyncheck_refuses_a_guarded_case_rather_than_running_it_unguarded(dyncheck,
+def test_shapecheck_refuses_a_guarded_case_rather_than_running_it_unguarded(shapecheck,
                                                                           tmp_path):
-    """There is no `DynGuard` yet, and that is the gap that matters most in this layer --
+    """There is no `RuntimeShapedGuard` yet, and that is the gap that matters most
+    in this layer --
     "no guard" being expressible is the failure the whole library is built around. A tool
     that silently dropped the guard would hide it, so it exits non-zero."""
     from test_cpp_parity import _write_case  # noqa: PLC0415
@@ -131,7 +133,7 @@ def test_dyncheck_refuses_a_guarded_case_rather_than_running_it_unguarded(dynche
     case = tmp_path / "guarded.bin"
     _write_case(case, np.asarray(xs, "f8"), np.asarray(ys, "f8"), 0.99, 100.0, "f8",
                 guard={"bounds": [("p_trace", None, 1e6)]}, adapter=0)
-    done = subprocess.run([str(dyncheck), str(case), str(tmp_path / "out.bin")],
+    done = subprocess.run([str(shapecheck), str(case), str(tmp_path / "out.bin")],
                           capture_output=True, text=True)
     assert done.returncode != 0
-    assert "DynGuard" in done.stderr, done.stderr
+    assert "RuntimeShapedGuard" in done.stderr, done.stderr

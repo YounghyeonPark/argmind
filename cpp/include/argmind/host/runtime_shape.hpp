@@ -2,6 +2,12 @@
 //
 // Runtime-shaped adapters, for the hosted tier.
 //
+// The name says what is runtime about it: the SHAPE -- `n_features` and `n_outputs`,
+// nothing else. These were called `DynRls`/`DynNlms` in `dyn.hpp` for one commit and
+// renamed after the first person to read it asked what `dyn` meant. That question is
+// the answer: an abbreviation that does not name the varying thing is a bad name in a
+// public API, and in Rust `dyn` means dynamic dispatch, which this is not.
+//
 // Why this exists, and why it is a separate directory
 // ---------------------------------------------------
 // The core takes its dimensions as template parameters. That is the reason C++ was chosen
@@ -23,7 +29,8 @@
 // This is a port of the reference, not a new algorithm
 // ----------------------------------------------------
 // `argmind/adapt.py` has always been runtime-shaped: `RecursiveLeastSquares(n, m, ...)`
-// takes its dimensions as arguments. So `DynRls` is a *closer* transcription of the
+// takes its dimensions as arguments. So `RuntimeShapedRls` is a *closer*
+// transcription of the
 // specification than `Rls<T,N,M>` is, and parity against it can be exact rather than
 // bounded in ulp.
 //
@@ -40,8 +47,8 @@
 // should. Measured at shapes the instantiation list does not contain, both adapters, both
 // precisions: 0.5 ulp at 5x1, 1.0 at 7x1, and 2.5 to 4.0 at 50x1.
 
-#ifndef ARGMIND_HOST_DYN_HPP
-#define ARGMIND_HOST_DYN_HPP
+#ifndef ARGMIND_HOST_RUNTIME_SHAPE_HPP
+#define ARGMIND_HOST_RUNTIME_SHAPE_HPP
 
 #include <stdint.h>
 
@@ -56,7 +63,7 @@ namespace host {
 /// The runtime-shaped report. `Report<T, M>` fixes its residual arrays at compile time,
 /// so it cannot carry a shape decided at construction.
 template <typename T>
-struct DynReport {
+struct RuntimeShapedReport {
     bool applied = false;
     Reason reason = Reason::None;
     std::vector<T> residual;
@@ -85,7 +92,7 @@ double norm_of(const std::vector<T>& v) {
 /// So a block written by one is readable by the other at the same shape, and
 /// `persist.hpp`'s record format needs no special case.
 template <typename T>
-class DynRls {
+class RuntimeShapedRls {
     static_assert(sizeof(T) >= 4,
                   "fp32 is the measured floor for this recursion; there is no "
                   "half-precision path in any filter form");
@@ -98,7 +105,7 @@ public:
                is_finite(lambda) && is_finite(p0);
     }
 
-    DynRls(int n_features, int n_outputs, T lambda, T p0)
+    RuntimeShapedRls(int n_features, int n_outputs, T lambda, T p0)
         : n_(n_features), m_(n_outputs), lambda_(lambda), p0_(p0),
           state_(static_cast<size_t>(n_features) * n_outputs +
                      static_cast<size_t>(n_features) * n_features, T(0)),
@@ -146,7 +153,8 @@ public:
     void predict(const T* x, T* out) const {
         for (int j = 0; j < m_; ++j) {
             T acc = T(0);
-            for (int i = 0; i < n_; ++i) acc += x[i] * theta()[static_cast<size_t>(i) * m_ + j];
+            for (int i = 0; i < n_; ++i)
+                acc += x[i] * theta()[static_cast<size_t>(i) * m_ + j];
             out[j] = acc;
         }
     }
@@ -163,8 +171,8 @@ public:
         *p_min_diag = lo;
     }
 
-    DynReport<T> update(const T* x, const T* y) {
-        DynReport<T> r;
+    RuntimeShapedReport<T> update(const T* x, const T* y) {
+        RuntimeShapedReport<T> r;
         for (int i = 0; i < n_; ++i) {
             if (!is_finite(x[i])) return reject(r, Reason::NonFiniteInput);
         }
@@ -179,7 +187,8 @@ public:
         // px = P x
         for (int i = 0; i < n_; ++i) {
             T acc = T(0);
-            for (int j = 0; j < n_; ++j) acc += p()[static_cast<size_t>(i) * n_ + j] * x[j];
+            for (int j = 0; j < n_; ++j)
+                acc += p()[static_cast<size_t>(i) * n_ + j] * x[j];
             px_[i] = acc;
         }
         T den = lambda_;
@@ -227,14 +236,15 @@ public:
     }
 
 private:
-    DynReport<T>& reject(DynReport<T>& r, Reason why) {
+    RuntimeShapedReport<T>& reject(RuntimeShapedReport<T>& r, Reason why) {
         for (T& v : e_) v = T(0);
         for (T& v : e_post_) v = T(0);
         ++rejected_nonfinite_;
         return finish(r, false, why, 0.0);
     }
 
-    DynReport<T>& finish(DynReport<T>& r, bool applied, Reason why, double gain) {
+    RuntimeShapedReport<T>& finish(RuntimeShapedReport<T>& r, bool applied,
+                                   Reason why, double gain) {
         r.applied = applied;
         r.reason = why;
         r.residual = e_;
@@ -258,7 +268,7 @@ private:
 
 /// Normalised LMS with the shape decided at construction. State is theta only.
 template <typename T>
-class DynNlms {
+class RuntimeShapedNlms {
     static_assert(sizeof(T) >= 4,
                   "fp16 is unmeasured for this recursion, not known to work");
 
@@ -270,7 +280,7 @@ public:
                is_finite(mu) && is_finite(eps);
     }
 
-    DynNlms(int n_features, int n_outputs, T mu, T eps)
+    RuntimeShapedNlms(int n_features, int n_outputs, T mu, T eps)
         : n_(n_features), m_(n_outputs), mu_(mu), eps_(eps),
           state_(static_cast<size_t>(n_features) * n_outputs, T(0)),
           e_(n_outputs, T(0)), e_post_(n_outputs, T(0)), yhat_(n_outputs, T(0)) {}
@@ -305,13 +315,14 @@ public:
     void predict(const T* x, T* out) const {
         for (int j = 0; j < m_; ++j) {
             T acc = T(0);
-            for (int i = 0; i < n_; ++i) acc += x[i] * state_[static_cast<size_t>(i) * m_ + j];
+            for (int i = 0; i < n_; ++i)
+                acc += x[i] * state_[static_cast<size_t>(i) * m_ + j];
             out[j] = acc;
         }
     }
 
-    DynReport<T> update(const T* x, const T* y) {
-        DynReport<T> r;
+    RuntimeShapedReport<T> update(const T* x, const T* y) {
+        RuntimeShapedReport<T> r;
         for (int i = 0; i < n_; ++i) {
             if (!is_finite(x[i])) return reject(r, Reason::NonFiniteInput);
         }
@@ -349,14 +360,15 @@ public:
     }
 
 private:
-    DynReport<T>& reject(DynReport<T>& r, Reason why) {
+    RuntimeShapedReport<T>& reject(RuntimeShapedReport<T>& r, Reason why) {
         for (T& v : e_) v = T(0);
         for (T& v : e_post_) v = T(0);
         ++rejected_nonfinite_;
         return finish(r, false, why, 0.0);
     }
 
-    DynReport<T>& finish(DynReport<T>& r, bool applied, Reason why, double gain) {
+    RuntimeShapedReport<T>& finish(RuntimeShapedReport<T>& r, bool applied,
+                                   Reason why, double gain) {
         r.applied = applied;
         r.reason = why;
         r.residual = e_;
@@ -382,4 +394,4 @@ private:
 }  // namespace host
 }  // namespace argmind
 
-#endif  // ARGMIND_HOST_DYN_HPP
+#endif  // ARGMIND_HOST_RUNTIME_SHAPE_HPP
