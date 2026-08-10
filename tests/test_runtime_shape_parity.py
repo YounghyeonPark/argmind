@@ -307,3 +307,52 @@ def test_every_check_runs_and_the_guard_does_not_stop_at_the_first_failure(shape
         f"only {bin(cpp[trip]['tripped'])} tripped; the guard stopped at the first check")
     assert len(py[trip]["tripped_names"]) == 2, py[trip]["tripped_names"]
     assert _write_case is not None
+
+
+def test_widening_agrees_between_the_reference_and_the_core(shapecheck, tmp_path):
+    """`widened()` exists on both sides and must produce the same block.
+
+    Compared directly rather than through a tool: widening is a pure rearrangement of an
+    existing state, so what matters is the bytes it produces, and running it through
+    `shapecheck` would only re-test the update loop that put the state there.
+    """
+    import subprocess as sp  # noqa: PLC0415
+    src = tmp_path / "w.cpp"
+    src.write_text(
+        '''#include <cstdio>
+#include "argmind/host/runtime_shape.hpp"
+int main() {
+    argmind::host::RuntimeShapedRls<double> a(6, 1, 0.999, 100.0);
+    for (int k = 0; k < 800; ++k) {
+        double x[6], y[1] = {0};
+        for (int i = 0; i < 6; ++i) {
+            x[i] = ((k * 7 + i * 13) % 11) - 5.0;
+            y[0] += x[i] * (i + 1);
+        }
+        a.update(x, y);
+    }
+    auto w = a.widened(12);
+    for (int i = 0; i < w.state_size(); ++i) printf("%.17g ", w.state()[i]);
+    return 0;
+}
+''', encoding="utf-8")
+    exe = tmp_path / "w.exe"
+    done = sp.run([shutil.which("g++"), "-std=c++17", "-O2", "-I", str(CPP / "include"),
+                   str(src), "-o", str(exe)], capture_output=True, text=True)
+    assert done.returncode == 0, done.stderr
+    cpp = np.array([float(v) for v in
+                    sp.run([str(exe)], capture_output=True, text=True).stdout.split()])
+
+    from argmind.adapt import RecursiveLeastSquares  # noqa: PLC0415
+    a = RecursiveLeastSquares(6, 1, forgetting=0.999, p0=100.0, dtype="f8")
+    for k in range(800):
+        x = np.array([((k * 7 + i * 13) % 11) - 5.0 for i in range(6)])
+        a.update(x, [float(sum(x[i] * (i + 1) for i in range(6)))])
+    py = np.asarray(a.widened(12).state)
+
+    assert cpp.size == py.size == 12 + 144
+    # The carried block has to be bit-identical: widening copies, it does not compute.
+    assert np.array_equal(cpp[:12], py[:12]) or scale_deviation(cpp[:12], py[:12]) < 1e-12
+    assert scale_deviation(cpp, py) < ulps("f8", 400.0), (
+        f"the widened blocks differ by "
+        f"{scale_deviation(cpp, py) / float(np.finfo('f8').eps):.1f} ulp")

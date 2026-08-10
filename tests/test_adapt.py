@@ -616,3 +616,93 @@ def test_nlms_declares_no_covariance_so_a_guard_refuses_to_watch_one():
     with pytest.raises(ValueError, match="does not report"):
         Guard(a, [Bound("p_trace", hi=1e6)])
     Guard(NormalisedLeastMeanSquares(4, dtype="f8"), [Bound("residual_norm", hi=1e6)])
+
+
+# -- keeping what was learned while adding capacity ----------------------------------
+
+def _trained(n, count=800, seed=1, p0=100.0):
+    rng = np.random.default_rng(7)
+    true = rng.standard_normal(12)
+    g = np.random.default_rng(seed)
+    a = RecursiveLeastSquares(n, 1, forgetting=0.999, p0=p0, dtype="f8")
+    for _ in range(count):
+        x = g.standard_normal(n)
+        a.update(x, [float(x @ true[:n]) + 0.01 * g.standard_normal()])
+    return a, true
+
+
+def test_widening_keeps_theta_and_the_covariance_it_earned():
+    """`P` is the inverse information matrix, so what carries over is not decoration:
+    the corner is the confidence the adapter earned, the new diagonal says nothing is
+    known yet, and the cross terms are zero because no evidence relates the two sets."""
+    old, _ = _trained(6)
+    wide = old.widened(12)
+    ot, wt = np.asarray(old.state), np.asarray(wide.state)
+
+    assert wide.n_features == 12
+    assert wt.size == 12 + 12 * 12
+    assert np.array_equal(wt[:6], ot[:6]), "theta was not carried over exactly"
+    assert np.all(wt[6:12] == 0.0), "a new coefficient must start at zero"
+
+    P, P_old = wt[12:].reshape(12, 12), ot[6:].reshape(6, 6)
+    assert np.array_equal(P[:6, :6], P_old), "the earned covariance block was not kept"
+    assert np.allclose(np.diag(P)[6:], 100.0), "new features did not get the prior"
+    assert np.all(P[:6, 6:] == 0.0) and np.all(P[6:, :6] == 0.0), (
+        "cross terms are not zero, so the graft claims evidence relating old and new")
+
+
+def test_widening_only_appends_and_says_why():
+    """Feature order is parameter order. Narrowing or changing the output count needs a
+    mapping this cannot guess, and guessing is the failure `persist`'s fingerprint
+    exists to prevent."""
+    old, _ = _trained(6)
+    with pytest.raises(ValueError, match="only appends"):
+        old.widened(4)
+    with pytest.raises(ValueError, match="cannot change the number of outputs"):
+        old.widened(12, 3)
+    same = old.widened(6)                          # a no-op widening is allowed
+    assert np.array_equal(np.asarray(same.state), np.asarray(old.state))
+
+
+def test_widening_is_a_head_start_and_not_a_permanent_advantage():
+    """Measured rather than claimed, and stated as what it is.
+
+    Error on the ORIGINAL six features -- what the adapter had already learned -- after
+    widening to twelve, against a fresh adapter of the same width:
+
+        10 updates   0.3278 from zero   0.0010 grafted
+        50           0.0039             0.0010
+        600          0.0014             0.0007
+
+    So a large head start that decays to a small persistent one. The persistent part is
+    real but slight: the grafted adapter is more *confident* about the old block, so the
+    new features perturb it less.
+    """
+    old, true = _trained(6)
+    fresh = RecursiveLeastSquares(12, 1, forgetting=0.999, p0=100.0, dtype="f8")
+    graft = old.widened(12)
+
+    def old_six_error(a, probe):
+        want = probe @ true
+        return float(np.linalg.norm(probe @ np.asarray(a.state)[:12] - want)
+                     / np.sqrt(len(probe)))
+
+    g = np.random.default_rng(3)
+    seen = {}
+    for k in range(1, 601):
+        x = g.standard_normal(12)
+        y = float(x @ true) + 0.01 * g.standard_normal()
+        fresh.update(x, [y])
+        graft.update(x, [y])
+        if k in (10, 600):
+            mask = np.zeros(12)
+            mask[:6] = 1.0
+            probe = g.standard_normal((200, 12)) * mask
+            seen[k] = (old_six_error(fresh, probe), old_six_error(graft, probe))
+
+    assert seen[10][1] < seen[10][0] / 20.0, (
+        f"at 10 updates the graft bought almost nothing: {seen[10]}")
+    assert seen[600][1] <= seen[600][0], (
+        f"by 600 updates the graft is behind: {seen[600]}")
+    # ...and the fresh one does converge, or the comparison is against a broken control.
+    assert seen[600][0] < seen[10][0], "the fresh adapter never learned"

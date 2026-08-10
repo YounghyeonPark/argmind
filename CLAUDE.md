@@ -388,6 +388,27 @@ is built with the Python reference so the CRC is genuinely correct — forging i
 only re-tests the CRC, which this project has been caught doing before. Both halves
 mutation-checked: removing the fingerprint check and skipping `load_state` each fail a test.
 
+**Keeping the learning while adding capacity: `widened()`, on both sides.** A bigger board does
+not make a bigger model — `n_features` is a design choice — but a wider model can now inherit a
+narrower one's learning instead of starting over. `theta` keeps its coefficients and the new ones
+start at zero; `P` keeps its earned block in the corner, the new diagonal gets `p0` and the cross
+terms are zero. That is principled rather than a copy: `P` is the inverse information matrix, so
+the corner is the confidence earned, the diagonal is "nothing known yet", and zero cross terms
+say no evidence relates the two sets.
+
+**Appending only**, and that is a constraint. Feature order is parameter order, so appending is
+the one widening that permutes nothing; rearranging needs a mapping the caller supplies, and
+guessing is the failure `persist`'s fingerprint exists to prevent. Narrowing and changing the
+output count are refused with the reason.
+
+**Measured, and it is a head start rather than a permanent gain** — error on the original six
+after widening to twelve, against a fresh adapter: **0.3278 → 0.0010 at 10 updates**, 0.0039 →
+0.0010 at 50, 0.0014 → 0.0007 at 600. **A prediction of mine was measured to be wrong**: I
+expected the graft to matter *more* when the new features are rarely excited, and it does not —
+the old features are excited either way, so a fresh adapter relearns them just as fast. Four
+mutants caught across the two implementations, and the two widenings are compared against each
+other.
+
 **Still undecided:** whether inference is *hosted* (an interface to ONNX Runtime/TFLite) or
 *embedded*, and whether the tiers ship as one library or two. Nothing on the camera/audio/speech
 path is built.

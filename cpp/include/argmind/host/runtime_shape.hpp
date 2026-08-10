@@ -164,6 +164,47 @@ public:
         }
     }
 
+    /// A wider adapter that keeps everything this one learned.
+    ///
+    /// **Appending only.** Feature order is parameter order, and a persisted block
+    /// restored against a different order is wrong undetectably -- which is why
+    /// `persist` carries a configuration fingerprint. Appending is the one widening
+    /// that permutes nothing: old feature `j` is still feature `j`. Rearranging would
+    /// need a mapping the caller supplies, and guessing one is the failure the
+    /// fingerprint exists to prevent.
+    ///
+    /// `theta` keeps its coefficients and the new ones start at zero. `P` keeps its
+    /// learned block in the corner and the new diagonal gets `p0`, with zero cross
+    /// terms: `P` is the inverse information matrix, so the corner carries the
+    /// confidence this adapter earned, the diagonal says nothing is known about the new
+    /// features yet, and no evidence yet relates the two sets.
+    ///
+    /// **It adds inputs, not expressiveness.** Still linear in the parameters.
+    ///
+    /// Returns an invalid adapter if `n_features` is narrower -- checked with `valid()`
+    /// rather than thrown, matching the rest of this library.
+    RuntimeShapedRls<T> widened(int n_features, T p0) const {
+        if (n_features < n_) return RuntimeShapedRls<T>(0, 0, lambda_, p0);
+        RuntimeShapedRls<T> out(n_features, m_, lambda_, p0);
+        for (int i = 0; i < n_; ++i) {
+            for (int j = 0; j < m_; ++j) {
+                out.theta()[static_cast<size_t>(i) * m_ + j] =
+                    theta()[static_cast<size_t>(i) * m_ + j];
+            }
+        }
+        for (int i = 0; i < n_; ++i) {
+            for (int j = 0; j < n_; ++j) {
+                out.p()[static_cast<size_t>(i) * n_features + j] =
+                    p()[static_cast<size_t>(i) * n_ + j];
+            }
+        }
+        return out;
+    }
+
+    RuntimeShapedRls<T> widened(int n_features) const {
+        return widened(n_features, p0_);
+    }
+
     void health(double* p_trace, double* p_min_diag) const {
         double tr = 0.0;
         double lo = static_cast<double>(p()[0]);
