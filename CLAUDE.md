@@ -302,6 +302,43 @@ to the output layer.
 the fault step leaving a finite state. If the guard needed one change for a network, the
 contract would not be one.
 
+**And the network goes through the whole composition on both sides** — streams, aligner, frame
+map, guard, persist — `tests/test_mlp_pipeline.py`. That is the claim the scope decision rests
+on, and it was the one piece still untested: `Guard` and `Pipeline` being templates over an
+`Adapter` had been demonstrated with NLMS, a different algorithm but still one matrix. A network
+has layers.
+
+**Full pipeline parity for this combination is deliberately not run, and the reason is pinned
+rather than asserted.** A pipeline's outputs are bookkeeping — frames, updated, lost_frames,
+staleness, the gates — and all of it is driven by shapes and clocks, not by the adapter's
+arithmetic; that is already compared for two adapters, and the network's arithmetic is already
+compared by `mlpcheck`. So only the *seam* is new. `test_the_seam_is_shape_driven` runs the same
+event log through a network and through RLS and requires **every counter to agree exactly**,
+with its own guards that the run reached overflow, a refused sample and non-zero staleness. If
+that premise ever breaks the test fails, instead of the reasoning quietly going stale.
+
+**Four fixture bugs, and three of them were the failure this project keeps finding.** A `drive`
+helper that restarted its timebase, so `Stream.push` refused every sample on a second run —
+monotonic time enforced at the source, working exactly as designed. A seam fixture where nothing
+was ever skipped and staleness was zero throughout, because both streams arrived at the same
+instant and `hold_last` always found an exact match. And a fault case asserting 2x damage where
+the fixture can only produce 1.53x, because at 400 steps of warm-up the network has barely
+learned and there is little to destroy — **the assertion now says the magnitude is a property of
+the fixture and the full-scale figure lives elsewhere**, rather than being loosened silently.
+
+**The fourth was the more interesting one: the test walked into the trap its own docstring
+warns about.** `StepReport.prediction` is a preallocated buffer the next `step()` overwrites —
+documented, and deliberate, because a fresh array per step allocates once per step. Collecting
+the reports and reading them afterwards gives one value repeated, and the test then reported
+"the prediction stopped moving" about a pipeline that was working. It reads the value during the
+loop now, and separately asserts the aliasing *still holds*, so the documented behaviour is
+pinned rather than worked around.
+
+**Eight mutants across the two sides, all caught** after one dud of mine that only added a
+comment: prediction as a fresh array, never predicting, predicting before the update, dropping
+the skipped counters, freezing without rolling back, the C++ step never reporting frozen, and
+`set_constant` ignored.
+
 **There are two adapters in C++** (`cpp/include/argmind/nlms.hpp`, `NormalisedLeastMeanSquares`
 in the reference). Normalised LMS is O(n) in memory and time and carries no covariance, which is
 the point: at a network head's width RLS's n² is the binding constraint — 330,608 B against
