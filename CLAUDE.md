@@ -236,18 +236,37 @@ error is exactly `(1 - 2*lr*(x.x + 1))` times the a priori one, 1.7e-13 over 600
 catch a missing term, which is what makes it worth having, and the test asserts the version
 without the bias does *not* hold.
 
-**fp16 fails, and the note that said it worked is withdrawn.** That note came from one target
-function at one architecture at one rate — 0.2305 against fp32's 0.2310 — and the sweep that
-replaced it (four targets × three architectures × two rates × three seeds × 100,000 updates,
-216 runs on 30 cores, 157 s) found **that configuration to be the single most favourable of the
-twenty-four**. It reads 0.991 there. Elsewhere fp16 goes **non-finite on every seed** within
-~1,700 updates on a large-output target at (32,32), and costs **4.0×** the fp32 error on a
-small-output one. **The mechanism is not what the first detector looked for**: nothing is driven
-to zero (0.0% in every run) — `lr·grad` falls below the fp16 spacing *at that weight's
-magnitude*, so the weight does not move, on up to **92%** of updates. A network can stop learning
-in half precision without ever producing a NaN. **fp32 against fp64 is 1.000 across the whole
-sweep**, so `f4` is where the floor actually is rather than a compromise. The negative result is
-protected by a test that reproduces the divergence in 2,500 updates with an fp32 control.
+**Scale the target — this outranks the precision question and was found while chasing it.**
+An un-normalised target defeats *every* precision. On `50·sin(0.5s₀) + 20·s₁s₂` at 200k
+updates: raw, **fp64** scores 0.7326 of a constant predictor with ‖w‖=3617 and **96.2% of its
+steps below the representable spacing**; divided by the target's own standard deviation it
+scores **0.0144** with ‖w‖=8.7 and 0.0%. **51× better, in double precision.** It bites at the
+other end too — a target with output ~0.001 is fitted four times *worse* than a constant in
+every precision until it is scaled up. The docstring now leads with this, because none of the
+precision figures mean anything without it.
+
+**fp32 is indistinguishable from fp64, and that is now measured to a million updates.** Four
+targets × two architectures × three seeds × 1,000,000 updates, 48 runs in 296 s: `f4/f8` is
+1.0000 at 100k, 250k and 500k and within ±4% at 1M — residue that falls on *both* sides of one,
+so it is two trajectories drifting apart rather than degradation. What does grow is fp32's own
+step underflow, 0.0% → up to 22% over a million updates on a non-stationary target: it costs
+nothing yet, it is the same mechanism that kills fp16, and it is recorded rather than dismissed.
+
+**fp16 is refused, and the claim has been narrowed twice.** The first version said it *worked*
+(one target, one architecture, one rate — the most favourable of twenty-four). The second said
+it cost **4.0×** on a small-output target; **withdrawn**, because fp64 scores 4.2× worse than a
+constant on that fixture — nothing learns it, so the comparison was between two failures, and
+normalised, fp16 is *better* there (0.817×). Fourth vacuous comparison of the session.
+
+What survives is measured on a **well-scaled** target and is a *rate*, not a ratio: at (16,),
+lr 0.002, fp32 halves its error between 50k and 100k updates (0.0907 → 0.0478) while fp16 moves
+4% (0.0853 → 0.0821). **fp16 has not become less accurate — it has stopped**, with 67% of its
+steps below the spacing at the weight's own magnitude against fp32's 0.1%. Separately, on a
+badly-scaled target it goes non-finite where fp32 survives on the same data and the same
+starting weights — kept, and labelled, because fp64 fails there too and a badly-scaled problem
+is not an indictment of a precision on its own. Both halves are tested, and the tests assert the
+*controls* (fp32 must keep improving; fp32 must not underflow) so a fixture that stops
+discriminating fails rather than passes.
 
 That measurement also exposed a real defect — the shared dtype refusal gave *every* adapter RLS's
 covariance reason, including two that have no covariance. It picks the right reason now, and both

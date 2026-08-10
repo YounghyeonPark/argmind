@@ -58,10 +58,10 @@ enum class Activation : uint8_t { Tanh = 0, Relu = 1 };
 
 template <typename T>
 class RuntimeShapedMlp {
-    // Measured to FAIL: at (32,32) on a large-output target the weights go non-finite
-    // within ~1,700 updates on every seed, and on a small-output one the error is 4x
-    // fp32's -- because `lr*grad` falls below the fp16 spacing at the weight's magnitude
-    // on up to 92% of updates. Nothing is driven to zero, so a NaN-or-zero check misses it.
+    // fp16 refused on measurement: on a WELL-SCALED target it underflows 42-82% of its
+    // steps against fp32's 0.0-0.8% and costs 1.06x to 2.13x the error, because `lr*grad`
+    // falls below the spacing at the weight's own magnitude. Nothing is driven to zero, so
+    // a NaN-or-zero check misses it. fp32 against fp64 is 1.0000 to a million updates.
     static_assert(sizeof(T) >= 4, "fp16 measured to fail; see the reference's docstring");
 
 public:

@@ -279,106 +279,142 @@ def test_relu_is_offered_but_is_not_the_default_and_the_measurement_says_why():
         "something survived lr=0.2, so 'both die at 0.2' overstates the caveat")
 
 
-def test_fp16_is_refused_because_it_was_measured_to_fail():
-    """A negative result, protected so a later change cannot quietly reverse it.
+SD_LARGE = 29.5409       # the target's own std, measured over 4,000 draws
 
-    An earlier version of this test asserted the opposite -- that fp16 *works* and is
-    refused only for want of evidence -- and it passed, because it ran the one
-    configuration where fp16 is fine. A sweep of 216 runs (four targets, three
-    architectures, two rates, three seeds, 100,000 updates) found that configuration to be
-    the most favourable of twenty-four.
 
-    Reproduced here in 2,500 updates: on a large-output target at (32,32) the fp16 weights
-    go non-finite and the fp32 control on the same data and the same starting weights does
-    not. Both halves matter -- without the control this would only show that the target is
-    hard.
+def _large(s, normalised=True):
+    v = 50.0 * math.sin(0.5 * s[0]) + 20.0 * s[1] * s[2]
+    return v / SD_LARGE if normalised else v
+
+
+def _run(dtype, hidden, lr, n, normalised=True, seed=1, probe_n=400):
+    """A run at `dtype`, started from the SAME weights an f8 run would start from, so a
+    difference is the recursion and not two initialisations. Returns
+    (RMSE/target-std or inf, step-underflow rate, ||w||)."""
+    ref = MultilayerPerceptron(3, 1, hidden=hidden, learning_rate=lr, dtype="f8", seed=seed)
+    init = np.array(ref.state, dtype="f8")
+    orig = adapt_module.SUPPORTED_DTYPES
+    try:
+        adapt_module.SUPPORTED_DTYPES = ("f2", "f4", "f8")
+        MultilayerPerceptron.min_dtype = "f2"
+        m = MultilayerPerceptron(3, 1, hidden=hidden, learning_rate=lr, dtype=dtype,
+                                 seed=seed)
+        m.load_state(init.astype(dtype))
+        g = np.random.default_rng(2001)
+        hits = seen = 0
+        with np.errstate(all="ignore"):
+            for k in range(n):
+                s = g.standard_normal(3)
+                if k % 100 == 0:
+                    before = np.array(m.state)
+                    m.update(s, [_large(s, normalised)])
+                    moved = np.abs(np.asarray(m.state) - before)
+                    spacing = np.spacing(np.abs(before).astype(dtype)).astype("f8")
+                    hits += int(np.sum(moved < spacing))
+                    seen += moved.size
+                else:
+                    m.update(s, [_large(s, normalised)])
+                if not np.all(np.isfinite(np.asarray(m.state))):
+                    return float("inf"), hits / max(seen, 1), float("inf")
+        probe = np.random.default_rng(0).standard_normal((probe_n, 3))
+        want = np.array([_large(s, normalised) for s in probe])
+        got = np.array([float(m.predict(s)[0]) for s in probe])
+        rel = float(np.sqrt(np.mean((got - want) ** 2)) / np.std(want))
+        return rel, hits / max(seen, 1), float(np.linalg.norm(np.asarray(m.state, "f8")))
+    finally:
+        adapt_module.SUPPORTED_DTYPES = orig
+        MultilayerPerceptron.min_dtype = "f4"
+
+
+def test_an_unnormalised_target_defeats_every_precision():
+    """The finding that outranks the precision question, and the reason the docstring leads
+    with it.
+
+    Raw ``50·sin(0.5s₀) + 20·s₁s₂`` drives the weights to ``‖w‖ ≈ 3600``, where the spacing
+    at a weight's magnitude exceeds ``lr*grad`` on **96 % of updates in fp64** and the model
+    scores 0.73 of a constant predictor. Dividing by the target's own standard deviation
+    gives 0.0144 and 0.0 % — **51× better, in double precision**.
+    """
+    raw_rel, raw_undf, raw_w = _run("f8", (32, 32), 0.01, 30_000, normalised=False)
+    nrm_rel, nrm_undf, nrm_w = _run("f8", (32, 32), 0.01, 30_000, normalised=True)
+
+    assert raw_rel > nrm_rel * 10.0, (
+        f"normalising bought little ({raw_rel:.4f} to {nrm_rel:.4f}), so this fixture no "
+        "longer shows the effect the docstring leads with")
+    assert raw_undf > 0.5 and nrm_undf < 0.05, (
+        f"underflow {raw_undf:.1%} raw against {nrm_undf:.1%} normalised -- the mechanism "
+        "stated in the docstring is not what this fixture is showing")
+    assert raw_w > nrm_w * 20.0, f"weights did not grow: {raw_w:.1f} against {nrm_w:.1f}"
+
+
+def test_fp32_is_indistinguishable_from_fp64():
+    """`min_dtype = 'f4'` is a floor, not a compromise. Measured to a million updates in a
+    separate sweep (f4/f8 = 1.0000 at 100k, 250k and 500k); reproduced here at a length a
+    test can afford, with the same starting weights so only the recursion differs."""
+    for hidden, lr in (((16,), 0.002), ((32, 32), 0.02)):
+        f4, u4, _ = _run("f4", hidden, lr, 20_000)
+        f8, u8, _ = _run("f8", hidden, lr, 20_000)
+        assert abs(f4 / f8 - 1.0) < 0.02, (
+            f"{hidden} lr={lr}: f4/f8 = {f4 / f8:.4f}; fp32 is no longer the floor and "
+            "min_dtype should be re-derived rather than this bound loosened")
+        assert u4 < 0.1 and u8 < 0.1, (
+            f"underflow {u4:.1%}/{u8:.1%} -- this fixture is not well scaled, so it cannot "
+            "say anything about precision")
+
+
+def test_fp16_stops_learning_where_fp32_keeps_going():
+    """A negative result, protected, and **narrower than two earlier versions of this test**.
+
+    The first asserted "4.0x the fp32 error on a small-output target". Its fixture was a raw
+    ~0.001 target on which **fp64 itself scores 4.2 times worse than a constant predictor**
+    -- nothing learns it, so the comparison was between two failures, and normalised, fp16
+    is *better* there. The second asserted a ratio at 20,000 updates, where there is no
+    difference at all (1.00x).
+
+    What is real is visible only over time, and as a **rate** rather than a ratio: on a
+    well-scaled target at (16,), fp32 halves its error between 50,000 and 100,000 updates
+    (0.0907 -> 0.0478) while fp16 moves 4% (0.0853 -> 0.0821). It is not less accurate; it
+    has **stopped**, because 67% of its steps are below the spacing at the weight's own
+    magnitude against fp32's 0.1%.
     """
     with pytest.raises(ValueError, match="no covariance"):
         MultilayerPerceptron(3, 1, hidden=(4,), dtype="f2")
     with pytest.raises(ValueError, match="positive-definiteness"):
         RecursiveLeastSquares(3, 1, dtype="f2")
 
-    def truth(s):
-        return 50.0 * math.sin(0.5 * s[0]) + 20.0 * s[1] * s[2]
+    mid4, _, _ = _run("f4", (16,), 0.002, 50_000)
+    end4, u4, _ = _run("f4", (16,), 0.002, 100_000)
+    mid2, _, _ = _run("f2", (16,), 0.002, 50_000)
+    end2, u2, _ = _run("f2", (16,), 0.002, 100_000)
 
-    def died_at(dtype, seed=2, n=2500):
-        ref = MultilayerPerceptron(3, 1, hidden=(32, 32), learning_rate=0.02,
-                                   dtype="f8", seed=seed)
-        init = np.array(ref.state, dtype="f8")
-        orig = adapt_module.SUPPORTED_DTYPES
-        try:
-            adapt_module.SUPPORTED_DTYPES = ("f2", "f4", "f8")
-            MultilayerPerceptron.min_dtype = "f2"
-            m = MultilayerPerceptron(3, 1, hidden=(32, 32), learning_rate=0.02,
-                                     dtype=dtype, seed=seed)
-            m.load_state(init.astype(dtype))
-            g = np.random.default_rng(1002)
-            with np.errstate(all="ignore"):
-                for k in range(n):
-                    s = g.standard_normal(3)
-                    m.update(s, [truth(s)])
-                    if not np.all(np.isfinite(np.asarray(m.state))):
-                        return k
-            return None
-        finally:
-            adapt_module.SUPPORTED_DTYPES = orig
-            MultilayerPerceptron.min_dtype = "f4"
-
-    assert died_at("f2") is not None, (
-        "fp16 survived the case it was measured to fail; if that is a real improvement the "
-        "docstring's sweep must be re-run rather than this threshold nudged")
-    assert died_at("f4") is None, (
-        "fp32 died too, so this fixture shows a hard target rather than a precision floor")
+    assert u4 < 0.05, (
+        f"fp32 underflowed {u4:.1%}, so this fixture is not well scaled and cannot "
+        "attribute anything to the precision")
+    assert u2 > 0.4, (
+        f"only {u2:.1%} of fp16 steps underflowed; if that is a real improvement the "
+        "docstring's table must be re-measured rather than this threshold nudged")
+    assert end4 < mid4 * 0.7, (
+        f"fp32 did not keep improving ({mid4:.4f} to {end4:.4f}), so there is nothing for "
+        "fp16 to fail to keep up with and this fixture proves nothing")
+    assert end2 > mid2 * 0.9, (
+        f"fp16 kept learning ({mid2:.4f} to {end2:.4f}) -- re-derive min_dtype rather than "
+        "keeping a refusal the evidence no longer supports")
+    # ...and the mechanism is NOT a NaN or a zeroed weight, which is why the obvious
+    # detector is blind: this run finishes finite.
+    assert np.isfinite(end2), "fp16 diverged, so this run shows the other failure mode"
 
 
-def test_the_fp16_failure_is_step_underflow_and_not_a_nan():
-    """The mechanism, because the obvious detector cannot see it.
-
-    Nothing is driven to zero -- 0.0% of weights in every run of the sweep. What happens is
-    that `lr*grad` falls below the fp16 spacing *at that weight's magnitude*, so the weight
-    does not move: up to 92% of updates on a small-output target. **A network can stop
-    learning in half precision without ever producing a NaN**, and a test looking for NaNs
-    or zeros would report success. Measured here on the small-output case.
-    """
-    def truth(s):
-        return 0.001 * (math.sin(3 * s[0]) + s[1] * s[2])
-
-    def underflow_rate(dtype, n=1500):
-        orig = adapt_module.SUPPORTED_DTYPES
-        try:
-            adapt_module.SUPPORTED_DTYPES = ("f2", "f4", "f8")
-            MultilayerPerceptron.min_dtype = "f2"
-            m = MultilayerPerceptron(3, 1, hidden=(32, 32), learning_rate=0.002,
-                                     dtype=dtype, seed=1)
-            g = np.random.default_rng(1001)
-            hits = seen = 0
-            with np.errstate(all="ignore"):
-                for k in range(n):
-                    s = g.standard_normal(3)
-                    before = np.array(m.state)
-                    m.update(s, [truth(s)])
-                    if k % 50 == 0:
-                        moved = np.abs(np.asarray(m.state) - before)
-                        spacing = np.spacing(np.abs(before).astype(dtype)).astype("f8")
-                        hits += int(np.sum(moved < spacing))
-                        seen += moved.size
-                zeros = float(np.mean(np.asarray(m.state) == 0.0))
-            return hits / max(seen, 1), zeros
-        finally:
-            adapt_module.SUPPORTED_DTYPES = orig
-            MultilayerPerceptron.min_dtype = "f4"
-
-    half, half_zeros = underflow_rate("f2")
-    single, _ = underflow_rate("f4")
-    assert half > 0.4, (
-        f"only {half:.1%} of fp16 steps underflowed, so this fixture no longer shows the "
-        "mechanism the docstring describes")
-    assert single < half / 2.0, (
-        f"fp32 underflowed at {single:.1%} against fp16's {half:.1%} -- if the two are "
-        "comparable this measures the problem rather than the precision")
-    assert half_zeros == 0.0, (
-        "fp16 drove weights to zero after all, so a zero-check WOULD have caught it and "
-        "the claim that the obvious detector is blind is wrong")
+def test_fp16_diverges_where_fp32_survives_on_a_badly_scaled_problem():
+    """The second, cruder fp16 failure, kept and **labelled**: the target here is raw, and
+    a badly-scaled problem is not an indictment of a precision on its own — fp64 fails on it
+    too, differently (96 % underflow, 0.73 of a constant). What is fair to say is that fp16
+    is strictly less robust: it goes non-finite where fp32, on the same data and the same
+    starting weights, does not."""
+    f2, _u, _w = _run("f2", (32, 32), 0.02, 2500, normalised=False, seed=1)
+    f4, _u, _w = _run("f4", (32, 32), 0.02, 2500, normalised=False, seed=1)
+    assert not np.isfinite(f2), "fp16 survived the case it was measured to diverge on"
+    assert np.isfinite(f4), (
+        "fp32 diverged too, so this shows a hard problem rather than a precision floor")
 
 
 # -- what is deliberately NOT clamped ------------------------------------------------------

@@ -883,37 +883,72 @@ class MultilayerPerceptron(Adapter):
     different thing — a sensor event — and is rejected and counted, as everywhere else.
     A test drives a divergence and asserts the guard catches it.
 
+    Scale the target. This outranks the precision question
+    ------------------------------------------------------
+    **An un-normalised target defeats every precision, including fp64.** Measured on
+    ``50·sin(0.5s₀) + 20·s₁s₂``, 200,000 updates at ``lr=0.01``:
+
+    ==============  ==================  ==========  ===========
+    target          RMSE / target std   ``‖w‖``     step underflow
+    ==============  ==================  ==========  ===========
+    raw, fp64       0.7326              3617        **96.2 %**
+    normalised, fp64 0.0144             8.7         0.0 %
+    normalised, fp32 0.0144             8.7         0.4 %
+    ==============  ==================  ==========  ===========
+
+    **51× better in double precision, from dividing by the target's own standard
+    deviation.** The mechanism is that large outputs drive the weights large, the spacing
+    at a weight's magnitude grows with it, and ``lr*grad`` then falls below what is
+    representable — so the weight stops moving. At ``‖w‖ ≈ 3600`` that happens on 96 % of
+    updates *in fp64*.
+
+    It bites at the other end too: a target with output ~0.001 is fitted **four times worse
+    than a constant predictor** in every precision until it is scaled up.
+
+    So: divide the target by its scale, and if the inputs are not already O(1), those too.
+    This is not a precision workaround, it is the condition under which any of the figures
+    below mean anything.
+
     Precision
     ---------
-    ``min_dtype`` is ``f4``, and **fp16 fails** — measured, after an earlier note here
-    claimed the opposite.
+    ``min_dtype`` is ``f4``, and both halves of that are measured.
 
-    That earlier note said fp16 was measured to *work*: 0.2305 against fp32's 0.2310 at
-    (32,32). It is **withdrawn**. That was one target function at one architecture and one
-    learning rate, and the sweep that replaced it — four targets, three architectures, two
-    rates, three seeds, 100,000 updates, 216 runs — found that configuration to be the
-    single most favourable of the twenty-four. It reads 0.991 there. Elsewhere:
+    **fp32 is indistinguishable from fp64.** Over four targets, two architectures, three
+    seeds and **one million updates**, ``f4/f8`` is 1.0000 at 100k, 250k and 500k and stays
+    within ±4 % at 1M — and that residue is two trajectories having drifted apart, not
+    degradation, since it falls on both sides of one. There is no accumulated-rounding
+    effect to find at a length no deployment reaches. What *does* grow is fp32's own step
+    underflow, from 0.0 % to as much as 22 % over a million updates on a non-stationary
+    target; it costs nothing yet, and it is the same mechanism that kills fp16, so it is
+    recorded rather than dismissed.
 
-    - ``50·sin(0.5s₀) + 20·s₁s₂`` at (32,32), lr 0.02: **the weights go non-finite on
-      every seed**, within about 1,700 updates. fp32 on the same data survives.
-    - ``0.001·(sin(3s₀) + s₁s₂)`` at (32,32), lr 0.002: **4.0× the fp32 error**; at (16,)
-      it is 3.3×. A small target puts every residual, and therefore every gradient, near
-      the bottom of fp16's range.
-    - a kinked target at (32,32): 1.19×.
+    **fp16 is refused, and the reason is measured on a well-scaled problem.** On the
+    normalised target above, 100,000 updates:
 
-    **The mechanism is not what was expected and the first detector could not see it.**
-    Nothing is driven to zero — the fraction of zero weights is 0.0% in every run. What
-    happens is that ``lr*grad`` falls below the fp16 spacing *at that weight's magnitude*,
-    so the weight simply does not move. That rate reaches **92%** on the small-target deep
-    case and **95%** on the large-target one. A network can stop learning in half precision
-    without ever producing a NaN, and a test looking for NaNs or zeros would report success.
+    ===========  =======  ==================  ==================
+    arch         lr       fp16 underflow      fp16 / fp32 error
+    ===========  =======  ==================  ==================
+    (16,)        0.002    **69.7 %**          **2.13×**
+    (16,)        0.02     42.3 %              1.11×
+    (32,32)      0.002    82.4 %              1.06×
+    (32,32)      0.02     53.4 %              1.29×
+    ===========  =======  ==================  ==================
 
-    RLS's fp16 failure really is a different one — its covariance recursion loses
-    positive-definiteness — and that argument still does not transfer. This adapter fails
-    for its own reason, which is why it had to be measured rather than inherited either way.
+    fp32 underflows 0.0–0.8 % on the same runs. On a badly-scaled target fp16 additionally
+    goes **non-finite within ~1,700 updates** where fp32 survives — that is a real
+    difference in robustness, and it is labelled as a badly-scaled case because fp64 fails
+    there too, differently.
 
-    **fp32 against fp64 is 1.000 across the whole sweep**, so ``f4`` is not a compromise:
-    it is where the precision floor actually is.
+    **A stronger fp16 claim was made here and is withdrawn.** It read "4.0× the fp32 error
+    on a small-output target". The fixture was the raw ~0.001 target, on which **fp64 scores
+    4.2 times worse than a constant predictor** — nothing learns it, so the comparison was
+    between two failures. Normalised, fp16 is *better* than fp32 on that target (0.817×).
+    The 92 % underflow figure quoted alongside came from the same fixture and is replaced by
+    the table above.
+
+    RLS's fp16 failure is a different one — its covariance recursion loses
+    positive-definiteness — and that argument does not transfer either way, which is why
+    this had to be measured for itself.
     """
 
     min_dtype = "f4"
@@ -1108,6 +1143,11 @@ class MultilayerPerceptron(Adapter):
                 delta = (delta @ self._w[i].T) * self._dact(acts[i])
         grads.reverse()
 
+        # Cast explicitly rather than relying on `float(lr) * array`. Under NEP 50 a
+        # Python float is weak-typed and the two are identical -- a mutant swapping
+        # them survives, and is equivalent rather than untested -- but `np.float64(lr)`
+        # would upcast the whole step to double, so the guarantee is worth stating in
+        # code rather than depending on a promotion rule that has changed before.
         lr = self.dtype.type(self.learning_rate)
         sq = 0.0
         for (w, b), (gw, gb) in zip(zip(self._w, self._b), grads):
