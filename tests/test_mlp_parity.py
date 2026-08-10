@@ -277,3 +277,114 @@ def test_the_guard_composes_over_the_network_in_cpp(tmp_path):
     assert int(got["froze"]) == 3000, (
         f"the guard froze at {got['froze']}, not at the fault step 3000")
     assert got["finite"] == "1", "the guard froze but left a non-finite state"
+
+
+WIDEN_SRC = r"""
+#include <stdio.h>
+#include <stdlib.h>
+#include <vector>
+#include "argmind/host/runtime_shape_mlp.hpp"
+using namespace argmind::host;
+
+// argv: <n_old> <n_new> <m> <h1> [h2...] < state on stdin as text
+int main(int argc, char** argv) {
+    if (argc < 5) return 1;
+    const int n_old = atoi(argv[1]), n_new = atoi(argv[2]), m = atoi(argv[3]);
+    std::vector<int> hidden;
+    for (int i = 4; i < argc; ++i) hidden.push_back(atoi(argv[i]));
+
+    RuntimeShapedMlp<double> a(n_old, m, hidden, Activation::Tanh, 0.02, 3);
+    std::vector<double> st(a.state_size());
+    for (int i = 0; i < a.state_size(); ++i) {
+        if (scanf("%lf", &st[i]) != 1) return 2;
+    }
+    if (!a.load_state(st.data())) return 3;
+
+    RuntimeShapedMlp<double> w = a.widened(n_new);
+    if (!w.valid()) return 4;
+    printf("%d\n", w.state_size());
+    for (int i = 0; i < w.state_size(); ++i) printf("%.17g\n", w.state()[i]);
+    return 0;
+}
+"""
+
+
+@pytest.fixture(scope="session")
+def widen_tool(tmp_path_factory):
+    cxx = shutil.which("g++")
+    if cxx is None:
+        pytest.skip("no host g++")
+    d = tmp_path_factory.mktemp("widen")
+    src = d / "widen.cpp"
+    src.write_text(WIDEN_SRC, encoding="utf-8")
+    exe = d / "widen.exe"
+    done = subprocess.run(
+        [cxx, "-std=c++17", "-O2", "-Wall", "-Wextra", "-Wpedantic",
+         "-I", str(CPP / "include"), str(src), "-o", str(exe)],
+        capture_output=True, text=True)
+    assert done.returncode == 0, f"the widening probe does not build:\n{done.stderr}"
+    return exe
+
+
+@pytest.mark.parametrize("hidden,n_old,n_new,m", [
+    ((8,), 3, 6, 1), ((8, 5), 3, 6, 2), ((4, 4, 4), 5, 9, 1), ((16,), 7, 8, 3),
+])
+def test_widening_produces_the_same_block_on_both_sides(widen_tool, hidden, n_old, n_new, m):
+    """`widened()` moves bytes; it does not compute. So parity here is **exact**, not a
+    tolerance -- the same standard `persist` is held to, and for the same reason. A
+    tolerance would let a transposed copy through if the numbers happened to be close.
+    """
+    ref = MultilayerPerceptron(n_old, m, hidden=hidden, learning_rate=0.02,
+                               dtype="f8", seed=1)
+    g = np.random.default_rng(4)
+    for _ in range(300):
+        s = g.standard_normal(n_old)
+        ref.update(s, [float(np.sin(2 * s[0])) + j for j in range(m)])
+
+    args = [str(widen_tool), str(n_old), str(n_new), str(m), *[str(h) for h in hidden]]
+    # `repr(float(v))`, not `repr(v)`: numpy 2 reprs a scalar as `np.float64(0.5)`, which
+    # `scanf` cannot read, and the probe then exits 2 with nothing on stderr.
+    feed = "\n".join(repr(float(v)) for v in np.asarray(ref.state, dtype="f8"))
+    done = subprocess.run(args, input=feed, capture_output=True, text=True)
+    assert done.returncode == 0, f"the widening probe failed ({done.returncode}): {done.stderr}"
+
+    lines = done.stdout.split()
+    size = int(lines[0])
+    cpp = np.array([float(v) for v in lines[1:1 + size]], dtype="f8")
+
+    py = np.asarray(ref.widened(n_new).state, dtype="f8")
+    assert cpp.size == py.size, f"state sizes differ: {cpp.size} against {py.size}"
+    assert np.array_equal(cpp, py), (
+        "the two widened blocks are not identical; widening moves bytes rather than "
+        "computing, so any difference is a layout disagreement")
+
+    # A control: the block must actually have changed, or comparing two copies of the old
+    # one would pass this.
+    assert py.size > np.asarray(ref.state).size
+    assert float(np.max(np.abs(py))) > 1e-6
+
+
+def test_both_sides_refuse_a_narrower_widening(widen_tool):
+    """Narrowing needs a mapping neither side can guess, and guessing would put learned
+    weights on the wrong sensors -- the failure `persist`'s fingerprint exists to prevent.
+
+    The two refuse in their own idiom, which is deliberate rather than an inconsistency:
+    the reference raises, and the port returns an adapter whose `valid()` is false, matching
+    `RuntimeShapedRls::widened` and the rest of a library that has no exceptions in the core.
+    """
+    ref = MultilayerPerceptron(6, 1, hidden=(8,), learning_rate=0.02, dtype="f8", seed=1)
+    with pytest.raises(ValueError, match="only appends"):
+        ref.widened(3)
+
+    feed = "\n".join(repr(float(v)) for v in np.asarray(ref.state, dtype="f8"))
+    done = subprocess.run([str(widen_tool), "6", "3", "1", "8"],
+                          input=feed, capture_output=True, text=True)
+    assert done.returncode == 4, (
+        f"the port did not refuse a narrower widening (exit {done.returncode}); it must "
+        "return an invalid adapter, not silently drop learned weights")
+
+    # A control: the same probe at a WIDER shape must succeed, or exit 4 could mean
+    # anything -- a parse failure, a bad argument, the tool not running at all.
+    ok = subprocess.run([str(widen_tool), "6", "9", "1", "8"],
+                        input=feed, capture_output=True, text=True)
+    assert ok.returncode == 0, f"the probe fails even when widening: {ok.stderr}"

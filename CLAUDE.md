@@ -580,6 +580,8 @@ weights move by exactly 0.0, since its outgoing weights gate the gradient into i
 and `tanh(0)=0` gates the reverse; **both random** jumps the output by 0.095; **incoming random,
 outgoing zero** is the one that works.
 
+**The port carries it too** (`RuntimeShapedMlp::widened`), in the hosted tier's own idiom: a narrower request returns an adapter whose `valid()` is false rather than throwing, matching `RuntimeShapedRls`. There is no `deepened()` on that side — the reference's exists only to refuse and carries the measurement, and a second copy of a refusal buys nothing. **Parity is exact rather than a tolerance**, for the reason `persist`'s is: widening moves bytes, it does not compute, so a tolerance would let a transposed copy through whenever the numbers happened to be close. Four architectures, `np.array_equal` on the whole block. The narrowing mutant survived until a case asked for one.
+
 **And the metric needed the correction this repository has now made four times.** The widened
 output differs from the old one by up to **367 ulp against each probe's own value** — which is
 the prediction passing near zero, not the networks differing. Against the *run's* scale it is

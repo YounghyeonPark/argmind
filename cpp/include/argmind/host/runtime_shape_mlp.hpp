@@ -160,6 +160,53 @@ public:
         for (int j = 0; j < m_; ++j) out[j] = a[j];
     }
 
+
+    /// A network with more INPUTS that keeps everything this one learned.
+    ///
+    /// A new input is a new **row** of `W0`, filled with zeros. The new inputs then
+    /// contribute nothing whatever their values, so the widened network computes the old
+    /// function of the old inputs -- measured at 0.0 to 2.3 ulp of the run's scale over
+    /// five architectures, against 2.0 to 4.6 for filling them randomly on a target whose
+    /// own spread is 1.4. For a device mid-flight when a sensor is installed, that
+    /// continuity is the requirement.
+    ///
+    /// **And the new rows still learn**, because the gradient into one is `x_new * delta`
+    /// and `delta` comes from an already-trained downstream. That is exactly what a new
+    /// hidden UNIT does not have, which is why there is no `deepened()` here: extra hidden
+    /// units were measured to buy nothing on any target that could be constructed (h=8
+    /// already reaches the ceiling, h=64 is sometimes worse), because SGD's convergence
+    /// binds before capacity does. The reference's `deepened()` exists only to refuse and
+    /// carries that measurement; nothing is gained by a second copy of a refusal.
+    ///
+    /// Returns an invalid adapter if `n_features` is narrower -- checked with `valid()`
+    /// rather than thrown, matching `RuntimeShapedRls::widened`.
+    RuntimeShapedMlp<T> widened(int n_features) const {
+        std::vector<int> hidden;
+        for (size_t l = 0; l + 1 < shapes_.size(); ++l) hidden.push_back(shapes_[l].out);
+        if (n_features < n_) {
+            return RuntimeShapedMlp<T>(0, 0, hidden, act_, lr_);
+        }
+
+        RuntimeShapedMlp<T> out(n_features, m_, hidden, act_, lr_);
+        const int h0 = shapes_[0].out;
+        T* w0 = out.state_.data();
+        for (size_t i = 0; i < static_cast<size_t>(n_features) * h0; ++i) w0[i] = T(0);
+        for (int i = 0; i < n_; ++i) {
+            for (int j = 0; j < h0; ++j) {
+                w0[static_cast<size_t>(i) * h0 + j] =
+                    state_[static_cast<size_t>(i) * h0 + j];
+            }
+        }
+        // Everything from `b0` onward is unchanged, and the two blocks have the same
+        // length there because only `W0` grew.
+        const size_t tail_src = static_cast<size_t>(n_) * h0;
+        const size_t tail_dst = static_cast<size_t>(n_features) * h0;
+        for (size_t k = 0; k + tail_src < state_.size(); ++k) {
+            out.state_[tail_dst + k] = state_[tail_src + k];
+        }
+        return out;
+    }
+
     RuntimeShapedReport<T> update(const T* x, const T* y) {
         RuntimeShapedReport<T> r;
         for (int i = 0; i < n_; ++i) {
