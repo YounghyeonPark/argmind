@@ -455,3 +455,60 @@ def test_the_recorded_target_sizes_are_current(cross, tmp_path):
         if label == "cortex-m55 composed":
             continue
         assert am + caller + lib == flash, f"{label}: columns do not sum to {flash}"
+
+
+#: Headers that are deliberately NOT freestanding. The hosted tier uses the heap and
+#: `std::vector`; the path is the boundary and this is where it is checked.
+HOSTED_HEADERS = ("host/dyn.hpp",)
+
+
+def test_no_core_header_reaches_into_the_hosted_tier(cross):
+    """The boundary is a directory name, and a directory name is a convention until
+    something checks it.
+
+    A core header including `argmind/host/...` would drag the heap into a freestanding
+    build, and the failure would surface as a confusing link error in somebody's firmware
+    rather than here. `cross` is required so this runs in the same place as the rest of
+    the target gate.
+    """
+    for name in HEADERS:
+        text = (CPP / "include" / "argmind" / name).read_text(encoding="utf-8")
+        assert "argmind/host/" not in text, (
+            f"{name} includes a hosted header; the freestanding core cannot")
+
+
+@pytest.mark.parametrize("header", HOSTED_HEADERS)
+def test_a_hosted_header_is_hosted_and_says_so_by_failing_freestanding(cross, tmp_path,
+                                                                       header):
+    """The other half, and the one that would otherwise be assumed.
+
+    If `host/dyn.hpp` happened to compile freestanding, the separation would be
+    decoration. It must not: `<vector>` is a hosted header. This asserts the split is
+    real rather than aspirational -- and if it ever starts passing, that is a signal the
+    header stopped needing the heap, which is a decision to make rather than a change to
+    absorb.
+    """
+    src = CPP / "include" / "argmind" / header
+
+    # It has to build in a HOSTED build first. Without this the assertion below is
+    # satisfied by a syntax error, and a broken header would read as a healthy boundary.
+    # A mutation attempt found exactly that: deleting `<vector>` "passed".
+    host_cxx = shutil.which("g++")
+    if host_cxx is None:
+        pytest.skip("no host g++")
+    done = _run([host_cxx, "-std=c++17", "-Wall", "-Wextra", "-I", CPP / "include",
+                 "-c", "-x", "c++", src, "-o", tmp_path / "hosted.o"])
+    assert done.returncode == 0, (
+        f"{header} does not build hosted either, so the assertion below would be "
+        f"satisfied by a syntax error:\n{done.stderr}")
+
+    done = _run([cross["g++"], "-std=c++17", *TARGET_CFLAGS, "-fno-exceptions",
+                 "-fno-rtti", "-I", CPP / "include", "-c", "-x", "c++",
+                 src, "-o", tmp_path / "h.o"])
+    assert done.returncode != 0, (
+        f"{header} compiles for the freestanding target, so the hosted/core split is "
+        "decoration; either it no longer needs the heap or it is in the wrong directory")
+    # ...and for the right reason. Any compile error satisfies the line above.
+    assert "vector" in done.stderr or "memory" in done.stderr, (
+        f"{header} failed the freestanding build for some reason other than a hosted "
+        f"header, so this proves nothing about the boundary:\n{done.stderr[:600]}")

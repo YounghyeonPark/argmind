@@ -116,6 +116,11 @@ if(NOT CMAKE_CROSSCOMPILING)
     target_include_directories(argmind_pipecheck PRIVATE include)
     target_compile_options(argmind_pipecheck PRIVATE -fno-exceptions -fno-rtti)
 
+    # The runtime-shape parity tool. NOT -fno-exceptions: it is the hosted tier and uses
+    # std::vector, which is the whole point of that tier existing separately.
+    add_executable(argmind_dyncheck tools/dyncheck.cpp)
+    target_include_directories(argmind_dyncheck PRIVATE include)
+
     enable_testing()
     add_test(NAME core COMMAND argmind_test_core)
 endif()

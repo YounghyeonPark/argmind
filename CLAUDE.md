@@ -278,6 +278,33 @@ then builds and runs a *separate* project against it — and checks the README's
 compiles, after grepping the header for its entry points reported every one of them missing
 (they are macro-generated, so only compiling means anything).
 
+**The runtime-shape layer exists** (`cpp/include/argmind/host/dyn.hpp`): `DynRls<T>` and
+`DynNlms<T>` take `n_features`/`n_outputs` at construction. **The path is the boundary** — these
+use the heap, no core header may include one, and both halves are checked: a core header
+reaching into `host/` fails, and a hosted header that started compiling freestanding would fail
+too. That second check was weak at first, satisfied by *any* compile error including a syntax
+error; it now builds the header hosted first and requires the freestanding failure to name a
+hosted include.
+
+**It is a port of the reference, not a new algorithm** — `argmind/adapt.py` has always been
+runtime-shaped, so `DynRls` is a *closer* transcription of the specification than `Rls<T,N,M>`
+is. One deliberate difference: it **divides** where the core multiplies by a reciprocal, since
+divergences 1 and 2 buy `VDIV.F32` cycles that do not exist above an OS. **That removes two of
+three divergences and not the third**, which is worth saying because the header first claimed it
+"turns a tolerance into an equality" and the measurement then did not. Reduction order remains.
+
+`cpp/tools/dyncheck.cpp` reads `xcheck`'s format unchanged — the case header already carried `n`
+and `m` as `uint16_t` — so the harness reuses one encoder and reader. **Measured at shapes the
+instantiation list does not contain**, which is the entire point: 5×1, 7×1, 7×2, 50×1, 6×4, both
+adapters, both precisions → **0.5 to 4.0 ulp**, growing with the sum length exactly as reduction
+order should, and the same order at f32 as at f64. A test asserts that *classification*, not
+just the number.
+
+**There is no `DynGuard` yet, and that is the gap that matters most in this layer.** `Guard`
+holds `ckpt_[Depth][state_size]`, so a runtime shape cannot use it. Until it exists the hosted
+tier can adapt without a guard, which is the exact failure this library was built around, so
+`dyncheck` **exits non-zero on a guarded case** rather than running it unguarded. Next.
+
 **Still undecided:** whether inference is *hosted* (an interface to ONNX Runtime/TFLite) or
 *embedded*, and whether the tiers ship as one library or two. Nothing on the camera/audio/speech
 path is built.
