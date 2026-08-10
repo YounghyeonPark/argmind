@@ -23,14 +23,28 @@ It is a **library**, not an application and not a pipeline tool. The API is the 
 
 Naming these now because a sensor-agnostic framework drifts into "everything" otherwise.
 
-- **Not a training framework.** No backpropagation, no autograd, no GPU. Offline training is a
-  solved problem with excellent tools; use them and bring the result here.
-- **Not a deep-learning runtime.** If you need to run a CNN, use ONNX Runtime or TFLite. This
-  library adapts *parameters and estimates*, and can sit alongside such a runtime.
+**Two of these were reversed on 2026-08-10** and are left standing with their reversal
+attached, because what a project stopped believing is evidence about how it decides. See *The
+platform generates the basis* below for the decision and the measurement that priced it.
+
+- ~~**Not a training framework.** No backpropagation, no autograd, no GPU.~~ **Reversed
+  2026-08-10 for the second tier.** Generating the basis is the platform's job, and a network
+  small enough to be a head trains inside the `Adapter` contract with the framework unchanged —
+  measured. *Offline* training of a deep backbone is still out: backprop retains activations,
+  not weights. The core tier keeps its model class.
+- ~~**Not a deep-learning runtime.** If you need to run a CNN, use ONNX Runtime or TFLite.~~
+  **Reversed 2026-08-10 for the second tier**, which must run its own inference network rather
+  than receive a feature vector from someone else's. Sitting alongside an external runtime
+  stays supported and stays the recommendation on an NPU part, where the vendor's runtime is
+  the only path to the accelerator.
 - **Not a driver layer or a robotics middleware.** It does not talk to hardware, does not own
   threads, and does not depend on ROS. You feed it samples.
-- **Not a research playground for online deep learning.** The adaptation methods here are ones
-  whose stability can be reasoned about.
+- **Not a research playground for online deep learning.** Still true, and it now carries a
+  cost the reversal above makes real: SGD on a too-small network **got worse with more data**
+  (0.4921 at 20k samples, 0.5340 at 60k), and the guard has no `p_trace` for a backpropagated
+  weight — so the model class arrives with the best warning signal missing. Methods land here
+  when their failure is *detectable*, which is a weaker bar than reasoning about stability and
+  the honest one to hold now.
 - **Not a model that can learn a representation, and this is the load-bearing limit.** Every
   bullet above says what the *implementation* is not. None of them said what the *model class*
   cannot express, and until 2026-08-09 the phrase "linear in the parameters" appeared nowhere
@@ -56,6 +70,73 @@ Naming these now because a sensor-agnostic framework drifts into "everything" ot
   application for this library, and the source cited to justify it said in the same paragraph
   that the phenomenon "requir[es] dedicated compensation models, not a scalar correction".
   The favourable half of a sentence was quoted and the unfavourable half was not.
+
+## The platform generates the basis — scope decision, 2026-08-10
+
+The answer above ended by saying the basis comes from outside and that this library is not a
+deep-learning runtime. The owner's response is that **on a platform, generating the basis is
+the platform's job, and a self-contained learning and inference network belongs in it too.**
+Taken. This reverses *"the caller supplies the basis"* and the fourth bullet of *What it is
+not*, and it is the largest scope change the project has made.
+
+**The structural question was asked before the decision was recorded, because it could be
+measured.** `Guard` and `Pipeline` were shown model-agnostic with NLMS — a different algorithm
+with no covariance. A backpropagating network is a much harder case: it has *layers*, its state
+is weights, it needs a backward pass, and it has no closed form for anything. A three-layer MLP
+wearing the `Adapter` contract, run against the framework unchanged:
+
+- **`persist` packed it with no special case** — 1,217 weights in one flat contiguous block, in
+  layer order, 9,766 bytes, unpacking to the same count. The flat-block rule was written for a
+  covariance and holds for a network.
+- **`Guard` accepted it** and built its ring at `Depth × state_size`.
+- **A `p_trace` bound was refused**, exactly as for any adapter with no covariance. The
+  adapter-declared `health_fields` mechanism, added for NLMS, covers this case without change.
+
+So **the framework does not have to move; only the model class does.** That is a real result and
+not a comfortable one — it means the cost is arithmetic rather than architecture, and the
+arithmetic is unflattering in two of three directions.
+
+### What learning the basis buys, and what it costs
+
+Same target as above, `sin(3s₀)·exp(−s₁²) + |s₂| − 0.4`, 2,000 held-out points. A constant
+predictor scores 0.7641. RMSE against the number of samples *seen*, so sample cost and final
+accuracy are separated — a table of final accuracies alone would hide the whole trade:
+
+| model | state | 200 | 1k | 5k | 20k | 60k |
+|---|---|---|---|---|---|---|
+| RFF D=32, RLS | 8.8 KB | 0.5679 | 0.4911 | 0.4788 | 0.4757 | 0.4756 |
+| RFF D=128, RLS | **131 KB** | **0.4656** | **0.3613** | **0.2605** | 0.2521 | 0.2458 |
+| MLP 3-16-1, SGD | 0.6 KB | 0.7769 | 0.6175 | 0.5194 | 0.4921 | **0.5340** |
+| MLP 3-32-32-1, SGD | **9.5 KB** | 0.7822 | 0.7206 | 0.3873 | 0.2455 | **0.2484** |
+
+**Memory: the network wins by 14×.** 0.2484 at 9.5 KB against 0.2458 at 131 KB — the same
+accuracy, and RLS's covariance is `n²` while a network's weights are not. This is the argument
+for the decision and it is a strong one.
+
+**Samples: the network loses by ~4×.** RFF reaches 0.2605 at 5,000 samples; the MLP needs 20,000
+to match it, and at 200 samples it is *worse than a constant* while RFF is already at 0.4656.
+RLS is the exact recursive solution of a least-squares problem and SGD is a walk downhill. On a
+device that must be useful in its first minute, that difference is the whole story.
+
+**And the small network got worse with more data** — 0.4921 at 20k, **0.5340 at 60k**. Not noise
+in the measurement: it is what a fixed learning rate on a too-small model does. **This is the
+finding that matters most**, because the guard cannot see it coming. `p_trace` rising is what
+warns that RLS is losing confidence; a backpropagated weight has no cheap equivalent, so this
+model class arrives with **the guard's best signal missing and a new failure mode that needs
+one**. A held-out running error is the obvious candidate and nothing here has measured it yet.
+
+**The guard's ring is `Depth × state_size` and that scales with the model, not with the
+sensors.** At depth 4: RLS n=6 is 1.6 KB total, the MLP 47.5 KB, a 3-64-64-1 net 175 KB, and
+RFF-128 through RLS **655 KB**. Comfortable on the SBC/NPU tier, impossible on the 8 KB core
+floor — so this is a second-tier capability by arithmetic, not by preference, and the core tier
+keeps the model class it has.
+
+### What this does not settle
+
+Training a *deep* backbone on-device is still not available and the reason is unchanged: backprop
+retains activations, not weights. What the probe shows is that a small head-sized network trains
+inside the contract. Between "adapt a linear head" and "train a backbone" there is a range, and
+where in it this platform stops is not decided by this measurement.
 
 ## "Is linear not too stupid?", measured 2026-08-10
 

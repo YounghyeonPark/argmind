@@ -102,7 +102,7 @@ so did not change the decision, so the decision stands and the scope moves.
 |---|---|---|
 | platform | embedded / edge | **embedded / edge *and* an SBC-class tier** — two floors, not one |
 | learning | on-device online adaptation | unchanged, **but no longer one algorithm** |
-| model class | (unstated — the defect below) | **was RLS only; must admit others, including hosted inference** |
+| model class | (unstated — the defect below) | **was RLS only; must admit others, including hosted inference — and since 2026-08-10 the platform generates the basis itself rather than receiving it** |
 | sensors | sensor-agnostic | unchanged, and now genuinely tested against it |
 | deliverable | a library, not an application | unchanged — **speech and situation logic are a caller's, not this library's** |
 | language | C++ core behind a C ABI | unchanged for the core tier |

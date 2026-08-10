@@ -549,8 +549,11 @@ class RecursiveLeastSquares(Adapter):
           about these yet". Cross terms are zero: no evidence yet relates the two sets.
 
         **This does not make the model class richer.** It adds inputs, not
-        expressiveness -- the adapter is still linear in the parameters and the caller
-        still supplies the basis.
+        expressiveness -- *this* adapter is still linear in the parameters, and something
+        outside it supplies the basis. As of 2026-08-10 that something may be the platform's
+        own network rather than the caller (DESIGN.md, *The platform generates the basis*);
+        widening the regressor is unaffected either way, since it never asked where the
+        features came from.
 
         A prediction that the graft would matter MORE when the new features are rarely
         excited was **wrong and measured to be wrong**: the old features are excited
