@@ -349,6 +349,28 @@ One mutant is **equivalent and recorded rather than contrived around**: adding `
 back to the prediction condition changes nothing here, because this port took the fixed shape
 where `build_frame` never clears the flag. Reintroducing the core's old bug needs both halves.
 
+**Swapping boards, measured 2026-08-10.** Every parity claim had compared an implementation
+against the *reference*, which answers "is the port right" and not the question an integrator
+asks before a hardware change: **move this firmware from a Cortex-M4F to a Cortex-M55 and do the
+numbers change?** Measured over four shapes and both precisions: **0.0 to 3.5 ulp between the
+two boards**, against 0.5 to 3.0 for either board against the reference — so a swap costs no more
+than the port already does, and `tests/test_board_migration.py` asserts *that comparison* rather
+than a bare bound, since a swap ten times worse than the port would still pass a loose one.
+
+**The f64 path differs more than f32, which is the opposite of the naive guess** — at 6×1 and 6×3
+the two are **bit-identical at f32** and differ by 3.0 and 3.3 ulp at f64. The M55 has hardware
+double precision and the M4F does not, so f64 is soft-float on one and not the other.
+
+**And a harness bug had to be found first: `malloc` returns NULL on QEMU's `mps3-an547`.**
+`rdimon`'s crt0 takes its heap from `SYS_HEAPINFO`, which works on `mps2-an386` and does not
+there. Nothing says so — `fopen` returns NULL so a parity tool reports "cannot open <file>" and
+reads as a missing file, and `printf("%f")` dies inside `dtoa` on a failed REENT malloc. Both
+were chased before the cause was found. `startup.c` supplies `_sbrk` over a static array now, so
+the heap comes from `.bss` and depends on no semihosting answer; at 256 KB it silently overflowed
+the AN547's 512 KB DTCM and the image produced *no output at all*, which is quieter than the
+failure it fixed, so it is 64 KB and the reason is recorded. The self-check suite never noticed
+because it allocates nothing.
+
 **Still undecided:** whether inference is *hosted* (an interface to ONNX Runtime/TFLite) or
 *embedded*, and whether the tiers ship as one library or two. Nothing on the camera/audio/speech
 path is built.

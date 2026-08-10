@@ -150,3 +150,44 @@ void Reset_Handler(void) {
     for (;;) {
     }
 }
+
+/* A heap in .bss, overriding the one `rdimon` derives from semihosting.
+ *
+ * **Measured, and it is a board difference rather than a preference.** `rdimon-crt0`
+ * asks the debug host for heap bounds with `SYS_HEAPINFO` and QEMU answers. On
+ * `mps2-an386` that works. On `mps3-an547` -- the Cortex-M55 board -- it does not:
+ * `malloc(1024)` returns NULL, and everything that needs it fails downstream in ways
+ * that name something else entirely. `fopen` returns NULL, so a parity tool reports
+ * "cannot open <file>" and reads as a missing file; `printf("%f")` fails inside `dtoa`
+ * with an assertion about a failed REENT malloc. Both were chased before the cause was
+ * found, and neither error mentions the heap.
+ *
+ * Defining `_sbrk` in an object file overrides the library's, which is the standard way
+ * and needs no linker flag. The heap then lives in `.bss`, which the startup above has
+ * already placed in memory the board actually backs, so it works on both machines and
+ * depends on no semihosting answer at all.
+ *
+ * This is the TEST HARNESS. The library allocates nothing and needs none of it; a
+ * firmware linking argmind supplies whatever heap its own environment has, or none.
+ */
+/* 64 KB, and the size is measured rather than generous. `mps2.ld` already reserves
+ * 256 KB of heap and 64 KB of stack, and the AN547's DTCM at 0x20000000 is 512 KB --
+ * not the 4 MB that script declares for the AN386. A 256 KB array on top of those
+ * overflowed it and the M55 image produced no output at all, which is a quieter
+ * failure than the one it was fixing. 64 KB covers `fopen`'s FILE structures and
+ * `dtoa`'s scratch, which is everything the parity tools ask for. */
+#define AM_QEMU_HEAP_BYTES (64 * 1024)
+static unsigned char am_qemu_heap[AM_QEMU_HEAP_BYTES];
+static unsigned char* am_qemu_brk = am_qemu_heap;
+
+void* _sbrk(int incr);
+void* _sbrk(int incr) {
+    unsigned char* prev = am_qemu_brk;
+    if (incr < 0) {
+        if (prev + incr < am_qemu_heap) return (void*)-1;
+    } else if ((unsigned)(am_qemu_heap + AM_QEMU_HEAP_BYTES - prev) < (unsigned)incr) {
+        return (void*)-1;   /* out of heap: NULL from malloc, not a silent overrun */
+    }
+    am_qemu_brk = prev + incr;
+    return (void*)prev;
+}
