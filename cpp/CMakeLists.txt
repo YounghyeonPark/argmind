@@ -121,6 +121,9 @@ if(NOT CMAKE_CROSSCOMPILING)
     add_executable(argmind_shapecheck tools/shapecheck.cpp)
     target_include_directories(argmind_shapecheck PRIVATE include)
 
+    add_executable(argmind_shapepipecheck tools/shapepipecheck.cpp)
+    target_include_directories(argmind_shapepipecheck PRIVATE include)
+
     enable_testing()
     add_test(NAME core COMMAND argmind_test_core)
 endif()

@@ -58,6 +58,10 @@ template <typename Adapter>
 class RuntimeShapedGuard {
 public:
     using T = typename Adapter::scalar;
+    /// Re-exported, because the guard IS an adapter and anything wrapping it -- the
+    /// runtime-shaped pipeline, for one -- asks for `scalar` by name. Omitted at
+    /// first, and the pipeline would not compile over a guarded adapter.
+    using scalar = T;
 
     /// `depth` is the rollback reach in checkpoints, so `depth * checkpoint_every` is how
     /// far back a trip can undo. `n_external` reserves caller-supplied slots -- see

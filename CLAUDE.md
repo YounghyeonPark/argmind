@@ -330,6 +330,25 @@ One fixture is deliberately artificial and says so: nothing else crosses its bou
 `p_trace` does (`p_min_diag` is not monotone and dips at step 40; `gain_norm` peaked at 0.50 long
 before), both measured, so "every check runs" is reached with two bounds on the same quantity.
 
+**`RuntimeShapedPipeline` finishes the hosted tier** (`host/runtime_shape_pipeline.hpp`).
+**Half of it needed no porting**: `Aligner` already takes its policy, reference and staleness
+limit as values, and `StreamView<T>`/`Ring<T>` already carry a runtime `dim` — all made that way
+for the C ABI, so the hosted tier inherits them. Only `FrameMap` and `Pipeline` fixed anything
+at compile time. `shapepipecheck` reads `pipecheck`'s job and result formats **byte for byte**,
+the structs copied with their size `static_assert`s intact, so the Python harness reuses its own
+`Case`/`both`/`compare`.
+
+**Two port bugs, both found by widening a fixture rather than by reading.** The first
+comparison ran on cases with **no events at all** — `steps=0`, four agreements out of four, the
+third vacuous pass this session. With events driven in, three mutants still survived because
+nothing ever *declined* an instant; an aiding stream that starts late reaches that path, and it
+immediately exposed the second bug: **`n_staleness` was derived from `ok` rather than from
+whether a frame was built**, disagreeing with the reference on the very first step.
+
+One mutant is **equivalent and recorded rather than contrived around**: adding `&& frame_ready_`
+back to the prediction condition changes nothing here, because this port took the fixed shape
+where `build_frame` never clears the flag. Reintroducing the core's old bug needs both halves.
+
 **Still undecided:** whether inference is *hosted* (an interface to ONNX Runtime/TFLite) or
 *embedded*, and whether the tiers ship as one library or two. Nothing on the camera/audio/speech
 path is built.
