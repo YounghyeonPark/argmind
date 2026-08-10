@@ -195,6 +195,15 @@ namespace {
 
 constexpr int kGuardDepth = 4;
 constexpr int kGuardBounds = 4;
+/* Four, matching the two above and for the reason the header already gives for them: they
+ * are the memory. Thirty-two bytes per guard, measured, and a C caller cannot choose a
+ * template parameter -- declaring zero here would make the feature unreachable from the one
+ * boundary it exists to cross. The C++ side keeps its zero-cost default. */
+constexpr int kGuardExternal = 4;
+static_assert(kGuardExternal == AM_GUARD_EXTERNALS,
+              "the header's AM_GUARD_EXTERNALS and this build disagree");
+static_assert(static_cast<int>(argmind::Field::External0) == AM_FIELD_EXTERNAL_0,
+              "AM_FIELD_EXTERNAL_0 no longer matches Field::External0");
 
 template <typename T, int M>
 void fill_guard_report(const argmind::GuardReport<T, M>& src, am_guard_report* dst,
@@ -219,7 +228,10 @@ void fill_guard_report(const argmind::GuardReport<T, M>& src, am_guard_report* d
 /// and getting a check that watches nothing. The C++ side cannot make this mistake — the
 /// enum is the parameter — and the C side can, which is exactly what a boundary is for.
 bool valid_field(int32_t field) {
-    return field >= 0 && field <= static_cast<int32_t>(argmind::Field::PMinDiag);
+    // Externals are part of the range now. A bound on one the guard does not declare is
+    // still refused, by `add_bound` rather than here -- the guard knows how many it has.
+    return field >= 0 &&
+           field <= static_cast<int32_t>(argmind::external_field(kGuardExternal - 1));
 }
 
 }  // namespace
@@ -236,7 +248,7 @@ bool valid_field(int32_t field) {
 
 #define AM_DEFINE_GUARD(NAME, SCALAR, N, M, MAX_BYTES)                          \
     using Guard_##NAME =                                                        \
-        argmind::Guard<argmind::Rls<SCALAR, N, M>, kGuardDepth, kGuardBounds>;   \
+        argmind::Guard<argmind::Rls<SCALAR, N, M>, kGuardDepth, kGuardBounds, kGuardExternal>;   \
     static_assert(sizeof(Guard_##NAME) <= (MAX_BYTES),                          \
                   "AM_GUARD_" #NAME "_MAX_BYTES is no longer an upper bound; "  \
                   "raise the macro in argmind.h");                              \
@@ -358,6 +370,13 @@ bool valid_field(int32_t field) {
     extern "C" uint32_t am_guard_##NAME##_frozen_by(const void* obj) {          \
         return obj ? static_cast<const Guard_##NAME*>(obj)->frozen_by() : 0u;   \
     }                                                                           \
+    extern "C" int am_guard_##NAME##_set_external(void* obj, int32_t slot,      \
+                                                  double value) {               \
+        if (!obj) return AM_ERR_NULL;                                           \
+        return static_cast<Guard_##NAME*>(obj)->set_external(slot, value)        \
+                   ? AM_OK                                                      \
+                   : AM_ERR_CONFIG;                                             \
+    }                                                                           \
     extern "C" int am_guard_##NAME##_counters(const void* obj,                  \
                                               am_guard_counters* out) {         \
         if (!obj || !out) return AM_ERR_NULL;                                   \
@@ -373,7 +392,7 @@ bool valid_field(int32_t field) {
 
 #define AM_DEFINE_GUARD_NLMS(NAME, SCALAR, N, M, MAX_BYTES)                          \
     using GuardNlms_##NAME =                                                        \
-        argmind::Guard<argmind::Nlms<SCALAR, N, M>, kGuardDepth, kGuardBounds>;   \
+        argmind::Guard<argmind::Nlms<SCALAR, N, M>, kGuardDepth, kGuardBounds, kGuardExternal>;   \
     static_assert(sizeof(GuardNlms_##NAME) <= (MAX_BYTES),                          \
                   "AM_GUARD_NLMS_" #NAME "_MAX_BYTES is no longer an upper bound; "  \
                   "raise the macro in argmind.h");                              \
@@ -488,6 +507,13 @@ bool valid_field(int32_t field) {
     }                                                                           \
     extern "C" uint32_t am_guard_nlms_##NAME##_frozen_by(const void* obj) {          \
         return obj ? static_cast<const GuardNlms_##NAME*>(obj)->frozen_by() : 0u;   \
+    }                                                                           \
+    extern "C" int am_guard_nlms_##NAME##_set_external(void* obj, int32_t slot,      \
+                                                  double value) {               \
+        if (!obj) return AM_ERR_NULL;                                           \
+        return static_cast<GuardNlms_##NAME*>(obj)->set_external(slot, value)        \
+                   ? AM_OK                                                      \
+                   : AM_ERR_CONFIG;                                             \
     }                                                                           \
     extern "C" int am_guard_nlms_##NAME##_counters(const void* obj,                  \
                                               am_guard_counters* out) {         \
@@ -900,6 +926,14 @@ bool valid_policy(int32_t p) {
         *out = static_cast<const Pipe_##NAME*>(obj)->adapter().frozen_by();      \
         return AM_OK;                                                           \
     }                                                                           \
+    extern "C" int am_pipe_##NAME##_set_external(void* obj, int32_t slot,       \
+                                                 double value) {                \
+        if (!obj) return AM_ERR_NULL;                                           \
+        return static_cast<Pipe_##NAME*>(obj)->adapter_mutable()                 \
+                       .set_external(slot, value)                               \
+                   ? AM_OK                                                      \
+                   : AM_ERR_CONFIG;                                             \
+    }                                                                           \
     extern "C" int am_pipe_##NAME##_counters(const void* obj,                    \
                                              am_guard_counters* out) {          \
         if (!obj || !out) return AM_ERR_NULL;                                   \
@@ -917,7 +951,7 @@ bool valid_policy(int32_t p) {
 
 #define AM_DEFINE_PIPE_GUARDED(NAME, SCALAR, N, M, RING, MAX_BYTES)             \
     using Adapter_##NAME =                                                      \
-        argmind::Guard<argmind::Rls<SCALAR, N, M>, kGuardDepth, kGuardBounds>;   \
+        argmind::Guard<argmind::Rls<SCALAR, N, M>, kGuardDepth, kGuardBounds, kGuardExternal>;   \
     using Pipe_##NAME = argmind::Pipeline<Adapter_##NAME, AM_MAX_STREAMS>;       \
     extern "C" int am_pipe_##NAME##_init(void* obj, size_t obj_bytes,            \
                                          SCALAR lambda, SCALAR p0,              \
@@ -941,7 +975,7 @@ bool valid_policy(int32_t p) {
 
 #define AM_DEFINE_PIPE_GUARDED_NLMS(NAME, SCALAR, N, M, RING, MAX_BYTES)             \
     using Adapter_##NAME =                                                      \
-        argmind::Guard<argmind::Nlms<SCALAR, N, M>, kGuardDepth, kGuardBounds>;   \
+        argmind::Guard<argmind::Nlms<SCALAR, N, M>, kGuardDepth, kGuardBounds, kGuardExternal>;   \
     using Pipe_##NAME = argmind::Pipeline<Adapter_##NAME, AM_MAX_STREAMS>;       \
     extern "C" int am_pipe_##NAME##_init(void* obj, size_t obj_bytes,            \
                                          SCALAR mu, SCALAR eps,              \

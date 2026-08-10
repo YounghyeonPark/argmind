@@ -272,6 +272,25 @@ AM_DECLARE_NLMS(f32_128_1, float)
 #define AM_FIELD_P_TRACE            3
 #define AM_FIELD_P_MIN_DIAG         4
 
+/* Scalars the CALLER computes and the guard watches, `AM_GUARD_EXTERNALS` of them.
+ *
+ * Every other field is the adapter's own health, and for a frozen backbone feeding an
+ * adapted head that is the wrong place to look: the head stays healthy because it fits
+ * whatever it is given, so an input shift reaches an early layer's statistics long before
+ * the head's residual moves. The guard cannot compute that number. It can watch it.
+ *
+ * Supply one with `am_guard_*_set_external` (or the pipeline's) before the update it should
+ * apply to, then bound it like any other field. Non-finite is accepted at the call and
+ * unhealthy at the check, because a NaN out of a runtime is the event this exists for.
+ *
+ * **Externals are inputs, not state**: a rollback does not restore them, or a trip would
+ * resurrect the value that caused it. */
+#define AM_GUARD_EXTERNALS  4
+#define AM_FIELD_EXTERNAL_0         5
+#define AM_FIELD_EXTERNAL_1         6
+#define AM_FIELD_EXTERNAL_2         7
+#define AM_FIELD_EXTERNAL_3         8
+
 /* Why the guard blocked an update, when it was not the adapter's own rejection. */
 #define AM_GUARD_NONE     0
 #define AM_GUARD_FROZEN   1  /* frozen; this sample was only looked at            */
@@ -338,6 +357,7 @@ typedef struct {
     int am_guard_##NAME##_thaw(void* obj);                                     \
     int am_guard_##NAME##_frozen(const void* obj);                             \
     uint32_t am_guard_##NAME##_frozen_by(const void* obj);                      \
+    int am_guard_##NAME##_set_external(void* obj, int32_t slot, double value);  \
     int am_guard_##NAME##_counters(const void* obj, am_guard_counters* out);
 
 /* A guard over NLMS. Identical to `AM_DECLARE_GUARD` but for `mu`/`eps` and the missing
@@ -369,13 +389,15 @@ typedef struct {
     int am_guard_nlms_##NAME##_thaw(void* obj);                                \
     int am_guard_nlms_##NAME##_frozen(const void* obj);                        \
     uint32_t am_guard_nlms_##NAME##_frozen_by(const void* obj);                 \
+    int am_guard_nlms_##NAME##_set_external(void* obj, int32_t slot,            \
+                                            double value);                     \
     int am_guard_nlms_##NAME##_counters(const void* obj,                        \
                                         am_guard_counters* out);
 
 AM_DECLARE_GUARD_NLMS(f32_6_1, float)
 AM_DECLARE_GUARD_NLMS(f32_128_1, float)
 
-#define AM_GUARD_NLMS_F32_6_1_MAX_BYTES    448
+#define AM_GUARD_NLMS_F32_6_1_MAX_BYTES    512
 #define AM_GUARD_NLMS_F32_128_1_MAX_BYTES  2944
 
 AM_DECLARE_GUARD(f32_6_1, float)
@@ -396,10 +418,10 @@ AM_DECLARE_GUARD(f64_6_1, double)
  * compile-time promise a C header makes without being able to compute the layout;
  * the first draft was written before measuring and f32_12_1's bound was too small,
  * which the static assertion caught. */
-#define AM_GUARD_F32_6_1_MAX_BYTES  1152
-#define AM_GUARD_F32_6_3_MAX_BYTES  1408
-#define AM_GUARD_F32_12_1_MAX_BYTES 3456
-#define AM_GUARD_F64_6_1_MAX_BYTES  2048
+#define AM_GUARD_F32_6_1_MAX_BYTES  1216
+#define AM_GUARD_F32_6_3_MAX_BYTES  1472
+#define AM_GUARD_F32_12_1_MAX_BYTES 3520
+#define AM_GUARD_F64_6_1_MAX_BYTES  2112
 
 /* ==========================================================================
  * The record format.
@@ -669,6 +691,7 @@ typedef struct {
                                         double fast_alpha, double slow_alpha,   \
                                         double floor, uint32_t warmup);        \
     int am_pipe_##NAME##_frozen_by(const void* obj, uint32_t* out);             \
+    int am_pipe_##NAME##_set_external(void* obj, int32_t slot, double value);   \
     int am_pipe_##NAME##_counters(const void* obj, am_guard_counters* out);     \
     AM_DECLARE_PIPE_COMMON(NAME, SCALAR, RING)
 
@@ -701,9 +724,9 @@ AM_DECLARE_PIPE_GUARDED_NLMS(g_nlms_f32_128_1, float, am_ring_f32)
  * x86-64 and therefore a shape rather than a target figure. */
 #define AM_PIPE_F32_6_1_MAX_BYTES     768
 #define AM_PIPE_F64_6_1_MAX_BYTES     1024
-#define AM_PIPE_G_F32_6_1_MAX_BYTES   1664
-#define AM_PIPE_G_F32_6_3_MAX_BYTES   1920
-#define AM_PIPE_G_F32_12_1_MAX_BYTES  4032
+#define AM_PIPE_G_F32_6_1_MAX_BYTES   1728
+#define AM_PIPE_G_F32_6_3_MAX_BYTES   1984
+#define AM_PIPE_G_F32_12_1_MAX_BYTES  4096
 
 /* The second tier's shape: a learnable HEAD on a frozen network, whose input is an
  * embedding rather than a handful of sensor channels. Present because the scope widened
@@ -717,12 +740,12 @@ AM_DECLARE_PIPE_GUARDED_NLMS(g_nlms_f32_128_1, float, am_ring_f32)
  * touches it pays nothing. At 256 features the same arithmetic reaches 30% of an STM32N6's
  * whole SRAM and at 512 it does not fit at all, which is the boundary to know before
  * choosing a backbone's output width. */
-#define AM_PIPE_G_F32_128_1_MAX_BYTES 335744
+#define AM_PIPE_G_F32_128_1_MAX_BYTES 335808
 /* The reason this adapter is here: at 128 features the RLS pipeline above is 335,744 bytes
  * and does not fit the declared 8 KB floor, while this one is 4,656 and does. */
-#define AM_PIPE_G_NLMS_F32_6_1_MAX_BYTES    896
+#define AM_PIPE_G_NLMS_F32_6_1_MAX_BYTES    960
 #define AM_PIPE_G_NLMS_F32_128_1_MAX_BYTES  4736
-#define AM_PIPE_G_F64_6_1_MAX_BYTES   2688
+#define AM_PIPE_G_F64_6_1_MAX_BYTES   2752
 
 /* Six instantiations is a lot of code for a caller who wants one. Build with
  * `-ffunction-sections -fdata-sections` and link with `--gc-sections`, which the

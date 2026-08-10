@@ -207,8 +207,24 @@ rather than trusting it. Externals are **inputs, not state**: a rollback does no
 or a trip would resurrect the value that caused it. Non-finite is accepted at the call and
 unhealthy at the check, because a NaN out of a runtime is the event the guard exists for.
 Both sides freeze at exactly the shift step; six mutants confirm it (3 C++, 3 Python).
-**Not in the C ABI yet** — that needs a decision on how many slots the exported guards
-declare, and it is recorded rather than guessed.
+
+**In the C ABI now, and the recorded question — how many slots — is answered with four**, the
+same number `Depth` and `MaxBounds` already are and for the reason the header already gives
+for them: they are the memory. A C caller cannot choose a template parameter, so declaring
+zero would leave the feature unreachable from the one boundary it exists to cross; the C++
+side keeps its zero-cost default for anyone who can pick. `AM_FIELD_EXTERNAL_0..3`,
+`am_guard_*_set_external` and `am_pipe_*_set_external`, with a `static_assert` tying the
+header's numbering to `Field::External0` — a C caller bounding a different slot than it set
+would be silent otherwise.
+
+Measured end to end in C99 on the backbone shape: an external bound is accepted, an
+out-of-range slot is refused rather than wrapped, and the pipeline **freezes at exactly the
+step the caller's scalar shifts** while the head's own residual never moves. The cost is
+**32 bytes per guard**; the target rows moved 64 because the exported `MAX_BYTES` round to the
+next multiple of 64, and `f32_12_1` composed is now at **97.4% of the declared 8 KB floor**.
+The `MAX_BYTES` `static_assert` caught every stale bound at the first build, for the third
+time. Three mutants: wrapping an out-of-range slot, narrowing `valid_field` back, and
+declaring no slots — all caught.
 
 **There are three adapters now, and the third is a network** — `MultilayerPerceptron`, the
 2026-08-10 scope decision made real. Python only so far. Three of nine mutants exposed real

@@ -280,6 +280,63 @@ void test_the_declared_size_bounds_are_bounds() {
 
 // -- NLMS across the C ABI ---------------------------------------------------------------
 
+void test_the_abi_carries_a_caller_supplied_scalar() {
+    // Every other field is the ADAPTER's health, and for a frozen backbone feeding an
+    // adapted head that is the wrong place to look: the head fits whatever it is given, so
+    // the world can move under it while its residual does not. Only the caller running the
+    // backbone can compute that number, and until now C had no way to hand it over.
+    static am_rls_storage store[AM_PIPE_G_NLMS_F32_128_1_MAX_BYTES / sizeof(am_rls_storage)];
+    static float bb_v[4 * 127];
+    static double bb_t[4];
+    static unsigned char bb_k[4];
+    static float tg_v[8];
+    static double tg_t[8];
+    static unsigned char tg_k[8];
+    am_ring_f32 rings[2];
+    am_step_report step;
+    void* p = store;
+
+    CHECK(am_ring_f32_init(&rings[0], bb_v, bb_t, bb_k, 127, 4) == AM_OK);
+    CHECK(am_ring_f32_init(&rings[1], tg_v, tg_t, tg_k, 1, 8) == AM_OK);
+    CHECK(am_pipe_g_nlms_f32_128_1_init(p, sizeof(store), 0.5f, 1e-6f, 5, 0,
+                                        AM_POLICY_HOLD_LAST, 0.0, 0) == AM_OK);
+    for (int i = 0; i < 127; ++i) {
+        CHECK(am_pipe_g_nlms_f32_128_1_add_feature(p, 0, i) == AM_OK);
+    }
+    CHECK(am_pipe_g_nlms_f32_128_1_add_target(p, 1, 0) == AM_OK);
+    CHECK(am_pipe_g_nlms_f32_128_1_set_constant(p, 1) == AM_OK);
+    CHECK(am_pipe_g_nlms_f32_128_1_add_bound(p, AM_FIELD_EXTERNAL_0, 0, 0.0, 1, 3.0)
+          == AM_OK);
+    // Out of range is refused rather than wrapped or ignored.
+    CHECK(am_pipe_g_nlms_f32_128_1_set_external(p, AM_GUARD_EXTERNALS, 1.0) == AM_ERR_CONFIG);
+    CHECK(am_pipe_g_nlms_f32_128_1_set_external(p, -1, 1.0) == AM_ERR_CONFIG);
+    CHECK(am_pipe_g_nlms_f32_128_1_set_external(nullptr, 0, 1.0) == AM_ERR_NULL);
+    CHECK(am_pipe_g_nlms_f32_128_1_configure(p, rings, 2) == AM_OK);
+
+    int froze = -1;
+    for (int k = 1; k <= 200; ++k) {
+        float f[127], y[1];
+        const double t = k * 0.02;
+        for (int i = 0; i < 127; ++i)
+            f[i] = static_cast<float>((k * 7 + i) % 13) * 0.1f - 0.6f;
+        CHECK(am_ring_f32_push(&rings[0], t, f, 1) == AM_OK);
+        if (k % 5 == 0) {
+            y[0] = f[0] * 2.0f - f[3];
+            am_ring_f32_push(&rings[1], t, y, 1);
+        }
+        // The caller's own statistic: quiet, then a distribution shift the head cannot see.
+        CHECK(am_pipe_g_nlms_f32_128_1_set_external(p, 0, k >= 120 ? 9.0 : 1.0) == AM_OK);
+        am_pipe_g_nlms_f32_128_1_step(p, rings, 2, &step);
+        if (step.frozen && froze < 0) froze = k;
+    }
+    CHECK(froze == 120);          // exactly the step the caller's scalar moved
+
+    // ...and the field numbering the header exports has to be the one the guard uses, or a
+    // C caller would bound a different slot than it set.
+    CHECK(AM_FIELD_EXTERNAL_0 == 5);
+    CHECK(AM_FIELD_EXTERNAL_3 == AM_FIELD_EXTERNAL_0 + AM_GUARD_EXTERNALS - 1);
+}
+
 void test_the_abi_offers_an_adapter_that_fits_a_backbone_width() {
     // The reason NLMS is exported at all. A frozen backbone hands out a wide embedding, and
     // at 128 features the guarded RLS pipeline is 332,328 bytes -- larger than the whole
@@ -2690,6 +2747,7 @@ int main() {
     test_the_abi_round_trips_a_state_block();
     test_the_abi_offers_an_adapter_that_fits_a_backbone_width();
     test_the_abi_nlms_learns_and_refuses_what_it_must();
+    test_the_abi_carries_a_caller_supplied_scalar();
     test_reset_returns_to_the_construction_state();
 
     test_bound_treats_non_finite_as_unhealthy();

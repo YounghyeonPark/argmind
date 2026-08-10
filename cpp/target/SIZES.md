@@ -25,12 +25,15 @@ to the total — a `caller` column exists because without it the drift was invis
 | configuration | flash | of which argmind | the caller | libc/libgcc | static RAM |
 |---|---|---|---|---|---|
 | bare RLS f32 6x1 | 2324 | 1272 | 160 | 892 | 272 |
-| + guard | 6104 | 3478 | 344 | 2282 | 1168 |
-| + record format | 6336 | 3756 | 304 | 2276 | 1844 |
-| full composed pipeline | 10344 | 7372 | 524 | 2448 | 3408 |
+| + guard | 6160 | 3536 | 344 | 2280 | 1232 |
+| + record format | 6400 | 3818 | 304 | 2278 | 1908 |
+| full composed pipeline | 10392 | 7422 | 524 | 2446 | 3472 |
 
-Against the declared 32 KB flash and 8 KB RAM, the full composed pipeline is **31.5%** of the
-flash budget and **41.6%** of the RAM.
+Against the declared 32 KB flash and 8 KB RAM, the full composed pipeline is **31.7%** of the
+flash budget and **42.4%** of the RAM, and the twelve-feature shape below is at **97.4%** of
+the RAM. The last move was the guard's four caller-supplied scalars reaching the C ABI: the
+object grew 32 bytes and these rows 64, because `usage.c` sizes its storage from the exported
+`MAX_BYTES`, which round to the next multiple of 64.
 
 The composed row's RAM moved 3136 → 3408 when `usage.c` gained its shape knob, and the cause
 is the wiring rather than the library: the map now takes `AM_N - 1` features from the reference
@@ -56,8 +59,8 @@ build at the default shape.
 
 | configuration | flash | of which argmind | the caller | libc/libgcc | static RAM |
 |---|---|---|---|---|---|
-| composed f32 6x3 | 10524 | 7550 | 532 | 2442 | 3872 |
-| composed f32 12x1 | 10204 | 7238 | 524 | 2442 | 7912 |
+| composed f32 6x3 | 10580 | 7606 | 532 | 2442 | 3936 |
+| composed f32 12x1 | 10252 | 7288 | 524 | 2440 | 7976 |
 
 **Flash barely depends on the shape and RAM entirely does.** 10,200 to 10,508 across the
 three — a 3% spread, and **12x1 is the *smallest* of them in flash** while being 2.3x the RAM.
@@ -76,7 +79,7 @@ shape, which is what stops the next person hand-editing it.
 
 | configuration | flash | static RAM |
 |---|---|---|
-| full composed pipeline | 7816 | 3408 |
+| full composed pipeline | 7880 | 3472 |
 
 Moving up to ARMv8.1-M makes the image **smaller**, at identical static RAM.
 
