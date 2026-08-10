@@ -39,12 +39,12 @@ platform generates the basis* below for the decision and the measurement that pr
   the only path to the accelerator.
 - **Not a driver layer or a robotics middleware.** It does not talk to hardware, does not own
   threads, and does not depend on ROS. You feed it samples.
-- **Not a research playground for online deep learning.** Still true, and it now carries a
-  cost the reversal above makes real: SGD on a too-small network **got worse with more data**
-  (0.4921 at 20k samples, 0.5340 at 60k), and the guard has no `p_trace` for a backpropagated
-  weight — so the model class arrives with the best warning signal missing. Methods land here
-  when their failure is *detectable*, which is a weaker bar than reasoning about stability and
-  the honest one to hold now.
+- **Not a research playground for online deep learning.** Still true, and the reversal above
+  gives it a sharper edge than "stability can be reasoned about": the guard has no `p_trace`
+  for a backpropagated weight, and **`residual_norm` was measured not to substitute for one**
+  (below). Methods land here when their failure is *detectable*. For this model class nothing
+  in the library detects a slow loss of quality, and that is stated rather than designed
+  around.
 - **Not a model that can learn a representation, and this is the load-bearing limit.** Every
   bullet above says what the *implementation* is not. None of them said what the *model class*
   cannot express, and until 2026-08-09 the phrase "linear in the parameters" appeared nowhere
@@ -106,7 +106,7 @@ accuracy are separated — a table of final accuracies alone would hide the whol
 |---|---|---|---|---|---|---|
 | RFF D=32, RLS | 8.8 KB | 0.5679 | 0.4911 | 0.4788 | 0.4757 | 0.4756 |
 | RFF D=128, RLS | **131 KB** | **0.4656** | **0.3613** | **0.2605** | 0.2521 | 0.2458 |
-| MLP 3-16-1, SGD | 0.6 KB | 0.7769 | 0.6175 | 0.5194 | 0.4921 | **0.5340** |
+| MLP 3-16-1, SGD | 0.6 KB | 0.7769 | 0.6175 | 0.5194 | 0.4921 | 0.5340 |
 | MLP 3-32-32-1, SGD | **9.5 KB** | 0.7822 | 0.7206 | 0.3873 | 0.2455 | **0.2484** |
 
 **Memory: the network wins by 14×.** 0.2484 at 9.5 KB against 0.2458 at 131 KB — the same
@@ -118,12 +118,61 @@ to match it, and at 200 samples it is *worse than a constant* while RFF is alrea
 RLS is the exact recursive solution of a least-squares problem and SGD is a walk downhill. On a
 device that must be useful in its first minute, that difference is the whole story.
 
-**And the small network got worse with more data** — 0.4921 at 20k, **0.5340 at 60k**. Not noise
-in the measurement: it is what a fixed learning rate on a too-small model does. **This is the
-finding that matters most**, because the guard cannot see it coming. `p_trace` rising is what
-warns that RLS is losing confidence; a backpropagated weight has no cheap equivalent, so this
-model class arrives with **the guard's best signal missing and a new failure mode that needs
-one**. A held-out running error is the obvious candidate and nothing here has measured it yet.
+**The small network's 0.4921 at 20k and 0.5340 at 60k looked like a network getting worse with
+more data.** It was written up here as "the finding that matters most" and it is **withdrawn**:
+it is two points picked out of a flat noisy series. The audit, ten runs over five initialisations
+and two data streams, RMSE fitted over `k = 20k…60k` rather than compared at the endpoints:
+
+- **the slope is positive in 1 of 10 runs — the one seed that had been quoted.** Mean −0.0250
+  per 10k samples, sd 0.0140: nine of ten keep improving.
+- in that one run the slope is **+0.0026 against a within-run scatter about its own trend line
+  of 0.0216** — the "trend" is an eighth of the noise it sits in.
+
+The rule this breaks is one this repository already had (*a uniformly tidy result is evidence
+the measurement is broken*) applied to its mirror image: **a result that is interesting because
+two endpoints disagree needs the points in between.** The commit that introduced it quoted the
+non-monotonicity from a two-checkpoint run and never plotted the middle. What caught it was
+asking a *different* question — whether the residual tracks held-out error — which printed the
+series at twelve checkpoints, and the series was flat.
+
+### What survives: the residual does not substitute for `p_trace`, and no check can be built on it
+
+The concern the withdrawn claim was standing in for is real and unresolved. Measured three ways:
+
+**No configuration of the existing checks detects a slow loss of quality.** `Divergence`'s own
+docstring says a fault the baseline can track will never trip; swept, it is worse than that.
+At its default `ratio=5.0` it never fires; tightened to 1.05 it fires at step ~201, immediately
+after warmup, on ordinary noise. `Bound("residual_norm")` fires at step **6** for every
+`hi` in 0.8…2.0 — the untrained model's noise — and never at 3.0. **There is no setting between
+blind and instantly wrong.**
+
+**Two new designs failed their negative controls.** A long EWMA against a baseline latched at
+`settle`, and the same with the baseline tracking the best seen so far, both to remove
+`Divergence`'s flaw of a reference that follows the drift. At `ratio=1.10` the tracking variant
+fires on the degrading network (24,583) — and also on a network that is **improving** (26,424)
+and on **stationary RLS** (23,717). At 1.25 and above nothing fires anywhere. No discrimination
+at any threshold.
+
+**Because the quantity does not carry the signal.** EWMA of `‖residual‖` at α=1e-4 against
+held-out RMSE, twelve checkpoints:
+
+| | EWMA range | held-out range | correlation |
+|---|---|---|---|
+| MLP 3-16-1, misspecified for its capacity | 1.023× (**falling**) | 1.115× (rising) | **+0.112** |
+| MLP 3-32-32-1, improving | 1.857× | 1.937× | +0.631 |
+| RLS, linear basis on a nonlinear truth | **1.518×** | **1.002×** | **−0.287** |
+
+The last row is the clearest: the smoothed residual moves by half while the thing it is supposed
+to proxy is flat to two parts in a thousand, and it moves the *wrong way*. The responsible
+assumption is **misspecification** — a control with a well-specified RLS gives +0.895 — and
+misspecification is the normal condition for an adapted head on a frozen backbone. A prequential
+residual is optimistic exactly when the model is fitting the samples it sees and not the
+population, which is the failure a quality signal exists to catch.
+
+**So the check was not built.** A mechanism for a failure mode that could not be reproduced would
+be a mechanism justified by its own fixture. What a signal would need is data the adapter has
+*not* trained on, which is a real design with a real cost — the guard withholding a fraction of
+samples — and it is recorded here rather than half-built.
 
 **The guard's ring is `Depth × state_size` and that scales with the model, not with the
 sensors.** At depth 4: RLS n=6 is 1.6 KB total, the MLP 47.5 KB, a 3-64-64-1 net 175 KB, and

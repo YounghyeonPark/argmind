@@ -179,24 +179,84 @@ def test_a_network_learns_what_no_linear_basis_can(probe):
     assert e_net < e_lin / 1.5
 
 
-def test_sgd_can_get_worse_with_more_data_and_nothing_here_warns(probe):
-    """The cost the reversal brings, pinned so it cannot be quietly forgotten.
+def test_the_residual_does_not_substitute_for_the_covariance_signal():
+    """The gap this model class arrives with, pinned so it is not quietly assumed away.
 
-    A too-small network under a fixed learning rate is **not monotone**: measured 0.4921 at
-    20k samples and 0.5340 at 60k. RLS cannot do this, and the signal that would have warned —
-    `p_trace` rising — does not exist for a backpropagated weight. Until a replacement health
-    signal is measured, this failure mode is undetected by design and the test says so.
+    A predecessor of this test asserted that SGD *got worse with more data* (0.4921 at 20k,
+    0.5340 at 60k) and passed, because both figures are deterministic under fixed seeds. It
+    was pinning **two points out of a flat noisy series**: over ten runs the slope is positive
+    in one — that seed — and mean −0.0250 per 10k against a within-run scatter of 0.0216. A
+    deterministic test can pin noise, and a passing test is not evidence that what it describes
+    is real.
+
+    What is real, and is what that test was reaching for: `p_trace` warns that RLS is losing
+    confidence, a backpropagated weight has no equivalent, and **the residual does not
+    substitute**. On a misspecified fit the smoothed residual and held-out error move in
+    opposite directions — RLS on a linear basis over a nonlinear truth gives EWMA range 1.518×
+    against a held-out range of 1.002×, correlation −0.287, while a well-specified control gives
+    +0.895. Misspecification is the normal condition for an adapted head.
     """
-    net = Mlp(3, 1, hidden=(16,), lr=0.02, dtype="f8", seed=1)
-    g = np.random.default_rng(5)
-    seen = {}
-    for k in range(1, 60001):
-        s = g.standard_normal(3)
-        net.update(s, [_truth(s)])
-        if k in (20000, 60000):
-            seen[k] = _rmse(lambda s: net.predict(s)[0], probe)
-    assert seen[60000] > seen[20000] * 1.02, (
-        f"SGD stayed monotone here ({seen[20000]:.4f} then {seen[60000]:.4f}), so this fixture "
-        "no longer demonstrates the hazard the guard cannot see and must be rebuilt")
+    net = Mlp(3, 1)
     assert net.health_fields.isdisjoint({"p_trace", "p_min_diag"}), (
-        "if this adapter ever reports a covariance, the claim that no signal exists is stale")
+        "if this adapter reports a covariance, the gap this test describes is gone and the "
+        "claim in DESIGN.md is stale")
+
+    # The measurement, at a scale that runs in a test: a misspecified RLS, where the residual
+    # is *provably* the wrong proxy because the held-out error cannot move at all.
+    true = np.array([2.0, -1.5, 0.5, 0.3])
+    probe_x = np.random.default_rng(0).standard_normal((500, 4))
+    probe_x[:, 3] = 1.0
+    m = RecursiveLeastSquares(4, 1, forgetting=1.0, p0=100.0, dtype="f8")
+    r = np.random.default_rng(5)
+    ew, rows = 0.0, []
+    for k in range(1, 20001):
+        s = r.standard_normal(3)
+        x = np.array([s[0], s[1], s[2], 1.0])
+        e = float(np.linalg.norm(m.update(x, [_truth(s)]).residual))
+        ew = e if k == 1 else ew + 1e-4 * (e - ew)
+        if k % 2000 == 0:
+            p = probe_x @ np.asarray(m.state)[:4]
+            rows.append((ew, float(np.sqrt(np.mean((p - probe_x @ true) ** 2)))))
+
+    ews = np.array([a for a, _ in rows])
+    rms = np.array([b for _, b in rows])
+    assert ews.max() / ews.min() > 1.3, (
+        f"the smoothed residual barely moved ({ews.max()/ews.min():.3f}x), so this fixture no "
+        "longer shows it wandering and cannot demonstrate that it is a bad proxy")
+    assert rms.max() / rms.min() < 1.05, (
+        f"the held-out error moved {rms.max()/rms.min():.3f}x, so the residual has something "
+        "real to track here and the comparison is not the one this test claims to make")
+    assert np.corrcoef(ews, rms)[0, 1] < 0.5, "the residual tracked held-out error after all"
+
+
+def test_no_existing_check_can_see_a_slow_loss_of_quality():
+    """Swept rather than argued: the useful window between blind and instantly wrong is empty.
+
+    `Divergence`'s docstring already said a fault its baseline can track will never trip. This
+    measures the other end too, because "then tighten it" is the obvious reply.
+    """
+    from argmind.guard import Divergence
+
+    def froze_at(check, n=3000):
+        net = Mlp(3, 1, hidden=(16,), lr=0.02, dtype="f8", seed=1)
+        g = Guard(net, [check], rollback_depth=4, checkpoint_every=100)
+        r = np.random.default_rng(5)
+        for k in range(1, n + 1):
+            s = r.standard_normal(3)
+            if g.update(s, [_truth(s)]).frozen:
+                return k
+        return None
+
+    assert froze_at(Divergence(ratio=5.0, floor=0.05, warmup=200)) is None, (
+        "the default Divergence fired, so it is not blind here and the sweep is void")
+    tight = froze_at(Divergence(ratio=1.05, fast_alpha=0.02, slow_alpha=0.0002,
+                                floor=0.05, warmup=200))
+    assert tight is not None and tight < 400, (
+        f"tightening Divergence did not produce an immediate false trip (froze at {tight}), so "
+        "the claim that no useful setting exists between the two is not demonstrated")
+
+    assert froze_at(Bound("residual_norm", hi=2.0)) is not None
+    assert froze_at(Bound("residual_norm", hi=2.0)) < 100, (
+        "a residual bound loose enough to survive the untrained model's noise would be the "
+        "counterexample to this whole test")
+    assert froze_at(Bound("residual_norm", hi=3.0)) is None
