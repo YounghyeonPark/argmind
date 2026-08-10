@@ -371,6 +371,23 @@ the AN547's 512 KB DTCM and the image produced *no output at all*, which is quie
 failure it fixed, so it is 64 KB and the reason is recorded. The self-check suite never noticed
 because it allocates nothing.
 
+**Exporting the learned model across boards: done and verified in both directions.** The
+record format already claimed "the writer and the reader may be different machines" and had
+been checked host-against-Cortex-M4F; **board-against-board is the case an integrator actually
+performs and had never been run.** `cpp/tools/braincheck.cpp` trains, packs and writes on one
+machine and reads, loads and predicts on another. M4F → M55 and M55 → M4F both reproduce the
+exporting board's prediction **to the last printed digit**, as does a record the *Python*
+reference wrote. `persist::pack` already took `count` as a runtime argument, so runtime shapes
+needed no special case — an earlier note here saying otherwise was wrong.
+
+**And the new board refuses what it must.** A flipped bit and a truncated write are caught by
+the CRC and the length. The third case is the one that matters and the CRC cannot see it: a
+record that is **perfectly valid but written under a different `FrameMap` order**, which would
+put the right numbers on the wrong features. The configuration fingerprint refuses it. That case
+is built with the Python reference so the CRC is genuinely correct — forging it by editing bytes
+only re-tests the CRC, which this project has been caught doing before. Both halves
+mutation-checked: removing the fingerprint check and skipping `load_state` each fail a test.
+
 **Still undecided:** whether inference is *hosted* (an interface to ONNX Runtime/TFLite) or
 *embedded*, and whether the tiers ship as one library or two. Nothing on the camera/audio/speech
 path is built.

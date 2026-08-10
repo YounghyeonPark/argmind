@@ -171,3 +171,122 @@ def test_the_state_block_one_board_writes_is_the_one_the_other_reads(images):
     a, b = states["cortex-m4"], states["cortex-m55"]
     assert scale_deviation(a[:n * m], b[:n * m]) < MIGRATION_ULP * float(
         np.finfo(np.dtype(dtype)).eps)
+
+
+# -- exporting a learned model and importing it somewhere else -----------------------
+
+FINGERPRINT = 0xFEEDBEEF        # must match cpp/tools/braincheck.cpp
+
+
+def _brain(work, board, cflags, machine):
+    """`braincheck` linked for one board, with `%f` in printf.
+
+    `-u _printf_float` is needed to read the prediction back at all, and it is the reason
+    the heap fix in `startup.c` had to come first: newlib's `dtoa` allocates.
+    """
+    tag = board.replace("-", "")
+    flags = [*cflags, *REST, "-I", str(CPP / "include")]
+    su = work / f"bstartup_{tag}.o"
+    d = _run([_cross("gcc"), "-std=c99", *flags, "-c", QEMU_DIR / "startup.c", "-o", su])
+    assert d.returncode == 0, d.stderr
+    obj = work / f"brain_{tag}.o"
+    d = _run([_cross("g++"), "-std=c++17", *flags, "-fno-exceptions", "-fno-rtti",
+              "-c", CPP / "tools" / "braincheck.cpp", "-o", obj])
+    assert d.returncode == 0, d.stderr
+    elf = work / f"brain_{tag}.elf"
+    d = _run([_cross("g++"), *cflags, "--specs=rdimon.specs", "--specs=nano.specs",
+              "-Wl,-u,_printf_float", "-Wl,--gc-sections",
+              "-T", QEMU_DIR / "mps2.ld", su, obj, "-o", elf])
+    assert d.returncode == 0, "\n".join(
+        l for l in d.stderr.splitlines() if "RWX permissions" not in l)
+    return elf, machine
+
+
+def _brain_run(work, elf, machine, mode, name):
+    sem = f"enable=on,target=native,arg=braincheck,arg={mode},arg={name}"
+    d = _run([shutil.which("qemu-system-arm"), *machine, "-nographic",
+              "-semihosting-config", sem, "-kernel", elf.name], cwd=work, timeout=300)
+    return d.stdout + d.stderr
+
+
+def _prediction(out):
+    for line in out.splitlines():
+        if "prediction" in line:
+            return float(line.rsplit(None, 1)[1])
+    return None
+
+
+@pytest.fixture(scope="session")
+def brains(images):
+    work, _ = images
+    return work, {b: _brain(work, b, cf, m) for b, (cf, m) in BOARDS.items()}
+
+
+def test_a_model_learned_on_one_board_loads_on_the_other(brains):
+    """The migration a fielded device actually performs, in both directions.
+
+    Not "the bytes round-trip" -- the *prediction* after importing must equal the one the
+    exporting board made, because that is what a device does with the record.
+    """
+    work, built = brains
+    m4, m55 = built["cortex-m4"], built["cortex-m55"]
+
+    exported = _prediction(_brain_run(work, *m4, "write", "from_m4.bin"))
+    assert exported is not None, "the M4F board did not export"
+    same = _prediction(_brain_run(work, *m4, "read", "from_m4.bin"))
+    across = _prediction(_brain_run(work, *m55, "read", "from_m4.bin"))
+    assert same == exported, f"the SAME board reread differently: {same} vs {exported}"
+    assert across == exported, (
+        f"M55 loaded the M4F model and predicts {across}, not {exported}")
+
+    # ...and the other direction, because a migration path that only works one way is a
+    # migration path that fails on the first rollback.
+    back = _prediction(_brain_run(work, *m55, "write", "from_m55.bin"))
+    assert back is not None
+    assert _prediction(_brain_run(work, *m4, "read", "from_m55.bin")) == back
+
+
+def test_the_new_board_refuses_a_record_it_should(brains):
+    """Three ways a record can be wrong, and the third is the one that matters.
+
+    A flipped bit and a truncated write are caught by the CRC and the length. A record
+    that is **perfectly valid but was written under a different configuration** is not --
+    its CRC is correct -- and loading it would put the right numbers on the wrong
+    features, which is the one corruption nothing downstream can detect. That case is
+    built with the Python reference so the CRC is genuinely right; forging it by editing
+    bytes would only re-test the CRC, a mistake this project has made before.
+    """
+    from argmind.adapt import RecursiveLeastSquares      # noqa: PLC0415
+    from argmind.persist import pack                     # noqa: PLC0415
+
+    work, built = brains
+    m55 = built["cortex-m55"]
+
+    good = work / "from_m4.bin"
+    if not good.exists():
+        _brain_run(work, *built["cortex-m4"], "write", "from_m4.bin")
+    raw = bytearray(good.read_bytes())
+
+    flipped = bytearray(raw)
+    flipped[60] ^= 0x01
+    (work / "flipped.bin").write_bytes(flipped)
+    (work / "truncated.bin").write_bytes(raw[:120])
+
+    a = RecursiveLeastSquares(6, 1, forgetting=0.999, p0=100.0, dtype="f4")
+    for k in range(200):
+        x = np.array([(k * 7 + i * 13) % 11 - 5.0 for i in range(6)], dtype="f4")
+        x[5] = 1.0
+        a.update(x, [2 * x[0] - 1.5 * x[1] + 0.25 * x[2] + 0.5])
+    (work / "other_cfg.bin").write_bytes(pack(a, sequence=1, fingerprint=0xDEADBEEF))
+    (work / "same_cfg.bin").write_bytes(pack(a, sequence=1, fingerprint=FINGERPRINT))
+
+    for name, expect in (("flipped.bin", "refused"), ("truncated.bin", "refused"),
+                         ("other_cfg.bin", "fingerprint mismatch")):
+        out = _brain_run(work, *m55, "read", name)
+        assert expect in out, f"{name} was not refused as expected:\n{out}"
+        assert "imported prediction" not in out, f"{name} was loaded anyway:\n{out}"
+
+    # The control: the same reference-written record with the RIGHT fingerprint loads, so
+    # the three refusals above are about those records and not about a Python-written one.
+    out = _brain_run(work, *m55, "read", "same_cfg.bin")
+    assert _prediction(out) is not None, f"a valid host-written record was refused:\n{out}"

@@ -124,6 +124,12 @@ if(NOT CMAKE_CROSSCOMPILING)
     add_executable(argmind_shapepipecheck tools/shapepipecheck.cpp)
     target_include_directories(argmind_shapepipecheck PRIVATE include)
 
+    # Export a learned model on one machine, import it on another. Freestanding-clean,
+    # because half of it runs on the target under QEMU.
+    add_executable(argmind_braincheck tools/braincheck.cpp)
+    target_include_directories(argmind_braincheck PRIVATE include)
+    target_compile_options(argmind_braincheck PRIVATE -fno-exceptions -fno-rtti)
+
     enable_testing()
     add_test(NAME core COMMAND argmind_test_core)
 endif()
