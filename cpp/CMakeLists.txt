@@ -59,7 +59,15 @@ option(ARGMIND_VECTOR_REPORT
 # -fno-exceptions -fno-rtti are not tuning. The core has to be usable in a
 # freestanding environment, and DESIGN.md pays those costs deliberately.
 add_library(argmind STATIC src/abi.cpp)
-target_include_directories(argmind PUBLIC include)
+add_library(argmind::argmind ALIAS argmind)
+set_target_properties(argmind PROPERTIES
+    VERSION ${PROJECT_VERSION}
+    SOVERSION ${PROJECT_VERSION_MAJOR})
+# BUILD_INTERFACE vs INSTALL_INTERFACE: without the pair, an installed package points at
+# a source tree that may not exist on the consuming machine.
+target_include_directories(argmind PUBLIC
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+    $<INSTALL_INTERFACE:include>)
 target_compile_options(argmind PRIVATE
     -fno-exceptions -fno-rtti -Wall -Wextra -Wpedantic)
 
@@ -110,4 +118,47 @@ if(NOT CMAKE_CROSSCOMPILING)
 
     enable_testing()
     add_test(NAME core COMMAND argmind_test_core)
+endif()
+
+
+# ---------------------------------------------------------------------------
+# Installation, so the library can be consumed rather than copied.
+#
+# Until 2026-08-10 there was none: `find_package(argmind)` did not work, and the only
+# way to use this from another project was to vendor the sources. That is defensible for
+# something nobody else builds and indefensible for something described as a platform,
+# which is the direction the scope took.
+#
+# Skipped for a bare-metal cross build. Installing into a host prefix from a Generic
+# toolchain is almost always a mistake -- firmware links the static library out of its
+# own build tree -- and offering it invites exactly that mistake.
+# ---------------------------------------------------------------------------
+if(NOT CMAKE_SYSTEM_NAME STREQUAL "Generic")
+    include(GNUInstallDirs)
+    include(CMakePackageConfigHelpers)
+
+    install(TARGETS argmind
+            EXPORT argmindTargets
+            ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR})
+    install(DIRECTORY include/argmind
+            DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
+            FILES_MATCHING PATTERN "*.h" PATTERN "*.hpp")
+    install(EXPORT argmindTargets
+            FILE argmindTargets.cmake
+            NAMESPACE argmind::
+            DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/argmind)
+
+    # SameMajorVersion, matching the policy in argmind.h: the C ABI is stable across a
+    # minor bump and may break across a major one. A consumer asking for 0.1 must not be
+    # silently handed a 1.0.
+    write_basic_package_version_file(
+        "${CMAKE_CURRENT_BINARY_DIR}/argmindConfigVersion.cmake"
+        VERSION ${PROJECT_VERSION}
+        COMPATIBILITY SameMajorVersion)
+    file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/argmindConfig.cmake"
+         "include(\"\${CMAKE_CURRENT_LIST_DIR}/argmindTargets.cmake\")\n")
+    install(FILES
+            "${CMAKE_CURRENT_BINARY_DIR}/argmindConfig.cmake"
+            "${CMAKE_CURRENT_BINARY_DIR}/argmindConfigVersion.cmake"
+            DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/argmind)
 endif()

@@ -235,6 +235,49 @@ and watching it pass**: `scale_deviation` returns a *fraction* and the assertion
 against `400`. It goes through `ulps()` now. Guarded NLMS has no parity harness and `xcheck`
 **exits non-zero** rather than silently substituting RLS, which is tested.
 
+## Platformisation — the layer question, settled 2026-08-10
+
+**argmind is not in the motor loop.** The owner's words: the robot's own stack drives the
+motors and argmind "controls the signal" — it produces an estimate or a correction that the
+robot's control stack consumes. That settles a question three earlier answers had circled:
+
+- The latency budget is the **estimation slot**, not the motor loop. On tomcat's own NFR12
+  that is **5.0 ms** of a 7.5 ms pipeline, against a whole loop of ~45–49 ms of which 37–41 is
+  the leg physically moving. Enormous for an estimator.
+- So there is no latency argument for firmware **here**. Structurally firmware is still the
+  floor — argmind allocates nothing and `step()` is bounded, so on bare metal its latency *is*
+  the code path, while on an OS the same code runs plus the scheduler's jitter, which can only
+  be equal or worse. It just does not matter against 5 ms.
+- **argmind does not force the choice either way.** Freestanding C++ behind a C ABI links into
+  firmware and into a Linux process unchanged; the tier is a property of the caller's system.
+- What would force firmware is position in the loop, and tomcat's ADR-0005 already answers it:
+  per-motor driver (FOC 15–30 kHz) is firmware without discussion, the RT tier (≥1 kHz hard) is
+  firmware or PREEMPT_RT, and perception/planning is an OS. Signal-level estimation is the last
+  of those.
+
+**Runtime shapes, decided the same day** — "모든 학습, 추론은 런타임에서 돌아감". Worth recording
+that compile-time *dimensions* never meant learning happened at compile time: both designs run
+at runtime, and the question was only whether `n_features`/`n_outputs` are template parameters
+or arguments. Measured before deciding: **runtime shapes would not save flash.** `--gc-sections`
+already means a firmware pays only for the shapes it calls — 2,308 B for bare RLS against 38,770
+for all fifteen instantiations, and a per-shape shim is 102–116 B. What it costs is inlining,
+the declared memory, and the `SIZES.md` gate; what it buys is not rebuilding. At OS level that
+trade flips, which is why the two answers are consistent.
+
+**So: the verified core stays, and a runtime-shape layer goes above it.** Nothing measured today
+is discarded, and the core remains what lets argmind move *down* into a driver if that is ever
+wanted.
+
+**First platform work landed 2026-08-10.** There was no `README.md` and no way to consume the
+library at all — `find_package(argmind)` did not exist and the only integration path was copying
+sources. Now: install rules, an export set, `argmind::argmind`, and a version policy that
+`AM_VERSION_REQUIRE(major, minor)` turns into a compile error rather than a comment. The record
+format is versioned **separately and says so**, because a device's saved state has to outlive a
+library upgrade. All of it executed by `tests/test_packaging.py`, which installs to a prefix and
+then builds and runs a *separate* project against it — and checks the README's own C example
+compiles, after grepping the header for its entry points reported every one of them missing
+(they are macro-generated, so only compiling means anything).
+
 **Still undecided:** whether inference is *hosted* (an interface to ONNX Runtime/TFLite) or
 *embedded*, and whether the tiers ship as one library or two. Nothing on the camera/audio/speech
 path is built.

@@ -78,8 +78,37 @@
 extern "C" {
 #endif
 
+/* Version, and what it promises -- which until 2026-08-10 was nothing at all: the two
+ * macros existed and no document said what a consumer could rely on.
+ *
+ *   MAJOR  The C ABI. Within one major version, a program compiled against an older
+ *          header links and runs against a newer library: entry points are added at the
+ *          end of the instantiation list, struct fields are appended into existing
+ *          padding or at the end, and enum values are never renumbered. A major bump may
+ *          break any of that.
+ *
+ *   MINOR  Additions. New instantiations, new entry points, new struct fields at the end.
+ *          A minor bump never removes or renumbers.
+ *
+ * **The persisted record format is versioned separately and independently** -- see
+ * `persist.hpp`. A device's saved state has to outlive a library upgrade, so its
+ * compatibility is not this number's business. Its own version byte and configuration
+ * fingerprint decide whether a block is accepted, and a mismatched `FrameMap` order is
+ * refused rather than silently misread.
+ *
+ * `AM_VERSION_REQUIRE(major, minor)` makes a consumer's expectation a compile error
+ * instead of a link-time surprise. A policy nothing enforces is a comment. */
 #define AM_VERSION_MAJOR 0
 #define AM_VERSION_MINOR 1
+
+#define AM_VERSION_REQUIRE(major, minor)                                       \
+    typedef char am_version_check_##major##_##minor[                           \
+        ((AM_VERSION_MAJOR) == (major) && (AM_VERSION_MINOR) >= (minor))       \
+            ? 1 : -1]
+
+/* Zero while the API is still moving. At 0.x a MINOR bump is allowed to break things,
+ * which is the usual convention and is stated here rather than assumed. The promises
+ * above take effect at 1.0. */
 
 /* Return codes. Zero is success; negative is failure. Nothing here throws. */
 #define AM_OK               0
