@@ -259,6 +259,49 @@ same defect has been in this repository before, on the path the guard takes at e
 `gain_norm` reporting the raw gradient instead of the step survived because nothing compared its
 *value*; it is now exact against the distance the state moved. The third was my own dud.
 
+**The network is across** (`cpp/include/argmind/host/runtime_shape_mlp.hpp`), into the *hosted*
+tier and not the core, by arithmetic rather than preference: the guard's ring is
+`Depth × state_size`, which is 47.5 KB for a 3-32-32-1 network at depth 4 against 1.6 KB for RLS
+at six features, and it needs `tanh` from libm, which the freestanding core does not link.
+
+**Initialisation deliberately does not match the reference, and that is the design.** The
+reference draws Glorot weights from numpy's PCG64 with a ziggurat normal; matching that
+bit-for-bit means reimplementing both, and a generator that *nearly* matches is worse than one
+that plainly does not. So the port uses its own stated generator and every parity case hands
+over the reference's own starting weights — which is what a device restoring a trained model
+does anyway, so the harness exercises the real path rather than a special one.
+
+**`mlpcheck` reuses `xcheck`'s result format byte for byte** — same `ResultHeader`, same 56-byte
+`Row`, `static_assert`s copied — so one Python reader serves both. The *case* format is new and
+could not be reused: `xcheck`'s header is a fixed 184 bytes carrying `lambda` and `p0`, and a
+network's configuration is a variable-length list of widths plus a weight block.
+
+**Measured across five architectures no instantiation list contains** (`()`, `(5,)`, `(8,6)`,
+`(4,4,4)`, `(16,)` at 3×1 to 7×3), both activations, both precisions: applied/reason exact,
+every reported scalar and the state block inside 400 ulp. **The `hidden=()` case carries the
+exact law on both sides** — a posteriori error exactly `(1 − 2·lr·(x·x + 1))` times a priori,
+to 1e-9 — which is the strongest statement available about a port.
+
+**`tanh` was the divergence to worry about and it is not one.** Reduction order is declared
+divergence 3 and every adapter carries it, but numpy's `tanh` and libm's disagreeing would be a
+**fourth**, and worse in kind: a transcendental enters at every hidden unit rather than at a
+summation. `relu` is exact in both, so comparing the two activations at the same architecture
+separates them — and a test asserts that separation rather than a bare bound.
+
+**Eleven mutants on the port, one survivor and it was a finding**: `gain_norm` without the
+learning rate. The rows were *collected* and only `applied`/`reason` were compared, so the field
+was present, decoded, and never looked at — the quietest way for a field to go untested, and the
+**second time in two days** for this exact field. Every reported scalar is compared now. The ten
+caught include column-major weights, a dropped bias, updating the weights before computing the
+next delta, a wrong `tanh` derivative, a transposed delta propagation, and the activation applied
+to the output layer.
+
+**And the composition is pinned in C++, not only in Python**: a test compiles
+`RuntimeShapedGuard<RuntimeShapedMlp<double>>`, checks the guard accepts a residual bound and
+**refuses a `p_trace` bound**, drives a latched-sensor fault and asserts it freezes at exactly
+the fault step leaving a finite state. If the guard needed one change for a network, the
+contract would not be one.
+
 **There are two adapters in C++** (`cpp/include/argmind/nlms.hpp`, `NormalisedLeastMeanSquares`
 in the reference). Normalised LMS is O(n) in memory and time and carries no covariance, which is
 the point: at a network head's width RLS's n² is the binding constraint — 330,608 B against

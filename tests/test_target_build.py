@@ -461,7 +461,8 @@ def test_the_recorded_target_sizes_are_current(cross, tmp_path):
 #: `std::vector`; the path is the boundary and this is where it is checked.
 HOSTED_HEADERS = ("host/runtime_shape.hpp",
                   "host/runtime_shape_guard.hpp",
-                  "host/runtime_shape_pipeline.hpp")
+                  "host/runtime_shape_pipeline.hpp",
+                  "host/runtime_shape_mlp.hpp")
 
 
 def test_no_core_header_reaches_into_the_hosted_tier(cross):
