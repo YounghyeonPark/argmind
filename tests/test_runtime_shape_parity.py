@@ -331,7 +331,7 @@ int main() {
         }
         a.update(x, y);
     }
-    auto w = a.widened(12);
+    auto w = a.widened(12, argmind::host::KeepConfidence::Yes);
     for (int i = 0; i < w.state_size(); ++i) printf("%.17g ", w.state()[i]);
     return 0;
 }
@@ -348,7 +348,7 @@ int main() {
     for k in range(800):
         x = np.array([((k * 7 + i * 13) % 11) - 5.0 for i in range(6)])
         a.update(x, [float(sum(x[i] * (i + 1) for i in range(6)))])
-    py = np.asarray(a.widened(12).state)
+    py = np.asarray(a.widened(12, keep_confidence=True).state)
 
     assert cpp.size == py.size == 12 + 144
     # The carried block has to be bit-identical: widening copies, it does not compute.

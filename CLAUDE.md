@@ -401,13 +401,27 @@ the one widening that permutes nothing; rearranging needs a mapping the caller s
 guessing is the failure `persist`'s fingerprint exists to prevent. Narrowing and changing the
 output count are refused with the reason.
 
-**Measured, and it is a head start rather than a permanent gain** — error on the original six
-after widening to twelve, against a fresh adapter: **0.3278 → 0.0010 at 10 updates**, 0.0039 →
-0.0010 at 50, 0.0014 → 0.0007 at 600. **A prediction of mine was measured to be wrong**: I
-expected the graft to matter *more* when the new features are rarely excited, and it does not —
-the old features are excited either way, so a fresh adapter relearns them just as fast. Four
-mutants caught across the two implementations, and the two widenings are compared against each
-other.
+**There are two reasons to widen and they want OPPOSITE answers**, which the owner named:
+expanding inputs/outputs, or expanding the *model* at the same inputs by enriching the basis. So
+`keep_confidence` is **keyword-only with no default** — a default would be a trap.
+
+| | fresh | keep_confidence=True | False |
+|---|---|---|---|
+| new independent inputs, error on the old ones @10 | 0.410 | **0.0010** | 0.327 |
+| richer basis, same three sensors, error @2000 | 0.00001 | **0.242** | 0.00001 |
+
+**New inputs want it carried**, and the *confidence* is what buys the head start — θ alone gives
+almost nothing (0.327 against a fresh 0.410). **A richer basis wants it dropped**, because a
+misspecified fit is **biased, not merely incomplete**: fitting a truth with an `0.8·s₀²` term
+using a linear basis lands the constant at **1.136** instead of 0.3, having absorbed
+`E[0.8·s₀²]`, with `tr(P)` down to 0.0032 — carrying that certainty makes the adapter sure of
+wrong values and it resists correction for thousands of updates.
+
+**Two predictions of mine were measured to be wrong here.** That grafting would matter *more*
+when new features are rarely excited — it does not, the old features are excited either way.
+And that carrying `P` is simply a benefit — in the basis case it is the whole problem. Both are
+why `widened()` has no default. Seven mutants caught across the two implementations, and the two
+widenings are compared against each other.
 
 **Still undecided:** whether inference is *hosted* (an interface to ONNX Runtime/TFLite) or
 *embedded*, and whether the tiers ship as one library or two. Nothing on the camera/audio/speech

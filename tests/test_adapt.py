@@ -619,8 +619,16 @@ def test_nlms_declares_no_covariance_so_a_guard_refuses_to_watch_one():
 
 
 # -- keeping what was learned while adding capacity ----------------------------------
+#
+# There are two reasons to widen and they want OPPOSITE answers, which is why
+# `keep_confidence` is keyword-only with no default. Both are tested here, and each
+# asserts the direction rather than a tolerance, because a bound that both cases pass
+# would be measuring nothing.
 
-def _trained(n, count=800, seed=1, p0=100.0):
+
+def _trained_linear(n=6, count=800, seed=1, p0=100.0):
+    """New INPUTS case: the truth is linear in twelve features and this sees the first
+    six, so its coefficients on those six are CORRECT -- nothing is being absorbed."""
     rng = np.random.default_rng(7)
     true = rng.standard_normal(12)
     g = np.random.default_rng(seed)
@@ -631,78 +639,124 @@ def _trained(n, count=800, seed=1, p0=100.0):
     return a, true
 
 
-def test_widening_keeps_theta_and_the_covariance_it_earned():
-    """`P` is the inverse information matrix, so what carries over is not decoration:
-    the corner is the confidence the adapter earned, the new diagonal says nothing is
-    known yet, and the cross terms are zero because no evidence relates the two sets."""
-    old, _ = _trained(6)
-    wide = old.widened(12)
-    ot, wt = np.asarray(old.state), np.asarray(wide.state)
-
-    assert wide.n_features == 12
-    assert wt.size == 12 + 12 * 12
-    assert np.array_equal(wt[:6], ot[:6]), "theta was not carried over exactly"
-    assert np.all(wt[6:12] == 0.0), "a new coefficient must start at zero"
-
-    P, P_old = wt[12:].reshape(12, 12), ot[6:].reshape(6, 6)
-    assert np.array_equal(P[:6, :6], P_old), "the earned covariance block was not kept"
-    assert np.allclose(np.diag(P)[6:], 100.0), "new features did not get the prior"
-    assert np.all(P[:6, 6:] == 0.0) and np.all(P[6:, :6] == 0.0), (
-        "cross terms are not zero, so the graft claims evidence relating old and new")
+def _truth_nonlinear(s):
+    return (2.0 * s[0] - 1.5 * s[1] + 0.5 * s[2]
+            + 0.8 * s[0] * s[0] - 1.2 * s[0] * s[1] + 0.3)
 
 
-def test_widening_only_appends_and_says_why():
-    """Feature order is parameter order. Narrowing or changing the output count needs a
-    mapping this cannot guess, and guessing is the failure `persist`'s fingerprint
-    exists to prevent."""
-    old, _ = _trained(6)
+def _linear_basis(s):
+    return np.array([s[0], s[1], s[2], 1.0])
+
+
+def _rich_basis(s):
+    return np.array([s[0], s[1], s[2], 1.0, s[0] ** 2, s[1] ** 2, s[0] * s[1]])
+
+
+def test_widening_carries_theta_and_optionally_the_covariance():
+    old, _ = _trained_linear()
+    ot = np.asarray(old.state)
+
+    for keep in (True, False):
+        wide = old.widened(12, keep_confidence=keep)
+        wt = np.asarray(wide.state)
+        assert wide.n_features == 12 and wt.size == 12 + 144
+        assert np.array_equal(wt[:6], ot[:6]), "theta is carried either way"
+        assert np.all(wt[6:12] == 0.0), "a new coefficient starts at zero"
+        P = wt[12:].reshape(12, 12)
+        assert np.allclose(np.diag(P)[6:], 100.0), "new features must get the prior"
+        assert np.all(P[:6, 6:] == 0.0), "cross terms claim evidence that does not exist"
+        if keep:
+            assert np.array_equal(P[:6, :6], ot[6:].reshape(6, 6))
+        else:
+            assert np.allclose(P[:6, :6], np.eye(6) * 100.0), (
+                "keep_confidence=False must leave the prior everywhere")
+
+
+def test_widening_is_keyword_only_because_a_default_would_be_a_trap():
+    old, _ = _trained_linear()
+    with pytest.raises(TypeError):
+        old.widened(12)                       # no default: the caller has to decide
     with pytest.raises(ValueError, match="only appends"):
-        old.widened(4)
+        old.widened(4, keep_confidence=False)
     with pytest.raises(ValueError, match="cannot change the number of outputs"):
-        old.widened(12, 3)
-    same = old.widened(6)                          # a no-op widening is allowed
-    assert np.array_equal(np.asarray(same.state), np.asarray(old.state))
+        old.widened(12, keep_confidence=False, n_outputs=3)
 
 
-def test_widening_is_a_head_start_and_not_a_permanent_advantage():
-    """Measured rather than claimed, and stated as what it is.
-
-    Error on the ORIGINAL six features -- what the adapter had already learned -- after
-    widening to twelve, against a fresh adapter of the same width:
-
-        10 updates   0.3278 from zero   0.0010 grafted
-        50           0.0039             0.0010
-        600          0.0014             0.0007
-
-    So a large head start that decays to a small persistent one. The persistent part is
-    real but slight: the grafted adapter is more *confident* about the old block, so the
-    new features perturb it less.
-    """
-    old, true = _trained(6)
+def test_new_inputs_want_the_confidence_carried():
+    """The old coefficients are still correct, so the earned certainty is worth keeping
+    -- and it is the certainty that buys the head start, not the coefficients. Measured:
+    fresh 0.410, keep_confidence=True 0.0010, False 0.327 at ten updates."""
+    old, true = _trained_linear()
     fresh = RecursiveLeastSquares(12, 1, forgetting=0.999, p0=100.0, dtype="f8")
-    graft = old.widened(12)
-
-    def old_six_error(a, probe):
-        want = probe @ true
-        return float(np.linalg.norm(probe @ np.asarray(a.state)[:12] - want)
-                     / np.sqrt(len(probe)))
+    kept = old.widened(12, keep_confidence=True)
+    dropped = old.widened(12, keep_confidence=False)
 
     g = np.random.default_rng(3)
-    seen = {}
-    for k in range(1, 601):
+    for _ in range(10):
         x = g.standard_normal(12)
         y = float(x @ true) + 0.01 * g.standard_normal()
-        fresh.update(x, [y])
-        graft.update(x, [y])
-        if k in (10, 600):
-            mask = np.zeros(12)
-            mask[:6] = 1.0
-            probe = g.standard_normal((200, 12)) * mask
-            seen[k] = (old_six_error(fresh, probe), old_six_error(graft, probe))
+        for m in (fresh, kept, dropped):
+            m.update(x, [y])
 
-    assert seen[10][1] < seen[10][0] / 20.0, (
-        f"at 10 updates the graft bought almost nothing: {seen[10]}")
-    assert seen[600][1] <= seen[600][0], (
-        f"by 600 updates the graft is behind: {seen[600]}")
-    # ...and the fresh one does converge, or the comparison is against a broken control.
-    assert seen[600][0] < seen[10][0], "the fresh adapter never learned"
+    mask = np.zeros(12)
+    mask[:6] = 1.0
+    probe = np.random.default_rng(50).standard_normal((200, 12)) * mask
+    want = probe @ true
+
+    def err(m):
+        return float(np.linalg.norm(probe @ np.asarray(m.state)[:12] - want) / np.sqrt(200))
+
+    assert err(kept) < err(fresh) / 100.0, (
+        f"carrying the confidence bought little: kept {err(kept):.5f} against fresh "
+        f"{err(fresh):.5f}")
+    assert err(dropped) > err(kept) * 50.0, (
+        "dropping the confidence performed as well as keeping it, so this case does not "
+        "distinguish the two and the API's choice is unmotivated")
+
+
+def test_a_richer_basis_wants_the_confidence_dropped():
+    """The opposite case, and the one that makes a default impossible.
+
+    A misspecified fit is **biased**, not merely incomplete: fitting a truth with an
+    `0.8 s0^2` term using a linear basis lands the constant at 1.136 rather than 0.3,
+    having absorbed `E[0.8 s0^2] = 0.8`, and `tr(P)` falls to 0.0032. Carrying that
+    certainty makes the adapter sure of wrong values and it resists correction.
+    """
+    g = np.random.default_rng(4)
+    lin = RecursiveLeastSquares(4, 1, forgetting=0.9995, p0=100.0, dtype="f8")
+    for _ in range(2000):
+        s = g.standard_normal(3)
+        lin.update(_linear_basis(s), [_truth_nonlinear(s)])
+
+    # the bias is the whole mechanism, so it is asserted rather than described
+    assert abs(float(np.asarray(lin.state)[3]) - 0.3) > 0.5, (
+        "the linear fit did not absorb the quadratic term, so this fixture does not "
+        "demonstrate a misspecified fit at all")
+    assert float(np.trace(np.asarray(lin.state)[4:].reshape(4, 4))) < 0.1
+
+    fresh = RecursiveLeastSquares(7, 1, forgetting=0.9995, p0=100.0, dtype="f8")
+    kept = lin.widened(7, keep_confidence=True)
+    dropped = lin.widened(7, keep_confidence=False)
+
+    g2 = np.random.default_rng(4)
+    for _ in range(2000):
+        s = g2.standard_normal(3)
+        b, y = _rich_basis(s), [_truth_nonlinear(s)]
+        for m in (fresh, kept, dropped):
+            m.update(b, y)
+
+    h = np.random.default_rng(99)
+    pts = h.standard_normal((500, 3))
+
+    def rmse(m):
+        return float(np.sqrt(np.mean([(m.predict(_rich_basis(x))[0] - _truth_nonlinear(x)) ** 2
+                                      for x in pts])))
+
+    assert rmse(dropped) < 1e-3, f"dropping the confidence did not converge: {rmse(dropped)}"
+    assert rmse(kept) > rmse(dropped) * 1000.0, (
+        f"carrying the confidence was not harmful here ({rmse(kept):.5f} against "
+        f"{rmse(dropped):.5f}), so the two cases do not disagree and the API's "
+        "keyword-only choice is unmotivated")
+    # ...and the richer basis does break the linear ceiling, or none of this matters.
+    assert rmse(dropped) < 0.01 < float(np.sqrt(np.mean(
+        [(lin.predict(_linear_basis(x))[0] - _truth_nonlinear(x)) ** 2 for x in pts])))

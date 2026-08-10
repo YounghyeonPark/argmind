@@ -60,6 +60,22 @@
 namespace argmind {
 namespace host {
 
+/// Whether a widened adapter inherits the covariance as well as the coefficients.
+///
+/// An enum rather than a bool, because the call site has to read: `widened(12, true)`
+/// says nothing about which of two opposite cases the caller is in, and the two want
+/// opposite answers.
+///
+///   Yes  the existing coefficients remain correct -- new inputs the old features do
+///        not explain. Carrying `P` carries the confidence earned, and that confidence
+///        is what buys the head start.
+///   No   the new terms may explain what the old ones were absorbing -- a richer basis
+///        over the same inputs. The old fit is BIASED, not merely incomplete, and
+///        carrying its certainty makes the adapter resist correction.
+///
+/// Measured both ways; see the reference's `widened()` for the figures.
+enum class KeepConfidence { No = 0, Yes = 1 };
+
 /// The runtime-shaped report. `Report<T, M>` fixes its residual arrays at compile time,
 /// so it cannot carry a shape decided at construction.
 template <typename T>
@@ -183,8 +199,9 @@ public:
     ///
     /// Returns an invalid adapter if `n_features` is narrower -- checked with `valid()`
     /// rather than thrown, matching the rest of this library.
-    RuntimeShapedRls<T> widened(int n_features, T p0) const {
+    RuntimeShapedRls<T> widened(int n_features, KeepConfidence keep, T p0) const {
         if (n_features < n_) return RuntimeShapedRls<T>(0, 0, lambda_, p0);
+
         RuntimeShapedRls<T> out(n_features, m_, lambda_, p0);
         for (int i = 0; i < n_; ++i) {
             for (int j = 0; j < m_; ++j) {
@@ -192,17 +209,21 @@ public:
                     theta()[static_cast<size_t>(i) * m_ + j];
             }
         }
-        for (int i = 0; i < n_; ++i) {
-            for (int j = 0; j < n_; ++j) {
-                out.p()[static_cast<size_t>(i) * n_features + j] =
-                    p()[static_cast<size_t>(i) * n_ + j];
+        if (keep == KeepConfidence::Yes) {
+            for (int i = 0; i < n_; ++i) {
+                for (int j = 0; j < n_; ++j) {
+                    out.p()[static_cast<size_t>(i) * n_features + j] =
+                        p()[static_cast<size_t>(i) * n_ + j];
+                }
             }
         }
+        // Otherwise P stays at p0*I from the constructor: the estimates carry over, the
+        // certainty does not, and the adapter is free to move them.
         return out;
     }
 
-    RuntimeShapedRls<T> widened(int n_features) const {
-        return widened(n_features, p0_);
+    RuntimeShapedRls<T> widened(int n_features, KeepConfidence keep) const {
+        return widened(n_features, keep, p0_);
     }
 
     void health(double* p_trace, double* p_min_diag) const {

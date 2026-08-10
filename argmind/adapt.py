@@ -500,9 +500,36 @@ class RecursiveLeastSquares(Adapter):
         return self._report(True, None)
 
 
-    def widened(self, n_features: int, n_outputs: int | None = None,
+    def widened(self, n_features: int, *, keep_confidence: bool,
+                n_outputs: int | None = None,
                 p0: float | None = None) -> "RecursiveLeastSquares":
-        """A wider adapter that keeps everything this one learned.
+        """A wider adapter that keeps what this one learned.
+
+        `keep_confidence` is **keyword-only and has no default**, because the two reasons
+        to widen want opposite answers and a default would be a trap. Measured, both:
+
+        | | fresh | keep_confidence=True | False |
+        |---|---|---|---|
+        | new independent inputs, error on the old ones at 10 updates | 0.410 | **0.0010** | 0.327 |
+        | richer basis, same inputs, error at 20 updates | 0.0219 | **1.85** | **0.0061** |
+
+        **True when the existing coefficients remain correct** -- new sensors that the old
+        features do not explain. `P` is the inverse information matrix, so carrying it
+        carries the confidence this adapter earned, and that confidence is what buys the
+        head start: carrying `theta` alone gives almost nothing (0.327 against a fresh
+        0.410).
+
+        **False when the new terms may explain what the old ones were absorbing** -- a
+        richer basis over the same inputs. A misspecified fit is *biased*, not merely
+        incomplete: fitting `y = 2s0 - 1.5s1 + 0.5s2 + 0.8s0^2 - 1.2s0s1 + 0.3` with a
+        linear basis lands the constant at **1.136** rather than 0.3, having absorbed
+        `E[0.8 s0^2] = 0.8`, and after 2000 updates `tr(P)` is 0.0032. Carrying that
+        confidence makes the adapter certain of wrong values and it resists correction --
+        **0.242 after two thousand more updates, against 0.00001 without it**.
+
+        Dropping the confidence is never worse than starting fresh, and starting fresh is
+        never better than dropping it, so `False` is the conservative answer when unsure.
+        `True` is the one that needs a reason.
 
         **Appending only, and that is a constraint rather than a simplification.**
         Feature order is parameter order, and a persisted block restored against a
@@ -525,12 +552,9 @@ class RecursiveLeastSquares(Adapter):
         expressiveness -- the adapter is still linear in the parameters and the caller
         still supplies the basis.
 
-        Measured, six features becoming twelve, error against the truth on the original
-        six: at 10 updates 0.3278 from zero against 0.0010 grafted, at 50 0.0039 against
-        0.0010, at 600 0.0014 against 0.0007. A large head start that decays to a small
-        persistent one. A prediction of mine that it would matter MORE when the new
-        features are rarely excited was **wrong and measured to be wrong**: the old
-        features are excited either way, so a fresh adapter relearns them just as fast.
+        A prediction that the graft would matter MORE when the new features are rarely
+        excited was **wrong and measured to be wrong**: the old features are excited
+        either way, so a fresh adapter relearns them just as fast.
 
         `p0` defaults to this adapter's, and `forgetting` and `dtype` always carry over --
         a widening that quietly changed the forgetting factor would look like the graft
@@ -552,9 +576,12 @@ class RecursiveLeastSquares(Adapter):
 
         out = RecursiveLeastSquares(n_features, n_outputs, forgetting=self.forgetting,
                                     p0=p0, dtype=self.dtype.name)
-        n_old, m = self.n_features, self.n_outputs
+        n_old = self.n_features
         out._theta[:n_old, :] = self._theta
-        out._p[:n_old, :n_old] = self._p
+        if keep_confidence:
+            out._p[:n_old, :n_old] = self._p
+        # Otherwise `P` stays at the constructor's `p0 * I`: the estimates carry over,
+        # the certainty does not, and the adapter is free to move them.
         return out
 
     def __repr__(self) -> str:
