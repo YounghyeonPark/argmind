@@ -447,6 +447,94 @@ def adapter_scaling(updates: int = 3000, dtype: str = "f8",
     return rows
 
 
+def step_underflow(adapter, xs, ys, probes: int = 20, warmup: int = 0) -> dict:
+    """How often an update is too small to change the weight it is applied to.
+
+    Per element of the state block: after one `update`, was the movement smaller than the
+    spacing at that element's own magnitude? A weight whose step is below its own
+    representable resolution **does not move**, and the model stops learning in that
+    direction without ever producing a NaN or a zero — which is why a check for either
+    reports success while nothing improves.
+
+    **This is a bring-up diagnostic, not a runtime mechanism**, and the distinction is
+    deliberate. The condition it finds is a *configuration* error — a target that is not
+    scaled — present from the first update and unchanging, so it is not the developing
+    fault a `Guard` exists to catch. Run it once when wiring a new sensor up, read the
+    number, scale the target, ship.
+
+    **It counts weights that did not move at all, and that is exact rather than a
+    threshold.** Under round-to-nearest a step smaller than half the spacing leaves the
+    weight bit-identical, so "stuck" is `movement == 0` — no `spacing()` call and no
+    tolerance. Comparing against the spacing instead was the first version; it can
+    over-count, because a downward step across a binade boundary is half a spacing and is a
+    real move. Measured, that over-count is **0.00 %** in every case tried, so the two agree
+    in practice and the exact one is kept for being exact and cheaper.
+
+    **The interpretation is only valid where a zero step means a small step**, and with
+    `relu` it does not. A unit that is off has *no* gradient, so its weights do not move for
+    a reason that has nothing to do with scaling — and the number inverts: on the same
+    target, `relu` reads **0.0 % raw and 57.1 % scaled** where `tanh` reads 64.4 % and 0.0 %.
+    Use it on `tanh`, whose derivative `1 - a²` is zero only at `|a| = 1` exactly. On `relu`
+    it reports dead units, which is worth knowing but is a different measurement.
+
+    Interpreting it, measured on `tanh`: **0.0 % is healthy and anything above about 10 %
+    is not.**
+    There is no grey band to tune. On `50·sin(0.5s₀) + 20·s₁s₂` through a network, over six
+    seeds and two architectures, the raw target gives 37–97 % and the same target divided by
+    its own standard deviation gives **exactly 0.0 % in every single run**. That separation
+    holds at **five probes**; more do not sharpen it.
+
+    **The failure is gradient descent's, not the library's**, and that is worth knowing
+    before reaching for this. Measured on the same raw target: RLS reports 0.0 % underflow
+    and *identical* accuracy raw or scaled (0.6547 both), and so does NLMS (0.7691 both) —
+    a least-squares solution is scale-invariant, so scaling `y` scales `theta` and nothing
+    else. Only the network cares: 63.6 % against 0.0 %, and 0.7156 against 0.1534. The
+    function is written against the `Adapter` contract rather than against one adapter
+    because those zeros are the control that says it is not just reporting noise.
+
+    A cheaper proxy was measured and **does not work**. `gain_norm / (eps * ‖state‖)` uses
+    two quantities the adapter already has, and correlates with the true rate at only +0.70
+    on a log scale, with the orderings overlapping: 1.24e13 for a 74 %-underflowing run
+    against 2.98e11 for a 0 % one. The reason is structural — a norm is dominated by the
+    largest weights and the largest gradients, which are the ones still moving, while the
+    rate is about the stuck minority. They measure different things.
+
+    `xs` and `ys` are arrays of samples; `warmup` of them are consumed before counting,
+    because a freshly constructed adapter moves freely and would read 0 % whatever the
+    scaling.
+
+    **There is no `--underflow` flag** and the omission is deliberate. The number only means
+    something against the caller's own target, and the only adapter this module's `Workload`
+    builds is an RLS, which is scale-invariant and would print 0.0 % forever. A command-line
+    entry point that cannot say anything is the shape of the two this repository has already
+    shipped with no caller.
+    """
+    xs = np.asarray(xs)
+    ys = np.asarray(ys)
+    if len(xs) < warmup + probes:
+        raise ValueError(
+            f"need at least warmup + probes = {warmup + probes} samples, got {len(xs)}")
+
+    for i in range(warmup):
+        adapter.update(xs[i], ys[i])
+
+    hits = seen = 0
+    applied = 0
+    for i in range(warmup, warmup + probes):
+        before = np.array(adapter.state)
+        report = adapter.update(xs[i], ys[i])
+        after = np.asarray(adapter.state)
+        if not report.applied:
+            continue                       # a rejected sample moves nothing by design
+        applied += 1
+        moved = np.abs(after - before)
+        hits += int(np.sum(moved == 0.0))
+        seen += moved.size
+
+    return {"rate": hits / seen if seen else float("nan"),
+            "stuck": hits, "elements": seen, "applied": applied}
+
+
 def step_cost(frames_per_step=(1, 2, 4, 8, 16), steps: int = 300,
               n_features: int = 6, dtype: str = "f4", guarded: bool = True,
               fresh_target: bool = False, warmup: int = 30) -> dict:

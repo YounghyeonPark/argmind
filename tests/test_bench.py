@@ -547,3 +547,136 @@ def test_the_adapters_report_runs_from_the_command_line(capsys):
     assert main(["--frames", "40", "--adapters"]) == 0
     out = capsys.readouterr().out
     assert "ns/flop spans" in out and "mlp (32, 32)" in out
+
+
+# -- the bring-up diagnostic for an unscaled target ---------------------------------------
+
+def _scaled(kind, s):
+    v = 50.0 * np.sin(0.5 * s[0]) + 20.0 * s[1] * s[2]
+    return float(v if kind == "raw" else v / 29.5409)
+
+
+def test_step_underflow_separates_a_scaled_target_from_an_unscaled_one():
+    """0.0% healthy, 37-97% not, with no grey band -- measured over six seeds and two
+    architectures, and the separation holds at five probes. Asserted in both directions:
+    an unscaled target must register and a scaled one must read exactly zero, or the
+    diagnostic is reporting something other than what its docstring claims."""
+    from argmind.adapt import MultilayerPerceptron
+    from argmind.bench import step_underflow
+
+    g = np.random.default_rng(2001)
+    xs = g.standard_normal((3200, 3))
+
+    got = {}
+    for kind in ("raw", "normalised"):
+        m = MultilayerPerceptron(3, 1, hidden=(16,), learning_rate=0.02, dtype="f8", seed=1)
+        ys = np.array([[_scaled(kind, s)] for s in xs])
+        with np.errstate(all="ignore"):
+            got[kind] = step_underflow(m, xs, ys, probes=5, warmup=3000)
+
+    assert got["normalised"]["rate"] == 0.0, (
+        f"a scaled target underflowed at {got['normalised']['rate']:.1%}; there is supposed "
+        "to be no grey band, so either the fixture or the claim is wrong")
+    assert got["raw"]["rate"] > 0.2, (
+        f"an unscaled target read {got['raw']['rate']:.1%}; if that is genuinely healthy "
+        "the docstring's 37-97% must be re-measured rather than this threshold lowered")
+    assert got["raw"]["applied"] == got["normalised"]["applied"] == 5
+    assert got["raw"]["elements"] == 5 * (3 * 16 + 16 + 16 + 1)
+
+
+def test_the_least_squares_adapters_are_scale_invariant_which_is_the_control():
+    """The zeros that say `step_underflow` is not just reporting noise.
+
+    Scaling `y` scales `theta` and nothing else in a least-squares solution, so RLS and NLMS
+    must be *identical* raw or scaled -- 0.0% underflow and the same accuracy either way.
+    The failure the diagnostic exists for is gradient descent's, not the library's, and if
+    these two ever stopped agreeing that scoping would be wrong.
+    """
+    from argmind.adapt import NormalisedLeastMeanSquares
+    from argmind.bench import step_underflow
+
+    def basis(s):
+        return np.array([s[0], s[1], s[2], 1.0, s[0] ** 2, s[1] ** 2, s[0] * s[1]])
+
+    g = np.random.default_rng(2001)
+    raw_s = g.standard_normal((3200, 3))
+    xs = np.array([basis(s) for s in raw_s])
+
+    for make in (lambda: RecursiveLeastSquares(7, 1, forgetting=0.999, p0=100.0, dtype="f8"),
+                 lambda: NormalisedLeastMeanSquares(7, 1, mu=0.5, dtype="f8")):
+        seen = {}
+        for kind in ("raw", "normalised"):
+            m = make()
+            ys = np.array([[_scaled(kind, s)] for s in raw_s])
+            seen[kind] = step_underflow(m, xs, ys, probes=20, warmup=3000)
+            probe = np.array([basis(s) for s in np.random.default_rng(0).standard_normal((400, 3))])
+            want = np.array([_scaled(kind, s) for s in
+                             np.random.default_rng(0).standard_normal((400, 3))])
+            got = probe @ np.asarray(m.state)[:7]
+            seen[kind]["rel"] = float(np.sqrt(np.mean((got - want) ** 2)) / np.std(want))
+        assert seen["raw"]["rate"] == 0.0 and seen["normalised"]["rate"] == 0.0
+        assert abs(seen["raw"]["rel"] - seen["normalised"]["rel"]) < 1e-9, (
+            f"{make().__class__.__name__} is not scale-invariant "
+            f"({seen['raw']['rel']:.4f} against {seen['normalised']['rel']:.4f}), so the "
+            "claim that this failure belongs to gradient descent alone is wrong")
+
+
+def test_step_underflow_refuses_a_sample_run_it_cannot_cover():
+    from argmind.bench import step_underflow
+    m = RecursiveLeastSquares(3, 1, dtype="f8")
+    xs = np.zeros((4, 3))
+    ys = np.zeros((4, 1))
+    with pytest.raises(ValueError, match="at least"):
+        step_underflow(m, xs, ys, probes=5, warmup=0)
+
+
+def test_step_underflow_is_not_interpretable_on_relu_and_the_inversion_is_pinned():
+    """The diagnostic's real limit, measured rather than reasoned about.
+
+    "Did not move" means "the step was too small" only where there is always a gradient. A
+    `relu` unit that is off has none, so its weights sit still for a reason unrelated to
+    scaling -- and the reading INVERTS: 0.0% raw against 57.1% scaled, where `tanh` gives
+    64.4% and 0.0%. Pinned so that nobody reads a relu number as a scaling verdict.
+    """
+    from argmind.adapt import MultilayerPerceptron
+    from argmind.bench import step_underflow
+
+    g = np.random.default_rng(2001)
+    xs = g.standard_normal((3200, 3))
+    got = {}
+    for act, kind in (("tanh", "raw"), ("tanh", "normalised"),
+                      ("relu", "raw"), ("relu", "normalised")):
+        m = MultilayerPerceptron(3, 1, hidden=(16,), activation=act,
+                                 learning_rate=0.02, dtype="f8", seed=1)
+        ys = np.array([[_scaled(kind, s)] for s in xs])
+        with np.errstate(all="ignore"):
+            got[(act, kind)] = step_underflow(m, xs, ys, probes=20, warmup=3000)["rate"]
+
+    assert got[("tanh", "raw")] > 0.2 and got[("tanh", "normalised")] == 0.0
+    assert got[("relu", "normalised")] > got[("relu", "raw")], (
+        f"relu no longer inverts ({got[('relu', 'raw')]:.1%} raw against "
+        f"{got[('relu', 'normalised')]:.1%} scaled); if a relu reading has become a valid "
+        "scaling verdict the docstring's caveat should be withdrawn, not this test relaxed")
+    assert got[("relu", "normalised")] > 0.2, (
+        "relu on a scaled target no longer produces the false positive the caveat exists "
+        "for, so the caveat is not demonstrated")
+
+
+def test_step_underflow_ignores_a_rejected_sample():
+    """A sample the adapter refuses moves nothing by design, and counting it as stuck would
+    make a stream with a dead sensor look like a scaling problem."""
+    from argmind.adapt import MultilayerPerceptron
+    from argmind.bench import step_underflow
+
+    g = np.random.default_rng(5)
+    xs = g.standard_normal((60, 3))
+    ys = np.array([[float(np.sin(2 * s[0]))] for s in xs])
+    xs[52, 1] = np.nan
+    ys[55, 0] = np.inf
+
+    m = MultilayerPerceptron(3, 1, hidden=(8,), learning_rate=0.02, dtype="f8", seed=1)
+    out = step_underflow(m, xs, ys, probes=10, warmup=50)
+    assert out["applied"] == 8, f"expected 8 applied of 10, got {out['applied']}"
+    assert out["elements"] == 8 * m.state.size, (
+        "a rejected sample contributed elements to the denominator")
+    assert out["rate"] == 0.0

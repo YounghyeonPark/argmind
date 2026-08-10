@@ -245,6 +245,25 @@ other end too — a target with output ~0.001 is fitted four times *worse* than 
 every precision until it is scaled up. The docstring now leads with this, because none of the
 precision figures mean anything without it.
 
+**It is gradient descent's failure and not the library's**, which is the scoping the first
+version of this paragraph left implicit. On the same raw target **RLS reports 0.0% step
+underflow and *identical* accuracy scaled or not** — 0.6547 both — and so does NLMS, 0.7691
+both: a least-squares solution is scale-invariant, so scaling `y` scales `theta` and nothing
+else. Only the network cares (63.6% against 0.0%, 0.7156 against 0.1534). `argmind.bench.
+step_underflow` measures it for any adapter, and those two zeros are its control.
+
+**It is a bring-up diagnostic and deliberately not a guard check.** The condition is a
+*configuration* error, present from the first update and unchanging, not the developing fault
+a guard exists to catch — the distinction the owner's correction of 2026-08-10 drew. **A cheap
+runtime proxy was measured and does not work**: `gain_norm / (eps·‖state‖)` correlates with the
+true rate at only +0.70 on a log scale and the orderings overlap (1.24e13 for a 74% run against
+2.98e11 for a 0% one), because a norm is dominated by the largest weights and gradients — the
+ones still moving — while the rate is about the stuck minority. The separation the real
+measure gives is total and needs **five probes**: raw 37–97%, scaled exactly 0.0% in every run
+of a six-seed sweep.
+
+**And the diagnostic has a limit that had to be measured rather than reasoned about: it is not interpretable on `relu`.** A unit that is off has no gradient, so its weights sit still for a reason unrelated to scaling, and the reading **inverts** — relu gives 0.0% raw and 57.1% scaled where tanh gives 64.4% and 0.0%. Pinned by a test. "Stuck" is `movement == 0`, exact under round-to-nearest and cheaper than a `spacing()` call; comparing against the spacing can over-count a downward step across a binade boundary, measured at 0.00% and kept as the exact form anyway.
+
 **fp32 is indistinguishable from fp64, and that is now measured to a million updates.** Four
 targets × two architectures × three seeds × 1,000,000 updates, 48 runs in 296 s: `f4/f8` is
 1.0000 at 100k, 250k and 500k and within ±4% at 1M — residue that falls on *both* sides of one,
