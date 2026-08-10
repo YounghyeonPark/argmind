@@ -25,9 +25,9 @@ to the total — a `caller` column exists because without it the drift was invis
 | configuration | flash | of which argmind | the caller | libc/libgcc | static RAM |
 |---|---|---|---|---|---|
 | bare RLS f32 6x1 | 2308 | 1256 | 160 | 892 | 272 |
-| + guard | 6168 | 3552 | 344 | 2272 | 1296 |
-| + record format | 6404 | 3830 | 304 | 2270 | 1972 |
-| full composed pipeline | 10452 | 7440 | 564 | 2448 | 3264 |
+| + guard | 6088 | 3468 | 344 | 2276 | 1168 |
+| + record format | 6320 | 3746 | 304 | 2270 | 1844 |
+| full composed pipeline | 10364 | 7356 | 564 | 2444 | 3136 |
 
 Against the declared 32 KB flash and 8 KB RAM, the full composed pipeline is **31.9%** of the
 flash budget and **39.8%** of the RAM.
@@ -40,7 +40,7 @@ time it fired in anger, on the change immediately after it was written.
 
 | configuration | flash | static RAM |
 |---|---|---|
-| full composed pipeline | 7924 | 3264 |
+| full composed pipeline | 7844 | 3136 |
 
 Moving up to ARMv8.1-M makes the image **smaller**, at identical static RAM.
 

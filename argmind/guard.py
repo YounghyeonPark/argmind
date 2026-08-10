@@ -367,7 +367,7 @@ class Guard(Adapter):
     """
 
     __slots__ = ("adapter", "checks", "rollback_depth", "checkpoint_every",
-                 "recover_after", "_ckpt", "_ckpt_health", "_ckpt_head",
+                 "recover_after", "_ckpt", "_ckpt_head",
                  "_ckpt_count", "_since_ckpt", "_frozen", "_healthy_run",
                  "_frozen_health", "_frozen_by", "_stats",
                  "n_external", "_external")
@@ -435,7 +435,6 @@ class Guard(Adapter):
         # covariance scalars that were true at that state, so a probe report built
         # after a rollback reports the truth rather than a stale number.
         self._ckpt = np.zeros((self.rollback_depth, n), dtype=adapter.state.dtype)
-        self._ckpt_health = np.zeros((self.rollback_depth, 2), dtype=np.float64)
         self._ckpt_head = 0
         self._ckpt_count = 0
         self._since_ckpt = 0
@@ -445,7 +444,7 @@ class Guard(Adapter):
         self._frozen_by: tuple[str, ...] = ()
         self._stats = {"applied": 0, "trips": 0, "rollbacks": 0,
                        "blocked_frozen": 0, "rejected_by_adapter": 0, "thaws": 0}
-        self._store_checkpoint(*adapter.health())
+        self._store_checkpoint()
 
     # -- Adapter contract, delegated ----------------------------------------
 
@@ -535,7 +534,7 @@ class Guard(Adapter):
         self._healthy_run = 0
         self._frozen_by = ()
         self._frozen_health = self.adapter.health()
-        self._store_checkpoint(*self._frozen_health)
+        self._store_checkpoint()
 
     # -- freezing ------------------------------------------------------------
 
@@ -591,16 +590,19 @@ class Guard(Adapter):
     def _oldest(self) -> int:
         return (self._ckpt_head - self._ckpt_count) % self.rollback_depth
 
-    def _store_checkpoint(self, p_trace: float, p_min_diag: float) -> None:
+    def _store_checkpoint(self) -> None:
         self._ckpt[self._ckpt_head] = self.adapter.state
-        self._ckpt_health[self._ckpt_head] = (p_trace, p_min_diag)
         self._ckpt_head = (self._ckpt_head + 1) % self.rollback_depth
         self._ckpt_count = min(self._ckpt_count + 1, self.rollback_depth)
 
     def _roll_back(self) -> tuple[float, float]:
         i = self._oldest()
         self.adapter.load_state(self._ckpt[i])
-        health = (float(self._ckpt_health[i, 0]), float(self._ckpt_health[i, 1]))
+        # Recomputed from the state just restored rather than stored beside it. `health()`
+        # is a pure function of the state block -- for RLS both scalars come out of `P`,
+        # which the block contains -- so this is bit-identical to a stored copy, verified
+        # over sixty checkpoints, and the ring drops `depth * 2` doubles.
+        health = self.adapter.health()
         # Everything retained is at or after the state just restored, so keeping it
         # would let a later trip roll "back" to a moment that came afterwards.
         self._ckpt_count = 1
@@ -693,7 +695,7 @@ class Guard(Adapter):
         self._stats["applied"] += 1
         self._since_ckpt += 1
         if self._since_ckpt >= self.checkpoint_every:
-            self._store_checkpoint(report.p_trace, report.p_min_diag)
+            self._store_checkpoint()
             self._since_ckpt = 0
         return provisional
 

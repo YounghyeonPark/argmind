@@ -173,16 +173,25 @@ def test_checkpoint_every_multiplies_the_reach():
 
 
 def test_checkpoint_memory_is_declared_and_does_not_grow():
-    """Same rule as everywhere else here: memory is a function of configuration,
-    never of uptime."""
+    """Same rule as everywhere else here: memory is a function of configuration, never of
+    uptime -- and it is now **exactly** `depth * state_size`.
+
+    It used to be `depth * (state_size + 2)`: each slot also carried the two covariance
+    scalars true at that state. Those are recoverable from the state block itself, so they
+    were redundant, and the test asserts the ring holds nothing but state blocks rather
+    than merely asserting some number.
+    """
     a = make_rls()
     g = Guard(a, [Trip()], rollback_depth=4)
-    expected = 4 * (a.state.size + 2)
-    assert g._ckpt.size + g._ckpt_health.size == expected
+    expected = 4 * a.state.size
+    assert g._ckpt.size == expected
+    assert not hasattr(g, "_ckpt_health"), (
+        "the ring carries per-checkpoint scalars again; if that is deliberate the declared "
+        "cost is no longer depth * state_size and DESIGN.md must say so")
     rng = np.random.default_rng(21)
     for _ in range(500):
         g.update(rng.standard_normal(2), [1.0])
-    assert g._ckpt.size + g._ckpt_health.size == expected, "checkpoint store grew"
+    assert g._ckpt.size == expected, "checkpoint store grew"
 
 
 def test_stateful_checks_keep_their_baseline_across_a_freeze_and_reset_on_thaw():
@@ -557,7 +566,12 @@ def test_a_manual_freeze_reports_the_live_covariance_not_a_stale_checkpoint():
         g.update([1.0 + i, -2.0, 0.5], [3.0])
 
     live_trace, live_min = g.health()
-    stale_trace = float(g._ckpt_health[g._newest()][0])
+    # What the newest checkpoint WOULD report, recomputed from the block it holds -- the
+    # ring no longer stores the scalars, and this is the value it used to store.
+    keep = np.array(rls.state)
+    rls.load_state(g._ckpt[g._newest()])
+    stale_trace = float(rls.health()[0])
+    rls.load_state(keep)
     assert abs(stale_trace - live_trace) > 1.0, (
         "the fixture is no longer mid-cadence, so a stale checkpoint would look correct")
 

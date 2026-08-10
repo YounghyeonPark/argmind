@@ -114,8 +114,8 @@ are templates over `Adapter`, and the contract they require is small — `update
 `scalar`. A second adapter with a **different algorithm and no covariance matrix at all**
 (normalised LMS, O(n) against RLS's O(n²), state `N*M` rather than `N*M + N*N`) goes through
 both templates **unchanged, compiling clean at `-Wall -Wextra` on the host and on Cortex-M4F
-freestanding**, learns correctly through the guard, and the guard shrinks with it: 472 bytes
-against RLS's 1,208 at the same depth. `cpp/tests/test_core.cpp` carries it, so the claim the
+freestanding**, learns correctly through the guard, and the guard shrinks with it: 432 bytes
+against RLS's 1,144 at the same depth. `cpp/tests/test_core.cpp` carries it, so the claim the
 widening rests on is protected rather than asserted.
 
 **The one place the contract is not model-agnostic, found by that probe.** `health()` is two
@@ -169,8 +169,8 @@ learn — Arm calls Ethos-U55 an *inference* accelerator and its path is TFLite 
 no heap. What is available is a frozen int8 backbone on the NPU whose feature vector **is** the
 regressor for an `Adapter` under a `Guard`: inference and learning share the computation rather
 than duplicating it, and one flat state block still covers persistence. Measured on both cores,
-a 128-wide head: `Guard<Rls<f32,128,1>,4,4>` is **330,608 B** against `Guard<Nlms<...>>` at
-**2,912 B** — **113×**, which is arithmetic on the state sizes. An accuracy comparison stood
+a 128-wide head: `Guard<Rls<f32,128,1>,4,4>` is **330,544 B** against `Guard<Nlms<...>>` at
+**2,872 B** — **115×**, which is arithmetic on the state sizes. An accuracy comparison stood
 beside it ("~17,000×") and is **withdrawn**: it came from a scratch fixture never checked in,
 an audit reconstructing it got the opposite ordering, and NLMS's μ — which sets its
 steady-state error — was never swept off its default. **The wall
@@ -202,7 +202,7 @@ guard cannot compute those numbers; it can watch them. `Guard<Adapter, Depth, Ma
 NExternal>` takes up to four, `set_external(i, v)` supplies them, and `Bound` on
 `external_field(i)` (`"external_i"` in Python) freezes with a cause, a counter and automatic
 recovery. Declaring none costs **zero bytes** — held as a member the empty slots measured
-1208 → 1216, so they are an empty private *base* and a `static_assert` checks the optimisation
+1144 → 1152, so they are an empty private *base* and a `static_assert` checks the optimisation
 rather than trusting it. Externals are **inputs, not state**: a rollback does not restore them,
 or a trip would resurrect the value that caused it. Non-finite is accepted at the call and
 unhealthy at the check, because a NaN out of a runtime is the event the guard exists for.
@@ -394,8 +394,8 @@ the skipped counters, freezing without rolling back, the C++ step never reportin
 
 **There are two adapters in C++** (`cpp/include/argmind/nlms.hpp`, `NormalisedLeastMeanSquares`
 in the reference). Normalised LMS is O(n) in memory and time and carries no covariance, which is
-the point: at a network head's width RLS's n² is the binding constraint — 330,608 B against
-2,912 at 128 features, and 512 features do not fit an STM32N6's SRAM. The Python was written
+the point: at a network head's width RLS's n² is the binding constraint — 330,544 B against
+2,872 at 128 features, and 512 features do not fit an STM32N6's SRAM. The Python was written
 first, as RLS's was, and `xcheck` gained an adapter axis in the byte that was padding so the two
 are compared rather than trusted for being short.
 
@@ -788,13 +788,14 @@ an adapter so "no guard" is not expressible — and the C boundary exported bare
 the guard unreachable from C. Likewise `am_rls_*_state()` handed out the block a device must
 survive a power cut with and there was no way to frame it. `Depth` and `MaxBounds` are fixed
 at 4 in the ABI because they are the memory; `checkpoint_every` stays runtime. Measured on
-x86-64 (a shape, not a target figure): the guarded adapters are 1208/1448/3488/2064 bytes, the
-checkpoint ring being the majority at every shape — **`f32_12_1` at 3488 is 43% of the
+x86-64 (a shape, not a target figure): the guarded adapters are 1144/1384/3424/2000 bytes, the
+checkpoint ring being the majority at every shape — **`f32_12_1` at 3424 is 42% of the
 declared 8 KB budget for one adapter**, which is arithmetic on the budget and worth seeing
 before a target build rather than after.
 
 The `MAX_BYTES` `static_assert` earned its keep on the first build: the bounds were written
-before measuring and `AM_GUARD_F32_12_1_MAX_BYTES` was 3328 against a real 3488. And the C99
+before measuring and `AM_GUARD_F32_12_1_MAX_BYTES` was 3328 against a real 3488 (both
+figures historical: 3456 against 3424 since the ring shrank). And the C99
 gate turned out weaker than it read — it compiled the header and stopped, which says nothing
 about symbols being callable. A C99 program now compiles with gcc, links against the C++ core
 and runs end to end: configure a guard, drive a fault, pack the state, restore it.
@@ -860,7 +861,7 @@ refusal as before, for a smaller reason.
 
 **The Guard is across too** (`cpp/include/argmind/guard.hpp`). `Guard<Adapter, Depth,
 MaxBounds>` — the checkpoint ring and check capacity live in the type, so the memory is
-declared: `Guard<Rls<float,6,1>, 4, 4>` is 1208 bytes of which 736 is the ring.
+declared: `Guard<Rls<float,6,1>, 4, 4>` is 1144 bytes of which 672 is the ring.
 
 **One structural difference, forced not chosen**: the Python's list of polymorphic `Check`
 objects needs virtuals and a heap, and the core has neither. Checks become concrete members
@@ -872,6 +873,25 @@ A guard *decides* rather than computes, so parity here is about decisions and a 
 differs is not a rounding difference. Matching exactly at both precisions, across depths
 1/2/4/10 and cadences 1 and 5: freeze step, thaw step, the whole frozen vector, which steps
 rolled back, the set of failing checks, and which checkpoint a trip restores.
+
+**The checkpoint ring holds nothing but state blocks now, and that was recorded as redundant
+before it was measured to be.** Each slot used to carry the two covariance scalars true at
+that state. They are recoverable from the block itself — `health()` is a pure function of the
+state, and for RLS both scalars come out of `P`, which the block contains — so a rollback
+recomputes them, **bit-identically, verified over sixty checkpoints**. `checkpoint_bytes` is
+now exactly `Depth × state_size`. Measured on the target: the guarded configuration's static
+RAM falls **1296 → 1168 B** and the full composed pipeline's **3264 → 3136**, on both M4F and
+M55; on x86-64 the guards go 1208/1448/3488/2064 → 1144/1384/3424/2000, and NLMS 472 → 432,
+which is not a uniform 64 because alignment absorbs some of it. The exported `AM_GUARD_*` and
+`AM_PIPE_G_*` upper bounds are tightened to match — leaving them would have meant a caller who
+sizes storage with the macro sees none of the saving, which was the point.
+
+**And `SIZES.md` told readers to re-run the size test with `--regen-sizes`, which did not
+exist.** That file is the one this repository created *because* a hand-copied size table went
+stale three times, so a broken instruction in it is the same failure returning by another
+door. The option exists now, rewrites only the numbers so the prose cannot drift from the
+reasoning it carries, and **still compares afterwards** — a regenerator that is not checked
+against the same parser the gate uses can write a file the gate cannot read.
 
 **A mutation check on the port found a bug in the reference.** `Guard.freeze()` read its health
 scalars from the newest checkpoint. Exact after a *trip* — the state has just been restored to

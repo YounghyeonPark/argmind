@@ -417,7 +417,30 @@ def _recorded_sizes():
     return out
 
 
-def test_the_recorded_target_sizes_are_current(cross, tmp_path):
+def _rewrite_sizes(measured):
+    """Replace the numbers in SIZES.md in place, leaving every word of prose alone.
+
+    A generator that rewrote the whole file would let the prose drift from the reasoning it
+    carries, and that prose is most of why the file exists.
+    """
+    lines = SIZES_MD.read_text(encoding="utf-8").splitlines()
+    out = []
+    for line in lines:
+        cells = [c.strip() for c in line.strip().strip("|").split("|")]
+        got = None
+        if len(cells) == 6 and cells[1].isdigit() and cells[0] in measured:
+            got = measured[cells[0]]
+        elif len(cells) == 3 and cells[1].isdigit():
+            full = measured.get("cortex-m55 composed")
+            got = (full[0], full[4]) if full else None
+        if got is None:
+            out.append(line)
+        else:
+            out.append("| " + " | ".join([cells[0], *[str(v) for v in got]]) + " |")
+    SIZES_MD.write_text(chr(10).join(out) + chr(10), encoding="utf-8")
+
+
+def test_the_recorded_target_sizes_are_current(cross, tmp_path, request):
     """`cpp/target/SIZES.md` must match a fresh link.
 
     The four size figures used to live in DESIGN.md and CLAUDE.md as hand-copied prose,
@@ -431,6 +454,10 @@ def test_the_recorded_target_sizes_are_current(cross, tmp_path):
     a changelog gate, not a brittle assertion.
     """
     measured = _measure_sizes(cross, tmp_path)
+    if request.config.getoption("--regen-sizes"):
+        _rewrite_sizes(measured)
+        # ...and then compare anyway. A regenerator that is not checked against the same
+        # parser the gate uses can write a file the gate cannot read.
     recorded = _recorded_sizes()
     assert recorded, f"no tables parsed out of {SIZES_MD}"
 

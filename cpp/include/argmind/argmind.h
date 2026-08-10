@@ -316,10 +316,10 @@ AM_DECLARE_GUARD(f64_6_1, double)
  * compile-time promise a C header makes without being able to compute the layout;
  * the first draft was written before measuring and f32_12_1's bound was too small,
  * which the static assertion caught. */
-#define AM_GUARD_F32_6_1_MAX_BYTES  1280
-#define AM_GUARD_F32_6_3_MAX_BYTES  1536
-#define AM_GUARD_F32_12_1_MAX_BYTES 3584
-#define AM_GUARD_F64_6_1_MAX_BYTES  2176
+#define AM_GUARD_F32_6_1_MAX_BYTES  1152
+#define AM_GUARD_F32_6_3_MAX_BYTES  1408
+#define AM_GUARD_F32_12_1_MAX_BYTES 3456
+#define AM_GUARD_F64_6_1_MAX_BYTES  2048
 
 /* ==========================================================================
  * The record format.
@@ -606,9 +606,9 @@ AM_DECLARE_PIPE_GUARDED(g_f64_6_1, double, am_ring_f64)
  * x86-64 and therefore a shape rather than a target figure. */
 #define AM_PIPE_F32_6_1_MAX_BYTES     768
 #define AM_PIPE_F64_6_1_MAX_BYTES     1024
-#define AM_PIPE_G_F32_6_1_MAX_BYTES   1792
-#define AM_PIPE_G_F32_6_3_MAX_BYTES   2048
-#define AM_PIPE_G_F32_12_1_MAX_BYTES  4096
+#define AM_PIPE_G_F32_6_1_MAX_BYTES   1664
+#define AM_PIPE_G_F32_6_3_MAX_BYTES   1920
+#define AM_PIPE_G_F32_12_1_MAX_BYTES  4032
 
 /* The second tier's shape: a learnable HEAD on a frozen network, whose input is an
  * embedding rather than a handful of sensor channels. Present because the scope widened
@@ -622,8 +622,8 @@ AM_DECLARE_PIPE_GUARDED(g_f64_6_1, double, am_ring_f64)
  * touches it pays nothing. At 256 features the same arithmetic reaches 30% of an STM32N6's
  * whole SRAM and at 512 it does not fit at all, which is the boundary to know before
  * choosing a backbone's output width. */
-#define AM_PIPE_G_F32_128_1_MAX_BYTES 335872
-#define AM_PIPE_G_F64_6_1_MAX_BYTES   2816
+#define AM_PIPE_G_F32_128_1_MAX_BYTES 335744
+#define AM_PIPE_G_F64_6_1_MAX_BYTES   2688
 
 /* Six instantiations is a lot of code for a caller who wants one. Build with
  * `-ffunction-sections -fdata-sections` and link with `--gc-sections`, which the

@@ -313,9 +313,11 @@ public:
     static constexpr int max_bounds = MaxBounds;
     static constexpr int depth = Depth;
 
-    /// Memory the checkpoints occupy, in bytes. Declared so a caller can budget it.
+    /// Memory the checkpoints occupy, in bytes. Declared so a caller can budget it, and
+    /// **exactly `Depth * state_size`** since the covariance scalars came out of the ring:
+    /// they are recomputed from the block a rollback restores, bit-identically.
     static constexpr int checkpoint_bytes =
-        Depth * (state_size * static_cast<int>(sizeof(T)) + 2 * 8);
+        Depth * state_size * static_cast<int>(sizeof(T));
 
     explicit Guard(const Adapter& adapter, uint32_t checkpoint_every = 1,
                    uint32_t recover_after = 0)
@@ -549,7 +551,7 @@ public:
 
         ++applied_;
         if (++since_ckpt_ >= checkpoint_every_) {
-            store_checkpoint(r.p_trace, r.p_min_diag);
+            store_checkpoint();
             since_ckpt_ = 0;
         }
         return r;
@@ -611,10 +613,8 @@ private:
     int newest() const { return (ckpt_head_ + Depth - 1) % Depth; }
     int oldest() const { return (ckpt_head_ + Depth - ckpt_count_) % Depth; }
 
-    void store_checkpoint(double trace, double min_diag) {
+    void store_checkpoint() {
         copy<T, state_size>(adapter_.state(), ckpt_[ckpt_head_]);
-        ckpt_health_[ckpt_head_][0] = trace;
-        ckpt_health_[ckpt_head_][1] = min_diag;
         ckpt_head_ = (ckpt_head_ + 1) % Depth;
         if (ckpt_count_ < Depth) ++ckpt_count_;
     }
@@ -622,8 +622,13 @@ private:
     void roll_back() {
         const int i = oldest();
         adapter_.load_state(ckpt_[i]);
-        frozen_trace_ = ckpt_health_[i][0];
-        frozen_min_diag_ = ckpt_health_[i][1];
+        // Recomputed from the state just restored rather than stored alongside it.
+        // `health()` is a pure function of the state block -- for RLS both scalars come
+        // out of `P`, which the block contains -- so the answer is bit-identical to what
+        // a stored copy would have held, verified over sixty checkpoints. The ring used
+        // to carry `Depth * 2` doubles for it, which is why the declared cost is now
+        // exactly `Depth * state_size`.
+        health(&frozen_trace_, &frozen_min_diag_);
         // Everything retained is at or after the state just restored, so keeping it
         // would let a later trip roll "back" to a moment that came afterwards.
         ckpt_count_ = 1;
@@ -643,7 +648,7 @@ private:
         frozen_by_ = 0;
         healthy_run_ = 0;
         health(&frozen_trace_, &frozen_min_diag_);
-        store_checkpoint(frozen_trace_, frozen_min_diag_);
+        store_checkpoint();
     }
 
     Adapter adapter_;
@@ -651,11 +656,10 @@ private:
     int n_bounds_ = 0;
     Divergence divergence_;
 
-    // Preallocated ring. Each slot carries the state block and the covariance scalars
-    // that were true at that state, so a probe built after a rollback reports the truth
-    // rather than a stale number.
+    // Preallocated ring, and nothing but the state blocks. A rollback recomputes the
+    // covariance scalars from the state it restored, which is bit-identical to storing
+    // them and `Depth * 2` doubles cheaper.
     T ckpt_[Depth][state_size];
-    double ckpt_health_[Depth][2];
     int ckpt_head_ = 0;
     int ckpt_count_ = 0;
     uint32_t since_ckpt_ = 0;

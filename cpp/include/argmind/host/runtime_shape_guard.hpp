@@ -78,8 +78,7 @@ public:
                       : (n_external > kMaxExternal ? kMaxExternal : n_external)),
           external_(static_cast<size_t>(n_external_), 0.0),
           ckpt_(static_cast<size_t>(depth_ < 1 ? 1 : depth_) *
-                    static_cast<size_t>(adapter.state_size()), T(0)),
-          ckpt_health_(static_cast<size_t>(depth_ < 1 ? 1 : depth_) * 2, 0.0) {
+                    static_cast<size_t>(adapter.state_size()), T(0)) {
         rearm();
     }
 
@@ -248,7 +247,7 @@ public:
 
         ++applied_;
         if (++since_ckpt_ >= checkpoint_every_) {
-            store_checkpoint(r.p_trace, r.p_min_diag);
+            store_checkpoint();
             since_ckpt_ = 0;
         }
         return r;
@@ -333,13 +332,11 @@ private:
         return ckpt_.data() + static_cast<size_t>(i) * adapter_.state_size();
     }
 
-    void store_checkpoint(double trace, double min_diag) {
+    void store_checkpoint() {
         const int n = adapter_.state_size();
         const T* src = adapter_.state();
         T* dst = slot(ckpt_head_);
         for (int i = 0; i < n; ++i) dst[i] = src[i];
-        ckpt_health_[static_cast<size_t>(ckpt_head_) * 2] = trace;
-        ckpt_health_[static_cast<size_t>(ckpt_head_) * 2 + 1] = min_diag;
         ckpt_head_ = (ckpt_head_ + 1) % depth_;
         if (ckpt_count_ < depth_) ++ckpt_count_;
     }
@@ -347,8 +344,10 @@ private:
     void roll_back() {
         const int i = oldest();
         adapter_.load_state(slot(i));
-        frozen_trace_ = ckpt_health_[static_cast<size_t>(i) * 2];
-        frozen_min_diag_ = ckpt_health_[static_cast<size_t>(i) * 2 + 1];
+        // Recomputed from the state just restored rather than stored beside it:
+        // `health()` is a pure function of the state block, so this is bit-identical to
+        // a stored copy and the ring drops `depth * 2` doubles. See `guard.hpp`.
+        health(&frozen_trace_, &frozen_min_diag_);
         // Everything retained is at or after the state just restored, so keeping it would
         // let a later trip roll "back" to a moment that came afterwards.
         ckpt_count_ = 1;
@@ -366,7 +365,7 @@ private:
         frozen_by_ = 0;
         healthy_run_ = 0;
         health(&frozen_trace_, &frozen_min_diag_);
-        store_checkpoint(frozen_trace_, frozen_min_diag_);
+        store_checkpoint();
     }
 
     Adapter adapter_;
@@ -381,7 +380,6 @@ private:
     std::vector<double> external_;
 
     std::vector<T> ckpt_;
-    std::vector<double> ckpt_health_;
     int ckpt_head_ = 0;
     int ckpt_count_ = 0;
     uint32_t since_ckpt_ = 0;

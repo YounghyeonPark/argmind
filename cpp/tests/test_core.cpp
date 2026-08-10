@@ -556,8 +556,10 @@ void test_the_checkpoint_memory_is_declared_and_matches_the_ring() {
     // Memory is a function of configuration, never of uptime.
     using G4 = argmind::Guard<argmind::Rls<float, 6, 1>, 4, 4>;
     using G1 = argmind::Guard<argmind::Rls<float, 6, 1>, 1, 4>;
-    CHECK(G4::checkpoint_bytes == 4 * (42 * 4 + 16));
-    CHECK(G1::checkpoint_bytes == 1 * (42 * 4 + 16));
+    // Exactly the state blocks: the two covariance scalars per slot were removed
+    // once they were measured to be recomputable from the block itself.
+    CHECK(G4::checkpoint_bytes == 4 * 42 * 4);
+    CHECK(G1::checkpoint_bytes == 1 * 42 * 4);
     CHECK(G4::checkpoint_bytes == 4 * G1::checkpoint_bytes);
     CHECK(sizeof(G4) > sizeof(G1));
     CHECK(G4::state_size == argmind::Rls<float, 6, 1>::state_size);
@@ -1573,7 +1575,7 @@ void test_the_declared_guard_bounds_are_bounds_and_not_fantasies() {
     // Where the memory goes, reported rather than inferred. The ring is the majority of
     // it at every shape, which is the thing a caller weighing rollback depth needs to see.
     CHECK(am_guard_f32_6_1_checkpoint_bytes() ==
-          4 * (AM_RLS_F32_6_1_STATE * 4 + 16));
+          4 * AM_RLS_F32_6_1_STATE * 4);
     CHECK(am_guard_f32_6_1_checkpoint_bytes() * 2 >
           static_cast<int>(am_guard_f32_6_1_bytes()));
     CHECK(am_guard_f32_6_1_state_size() == AM_RLS_F32_6_1_STATE);
@@ -2474,8 +2476,9 @@ void test_a_guard_that_declares_no_externals_costs_nothing_and_refuses_them() {
     using G1 = argmind::Guard<argmind::Rls<float, 6, 1>, 4, 4, 1>;
     // The size property the whole design turns on: most guards will never declare an
     // external and none of them should pay for the feature. Held as a member instead of
-    // an empty base this read 1216 against 1208.
-    CHECK(sizeof(G0) == 1208);
+    // an empty base this read 1216 against 1208. Both figures dropped by 64 when the
+    // ring stopped carrying two doubles per slot.
+    CHECK(sizeof(G0) == 1144);
     CHECK(sizeof(G1) == sizeof(G0) + 8);
     CHECK(G0::n_external == 0);
 

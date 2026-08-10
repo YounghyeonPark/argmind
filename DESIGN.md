@@ -344,7 +344,7 @@ made with that stated, so it stands.
 adapter — normalised LMS, O(n), **no covariance matrix at all**, state `N*M` rather than
 `N*M + N*N` — passes through `Guard` and `Pipeline` with **no change to either template**,
 compiling clean at `-Wall -Wextra` on the host and for Cortex-M4F freestanding, learning
-correctly through the guard, and shrinking it to 472 bytes from RLS's 1,208 at the same depth.
+correctly through the guard, and shrinking it to 432 bytes from RLS's 1,144 at the same depth.
 So `Stream`, `Aligner`, `FrameMap`, `Guard`, `Pipeline` and the record format are the reusable
 contribution, and it was never RLS that made them worth having. `cpp/tests/test_core.cpp`
 carries the probe so this is protected, not asserted.
@@ -498,8 +498,8 @@ backbone emits — driven 4,000 samples through the full guard:
 
 | | guard object |
 |---|---|
-| `Guard<Rls<float,128,1>,4,4>` | **330,608 B** |
-| `Guard<Nlms<float,128,1>,4,4>` | **2,912 B** |
+| `Guard<Rls<float,128,1>,4,4>` | **330,544 B** |
+| `Guard<Nlms<float,128,1>,4,4>` | **2,872 B** |
 
 Both instantiate and run on Cortex-M4F under `mps2-an386` and on Cortex-M55 under
 `mps3-an547`. The sizes are exact and independently reproduced.
@@ -1204,7 +1204,7 @@ layout swapped to P-then-θ, and λ used where the reciprocal belongs.
 
 `cpp/include/argmind/guard.hpp`. `Guard<Adapter, Depth, MaxBounds>`, with the checkpoint ring
 and the check capacity in the type so the memory is declared: `Guard<Rls<float,6,1>, 4, 4>` is
-1208 bytes, of which 736 is the ring, reported by `checkpoint_bytes`.
+1144 bytes, of which 672 is the ring, reported by `checkpoint_bytes` — and the ring is now exactly `Depth * state_size`, the two covariance scalars per slot having been measured recomputable from the block a rollback restores.
 
 **The structural difference is forced rather than chosen.** The Python holds a list of `Check`
 subclasses and calls `evaluate` on each; that needs virtual dispatch and heap objects, and the
@@ -1510,7 +1510,7 @@ naming. Measured cost: `sizeof(StreamView<float>)` 40 to 48 bytes; `sizeof(Strea
 unchanged at 2136.
 
 **Declared memory, host figures on x86-64 and not target figures.**
-`Pipeline<Guard<Rls<float,6,1>,4,4>, 4>` is 1616 bytes, of which the guard is 1208 and the
+`Pipeline<Guard<Rls<float,6,1>,4,4>, 4>` is 1592 bytes, of which the guard is 1144 and the
 pipeline's own parts 408 — the `Pick<float>` scratch buffer is 152 of those. `pick_bytes` is
 `sizeof(Pick<T>)` rather than a hand-summed payload, and a unit check pins it against `sizeof`:
 `stream.hpp` shipped a constant that added up the payload, told callers to budget from it, and
@@ -1588,14 +1588,14 @@ already a runtime argument there.
 
 | instantiation | sizeof | of which the checkpoint ring |
 |---|---|---|
-| `am_guard_f32_6_1` | 1208 | 736 |
-| `am_guard_f32_6_3` | 1448 | 928 |
-| `am_guard_f32_12_1` | 3488 | 2560 |
-| `am_guard_f64_6_1` | 2064 | 1408 |
+| `am_guard_f32_6_1` | 1144 | 672 |
+| `am_guard_f32_6_3` | 1384 | 864 |
+| `am_guard_f32_12_1` | 3424 | 2496 |
+| `am_guard_f64_6_1` | 2000 | 1344 |
 
 The ring is the majority at every shape, which is the thing a caller weighing rollback depth
 needs to see and the reason `am_guard_*_checkpoint_bytes()` reports it separately rather than
-leaving it to be inferred. **`f32_12_1` is worth looking at twice: 3488 bytes is 43% of the
+leaving it to be inferred. **`f32_12_1` is worth looking at twice: 3424 bytes is 42% of the
 declared 8 KB RAM budget for one guarded adapter.** That is arithmetic on the declared budget,
 not a measurement of a real firmware, and it is the kind of number that should be seen before
 a target build rather than after.
