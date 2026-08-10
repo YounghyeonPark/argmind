@@ -264,6 +264,26 @@ of a six-seed sweep.
 
 **And the diagnostic has a limit that had to be measured rather than reasoned about: it is not interpretable on `relu`.** A unit that is off has no gradient, so its weights sit still for a reason unrelated to scaling, and the reading **inverts** — relu gives 0.0% raw and 57.1% scaled where tanh gives 64.4% and 0.0%. Pinned by a test. "Stuck" is `movement == 0`, exact under round-to-nearest and cheaper than a `spacing()` call; comparing against the spacing can over-count a downward step across a binade boundary, measured at 0.00% and kept as the exact form anyway.
 
+**fp32 to TEN million updates: exact on a stationary target, and the non-stationary answer is
+not available.** A device adapting at 50 Hz reaches ten million in under three days, so the
+length is a deployment figure. 24 runs, 2 targets × 2 architectures × 3 seeds:
+
+- **stationary: `f4/f8` is 1.0000 at every one of five checkpoints**, at (16,) and at (32,32),
+  while f4's own step underflow climbs to **11.3%** and **2.6%**. So underflow at those rates
+  costs *nothing measurable* — the claim that fp32 is the floor holds ten times further out
+  than it did.
+- **non-stationary: no conclusion, and that is the finding.** Both precisions degrade late —
+  f8 itself goes 0.0386 → 0.0629 at (16,) and 0.0228 → 0.0415 at (32,32) between 6M and 10M —
+  and the ratio swings **both ways**: 1.2211 at (16,), **0.6019** at (32,32), where f4 is 40%
+  *better*. Two trajectories separating on a moving target, three seeds, and a swing far
+  larger than any precision effect would be. **Reporting either number as a precision result
+  would be picking a side of a coin.**
+
+**What does hold, and is the reason the concern stays open: fp32's underflow keeps climbing
+and does not saturate.** On the drifting deep case it runs 0.1% → 0.6% → 6.3% → 20.6% →
+**38.7%** across the five checkpoints. Nothing has cost anything yet. Nobody has run a
+hundred million.
+
 **fp32 is indistinguishable from fp64, and that is now measured to a million updates.** Four
 targets × two architectures × three seeds × 1,000,000 updates, 48 runs in 296 s: `f4/f8` is
 1.0000 at 100k, 250k and 500k and within ±4% at 1M — residue that falls on *both* sides of one,

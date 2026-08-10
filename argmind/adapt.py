@@ -913,9 +913,24 @@ class MultilayerPerceptron(Adapter):
     ---------
     ``min_dtype`` is ``f4``, and both halves of that are measured.
 
-    **fp32 is indistinguishable from fp64.** Over four targets, two architectures, three
-    seeds and **one million updates**, ``f4/f8`` is 1.0000 at 100k, 250k and 500k and stays
-    within ±4 % at 1M — and that residue is two trajectories having drifted apart, not
+    **fp32 is indistinguishable from fp64 on a stationary target, measured to ten million
+    updates** — a device adapting at 50 Hz reaches that in under three days. ``f4/f8`` is
+    1.0000 at every one of five checkpoints, at (16,) and at (32,32), while fp32's own step
+    underflow climbs to 11.3 % and 2.6 %: at those rates it costs nothing measurable.
+
+    **On a NON-stationary target there is no answer, and that is stated rather than
+    resolved.** Both precisions degrade late — fp64 itself goes 0.0386 → 0.0629 between six
+    and ten million — and the ratio swings *both ways*, 1.22 at (16,) and **0.60** at
+    (32,32) where fp32 is 40 % better. That is two trajectories separating on a moving
+    target over three seeds, not a precision effect, and quoting either number would be
+    picking a side of a coin.
+
+    **What does hold is that fp32's underflow keeps climbing and does not saturate**: 0.1 %
+    → 0.6 % → 6.3 % → 20.6 % → **38.7 %** over ten million updates on the drifting deep
+    case. Nothing has cost anything yet, and nobody has run a hundred million.
+
+    Over the earlier four-target sweep to one million, ``f4/f8`` is 1.0000 at 100k, 250k and
+    500k and stays within ±4 % at 1M — and that residue is two trajectories having drifted apart, not
     degradation, since it falls on both sides of one. There is no accumulated-rounding
     effect to find at a length no deployment reaches. What *does* grow is fp32's own step
     underflow, from 0.0 % to as much as 22 % over a million updates on a non-stationary
