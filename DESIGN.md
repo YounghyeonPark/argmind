@@ -57,6 +57,55 @@ Naming these now because a sensor-agnostic framework drifts into "everything" ot
   that the phenomenon "requir[es] dedicated compensation models, not a scalar correction".
   The favourable half of a sentence was quoted and the unfavourable half was not.
 
+## "Is linear not too stupid?", measured 2026-08-10
+
+Asked directly, and the honest answer has three parts.
+
+**Linear in the PARAMETERS is not linear in the inputs.** The regressor is whatever the caller
+puts in it, so a polynomial, spline, Fourier or random-feature basis gives a nonlinear model
+while the learning stays an exact recursive least-squares solution. Demonstrated: a truth
+containing `0.8·s₀²` is unfittable by a linear basis and fitted to 1e-5 by a quadratic one, at
+the same three sensors.
+
+**But on a genuinely hard function, a bare linear basis is exactly as good as a constant.**
+Against `sin(3s₀)·exp(−s₁²) + |s₂| − 0.4`, over 2,000 held-out points:
+
+| basis | n | RMSE | vs a constant | state |
+|---|---|---|---|---|
+| constant predictor | — | 0.7641 | 1.0× | — |
+| linear | 4 | **0.7640** | **1.0×** | 80 B |
+| quadratic | 10 | 0.5201 | 1.5× | 440 B |
+| cubic | 20 | 0.5169 | 1.5× | 1.7 KB |
+| random Fourier, D=32 | 33 | 0.4654 | 1.6× | 4.5 KB |
+| random Fourier, D=128 | 129 | 0.1474 | 5.2× | 67 KB |
+| random Fourier, D=512 | 513 | 0.1071 | 7.1× | **1.05 MB** |
+
+So the challenge lands. A linear basis learns nothing here, and buying accuracy with a *generic*
+basis costs `n²` — half a megabyte of covariance to reach 7×, and cubic barely improves on
+quadratic because the truth is not polynomial at all.
+
+**The third part is where the answer actually is: it is the basis that matters, not the width.**
+An oracle basis of eight terms — the truth's own building blocks — fits it to machine precision
+in **288 bytes**, beating five hundred random features at 1/17,000th of the state.
+
+Nobody has that oracle. **A trained network is the machine that finds those eight from data**,
+and that is the whole argument for the frozen-backbone-plus-adapted-head design: the backbone
+supplies the representation, argmind adapts on top of it, and the system is as expressive as its
+backbone rather than as its adapter. Calling the adapter linear describes the last layer, not the
+model.
+
+**What linear-in-the-parameters buys, and it is not nothing.** No local minima and no learning
+rate. Memory and time known before the device ships. `p_trace` is a real per-direction confidence
+— there is no cheap equivalent for a backpropagated weight — and it is what the guard's bounds
+and rollback are built on. Those properties are why the adapter is this and not something else,
+and they are given up together the moment it is not.
+
+**What it cannot do, unchanged from the model-class note above.** It cannot learn the basis: if
+you do not know which features matter, no amount of data supplies them. It scales badly in the
+input dimension: a degree-2 basis on 128 inputs is 8,256 terms and `n²` on that is 68 million
+covariance entries. And nothing whose output depends on the input's *history* can be fitted by
+instantaneous features at all.
+
 ## A bigger board does not make a bigger model, 2026-08-10
 
 Asked directly, and the answer is no: the model's size is `n_features` and `n_outputs`, which
