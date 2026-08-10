@@ -260,3 +260,74 @@ def test_no_existing_check_can_see_a_slow_loss_of_quality():
         "a residual bound loose enough to survive the untrained model's noise would be the "
         "counterexample to this whole test")
     assert froze_at(Bound("residual_norm", hi=3.0)) is None
+
+
+def test_a_network_does_not_recover_from_a_fault_and_rls_does():
+    """The difference that survives changing the configuration, and the guard against it.
+
+    Two stronger-sounding claims were measured and dropped: that the network is 4.5x more
+    damaged than RLS (that run gave RLS 4,600 clean samples to recover in and compared at the
+    end — recovery, mislabelled vulnerability), and that it is more vulnerable at impact (27.4x
+    against 9.4x in one run, 29.0x against **32.7x** at `forgetting=0.995` — the ordering flips).
+
+    What holds everywhere measured: once clean data resumes, RLS returns to exactly where it
+    was and SGD stalls permanently. For RLS the guard buys time; for a network it is what
+    prevents the damage from being permanent.
+    """
+    from argmind.guard import Divergence
+
+    probe_s = np.random.default_rng(0).standard_normal((300, 3))
+    want = np.array([_truth(s) for s in probe_s])
+    WARM, FLEN, RECOV = 3000, 200, 1000
+    END = WARM + FLEN
+
+    def trial(kind, guarded):
+        if kind == "mlp":
+            a, feat = Mlp(3, 1, hidden=(32, 32), lr=0.02, dtype="f8", seed=1), (lambda s: s)
+        else:
+            a = RecursiveLeastSquares(7, 1, forgetting=0.995, p0=100.0, dtype="f8")
+            feat = lambda s: np.array([s[0], s[1], s[2], 1.0,
+                                       s[0] ** 2, s[1] ** 2, s[0] * s[1]])
+        m = Guard(a, [Divergence(ratio=4.0, floor=0.05, warmup=500)],
+                  rollback_depth=4, checkpoint_every=100) if guarded else a
+
+        def q():
+            p = np.array([m.predict(feat(z))[0] for z in probe_s])
+            return float(np.sqrt(np.mean((p - want) ** 2)))
+
+        r = np.random.default_rng(5)
+        before, at_impact, froze = None, None, None
+        for k in range(1, END + RECOV + 1):
+            s = r.standard_normal(3)
+            y = 40.0 if WARM <= k < END else _truth(s)     # sensor latched high
+            if k == WARM:
+                before = q()
+            rep = m.update(feat(s), [y])
+            if guarded and froze is None and getattr(rep, "frozen", False):
+                froze = k
+            if k == END:
+                at_impact = q()
+        return before, at_impact, q(), froze
+
+    mb, mi, mr, _ = trial("mlp", False)
+    rb, ri, rr, _ = trial("rls", False)
+
+    assert mi / mb > 5.0 and ri / rb > 5.0, (
+        f"the fault did not damage both models ({mi/mb:.1f}x, {ri/rb:.1f}x), so nothing here "
+        "shows a guard preventing anything")
+    assert rr / rb < 1.2, (
+        f"RLS did not recover ({rr/rb:.2f}x after {RECOV} clean samples), so the contrast this "
+        "test is built on is absent and the fixture must be rebuilt")
+    assert mr / mb > 1.8, (
+        f"the network recovered too ({mr/mb:.2f}x), so 'SGD does not retrace' is not "
+        "demonstrated and the claim in DESIGN.md is stale")
+    # Deliberately NOT asserted: which of the two is worse at impact. Measured 27.4x against
+    # 9.4x in one configuration and 29.0x against 32.7x in another -- the ordering flips with
+    # the forgetting factor, so it is not a property of the model class.
+
+    gb, gi, gr, froze = trial("mlp", True)
+    assert froze == WARM, f"the guard froze at {froze}, not at the fault step {WARM}"
+    assert gi / gb < 1.5 and gr / gb < 1.5, (
+        f"the guard did not prevent the damage: {gb:.4f} -> {gi:.4f} -> {gr:.4f}")
+    # NOT "the guard improved it": rollback restores an older checkpoint and this run's held-out
+    # RMSE fluctuates over roughly 0.21-0.41, so a lower figure is inside the noise.

@@ -135,7 +135,67 @@ non-monotonicity from a two-checkpoint run and never plotted the middle. What ca
 asking a *different* question — whether the residual tracks held-out error — which printed the
 series at twelve checkpoints, and the series was flat.
 
-### What survives: the residual does not substitute for `p_trace`, and no check can be built on it
+### The question was the wrong one, and the owner named it
+
+Two days of this drifted from one question into another without noticing:
+
+| | asks | needs | is it the guard's job |
+|---|---|---|---|
+| **validation** | is this model any good? | data the adapter has not trained on | **no** |
+| **fault detection** | did something just break? | the stream itself | **yes** |
+
+Searching for "a signal that sees a slow loss of quality" is the first one. Online adaptation
+**improves a model by repetition; it does not pre-judge whether it will work** — the owner's
+correction, and it dissolves the problem rather than solving it. A guard is reactive by
+construction: checks run *after* the update, because the quantities worth checking do not exist
+until then. Nothing in this design ever claimed to predict.
+
+**So the honest measurement is whether the guard does its real job on a network.** A sensor
+latched high for 200–400 samples, held-out RMSE against the model's own quality just before the
+fault, unguarded, with an RLS control beside it:
+
+| clean samples since the fault ended | +0 | +100 | +500 | +2,000 | +5,000 | +20,000 |
+|---|---|---|---|---|---|---|
+| MLP 3-32-32-1, SGD | 27.4× | 7.6× | 3.9× | 3.8× | 3.4× | **3.33×** |
+| RLS, rich basis | 9.4× | 9.0× | 7.4× | 3.6× | 1.3× | **1.00×** |
+
+**RLS recovers completely and SGD does not.** Once clean data resumes the least-squares recursion
+pulls back to the correct fit; a walk downhill from a corrupted position does not retrace, and it
+stalls at 3.3× for as long as the run continues. So the guard's value differs by model class in
+kind rather than degree: **for RLS it buys time, and for a network it is what prevents permanent
+damage.**
+
+**Two claims were made here and withdrawn before they were written down**, both from reading one
+configuration as a property:
+
+- *"The network is 4.5× more damaged than RLS (1.03×)"* — that was a 30,000-sample run in which
+  RLS had 4,600 clean samples to recover in and the comparison was made at the end. It was
+  measuring recovery and calling it vulnerability.
+- *"The network is more vulnerable at impact"* — at +0 it is 27.4× against 9.4× in that run, but
+  at a shorter warm-up with `forgetting=0.995` the same fault gives 29.0× against RLS's **32.7×**.
+  **The ordering flips with the forgetting factor**, so vulnerability at impact is not a property
+  of the model class and no version of that sentence is kept.
+
+Guarded, at the same fault: `Divergence` freezes at **exactly the fault step** in every case, on
+`residual_norm` alone — a field every adapter reports — and the damage does not happen. The NaN
+case never freezes and takes no damage either, because the adapter rejects a non-finite target at
+the input and counts it, so nothing reaches the model; that is correct, and worth naming, because
+"no freeze" reads as a miss.
+
+**One flattering reading declined.** The guarded MLP ends *below* where it was before the fault,
+which looks like the guard improving the model. It is not: rollback restores a checkpoint up to
+800 samples old, and this run's held-out RMSE fluctuates over 0.21–0.41 across its own
+checkpoints, so both figures sit inside the noise. The claim is damage prevented, not improvement.
+
+**What this corrects.** "The model class arrives with the guard's best signal missing and a new
+failure mode that needs one" was written above and is **too strong**. `p_trace` is genuinely
+absent and genuinely useful — per-direction confidence, which for RLS catches windup in a
+direction nothing has excited. But it answers a validation-shaped question, and the guard's own
+job is answered by the residual for both model classes. What remains missing is narrower and is
+now stated narrowly: **there is no confidence-per-direction for a backpropagated weight, so a
+windup-shaped fault has no analogue and no check.**
+
+### The residual still does not substitute for `p_trace`, and no check can be built on it
 
 The concern the withdrawn claim was standing in for is real and unresolved. Measured three ways:
 
@@ -169,10 +229,11 @@ misspecification is the normal condition for an adapted head on a frozen backbon
 residual is optimistic exactly when the model is fitting the samples it sees and not the
 population, which is the failure a quality signal exists to catch.
 
-**So the check was not built.** A mechanism for a failure mode that could not be reproduced would
-be a mechanism justified by its own fixture. What a signal would need is data the adapter has
-*not* trained on, which is a real design with a real cost — the guard withholding a fraction of
-samples — and it is recorded here rather than half-built.
+**So the check was not built**, and after the correction above it should not be: a mechanism for
+a failure mode that could not be reproduced would be a mechanism justified by its own fixture,
+and the question it answered was the validation one. What a validation signal would need is data
+the adapter has *not* trained on — the guard withholding a fraction of samples — which is a real
+design with a real cost, and belongs to whoever wants validation rather than to the guard.
 
 **The guard's ring is `Depth × state_size` and that scales with the model, not with the
 sensors.** At depth 4: RLS n=6 is 1.6 KB total, the MLP 47.5 KB, a 3-64-64-1 net 175 KB, and
