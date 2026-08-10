@@ -236,14 +236,29 @@ error is exactly `(1 - 2*lr*(x.x + 1))` times the a priori one, 1.7e-13 over 600
 catch a missing term, which is what makes it worth having, and the test asserts the version
 without the bias does *not* hold.
 
-**fp16 works and is still refused.** RLS's fp16 failure is its *covariance recursion* and this
-adapter has no covariance, so that argument never transferred — measured, 0.2305 against fp32's
-0.2310 at (32,32), no non-finite weight and none driven to zero, because a step is ~5e-2 against
-an fp16 resolution near 0.1 of 6.1e-5. It stays refused **for want of evidence rather than
-because it fails**: one problem, one architecture family, 20k updates, on a host. That also
-exposed a real defect — the shared refusal message gave *every* adapter RLS's covariance reason,
-including two that have no covariance. It picks the right reason now, and both branches are
-tested.
+**fp16 fails, and the note that said it worked is withdrawn.** That note came from one target
+function at one architecture at one rate — 0.2305 against fp32's 0.2310 — and the sweep that
+replaced it (four targets × three architectures × two rates × three seeds × 100,000 updates,
+216 runs on 30 cores, 157 s) found **that configuration to be the single most favourable of the
+twenty-four**. It reads 0.991 there. Elsewhere fp16 goes **non-finite on every seed** within
+~1,700 updates on a large-output target at (32,32), and costs **4.0×** the fp32 error on a
+small-output one. **The mechanism is not what the first detector looked for**: nothing is driven
+to zero (0.0% in every run) — `lr·grad` falls below the fp16 spacing *at that weight's
+magnitude*, so the weight does not move, on up to **92%** of updates. A network can stop learning
+in half precision without ever producing a NaN. **fp32 against fp64 is 1.000 across the whole
+sweep**, so `f4` is where the floor actually is rather than a compromise. The negative result is
+protected by a test that reproduces the divergence in 2,500 updates with an fp32 control.
+
+That measurement also exposed a real defect — the shared dtype refusal gave *every* adapter RLS's
+covariance reason, including two that have no covariance. It picks the right reason now, and both
+branches are tested.
+
+**And a mutation check on that correction found `min_dtype` to be a dead check** as the repository
+stands: `SUPPORTED_DTYPES` is `('f4','f8')` and all three adapters declare `f4`, so the itemsize
+comparison can never be true — the allowlist refuses `f2` first and nothing else is smaller. Same
+shape as the guard's `at_most(PTrace, 1e4)` finding. It is not dead *code*, since an adapter needing
+double precision would declare `f8`, so it is exercised with a synthetic one that does, and a
+separate assertion fails if it ever becomes reachable for a shipped adapter.
 
 **A diverging step is deliberately not clamped**, following the rule RLS sets by reporting
 covariance windup rather than bounding it: a safety mechanism inside the adapter makes the guard

@@ -279,32 +279,106 @@ def test_relu_is_offered_but_is_not_the_default_and_the_measurement_says_why():
         "something survived lr=0.2, so 'both die at 0.2' overstates the caveat")
 
 
-def test_fp16_is_refused_for_want_of_evidence_and_says_so():
-    """The refusal message used to give every adapter RLS's covariance argument, including
-    two adapters that have no covariance. Measured: fp16 works fine here — 0.2305 against
-    fp32's 0.2310 — so the covariance reason was not merely irrelevant, it was wrong."""
+def test_fp16_is_refused_because_it_was_measured_to_fail():
+    """A negative result, protected so a later change cannot quietly reverse it.
+
+    An earlier version of this test asserted the opposite -- that fp16 *works* and is
+    refused only for want of evidence -- and it passed, because it ran the one
+    configuration where fp16 is fine. A sweep of 216 runs (four targets, three
+    architectures, two rates, three seeds, 100,000 updates) found that configuration to be
+    the most favourable of twenty-four.
+
+    Reproduced here in 2,500 updates: on a large-output target at (32,32) the fp16 weights
+    go non-finite and the fp32 control on the same data and the same starting weights does
+    not. Both halves matter -- without the control this would only show that the target is
+    hard.
+    """
     with pytest.raises(ValueError, match="no covariance"):
         MultilayerPerceptron(3, 1, hidden=(4,), dtype="f2")
     with pytest.raises(ValueError, match="positive-definiteness"):
         RecursiveLeastSquares(3, 1, dtype="f2")
 
-    # ...and it really does work, which is what makes the refusal a choice about evidence.
-    orig = adapt_module.SUPPORTED_DTYPES
-    try:
-        adapt_module.SUPPORTED_DTYPES = ("f2", "f4", "f8")
-        MultilayerPerceptron.min_dtype = "f2"
-        m = MultilayerPerceptron(3, 1, hidden=(32, 32), learning_rate=0.02,
-                                 dtype="f2", seed=1)
-        r = np.random.default_rng(5)
-        for _ in range(4000):
-            s = r.standard_normal(3)
-            m.update(s, [math.sin(3 * s[0]) * math.exp(-s[1] ** 2) + abs(s[2]) - 0.4])
-        st = np.asarray(m.state)
-        assert np.all(np.isfinite(st)), "fp16 went non-finite, so the docstring is wrong"
-        assert np.mean(st == 0.0) < 0.01, "fp16 zeroed weights, so the docstring is wrong"
-    finally:
-        adapt_module.SUPPORTED_DTYPES = orig
-        MultilayerPerceptron.min_dtype = "f4"
+    def truth(s):
+        return 50.0 * math.sin(0.5 * s[0]) + 20.0 * s[1] * s[2]
+
+    def died_at(dtype, seed=2, n=2500):
+        ref = MultilayerPerceptron(3, 1, hidden=(32, 32), learning_rate=0.02,
+                                   dtype="f8", seed=seed)
+        init = np.array(ref.state, dtype="f8")
+        orig = adapt_module.SUPPORTED_DTYPES
+        try:
+            adapt_module.SUPPORTED_DTYPES = ("f2", "f4", "f8")
+            MultilayerPerceptron.min_dtype = "f2"
+            m = MultilayerPerceptron(3, 1, hidden=(32, 32), learning_rate=0.02,
+                                     dtype=dtype, seed=seed)
+            m.load_state(init.astype(dtype))
+            g = np.random.default_rng(1002)
+            with np.errstate(all="ignore"):
+                for k in range(n):
+                    s = g.standard_normal(3)
+                    m.update(s, [truth(s)])
+                    if not np.all(np.isfinite(np.asarray(m.state))):
+                        return k
+            return None
+        finally:
+            adapt_module.SUPPORTED_DTYPES = orig
+            MultilayerPerceptron.min_dtype = "f4"
+
+    assert died_at("f2") is not None, (
+        "fp16 survived the case it was measured to fail; if that is a real improvement the "
+        "docstring's sweep must be re-run rather than this threshold nudged")
+    assert died_at("f4") is None, (
+        "fp32 died too, so this fixture shows a hard target rather than a precision floor")
+
+
+def test_the_fp16_failure_is_step_underflow_and_not_a_nan():
+    """The mechanism, because the obvious detector cannot see it.
+
+    Nothing is driven to zero -- 0.0% of weights in every run of the sweep. What happens is
+    that `lr*grad` falls below the fp16 spacing *at that weight's magnitude*, so the weight
+    does not move: up to 92% of updates on a small-output target. **A network can stop
+    learning in half precision without ever producing a NaN**, and a test looking for NaNs
+    or zeros would report success. Measured here on the small-output case.
+    """
+    def truth(s):
+        return 0.001 * (math.sin(3 * s[0]) + s[1] * s[2])
+
+    def underflow_rate(dtype, n=1500):
+        orig = adapt_module.SUPPORTED_DTYPES
+        try:
+            adapt_module.SUPPORTED_DTYPES = ("f2", "f4", "f8")
+            MultilayerPerceptron.min_dtype = "f2"
+            m = MultilayerPerceptron(3, 1, hidden=(32, 32), learning_rate=0.002,
+                                     dtype=dtype, seed=1)
+            g = np.random.default_rng(1001)
+            hits = seen = 0
+            with np.errstate(all="ignore"):
+                for k in range(n):
+                    s = g.standard_normal(3)
+                    before = np.array(m.state)
+                    m.update(s, [truth(s)])
+                    if k % 50 == 0:
+                        moved = np.abs(np.asarray(m.state) - before)
+                        spacing = np.spacing(np.abs(before).astype(dtype)).astype("f8")
+                        hits += int(np.sum(moved < spacing))
+                        seen += moved.size
+                zeros = float(np.mean(np.asarray(m.state) == 0.0))
+            return hits / max(seen, 1), zeros
+        finally:
+            adapt_module.SUPPORTED_DTYPES = orig
+            MultilayerPerceptron.min_dtype = "f4"
+
+    half, half_zeros = underflow_rate("f2")
+    single, _ = underflow_rate("f4")
+    assert half > 0.4, (
+        f"only {half:.1%} of fp16 steps underflowed, so this fixture no longer shows the "
+        "mechanism the docstring describes")
+    assert single < half / 2.0, (
+        f"fp32 underflowed at {single:.1%} against fp16's {half:.1%} -- if the two are "
+        "comparable this measures the problem rather than the precision")
+    assert half_zeros == 0.0, (
+        "fp16 drove weights to zero after all, so a zero-check WOULD have caught it and "
+        "the claim that the obvious detector is blind is wrong")
 
 
 # -- what is deliberately NOT clamped ------------------------------------------------------

@@ -885,23 +885,35 @@ class MultilayerPerceptron(Adapter):
 
     Precision
     ---------
-    ``min_dtype`` is ``f4`` and **fp16 was measured to work anyway**, which is worth
-    stating because the inherited assumption said it would not. On the reference problem
-    at 20,000 updates: fp16 reaches **0.2305** against fp32's 0.2310 at (32,32), 0.4893
-    against 0.4892 at (16,), and 0.7927 against 0.7927 with no hidden layer — no
-    non-finite weights and not one weight driven to zero. The headroom is why: a typical
-    step is ``lr*||grad|| ~ 5e-2`` against an fp16 resolution near a weight of 0.1 of
-    ``6.1e-5``, nearly three decades. RLS's fp16 failure is its **covariance recursion**
-    losing positive-definiteness, and this adapter has no covariance, so that argument
-    never transferred.
+    ``min_dtype`` is ``f4``, and **fp16 fails** — measured, after an earlier note here
+    claimed the opposite.
 
-    **It is still refused, and the reason is the evidence rather than the arithmetic.**
-    One problem, one architecture family, 20,000 updates, on a host. Half precision would
-    halve the state — which is the whole reason a network is here — so this is a real
-    opportunity and it is recorded as one. What it needs before ``min_dtype`` moves: more
-    than one target function, a run long enough to show accumulated rounding in the
-    weights, and the target, where fp16 arithmetic is emulated on a Cortex-M4F and native
-    on an M55.
+    That earlier note said fp16 was measured to *work*: 0.2305 against fp32's 0.2310 at
+    (32,32). It is **withdrawn**. That was one target function at one architecture and one
+    learning rate, and the sweep that replaced it — four targets, three architectures, two
+    rates, three seeds, 100,000 updates, 216 runs — found that configuration to be the
+    single most favourable of the twenty-four. It reads 0.991 there. Elsewhere:
+
+    - ``50·sin(0.5s₀) + 20·s₁s₂`` at (32,32), lr 0.02: **the weights go non-finite on
+      every seed**, within about 1,700 updates. fp32 on the same data survives.
+    - ``0.001·(sin(3s₀) + s₁s₂)`` at (32,32), lr 0.002: **4.0× the fp32 error**; at (16,)
+      it is 3.3×. A small target puts every residual, and therefore every gradient, near
+      the bottom of fp16's range.
+    - a kinked target at (32,32): 1.19×.
+
+    **The mechanism is not what was expected and the first detector could not see it.**
+    Nothing is driven to zero — the fraction of zero weights is 0.0% in every run. What
+    happens is that ``lr*grad`` falls below the fp16 spacing *at that weight's magnitude*,
+    so the weight simply does not move. That rate reaches **92%** on the small-target deep
+    case and **95%** on the large-target one. A network can stop learning in half precision
+    without ever producing a NaN, and a test looking for NaNs or zeros would report success.
+
+    RLS's fp16 failure really is a different one — its covariance recursion loses
+    positive-definiteness — and that argument still does not transfer. This adapter fails
+    for its own reason, which is why it had to be measured rather than inherited either way.
+
+    **fp32 against fp64 is 1.000 across the whole sweep**, so ``f4`` is not a compromise:
+    it is where the precision floor actually is.
     """
 
     min_dtype = "f4"

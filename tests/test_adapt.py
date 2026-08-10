@@ -14,9 +14,12 @@ against mathematics rather than against itself.
 """
 
 import numpy as np
+
+import argmind.adapt as adapt
 import pytest
 
-from argmind.adapt import NormalisedLeastMeanSquares, RecursiveLeastSquares, UpdateReport
+from argmind.adapt import (MultilayerPerceptron, NormalisedLeastMeanSquares,
+                           RecursiveLeastSquares, UpdateReport)
 
 
 def batch_ewls(xs, ys, lam, p0, n, m):
@@ -760,3 +763,53 @@ def test_a_richer_basis_wants_the_confidence_dropped():
     # ...and the richer basis does break the linear ceiling, or none of this matters.
     assert rmse(dropped) < 0.01 < float(np.sqrt(np.mean(
         [(lin.predict(_linear_basis(x))[0] - _truth_nonlinear(x)) ** 2 for x in pts])))
+
+
+# -- the shared dtype gate ---------------------------------------------------------------
+
+def test_min_dtype_cannot_currently_fire_and_is_exercised_anyway():
+    """`Adapter.min_dtype` is a **dead check as the repository stands**, and that is
+    recorded rather than left to be assumed working.
+
+    `SUPPORTED_DTYPES` is `('f4', 'f8')` and every adapter here declares `min_dtype = 'f4'`,
+    so the itemsize comparison can never be true: the allowlist refuses `f2` first and
+    nothing else is smaller. This is the same shape as the guard's `at_most(PTrace, 1e4)`
+    finding -- configured, reporting fine on every call, unable ever to fire.
+
+    It is not dead *code*: an adapter needing double precision would declare `min_dtype =
+    'f8'` and the gate would refuse `f4`. So the mechanism is exercised here with an adapter
+    that does, which is the only way to know it works before one exists.
+    """
+    reachable = any(
+        np.dtype(d).itemsize < np.dtype(cls.min_dtype).itemsize
+        for d in adapt.SUPPORTED_DTYPES
+        for cls in (RecursiveLeastSquares, NormalisedLeastMeanSquares,
+                    MultilayerPerceptron))
+    assert not reachable, (
+        "min_dtype can now fire for a shipped adapter, so it is no longer a dead check and "
+        "this test should assert the real refusal instead of a synthetic one")
+
+    class NeedsDouble(RecursiveLeastSquares):
+        min_dtype = "f8"
+
+    NeedsDouble(3, 1, dtype="f8")
+    with pytest.raises(ValueError, match="requires at least"):
+        NeedsDouble(3, 1, dtype="f4")
+
+    # ...and the message must name the adapter, since a shared gate raising for three
+    # different reasons is the defect the covariance wording already was.
+    with pytest.raises(ValueError, match="NeedsDouble"):
+        NeedsDouble(3, 1, dtype="f4")
+
+
+def test_the_dtype_refusal_gives_each_adapter_its_own_reason():
+    """One shared gate, three different reasons. It used to give every adapter RLS's
+    covariance argument, including two that have no covariance -- and for the network that
+    was not merely irrelevant but **wrong**, since its fp16 failure is step underflow in the
+    weight update, measured separately."""
+    with pytest.raises(ValueError, match="positive-definiteness"):
+        RecursiveLeastSquares(3, 1, dtype="f2")
+    for cls, kw in ((NormalisedLeastMeanSquares, {}),
+                    (MultilayerPerceptron, {"hidden": (4,)})):
+        with pytest.raises(ValueError, match="no covariance"):
+            cls(3, 1, dtype="f2", **kw)
