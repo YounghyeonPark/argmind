@@ -356,6 +356,97 @@ def scaling(dims=(4, 8, 16, 32, 64, 128), updates: int = 2000,
 
 
 
+def update_flops(kind: str, n_features: int, n_outputs: int = 1,
+                 hidden: tuple[int, ...] = ()) -> int:
+    """Multiply-adds in one `update`, **derived from the shapes rather than timed.**
+
+    This is the transferable number. Host microseconds are interpreter and numpy dispatch
+    cost — `scaling` already shows RLS flat from n=4 to n=32 for that reason — so they say
+    nothing about the C++ tier or about a target. A flop count is architectural: it is the
+    same on every machine, and it is what sizes a duty cycle.
+
+    RLS is ``4n² + 4nm + 2n``: ``P@x``, ``x@P``, the rank-one update and ``P /= lambda`` are
+    each ``n²``. NLMS is ``4nm + 2n`` and has no ``n²`` term at all, which is the whole
+    reason it exists. A network is ``4·W`` over its weight count ``W``, because the forward
+    pass runs **twice** — once for the prediction and once for the a posteriori residual —
+    plus the backward pass and the gradient.
+
+    So at equal *state* a network costs about twice an RLS, since RLS's ``4n²`` sits against
+    a state of ``n² + nm``, while a network's ``4W`` sits against a state of ``W``. Measured
+    on the host and it holds: 34.6 µs against 60.3 at ~4,200 elements, 206.8 against 460.3
+    at ~66,000, both against a run-to-run spread of 1.07–1.18×.
+    """
+    n, m = int(n_features), int(n_outputs)
+    if kind == "rls":
+        return 4 * n * n + 4 * n * m + 2 * n
+    if kind == "nlms":
+        return 4 * n * m + 2 * n
+    if kind == "mlp":
+        widths = (n, *hidden, m)
+        w = sum(a * b for a, b in zip(widths[:-1], widths[1:]))
+        return 8 * w      # forward twice, backward, gradient -- 2*(2w) + 2w + 2w
+    raise ValueError(f"unknown adapter kind {kind!r}")
+
+
+def adapter_scaling(updates: int = 3000, dtype: str = "f8",
+                    warmup: int = 300) -> list[dict]:
+    """Update cost against size for all three adapters, beside the derived flop count.
+
+    **The point is the ratio between them, not either number.** `scaling` already records
+    that RLS is flat from n=4 to n=32 because the cost there is call overhead; this makes
+    that quantitative and extends it to a network, whose update is several small numpy
+    calls per layer rather than one large one.
+
+    Measured, `ns/flop` across the range: **66 down to 0.8, a factor of 209.** A constant
+    would mean arithmetic-bound. It is not — small adapters are dispatch-bound and only the
+    largest approach the arithmetic, where RLS and a network converge on the same 0.78–0.86
+    ns/flop and the network simply does twice the flops.
+
+    That factor of 209 is the evidence for the rule DESIGN.md already states: **these
+    timings are not a baseline the C++ core can be compared against**, because most of what
+    they measure is not present there. It is also why nothing here is a regression gate —
+    `argmind.bench.compare` gates exact counters, the state digest, the leak rate and
+    ratios inside one run, and an absolute microsecond figure is none of those.
+
+    One number was measured and is **not** reported, because it did not survive its own
+    error bars: the equal-*accuracy* comparison. MLP (32,32) at 62.6 µs against RFF-128
+    through RLS at 78.9 reads as 1.26× — inside run-to-run spreads of 1.62× and 1.33×. The
+    memory side of that comparison is 9.5 KB against 131.0 KB and is not close.
+    """
+    from .adapt import MultilayerPerceptron, NormalisedLeastMeanSquares  # noqa: PLC0415
+
+    cases: list[tuple[str, str, object, int]] = []
+    for n in (16, 64, 128, 256):
+        cases.append((f"rls n={n}", "rls",
+                      lambda n=n: RecursiveLeastSquares(n_features=n, forgetting=0.999,
+                                                        dtype=dtype), n))
+    for n in (64, 256, 1024):
+        cases.append((f"nlms n={n}", "nlms",
+                      lambda n=n: NormalisedLeastMeanSquares(n, 1, dtype=dtype), n))
+    for hid in ((16,), (32, 32), (64, 64), (128, 128), (256, 256)):
+        cases.append((f"mlp {hid}", "mlp",
+                      lambda h=hid: MultilayerPerceptron(3, 1, hidden=h, dtype=dtype), 3))
+
+    rows = []
+    for label, kind, make, n_in in cases:
+        a = make()
+        rng = np.random.default_rng(17)
+        xs = rng.standard_normal((updates, n_in)).astype(dtype)
+        ys = rng.standard_normal((updates, 1)).astype(dtype)
+        for i in range(min(warmup, updates)):
+            a.update(xs[i], ys[i])
+        start = _NS()
+        for i in range(updates):
+            a.update(xs[i], ys[i])
+        ns = (_NS() - start) / updates
+        flops = update_flops(kind, a.n_features, a.n_outputs,
+                             getattr(a, "hidden", ()))
+        rows.append({"label": label, "kind": kind, "ns_per_update": ns,
+                     "flops": flops, "state": int(np.asarray(a.state).size),
+                     "ns_per_flop": ns / flops})
+    return rows
+
+
 def step_cost(frames_per_step=(1, 2, 4, 8, 16), steps: int = 300,
               n_features: int = 6, dtype: str = "f4", guarded: bool = True,
               fresh_target: bool = False, warmup: int = 30) -> dict:
@@ -628,6 +719,9 @@ def main(argv=None) -> int:
                    help="also report the memory leak rate")
     p.add_argument("--scaling", action="store_true",
                    help="also report update cost against state dimension")
+    p.add_argument("--adapters", action="store_true",
+                   help="also report update cost against size for all three adapters, "
+                        "beside the derived flop count")
     p.add_argument("--latency", action="store_true",
                    help="also report step() cost against frames drained, and what "
                         "require_fresh_target costs")
@@ -647,6 +741,21 @@ def main(argv=None) -> int:
                   f"{row['blocks_per_frame']:>7.3f} blocks/frame")
         print(f"        leak {mg['blocks_per_frame']:+.4f} blocks/frame, "
               f"fixed {mg['fixed_blocks_per_batch']:+.1f} blocks/batch")
+
+    if args.adapters:
+        rows = adapter_scaling()
+        print("\nupdate cost by adapter, against DERIVED flops. ns/flop spanning two "
+              "orders of\n        magnitude is what says these timings are dispatch "
+              "rather than arithmetic --\n        and therefore not a baseline the C++ "
+              "core can be compared against.")
+        print(f"        {'adapter':>16}{'us/upd':>9}{'kflop':>9}{'state':>8}{'ns/flop':>10}")
+        for row in rows:
+            print(f"        {row['label']:>16}{row['ns_per_update'] / 1000:>9.1f}"
+                  f"{row['flops'] / 1000:>9.1f}{row['state']:>8}"
+                  f"{row['ns_per_flop']:>10.2f}")
+        lo = min(r["ns_per_flop"] for r in rows)
+        hi = max(r["ns_per_flop"] for r in rows)
+        print(f"        ns/flop spans {lo:.2f} to {hi:.2f}, a factor of {hi / lo:.0f}")
 
     if args.latency:
         sc = step_cost()

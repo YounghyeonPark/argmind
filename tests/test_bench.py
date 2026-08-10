@@ -468,3 +468,82 @@ def test_the_gate_is_cheaper_per_frame_than_adapting():
     gs = gate_saving(frames_per_step=(1, 4, 16), steps=60, guarded=False)
     assert gs["per_frame_ratio"] < 0.7, gs["per_frame_ratio"]
     assert gs["adaptations_on"] * 4 < gs["adaptations_off"]
+
+
+# -- update cost by adapter, and the flop model that makes it portable -------------------
+
+def test_the_flop_model_is_tied_to_the_implementation_not_to_a_comment():
+    """`update_flops` is the transferable half of `adapter_scaling`: host microseconds are
+    dispatch, a flop count is architectural. A formula in a docstring rots, so it is checked
+    against the adapters' own declared shapes and against the scaling laws it encodes.
+    """
+    from argmind.adapt import MultilayerPerceptron, NormalisedLeastMeanSquares
+    from argmind.bench import update_flops
+
+    # RLS is O(n^2): doubling n must quadruple the count, to within the linear terms.
+    r = [update_flops("rls", n) for n in (64, 128, 256)]
+    assert 3.9 < r[1] / r[0] < 4.1 and 3.9 < r[2] / r[1] < 4.1
+
+    # NLMS has no n^2 term at all, which is the entire reason it exists.
+    q = [update_flops("nlms", n) for n in (64, 128, 256)]
+    assert 1.9 < q[1] / q[0] < 2.1 and 1.9 < q[2] / q[1] < 2.1
+    assert update_flops("nlms", 256) < update_flops("rls", 256) / 100
+
+    # A network's count must follow its OWN weight block, so a layout change breaks this
+    # rather than leaving the formula quietly describing something else.
+    for hidden in ((), (16,), (32, 32), (7, 5, 3)):
+        net = MultilayerPerceptron(4, 2, hidden=hidden, dtype="f8")
+        biases = sum((*hidden, 2))
+        weights = int(np.asarray(net.state).size) - biases
+        assert update_flops("mlp", 4, 2, hidden) == 8 * weights, (
+            f"the flop model for {hidden} does not match the adapter's own weight count")
+
+    # RLS's state and its flops both grow as n^2, so at EQUAL STATE a network costs about
+    # twice an RLS. That is the claim the docstring makes and it is arithmetic, not timing.
+    rls = RecursiveLeastSquares(n_features=64, dtype="f8")
+    net = MultilayerPerceptron(3, 1, hidden=(64, 64), dtype="f8")
+    assert 0.9 < np.asarray(net.state).size / np.asarray(rls.state).size < 1.2
+    ratio = (update_flops("mlp", 3, 1, (64, 64))
+             / update_flops("rls", 64, 1))
+    assert 1.6 < ratio < 2.6, f"at equal state the flop ratio is {ratio:.2f}, not ~2"
+    assert isinstance(NormalisedLeastMeanSquares(4, 1, dtype="f8"), object)
+
+    with pytest.raises(ValueError, match="unknown adapter kind"):
+        update_flops("kalman", 6)
+
+
+def test_adapter_scaling_shows_the_small_adapters_are_dispatch_bound():
+    """The one timing claim here that is safe to assert: `ns/flop` spans two orders of
+    magnitude. A constant would mean arithmetic-bound; it is not, and that span is the
+    evidence for DESIGN.md's rule that these figures are not a baseline for the C++ core.
+
+    Nothing tighter is asserted. Run-to-run spread is 1.07-1.18x interleaved, and the
+    equal-accuracy comparison this function's docstring records as **not reported** failed
+    exactly that test -- 1.26x against spreads of 1.33x and 1.62x.
+    """
+    from argmind.bench import adapter_scaling
+
+    rows = adapter_scaling(updates=400, warmup=100)
+    assert {r["kind"] for r in rows} == {"rls", "nlms", "mlp"}
+    per = [r["ns_per_flop"] for r in rows]
+    assert max(per) / min(per) > 20.0, (
+        f"ns/flop spans only {max(per) / min(per):.1f}x; if the cost has become "
+        "arithmetic-bound across the whole range, the claim that these timings are "
+        "dispatch must be re-derived rather than this bound loosened")
+
+    # The smallest adapter must be the most dispatch-bound one, or "small is overhead" is
+    # not what the span is showing.
+    worst = max(rows, key=lambda r: r["ns_per_flop"])
+    assert worst["flops"] < 2000, (
+        f"the worst ns/flop is {worst['label']} at {worst['flops']} flops, which is not a "
+        "small adapter -- the span is not the dispatch effect it is described as")
+
+
+def test_the_adapters_report_runs_from_the_command_line(capsys):
+    """Two entry points in this repository have shipped with no caller. The reporting path
+    has its own formatting and its own division, so compiling is not enough."""
+    from argmind.bench import main
+
+    assert main(["--frames", "40", "--adapters"]) == 0
+    out = capsys.readouterr().out
+    assert "ns/flop spans" in out and "mlp (32, 32)" in out

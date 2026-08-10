@@ -673,6 +673,34 @@ suite gates only what survives moving machines: exact counters, the state digest
 rate, and ratios measured inside one run. The tolerance is widened by *measured* run-to-run
 spread, not a guessed constant.
 
+**The benchmark covers all three adapters now, and it carries a transferable number beside
+the timings** (`adapter_scaling`, `update_flops`, `--adapters`). There was no benchmark for the
+network at all, and this project's own rule is that an optimisation with no way to fail is a
+hope.
+
+**`update_flops` is derived from the shapes, not timed**, which is what makes it usable off
+this machine: RLS is `4n² + 4nm + 2n`, NLMS is `4nm + 2n` with no n² term at all, and a network
+is `8W` over its weight count, because the forward pass runs *twice* — once for the prediction
+and once for the a posteriori residual. **At equal state a network costs about twice an RLS**,
+since RLS's `4n²` sits against a state of `n² + nm` while a network's `8W` sits against `W`.
+Measured on the host and it holds: 34.6 µs against 60.3 at ~4,200 elements, 206.8 against 460.3
+at ~66,000, against an interleaved spread of 1.07–1.18×.
+
+**And the timings are proved to be dispatch rather than arithmetic, quantitatively.** `ns/flop`
+runs from **75 down to 0.7 — a factor of 112**, and only the largest adapters approach the
+arithmetic, where RLS and a network converge on the same 0.8 ns/flop and the network simply does
+twice the flops. A constant would have meant arithmetic-bound. So the span *is* the evidence for
+DESIGN.md's existing rule that these figures are not a baseline the C++ core can be compared
+against, and nothing here is a regression gate for the same reason.
+
+**One number was measured and is deliberately not reported.** The equal-*accuracy* comparison —
+MLP (32,32) at 62.6 µs against RFF-128 through RLS at 78.9 — reads 1.26× and sits inside
+run-to-run spreads of 1.62× and 1.33×. It did not survive its own error bars. The memory side of
+the same comparison is 9.5 KB against 131.0 KB and is not close. **A 2.3× outlier was caught the
+same way**: a single non-interleaved run read MLP (256,256) at 169 µs where eight interleaved
+repeats give 460. Consecutive repeats measure a drifting mean, which this repository has already
+paid to learn once.
+
 **Two measured results from building it**, both of which contradicted a plausible first guess:
 
 - **RLS update cost is flat from n=4 to n=32** (~22 µs) and only climbs at n=64. RLS is O(n²), so
