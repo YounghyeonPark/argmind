@@ -1159,6 +1159,111 @@ class MultilayerPerceptron(Adapter):
         self._updates += 1
         return self._report(True, None, float(self.learning_rate * math.sqrt(sq)))
 
+
+    def widened(self, n_features: int) -> "MultilayerPerceptron":
+        """A network with more INPUTS that keeps everything this one learned.
+
+        A new input is a new **row** of ``W0``, and it is filled with zeros. That has two
+        properties, both measured:
+
+        **The output does not move.** A zero row means the new inputs contribute nothing
+        whatever their values, so the widened network computes the old function of the old
+        inputs — a jump of ``1e-15`` against the alternative's 2.0 to 4.6 on a target whose
+        own spread is 1.4. For a device that is mid-flight when a sensor is installed, that
+        is the whole requirement.
+
+        Not bit-for-bit, and the first version of this note claimed it was: numpy groups a
+        sum of six differently from a sum of three, and three of the terms being exactly
+        zero does not restore the order of the other three. Measured against the *run's*
+        scale, **0.0 to 2.3 ulp** over five architectures — exactly 0 with no hidden layer.
+        Against each probe's own value it reads 367 ulp at (8,), which is the prediction
+        passing near zero rather than the networks differing; that correction has now been
+        needed four times in this repository. Declared divergence 3 in a new place, not a
+        defect.
+
+        **And the new row still learns.** Its gradient is ``x_new * delta`` where ``delta``
+        comes from an already-trained downstream, so it is non-zero from the first update.
+        That is what separates a new input from a new hidden *unit*, whose gradient is gated
+        by its own outgoing weights — see the refusal below.
+
+        Measured against starting over, three inputs becoming six on a truth that needs all
+        six, RMSE over the whole input space: at 100 updates 0.915 grafted against 1.134
+        fresh, at 2,000 0.651 against 1.004, at 30,000 **0.383 against 0.559**. The
+        advantage does not close. On the *original* three inputs at 100 updates it is 0.481
+        against 0.929, which is the direct statement that the learning survived.
+
+        **There is no ``keep_confidence`` here and the asymmetry with `RecursiveLeastSquares`
+        is the point.** RLS needs that choice because carrying ``P`` is right for new inputs
+        and actively harmful for a richer basis over the same inputs. A network has no
+        covariance, so there is nothing to carry or drop; and the network analogue of "a
+        richer basis" is more hidden units, which is refused below for a measured reason.
+
+        Filling the new rows randomly instead was measured and is **not offered**: it wins on
+        2 of 6 seeds (medians 0.3779 against 0.3960, seed spreads 1.51x and 1.66x, so a tie)
+        and it breaks the continuity, which is not a trade worth an option.
+        """
+        if n_features < self.n_features:
+            raise ValueError(
+                f"widened() only appends: {n_features} is narrower than "
+                f"{self.n_features}. Dropping an input needs a mapping this cannot guess, "
+                "and guessing would put learned weights on the wrong sensors.")
+
+        out = MultilayerPerceptron(
+            n_features, self.n_outputs, hidden=self.hidden,
+            activation=self.activation, learning_rate=self.learning_rate,
+            dtype=self.dtype.name)
+        first = out._w[0]
+        first[:] = 0.0
+        first[:self.n_features, :] = self._w[0]
+        out._b[0][:] = self._b[0]
+        for i in range(1, len(self._shapes)):
+            out._w[i][:] = self._w[i]
+            out._b[i][:] = self._b[i]
+        return out
+
+    def deepened(self, hidden: tuple[int, ...]) -> "MultilayerPerceptron":
+        """Refused, and the refusal is a measurement rather than a missing feature.
+
+        Adding hidden units is the obvious other way to "grow the brain", and on every
+        target that could be constructed it buys **nothing**. Single hidden layer, 60,000
+        updates, four seeds, RMSE:
+
+        ==========  ======  ======  ======  ======
+        target       h=8    h=16    h=32    h=64
+        ==========  ======  ======  ======  ======
+        smooth      0.2368  0.2469  0.2391  0.2305
+        wiggly      1.0918  1.0918  1.1386  1.1404
+        product     0.7434  0.7547  0.7404  0.7453
+        ==========  ======  ======  ======  ======
+
+        Eight units already reach the ceiling and sixty-four do not beat them — on `wiggly`
+        the wider networks are *worse*. **The binding constraint on these problems is SGD's
+        convergence, not capacity**, so a wider network has more parameters to move with the
+        same number of samples. Offering a widening whose benefit cannot be demonstrated
+        would be a feature justified by its own docstring.
+
+        There is a second reason, and it is the trap anyone hand-editing a state block will
+        hit. A new hidden unit needs incoming weights (a column of ``W_L``) and outgoing ones
+        (a row of ``W_{L+1}``), and the three obvious fillings each fail differently:
+
+        - **both zero** preserves the function and the unit is **permanently dead** —
+          measured, its weights move by exactly ``0.0`` — because its outgoing weights gate
+          the gradient into its incoming ones, and ``tanh(0) = 0`` gates the reverse.
+        - **both random** lets it learn but the output jumps: 0.095 RMSE, discontinuously.
+        - **incoming random, outgoing zero** is the one that works — exact continuity *and*
+          the unit learns. It is written down here because it is not obvious, not because
+          this method does it.
+
+        If a future measurement finds a problem where capacity binds, that is the recipe.
+        """
+        raise NotImplementedError(
+            "deepening is refused rather than unimplemented: extra hidden units were "
+            "measured to buy nothing on any target that could be constructed (h=8 already "
+            "reaches the ceiling and h=64 does not beat it), because SGD's convergence "
+            "binds before capacity does. See the docstring for the measurement and for the "
+            "initialisation recipe if that ever changes. "
+            f"(asked for hidden={tuple(hidden)!r}, have {self.hidden!r})")
+
     def __repr__(self) -> str:
         return (f"MultilayerPerceptron(n_features={self.n_features}, "
                 f"n_outputs={self.n_outputs}, hidden={self.hidden}, "

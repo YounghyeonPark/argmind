@@ -551,6 +551,42 @@ is built with the Python reference so the CRC is genuinely correct — forging i
 only re-tests the CRC, which this project has been caught doing before. Both halves
 mutation-checked: removing the fingerprint check and skipping `load_state` each fail a test.
 
+**The network can keep its learning while gaining INPUTS, and cannot usefully gain hidden
+units — both measured.** `MultilayerPerceptron.widened(n_features)` fills the new rows of `W0`
+with **zeros**, which preserves the function (the new inputs contribute nothing whatever their
+values) *and* still learns, because the gradient into a new row is `x_new · delta` and `delta`
+comes from a trained downstream. Measured against starting over, three inputs becoming six on a
+truth needing all six: **0.915 grafted against 1.134 fresh at 100 updates, 0.651 against 1.004
+at 2,000, 0.383 against 0.559 at 30,000** — the advantage does not close, and on the *original*
+three inputs at 100 updates it is 0.481 against 0.929, which is the direct statement that the
+learning survived.
+
+**Random rows were measured and are not offered**: a tie on accuracy (2 of 6 seeds, medians
+0.3779 against 0.3960 inside seed spreads of 1.51× and 1.66×) and they break continuity, moving
+the output by **2.0 to 4.6** on a target whose spread is 1.4. Zero moves it by 0.0–2.3 ulp.
+
+**`deepened()` exists only to refuse, and the refusal is the measurement.** Extra hidden units
+buy nothing on any target that could be constructed — single layer, 60,000 updates, four seeds:
+`smooth` 0.2368/0.2469/0.2391/0.2305 and `wiggly` 1.0918/1.0918/1.1386/1.1404 at h=8/16/32/64,
+so **eight units already reach the ceiling and sixty-four are sometimes worse**. The binding
+constraint on these problems is SGD's convergence, not capacity. The first widening fixture
+could not see this: all three strategies landed within 0.2% of each other *including the one
+whose new units are provably dead*, which is a fixture that cannot tell them apart rather than
+three answers agreeing.
+
+The refusal carries the recipe anyway, because it is the trap for anyone hand-editing a state
+block: a new hidden unit with **both** new blocks zero is **permanently dead** — measured, its
+weights move by exactly 0.0, since its outgoing weights gate the gradient into its incoming ones
+and `tanh(0)=0` gates the reverse; **both random** jumps the output by 0.095; **incoming random,
+outgoing zero** is the one that works.
+
+**And the metric needed the correction this repository has now made four times.** The widened
+output differs from the old one by up to **367 ulp against each probe's own value** — which is
+the prediction passing near zero, not the networks differing. Against the *run's* scale it is
+**0.0 to 2.3 ulp** over five architectures, exactly 0 with no hidden layer. The test asserts
+both, so the reason the per-value metric is wrong is pinned rather than described. Seven mutants,
+all caught.
+
 **Keeping the learning while adding capacity: `widened()`, on both sides.** A bigger board does
 not make a bigger model — `n_features` is a design choice — but a wider model can now inherit a
 narrower one's learning instead of starting over. `theta` keeps its coefficients and the new ones

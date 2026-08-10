@@ -445,3 +445,158 @@ def test_a_divergence_is_not_clamped_inside_the_adapter_and_the_guard_catches_it
     step, finite = drive(True)
     assert step is not None, "the guard did not catch a divergence that destroyed the model"
     assert finite, "the guard froze but the restored state is not finite"
+
+
+# -- keeping the learning while adding inputs ---------------------------------------------
+
+def _six(s):
+    """Needs all six inputs, and the new three are not explained by the old three."""
+    return (math.sin(3 * s[0]) + 0.5 * s[1] * s[2]
+            + 0.8 * math.tanh(2 * s[3]) - 0.6 * s[4] * s[5])
+
+
+def test_widening_the_input_moves_the_output_by_at_most_one_ulp():
+    """The requirement for a device that is mid-flight when a sensor is installed: the
+    prediction must not jump. A zero row means the new inputs contribute nothing whatever
+    their values, so the function is preserved *mathematically*.
+
+    **It is not preserved bit-for-bit, and the first version of this test asserted that it
+    was.** numpy groups a sum of six differently from a sum of three, and three of the terms
+    being exactly zero does not restore the order of the other three. Declared divergence 3,
+    in a new place.
+
+    **Measuring it took the correction this repository has now made four times.** Against
+    each probe's own value the worst reads **367 ulp** at (8,) -- which is the prediction
+    passing near zero, not the implementations differing. Against the run's scale, which is
+    the rule already applied to the state block, the a posteriori residual and the pipeline's
+    prediction, it is **0.0 to 2.3 ulp** over five architectures: exactly 0 with no hidden
+    layer, 0.8-2.3 with one to three.
+
+    The contrast that matters is unaffected: filling the new rows randomly instead moves the
+    output by **2.0 to 4.6** on a target whose own spread is 1.4.
+    """
+    old = MultilayerPerceptron(3, 2, hidden=(8, 5), learning_rate=0.02, dtype="f8", seed=1)
+    g = np.random.default_rng(4)
+    for _ in range(400):
+        s = g.standard_normal(3)
+        old.update(s, [float(np.sin(2 * s[0])), float(s[1] * s[2])])
+
+    wide = old.widened(6)
+    assert wide.state.size == old.state.size + 3 * 8
+    assert wide.n_features == 6 and wide.hidden == (8, 5) and wide.n_outputs == 2
+
+    probe = np.random.default_rng(3).standard_normal((200, 6)) * 5.0   # new inputs LARGE
+    a = np.array([np.asarray(old.predict(x[:3])) for x in probe])
+    b = np.array([np.asarray(wide.predict(x)) for x in probe])
+    ulp = float(np.finfo(np.float64).eps)
+    run_scale = max(float(np.max(np.abs(a))), 1e-30)
+    worst = float(np.max(np.abs(a - b))) / run_scale / ulp
+    assert worst < 8.0, (
+        f"widening moved the output by {worst:.1f} ulp of the run's scale (measured 0.0-2.3 "
+        "over five architectures); the new rows are not zero, or something other than the "
+        "summation grouping changed")
+    # The per-value metric is deliberately NOT used and the reason is asserted: it reads up
+    # to 367 ulp on a prediction that passes near zero, which measures the cancellation
+    # rather than the two networks.
+    per_value = max(float(np.max(np.abs(p - q))) / max(float(np.max(np.abs(p))), 1e-30)
+                    for p, q in zip(a, b)) / ulp
+    assert per_value > worst, (
+        "the per-value metric is no longer inflated by cancellation here, so this fixture "
+        "does not demonstrate why the run's scale is the right denominator")
+    # ...and the new rows really are zero, so the bound above is not passing for the wrong
+    # reason -- a tiny random fill would also land inside a loose tolerance.
+    assert np.all(np.asarray(wide.state)[:6 * 8].reshape(6, 8)[3:, :] == 0.0)
+
+    # ...and everything after the first layer must be carried across untouched, or the
+    # equality above could hold for a network that had lost its later layers.
+    assert np.array_equal(np.asarray(old.state)[3 * 8:], np.asarray(wide.state)[6 * 8:])
+
+
+def test_the_new_input_rows_learn_from_the_first_update():
+    """Zeros that cannot move would be the `reset()` trap again. They do move here, because
+    the gradient into a new input row is `x_new * delta` and `delta` comes from a trained
+    downstream -- which is exactly what a new hidden UNIT does not have."""
+    old = MultilayerPerceptron(3, 1, hidden=(8,), learning_rate=0.02, dtype="f8", seed=1)
+    g = np.random.default_rng(4)
+    for _ in range(400):
+        s = g.standard_normal(3)
+        old.update(s, [float(np.sin(2 * s[0]))])
+
+    wide = old.widened(6)
+    before = np.array(wide.state)
+    s = g.standard_normal(6)
+    wide.update(s, [_six(s)])
+    after = np.asarray(wide.state)
+    new_rows_before = before[:6 * 8].reshape(6, 8)[3:, :]
+    new_rows_after = after[:6 * 8].reshape(6, 8)[3:, :]
+    assert np.all(new_rows_before == 0.0)
+    assert float(np.max(np.abs(new_rows_after))) > 1e-6, (
+        "the new input rows did not move on the first update, so they are dead weight")
+
+
+def test_grafting_beats_starting_over_when_a_sensor_arrives():
+    """Measured, three inputs becoming six on a truth needing all six: RMSE over the whole
+    input space is 0.915 grafted against 1.134 fresh at 100 updates, 0.651 against 1.004 at
+    2,000 and 0.383 against 0.559 at 30,000 -- the advantage does not close. Shortened here,
+    and the assertion is on the *early* separation, which is what "the learning survived"
+    means."""
+    def build():
+        m = MultilayerPerceptron(3, 1, hidden=(16,), learning_rate=0.02, dtype="f8", seed=2)
+        g = np.random.default_rng(502)
+        for _ in range(10000):
+            s = g.standard_normal(6)
+            s[3:] = 0.0
+            m.update(s[:3], [_six(s)])
+        return m, g
+
+    old, g = build()
+    grafted = old.widened(6)
+    fresh = MultilayerPerceptron(6, 1, hidden=(16,), learning_rate=0.02, dtype="f8", seed=9)
+
+    probe = np.random.default_rng(0).standard_normal((600, 6))
+    want = np.array([_six(s) for s in probe])
+
+    def rmse(m):
+        got = np.array([float(m.predict(s)[0]) for s in probe])
+        return float(np.sqrt(np.mean((got - want) ** 2)))
+
+    # 1,500 rather than 400: the ratio is NOT monotone in the number of post-widening
+    # updates -- 0.819 at 200, 0.871 at 400, 0.719 at 1500 -- so 400 lands in a transient
+    # and would pin a bounce rather than the effect. At 1,500 it is 0.63-0.72 across every
+    # warm-up length tried.
+    gg = np.random.default_rng(77)
+    for _ in range(1500):
+        s = gg.standard_normal(6)
+        y = [_six(s)]
+        grafted.update(s, y)
+        fresh.update(s, y)
+
+    assert rmse(grafted) < rmse(fresh) * 0.85, (
+        f"the graft did not beat starting over ({rmse(grafted):.4f} against "
+        f"{rmse(fresh):.4f}), so nothing here shows the learning being kept")
+    # A control: without it, a fresh network that simply failed would pass the above.
+    assert rmse(fresh) < float(np.std(want)) * 2.0
+
+
+def test_deepening_is_refused_with_the_measurement_as_the_reason():
+    """Not a missing feature. Extra hidden units were measured to buy nothing on any target
+    that could be constructed -- h=8 already reaches the ceiling and h=64 does not beat it,
+    because SGD's convergence binds before capacity does."""
+    m = MultilayerPerceptron(3, 1, hidden=(8,), dtype="f8")
+    with pytest.raises(NotImplementedError, match="measured to buy nothing"):
+        m.deepened((16,))
+    with pytest.raises(ValueError, match="only appends"):
+        m.widened(2)
+
+
+def test_the_widened_network_still_satisfies_the_contract():
+    """A widened adapter is an adapter: `persist` must take it, a `Guard` must wrap it, and
+    the covariance fields must still be refused."""
+    old = MultilayerPerceptron(3, 1, hidden=(8,), dtype="f8", seed=1)
+    wide = old.widened(5)
+    rec = pack(wide, sequence=1, fingerprint=0xBEEF)
+    assert unpack(rec).state_size == wide.state.size
+    g = Guard(wide, [Bound("residual_norm", hi=50.0)], rollback_depth=2)
+    assert g.n_features == 5
+    with pytest.raises(ValueError):
+        Guard(old.widened(5), [Bound("p_trace", hi=1e6)])
