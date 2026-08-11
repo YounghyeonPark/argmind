@@ -61,9 +61,14 @@ class RuntimeShapedBackbone {
 public:
     using scalar = T;
 
+    /// `pool` tiles the final feature map into `pool x pool` averages instead of one.
+    /// `pool = 1` is global average pooling, which discards WHERE anything was --
+    /// measured on a shallow random backbone, a blob's position reads 1.076 of its own
+    /// standard deviation globally (worse than a constant) and 0.231 on a 3x3 grid.
     RuntimeShapedBackbone(const std::vector<LayerSpec>& plan, int height, int width,
-                          int channels)
-        : plan_(plan), h_(height), w_(width), c_in_(channels) {
+                          int channels, int pool = 1)
+        : plan_(plan), h_(height), w_(width), c_in_(channels), pool_(pool) {
+        if (pool < 1) valid_ = false;
         valid_ = height >= 1 && width >= 1 && channels >= 1;
         int h = height, w = width, c = channels;
         size_t off = 0;
@@ -88,7 +93,9 @@ public:
             if (L.kind != LayerKind::Depthwise) c = L.out_channels;
             widest = std::max(widest, static_cast<size_t>(h) * w * c);
         }
-        n_outputs_ = c;
+        channels_out_ = c;
+        n_outputs_ = c * pool_ * pool_;
+        if (h < pool_ || w < pool_) valid_ = false;
         state_.assign(off, T(0));
         // Two buffers, ping-ponged, each the size of the largest single activation. Never
         // smaller than the true peak pair and one line instead of a schedule.
@@ -148,13 +155,26 @@ public:
             dst = t;
         }
 
-        // Global average pool: the layer that turns a feature MAP into the feature VECTOR
-        // the rest of this library consumes.
-        const T inv = T(1) / static_cast<T>(h * w);
-        for (int ch = 0; ch < c; ++ch) {
-            T acc = T(0);
-            for (int i = 0; i < h * w; ++i) acc += src[static_cast<size_t>(i) * c + ch];
-            out[ch] = acc * inv * scale_;
+        // The layer that turns a feature MAP into the feature VECTOR the rest of this
+        // library consumes. Tiles get `h / pool` rows with the remainder on the LAST one,
+        // matching the reference -- a difference there would move every feature.
+        int o = 0;
+        for (int gi = 0; gi < pool_; ++gi) {
+            const int i0 = gi * h / pool_;
+            const int i1 = (gi + 1 < pool_) ? (gi + 1) * h / pool_ : h;
+            for (int gj = 0; gj < pool_; ++gj) {
+                const int j0 = gj * w / pool_;
+                const int j1 = (gj + 1 < pool_) ? (gj + 1) * w / pool_ : w;
+                const T inv = T(1) / static_cast<T>((i1 - i0) * (j1 - j0));
+                for (int ch = 0; ch < c; ++ch) {
+                    T acc = T(0);
+                    for (int i = i0; i < i1; ++i) {
+                        for (int j = j0; j < j1; ++j)
+                            acc += src[(static_cast<size_t>(i) * w + j) * c + ch];
+                    }
+                    out[o++] = acc * inv * scale_;
+                }
+            }
         }
     }
 
@@ -232,6 +252,8 @@ private:
     std::vector<T> state_;
     std::vector<T> a_, b_;
     int h_, w_, c_in_;
+    int pool_ = 1;
+    int channels_out_ = 0;
     int n_outputs_ = 0;
     T scale_ = T(1);
     bool valid_ = true;

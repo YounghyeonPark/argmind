@@ -50,7 +50,7 @@ def run_both(tool, tmp_path, ref, image, dtype):
     h, w, c = ref.in_shape
     job = tmp_path / "case.bin"
     with job.open("wb") as f:
-        f.write(CASE.pack(b"AMBB", 1, np.dtype(dtype).itemsize, 0, h, w, c,
+        f.write(CASE.pack(b"AMBB", 1, np.dtype(dtype).itemsize, ref.pool, h, w, c,
                           len(ref.plan), ref.state_size, ref.output_scale))
         for entry in ref.plan:
             if entry[0] == "conv":
@@ -82,6 +82,9 @@ def ulp(a, b, dtype):
 
 PLANS = [
     ("one conv", [("conv", 5, 3, 2)], (12, 12, 3)),
+    ("grid pooled 2x2", [("conv", 5, 3, 2), ("dw", 3, 2)], (16, 16, 3), 2),
+    ("grid pooled 3x3", [("conv", 6, 3, 2), ("dw", 3, 1), ("pw", 8)], (18, 18, 3), 3),
+    ("grid that does not divide", [("conv", 4, 3, 2)], (11, 13, 3), 3),
     ("one depthwise", [("conv", 4, 3, 1), ("dw", 3, 2)], (10, 10, 2)),
     ("a separable block", [("conv", 6, 3, 2), ("dw", 3, 1), ("pw", 8)], (16, 16, 3)),
     ("stride everywhere", [("conv", 4, 3, 2), ("dw", 3, 2), ("pw", 6), ("dw", 3, 2),
@@ -92,9 +95,11 @@ PLANS = [
 
 
 @pytest.mark.parametrize("dtype", ["f4", "f8"])
-@pytest.mark.parametrize("label,plan,shape", PLANS)
-def test_the_port_agrees_with_the_reference(bbcheck, tmp_path, dtype, label, plan, shape):
-    ref = Backbone(plan, shape, dtype=dtype, seed=3)
+@pytest.mark.parametrize("case", PLANS, ids=lambda c: c[0])
+def test_the_port_agrees_with_the_reference(bbcheck, tmp_path, dtype, case):
+    label, plan, shape = case[0], case[1], case[2]
+    pool = case[3] if len(case) > 3 else 1
+    ref = Backbone(plan, shape, dtype=dtype, seed=3, pool=pool)
     img = np.random.default_rng(7).standard_normal(shape)
     py, cpp = run_both(bbcheck, tmp_path, ref, img, dtype)
 

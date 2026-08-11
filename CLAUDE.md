@@ -226,6 +226,41 @@ The `MAX_BYTES` `static_assert` caught every stale bound at the first build, for
 time. Three mutants: wrapping an out-of-range slot, narrowing `valid_field` back, and
 declaring no slots — all caught.
 
+**There is a `demo/` now, and it is deliberately outside the library.** `python -m
+demo.pointer` runs argmind off a webcam: a dot follows your hand after you teach it by
+dragging, and the same window shows the two-rate alignment, drift re-convergence, the guard
+freezing when you cover the camera, thawing when you uncover it, and persistence across a
+restart. **Nothing under `argmind/` or `cpp/` imports it**, and it has a dependency the library
+must never acquire — OpenCV. A demo that blurred that line would argue against the design it
+demonstrates.
+
+Measured: **931 fps** for backbone plus pipeline on the host, so a 30 Hz camera is not the
+constraint; position error **0.035** after ~400 taught frames against **0.24** for guessing the
+centre; head state **1,160 B**.
+
+**Three of its design choices came out of measurements that rejected the first attempt.** The
+architecture is shallow and grid-pooled because random convolutional features **work shallow
+and die deep** — brightness reads 0.009 at one layer and **1.119 at twenty-seven**, worse than
+a constant — and because global average pooling discards *where*: a position task reads 1.076
+globally against **0.231** on a 3x3 grid. `grid_avg_pool` is in the library for that reason, in
+both implementations, with parity cases including a grid that does not divide the map.
+
+The guard's external check watches the **raw frame's standard deviation**, after two other
+statistics were measured not to separate: distance from a baseline embedding saturates
+(covered 1.000, a dim room 0.877) and embedding norm overlaps outright (0.604 against 0.578).
+Frame std is 0.000 covered against 0.194-0.197 for every legitimate scene — and it is the right
+*kind* of statistic, because a flat grey frame gives a plausible embedding the head fits
+happily. Setting the first threshold by eye froze the demo on its second frame. And you teach
+by dragging rather than clicking because NLMS at 145 features needs a few hundred updates:
+0.058 at 300, nowhere at 50.
+
+**`demo/test_pointer.py` drives the whole composition headlessly** with synthetic frames and
+runs in the root suite, needing no camera and no OpenCV — `cv2` is imported inside `main()`.
+It carries the control the fault test needs: the same covered camera destroys an *unguarded*
+head, so freezing prevented something. **And it walked into the preallocated-prediction trap
+for the third time in this repository**, reporting that teaching barely worked (0.256 → 0.227)
+on a composition that reaches 0.035.
+
 **The platform has its own backbone now** (`argmind/backbone.py`), and it exists because a
 previous answer of mine narrowed the owner's decision without the authority to. Asked whether
 camera hardware needs a HAL, I said no *and* that a backbone belongs to the vendor's runtime —

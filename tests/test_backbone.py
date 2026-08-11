@@ -12,7 +12,8 @@ import pytest
 
 from argmind.adapt import NormalisedLeastMeanSquares, RecursiveLeastSquares
 from argmind.backbone import (Backbone, conv2d, conv2d_naive, depthwise_conv2d,
-                              depthwise_conv2d_naive, global_avg_pool, mobilenet_v1, relu6)
+                              depthwise_conv2d_naive, global_avg_pool, grid_avg_pool,
+                              mobilenet_v1, relu6)
 from argmind.persist import pack, unpack
 
 
@@ -324,3 +325,84 @@ def test_the_plan_stride_reaches_the_convolution():
     # The declared memory follows the stride too, which is the figure that decides the tier.
     assert (Backbone([("conv", 5, 3, 2)], (16, 16, 3)).peak_activation_values()
             < Backbone([("conv", 5, 3, 1)], (16, 16, 3)).peak_activation_values())
+
+
+# -- the readout, which decides what a spatial task can do at all --------------------------
+
+def test_grid_pooling_keeps_where_and_global_pooling_does_not():
+    """Not a refinement. Global average pooling **discards position by construction**, and on
+    a shallow random backbone a moving blob reads **1.076** of its own standard deviation
+    globally -- worse than a constant predictor -- against **0.231** on a 3x3 grid. Brightness
+    is unaffected either way (0.009 against 0.023) because it is a global quantity.
+
+    Shortened here to the property rather than the regression: the tiles must differ from each
+    other when the input has structure, and their mean must be the global answer.
+    """
+    g = np.random.default_rng(1)
+    x = g.standard_normal((12, 12, 4))
+    x[:6, :, :] += 5.0                       # a top-heavy image
+
+    glob = grid_avg_pool(x, 1)
+    tiles = grid_avg_pool(x, 3).reshape(9, 4)
+    assert glob.shape == (4,) and tiles.shape == (9, 4)
+    assert np.allclose(tiles.mean(axis=0), glob), (
+        "the tiles do not average to the global answer, so one of the two is wrong")
+    assert tiles[0, 0] > tiles[8, 0] + 1.0, (
+        "the top and bottom tiles agree on a top-heavy image, so the grid is not spatial")
+
+    # ...and the global readout cannot tell the image from its vertical flip, which is the
+    # whole reason a spatial task needs the grid.
+    flipped = x[::-1, :, :]
+    assert np.allclose(grid_avg_pool(flipped, 1), glob)
+    assert not np.allclose(grid_avg_pool(flipped, 3), grid_avg_pool(x, 3))
+
+    b = Backbone([("conv", 6, 3, 2)], (16, 16, 3), dtype="f8", seed=1, pool=3)
+    assert b.n_outputs == 6 * 9
+    img = g.standard_normal((16, 16, 3))
+    assert b.features(img).shape == (54,)
+    with pytest.raises(ValueError, match="grid must be"):
+        grid_avg_pool(x, 0)
+    with pytest.raises(ValueError, match="at least that big"):
+        grid_avg_pool(np.zeros((2, 2, 3)), 3)
+
+
+def test_a_random_backbone_dies_with_depth():
+    """The measurement that decided the demo's architecture, and it is not obvious: random
+    convolutional features work SHALLOW and carry nothing deep.
+
+    Predicting overall brightness from a random-weight stack, RMSE over the target's own
+    standard deviation: **0.009 at one layer**, 0.011 at two, 0.010 at four, 0.027 at eight,
+    and **1.119 at twenty-seven** -- worse than a constant. Each relu6 halves the signal and
+    the random mixing decorrelates what is left. An untrained deep backbone is not a basis.
+    """
+    rng = np.random.default_rng(0)
+    n, hh = 60, 48
+
+    def scene(bright):
+        return np.full((hh, hh, 3), bright) + rng.standard_normal((hh, hh, 3)) * 0.05
+
+    bright = rng.uniform(0.1, 0.9, n)
+    imgs = [scene(b) for b in bright]
+
+    def brightness_error(plan):
+        bb = Backbone(plan, (hh, hh, 3), dtype="f8", seed=1, pool=1)
+        x = np.array([bb.features(im) for im in imgs])
+        x = x / max(float(x.std()), 1e-30)
+        x = np.concatenate([x, np.ones((n, 1))], axis=1)
+        m = NormalisedLeastMeanSquares(x.shape[1], 1, mu=0.5, dtype="f8")
+        for _ in range(40):
+            for xi, yi in zip(x[:45], bright[:45]):
+                m.update(xi, [yi])
+        p = np.array([float(m.predict(xi)[0]) for xi in x[45:]])
+        return float(np.sqrt(np.mean((p - bright[45:]) ** 2)) / bright[45:].std())
+
+    shallow = brightness_error([("conv", 16, 5, 4)])
+    deep_plan = [("conv", 8, 3, 2)]
+    for i in range(8):
+        deep_plan += [("dw", 3, 2 if i in (0, 2) else 1), ("pw", 16)]
+    deep = brightness_error(deep_plan)
+
+    assert shallow < 0.2, f"a one-layer random backbone cannot read brightness: {shallow:.3f}"
+    assert deep > shallow * 3.0, (
+        f"depth no longer destroys the signal ({shallow:.3f} against {deep:.3f}); if random "
+        "deep features have become usable the demo's architecture should be re-derived")

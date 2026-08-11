@@ -27,7 +27,7 @@ struct CaseHeader {
     char magic[4];      // "AMBB"
     uint16_t version;
     uint8_t dtype;      // 4 or 8
-    uint8_t pad;
+    uint8_t pool;       // grid size; 1 is global average pooling
     uint16_t height, width, channels;
     uint16_t n_layers;
     uint32_t state_size;
@@ -52,7 +52,8 @@ int run(const CaseHeader& h, const std::vector<LayerRec>& layers,
         plan.push_back({static_cast<argmind::host::LayerKind>(L.kind),
                         L.out_channels, L.k, L.stride});
     }
-    argmind::host::RuntimeShapedBackbone<T> bb(plan, h.height, h.width, h.channels);
+    argmind::host::RuntimeShapedBackbone<T> bb(plan, h.height, h.width, h.channels,
+                                              h.pool);
     if (!bb.valid()) {
         fprintf(stderr, "the plan was refused\n");
         return 4;
