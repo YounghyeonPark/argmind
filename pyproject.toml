@@ -18,7 +18,12 @@ dev = ["pytest>=8", "ruff>=0.6"]
 [tool.pytest.ini_options]
 # accelerator/ is parked and its 429 tests do not gate work on this project.
 # Run them explicitly with: python -m pytest accelerator/tests
-testpaths = ["tests"]
+#
+# `demo` is here because it was not, and `demo/test_pointer.py` had therefore never run
+# under `python -m pytest` since the demo landed. Same shape as `select_newest`: present,
+# compiled, and reached by nothing. The demo's tests import no OpenCV — `pointer.py` takes
+# `import cv2` inside `main()` — so collecting them costs a clone without it nothing.
+testpaths = ["tests", "demo"]
 addopts = "-q --strict-markers --strict-config"
 
 [tool.ruff]

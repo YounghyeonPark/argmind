@@ -813,6 +813,84 @@ And that carrying `P` is simply a benefit — in the basis case it is the whole 
 why `widened()` has no default. Seven mutants caught across the two implementations, and the two
 widenings are compared against each other.
 
+## Objectives declared abstractly — measured 2026-08-10/11, and the detector does not exist
+
+**The owner's question**: an application should declare several objective functions abstractly —
+track eyes, nose, mouth — when no pre-trained backbone knows which part is which. **The
+specification works and the automation does not**, and the split is the finding.
+
+**The abstract form is sound.** *salient / distinct / rigid*, with no part named, has its optimum
+at one-tracker-per-part: 4,000 random rigid-triangle placements did not beat the truth, and a
+distractor that is bright but drifts independently is refused by `rigid` rather than by anything
+that knows what a face is. Measured over static placements.
+
+**But the learner acts over trajectories, and that is where the weight was never validated.**
+`W_RIGID` had been raised 1.0 → 3.0 deliberately, to widen the distractor's margin (only +0.039
+at 1.0). Over trajectories the cheapest way to keep distances constant is **not to move**, so at
+3.0 a policy that always picks `stay` beats the learner. Swept on trajectories, four seeds, 400
+greedy steps, scored against a zero-reward control — measured, `demo/objective_sweep/`:
+
+| `W_RIGID` | 0.00 | 0.25 | 0.50 | 1.00 | 2.00 | 3.00 | 6.00 |
+|---|---|---|---|---|---|---|---|
+| score | **1.18x** | **1.05x** | **1.10x** | 0.98x | 1.01x | **0.69x** | **0.68x** |
+
+So the safe region is 0.0–0.5 and the weight I chose is in the region where **learning is worse
+than not learning**. A specification error of mine, found by sweeping the axis rather than by
+reasoning about it: *an objective validated over placements is not validated for a learner.*
+
+**The detector I proposed does not work, and that is the substantive negative result.** The plan
+was to put the action-reversal rate and the stay rate into `set_external` so the guard freezes a
+degenerate policy. Measured across the sweep *and* a second, unrelated environment (a novelty
+reward on one panning agent, which the learner maximises by oscillating — **1.51x a
+follow-the-blob oracle on the oracle's own reward while looking at nothing**):
+
+| statistic | part tracking | panning | verdict |
+|---|---|---|---|
+| `reversal` | working reverses **more**, 29.7–37.5% vs 19.2–22.1% | working oracle reverses **0.0%**, wiggler 25.7% | sign inverts |
+| `stillness` | worst row is the stillest, 47.2% | working oracle is the stillest, 61.4% | sign inverts |
+| `entropy` | overlapping | wiggler **2.24 bits** vs oracle **1.73** | a lower bound freezes the *working* policy first |
+
+**A policy's action distribution does not carry the sign of its own error** — whether moving a lot
+is good is a property of the task, which is exactly what the detector was supposed to supply.
+Same shape as `at_most(PTrace, 1e4)` being dead while `at_least(PTrace, 1e-9)` trips immediately:
+one bound, two directions, and which is right is not knowable from inside the guard. Held out
+rather than fitted — `entropy` was chosen on the freeze failure and then tested on the wiggle
+failure, where it points the wrong way.
+
+**What does work is much narrower and needs no tuning: collapse to a constant.** A head trained
+with zero reward reads **0.00 bits and 100% stillness in both environments**, against ≥1.73 bits
+for every policy that does anything. `demo/policy_health.py` is that, `collapsed()` is the test,
+and it catches the deployment failure that matters — a head that has silently stopped deciding —
+not one pointed at the wrong thing.
+
+**And the value handed to `set_external` is not the raw statistic**, which a failing test found
+rather than a reading: a `Bound` is evaluated from the first update and has no "not enough
+evidence yet", so raw entropy on a one-action window **freezes the guard at step 0**.
+`external_signal()` resolves it on the caller's side of the slot. **Third occurrence** of that
+shape here. Both halves are pinned, including that the naive version still fails.
+
+**Two earlier figures are corrected by the shipped definitions rather than by a new run.** The
+exploratory code counted `stillness` over *transitions* where `action_stats` counts it over
+samples, and pooled three trackers into one histogram where entropy is now per tracker; pooling
+inflates entropy whenever the agents differ, so that column had read high (e.g. 2.26 → 2.03).
+Every reward and score reproduced exactly. The wiggler's reversal rate, quoted as 45% from an
+earlier scratch computation, is **25.7%** under `action_stats`.
+
+**The sweep is checked in because no test can protect this.** Twelve mutants, eleven caught. The
+survivor edits a *recorded measurement* — a score in the table — which falsifies an input rather
+than a computation, and no assertion reaches it. The first version of the table carried a boolean
+"works" label and that mutant was worse: relabelling a row passed the whole suite. The label is
+**derived** from the measured score now, so an edit has to change a number, and
+`python -m demo.objective_sweep.sweep` regenerates every figure in 4m49s at `--jobs 28` on this
+machine (measured; not a target figure). Same remedy as the `persist` sweeps, for the same reason.
+
+**A separate finding, from adding the tests: `testpaths` was `["tests"]`, so `demo/test_pointer.py`
+had never run under `python -m pytest` since the demo landed** — while `demo/README.md` said in
+so many words that it "runs in the root suite". Present, importable, reached by nothing: the same
+shape as `select_newest` being compiled and called by no binary. `testpaths` is `["tests",
+"demo"]` now and the demo's tests import no OpenCV, so a clone without it still collects them.
+Had this not been fixed, every test above would have protected nothing.
+
 **Still undecided:** whether inference is *hosted* (an interface to ONNX Runtime/TFLite) or
 *embedded*, and whether the tiers ship as one library or two. Nothing on the camera/audio/speech
 path is built.
@@ -835,7 +913,7 @@ rollback, explicit recovery), `argmind/pipeline.py` (`FrameMap`, input gate, bou
 pipeline. `argmind/bench.py` has no C++ counterpart and is not getting one: it is a host
 measurement harness, and DESIGN.md already records that Python timings are not a baseline the
 C++ can be compared against.
-507 Python tests and 4,652 C++ checks pass; several exist to prove failures are visible
+825 Python tests and 4,652 C++ checks pass; several exist to prove failures are visible
 rather than silent. Every suite is mutation-checked, and surviving mutants are recorded where
 they live rather than tallied here — including the ones that turn out to be **equivalent on a
 64-bit host**, a distinction worth keeping rather than rounding away. Cumulative counts are

@@ -2,9 +2,16 @@
 
 **Not part of the library.** Nothing under `argmind/` or `cpp/` imports anything here, and
 this directory has dependencies the library must never acquire — OpenCV for the camera and
-the window. `python -m pytest` at the repository root does not run it. That separation is the
-point: argmind is a library that allocates nothing and talks to no hardware, and a demo that
-blurred that line would be arguing against the design it is demonstrating.
+the window. That separation is the point: argmind is a library that allocates nothing and talks
+to no hardware, and a demo that blurred that line would be arguing against the design it is
+demonstrating.
+
+`python -m pytest` at the repository root **does** run the tests here. This line used to say it
+did not, and that was true and wrong: `testpaths` listed `tests` alone, so `test_pointer.py` had
+never executed under the suite since the demo landed — present, importable, and reached by
+nothing, which is the same shape as `select_newest` being compiled and called by no binary. The
+tests import no OpenCV (`pointer.py` takes `import cv2` inside `main()`), so a clone without it
+still collects them.
 
 ```
 pip install -r demo/requirements.txt
@@ -83,3 +90,38 @@ NLMS at 145 features reaches a radial error of 0.058 after 300 updates and gets 
 | `r` | reset the head and forget everything |
 | `s` | save to `demo/state/`, `l` load |
 | `q` | quit (it saves) |
+
+## `policy_health.py` — what a caller may *not* bound, measured
+
+The demo's external check works because frame standard deviation separates completely. That is
+not a general result, and the second thing in this directory exists to say so.
+
+`demo/objective_sweep/` drives two reinforcement objectives to failure in opposite directions —
+a rigidity term that makes *not moving* optimal, and a novelty reward that makes *oscillating*
+optimal, the latter scoring **1.51× a follow-the-blob oracle on the oracle's own reward while
+looking at nothing**. Both failures are plainly visible in the action stream. Neither is
+detectable by a bound on it:
+
+| statistic | part tracking | panning |
+|---|---|---|
+| `reversal` | working policies reverse **more** (29.7–37.5% vs 19.2–22.1%) | the working oracle reverses **0.0%**, the wiggler 25.7% |
+| `stillness` | the worst row is the stillest (47.2%) | the working oracle is the stillest (61.4%) |
+| `entropy` | overlapping | the wiggler reads **2.24 bits against the oracle's 1.73** |
+
+So a low-entropy bound freezes the working policy *before* the broken one. **A policy's action
+distribution does not carry the sign of its own error** — whether moving a lot is good is a
+property of the task, which is exactly what a specification-error detector was supposed to
+supply. Same shape as the guard's `at_most(PTrace, 1e4)` finding: one bound, two directions, and
+which direction is right is not knowable from inside the guard.
+
+What *is* detectable, with no threshold tuning, is **collapse to a constant**: 0.00 bits and 100%
+stillness against ≥1.73 bits for every policy that does anything, in both environments. That is
+the failure that matters in a deployment — a head that has silently stopped deciding — and
+`collapsed()` is it.
+
+One implementation note that a test found rather than a reading: the value handed to
+`set_external` is **not** the raw statistic. A `Bound` is evaluated from the first update and has
+no "not enough evidence yet", so raw entropy freezes the guard at **step 0** on a one-action
+window. `external_signal()` resolves that on the caller's side of the slot. Third occurrence of
+that shape here, after `at_least(PTrace, 1e-9)` tripping immediately and `at_most(PTrace, 1e4)`
+being dead.
