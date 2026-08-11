@@ -506,7 +506,8 @@ def test_the_recorded_target_sizes_are_current(cross, tmp_path, request):
 HOSTED_HEADERS = ("host/runtime_shape.hpp",
                   "host/runtime_shape_guard.hpp",
                   "host/runtime_shape_pipeline.hpp",
-                  "host/runtime_shape_mlp.hpp")
+                  "host/runtime_shape_mlp.hpp",
+                  "host/runtime_shape_backbone.hpp")
 
 
 def test_no_core_header_reaches_into_the_hosted_tier(cross):

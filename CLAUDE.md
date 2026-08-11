@@ -279,6 +279,30 @@ implementations that disagree on any of it are two different models; and on-devi
 the backbone, which was already measured unavailable since backprop retains activations and the
 forward pass alone is the peak above.
 
+**The backbone is across** (`cpp/include/argmind/host/runtime_shape_backbone.hpp`,
+`cpp/tools/bbcheck.cpp`), into the hosted tier for the memory reason above. Measured over six
+plans — one conv, one depthwise, a separable block, stride at every layer, a 5×5 kernel, a
+non-square input — at both precisions: **within 400 ulp of the reference**, and the full
+27-layer MobileNet at 96×96 agrees too. Eight mutants, all caught: top-heavy padding, a
+column-major kernel index, a depthwise that mixes channels, relu6 without its upper clip, an
+ignored stride, a dropped `output_scale`, a pool dividing by the wrong count, and a
+zero-channel plan accepted.
+
+**Classifying the divergence took two corrections and the second one is the finding.** Through
+the whole stack the deviation does *not* grow with the sum length — 1.18, 1.88, 0.77 ulp at
+pointwise widths of 4, 32, 256 — which is not what reduction order looks like. The first
+explanation offered was `relu6` saturating at 6, and it is **measured to be wrong: 0.0% of
+activations reach the clip at any width**. What is true is that **55% are clipped to exactly
+zero**, bit-identical whatever order produced them, and global average pooling then averages
+errors of random sign over H×W. Isolating a single pointwise layer with no pooling and no
+stack, the growth is plain: **0.52, 0.50, 1.31, 3.94, 4.17 ulp** at cin of 4, 16, 64, 256,
+1024. So it is reduction order, and the stack absorbs most of it — and a test now pins the
+*rejected* explanation too, so it is not offered again.
+
+**One harness bug that fails silently:** `struct` does not insert the padding a C++ compiler
+puts before a `double`, so the Python encoder packed 28 bytes where `bbcheck` static_asserts
+32, and every case came back "not a case file" with nothing on stderr.
+
 **There are three adapters now, and the third is a network** — `MultilayerPerceptron`, the
 2026-08-10 scope decision made real. Python only so far. Three of nine mutants exposed real
 gaps rather than confirming the suite, and two design choices were measured rather than taken.
