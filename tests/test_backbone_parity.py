@@ -17,6 +17,8 @@ from pathlib import Path
 import numpy as np
 import pytest
 
+import _toolbuild
+
 from argmind.backbone import Backbone, mobilenet_v1
 
 REPO = Path(__file__).resolve().parents[1]
@@ -29,18 +31,19 @@ LAYER = struct.Struct("<B3xiii")         # 16 bytes
 KIND = {"conv": 0, "dw": 1, "pw": 2}
 
 
-@pytest.fixture(scope="session")
-def bbcheck(tmp_path_factory):
-    cxx = shutil.which("g++")
-    if cxx is None:
-        pytest.skip("no host g++")
-    exe = tmp_path_factory.mktemp("bb") / "bbcheck.exe"
-    done = subprocess.run(
-        [cxx, "-std=c++17", "-O2", "-Wall", "-Wextra", "-Wpedantic",
-         "-I", str(CPP / "include"), str(CPP / "tools" / "bbcheck.cpp"), "-o", str(exe)],
-        capture_output=True, text=True)
-    assert done.returncode == 0, f"bbcheck does not build:\n{done.stderr}"
-    return exe
+@pytest.fixture(scope="session", params=_toolbuild.ARCHES)
+def bbcheck(request, tmp_path_factory):
+    """Built for the host and for the declared target, like every other parity tool here.
+
+    **The target cases are small on purpose and the reason is the harness, not the library.**
+    `cpp/target/qemu/startup.c` gives the image a 64 KB heap out of `.bss`, because the
+    AN547's DTCM is 512 KB and a larger array made the M55 image produce no output at all. A
+    96x96 MobileNet needs 840 KB of weights and 216 KB of activations in fp32, so it cannot
+    run there. An STM32N6 has 4.2 MB. What the target runs is the *arithmetic*, at shapes
+    that fit, which is the question a port has to answer.
+    """
+    work = tmp_path_factory.mktemp("bb_" + request.param)
+    return _toolbuild.build_tool("bbcheck", request.param, work)
 
 
 def run_both(tool, tmp_path, ref, image, dtype):
@@ -102,7 +105,8 @@ def test_the_port_agrees_with_the_reference(bbcheck, tmp_path, dtype, label, pla
     assert float(np.max(np.abs(py))) > 1e-6, "the embedding is ~zero, so this compares nothing"
 
 
-def test_the_deviation_is_reduction_order_and_the_stack_absorbs_it(bbcheck, tmp_path):
+def test_the_deviation_is_reduction_order_and_the_stack_absorbs_it(tmp_path_factory,
+                                                                   tmp_path):
     """Classifying the difference instead of accepting a small number -- and the
     classification took two corrections.
 
@@ -120,6 +124,10 @@ def test_the_deviation_is_reduction_order_and_the_stack_absorbs_it(bbcheck, tmp_
     **0.52, 0.50, 1.31, 3.94, 4.17 ulp** at cin of 4, 16, 64, 256 and 1024. So the mechanism
     is reduction order, and the full stack absorbs most of it.
     """
+    # Host only: the 256-wide case holds two activation buffers of 9,216 values, which is
+    # 147 KB at f8 against the QEMU harness's 64 KB heap. The target runs the small plans.
+    bbcheck = _toolbuild.build_tool("bbcheck", "host", tmp_path_factory.mktemp("bbwide"))
+
     from argmind.backbone import conv2d          # noqa: PLC0415
 
     def loop_pointwise(x, w, b):
@@ -195,13 +203,16 @@ def test_relu6_saturation_is_not_what_absorbs_the_deviation():
         "given for the stack absorbing the reduction-order growth")
 
 
-def test_the_full_mobilenet_agrees(bbcheck, tmp_path):
+def test_the_full_mobilenet_agrees(tmp_path_factory, tmp_path):
     """The configuration the scope decision points at: 27 layers, 210,336 weights, a 256-wide
     embedding. Deep enough that a wrong padding rule or a transposed filter compounds into
     something obvious rather than staying at roundoff."""
+    # Host only: 840 KB of weights and 216 KB of activations do not fit the QEMU harness's
+    # 64 KB heap. That is the harness, not the library -- an STM32N6 has 4.2 MB.
+    tool = _toolbuild.build_tool("bbcheck", "host", tmp_path_factory.mktemp("bbfull"))
     ref = mobilenet_v1(0.25, (96, 96, 3), dtype="f4", seed=1)
     img = np.random.default_rng(4).standard_normal((96, 96, 3))
-    py, cpp = run_both(bbcheck, tmp_path, ref, img, "f4")
+    py, cpp = run_both(tool, tmp_path, ref, img, "f4")
     assert py.shape == (256,) and ref.state_size == 210336
     dev = ulp(py, cpp, "f4")
     assert dev < 2000.0, f"the full stack deviates by {dev:.1f} ulp"

@@ -299,6 +299,20 @@ stack, the growth is plain: **0.52, 0.50, 1.31, 3.94, 4.17 ulp** at cin of 4, 16
 1024. So it is reduction order, and the stack absorbs most of it — and a test now pins the
 *rejected* explanation too, so it is not offered again.
 
+**And it runs on ARM.** `bbcheck` is parametrised `[host]`/`[target]` like every other parity
+tool here, so the six plans at both precisions execute under QEMU on the declared floor as well
+as on the host, and agree with the reference there too. Convolution is the first thing in this
+library whose arithmetic is dense enough for a soft-float or contraction difference to compound
+through twenty-seven layers, and it does not.
+
+**Three cases are host-only and the reason is the harness, not the library.** The QEMU image
+takes a 64 KB heap out of `.bss` — the AN547's DTCM is 512 KB and a larger array made the M55
+produce no output at all — so a 96×96 MobileNet at 840 KB of weights plus 216 KB of activations
+cannot run there, and neither can the 256-wide classification case at 147 KB of activations in
+f8. **That limit announced itself rather than being assumed**: the wide case was in the target
+set first and failed with exit 1 while the host passed, which is also the evidence that the
+target path is a genuinely different binary. An STM32N6 has 4.2 MB.
+
 **One harness bug that fails silently:** `struct` does not insert the padding a C++ compiler
 puts before a `double`, so the Python encoder packed 28 bytes where `bbcheck` static_asserts
 32, and every case came back "not a case file" with nothing on stderr.
