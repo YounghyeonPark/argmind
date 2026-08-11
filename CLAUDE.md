@@ -943,6 +943,50 @@ hosted suite puts the target on stream 0 and the reference *is* the target strea
 gate cannot fire — copying its mapping while pushing the core suite's arrangement gave 81
 updates where 9 were expected, and a 1786-ulp state divergence that was the swap, not the port.
 
+**Teaching from the input instead of from the mouse — built, and the rule it turns on is the
+finding.** The owner asked for it after being told the head learns only while dragging. Pure
+self-supervision was already measured not to work here (a linear map to the next embedding reads a
+diagonal of 0.004 against an identity's 1.0), so the label comes from a second, independent
+computation on the same input — an **aiding sensor**, which is the structure this library was
+designed against. `demo/label_sources.py`, `--teach auto|mouse|both`, `--detect-every N`.
+
+**An aiding sensor earns a learned model only if it can be blind while the estimand changes.**
+Scored only on the frames where the source is blind, over a moving blob:
+
+| source | blind by | head | hold last | centre | |
+|---|---|---|---|---|---|
+| `MotionLabeller` | nothing moving | 0.090 | **0.078** | 0.316 | **0.87× — the head loses** |
+| `CadenceDetector(10)` | a declared interval | **0.101** | 0.133 | 0.231 | 1.31× (1.26× at 5, 1.41× at 15) |
+
+Motion energy fails *structurally*, not for want of tuning: it is blind exactly when the target is
+not moving, so holding its last output is right whenever it is unavailable. It ships anyway,
+because the negative result is the useful half and it is the first thing anyone reaches for.
+
+**And the unflattering control scopes the whole thing: a detector run on every frame scores 0.010**
+— eight times better than the head, which is an interpolator between its teacher's runs and cannot
+beat it. On this host the exhaustive detector costs **0.10 ms/frame against the backbone-plus-
+pipeline's 0.58 ms** (measured), so for this task on this machine the right answer is to run the
+detector. The case argmind is for is a heavy detector on an NPU at 10–30 Hz with a 24-byte head
+between its runs, and **that is not measured, so it is not claimed.** My original premise — that
+the detector is the expensive one — was wrong on the host, and the measurement said so.
+
+**Two detector choices came out of measurements that rejected the first attempt.** It reads the
+**single-step** frame difference rather than accumulating between runs: an accumulated map is
+about the *interval*, so its centroid is the middle of the arc travelled and its error grows with
+the window — 0.048 / 0.074 / 0.121 / 0.160 at cadence 2/5/10/15 against a flat ~0.036. **Stamping
+the accumulated label at the interval's midpoint does not fix it** (identical to three decimals),
+because with a fast reference `hold_last` pairs it with the current features either way — the
+label is wrong about every instant rather than mis-aligned, which is the one case where this
+project's recorded stamping lesson is *not* the answer. And it reads the difference rather than the
+frame, which no synthetic-blob fixture can justify since there the mover *is* the brightest thing;
+a mutant locating on the raw frame survived everything until a scene with a brighter static lamp
+was added, where the two separate completely.
+
+**The first fixture was rigged and the label count gave it away**: the blob *teleported* into its
+parked position, a teleport is a motion event, so the detector got one free reading at exactly the
+right place and holding was correct by construction. Nine mutants, all caught after that fixture
+was added.
+
 **Still undecided:** whether inference is *hosted* (an interface to ONNX Runtime/TFLite) or
 *embedded*, and whether the tiers ship as one library or two. Nothing on the camera/audio/speech
 path is built.
@@ -965,7 +1009,7 @@ rollback, explicit recovery), `argmind/pipeline.py` (`FrameMap`, input gate, bou
 pipeline. `argmind/bench.py` has no C++ counterpart and is not getting one: it is a host
 measurement harness, and DESIGN.md already records that Python timings are not a baseline the
 C++ can be compared against.
-832 Python tests and 4,652 C++ checks pass; several exist to prove failures are visible
+840 Python tests and 4,652 C++ checks pass; several exist to prove failures are visible
 rather than silent. Every suite is mutation-checked, and surviving mutants are recorded where
 they live rather than tallied here — including the ones that turn out to be **equivalent on a
 64-bit host**, a distinction worth keeping rather than rounding away. Cumulative counts are

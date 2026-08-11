@@ -26,6 +26,7 @@ from argmind.guard import Bound, Divergence, Guard
 from argmind.persist import Store, fingerprint_of
 from argmind.pipeline import FrameMap, Pipeline
 from argmind.stream import Stream
+from demo.label_sources import CadenceDetector
 
 #: Small on purpose. Random convolutional features work shallow and carry nothing deep --
 #: brightness reads 0.009 at one layer and 1.119 at twenty-seven -- and a 3x3 grid is what
@@ -116,20 +117,27 @@ def draw(cv2, frame, state):
         cv2.drawMarker(frame, (int(tx * w), int(ty * h)), (255, 180, 0),
                        cv2.MARKER_TILTED_CROSS, 12, 1)
 
+    if state.get("detector_ran"):
+        # Where the automatic label just landed, so the two sources are distinguishable on
+        # screen rather than both arriving as an unexplained jump in the dot.
+        px, py = state["taught_points"][-1]
+        cv2.circle(frame, (int(px * w), int(py * h)), 9, (0, 200, 255), 2)
+
     lines = [
-        f"taught {state['n_taught']}   updates {state['updates']}   {state['fps']:.0f} fps",
+        f"auto {state['n_auto']} (every {state['every']})   mouse {state['n_taught']}   "
+        f"updates {state['updates']}   {state['fps']:.0f} fps",
         f"frame std x{state['drift']:.2f}   residual {state['residual']:.3f}",
     ]
     if state["frozen"]:
         lines.append("FROZEN by " + (", ".join(state["frozen_by"]) or "?"))
     elif state["learning"]:
-        lines.append("LEARNING - keep dragging")
-    elif state["n_taught"] < 4:
+        lines.append("LEARNING")
+    elif state["teach"] == "mouse" and state["n_taught"] < 4:
         lines.append("hold the mouse button on yourself and move around to teach it")
     else:
-        # The answer to "do I have to keep teaching it?" -- yes, and the overlay says so
-        # rather than leaving it to be inferred from a counter that does not move.
-        lines.append("predicting only, not learning - hold the button to teach")
+        # The answer to "do I have to keep teaching it?" -- with `--teach mouse`, yes; with a
+        # detector wired in, the input teaches it and this line says which.
+        lines.append("predicting only, not learning - move, or hold the button to teach")
     for i, text in enumerate(lines):
         cv2.putText(frame, text, (8, 20 + 20 * i), cv2.FONT_HERSHEY_SIMPLEX, 0.5,
                     (0, 0, 0), 3, cv2.LINE_AA)
@@ -150,6 +158,12 @@ def main(argv=None):
     p = argparse.ArgumentParser(prog="python -m demo.pointer", description=__doc__)
     p.add_argument("--camera", type=int, default=0)
     p.add_argument("--load", action="store_true", help="restore a saved head at startup")
+    p.add_argument("--teach", choices=("both", "auto", "mouse"), default="both",
+                   help="where labels come from: an automatic detector, your mouse, or both")
+    p.add_argument("--detect-every", type=int, default=10, metavar="N",
+                   help="run the automatic detector every N frames (default 10). This is a "
+                        "declaration of what the caller can afford, and it is what the learned "
+                        "head is covering; N=1 needs no learned head at all")
     args = p.parse_args(argv)
 
     backbone, head, guard, features, taught, fmap, pipe = build()
@@ -183,9 +197,12 @@ def main(argv=None):
     cv2.namedWindow("argmind")
     cv2.setMouseCallback("argmind", on_mouse)
 
+    detector = None if args.teach == "mouse" else CadenceDetector(args.detect_every)
     state = {"pred": None, "frozen": False, "frozen_by": (), "n_taught": 0,
              "updates": 0, "fps": 0.0, "drift": 0.0, "residual": 0.0,
-             "taught_points": [], "learning": False, "last_update_frame": -999}
+             "taught_points": [], "learning": False, "last_update_frame": -999,
+             "n_auto": 0, "detector_ran": False, "teach": args.teach,
+             "every": args.detect_every}
     # Calibrated from the first second: the scale of the caller's own statistic and of the
     # backbone's output. Both are numbers the library refuses to guess.
     frame_std = None
@@ -215,10 +232,27 @@ def main(argv=None):
 
         now = time.perf_counter() - t0
         features.push(now, emb)
+
+        # Labels out of the INPUT, on a declared cadence. The detector is authoritative and
+        # unavailable between runs, which is what gives the head something to do -- and the
+        # blindness has to be independent of the target's motion or holding the last detection
+        # covers it. Measured: a motion-energy detector, which is blind exactly when nothing
+        # moves, LOSES to holding (0.87x); this one wins (1.26-1.42x over cadences 5 to 15).
+        # And running a detector every frame beats both at 0.010 against the head's ~0.08, so
+        # this arrangement is about the detector being unaffordable, not about accuracy.
+        auto = detector(small) if detector is not None else None
+        state["detector_ran"] = auto is not None
+        if auto is not None:
+            taught.push(now, [auto[0], auto[1]])
+            state["n_auto"] += 1
+            state["taught_points"].append(auto)
         if click["xy"] is not None:
             cx, cy = click["xy"]
             click["xy"] = None
-            taught.push(now, [cx / w, cy / h])
+            # Pushed a hair later so a mouse label always wins the instant it shares with an
+            # automatic one: `hold_last` takes the newest at or before the reference, and a
+            # correction the user made by hand should not be the one that gets dropped.
+            taught.push(now + 1e-6, [cx / w, cy / h])
             state["n_taught"] += 1
             state["taught_points"].append((cx / w, cy / h))
 

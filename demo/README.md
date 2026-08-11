@@ -27,6 +27,7 @@ piece of the library:
 | what you see | what it is |
 |---|---|
 | you hold the button on yourself and drag, and it starts following | online adaptation from labels that arrive when *you* supply them |
+| it also teaches itself from the input, on a declared cadence | an intermittent aiding sensor with a learned head between its runs — see the last section, including where that is *not* worth doing |
 | the camera runs at ~30 Hz and your clicks do not | `Aligner` — two independent clocks, which is what it was built for |
 | move the laptop or change the lighting and it re-converges | drift tracking, the original reason this library exists |
 | **cover the camera** and it freezes instead of being destroyed | `Guard` — and it says which check tripped |
@@ -125,3 +126,53 @@ no "not enough evidence yet", so raw entropy freezes the guard at **step 0** on 
 window. `external_signal()` resolves that on the caller's side of the slot. Third occurrence of
 that shape here, after `at_least(PTrace, 1e-9)` tripping immediately and `at_most(PTrace, 1e4)`
 being dead.
+
+## Teaching from the input instead of from the mouse
+
+    python -m demo.pointer                       # both sources; the detector runs every 10 frames
+    python -m demo.pointer --teach auto           # no mouse at all
+    python -m demo.pointer --teach mouse          # the original behaviour
+    python -m demo.pointer --detect-every 5       # a cadence you can afford
+
+`demo/label_sources.py` supplies the label from a second, independent computation on the same
+input, so nothing has to keep dragging. The **pure** version — learn from the video alone with no
+external signal — was measured and does **not** work on an untrained backbone: a linear map to the
+next embedding reads a diagonal of 0.004 against an identity's 1.0, and frozen held-out error is
+2–7× worse than repeating the last value. A label has to come from somewhere; it just does not
+have to come from a human.
+
+**The rule that decides whether the learned head is worth anything, measured both ways.** Scored
+only on the frames where the label source is blind — the ones a caller with no learned model would
+have to guess, over a moving blob:
+
+| label source | blind by | head | hold last | centre | |
+|---|---|---|---|---|---|
+| `MotionLabeller` | nothing moving | 0.090 | **0.078** | 0.316 | 0.87×, the head **loses** |
+| `CadenceDetector(10)` | a declared interval | **0.101** | 0.133 | 0.231 | 1.31×, the head wins |
+
+**An aiding sensor earns a learned model only if it can be blind while the estimand changes.**
+Motion energy fails that structurally, not for want of tuning: it is blind exactly when the target
+is not moving, so holding its last output is right whenever it is unavailable. It is kept because
+the negative result is the useful half, and because it is the first thing anyone reaches for.
+
+**And the control that scopes all of it: a detector you can run every frame scores 0.010** —
+eight times better than the head. The head is not better than its own teacher, it interpolates
+between the teacher's runs. On this host the exhaustive detector costs 0.10 ms/frame against the
+backbone-plus-pipeline's 0.58 ms, so for *this* task on *this* machine the right answer is to run
+the detector. The case argmind is built for is a heavy detector on an NPU at 10–30 Hz with a
+24-byte head between its runs, and that has not been measured here, so it is not claimed.
+
+**Two design choices inside the detector came out of measurements that rejected the first
+attempt.** It reads the **single-step** frame difference, not an accumulation between runs: an
+accumulated map is about the *interval*, so its centroid is the middle of the arc travelled and
+its error grows with the window — 0.048 / 0.074 / 0.121 / 0.160 at cadence 2 / 5 / 10 / 15 against
+a flat ~0.036. Re-stamping the accumulated label at the interval midpoint does **not** fix it
+(identical to three decimals), because with a fast reference `hold_last` pairs it with the current
+features either way — the label is wrong about every instant, not mis-aligned. And it reads the
+difference rather than the frame, which no synthetic-blob fixture can justify since there the mover
+*is* the brightest thing; with a brighter static lamp in the scene the two separate completely,
+and that fixture exists because a mutant reading the raw frame survived everything else.
+
+The first fixture for the motion result was rigged, and the label count gave it away: the blob
+teleported into its parked position, a teleport is a motion event, so the detector got one free
+reading at exactly the right place.
