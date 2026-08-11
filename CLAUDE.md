@@ -1080,6 +1080,65 @@ dead camera now says so and returns 2. Same family as the earlier "printed saved
 where it said" — **the failures that matter in this demo are the ones that report success.** Two
 mutants, both caught.
 
+## A vocabulary that grows automatically — assessed and partly built, 2026-08-11/12
+
+**The owner's proposal**: the network should *memorise* objects, segment them perceptually, and the
+recognisable-label count should then scale automatically. Two thirds of that is supported by
+measurement; the third collides with a constraint and the way round it was **refuted**.
+
+**The constraint that shapes everything here**: `RecursiveLeastSquares.widened()` **refuses** to
+change `n_outputs` — theta is row-major over features, so a different width interleaves the old
+coefficients. A growing label set therefore cannot be a growing head. So the resolution is
+**unbounded vocabulary, bounded concurrency**: a caller-side dictionary that grows freely, and a
+head with a declared number of slots. `ObjectMemory` is that dictionary.
+
+**Putting the identity on the head's INPUT instead does not work, and one refutation was my own
+prediction going the wrong way.** Against a per-slot head at **1.71–1.83x** a centre guess, flat
+from 2 to 5 objects:
+
+| form | 2 objects | 3 | 4 | 5 |
+|---|---|---|---|---|
+| per-slot, 2K outputs | 1.73x | 1.83x | 1.72x | 1.71x |
+| `[embedding, query]` concatenated | 1.10x | 1.03x | 1.01x | 1.00x |
+| query correlated against the feature map | 1.08x | 1.04x | 1.01x | 1.01x |
+
+The concatenation was *predicted* to fail — locating a pattern is a multiplicative interaction and
+a linear map on a concatenation has no product term. **The correlation was predicted to work and
+does not**, and the cause is measured rather than assumed: the correlation map's argmax lands on the
+queried object only **4–50%** of the time under any similarity (cosine 17.5/10.8/4.2%, plain dot
+2.5/5.8/50.0%, negative distance 40.0/15.8/18.3%). A random backbone's per-cell channel signature
+does not identify an object. **So per-object segmentation by correlating a memory against the
+feature map is refused here, not merely unbuilt** — and it is the *fourth* independent line of work
+this session to end at "this needs trained backbone weights".
+
+**What the dictionary does, measured over 1200 frames**: 2 objects → 4 ids, **96.7%** correct
+matching; 3 → 7 ids, **66.5%**; 5 → 12 ids, **43.1%**. It works for two, is mixed at three, degrades
+past that, and **inflates about 2x** because the same object seen where its crop clips at a frame
+edge describes differently. Automatic growth is real, not free, and not exact.
+
+**`tol` is tuned on the outcome and the first version of its docstring claimed otherwise.** The
+derivation would be the gap between within-object and between-object descriptor distance, but that
+gap **moves with the scene** — measured on the crops the registry actually sees, (0.081, 0.225) at
+two objects and (0.131, 0.288) at three. There is no single interval, so 0.25 is a compromise over a
+2/3/5 sweep. A test pins *why* it cannot be derived, and it was a failing assertion — the claim that
+0.25 sat inside "the" gap — that caught the overreach. What is principled is the shape of failure
+either side: at 0.04 it mints **101/282/917** ids for 2/3/5 objects, one per detection; at 0.60
+everything collapses to one id.
+
+**Two more of my own errors, both caught by numbers rather than code.** A registry accuracy of
+**0–30%** across every threshold, which was a *metric* bug: it compared the id index against the
+true object index, and those coincide only when ids are minted in order and there are exactly as
+many. Tracking which object each id was minted from gives 43–97%. And an exploratory 85.3% at three
+objects became **66.5%** on the shipped path, because the scratch script only updated the background
+on cadence frames — the higher number came from a slower-adapting background, not better matching.
+
+**And a mutation check found a real aliasing defect**: `observe` used `np.asarray`, which returns the
+*same object* for a float64 input, so the memory aliased the caller's descriptor and anything they
+did to it afterwards silently rewrote the store. The surviving mutant was `descriptor()` handing out
+the live array — it survived because the test compared against an array the store was also holding.
+Same class as the `shares_memory` defect recorded for `Adapter.state`. Both copy now, six mutants
+caught.
+
 **Still undecided:** whether inference is *hosted* (an interface to ONNX Runtime/TFLite) or
 *embedded*, and whether the tiers ship as one library or two. Nothing on the camera/audio/speech
 path is built.
@@ -1102,7 +1161,7 @@ rollback, explicit recovery), `argmind/pipeline.py` (`FrameMap`, input gate, bou
 pipeline. `argmind/bench.py` has no C++ counterpart and is not getting one: it is a host
 measurement harness, and DESIGN.md already records that Python timings are not a baseline the
 C++ can be compared against.
-861 Python tests and 4,652 C++ checks pass; several exist to prove failures are visible
+869 Python tests and 4,652 C++ checks pass; several exist to prove failures are visible
 rather than silent. Every suite is mutation-checked, and surviving mutants are recorded where
 they live rather than tallied here — including the ones that turn out to be **equivalent on a
 64-bit host**, a distinction worth keeping rather than rounding away. Cumulative counts are

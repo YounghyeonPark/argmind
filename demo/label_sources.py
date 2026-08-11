@@ -54,7 +54,8 @@ from collections.abc import Callable
 import numpy as np
 
 __all__ = ["MotionLabeller", "CadenceDetector", "brightest_window",
-           "motion_centroid", "find_peaks", "BackgroundLocator", "AppearanceMatcher"]
+           "motion_centroid", "find_peaks", "BackgroundLocator", "AppearanceMatcher",
+           "ObjectMemory"]
 
 
 def _grey(frame) -> np.ndarray:
@@ -518,3 +519,124 @@ def _permutations(seq):
     for i, v in enumerate(seq):
         for rest in _permutations(seq[:i] + seq[i + 1:]):
             yield (v,) + rest
+
+
+class ObjectMemory:
+    """A growing dictionary of object appearances: the vocabulary, separate from the head.
+
+    **Why this is the shape the constraint forces.** Giving each object its own output pair means
+    K objects need a 2K-output head, and `RecursiveLeastSquares.widened()` **refuses** to change
+    `n_outputs` — "theta is stored row-major over features, so a different width interleaves the
+    old coefficients differently and there is no correct answer without a mapping". A growing
+    label set therefore cannot be a growing head.
+
+    So: **unbounded vocabulary, bounded concurrency.** This dictionary grows freely on the
+    caller's side; the head has a declared number of slots and tracks whichever remembered objects
+    are present. Fixed state, fixed flops, no heap on the core tier's side of the boundary.
+
+    Two alternatives that put the identity on the head's *input* were measured and both fail,
+    against a per-slot head at 1.71-1.83x a centre guess:
+
+    | form | 2 objects | 3 | 4 | 5 |
+    |---|---|---|---|---|
+    | per-slot, 2K outputs | 1.73x | 1.83x | 1.72x | 1.71x |
+    | `[embedding, query]` concatenated | 1.10x | 1.03x | 1.01x | 1.00x |
+    | query correlated against the feature map | 1.08x | 1.04x | 1.01x | 1.01x |
+
+    The concatenation was predicted to fail: locating a specific pattern is a multiplicative
+    interaction and a linear map on a concatenation has no product term. **The correlation was
+    predicted to work and does not**, and the reason is measured rather than guessed: the
+    correlation map's argmax lands on the queried object only 4-50% of the time, whichever
+    similarity is used — cosine 17.5/10.8/4.2%, plain dot 2.5/5.8/50.0%, negative distance
+    40.0/15.8/18.3% for three queries. A random backbone's per-cell channel signature does not
+    identify an object. That is what a *trained* embedding is for.
+
+    So per-object segmentation by correlating a memory against the feature map is **refused here**,
+    not merely absent.
+
+    What this dictionary is measured to do
+    --------------------------------------
+    Minting a new id when nothing stored is within `tol`, over a 1200-frame run:
+
+    | true objects | ids minted | match correct |
+    |---|---|---|
+    | 2 | 4 | **96.7%** |
+    | 3 | 7 | **66.5%** |
+    | 5 | 12 | **43.1%** |
+
+    So it works for two, is mixed at three, and degrades past that. It also **inflates**: about
+    twice as many ids as objects, because the same object seen where its crop clips against a frame
+    edge describes differently. Automatic growth is real; it is not free and it is not exact.
+
+    **`tol` is tuned on the outcome and there is no way around that here**, which is worth stating
+    plainly because the first version of this docstring claimed otherwise. The obvious derivation
+    is the gap between within-object and between-object descriptor distance — but that gap **moves
+    with the scene**: measured on the crops this actually sees, (0.081, 0.225) at two objects and
+    (0.131, 0.288) at three. There is no single interval for a threshold to sit inside, so 0.25 is
+    a compromise chosen across a 2/3/5-object sweep, not a derived value.
+
+    What *is* principled is the shape of the failure either side of it, and it is a collapse rather
+    than a degradation: at 0.04 this mints **101, 282 and 917** ids for 2, 3 and 5 objects — one per
+    detection — and at 0.60 everything becomes a single id.
+    """
+
+    __slots__ = ("tol", "max_ids", "_store")
+
+    #: Chosen across a 2/3/5-object sweep, i.e. **tuned on the outcome**. See the class
+    #: docstring: the within/between gap that would justify it moves with the object count, so
+    #: there is no interval to derive it from.
+    DEFAULT_TOL = 0.25
+
+    def __init__(self, tol: float = DEFAULT_TOL, *, max_ids: int = 64) -> None:
+        if not tol > 0.0:
+            raise ValueError(f"tol must be positive, got {tol}")
+        if max_ids < 1:
+            raise ValueError(f"max_ids must be at least 1, got {max_ids}")
+        self.tol = float(tol)
+        self.max_ids = int(max_ids)
+        self.reset()
+
+    def reset(self) -> None:
+        self._store: list[np.ndarray] = []
+
+    def __len__(self) -> int:
+        return len(self._store)
+
+    @property
+    def full(self) -> bool:
+        return len(self._store) >= self.max_ids
+
+    def observe(self, descriptor) -> tuple[int, bool]:
+        """`(id, minted)` for this descriptor: an existing id, or a new one.
+
+        `max_ids` is a hard ceiling, and it exists because "automatically scalable" has a failure
+        mode: at a `tol` below the measured within-object distance this mints an id per detection —
+        917 of them for five objects. Past the ceiling the nearest id is returned however far away
+        it is, and `full` says so, because a caller that silently stops learning new objects is
+        worse than one that can be asked.
+
+        Descriptors are **held**, never averaged into. Updating an id's descriptor from each match
+        lets it drift onto a neighbour, which is the same shape as the guard's baseline tracking
+        the fault it was holding out against.
+        """
+        # Copied, not referenced. `np.asarray` on a float64 array returns the *same object*, so
+        # the store aliased the caller's descriptor and anything they did to it afterwards silently
+        # rewrote the memory. Found by a mutation check: `descriptor()` handing out the live array
+        # survived, because the test compared it against an array the store was also holding.
+        # Same class as the `shares_memory` defect this project records for `Adapter.state`.
+        d = np.array(descriptor, dtype=np.float64, copy=True)
+        if d.ndim != 1:
+            raise ValueError(f"descriptor must be 1-D, got shape {d.shape}")
+        if self._store:
+            dist = [float(np.linalg.norm(d - s)) for s in self._store]
+            j = int(np.argmin(dist))
+            if dist[j] <= self.tol or self.full:
+                return j, False
+        elif self.full:                     # max_ids cannot be 0, so this is unreachable
+            raise AssertionError("empty store reported full")
+        self._store.append(d)
+        return len(self._store) - 1, True
+
+    def descriptor(self, i: int) -> np.ndarray:
+        """The held descriptor for an id. A copy, so a caller cannot make it drift."""
+        return self._store[i].copy()
