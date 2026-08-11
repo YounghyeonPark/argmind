@@ -1070,6 +1070,16 @@ against "object A is slot 0" read 0.430 — roughly the distance between the obj
 slot names are arbitrary and the matcher seeds from whichever object is leftmost first. A constant
 swap read as a tracking failure.
 
+**And running it once more found the worst-shaped bug yet, which is now twice for this demo: a
+camera failure that reported success and destroyed the saved model.** `cap.read()` returned
+not-ok on the very first frame — the camera was still held by another process — so the loop broke,
+the demo saved an **untrained** head over the trained one, printed "saved", and exited **0**,
+indistinguishable from a normal quit. The only sign was an OpenCV warning on stderr. Fixed both
+ways: `should_save(updates, restored)` refuses to write when the session learned nothing, and a
+dead camera now says so and returns 2. Same family as the earlier "printed saved and saved nothing
+where it said" — **the failures that matter in this demo are the ones that report success.** Two
+mutants, both caught.
+
 **Still undecided:** whether inference is *hosted* (an interface to ONNX Runtime/TFLite) or
 *embedded*, and whether the tiers ship as one library or two. Nothing on the camera/audio/speech
 path is built.
@@ -1092,7 +1102,7 @@ rollback, explicit recovery), `argmind/pipeline.py` (`FrameMap`, input gate, bou
 pipeline. `argmind/bench.py` has no C++ counterpart and is not getting one: it is a host
 measurement harness, and DESIGN.md already records that Python timings are not a baseline the
 C++ can be compared against.
-859 Python tests and 4,652 C++ checks pass; several exist to prove failures are visible
+861 Python tests and 4,652 C++ checks pass; several exist to prove failures are visible
 rather than silent. Every suite is mutation-checked, and surviving mutants are recorded where
 they live rather than tallied here — including the ones that turn out to be **equivalent on a
 64-bit host**, a distinction worth keeping rather than rounding away. Cumulative counts are

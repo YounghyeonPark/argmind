@@ -48,6 +48,25 @@ STATE_PATH = STATE_DIR / "head"
 CROP = 20
 
 
+def should_save(updates: int, restored: bool) -> bool:
+    """Is there anything worth writing over the saved head?
+
+    **No, if this session learned nothing.** Found by running the demo when the camera was still
+    held by another process: `cap.read()` failed on the very first frame, the loop broke, and the
+    demo saved an *untrained* head over the trained one and printed "saved" -- exit code 0, looking
+    exactly like a normal quit. A camera glitch at start-up destroyed the model.
+
+    Same family as the earlier bug where it printed "saved" and wrote to the wrong place: the
+    dangerous failures here are the ones that report success.
+
+    `restored` is accepted and deliberately does not change the answer: re-saving a freshly loaded
+    head writes the same bytes and buys nothing, and taking it into account would mean a session
+    that loaded and then learned nothing still spends an erase cycle. It is a parameter so the
+    reasoning is visible rather than absent.
+    """
+    return updates > 0
+
+
 def crop_at(frame, point):
     """The appearance window around `point`, clamped to the frame."""
     h, w = frame.shape[0], frame.shape[1]
@@ -295,12 +314,16 @@ def main(argv=None):
     # backbone's output. Both are numbers the library refuses to guess.
     frame_std = None
     calibrated = False
+    camera_failed = False
     t0 = time.perf_counter()
     frames = 0
 
     while True:
         ok, frame = cap.read()
         if not ok:
+            # A dead camera and a user pressing `q` used to leave by the same door, so a
+            # start-up failure looked like a normal quit -- and then overwrote the saved head.
+            camera_failed = True
             break
         frame = cv2.flip(frame, 1)
         h, w = frame.shape[:2]
@@ -404,10 +427,19 @@ def main(argv=None):
         if key == ord("h"):
             print(__doc__)
 
-    store.save(guard, fingerprint=fp)
     cap.release()
     cv2.destroyAllWindows()
-    print(f"saved to {store.slot_path(0)} and .1")
+    if should_save(state["updates"], args.load):
+        store.save(guard, fingerprint=fp)
+        print(f"saved to {store.slot_path(0)} and .1")
+    else:
+        print(f"nothing learned this session ({state['updates']} updates), so the saved head "
+              f"at {store.slot_path(0)} is left alone")
+    if camera_failed:
+        print(f"camera {args.camera} stopped returning frames. If another process is holding it, "
+              "close that first; OpenCV reports this on stderr and would otherwise look like a "
+              "normal exit.", file=sys.stderr)
+        return 2
     return 0
 
 

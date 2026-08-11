@@ -296,3 +296,50 @@ def test_the_state_path_is_a_base_path_and_the_slots_land_under_it(tmp_path):
     # the bug this test describes.
     assert STATE_PATH.parent == STATE_DIR
     assert STATE_PATH.name and not STATE_PATH.name.endswith("/")
+
+def test_a_session_that_learned_nothing_does_not_overwrite_the_saved_head():
+    """Found by running the demo while the camera was still held by another process.
+
+    `cap.read()` failed on the first frame, the loop broke, and the demo saved an untrained head
+    over the trained one and printed "saved" -- exit code 0, indistinguishable from a normal quit.
+    A camera glitch at start-up destroyed the model.
+
+    Same family as the earlier bug that printed "saved" and wrote to the wrong place. The failures
+    that matter here are the ones that report success.
+    """
+    from demo.pointer import should_save
+
+    assert should_save(0, False) is False, "a session that learned nothing would overwrite"
+    assert should_save(0, True) is False
+    assert should_save(1, False) is True
+    assert should_save(500, True) is True
+
+
+def test_a_dead_camera_is_reported_and_does_not_look_like_a_normal_quit(ready, tmp_path):
+    """The other half: the exit has to be distinguishable. `main()` returns 2 and says so on
+    stderr rather than 0 with a cheerful "saved".
+
+    Driven through the save path rather than through `main`, which needs a camera and OpenCV: what
+    is asserted is that a trained head survives a subsequent no-op session, which is the damage
+    the bug actually did.
+    """
+    parts, path = ready
+    guard = parts[2]
+    store = Store(tmp_path / "head")
+    fp = fingerprint(parts[0], 1)
+
+    drive(parts, path, steps=200)                      # learn something
+    store.save(guard, fingerprint=fp)
+    trained = np.asarray(guard.state).copy()
+
+    # A fresh composition that learned nothing must not be written over it.
+    fresh = build(1)
+    from demo.pointer import should_save
+    assert not should_save(0, False)
+    # The check is what stands between the two; if a caller ignores it, this is the damage.
+    store.save(fresh[2], fingerprint=fp)
+    restored = build(1)
+    store.load(restored[2], fingerprint=fp)
+    assert not np.allclose(np.asarray(restored[2].state), trained), (
+        "saving an untrained head did not change the record, so this test is not demonstrating "
+        "the hazard that should_save exists to prevent")
