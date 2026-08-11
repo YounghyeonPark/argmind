@@ -6,6 +6,7 @@ alignment, two adapters, the guard, the pipeline and persistence — and the cor
 on emulated Cortex-M4 and Cortex-M55. What is absent is timing on real silicon.
 """
 
+from .backbone import Backbone, mobilenet_v1
 from .adapt import (Adapter, MultilayerPerceptron, NormalisedLeastMeanSquares,
                     RecursiveLeastSquares,
                     UpdateReport)
@@ -19,6 +20,7 @@ __version__ = "0.0.1.dev0"
 __all__ = ["Sample", "Stream", "Aligner", "Frame",
            "Adapter", "UpdateReport", "RecursiveLeastSquares",
            "NormalisedLeastMeanSquares", "MultilayerPerceptron",
+           "Backbone", "mobilenet_v1",
            "Guard", "GuardReport", "Check", "Bound", "Divergence",
            "Pipeline", "FrameMap", "StepReport",
            "Store", "Record", "fingerprint_of"]

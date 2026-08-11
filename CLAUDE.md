@@ -226,6 +226,59 @@ The `MAX_BYTES` `static_assert` caught every stale bound at the first build, for
 time. Three mutants: wrapping an out-of-range slot, narrowing `valid_field` back, and
 declaring no slots — all caught.
 
+**The platform has its own backbone now** (`argmind/backbone.py`), and it exists because a
+previous answer of mine narrowed the owner's decision without the authority to. Asked whether
+camera hardware needs a HAL, I said no *and* that a backbone belongs to the vendor's runtime —
+the second half was not the decision of 2026-08-10, which said the platform needs **its own
+inference network**. The owner asked. It was wrong.
+
+**Two things I had conflated.** Using an NPU does require the vendor toolchain: the Neural-ART's
+instruction encoding is proprietary and its weights go through ST's compiler. Implementing a
+convolution requires nothing. So both paths to the same feature vector are supported — run the
+backbone here, or push a vendor runtime's embedding into a `Stream` like any other sensor — and
+the seam is the vector.
+
+**The tier was decided by arithmetic before a line was written.** The smallest useful vision
+backbone, MobileNet v1 α=0.25 at 96×96, holds two adjacent activation buffers and the largest
+pair is **54 KB in int8, 216 KB in fp32**, against a declared core floor of **8 KB for the
+whole library**. At 224×224 it is 294 KB. No implementation changes that, and
+`peak_activation_values()` reports it rather than leaving it in prose.
+
+**Convolution is checked against the definition written as four nested loops**, which shares no
+implementation trick with the im2col-and-matmul version — the same discipline as RLS against
+the closed-form solution and the MLP against central differences. Agreement is 1e-13 relative
+over six shapes, and depthwise is exact.
+
+**The finding that came out of building it corrects something I claimed the same morning.** An
+untrained deep stack emits a full-rank but tiny embedding — magnitude **6.8e-4** — and on it
+*every* head fails: RLS, NLMS and the network all score ~1.0 against a constant predictor.
+Scaling it fixes RLS decisively (0.998 → 0.0015). **`p0` has units**: the gain is
+`p0·x/(1 + p0·‖x‖²)`, so at `‖x‖ ~ 1e-4` the data term is `1e-8·p0` and the default 100 is
+eight orders of magnitude short — raising `p0` to 1e10 recovers it exactly. **Scaling the
+target is free for RLS and NLMS; scaling the input is not**, and I had generalised the morning's
+target-scaling result into a prediction that they would be invariant here. Wrong, and both
+directions are now pinned by a test.
+
+**L2-normalising each embedding is measured and deliberately not the answer**: it makes ‖x‖
+exactly 1 and conditions the prior by construction, but it discards the magnitude, which costs
+**150×** against a single global scale on a target that depends on it. So `calibrate_scale()`
+*reports* a constant and `output_scale` applies it, rather than the library guessing. A trained
+backbone with batch normalisation has none of this problem — that is what batch normalisation
+is for — so it is a property of an untrained or naively-converted stack.
+
+**Eight mutants, two of which were real gaps.** The SAME-padding impulse fixture could not
+discriminate: at 4×4 with a 3×3 kernel the extra row of padding lands where an impulse at (0,0)
+is inside the first window either way, so a top-heavy mutant survived. 5×5 with a 4×4 kernel
+pads by three and separates them — one window against four. And a mutant forcing stride 1
+survived everything, because `features()` pools its map away so the output *shape* and the
+feature count are identical; it is caught now by composing the layer independently.
+
+**What is deliberately absent**: int8, because quantised inference is defined by a scheme
+(zero points, per-axis scales, accumulator width, requantisation rounding) and two
+implementations that disagree on any of it are two different models; and on-device training of
+the backbone, which was already measured unavailable since backprop retains activations and the
+forward pass alone is the peak above.
+
 **There are three adapters now, and the third is a network** — `MultilayerPerceptron`, the
 2026-08-10 scope decision made real. Python only so far. Three of nine mutants exposed real
 gaps rather than confirming the suite, and two design choices were measured rather than taken.
