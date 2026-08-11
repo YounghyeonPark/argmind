@@ -49,16 +49,24 @@ def drive(ready, source, steps=660):
         img = frame_at(tx, ty, seed=k)
         guard.set_external(0, float(np.std(img)) / max(frame_std, 1e-6))
         features.push(t, backbone.features(img))
-        got = source(img)
+        got = as_points(source(img))
         if got is not None:
-            last = got
-            taught.push(t, [got[0], got[1]])
+            last = got[0]
+            taught.push(t, [c for xy in got for c in xy])
         r = pipe.step()
         # Read now: `StepReport.prediction` is a preallocated buffer the next step overwrites.
         pred = None if r.prediction is None else (float(r.prediction[0]),
                                                  float(r.prediction[1]))
         rows.append((pred, last, (tx, ty), got is not None))
     return rows
+
+
+def as_points(got):
+    """`CadenceDetector` returns a list of points; `MotionLabeller` returns one point. Normalise
+    here rather than letting either grow a return type that varies with its arguments."""
+    if got is None:
+        return None
+    return list(got) if isinstance(got[0], tuple) else [tuple(got)]
 
 
 def radial(rows, pick):
@@ -133,7 +141,7 @@ def test_a_source_you_can_run_every_frame_beats_the_head(ready):
     every_frame = float(np.mean(direct))
     assert every_frame < 0.05, every_frame
 
-    rows = drive(ready, CadenceDetector(10, locate=brightest_window))
+    rows = drive(ready, CadenceDetector(10, locate=lambda f: [brightest_window(f)]))
     warm = rows[len(rows) // 2:]
     head = radial([r for r in warm if not r[3]], lambda p, _l: p)
     assert every_frame < head, (
@@ -251,18 +259,22 @@ def test_the_default_locator_follows_the_mover_and_not_the_brightest_thing():
     `brightest_window` is offered but is not the default.
     """
     det_motion = CadenceDetector(3)
-    det_bright = CadenceDetector(3, locate=brightest_window)
+    det_bright = CadenceDetector(3, locate=lambda f: [brightest_window(f)])
     err_motion, err_bright = [], []
     for k in range(30):
         tx, ty = wander(k)
         img = frame_with_a_lamp(tx, ty, seed=k)
-        got_m, got_b = det_motion(img), det_bright(img)
+        got_m, got_b = as_points(det_motion(img)), as_points(det_bright(img))
         if got_m is not None:
-            err_motion.append(np.hypot(got_m[0] - tx, got_m[1] - ty))
+            err_motion.append(np.hypot(got_m[0][0] - tx, got_m[0][1] - ty))
         if got_b is not None:
-            err_bright.append(np.hypot(got_b[0] - tx, got_b[1] - ty))
+            err_bright.append(np.hypot(got_b[0][0] - tx, got_b[0][1] - ty))
     m, b = float(np.mean(err_motion)), float(np.mean(err_bright))
-    assert m < 0.10, f"the motion locator lost the mover: {m:.3f}"
+    # Measured 0.114 against 0.679 with the shipped default. The bound moved from 0.10 when the
+    # default became `find_peaks`, which refines inside a suppression window rather than taking
+    # a floored global centroid -- re-measured rather than loosened by feel.
+    assert m < 0.15, f"the motion locator lost the mover: {m:.3f}"
+    assert b > m * 4.0, f"only {b / m:.1f}x apart, so the fixture barely separates them"
     assert b > 0.4, (
         f"the brightness locator found the mover anyway ({b:.3f}), so this fixture no longer "
         "separates the two and the default's justification is untested")
@@ -282,3 +294,150 @@ def test_the_default_locator_follows_the_mover_and_not_the_brightest_thing():
         f"locating on the raw frame ({np.mean(on_frame):.3f}) is now meaningfully better than "
         f"a centre guess ({np.mean(centre):.3f}); the mutant it stands for would survive")
     assert float(np.mean(on_frame)) > m * 2.0
+
+
+def test_the_detector_sorts_its_peaks_and_refuses_a_short_list():
+    """Both of these live in `CadenceDetector`, and both survived a mutation run because
+    `test_multi_object.py` calls `find_peaks` directly and does its own sorting -- so the
+    component that actually ships was bypassed.
+
+    The sort is what breaks the head's permutation symmetry (measured: sorted labels 0.129
+    against arbitrary 0.256, on a centre guess of 0.312), and refusing a short list is what
+    stops slots being silently reassigned when the scene loses a mover.
+    """
+    from demo.test_multi_object import scene, two_movers
+
+    det = CadenceDetector(2, k=2)
+    # The non-None returns, not the last one: most calls are blind by cadence, and taking the
+    # final return read None for that reason alone.
+    seen = [v for v in (det(scene(two_movers(k), seed=k)) for k in range(8)) if v is not None]
+    assert seen, "no cadence instant produced a pair"
+    for got in seen:
+        assert len(got) == 2
+        assert got[0][0] < got[1][0], f"slot 0 is not the leftmost: {got}"
+
+    # Reversed input to `locate` must still come out leftmost-first: the rule is the detector's,
+    # not the locator's.
+    right, left = (0.8, 0.3), (0.2, 0.7)
+    det2 = CadenceDetector(1, k=2, locate=lambda _f: [right, left])
+    det2(scene([(0.5, 0.5)], seed=1))                 # first frame: no predecessor
+    out = det2(scene([(0.5, 0.5)], seed=2))
+    assert out == [left, right], out
+
+    # One mover, two slots asked for: None rather than a list of one.
+    #
+    # `suppress=0.45` is needed and the reason is a measured property of frame differencing, not
+    # a tuning preference: a moving object leaves a DIPOLE -- |current - previous| has a lobe
+    # where it was and one where it is -- so at the default 0.18 a single mover legitimately
+    # yields two peaks. See `test_one_mover_leaves_two_difference_lobes`.
+    lone = CadenceDetector(2, k=2, suppress=0.45)
+    alone = [lone(scene([(0.3 + 0.05 * k, 0.5)], seed=k)) for k in range(8)]
+    assert all(v is None for v in alone), alone
+    # ...and the control: the same detector asking for one slot does find it, so the None above
+    # is the shortfall and not a broken fixture.
+    solo = CadenceDetector(2, k=1, suppress=0.45)
+    assert any(solo(scene([(0.3 + 0.05 * k, 0.5)], seed=k)) for k in range(8))
+
+
+def test_one_mover_leaves_two_difference_lobes():
+    """Why `k > 1` cannot be used to count, measured.
+
+    `|current - previous|` has a lobe where the object was and one where it is, separated by
+    roughly the object's own size. Asking for three peaks on a single blob of sigma 8.6 px:
+
+    | displacement | 0.5 px | 1.9 px | 4.8 px | 9.6 px | 19.2 px |
+    |---|---|---|---|---|---|
+    | `suppress=0.18` | 3 | 3 | 2 | 2 | 2 |
+    | `suppress=0.45` | 3 | 1 | 1 | 1 | 1 |
+
+    The left column is a different failure: at 0.5 px the difference is noise, and a floor
+    relative to the *peak* cannot catch that because the peak is noise too. `min_energy` is for
+    that half, and it is off by default because the separation is only 1.35x.
+
+    So the shipped claim is scoped: `k > 1` separates objects that are far apart, and it cannot
+    count. The two-object accuracy result is for movers half a frame apart.
+    """
+    from demo.label_sources import find_peaks
+    from demo.test_multi_object import scene
+
+    def peaks_for(dx, suppress):
+        a = _grey(scene([(0.40, 0.50)], seed=1))
+        b = _grey(scene([(0.40 + dx, 0.50)], seed=2))
+        return len(find_peaks(np.abs(b - a), 3, suppress=suppress))
+
+    assert peaks_for(0.05, 0.18) == 2, "the dipole no longer appears at the default radius"
+    assert peaks_for(0.05, 0.45) == 1, "a wide radius no longer merges the dipole"
+    # And the noise-dominated end, which suppression cannot fix at any radius.
+    assert peaks_for(0.005, 0.45) == 3
+    assert peaks_for(0.005, 0.18) == 3
+
+def test_the_energy_floor_refuses_a_still_scene_and_its_margin_is_tight():
+    """`min_energy` is the half of the noise problem that suppression cannot fix, and its default
+    is **off** because the separation is small enough to be dangerous.
+
+    Measured mean absolute frame difference: a still scene reads 0.0129-0.0131 and a fixture whose
+    blobs move ~2 px per frame reads 0.0177-0.0190 -- **1.35x**. So a margin of 2.0 over the still
+    quantile refuses real motion outright, which is how this was found rather than reasoned about.
+
+    A peak-to-median ratio was measured as the alternative, on the theory that noise is uniform
+    while a mover is localised. It is **worse** -- 0.97x, the distributions overlap, because a
+    second mover raises the map's own median. Asserted here so it is not tried again.
+    """
+    from demo.test_multi_object import scene, two_movers
+
+    still = [scene([(0.4, 0.5)], seed=100 + i) for i in range(12)]
+    moving = [scene(two_movers(k), seed=k) for k in range(12)]
+
+    def energies(frames):
+        prev, out = None, []
+        for f in frames:
+            g = _grey(f)
+            if prev is not None:
+                out.append(float(np.abs(g - prev).mean()))
+            prev = g
+        return np.array(out)
+
+    e_still, e_move = energies(still), energies(moving)
+    ratio = float(e_move.min() / e_still.max())
+    assert 1.1 < ratio < 1.8, (
+        f"still-to-moving separation is now {ratio:.2f}x, not the ~1.35x this file is written "
+        "around; the margin defaults below were chosen against that number")
+
+    # A calibrated floor refuses the still scene...
+    det = CadenceDetector(1, k=1)
+    thr = det.calibrate(still)
+    assert e_still.max() < thr < e_move.min(), (thr, e_still.max(), e_move.min())
+    assert all(det(f) is None for f in still), "a still scene produced a label"
+    # ...and does not refuse the moving one, which is the half a bigger margin would break.
+    det.reset()
+    assert any(det(f) is not None for f in moving), "the calibrated floor refused real motion"
+
+    # The finding: the margin that looks safe is not. 2.0 refuses everything.
+    greedy = CadenceDetector(1, k=1)
+    greedy.calibrate(still, margin=2.0)
+    greedy.reset()
+    assert all(greedy(f) is None for f in moving), (
+        "a margin of 2.0 no longer refuses real motion, so the reason the default is 1.2 -- and "
+        "the reason min_energy ships disabled -- is no longer demonstrated")
+
+    # And the peak-to-median alternative, refuted rather than described.
+    def peak_over_median(frames):
+        prev, out = None, []
+        for f in frames:
+            g = _grey(f)
+            if prev is not None:
+                d = np.abs(g - prev)
+                out.append(float(d.max() / max(float(np.median(d)), 1e-9)))
+            prev = g
+        return np.array(out)
+
+    p_still, p_move = peak_over_median(still), peak_over_median(moving)
+    assert p_move.min() < p_still.max(), (
+        f"peak/median now separates ({p_move.min():.2f} vs {p_still.max():.2f}); if that is real "
+        "it is a better gate than mean energy and label_sources.py should say so")
+
+
+def test_the_detector_leaves_the_energy_floor_off_by_default():
+    """A gate whose safe margin is 1.35x must not be on without the caller measuring it."""
+    assert CadenceDetector(1).min_energy == 0.0
+    assert CadenceDetector(1, min_energy=0.05).min_energy == 0.05

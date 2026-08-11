@@ -176,3 +176,56 @@ and that fixture exists because a mutant reading the raw frame survived everythi
 The first fixture for the motion result was rigged, and the label count gave it away: the blob
 teleported into its parked position, a teleport is a motion event, so the detector got one free
 reading at exactly the right place.
+## More than one object
+
+    python -m demo.pointer --objects 2            # two moving things, leftmost first
+
+**What you saw with two people in frame was not a recognition failure.** With one output pair the
+label is one centroid, and a difference map with two movers has its centroid *between* them — the
+demo was tracking that midpoint, and tracking it accurately (0.067 against the midpoint, 0.262
+against either object). Two separate things had to be fixed.
+
+**The label had to stop aggregating**, which is arithmetic: `find_peaks` instead of a centroid.
+
+**And the head is permutation-symmetric**, which is the interesting half. With 2K outputs nothing
+distinguishes output pair 1 from pair 2, so unless the labels arrive in the same order every frame
+the least-squares answer for both pairs is the same thing. Measured over two movers, against a
+centre-guess control:
+
+| labels | crossing | scored as | head | centre | |
+|---|---|---|---|---|---|
+| sorted by x | no | role | **0.129** | 0.312 | 2.43× |
+| sorted by x | yes | role | **0.137** | 0.222 | 1.62× |
+| sorted by x | yes | **identity** | 0.251 | 0.222 | **0.88× — fails** |
+| as found | no | role | 0.256 | 0.312 | 1.22× |
+| as found | yes | role | 0.236 | 0.222 | **0.94× — fails** |
+
+So peaks are returned **sorted by x**, and what that buys is **roles, not identities**: the head
+learns "where is the leftmost object", a well-defined function of the current frame. It cannot
+follow *which* object is which through a crossing — worse than guessing the centre — and that is
+structural, not a tuning failure. Association is a question about the input's *history*, which is
+exactly what the first section of `CLAUDE.md` says this model class cannot represent. Fixing it
+means a tracker with state, which is a different component.
+
+I predicted crossings would break role tracking too. They do not (0.137 against 0.129); the metric
+was what mattered.
+
+**The detector cannot count, and that is measured.** Frame differencing finds *change*, and one
+object in motion is two changes — `|current − previous|` has a lobe where the object was and one
+where it is. Asking for three peaks on a single blob of σ = 8.6 px:
+
+| displacement | 0.5 px | 1.9 px | 4.8 px | 9.6 px | 19.2 px |
+|---|---|---|---|---|---|
+| `suppress=0.18` (default) | 3 | 3 | 2 | 2 | 2 |
+| `suppress=0.45` | 3 | 1 | 1 | 1 | 1 |
+
+The lobe separation scales with the object's **size**, not with how far it moved, so one radius
+cannot serve every object size. The left column is a different failure — at 0.5 px the difference
+*is* noise, and a floor relative to the peak cannot catch that because the peak is noise too.
+`min_energy` covers that half and **ships disabled**, because a still scene reads 0.0129–0.0131
+against 0.0177–0.0190 for slow real motion: a separation of only **1.35×**, so a margin of 2.0
+refuses real motion outright. A peak-to-median gate was measured as the alternative and is
+**worse** (0.97×, overlapping), because a second mover raises the map's own median.
+
+**So `--objects K` is scoped: it separates objects that are far apart, and it cannot count.** The
+two-object accuracy above is for movers half a frame apart.

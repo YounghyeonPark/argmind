@@ -42,12 +42,23 @@ STATE_DIR = Path(__file__).resolve().parent / "state"
 STATE_PATH = STATE_DIR / "head"
 
 
-def build():
-    """The whole composition, and every piece of it is load-bearing here."""
+def build(objects: int = 1):
+    """The whole composition, and every piece of it is load-bearing here.
+
+    `objects` is how many things to track: the head gets `2 * objects` outputs, and the labels
+    arrive in a **declared order** (leftmost first), because a head with 2k outputs is
+    permutation-symmetric and learns the mean of the objects if the order wanders. Measured over
+    two movers: sorted labels reach 0.129 against a centre-guess 0.312, and labels in whatever
+    order the detector found them reach 0.256 — which is the centre guess with extra steps. See
+    `demo/label_sources.py` for the table and for what this does *not* buy, which is identity
+    through a crossing.
+    """
+    if objects < 1:
+        raise ValueError(f"objects must be at least 1, got {objects}")
     backbone = Backbone(PLAN, IN_SHAPE, dtype="f4", seed=1, pool=POOL)
     n = backbone.n_outputs + 1                       # + the constant
 
-    head = NormalisedLeastMeanSquares(n, 2, mu=0.3, dtype="f4")
+    head = NormalisedLeastMeanSquares(n, 2 * objects, mu=0.3, dtype="f4")
     guard = Guard(
         head,
         [
@@ -77,9 +88,9 @@ def build():
     )
 
     features = Stream("features", dim=backbone.n_outputs, capacity=64, dtype="f4")
-    taught = Stream("taught", dim=2, capacity=16, dtype="f4")
+    taught = Stream("taught", dim=2 * objects, capacity=16, dtype="f4")
     fmap = FrameMap(features=[("features", i) for i in range(backbone.n_outputs)],
-                    target=[("taught", 0), ("taught", 1)], constant=True)
+                    target=[("taught", i) for i in range(2 * objects)], constant=True)
     # The reference is the CAMERA, not the labels, and getting this wrong was the demo's
     # third caller-side bug: with `reference="taught"` a frame exists only at a label
     # instant, so the dot moved while dragging and never otherwise -- 0 predictions out of
@@ -99,29 +110,42 @@ def build():
     return backbone, head, guard, features, taught, fmap, pipe
 
 
-def fingerprint(backbone):
+def fingerprint(backbone, objects: int = 1):
     """Refuses a saved head restored against a different backbone or readout. The CRC cannot
-    see that -- the bytes are perfectly valid, they just mean something else."""
+    see that -- the bytes are perfectly valid, they just mean something else.
+
+    `objects` is in it because it changes what the outputs *mean*, not only how many there are:
+    a two-object block restored into a one-object head would put the leftmost object's y into
+    the x slot of nothing.
+    """
     return fingerprint_of("pointer", str(PLAN), str(IN_SHAPE), f"pool{POOL}",
-                          f"n{backbone.n_outputs}")
+                          f"n{backbone.n_outputs}", f"obj{objects}")
 
 
 def draw(cv2, frame, state):
     h, w = frame.shape[:2]
     if state["pred"] is not None:
-        px, py = int(state["pred"][0] * w), int(state["pred"][1] * h)
         colour = (0, 0, 255) if state["frozen"] else (0, 220, 0)
-        cv2.circle(frame, (px, py), 16, colour, 3)
-        cv2.circle(frame, (px, py), 2, colour, -1)
+        # One circle per tracked object, labelled by SLOT rather than by identity: slot 0 is
+        # "leftmost", and that is what the head can learn. It is not "the object you were
+        # looking at a moment ago" -- see demo/label_sources.py.
+        pred = state["pred"]
+        for i in range(len(pred) // 2):
+            px, py = int(pred[2 * i] * w), int(pred[2 * i + 1] * h)
+            cv2.circle(frame, (px, py), 16, colour, 3)
+            cv2.circle(frame, (px, py), 2, colour, -1)
+            if len(pred) > 2:
+                cv2.putText(frame, str(i), (px + 20, py + 5), cv2.FONT_HERSHEY_SIMPLEX,
+                            0.5, colour, 2, cv2.LINE_AA)
     for tx, ty in state["taught_points"][-8:]:
         cv2.drawMarker(frame, (int(tx * w), int(ty * h)), (255, 180, 0),
                        cv2.MARKER_TILTED_CROSS, 12, 1)
 
     if state.get("detector_ran"):
-        # Where the automatic label just landed, so the two sources are distinguishable on
-        # screen rather than both arriving as an unexplained jump in the dot.
-        px, py = state["taught_points"][-1]
-        cv2.circle(frame, (int(px * w), int(py * h)), 9, (0, 200, 255), 2)
+        # Where the automatic labels just landed, so the two sources are distinguishable on
+        # screen rather than both arriving as an unexplained jump in the dots.
+        for px, py in state["taught_points"][-state.get("objects", 1):]:
+            cv2.circle(frame, (int(px * w), int(py * h)), 9, (0, 200, 255), 2)
 
     lines = [
         f"auto {state['n_auto']} (every {state['every']})   mouse {state['n_taught']}   "
@@ -160,16 +184,24 @@ def main(argv=None):
     p.add_argument("--load", action="store_true", help="restore a saved head at startup")
     p.add_argument("--teach", choices=("both", "auto", "mouse"), default="both",
                    help="where labels come from: an automatic detector, your mouse, or both")
+    p.add_argument("--objects", type=int, default=1, metavar="K",
+                   help="how many moving things to track. The head gets 2K outputs and the "
+                        "labels arrive leftmost-first: it learns ROLES, not identities, and "
+                        "cannot follow which object is which through a crossing")
     p.add_argument("--detect-every", type=int, default=10, metavar="N",
                    help="run the automatic detector every N frames (default 10). This is a "
                         "declaration of what the caller can afford, and it is what the learned "
                         "head is covering; N=1 needs no learned head at all")
     args = p.parse_args(argv)
 
-    backbone, head, guard, features, taught, fmap, pipe = build()
+    n_objects = args.objects
+    if n_objects > 1 and args.teach == "mouse":
+        sys.exit("--objects > 1 needs the automatic detector: one mouse position cannot say "
+                 "where two objects are. Use --teach auto or --teach both.")
+    backbone, head, guard, features, taught, fmap, pipe = build(n_objects)
     STATE_DIR.mkdir(parents=True, exist_ok=True)
     store = Store(STATE_PATH)
-    fp = fingerprint(backbone)
+    fp = fingerprint(backbone, n_objects)
     if args.load:
         rec = store.load(guard, fingerprint=fp)
         if rec is None:
@@ -197,12 +229,12 @@ def main(argv=None):
     cv2.namedWindow("argmind")
     cv2.setMouseCallback("argmind", on_mouse)
 
-    detector = None if args.teach == "mouse" else CadenceDetector(args.detect_every)
+    detector = None if args.teach == "mouse"         else CadenceDetector(args.detect_every, k=n_objects)
     state = {"pred": None, "frozen": False, "frozen_by": (), "n_taught": 0,
              "updates": 0, "fps": 0.0, "drift": 0.0, "residual": 0.0,
              "taught_points": [], "learning": False, "last_update_frame": -999,
              "n_auto": 0, "detector_ran": False, "teach": args.teach,
-             "every": args.detect_every}
+             "every": args.detect_every, "objects": n_objects}
     # Calibrated from the first second: the scale of the caller's own statistic and of the
     # backbone's output. Both are numbers the library refuses to guess.
     frame_std = None
@@ -243,22 +275,29 @@ def main(argv=None):
         auto = detector(small) if detector is not None else None
         state["detector_ran"] = auto is not None
         if auto is not None:
-            taught.push(now, [auto[0], auto[1]])
+            # Sorted leftmost-first by the detector, and flattened in that order. The order is
+            # the whole reason this works at all: a head with 2k outputs is permutation-
+            # symmetric, and labels in whatever order they were found reach 0.256 against a
+            # centre-guess 0.312 -- i.e. learn nothing.
+            taught.push(now, [c for xy in auto for c in xy])
             state["n_auto"] += 1
-            state["taught_points"].append(auto)
+            state["taught_points"].extend(auto)
         if click["xy"] is not None:
             cx, cy = click["xy"]
             click["xy"] = None
             # Pushed a hair later so a mouse label always wins the instant it shares with an
             # automatic one: `hold_last` takes the newest at or before the reference, and a
             # correction the user made by hand should not be the one that gets dropped.
-            taught.push(now + 1e-6, [cx / w, cy / h])
+            # One mouse position teaches every slot the same point, which is only sensible
+            # at --objects 1; with more, the automatic detector is the label source and the
+            # mouse is a nudge. Stated rather than silently doing something clever.
+            taught.push(now + 1e-6, [cx / w, cy / h] * n_objects)
             state["n_taught"] += 1
             state["taught_points"].append((cx / w, cy / h))
 
         report = pipe.step()
         if report.prediction is not None:
-            state["pred"] = (float(report.prediction[0]), float(report.prediction[1]))
+            state["pred"] = tuple(float(v) for v in report.prediction)
         state["frozen"] = bool(report.frozen)
         state["frozen_by"] = tuple(report.frozen_by)
         # Counted from the reports, because `Guard` exposes no update counter. This line used

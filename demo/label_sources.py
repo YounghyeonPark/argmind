@@ -53,7 +53,8 @@ from collections.abc import Callable
 
 import numpy as np
 
-__all__ = ["MotionLabeller", "CadenceDetector", "brightest_window", "motion_centroid"]
+__all__ = ["MotionLabeller", "CadenceDetector", "brightest_window",
+           "motion_centroid", "find_peaks"]
 
 
 def _grey(frame) -> np.ndarray:
@@ -103,6 +104,43 @@ def brightest_window(frame, half: int = 6) -> tuple[float, float]:
 def motion_centroid(accumulated: np.ndarray, floor: float = 0.35) -> tuple[float, float] | None:
     """Where movement happened, from an accumulated absolute-difference map."""
     return _centroid(accumulated, floor)
+
+
+def find_peaks(weight: np.ndarray, k: int, *, floor: float = 0.35,
+               suppress: float = 0.18) -> list[tuple[float, float]]:
+    """The `k` strongest separated maxima of `weight`, each refined to its own local centroid.
+
+    Greedy with non-maximum suppression, and it knows nothing about what the objects are. Returns
+    fewer than `k` — possibly none — when the map does not contain that many peaks above `floor`
+    of its own maximum, which is the honest answer and is what lets a caller push nothing.
+
+    `suppress` is the exclusion radius as a fraction of the frame's longer side. It is what stops
+    one bright object being reported as two, and it bounds how close two objects may be before
+    they merge — a real limit of this detector, not of the head that learns from it.
+    """
+    if k < 1:
+        raise ValueError(f"k must be at least 1, got {k}")
+    m = np.array(weight, dtype=np.float64, copy=True)
+    peak = float(m.max()) if m.size else 0.0
+    if peak <= 0.0:
+        return []
+    r = max(1, int(suppress * max(m.shape)))
+    out: list[tuple[float, float]] = []
+    h, wd = m.shape
+    for _ in range(k):
+        y, x = divmod(int(np.argmax(m)), wd)
+        if m[y, x] < floor * peak:
+            break
+        y0, y1 = max(0, y - r), min(h, y + r + 1)
+        x0, x1 = max(0, x - r), min(wd, x + r + 1)
+        local = _centroid(m[y0:y1, x0:x1], 0.5)
+        if local is None:
+            out.append((x / max(wd - 1, 1), y / max(h - 1, 1)))
+        else:
+            out.append(((x0 + local[0] * max(x1 - x0 - 1, 1)) / max(wd - 1, 1),
+                        (y0 + local[1] * max(y1 - y0 - 1, 1)) / max(h - 1, 1)))
+        m[y0:y1, x0:x1] = 0.0
+    return out
 
 
 class MotionLabeller:
@@ -198,30 +236,119 @@ class CadenceDetector:
     the current features either way. It is the label that is wrong about every instant, not the
     alignment. That distinction is worth keeping: this project's recorded two-rate lesson is
     about *stamping*, and this is the one case where stamping is not the answer.
+
+    Tracking `k > 1` objects needs one more thing, and it is not in the detector: **a consistent
+    assignment rule**, because a head with 2k outputs is permutation-symmetric and nothing
+    distinguishes output pair 1 from pair 2. Peaks are therefore returned **sorted by x**, so
+    slot 0 is the leftmost. Measured over two movers against a centre-guess control:
+
+    | labels | crossing | scored as | head | centre | |
+    |---|---|---|---|---|---|
+    | sorted by x | no | role | **0.129** | 0.312 | 2.43× |
+    | sorted by x | yes | role | **0.137** | 0.222 | 1.62× |
+    | sorted by x | yes | *identity* | 0.251 | 0.222 | **0.88×, fails** |
+    | as found | no | role | 0.256 | 0.312 | 1.22× |
+    | as found | yes | role | 0.236 | 0.222 | **0.94×, fails** |
+
+    The sort rule is what makes it work at all, and **what it buys is roles, not identities**: the
+    head learns "where is the leftmost object", a well-defined function of the current frame. It
+    cannot follow *which* object is which through a crossing — 0.88×, worse than guessing the
+    centre — and that is structural. Association depends on the input's *history*, and DESIGN.md's
+    *What it is not* already says no choice of instantaneous features represents a
+    history-dependent quantity.
+
+    An earlier draft of this note predicted the crossing would break role tracking too. It does
+    not: 0.137 with crossings against 0.129 without. The metric was what mattered, not the scene.
+
+    Two limits of frame differencing itself, both measured, and neither is the head's:
+
+    **A moving object leaves a dipole.** `|current - previous|` has a lobe where the object was
+    and one where it is, so at a displacement comparable to the object's own size one mover reads
+    as two peaks. Measured on a blob of sigma 8.6 px, asking for 3 peaks:
+
+    | displacement | 0.5 px | 1.9 px | 4.8 px | 9.6 px | 19.2 px |
+    |---|---|---|---|---|---|
+    | `suppress=0.18` | 3 | 3 | 2 | 2 | 2 |
+    | `suppress=0.45` | 3 | 1 | 1 | 1 | 1 |
+
+    The separation scales with the object's **size**, not with how far it moved, so one suppression
+    radius cannot serve every object size. `suppress` is therefore a stated knob rather than a
+    solved problem.
+
+    **And a floor relative to the maximum admits noise when the maximum IS noise** — the left
+    column above, where the object barely moved. `min_energy` fixes that half: below it the frame
+    is declared to carry no motion and the answer is None. Set it from the caller's own camera
+    with `calibrate`, because a noise floor is a property of the sensor and the lighting.
+
+    So `k > 1` is offered with the limit stated: **it separates objects that are far apart and it
+    cannot count.** The measured two-object result above is for movers half a frame apart.
     """
 
-    __slots__ = ("every", "floor", "locate", "_prev", "_k", "runs", "last")
+    __slots__ = ("every", "floor", "k", "min_energy", "suppress", "locate",
+                 "_prev", "_k", "runs", "last", "energy")
 
-    def __init__(self, every: int = 10, *, floor: float = 0.35,
-                 locate: Callable[[np.ndarray], tuple[float, float] | None] | None = None) -> None:
+    def __init__(self, every: int = 10, *, k: int = 1, floor: float = 0.35,
+                 min_energy: float = 0.0, suppress: float = 0.18,
+                 locate: Callable[[np.ndarray], list[tuple[float, float]]] | None = None) -> None:
         if every < 1:
             raise ValueError(f"every must be at least 1, got {every}")
+        if k < 1:
+            raise ValueError(f"k must be at least 1, got {k}")
         self.every = int(every)
+        self.k = int(k)
         self.floor = float(floor)
+        self.min_energy = float(min_energy)
+        self.suppress = float(suppress)
         self.locate = locate
         self.reset()
+
+    def calibrate(self, frames, quantile: float = 0.9, margin: float = 1.2) -> float:
+        """Set `min_energy` from a still sample of the caller's own camera, and return it.
+
+        **The margin is small because the separation is small**, and that is measured rather than
+        assumed. Mean absolute frame difference: a still scene reads 0.0129-0.0131 and a fixture
+        whose blobs move ~2 px per frame reads 0.0177-0.0190 — a gap of only **1.35x**. A margin
+        of 2.0 refuses real motion outright, which is how this was found.
+
+        So `min_energy` catches a scene that is *not moving at all*; it cannot be set to
+        distinguish slow motion from noise, and the constructor leaves it at 0.0 so that nothing
+        is refused unless a caller opts in.
+
+        A peak-to-median ratio was measured as the alternative, on the theory that noise is
+        uniform while a mover is localised. **It is worse**: 0.97x, the two distributions overlap,
+        because a second mover raises the map's own median. Recorded so it is not tried again.
+        """
+        self.reset()
+        seen = []
+        for f in frames:
+            cur = _grey(f)
+            if self._prev is not None and self._prev.shape == cur.shape:
+                seen.append(float(np.abs(cur - self._prev).mean()))
+            self._prev = cur
+        self.reset()
+        if seen:
+            self.min_energy = float(np.quantile(seen, quantile) * margin)
+        return self.min_energy
 
     def reset(self) -> None:
         self._prev: np.ndarray | None = None
         self._k = 0
         self.runs = 0
-        self.last: tuple[float, float] | None = None
+        self.energy = 0.0
+        self.last: list[tuple[float, float]] | None = None
 
-    def __call__(self, frame) -> tuple[float, float] | None:
-        """A location on the cadence instants, None on every other frame.
+    def __call__(self, frame) -> list[tuple[float, float]] | None:
+        """`k` locations on the cadence instants, None on every other frame.
 
-        Holding the previous frame costs a copy; that is not the expensive part. The point of
-        the cadence is that the `locate` call is what a caller cannot afford at output rate.
+        Always a list, even at `k == 1`: a return type that changes with a constructor argument is
+        a trap for the caller, and the length *is* the declared object count.
+
+        Fewer than `k` peaks means the scene does not contain that many movers, and the honest
+        answer is None. A partial list would silently reassign slots, which is exactly the
+        permutation problem the sort rule exists to prevent.
+
+        Holding the previous frame costs a copy; that is not the expensive part. The point of the
+        cadence is that the `locate` call is what a caller cannot afford at output rate.
         """
         cur = _grey(frame)
         if self._prev is None or self._prev.shape != cur.shape:
@@ -230,13 +357,19 @@ class CadenceDetector:
             return None
         step = np.abs(cur - self._prev)
         self._prev = cur
+        self.energy = float(step.mean())
         self._k += 1
         if self._k % self.every != 0:
+            return None
+        if self.energy < self.min_energy:
+            # Nothing moved enough to be distinguishable from the sensor's own noise. A floor
+            # relative to the peak cannot catch this, because the peak is noise too.
             return None
 
         self.runs += 1
         got = self.locate(cur) if self.locate is not None \
-            else motion_centroid(step, self.floor)
-        if got is not None:
-            self.last = got
-        return got
+            else find_peaks(step, self.k, floor=self.floor, suppress=self.suppress)
+        if got is None or len(got) < self.k:
+            return None
+        self.last = sorted(got[:self.k], key=lambda p: p[0])
+        return self.last

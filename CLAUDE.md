@@ -987,6 +987,49 @@ parked position, a teleport is a motion event, so the detector got one free read
 right place and holding was correct by construction. Nine mutants, all caught after that fixture
 was added.
 
+**More than one object: the head does it, the detector cannot count — both measured 2026-08-11.**
+The owner reported multi-object tracking not working. It was not a recognition failure: with one
+output pair the label is one centroid, and a difference map with two movers has its centroid
+*between* them, so the demo tracked that midpoint **accurately** — 0.067 against the midpoint,
+0.262 against either object. Two independent causes, and separating them was the work.
+
+**The head is permutation-symmetric, and an assignment rule on the caller's side settles it.**
+With 2K outputs nothing distinguishes output pair 1 from pair 2, so unless labels arrive in the
+same order every frame the least-squares answer for both pairs is the same thing:
+
+| labels | crossing | scored as | head | centre | |
+|---|---|---|---|---|---|
+| sorted by x | no | role | **0.129** | 0.312 | 2.43x |
+| sorted by x | yes | role | **0.137** | 0.222 | 1.62x |
+| sorted by x | yes | *identity* | 0.251 | 0.222 | **0.88x — fails** |
+| as found | no | role | 0.256 | 0.312 | 1.22x |
+| as found | yes | role | 0.236 | 0.222 | **0.94x — fails** |
+
+**What it buys is roles, not identities.** "Leftmost" is a well-defined function of the current
+frame and a head can learn it. *Which* object is which through a crossing is worse than guessing
+the centre, and that is **the first section of this file arriving in a concrete task**: association
+depends on the input's history, and no choice of instantaneous features represents it. **I
+predicted crossings would break role tracking too, and that was wrong** — 0.137 against 0.129; the
+metric was what mattered, not the scene.
+
+**The detector cannot count, and the reason is frame differencing itself.** One object in motion is
+*two* changes — a lobe where it was and one where it is. Asking three peaks of a single blob at
+sigma 8.6 px: `suppress=0.18` gives 3/3/2/2/2 and `suppress=0.45` gives 3/1/1/1/1 at displacements
+0.5/1.9/4.8/9.6/19.2 px. The separation scales with the object's **size**, not its displacement, so
+one radius cannot serve every size. The 0.5 px column is a *different* failure — the difference is
+noise, and a floor relative to the peak cannot catch that because the peak is noise too.
+
+**`min_energy` covers that half and ships disabled, because its safe margin is 1.35x**: a still
+scene reads 0.0129–0.0131 against 0.0177–0.0190 for slow real motion, so a margin of 2.0 refuses
+real motion outright — found by it refusing everything. A peak-to-median gate was measured as the
+principled alternative and is **worse**: 0.97x, overlapping, because a second mover raises the
+map's own median. Recorded so it is not tried again.
+
+So `--objects K` is scoped: **it separates objects that are far apart and it cannot count.** Nine
+mutants; the two that survived were both in `CadenceDetector`, because the multi-object tests
+called `find_peaks` directly and did their own sorting — the component that ships was bypassed.
+Both closed, plus two more on the energy floor, which had no test at all when it was added.
+
 **Still undecided:** whether inference is *hosted* (an interface to ONNX Runtime/TFLite) or
 *embedded*, and whether the tiers ship as one library or two. Nothing on the camera/audio/speech
 path is built.
@@ -1009,7 +1052,7 @@ rollback, explicit recovery), `argmind/pipeline.py` (`FrameMap`, input gate, bou
 pipeline. `argmind/bench.py` has no C++ counterpart and is not getting one: it is a host
 measurement harness, and DESIGN.md already records that Python timings are not a baseline the
 C++ can be compared against.
-840 Python tests and 4,652 C++ checks pass; several exist to prove failures are visible
+850 Python tests and 4,652 C++ checks pass; several exist to prove failures are visible
 rather than silent. Every suite is mutation-checked, and surviving mutants are recorded where
 they live rather than tallied here — including the ones that turn out to be **equivalent on a
 64-bit host**, a distinction worth keeping rather than rounding away. Cumulative counts are
