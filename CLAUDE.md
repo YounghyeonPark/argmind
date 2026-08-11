@@ -261,6 +261,14 @@ head, so freezing prevented something. **And it walked into the preallocated-pre
 for the third time in this repository**, reporting that teaching barely worked (0.256 → 0.227)
 on a composition that reaches 0.035.
 
+**Running it found a demo bug of the worst shape: it printed "saved" and saved nothing where
+it said.** A `Store` takes a base *path* — its slots are `<path>.0` and `<path>.1`, and its
+docstring says exactly that — and the demo passed the *directory*, so the head landed as
+`demo/state.0` beside it while the message named `demo/state`. The library was right and the
+caller was wrong, which is the reading that matters: it **saved correctly and reported the
+wrong place**, which is worse than failing. Pinned by a test, and the mutant that points
+`Store` at a directory again is caught.
+
 **The platform has its own backbone now** (`argmind/backbone.py`), and it exists because a
 previous answer of mine narrowed the owner's decision without the authority to. Asked whether
 camera hardware needs a HAL, I said no *and* that a backbone belongs to the vendor's runtime —

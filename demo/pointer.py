@@ -34,6 +34,11 @@ PLAN = [("conv", 12, 5, 4), ("dw", 3, 2), ("pw", 16)]
 IN_SHAPE = (72, 96, 3)          # the camera frame, resized; H then W
 POOL = 3
 STATE_DIR = Path(__file__).resolve().parent / "state"
+#: A `Store` takes a base PATH, not a directory -- its slots are `<path>.0` and
+#: `<path>.1`. Its docstring says so and the first version of this file passed the
+#: directory, so the slots landed as `demo/state.0` NEXT TO it while the demo printed
+#: "saved to demo/state". It saved correctly and told the user the wrong place.
+STATE_PATH = STATE_DIR / "head"
 
 
 def build():
@@ -130,7 +135,7 @@ def main(argv=None):
 
     backbone, head, guard, features, taught, fmap, pipe = build()
     STATE_DIR.mkdir(parents=True, exist_ok=True)
-    store = Store(STATE_DIR)
+    store = Store(STATE_PATH)
     fp = fingerprint(backbone)
     if args.load:
         rec = store.load(guard, fingerprint=fp)
@@ -236,7 +241,7 @@ def main(argv=None):
     store.save(guard, fingerprint=fp)
     cap.release()
     cv2.destroyAllWindows()
-    print(f"saved to {STATE_DIR}")
+    print(f"saved to {store.slot_path(0)} and .1")
     return 0
 
 

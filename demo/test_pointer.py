@@ -12,7 +12,7 @@ import numpy as np
 import pytest
 
 from argmind.persist import Store
-from demo.pointer import IN_SHAPE, build, fingerprint
+from demo.pointer import IN_SHAPE, STATE_DIR, STATE_PATH, build, fingerprint
 
 
 def frame_at(x, y, bright=0.45, seed=0):
@@ -160,3 +160,30 @@ def test_it_remembers_across_a_restart(ready, tmp_path):
     other = build()
     with pytest.raises(Exception):
         Store(tmp_path).load(other[2], fingerprint=fp ^ 0xFFFF)
+
+
+def test_the_state_path_is_a_base_path_and_the_slots_land_under_it(tmp_path):
+    """"Saved" printed while nothing was written is the defect this pins.
+
+    A `Store` takes a base PATH -- its slots are `<path>.0` and `<path>.1` -- and its
+    docstring says so. The first version of the demo passed the *directory*, so the slots
+    landed as `demo/state.0` beside it while the demo announced `demo/state`. It saved
+    correctly and told the user the wrong place, which is worse than failing.
+    """
+    parts = build()
+    guard = parts[2]
+    base = tmp_path / "state" / "head"
+    base.parent.mkdir(parents=True)
+    store = Store(base)
+    store.save(guard, fingerprint=fingerprint(parts[0]))
+
+    written = sorted(p.name for p in base.parent.iterdir())
+    assert written, "save() wrote nothing under the directory it was pointed at"
+    assert all(n.startswith("head.") for n in written), written
+    assert not list(tmp_path.glob("state.*")), (
+        "a slot landed beside the directory instead of inside it")
+
+    # ...and the demo's own constants have to agree with that shape, or the module ships
+    # the bug this test describes.
+    assert STATE_PATH.parent == STATE_DIR
+    assert STATE_PATH.name and not STATE_PATH.name.endswith("/")
