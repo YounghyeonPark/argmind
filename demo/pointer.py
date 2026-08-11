@@ -79,8 +79,21 @@ def build():
     taught = Stream("taught", dim=2, capacity=16, dtype="f4")
     fmap = FrameMap(features=[("features", i) for i in range(backbone.n_outputs)],
                     target=[("taught", 0), ("taught", 1)], constant=True)
+    # The reference is the CAMERA, not the labels, and getting this wrong was the demo's
+    # third caller-side bug: with `reference="taught"` a frame exists only at a label
+    # instant, so the dot moved while dragging and never otherwise -- 0 predictions out of
+    # 140 unlabelled frames, measured. The library's own recorded answer is this one:
+    # `hold_last` plus the fastest stream as the reference, so `step()` waits for nothing
+    # and output latency is the caller's call cadence. Refusing to *learn* is not a reason
+    # to stop *predicting*.
+    #
+    # `require_fresh_target` is what stops the held label being relearned once per camera
+    # frame, and it is not optional here: measured on the same data, 0.085 radial error with
+    # it against 0.238 without. It compares the target sample's own timestamp, so it needs
+    # no threshold -- `max_stale_s` cannot do this job, being a bound on time where the
+    # question is identity.
     pipe = Pipeline([features, taught],
-                    Aligner(reference="taught", policy="hold_last", max_stale_s=0.4),
+                    Aligner(reference="features", policy="hold_last", max_stale_s=0.4),
                     guard, fmap, require_fresh_target=True)
     return backbone, head, guard, features, taught, fmap, pipe
 
@@ -109,8 +122,14 @@ def draw(cv2, frame, state):
     ]
     if state["frozen"]:
         lines.append("FROZEN by " + (", ".join(state["frozen_by"]) or "?"))
+    elif state["learning"]:
+        lines.append("LEARNING - keep dragging")
     elif state["n_taught"] < 4:
         lines.append("hold the mouse button on yourself and move around to teach it")
+    else:
+        # The answer to "do I have to keep teaching it?" -- yes, and the overlay says so
+        # rather than leaving it to be inferred from a counter that does not move.
+        lines.append("predicting only, not learning - hold the button to teach")
     for i, text in enumerate(lines):
         cv2.putText(frame, text, (8, 20 + 20 * i), cv2.FONT_HERSHEY_SIMPLEX, 0.5,
                     (0, 0, 0), 3, cv2.LINE_AA)
@@ -166,7 +185,7 @@ def main(argv=None):
 
     state = {"pred": None, "frozen": False, "frozen_by": (), "n_taught": 0,
              "updates": 0, "fps": 0.0, "drift": 0.0, "residual": 0.0,
-             "taught_points": []}
+             "taught_points": [], "learning": False, "last_update_frame": -999}
     # Calibrated from the first second: the scale of the caller's own statistic and of the
     # backbone's output. Both are numbers the library refuses to guess.
     frame_std = None
@@ -208,9 +227,22 @@ def main(argv=None):
             state["pred"] = (float(report.prediction[0]), float(report.prediction[1]))
         state["frozen"] = bool(report.frozen)
         state["frozen_by"] = tuple(report.frozen_by)
-        state["updates"] = guard.updates if hasattr(guard, "updates") else state["updates"]
+        # Counted from the reports, because `Guard` exposes no update counter. This line used
+        # to read `guard.updates if hasattr(guard, "updates") else state["updates"]`, and
+        # `Guard` has no such attribute -- so the number on screen was hardwired to 0 for the
+        # life of the demo, and it is the one number that answers "is it learning right now".
+        # A defensive `hasattr` around a field nobody checked is how that stays invisible.
         if report.updated:
+            state["updates"] += 1
+            state["last_update_frame"] = frames
             state["residual"] = float(np.linalg.norm(head._e))   # noqa: SLF001
+        # Learning is not continuous and the demo must say so: the head adapts only on a frame
+        # that carries a NEW label, which means only while the button is held. There is no
+        # self-supervision here, and that is measured rather than unfinished -- predicting the
+        # next embedding from an untrained backbone learns nothing (a learned map's diagonal
+        # reads 0.004 against an identity's 1.0, and frozen held-out error is 2-7x worse than
+        # simply repeating the last value).
+        state["learning"] = frames - state["last_update_frame"] < 8
 
         frames += 1
         if frames % 15 == 0:

@@ -646,6 +646,7 @@ private:
                 return false;
             }
             stale_[i] = pick_.staleness;
+            sample_t_[i] = pick_.sample_t;
             const double a = pick_.staleness < 0.0 ? -pick_.staleness : pick_.staleness;
             if (a > frame_worst_) frame_worst_ = a;
             if (!pick_.valid) frame_all_valid_ = false;
@@ -679,10 +680,17 @@ private:
 
     /// Has the target sample changed since the last attempt?
     ///
-    /// Decided on the sample's own timestamp, recovered from the signed staleness the
-    /// aligner reports: `t_sample = t_reference + staleness`. Only the streams a target
-    /// component comes from are consulted, which is why the fast feature streams do not
-    /// keep re-arming it.
+    /// Decided on the sample's own timestamp, which the aligner now **carries** on the pick.
+    /// Only the streams a target component comes from are consulted, which is why the fast
+    /// feature streams do not keep re-arming it.
+    ///
+    /// This used to recover the timestamp as `t_reference + staleness`, and that addition is
+    /// not bit-stable across reference instants: after a gap in the target stream the same
+    /// physical sample rebuilt an ulp away from the stored value and read as new. Measured in
+    /// the reference, 52 of 120 frames relearned a 14-second-old target -- the exact failure
+    /// this gate exists to prevent. It needs timestamps that are not exactly representable,
+    /// which is the normal case for an accumulated or clock-read timebase, and is why a
+    /// fixture using `k / 30.0` never saw it.
     ///
     /// Recorded on the ATTEMPT, not on success. A target the adapter then rejects is not
     /// retried on the next nine frames: it would be rejected nine more times and the
@@ -696,7 +704,7 @@ private:
         bool changed = false;
         for (int j = 0; j < n_outputs; ++j) {
             const int i = map_.target_stream(j);
-            const double stamp = frame_t_ + stale_[i];
+            const double stamp = sample_t_[i];
             if (!have_last_target_ || last_target_t_[j] != stamp) changed = true;
             last_target_t_[j] = stamp;
         }
@@ -761,6 +769,10 @@ private:
     T sx_[n_features] = {};
     T sy_[n_outputs] = {};
     double stale_[MaxStreams] = {};
+    /// Each stream's contributing sample's own timestamp, carried from the pick.
+    /// `frame_t_ + stale_[i]` recovers it only to within rounding; see
+    /// `target_is_new`, which is an identity check and needs the identity.
+    double sample_t_[MaxStreams] = {};
     Pick<T> pick_;
 
     bool frame_ready_ = false;

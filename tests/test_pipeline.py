@@ -516,6 +516,89 @@ def test_the_freshness_gate_is_unaffected_by_jitter(jitter):
     assert report.skipped["stale_target"] == report.frames - 20
 
 
+def test_a_gap_in_the_target_stream_does_not_let_a_stale_target_through():
+    """A real defect, found by the webcam demo and by none of the tests above.
+
+    The gate compares the target sample's timestamp to the previous one for **exact
+    equality** -- deliberately, since the question is identity and a tolerance would put a
+    threshold back where the design removed one. But it used to *reconstruct* that timestamp
+    as ``frame.t + staleness_s[name]``, and that addition is not bit-stable across reference
+    instants: after a gap in the target stream the same physical sample rebuilt an ulp away
+    from the stored value and read as a new measurement.
+
+    Measured before the fix: **52 of 120 frames** relearned a 14-second-old target, which is
+    precisely the failure this gate exists to prevent -- and CLAUDE.md already quantifies what
+    that costs, tr(P) ending an order of magnitude below where the information should leave it.
+    The demo saw only one, which is why the first version of this test asserted one; the leak
+    is data-dependent, not bounded, and "exactly one, so it does not repeat" was a property of
+    one arithmetic path rather than of the mechanism.
+
+    **It needs a target timestamp that is not exactly representable**, which is the normal
+    case: a real caller accumulates (`t += 1/30`) or reads a clock. Timestamps written as
+    `k / 30.0` round-trip exactly and leaked nothing even before the fix, which is why the
+    contrast is kept below -- a fixture built only the tidy way could not have found this.
+
+    Fixed by carrying the value instead of deriving it: `Frame.sample_t`, and `Pick::sample_t`
+    on both C++ sides. An identity check needs the identity, not a value equal to it to within
+    rounding.
+    """
+    def run(accumulate):
+        fast = Stream("fast", dim=1, capacity=4096)
+        slow = Stream("slow", dim=1, capacity=4096)
+        pipe = Pipeline([fast, slow], Aligner("fast", "hold_last", None),
+                        RecursiveLeastSquares(2, 1, forgetting=1.0, p0=100.0, dtype="f8"),
+                        FrameMap([("fast", 0)], ("slow", 0), constant=True),
+                        require_fresh_target=True)
+        t = 0.0
+        for k in range(1, 121):
+            t = t + 1.0 / 30.0 if accumulate else k / 30.0
+            fast.push(t=t, values=np.array([float(k % 7)]))
+            slow.push(t=t, values=np.array([2.0 + 0.01 * k]))
+        first = pipe.step()
+        assert first.updated == 120, "the fixture did not consume its targets"
+        # A long silence on the target stream while the reference keeps arriving.
+        g = t + 10.0
+        for k in range(1, 121):
+            fast.push(t=g + k / 30.0, values=np.array([float(k % 7)]))
+        return t, pipe.step()
+
+    t_acc, after = run(accumulate=True)
+    # The fixture's own guard: accumulation must actually have drifted off the exact value,
+    # or it is the tidy case in disguise and cannot exercise the reconstruction at all.
+    assert t_acc != 4.0 and t_acc == pytest.approx(4.0), t_acc
+    assert after.frames == 120
+    assert after.updated == 0, (
+        f"{after.updated} of 120 frames relearned a 14-second-old target. This was 52 before "
+        "`Frame.sample_t` was carried instead of rebuilt from staleness; if it is non-zero "
+        "again the gate has gone back to deriving the timestamp somewhere")
+    assert after.skipped["stale_target"] == 120
+
+    # The contrast that identifies the cause rather than merely asserting the fix: an exactly
+    # representable timestamp round-trips, so this path never leaked and still does not.
+    t_exact, tidy = run(accumulate=False)
+    assert t_exact == 4.0
+    assert tidy.updated == 0
+
+    # And the mechanism itself, so the explanation above is measured and not narrated: the
+    # reconstruction the gate used to perform disagrees with the sample's own timestamp.
+    fast = Stream("fast", dim=1, capacity=64)
+    slow = Stream("slow", dim=1, capacity=64)
+    t = 0.0
+    for k in range(1, 121):
+        t += 1.0 / 30.0
+        fast.push(t=t, values=np.array([1.0]))
+        slow.push(t=t, values=np.array([2.0]))
+    aligner = Aligner("fast", "hold_last", None)
+    streams = {"fast": fast, "slow": slow}
+    at_gap = aligner.align(streams, t + 10.0 + 1.0 / 30.0)
+    assert at_gap.sample_t["slow"] == t, "the aligner no longer carries the sample's own time"
+    rebuilt = at_gap.t + at_gap.staleness_s["slow"]
+    assert rebuilt != t, (
+        "the reconstruction now round-trips exactly on this fixture, so it no longer "
+        "demonstrates why the value is carried; the leak above would also stop reproducing")
+    assert rebuilt == pytest.approx(t, abs=1e-12)
+
+
 @pytest.mark.parametrize("gate,jittered,clean", [(0.05, 12, 20), (0.15, 31, 39)])
 def test_max_stale_s_cannot_do_the_gates_job(gate, jittered, clean):
     """The negative control, and it is what justifies adding an option at all.

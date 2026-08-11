@@ -432,10 +432,14 @@ class Pipeline:
                 note("invalid")
                 continue
             if self.require_fresh_target:
-                # The sample's own timestamp, recovered from the signed staleness the
-                # aligner reports: t_sample = t_reference + staleness.
-                stamps = tuple(frame.t + frame.staleness_s[name]
-                               for name in self._target_streams)
+                # The sample's own timestamp, carried by the aligner. This used to
+                # reconstruct it as `frame.t + frame.staleness_s[name]`, and that addition
+                # is not bit-stable across reference instants: after a gap in the target
+                # stream the same physical sample rebuilt an ulp away from the stored value
+                # and read as new. Measured, 52 of 120 frames relearned a 14-second-old
+                # target -- the exact failure this gate exists to prevent. An identity check
+                # needs the identity, not a value equal to it to within rounding.
+                stamps = tuple(frame.sample_t[name] for name in self._target_streams)
                 if stamps == self._last_target_t:
                     note("stale_target")
                     continue

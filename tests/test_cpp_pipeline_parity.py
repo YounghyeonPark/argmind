@@ -770,9 +770,15 @@ def test_the_freshness_gate_agrees_across_the_boundary(pipecheck, tmp_path):
 
     A 1-wide reference at 10 Hz carrying features and a 1 Hz stream carrying the target: the
     configuration low latency asks for and the one where hold-last hands the same measurement
-    to the learner ten times over. The two implementations decide freshness from the sample's
-    own timestamp, recovered from the signed staleness, so they have to agree on every frame
-    or one of them is learning from a different set of measurements.
+    to the learner ten times over. Both implementations decide freshness from the sample's own
+    timestamp, so they have to agree on every frame or one of them is learning from a different
+    set of measurements.
+
+    This case cannot see the reconstruction defect that
+    `test_a_gap_in_the_target_stream_carries_across_the_boundary` covers, and the reason is
+    worth stating: `k / 10.0` is exactly representable and there is no gap in the target
+    stream, so rebuilding the timestamp from staleness round-trips and the two mechanisms are
+    indistinguishable here.
     """
     case = Case([1, 1], 64, [(0, 0)], (1, 0), constant=True,
                 require_fresh_target=True)
@@ -790,6 +796,48 @@ def test_the_freshness_gate_agrees_across_the_boundary(pipecheck, tmp_path):
         f"against {j} measurements")
     assert gated > 0, "no frame was gated, so this compares nothing"
     assert gated + py["totals"]["updated"] == py["totals"]["frames"]
+
+
+def test_a_gap_in_the_target_stream_carries_across_the_boundary(pipecheck, tmp_path):
+    """The case the harness was missing, and it was missing for two reasons at once.
+
+    The freshness gate used to rebuild the target's timestamp as `t_reference + staleness` on
+    all three implementations. That addition is not bit-stable across reference instants, so
+    after a gap in the target stream the same physical sample read as new: measured in the
+    reference, **52 of 120 frames relearned a 14-second-old target**. The fix is `sample_t`
+    carried on the pick rather than derived.
+
+    Every existing case here misses it because every one of them uses exactly representable
+    timestamps (`k / 10.0`) and keeps the target stream running. This one accumulates, as a
+    real caller does, and then goes quiet on the target while the reference keeps arriving.
+
+    Verified against its own mutant: putting the reconstruction back into `pipeline.hpp` makes
+    this fail, where before it was caught only by `SIZES.md` noticing the flash had moved --
+    which is an accident, not coverage.
+    """
+    case = Case([1, 1], 64, [(0, 0)], (1, 0), constant=True, dtype="f8",
+                require_fresh_target=True)
+    t = 0.0
+    for k in range(1, 61):
+        t += 1.0 / 30.0                      # accumulated, so t is not exactly representable
+        case.push(0, t, [float(k % 7)])
+        case.push(1, t, [2.0 + 0.01 * k])
+        case.step()
+    gap = t
+    for k in range(1, 61):
+        case.push(0, gap + 10.0 + k / 30.0, [float(k % 7)])
+        case.step()
+
+    py, cpp = both(pipecheck, tmp_path, case)
+    gated = sum(s["skipped"][SKIP.index("stale_target")] for s in cpp["steps"])
+    assert py["totals"]["frames"] == 120
+    assert py["totals"]["updated"] == 60, (
+        f"{py['totals']['updated']} adaptations against 60 distinct targets: a stale target "
+        "reached the learner, which is what carrying `sample_t` prevents")
+    assert gated == 60, f"{gated} frames gated, expected the 60 after the gap"
+    # The fixture's own guard: without accumulation this case is the tidy one again and proves
+    # nothing, so assert the timestamps really are inexact.
+    assert gap != 2.0 and gap == pytest.approx(2.0), gap
 
 
 def test_the_prediction_crosses_the_boundary_on_every_frame(pipecheck, tmp_path):

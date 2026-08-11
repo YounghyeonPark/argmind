@@ -24,7 +24,7 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from test_cpp_pipeline_parity import Case, both, compare
+from test_cpp_pipeline_parity import SKIP, Case, both, compare
 
 REPO = Path(__file__).resolve().parent.parent
 CPP = REPO / "cpp"
@@ -166,3 +166,49 @@ def test_an_instant_that_cannot_build_a_frame_agrees(shapepipecheck, tmp_path):
     for i, s in enumerate(steps):
         if s["frames"] == 0:
             assert s["n_staleness"] == 0, f"step {i} reported staleness with no frame"
+
+
+def test_the_freshness_gate_agrees_and_survives_a_gap(shapepipecheck, tmp_path):
+    """The hosted port's freshness gate had **no behavioural case at all** until this one.
+
+    That was found by mutation rather than by reading: putting the old timestamp
+    reconstruction back into `runtime_shape_pipeline.hpp` -- `t_reference + staleness` instead
+    of the `sample_t` the pick now carries -- passed the entire suite. The core's equivalent
+    mutant was caught only by `SIZES.md` noticing the flash had moved, which is an accident and
+    not coverage either.
+
+    Two things have to hold. Ordinarily, one adaptation per distinct target and not ten. And
+    across a gap in the target stream, with timestamps that are **accumulated** rather than
+    written as exact fractions, nothing stale reaches the learner: the reconstruction is not
+    bit-stable, so the same physical sample used to read as new. Measured in the reference
+    before the fix, 52 of 120 frames relearned a 14-second-old target.
+    """
+    # Features on stream 0, which is also the reference, and the target on stream 1 -- the
+    # fast-reference arrangement the gate exists for. The other cases in this file put the
+    # target on the reference stream, where the gate cannot fire at all.
+    case = Case([1, 1], 64, [(0, 0)], (1, 0), constant=True, dtype="f8",
+                require_fresh_target=True)
+    t = 0.0
+    for k in range(1, 91):
+        t += 1.0 / 30.0                    # accumulated: t is not exactly representable
+        case.push(0, t, [float(k % 7)])    # the reference, every tick
+        if k % 10 == 0:
+            case.push(1, t, [2.0 + 0.01 * k])          # the target, a tenth as often
+        case.step()
+    gap_at = t
+    for k in range(1, 61):                 # the target goes quiet; the reference does not
+        case.push(0, gap_at + 10.0 + k / 30.0, [float(k % 7)])
+        case.step()
+
+    py, cpp = both(shapepipecheck, tmp_path, case)
+    compare(case, py, cpp)
+    # 141 of 150 instants build a frame: the first nine have no target sample yet, so
+    # hold-last finds nothing and the instant is declined outright. That is a third path
+    # this case exercises for free, and it is asserted rather than absorbed.
+    assert py["totals"]["frames"] == 141
+    assert py["totals"]["updated"] == 9, (
+        f"{py['totals']['updated']} adaptations against 9 distinct targets; a held or stale "
+        "target reached the learner")
+    gated = sum(s["skipped"][SKIP.index("stale_target")] for s in cpp["steps"])
+    assert gated == 132, f"{gated} frames gated, expected 141 - 9"
+    assert gap_at != 3.0 and gap_at == pytest.approx(3.0), gap_at

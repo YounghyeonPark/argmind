@@ -61,6 +61,17 @@ class Frame:
         How far each contributing sample sat from `t`. Signed: negative means the
         sample predates the reference, positive means it came after (only
         possible under a non-causal policy). Interpolated entries report 0.0.
+    sample_t : dict[str, float]
+        The contributing sample's **own** timestamp, carried rather than derived.
+
+        `t + staleness_s[name]` recovers it only approximately: the addition is not
+        bit-stable across reference instants, so the same physical sample rebuilt at
+        two different instants can differ by an ulp. `Pipeline`'s freshness gate is
+        an identity check on this value, and reconstructing it made the gate leak —
+        measured, 52 of 120 frames relearned a 14-second-old target after a gap in
+        the target stream, on timestamps produced by accumulation rather than by
+        exact division. The aligner has the value at the moment it computes the gap,
+        so it reports it.
     valid : dict[str, bool]
         The sensor's own validity flag, carried through untouched.
     policy : str
@@ -69,6 +80,7 @@ class Frame:
     t: float
     values: dict[str, np.ndarray]
     staleness_s: dict[str, float]
+    sample_t: dict[str, float] = field(default_factory=dict)
     valid: dict[str, bool] = field(default_factory=dict)
     policy: str = "hold_last"
 
@@ -176,6 +188,7 @@ class Aligner:
         """Build one frame at reference instant `t`, or None if it cannot be built."""
         values: dict[str, np.ndarray] = {}
         staleness: dict[str, float] = {}
+        sample_t: dict[str, float] = {}
         validity: dict[str, bool] = {}
 
         for name, s in streams.items():
@@ -191,10 +204,14 @@ class Aligner:
                 return None
             values[name] = sample.values
             staleness[name] = gap
+            # Carried, not derived. An interpolated pick is stamped at the reference
+            # instant, which is right: a blended target is a new measurement at every
+            # instant, and that is already what the freshness gate concludes for it.
+            sample_t[name] = sample.t
             validity[name] = sample.valid
 
         self._frames += 1
-        return Frame(t=t, values=values, staleness_s=staleness,
+        return Frame(t=t, values=values, staleness_s=staleness, sample_t=sample_t,
                      valid=validity, policy=self.policy)
 
     def drain(self, streams: dict[str, Stream]) -> list[Frame]:

@@ -164,6 +164,7 @@ public:
         dims_.assign(static_cast<size_t>(n_streams), 0);
         for (int i = 0; i < n_streams; ++i) dims_[static_cast<size_t>(i)] = views[i].dim;
         stale_.assign(static_cast<size_t>(n_streams), 0.0);
+        sample_t_.assign(static_cast<size_t>(n_streams), 0.0);
         const size_t nf = static_cast<size_t>(adapter_.n_features());
         const size_t nm = static_cast<size_t>(adapter_.n_outputs());
         x_.assign(nf, T(0));
@@ -355,6 +356,7 @@ private:
                 return false;
             }
             stale_[static_cast<size_t>(i)] = pick_.staleness;
+            sample_t_[static_cast<size_t>(i)] = pick_.sample_t;
             const double a = pick_.staleness < 0.0 ? -pick_.staleness : pick_.staleness;
             if (a > frame_worst_) frame_worst_ = a;
             if (!pick_.valid) frame_all_valid_ = false;
@@ -381,15 +383,19 @@ private:
         return true;
     }
 
-    /// Has the target sample changed? Decided on the sample's own timestamp, recovered
-    /// from the signed staleness: `t_sample = t_reference + staleness`. Recorded on the
-    /// ATTEMPT, not on success, so a target the adapter rejects is not retried nine times
-    /// and counted as nine faults.
+    /// Has the target sample changed? Decided on the sample's own timestamp, which the
+    /// aligner carries on the pick. Recorded on the ATTEMPT, not on success, so a target the
+    /// adapter rejects is not retried nine times and counted as nine faults.
+    ///
+    /// It used to rebuild the timestamp as `t_reference + staleness`, which is not bit-stable
+    /// across reference instants; the same physical sample then read as new after a gap in
+    /// the target stream. Measured in the reference: 52 of 120 frames relearned a
+    /// 14-second-old target.
     bool target_is_new() {
         bool changed = false;
         for (int j = 0; j < map_.n_outputs(); ++j) {
             const int i = map_.target_stream(j);
-            const double stamp = frame_t_ + stale_[static_cast<size_t>(i)];
+            const double stamp = sample_t_[static_cast<size_t>(i)];
             if (!have_last_target_ || last_target_t_[static_cast<size_t>(j)] != stamp) {
                 changed = true;
             }
@@ -408,6 +414,9 @@ private:
     int n_streams_ = 0;
     std::vector<int> dims_;
     std::vector<double> stale_;
+    /// Each stream's contributing sample's own timestamp, carried from the pick rather
+    /// than rebuilt as `frame_t_ + stale_[i]`; see `target_is_new`.
+    std::vector<double> sample_t_;
     std::vector<T> x_, y_, sx_, sy_;
     std::vector<double> last_target_t_;
     bool have_last_target_ = false;

@@ -27,7 +27,7 @@ to the total — a `caller` column exists because without it the drift was invis
 | bare RLS f32 6x1 | 2324 | 1272 | 160 | 892 | 272 |
 | + guard | 6160 | 3536 | 344 | 2280 | 1232 |
 | + record format | 6400 | 3818 | 304 | 2278 | 1908 |
-| full composed pipeline | 10392 | 7422 | 524 | 2446 | 3472 |
+| full composed pipeline | 10416 | 7452 | 524 | 2440 | 3472 |
 
 Against the declared 32 KB flash and 8 KB RAM, the full composed pipeline is **31.7%** of the
 flash budget and **42.4%** of the RAM, and the twelve-feature shape below is at **97.4%** of
@@ -59,8 +59,8 @@ build at the default shape.
 
 | configuration | flash | of which argmind | the caller | libc/libgcc | static RAM |
 |---|---|---|---|---|---|
-| composed f32 6x3 | 10580 | 7606 | 532 | 2442 | 3936 |
-| composed f32 12x1 | 10252 | 7288 | 524 | 2440 | 7976 |
+| composed f32 6x3 | 10600 | 7632 | 532 | 2436 | 3936 |
+| composed f32 12x1 | 10296 | 7334 | 524 | 2438 | 7976 |
 
 **Flash barely depends on the shape and RAM entirely does.** 10,200 to 10,508 across the
 three — a 3% spread, and **12x1 is the *smallest* of them in flash** while being 2.3x the RAM.
@@ -79,7 +79,7 @@ shape, which is what stops the next person hand-editing it.
 
 | configuration | flash | static RAM |
 |---|---|---|
-| full composed pipeline | 7880 | 3472 |
+| full composed pipeline | 7916 | 3472 |
 
 Moving up to ARMv8.1-M makes the image **smaller**, at identical static RAM.
 

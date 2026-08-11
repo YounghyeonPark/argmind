@@ -118,6 +118,16 @@ struct Pick {
     /// Signed: negative means the sample predates the reference, positive means it came
     /// after — only possible under a non-causal policy. Interpolated picks report 0.
     double staleness = 0.0;
+    /// The picked sample's **own** timestamp, carried rather than left to be derived.
+    ///
+    /// `t_reference + staleness` recovers it only to within rounding: the addition is not
+    /// bit-stable across reference instants, so the same physical sample rebuilt at two
+    /// instants can differ by an ulp. `Pipeline::target_is_new` is an identity check on this
+    /// value, and reconstructing it made the gate leak — measured in the reference, 52 of 120
+    /// frames relearned a 14-second-old target after a gap in the target stream. An
+    /// interpolated pick is stamped at the reference instant, which is correct: a blend is a
+    /// new measurement at every instant.
+    double sample_t = 0.0;
     const T* values = nullptr;    ///< borrowed, unless `blended` was written
     T blended[MAX_DIM];           ///< interpolation writes here; `values` then points at it
 };
@@ -176,6 +186,7 @@ public:
         out->present = false;
         out->valid = false;
         out->staleness = 0.0;
+        out->sample_t = 0.0;
         out->values = nullptr;
 
         if (policy_ == Policy::HoldLast || policy_ == Policy::DropIfStale) {
@@ -185,6 +196,7 @@ public:
             out->present = true;
             out->valid = got.valid;
             out->staleness = got.t - t;
+            out->sample_t = got.t;
             out->values = got.values;
             return true;
         }
@@ -196,6 +208,7 @@ public:
             out->present = true;
             out->valid = got.valid;
             out->staleness = got.t - t;
+            out->sample_t = got.t;
             out->values = got.values;
             return true;
         }
@@ -212,6 +225,7 @@ public:
         out->present = true;
         out->valid = a.valid && b.valid;
         out->staleness = 0.0;
+        out->sample_t = t;
         if (b.t == a.t) {
             out->values = a.values;
             return true;

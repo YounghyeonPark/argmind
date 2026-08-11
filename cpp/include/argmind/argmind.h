@@ -721,9 +721,17 @@ AM_DECLARE_PIPE_GUARDED_NLMS(g_nlms_f32_128_1, float, am_ring_f32)
 
 /* Upper bounds, static-asserted in the implementation. A guarded pipeline is its
  * guard plus about 400 bytes; the guard is mostly its checkpoint ring. Measured on
- * x86-64 and therefore a shape rather than a target figure. */
+ * x86-64 and therefore a shape rather than a target figure.
+ *
+ * Every pipeline grew 32 bytes when the aligner started carrying each pick's own
+ * timestamp instead of leaving the freshness gate to rebuild it from staleness --
+ * `double sample_t_[MaxStreams]`, and it bought a real defect: the reconstruction is
+ * not bit-stable, and 52 of 120 frames were relearning a 14-second-old target after a
+ * gap. Only F64_6_1 crossed its bound (1016 -> 1048); the rest had headroom and are
+ * unchanged, which is why the numbers here are measured per shape rather than
+ * adjusted by a delta. */
 #define AM_PIPE_F32_6_1_MAX_BYTES     768
-#define AM_PIPE_F64_6_1_MAX_BYTES     1024
+#define AM_PIPE_F64_6_1_MAX_BYTES     1088
 #define AM_PIPE_G_F32_6_1_MAX_BYTES   1728
 #define AM_PIPE_G_F32_6_3_MAX_BYTES   1984
 #define AM_PIPE_G_F32_12_1_MAX_BYTES  4096

@@ -39,7 +39,9 @@ def drive(parts, path, steps=260, covered=(), t0=0.0, teach_every=1):
         # standard deviation relative to calibration. A covered camera reads 0.
         guard.set_external(0, float(np.std(img)) / max(path["frame_std"], 1e-6))
         features.push(t, emb)
-        if k % teach_every == 0:
+        # `teach_every=0` means never, which `k % teach_every` cannot express -- at k=0
+        # any modulus is zero, so a case meaning "no labels at all" pushed one anyway.
+        if teach_every and k % teach_every == 0:
             taught.push(t, [x, y])
         r = pipe.step()
         # The prediction must be read NOW. `StepReport.prediction` is a preallocated buffer
@@ -81,6 +83,113 @@ def test_it_learns_where_you_are_from_clicks(ready):
     # A control: a constant predictor at the centre of the sampled range would score about
     # 0.24, so beating it is the claim rather than merely improving.
     assert late < 0.24, f"it never beat a centre-guess: {late:.3f}"
+
+
+def test_it_keeps_predicting_on_frames_that_carry_no_label(ready):
+    """The camera runs at 30 Hz and the labels do not, so a prediction on an unlabelled frame
+    is the entire output of this demo. The first version of `pointer.py` used the LABEL stream
+    as the aligner's reference, and frames are built at reference instants -- so the dot moved
+    while the button was held and never otherwise. Measured on this fixture: 0 predictions out
+    of 140 unlabelled frames.
+
+    `drive` has had a `teach_every` parameter since it was written and **no caller ever passed
+    one**, so every case fed a label on every frame; both streams then arrive at the same
+    instant, `hold_last` always finds an exact match, and the reference choice has no
+    observable consequence. The knob existed and was never turned.
+    """
+    parts, path = ready
+    reports, t = drive(parts, path, steps=200)               # teach densely first
+    taught_well = _error(reports[-60:])
+
+    # Now the button is released: features keep arriving, labels stop entirely.
+    quiet, _t = drive(parts, path, steps=140, t0=t, teach_every=0)
+    have = [p for _fz, _by, p, _xy in quiet if p is not None]
+    assert len(have) == 140, (
+        f"only {len(have)} of 140 unlabelled frames produced a prediction; with the label "
+        "stream as the aligner's reference this is 0, which is the bug this test exists for")
+
+    # And the prediction must still be USEFUL, not merely present -- a held constant would
+    # also be "present" on every frame.
+    assert _error(quiet) < 0.24, (
+        f"predictions on unlabelled frames are no better than a centre-guess: "
+        f"{_error(quiet):.3f} against a taught {taught_well:.3f}")
+
+    # The prediction moves frame to frame, which is what says it is being recomputed from the
+    # camera rather than repeated. This is also the aliasing trap's other face: a stale buffer
+    # would give one value 140 times.
+    assert len({(round(p[0], 6), round(p[1], 6)) for p in have}) > 100
+
+
+def test_a_held_label_is_not_relearned_once_per_camera_frame(ready):
+    """`require_fresh_target` is not decoration once the reference is the fast stream. Without
+    it the same held label is used as a target on every camera frame, and the head is dragged
+    towards a position that stopped being true -- measured 0.238 radial error against 0.085.
+
+    This is the cost CLAUDE.md records for a fast reference, made concrete in the demo: a slow
+    target relearned once per fast frame. The gate compares the target sample's own timestamp,
+    which is why it needs no threshold; `max_stale_s` is a bound on time where the question is
+    identity, and no value of it is right for both.
+    """
+    parts, path = ready
+    _pipe = parts[6]
+    assert _pipe.require_fresh_target, (
+        "the demo turned the freshness gate off; with a camera-rate reference that relearns "
+        "every held label and the measured cost is 2.8x the error")
+
+    # Teach at a tenth of the camera rate, which is what dragging actually produces.
+    reports, _t = drive(parts, path, steps=600, teach_every=10)
+    updated = sum(1 for _fz, _by, p, _xy in reports if p is not None)
+    assert updated == 600                     # a prediction on every frame regardless
+    assert _error(reports[-120:]) < 0.24, "sparse teaching never beat a centre-guess"
+
+
+def test_the_overlay_reports_whether_it_is_learning_right_now(ready):
+    """"Do I have to keep teaching it, or does it keep learning by itself?" was a question the
+    demo could not answer, because the `updates` counter on screen was hardwired to zero: the
+    line read `guard.updates if hasattr(guard, "updates") else ...` and `Guard` has no such
+    attribute. A defensive `hasattr` around a field nobody checked.
+
+    So both halves are pinned here: the attribute is genuinely absent (the fallback was not
+    dead code guarding a rename), and the counter now advances only while labels arrive.
+    """
+    parts, path = ready
+    guard = parts[2]
+    assert not hasattr(guard, "updates"), (
+        "Guard now exposes an update counter; the demo should read it, and this test should "
+        "say so rather than asserting its absence")
+
+    reports, t = drive(parts, path, steps=120)
+    learned = sum(1 for _fz, _by, p, _xy in reports if p is not None)
+    assert learned == 120
+
+    # `updated` is the honest source, and it must move while teaching...
+    updates_taught, t2 = _count_updates(parts, path, steps=120, t0=t, teach_every=1)
+    assert updates_taught > 100, updates_taught
+    # ...and stop when the button is released, which is what "not learning" means. The clock
+    # continues rather than jumping: a jump exposes a real library defect in the freshness
+    # gate (one stale target slips through after a gap in the target stream), which is pinned
+    # by `test_a_gap_in_the_target_stream_lets_one_stale_target_through` in tests/, not here.
+    updates_quiet, _t = _count_updates(parts, path, steps=120, t0=t2, teach_every=0)
+    assert updates_quiet == 0, (
+        f"{updates_quiet} updates on frames with no new label; the head is learning from a "
+        "target that stopped being true, which is what require_fresh_target prevents")
+
+
+def _count_updates(parts, path, steps, t0, teach_every):
+    """`drive` reports predictions, not whether the adapter moved, so this counts `updated`."""
+    backbone, _head, guard, features, taught, _fmap, pipe = parts
+    g = np.random.default_rng(5)
+    n, t = 0, t0
+    for k in range(steps):
+        t += 1.0 / 30.0
+        x, y = float(g.uniform(0.2, 0.8)), float(g.uniform(0.2, 0.8))
+        img = frame_at(x, y, seed=k)
+        guard.set_external(0, float(np.std(img)) / max(path["frame_std"], 1e-6))
+        features.push(t, backbone.features(img))
+        if teach_every and k % teach_every == 0:
+            taught.push(t, [x, y])
+        n += bool(pipe.step().updated)
+    return n, t
 
 
 def test_covering_the_camera_freezes_it_instead_of_destroying_it(ready):

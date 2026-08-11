@@ -891,6 +891,58 @@ shape as `select_newest` being compiled and called by no binary. `testpaths` is 
 "demo"]` now and the demo's tests import no OpenCV, so a clone without it still collects them.
 Had this not been fixed, every test above would have protected nothing.
 
+**Running the demo on a webcam found two caller bugs and one real library defect** (2026-08-11),
+and the owner found all three by asking why the dot only moved while dragging.
+
+**The demo had the aligner's reference backwards.** `reference="taught"` — the *label* stream —
+and frames are built at reference instants, so a prediction existed only when a label arrived.
+Measured on the headless fixture: **0 predictions out of 140 unlabelled frames** against
+**140/140** with `reference="features"`, error 0.085. The library's own recorded answer was the
+one the demo did not use — `hold_last` plus the fastest stream as the reference — and the same
+run measured why the other half must stay: with `require_fresh_target` off the held label is
+relearned once per camera frame and the error goes **0.085 → 0.238**.
+
+**The suite could not see it**, and the reason is the shape this project keeps finding: `drive`
+has had a `teach_every` parameter since it was written and **no caller ever passed one**, so
+every case fed a label on every frame — both streams then arrive at the same instant,
+`hold_last` always finds an exact match, and the reference choice has no observable
+consequence. The knob existed and was never turned.
+
+**And the overlay's `updates` counter was hardwired to zero.** The line read `guard.updates if
+hasattr(guard, "updates") else state["updates"]` and `Guard` has no such attribute — so the one
+number that answers "is it learning right now" never moved, which is why the question had to be
+asked at all. Counted from `report.updated` now, with the overlay stating *learning* against
+*predicting only*, because there is no self-supervision here and that is measured rather than
+unfinished. Both halves are pinned, including that the attribute is genuinely absent.
+
+**The library defect: `require_fresh_target` leaked, and the leak was not bounded.**
+The gate is an identity check on the target sample's timestamp — deliberately, since a tolerance
+would put back the threshold the design removed — but it *reconstructed* that timestamp as
+`t_reference + staleness`, and that addition is not bit-stable across reference instants. After
+a gap in the target stream the same physical sample rebuilt an ulp away from the stored value and
+read as new. **52 of 120 frames relearned a 14-second-old target**, which is precisely the
+failure the gate exists to prevent and whose cost this file already quantifies. **It needs
+timestamps that are not exactly representable** — accumulation or a clock read, i.e. the normal
+case; every existing fixture used `k / 30.0`, which round-trips, which is why nothing caught it.
+
+The first version of this note said **exactly one** leaked and would not repeat. Withdrawn: one
+was what the *demo's* arithmetic produced, and generalising it made a property of one path into
+a property of the mechanism. Fixed by carrying the value instead of deriving it — `Frame.sample_t`
+in the reference and `Pick::sample_t` in both C++ tiers, since **all three had the same
+reconstruction**. Every pipeline grew 32 bytes (`double sample_t_[MaxStreams]`) and only
+`AM_PIPE_F64_6_1_MAX_BYTES` crossed its bound, 1016 → 1048, so the `static_assert` fired for the
+fourth time and the bounds were re-measured per shape rather than adjusted by a delta; target
+flash moved +20 to +44 B with **static RAM unchanged**, and `SIZES.md` was regenerated.
+
+**Mutation found the coverage gap that mattered more than the fix.** The reference mutant was
+caught, but the core's was caught *only by `SIZES.md` noticing the flash had moved* — an accident
+— and the hosted port's **survived outright**: `runtime_shape_pipeline.hpp`'s freshness gate had
+no behavioural case at all. Both harnesses now carry a gap case with accumulated timestamps,
+and all three mutants are caught on host and target. One fixture bug of mine on the way: the
+hosted suite puts the target on stream 0 and the reference *is* the target stream, where the
+gate cannot fire — copying its mapping while pushing the core suite's arrangement gave 81
+updates where 9 were expected, and a 1786-ulp state divergence that was the swap, not the port.
+
 **Still undecided:** whether inference is *hosted* (an interface to ONNX Runtime/TFLite) or
 *embedded*, and whether the tiers ship as one library or two. Nothing on the camera/audio/speech
 path is built.
@@ -913,7 +965,7 @@ rollback, explicit recovery), `argmind/pipeline.py` (`FrameMap`, input gate, bou
 pipeline. `argmind/bench.py` has no C++ counterpart and is not getting one: it is a host
 measurement harness, and DESIGN.md already records that Python timings are not a baseline the
 C++ can be compared against.
-825 Python tests and 4,652 C++ checks pass; several exist to prove failures are visible
+832 Python tests and 4,652 C++ checks pass; several exist to prove failures are visible
 rather than silent. Every suite is mutation-checked, and surviving mutants are recorded where
 they live rather than tallied here — including the ones that turn out to be **equivalent on a
 64-bit host**, a distinction worth keeping rather than rounding away. Cumulative counts are
