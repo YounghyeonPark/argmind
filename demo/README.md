@@ -229,3 +229,64 @@ refuses real motion outright. A peak-to-median gate was measured as the alternat
 
 **So `--objects K` is scoped: it separates objects that are far apart, and it cannot count.** The
 two-object accuracy above is for movers half a frame apart.
+## Telling the objects apart — by what they look like
+
+    python -m demo.pointer --objects 2 --identify
+
+Sorting labels by x gave **roles**: "leftmost" is a function of the current frame, so a head can
+learn it (0.063, 3.53× a centre guess). **Identity** is not — which object this is depends on which
+it *was* — and the sort rule duly failed at it (0.234 against a centre guess of 0.222).
+
+**Appearance removes the history.** If the objects look different, the current frame says which is
+which, so the head's target becomes a function of the frame again and the association moves to the
+caller's side of the label. Measured end to end through the real composition:
+
+| assignment | scored as | head | centre | |
+|---|---|---|---|---|
+| sorted by x | identity | 0.234 | 0.222 | 0.95× — fails |
+| **appearance** | **identity** | **0.041** | 0.222 | **5.36×** |
+| sorted by x | role | 0.063 | 0.222 | 3.53× |
+| appearance | role | 0.242 | 0.222 | 0.92× — fails |
+
+Each rule answers one question and fails the other, which is why both ship. A caller who wants
+"leftmost" should not be given the appearance matcher.
+
+**Four things had to hold, and finding which one was broken was the work:**
+
+| | measured |
+|---|---|
+| a **random** backbone's crop embeddings separate the objects | 0.206 within/between (identical pair: 0.915) |
+| nearest-template matching assigns them | **100%** correct, at every crossing speed |
+| the head can express "where is the red one" | 0.072 with perfect labels — better than roles |
+| the **locator** puts one detection on each object | 20.3% → **96.6%** |
+
+The last row was the whole failure. **A frame difference is a temporal derivative**, so a mover
+leaves a dipole and two peaks usually land on one object. No suppression radius fixes it here: the
+dipole spacing is ~17 px for a blob of σ 8.6 px while the two objects come within ~21.6 px of each
+other. Differencing against a running **background** instead pairs at 96.6%, and it is also
+immune to the bright static lamp that ruled out locating on the raw frame.
+
+**The control that says this is appearance and not something leaking.** Two *identical* objects
+must fall to chance. They reach 74.3% at different heights and **50.6%** at the same height — the
+residual was the crop carrying position, because a crop near a frame edge is clamped. That is why
+the honest control puts them level, and why `CROP` is documented as carrying position.
+
+**And two limits of the background locator, both measured.** It **cannot count** — `k` is a
+declaration of how many slots the caller wants, not a detection, so two slots on a one-object scene
+gives a second slot chasing noise. And a **stationary object is absorbed into the background and
+lost at every rate**:
+
+| px/frame | rate=0.02 | 0.05 | 0.15 | 0.4 |
+|---|---|---|---|---|
+| 0.0 | **0%** | **0%** | **0%** | **0%** |
+| 0.5 | 91% | 93% | 0% | 0% |
+| 1.0 | **100%** | 98% | 13% | 0% |
+| 1.9 | 27% | 27% | 24% | 4% |
+| 4.8 | 0% | 0% | 0% | 0% |
+
+So `rate` is not a free parameter. An earlier version of that measurement reported 100% at every
+rate because it asked whether *a* peak existed rather than whether the peak was on the object — a
+check that could not produce a negative result. Reading the coordinates caught it: (0.89, 0.82) for
+an object at (0.35, 0.50). **Three measurement bugs in this thread were all caught by reading the
+numbers** rather than the code — that one, a uniform 2.00 in every cell of a swept table, and a
+0.89 error on a frame 1.0 wide.

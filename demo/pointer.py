@@ -26,7 +26,7 @@ from argmind.guard import Bound, Divergence, Guard
 from argmind.persist import Store, fingerprint_of
 from argmind.pipeline import FrameMap, Pipeline
 from argmind.stream import Stream
-from demo.label_sources import CadenceDetector
+from demo.label_sources import AppearanceMatcher, BackgroundLocator, CadenceDetector
 
 #: Small on purpose. Random convolutional features work shallow and carry nothing deep --
 #: brightness reads 0.009 at one layer and 1.119 at twenty-seven -- and a 3x3 grid is what
@@ -40,6 +40,23 @@ STATE_DIR = Path(__file__).resolve().parent / "state"
 #: directory, so the slots landed as `demo/state.0` NEXT TO it while the demo printed
 #: "saved to demo/state". It saved correctly and told the user the wrong place.
 STATE_PATH = STATE_DIR / "head"
+#: The appearance window around a detected object, in pixels of the resized frame. It has to be
+#: big enough to contain an object and small enough not to contain its neighbour -- and it carries
+#: POSITION as well as appearance whenever it is clamped at a frame edge, which is measured: two
+#: identical objects at different heights are still told apart 74.3% of the time through their
+#: crops, falling to 50.6% (chance) when they sit at the same height.
+CROP = 20
+
+
+def crop_at(frame, point):
+    """The appearance window around `point`, clamped to the frame."""
+    h, w = frame.shape[0], frame.shape[1]
+    x = int(round(point[0] * (w - 1)))
+    y = int(round(point[1] * (h - 1)))
+    half = CROP // 2
+    x0 = max(0, min(w - CROP, x - half))
+    y0 = max(0, min(h - CROP, y - half))
+    return frame[y0:y0 + CROP, x0:x0 + CROP, :]
 
 
 def build(objects: int = 1):
@@ -148,7 +165,8 @@ def draw(cv2, frame, state):
             cv2.circle(frame, (int(px * w), int(py * h)), 9, (0, 200, 255), 2)
 
     lines = [
-        f"auto {state['n_auto']} (every {state['every']})   mouse {state['n_taught']}   "
+        f"{state['how']}{'+id' if state['identify'] else ''} x{state['objects']}   "
+        f"auto {state['n_auto']}   mouse {state['n_taught']}   "
         f"updates {state['updates']}   {state['fps']:.0f} fps",
         f"frame std x{state['drift']:.2f}   residual {state['residual']:.3f}",
     ]
@@ -188,6 +206,17 @@ def main(argv=None):
                    help="how many moving things to track. The head gets 2K outputs and the "
                         "labels arrive leftmost-first: it learns ROLES, not identities, and "
                         "cannot follow which object is which through a crossing")
+    p.add_argument("--locate", choices=("motion", "background"), default=None,
+                   help="how the automatic labels find things. `motion` differences consecutive "
+                        "frames; `background` differences against a running background estimate. "
+                        "Defaults to background above one object, because a frame difference is a "
+                        "temporal derivative and leaves a DIPOLE -- measured, two peaks land one "
+                        "per object 20.3%% of the time against 96.6%% for background")
+    p.add_argument("--identify", action="store_true",
+                   help="assign the slots by APPEARANCE instead of left-to-right. Tracks identity "
+                        "through a crossing (0.041 against a centre-guess 0.222) where the sort "
+                        "rule cannot (0.234). Needs the objects to LOOK different: with identical "
+                        "ones the assignment falls to chance, measured 50.6%%")
     p.add_argument("--detect-every", type=int, default=10, metavar="N",
                    help="run the automatic detector every N frames (default 10). This is a "
                         "declaration of what the caller can afford, and it is what the learned "
@@ -229,12 +258,39 @@ def main(argv=None):
     cv2.namedWindow("argmind")
     cv2.setMouseCallback("argmind", on_mouse)
 
-    detector = None if args.teach == "mouse"         else CadenceDetector(args.detect_every, k=n_objects)
+    # `background` above one object is not a preference: a frame difference is a temporal
+    # derivative, so a mover leaves a lobe where it was and one where it is, and asking for two
+    # peaks returns two lobes of the same object 80% of the time. Measured 20.3% correct pairing
+    # against 96.6%. No suppression radius fixes it here -- the dipole spacing (~17 px for a blob
+    # of sigma 8.6) and the closest approach of the two objects (~21.6 px) leave no window.
+    how = args.locate or ("background" if n_objects > 1 else "motion")
+    if args.teach == "mouse":
+        detector = None
+    elif how == "background":
+        detector = BackgroundLocator(n_objects, rate=0.05)
+    else:
+        detector = CadenceDetector(args.detect_every, k=n_objects)
+
+    matcher = None
+    if args.identify:
+        if how != "background":
+            sys.exit("--identify needs --locate background: appearance matching is only as good "
+                     "as the crops it describes, and motion differencing puts them on the "
+                     "leading and trailing edges of one object rather than on two objects.")
+        crop_backbone = Backbone(PLAN, (CROP, CROP, 3), dtype="f4", seed=1, pool=2)
+
+        def describe(frame, point):
+            v = crop_backbone.features(crop_at(frame, point)).astype(np.float64)
+            n = float(np.linalg.norm(v))
+            return v / n if n > 0 else v
+
+        matcher = AppearanceMatcher(n_objects, describe)
     state = {"pred": None, "frozen": False, "frozen_by": (), "n_taught": 0,
              "updates": 0, "fps": 0.0, "drift": 0.0, "residual": 0.0,
              "taught_points": [], "learning": False, "last_update_frame": -999,
              "n_auto": 0, "detector_ran": False, "teach": args.teach,
-             "every": args.detect_every, "objects": n_objects}
+             "every": args.detect_every, "objects": n_objects, "how": how,
+             "identify": args.identify}
     # Calibrated from the first second: the scale of the caller's own statistic and of the
     # backbone's output. Both are numbers the library refuses to guess.
     frame_std = None
@@ -273,6 +329,11 @@ def main(argv=None):
         # And running a detector every frame beats both at 0.010 against the head's ~0.08, so
         # this arrangement is about the detector being unaffordable, not about accuracy.
         auto = detector(small) if detector is not None else None
+        if auto is not None and matcher is not None:
+            # Slots by appearance rather than by position. This is what makes IDENTITY a function
+            # of the current frame -- "which object is which" otherwise depends on which it was,
+            # and DESIGN.md's *What it is not* says no instantaneous basis represents a history.
+            auto = matcher(small, auto)
         state["detector_ran"] = auto is not None
         if auto is not None:
             # Sorted leftmost-first by the detector, and flattened in that order. The order is

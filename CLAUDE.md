@@ -1030,6 +1030,46 @@ mutants; the two that survived were both in `CadenceDetector`, because the multi
 called `find_peaks` directly and did their own sorting — the component that ships was bypassed.
 Both closed, plus two more on the energy floor, which had no test at all when it was added.
 
+**Cognitive distinction by appearance works, and it makes identity expressible — 2026-08-11.**
+The owner asked whether the two tracked objects could be told apart by their features. They can,
+and the reason it is not merely a nicety: sorting by x tracks **roles** ("leftmost" is a function of
+the current frame, so a head can learn it) and fails **identity**, because which object this is
+depends on which it *was*. **Appearance removes the history** — if they look different, the current
+frame says which is which, so the head's target is a function of the frame again and the association
+sits on the caller's side. Measured end to end: **0.041 against a centre-guess 0.222, 5.36x**, and
+better than the sort rule ever managed on roles (0.063). Each rule fails the other's question
+(appearance on roles: 0.242, 0.92x), so both ship.
+
+**Four things had to hold and finding the broken one was the work.** A **random** backbone's crop
+embeddings separate the objects (0.206 within/between, identical pair 0.915); nearest-template
+matching is **100%** correct at every speed tried; the head expresses "where is the red one" at
+0.072 with perfect labels. The failure was the **locator**: a frame difference is a temporal
+derivative, so a mover leaves a dipole and two peaks land on one object — **20.3%** correct pairing
+against **96.6%** for a running background, which is also immune to the static lamp that ruled out
+locating on the raw frame. No suppression radius fixes the derivative: dipole spacing ~17 px for a
+sigma-8.6 px blob against a closest approach of ~21.6 px.
+
+**The control is what makes the appearance claim mean anything.** Two *identical* objects must fall
+to chance: 74.3% at different heights, **50.6%** at the same height. The residual was the crop
+carrying **position**, since a crop near a frame edge is clamped — so the honest control levels
+them, and `CROP` is documented as position-sensitive.
+
+**Two limits of the background locator, measured.** It **cannot count** — `k` is a declaration, not
+a detection. And a **stationary object is absorbed into the background and lost at every rate**
+(0% at every rate tried), while the usable window is narrow: 100% at 1.0 px/frame and rate 0.02,
+0% at 4.8 px/frame. `rate` is not free.
+
+**Three measurement bugs in this thread, all caught by reading numbers rather than code.** A
+crossing fixture that sent its objects to x=2.0, off the picture, reading 0.89 error on a frame
+1.0 wide. A swept table that read a uniform 2.00 in every cell — this project's own rule that a
+uniformly tidy result is a broken measurement, applied to my own. And a stationary-object check
+that asked whether *a* peak existed rather than whether it was **on** the object, so it could not
+produce a negative result and duly reported 100% everywhere; the peak was at (0.89, 0.82) for an
+object at (0.35, 0.50). A fourth was a scoring error, not a measurement one: identity scored
+against "object A is slot 0" read 0.430 — roughly the distance between the objects — because the
+slot names are arbitrary and the matcher seeds from whichever object is leftmost first. A constant
+swap read as a tracking failure.
+
 **Still undecided:** whether inference is *hosted* (an interface to ONNX Runtime/TFLite) or
 *embedded*, and whether the tiers ship as one library or two. Nothing on the camera/audio/speech
 path is built.
@@ -1052,7 +1092,7 @@ rollback, explicit recovery), `argmind/pipeline.py` (`FrameMap`, input gate, bou
 pipeline. `argmind/bench.py` has no C++ counterpart and is not getting one: it is a host
 measurement harness, and DESIGN.md already records that Python timings are not a baseline the
 C++ can be compared against.
-850 Python tests and 4,652 C++ checks pass; several exist to prove failures are visible
+859 Python tests and 4,652 C++ checks pass; several exist to prove failures are visible
 rather than silent. Every suite is mutation-checked, and surviving mutants are recorded where
 they live rather than tallied here — including the ones that turn out to be **equivalent on a
 64-bit host**, a distinction worth keeping rather than rounding away. Cumulative counts are
