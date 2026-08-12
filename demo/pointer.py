@@ -137,6 +137,87 @@ def crop_at(frame, point):
     return frame[y0:y0 + CROP, x0:x0 + CROP, :]
 
 
+#: Leak rates for the output-feedback bank: short, medium and long term. Three, because one is
+#: measured to be *worse than persistence* free-running and three is where it starts paying.
+FEEDBACK_RATES = (0.5, 0.15, 0.03)
+
+
+def feedback_width(objects: int, rates=FEEDBACK_RATES) -> int:
+    """How many extra basis terms an `OutputMemory` contributes, so `build` and `main` agree
+    without one of them constructing the other's object."""
+    return len(rates) * 2 * objects
+
+
+class OutputMemory:
+    """A bank of leaky integrators over the head's own past output, for the head's own input.
+
+    **Why this is allowed at all.** DESIGN.md says no choice of *instantaneous* features represents
+    a history-dependent quantity, and which object this is depends on which it was. That is a
+    statement about the BASIS, not the model class: `y_t = f(x_t, y_{t-1}, ...)` is still linear in
+    the parameters, and "the caller supplies the basis" is the licence to put lagged outputs in it.
+
+    **What it buys, measured on a fixture where nothing else can work.** Two identical objects
+    orbiting 180 degrees apart: swapping their labels produces a **bit-identical** image, so no
+    instantaneous property whatever can say which is which. Identity there is purely historical.
+
+    | basis | error | x centre | x persistence |
+    |---|---|---|---|
+    | frame only | 0.2504 | **1.00x** | 0.04x |
+    | + previous output, teacher-forced | 0.0002 | 1572x | 70.5x |
+    | + previous output, free-running | 0.0195 | 12.8x | **0.57x** |
+    | + three lags, free-running | 0.0035 | 71.0x | 3.18x |
+    | + **this bank**, free-running | 0.0018 | **141.7x** | **6.36x** |
+
+    Frame-only reads exactly a centre guess, which is what says the question is real. And the
+    multi-timescale part is not decoration: **one lag free-running is worse than simply copying the
+    previous true position** (0.57x), because its own errors compound. Teacher forcing reads 1572x
+    and is the ceiling, not a shippable number -- the figure that ships is the free-running one.
+
+    **And it cannot recover from a dropout, which is the cost.** Sixty blind frames take the error
+    from 0.0009 to 0.70, and nine hundred frames later it is still **0.46** -- it never comes back.
+    That is not divergence (the prediction stays bounded at 1.24); it is a **stable wrong fixed
+    point**, and it follows from the same property that made feedback necessary: a frame that
+    cannot disambiguate also cannot correct. More time constants do not help -- a four-rate bank
+    behaves identically to three.
+
+    **So this needs an external re-anchor and the guard is not it**: the head is healthy and its
+    residual is low, because it fits the wrong assignment well. What re-anchors it is appearance,
+    when the objects differ -- which is what `ObjectMemory` and `AppearanceMatcher` are. Feedback
+    carries identity through ambiguity; appearance recovers it after a break. Neither alone.
+    """
+
+    __slots__ = ("rates", "n_outputs", "_bank")
+
+    def __init__(self, n_outputs: int, rates=FEEDBACK_RATES) -> None:
+        if n_outputs < 1:
+            raise ValueError(f"n_outputs must be at least 1, got {n_outputs}")
+        if not rates or any(not 0.0 < r <= 1.0 for r in rates):
+            raise ValueError(f"every rate must be in (0, 1], got {rates}")
+        self.rates = tuple(float(r) for r in rates)
+        self.n_outputs = int(n_outputs)
+        self.reset()
+
+    def reset(self) -> None:
+        self._bank = [np.zeros(self.n_outputs, dtype=np.float64) for _ in self.rates]
+
+    @property
+    def width(self) -> int:
+        return len(self.rates) * self.n_outputs
+
+    def features(self) -> np.ndarray:
+        return np.concatenate(self._bank)
+
+    def observe(self, y) -> None:
+        """Fold an output into every band. The caller decides whether `y` is the head's own
+        prediction or a supplied label -- during learning the label is the honest thing to feed,
+        and the gap between the two is the teacher-forcing gap the docstring quantifies."""
+        v = np.asarray(y, dtype=np.float64).ravel()
+        if v.size != self.n_outputs:
+            raise ValueError(f"expected {self.n_outputs} outputs, got {v.size}")
+        for i, r in enumerate(self.rates):
+            self._bank[i] += r * (v - self._bank[i])
+
+
 def raw_width(factor=RAW_FACTOR, shape=IN_SHAPE, colour=True):
     return (shape[0] // factor) * (shape[1] // factor) * (shape[2] if colour else 1)
 
@@ -175,7 +256,8 @@ def segment_image(labels, ids=(), scale=6):
     return out
 
 
-def build(objects: int = 1, source: str = "backbone", *, colour: bool = True):
+def build(objects: int = 1, source: str = "backbone", *, colour: bool = True,
+          feedback: bool = False):
     """The whole composition, and every piece of it is load-bearing here.
 
     `objects` is how many things to track: the head gets `2 * objects` outputs, and the labels
@@ -194,7 +276,10 @@ def build(objects: int = 1, source: str = "backbone", *, colour: bool = True):
     # the guard's calibration uses it. `source` decides only what reaches the HEAD.
     backbone = Backbone(PLAN, IN_SHAPE, dtype="f4", seed=1, pool=POOL)
     width = backbone.n_outputs if source == "backbone" else raw_width(colour=colour)
-    n = width + 1                                    # + the constant
+    # Sized here, CONSTRUCTED by the caller -- like the detector, the matcher and the object
+    # memory. `build` owns the shapes; `main` owns the caller-side state.
+    fb = feedback_width(objects) if feedback else 0
+    n = width + fb + 1                               # + the constant
 
     head = NormalisedLeastMeanSquares(n, 2 * objects, mu=0.3, dtype="f4")
     guard = Guard(
@@ -225,9 +310,12 @@ def build(objects: int = 1, source: str = "backbone", *, colour: bool = True):
         n_external=1,
     )
 
-    features = Stream("features", dim=width, capacity=64, dtype="f4")
+    # The feedback bank rides in the SAME stream as the frame features: it is part of the
+    # basis, not a second sensor, and giving it its own stream would make the aligner responsible
+    # for something that has no independent clock.
+    features = Stream("features", dim=width + fb, capacity=64, dtype="f4")
     taught = Stream("taught", dim=2 * objects, capacity=16, dtype="f4")
-    fmap = FrameMap(features=[("features", i) for i in range(width)],
+    fmap = FrameMap(features=[("features", i) for i in range(width + fb)],
                     target=[("taught", i) for i in range(2 * objects)], constant=True)
     # The reference is the CAMERA, not the labels, and getting this wrong was the demo's
     # third caller-side bug: with `reference="taught"` a frame exists only at a label
@@ -405,6 +493,12 @@ def main(argv=None):
                    help="open a second window showing the label regions: the background-difference "
                         "mask partitioned by nearest detection, coloured by remembered id. Needs "
                         "--locate background, which is where the mask comes from")
+    p.add_argument("--feedback", action="store_true",
+                   help="put the head's own past output back into its input, as a bank of leaky "
+                        "integrators at three time constants. The only thing that works when two "
+                        "objects are indistinguishable by appearance -- and it cannot recover "
+                        "from a dropout, because the frame that cannot disambiguate cannot "
+                        "correct either. See OutputMemory")
     p.add_argument("--bg-selective", action="store_true",
                    help="stop the background learning where the mask says there is an object. "
                         "Fills the regions instead of outlining them -- core coverage 0.00 to "
@@ -433,11 +527,13 @@ def main(argv=None):
         sys.exit("--objects > 1 needs the automatic detector: one mouse position cannot say "
                  "where two objects are. Use --teach auto or --teach both.")
     backbone, head, guard, features, taught, fmap, pipe = build(
-        n_objects, args.input, colour=not args.raw_grey)
+        n_objects, args.input, colour=not args.raw_grey, feedback=args.feedback)
+    output_memory = OutputMemory(2 * n_objects) if args.feedback else None
     STATE_DIR.mkdir(parents=True, exist_ok=True)
     store = Store(STATE_PATH)
     fp = fingerprint(backbone, n_objects,
-                     args.input + ("-grey" if args.raw_grey else ""))
+                     args.input + ("-grey" if args.raw_grey else "")
+                     + ("-fb" if args.feedback else ""))
     if args.load:
         rec = store.load(guard, fingerprint=fp)
         if rec is None:
@@ -535,6 +631,8 @@ def main(argv=None):
         # version recomputed `backbone.features(small)` after calibrating, which would have
         # ignored `--input raw` on that frame and every frame after it.
         emb = extract(small)
+        if output_memory is not None:
+            emb = np.concatenate([emb, output_memory.features().astype(emb.dtype)])
 
         if not calibrated and frames > 15:
             # Scaling the input matters and is not optional: `p0` has units, and this project
@@ -613,6 +711,11 @@ def main(argv=None):
         # `Guard` has no such attribute -- so the number on screen was hardwired to 0 for the
         # life of the demo, and it is the one number that answers "is it learning right now".
         # A defensive `hasattr` around a field nobody checked is how that stays invisible.
+        if output_memory is not None and state["pred"] is not None:
+            # Fed with the head's own output, which is the free-running case the docstring's
+            # numbers are for. Feeding the label instead is teacher forcing and reads 11x better
+            # while measuring a system nobody can deploy.
+            output_memory.observe(state["pred"])
         if report.updated:
             state["updates"] += 1
             state["last_update_frame"] = frames

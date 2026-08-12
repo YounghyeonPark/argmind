@@ -1279,6 +1279,50 @@ input it can — the matcher is still needed to keep *labels* consistent while l
 head's representation has stopped being the bottleneck. Two mutants: averaging the channels away
 again, and moving the factor off the backbone's width.
 
+**Feeding the head's own output back into its input — the owner's proposal, and it works, with a
+cost that decides how it must be used (2026-08-12).** It also corrects a framing I had been using
+loosely: the first section of this file says no choice of *instantaneous* features represents a
+history-dependent quantity, and I had been reading that as "this model class cannot do identity".
+It is a statement about the **basis**. `y_t = f(x_t, y_{t-1}, ...)` is still linear in the
+parameters, and "the caller supplies the basis" is exactly the licence to put lagged outputs in it.
+
+**Measured on the only fixture that can test it**: two *identical* objects orbiting 180° apart,
+whose image is **bit-identical** under exchanging their labels — so no instantaneous property
+whatever can say which is which. Free-running, against a centre guess and against copying the
+previous *true* position:
+
+| basis | error | x centre | x persistence |
+|---|---|---|---|
+| frame only | 0.2504 | **1.00x** | 0.04x |
+| + previous output, teacher-forced | 0.0002 | 1572x | 70.5x |
+| + previous output, free-running | 0.0195 | 12.8x | **0.57x** |
+| + three lags, free-running | 0.0035 | 71.0x | 3.18x |
+| + **EWMA bank .5/.15/.03**, free-running | 0.0018 | **141.7x** | **6.36x** |
+
+Frame-only reads **exactly a centre guess**, which is what says the question is real. And the
+short-to-long part of the proposal is not decoration: **one lag free-running is worse than
+persistence** (0.57x) because its own errors compound; three lags reach 3.18x and the bank 6.36x.
+Teacher forcing reads 1572x and is the ceiling, not a shippable number — an 11x gap, and only the
+free-running figure describes a system anyone can deploy.
+
+**It cannot recover from a dropout, and that is the cost.** Sixty blind frames take the error from
+0.0009 to 0.70, and nine hundred frames later it is still **0.46**. Not divergence — the prediction
+stays bounded at 1.24 — a **stable wrong fixed point**, and it follows from the same property that
+made feedback necessary: a frame that cannot disambiguate cannot correct either. A four-rate bank
+behaves identically, so it is not a tuning problem. **The guard cannot catch it**: the head is
+healthy and its residual is low because it fits the wrong assignment well — the same shape as the
+two-rate finding this file already records.
+
+**So the two mechanisms are complements, not alternatives**: feedback carries identity through
+ambiguity, appearance (`ObjectMemory`, `AppearanceMatcher`) re-anchors it after a break, and neither
+alone is enough. `--feedback`, and the source is in the persistence fingerprint. Three mutants
+caught: collapsing the bank to one rate, removing the leak, and not widening the basis.
+
+**Three rigged fixtures on the way, all mine, each caught by a number that could not be true.**
+Objects at fixed different heights (height identifies them); different colours (appearance already
+solves it, measured at 118x last turn); and a trajectory crossing only in x, which never swapped
+anything. The shipped fixture asserts its own swap-invariance for that reason.
+
 **Still undecided:** whether inference is *hosted* (an interface to ONNX Runtime/TFLite) or
 *embedded*, and whether the tiers ship as one library or two. Nothing on the camera/audio/speech
 path is built.
