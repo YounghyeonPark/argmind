@@ -1595,6 +1595,13 @@ are two thresholds on one split, and 0.03 is a middle rather than an optimum.
 the floor is too low (precision 0.44 → 0.85 at floor 0.01) and once the floor is right it is worse
 than nothing, costing coverage 1.00 → 0.90 for precision 0.98 → 0.90. Not offered.
 
+**And I gated a test on an absolute timing, which this project had already paid to learn once.**
+The split's cost test bounded the worst fixture at 33 ms; it passed standalone at 14.3 and **failed
+inside the hour at 34.1** under the pre-commit hook, which runs the whole suite alongside it. It
+asserts a within-run **ratio** now — a noise-carved background must cost more than twice a clean
+scene at the same frame size and the same `k`, which is the hook-round explanation itself — and the
+milliseconds stay in the docstring as recorded figures rather than as a gate.
+
 **Two fixtures of mine collided while claiming in a comment that they did not** — minimum separation
 0.148 against a touching threshold of 0.220, and 0.112 against 0.180 — so objects merged near the end
 of every run and the merge read as a labelling failure. Every number above was re-measured on
