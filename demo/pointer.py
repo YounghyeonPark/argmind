@@ -292,6 +292,33 @@ def regions_for_slots(detector, frame, n, *, split=True, edges=0.95, min_frac=0.
     return region_map, of_cluster, ids, points
 
 
+def follow_permutation(before, after, values):
+    """Reorder `values` the same way `after` reorders `before`.
+
+    The appearance matcher returns the same points in a different order, and whatever was indexed by
+    the old order -- here, which region each slot came from -- has to follow it. Get this wrong and
+    the picture colours a region with another slot's label, which is exactly the defect that made the
+    ids flicker in the first place.
+
+    **Matched by first UNUSED equal value, not by `before.index(pt)`.** A slot the frame had no
+    region for carries the frame centre, so two entries can be identical, and `index` would hand both
+    of them the same region. Module level because that reasoning was a comment inside `main()`'s loop
+    where nothing could reach it -- the fifth thing in this package to need moving out for that
+    reason in one day.
+    """
+    if len(before) != len(after) or len(before) != len(values):
+        raise ValueError(f"{len(before)} before, {len(after)} after, {len(values)} values")
+    taken = set()
+    out = []
+    for pt in after:
+        match = next((i for i, q in enumerate(before) if i not in taken and q == pt), None)
+        if match is None:
+            raise ValueError(f"{pt} is not one of the points that went in: {before}")
+        taken.add(match)
+        out.append(values[match])
+    return out
+
+
 def label_field(region_map, of_cluster, cluster_labels, tracker, *, min_frac=0.03, frame=None):
     """Every region worth painting, with a label that survives between frames.
 
@@ -905,14 +932,7 @@ def main(argv=None):
             # one cluster.
             before = list(auto)
             auto = matcher(small, auto)
-            taken = set()
-            perm = []
-            for pt in auto:
-                # First UNUSED match, not `before.index(pt)`: a slot with no region gets the frame
-                # centre, so two entries can be equal and `index` would hand both the same region.
-                perm.append(next(i for i, q in enumerate(before) if i not in taken and q == pt))
-                taken.add(perm[-1])
-            slot_cluster = [slot_cluster[i] for i in perm]
+            slot_cluster = follow_permutation(before, auto, slot_cluster)
         elif auto is not None and matcher is not None:
             # Slots by appearance rather than by position. This is what makes IDENTITY a function
             # of the current frame -- "which object is which" otherwise depends on which it was,

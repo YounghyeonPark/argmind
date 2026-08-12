@@ -529,3 +529,34 @@ def test_the_descriptor_reads_the_region_and_not_its_neighbourhood():
     # An empty region answers rather than raising, and a greyscale frame gives four numbers.
     assert not region_descriptor(img, np.zeros(img.shape[:2], dtype=bool)).any()
     assert len(region_descriptor(img.mean(axis=2), masks[0])) == 2
+
+
+def test_the_slot_to_region_pairing_follows_the_matchers_permutation():
+    """The appearance matcher hands back the same points in a different order, and which region each
+    slot came from has to follow. Getting it wrong colours a region with another slot's label, which
+    is the defect that made the ids flicker in the first place.
+
+    The interesting case is **duplicate points**: a slot the frame had no region for carries the
+    frame centre, so two entries can be equal, and `before.index(pt)` would hand both of them the
+    same region. This lived inside `main()`'s loop where nothing could reach it.
+    """
+    from demo.pointer import follow_permutation
+
+    before = [(0.2, 0.5), (0.5, 0.5), (0.8, 0.5)]
+    assert follow_permutation(before, before, [7, 8, 9]) == [7, 8, 9]
+    assert follow_permutation(before, [before[2], before[0], before[1]], [7, 8, 9]) == [9, 7, 8]
+
+    # Two slots at the frame centre, which is what an absent region carries.
+    dup = [(0.5, 0.5), (0.2, 0.5), (0.5, 0.5)]
+    got = follow_permutation(dup, [dup[1], dup[0], dup[2]], ["a", "b", "c"])
+    assert got == ["b", "a", "c"], (
+        f"got {got}; with two identical points the pairing must still be one-to-one, and "
+        "`before.index` would give both of them the first match")
+    assert sorted(follow_permutation(dup, [dup[2], dup[0], dup[1]], ["a", "b", "c"])) == \
+        ["a", "b", "c"], "a value was used twice or dropped"
+
+    assert follow_permutation([], [], []) == []
+    with pytest.raises(ValueError, match="values"):
+        follow_permutation(before, before, [1, 2])
+    with pytest.raises(ValueError, match="not one of the points"):
+        follow_permutation(before, [(0.9, 0.9), before[0], before[1]], [1, 2, 3])

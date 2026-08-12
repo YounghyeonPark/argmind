@@ -1637,6 +1637,12 @@ near a frame edge is clamped and carries *position*, and that leak inflated an i
 middle describes 0.0000 apart. Colour does the work — raw RGB separates two objects at 0.096 against
 greyscale's 0.984, which is chance.
 
+**And the block pairing a slot to its region was still inside `main()`**, where nothing could reach
+it — `follow_permutation` is module-level now, with the case that motivated it pinned: a slot the
+frame had no region for carries the frame centre, so two entries can be equal and `before.index(pt)`
+hands both of them the same region. Sixth thing in two days to need moving out for that reason; four
+mutants caught.
+
 **Two of my own measurement errors, both caught by a row that could not be true.** The
 false-inheritance fixture put the newcomer at the hidden object's position *during* the gap, so a
 region sat there continuously and merely changed colour — position matching linked them with no
