@@ -47,6 +47,43 @@ STATE_PATH = STATE_DIR / "head"
 #: identical objects at different heights are still told apart 74.3% of the time through their
 #: crops, falling to 50.6% (chance) when they sit at the same height.
 CROP = 20
+#: Block-mean downsample factor for `--input raw`. 8 turns a 72x96 frame into 9x12 = 108 numbers,
+#: which is FEWER than the backbone's 144 and measured at least as good on every axis tried.
+RAW_FACTOR = 8
+
+
+def raw_features(frame, factor=RAW_FACTOR):
+    """A block-mean downsample of the greyscale frame, flattened.
+
+    **Measured better than the random backbone on every axis this demo exercises**, which is not
+    what I expected and is worth stating plainly. Position, one object, perfect labels:
+
+    | input | features | head state | ms/frame | error | vs centre |
+    |---|---|---|---|---|---|
+    | backbone | 145 | 1.1 KB | 0.94 | 0.064 | 4.55x |
+    | raw /8 | **109** | **0.9 KB** | **0.42** | **0.063** | **4.58x** |
+    | raw rgb | 20737 | 162 KB | 0.73 | 0.062 | 4.72x |
+
+    And frozen, which separates tracking from generalising: raw /8 reaches **0.001 (215.8x a
+    centre guess)** against the backbone's 0.027 (10.6x).
+
+    The reason is mechanical: position is a linear readout of a spatial map. `sum_i w_i * pixel_i`
+    with weights proportional to a pixel's coordinate *is* the centroid times the total brightness,
+    so a linear head computes it almost exactly from raw pixels. The backbone pools to a 3x3 grid
+    and mixes channels randomly, which for this task can only lose information.
+
+    **What a backbone is supposed to buy is invariance, and a random one does not buy it.** Trained
+    under one condition and frozen, then tested under another: brightness x1.6 gives 0.9x for the
+    backbone against 0.7x for raw, and a +0.25 offset 1.0x against 0.8x -- the backbone is
+    marginally better and *both are at a centre guess*, i.e. both have failed. Under clutter raw
+    is better outright, 1.6x against 1.4x. A trained backbone with batch normalisation is a
+    different proposition; this file's is random.
+    """
+    g = np.asarray(frame, dtype=np.float32)
+    if g.ndim == 3:
+        g = g.mean(axis=2)
+    h, w = g.shape[0] // factor * factor, g.shape[1] // factor * factor
+    return g[:h, :w].reshape(h // factor, factor, w // factor, factor).mean(axis=(1, 3)).ravel()
 
 
 def should_save(updates: int, restored: bool) -> bool:
@@ -79,7 +116,11 @@ def crop_at(frame, point):
     return frame[y0:y0 + CROP, x0:x0 + CROP, :]
 
 
-def build(objects: int = 1):
+def raw_width(factor=RAW_FACTOR, shape=IN_SHAPE):
+    return (shape[0] // factor) * (shape[1] // factor)
+
+
+def build(objects: int = 1, source: str = "backbone"):
     """The whole composition, and every piece of it is load-bearing here.
 
     `objects` is how many things to track: the head gets `2 * objects` outputs, and the labels
@@ -92,8 +133,13 @@ def build(objects: int = 1):
     """
     if objects < 1:
         raise ValueError(f"objects must be at least 1, got {objects}")
+    if source not in ("backbone", "raw"):
+        raise ValueError(f"source must be 'backbone' or 'raw', got {source!r}")
+    # The backbone is built either way: `--identify` and `--remember` describe crops with it, and
+    # the guard's calibration uses it. `source` decides only what reaches the HEAD.
     backbone = Backbone(PLAN, IN_SHAPE, dtype="f4", seed=1, pool=POOL)
-    n = backbone.n_outputs + 1                       # + the constant
+    width = backbone.n_outputs if source == "backbone" else raw_width()
+    n = width + 1                                    # + the constant
 
     head = NormalisedLeastMeanSquares(n, 2 * objects, mu=0.3, dtype="f4")
     guard = Guard(
@@ -124,9 +170,9 @@ def build(objects: int = 1):
         n_external=1,
     )
 
-    features = Stream("features", dim=backbone.n_outputs, capacity=64, dtype="f4")
+    features = Stream("features", dim=width, capacity=64, dtype="f4")
     taught = Stream("taught", dim=2 * objects, capacity=16, dtype="f4")
-    fmap = FrameMap(features=[("features", i) for i in range(backbone.n_outputs)],
+    fmap = FrameMap(features=[("features", i) for i in range(width)],
                     target=[("taught", i) for i in range(2 * objects)], constant=True)
     # The reference is the CAMERA, not the labels, and getting this wrong was the demo's
     # third caller-side bug: with `reference="taught"` a frame exists only at a label
@@ -147,7 +193,7 @@ def build(objects: int = 1):
     return backbone, head, guard, features, taught, fmap, pipe
 
 
-def fingerprint(backbone, objects: int = 1):
+def fingerprint(backbone, objects: int = 1, source: str = "backbone"):
     """Refuses a saved head restored against a different backbone or readout. The CRC cannot
     see that -- the bytes are perfectly valid, they just mean something else.
 
@@ -156,7 +202,7 @@ def fingerprint(backbone, objects: int = 1):
     the x slot of nothing.
     """
     return fingerprint_of("pointer", str(PLAN), str(IN_SHAPE), f"pool{POOL}",
-                          f"n{backbone.n_outputs}", f"obj{objects}")
+                          f"n{backbone.n_outputs}", f"obj{objects}", f"src{source}")
 
 
 def draw(cv2, frame, state):
@@ -197,7 +243,8 @@ def draw(cv2, frame, state):
             cv2.circle(frame, (int(px * w), int(py * h)), 9, (0, 200, 255), 2)
 
     lines = [
-        f"{state['how']}{'+id' if state['identify'] else ''} x{state['objects']}"
+        f"{state['source']}/{state['how']}{'+id' if state['identify'] else ''} "
+        f"x{state['objects']}"
         f"{'   vocab ' + str(state['vocab']) if state['remember'] else ''}   "
         f"auto {state['n_auto']}   mouse {state['n_taught']}   "
         f"updates {state['updates']}   {state['fps']:.0f} fps",
@@ -250,6 +297,10 @@ def main(argv=None):
                         "through a crossing (0.041 against a centre-guess 0.222) where the sort "
                         "rule cannot (0.234). Needs the objects to LOOK different: with identical "
                         "ones the assignment falls to chance, measured 50.6%%")
+    p.add_argument("--input", choices=("backbone", "raw"), default="backbone",
+                   help="what reaches the head: the frozen random backbone's 144 features, or a "
+                        "block-mean downsample of the raw frame (108 numbers). Raw is measured "
+                        "smaller, ~2x faster and at least as accurate here -- see raw_features()")
     p.add_argument("--remember", action="store_true",
                    help="keep a growing dictionary of object appearances and show it. Every "
                         "detection gets an id; new ones are minted when nothing stored matches. "
@@ -268,10 +319,10 @@ def main(argv=None):
     if n_objects > 1 and args.teach == "mouse":
         sys.exit("--objects > 1 needs the automatic detector: one mouse position cannot say "
                  "where two objects are. Use --teach auto or --teach both.")
-    backbone, head, guard, features, taught, fmap, pipe = build(n_objects)
+    backbone, head, guard, features, taught, fmap, pipe = build(n_objects, args.input)
     STATE_DIR.mkdir(parents=True, exist_ok=True)
     store = Store(STATE_PATH)
-    fp = fingerprint(backbone, n_objects)
+    fp = fingerprint(backbone, n_objects, args.input)
     if args.load:
         rec = store.load(guard, fingerprint=fp)
         if rec is None:
@@ -336,12 +387,18 @@ def main(argv=None):
              "n_auto": 0, "detector_ran": False, "teach": args.teach,
              "every": args.detect_every, "objects": n_objects, "how": how,
              "identify": args.identify, "vocab": 0, "slot_ids": [], "minted": [],
-             "remember": args.remember}
+             "remember": args.remember, "source": args.input}
     # Calibrated from the first second: the scale of the caller's own statistic and of the
     # backbone's output. Both are numbers the library refuses to guess.
     frame_std = None
     calibrated = False
     camera_failed = False
+    feature_scale = 1.0
+
+    def extract(small):
+        if args.input == "backbone":
+            return backbone.features(small)
+        return raw_features(small) * feature_scale
     t0 = time.perf_counter()
     frames = 0
 
@@ -355,14 +412,23 @@ def main(argv=None):
         frame = cv2.flip(frame, 1)
         h, w = frame.shape[:2]
         small = cv2.resize(frame, (IN_SHAPE[1], IN_SHAPE[0])).astype(np.float32) / 255.0
-        emb = backbone.features(small)
+        # One extraction path, so calibration cannot silently switch the source. The first
+        # version recomputed `backbone.features(small)` after calibrating, which would have
+        # ignored `--input raw` on that frame and every frame after it.
+        emb = extract(small)
 
         if not calibrated and frames > 15:
-            backbone.output_scale = 1.0 / max(float(np.std(emb)), 1e-6)
+            # Scaling the input matters and is not optional: `p0` has units, and this project
+            # measured an unscaled embedding at 6.8e-4 defeating every head until it was scaled.
+            feature_scale = 1.0 / max(float(np.std(emb)), 1e-6)
+            if args.input == "backbone":
+                backbone.output_scale = feature_scale
+                feature_scale = 1.0            # the backbone applies it internally
             frame_std = float(np.std(small))
             calibrated = True
-            emb = backbone.features(small)
-            print(f"calibrated: output_scale {backbone.output_scale:.1f}, "
+            emb = extract(small)
+            print(f"calibrated: feature scale "
+                  f"{backbone.output_scale if args.input == 'backbone' else feature_scale:.1f}, "
                   f"frame std {frame_std:.3f}")
         if calibrated:
             state["drift"] = float(np.std(small)) / max(frame_std, 1e-6)

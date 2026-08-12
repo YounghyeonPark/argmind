@@ -343,3 +343,71 @@ def test_a_dead_camera_is_reported_and_does_not_look_like_a_normal_quit(ready, t
     assert not np.allclose(np.asarray(restored[2].state), trained), (
         "saving an untrained head did not change the record, so this test is not demonstrating "
         "the hazard that should_save exists to prevent")
+
+# ---------------------------------------------------------------------------
+# Raw pixels against the random backbone
+# ---------------------------------------------------------------------------
+
+
+def test_raw_pixels_are_smaller_and_at_least_as_good_as_the_random_backbone(ready):
+    """The owner asked why not just feed the raw image. Measured, it wins on every axis here.
+
+    | input | features | head state | ms/frame | error | vs centre |
+    |---|---|---|---|---|---|
+    | backbone | 145 | 1.1 KB | 0.94 | 0.064 | 4.55x |
+    | raw /8 | **109** | **0.9 KB** | **0.42** | **0.063** | **4.58x** |
+
+    The reason is mechanical rather than lucky: position is a linear readout of a spatial map, and
+    `sum_i w_i * pixel_i` with coordinate weights is the centroid times the total brightness. The
+    backbone pools to a 3x3 grid, which for this task can only lose information.
+    """
+    from demo.pointer import raw_features, raw_width
+
+    assert raw_width() < 144, "the raw path is no longer smaller than the backbone's 144"
+    parts_raw = build(1, "raw")
+    parts_bb = build(1, "backbone")
+    assert parts_raw[1].n_features < parts_bb[1].n_features
+    assert np.asarray(parts_raw[1].state).nbytes < np.asarray(parts_bb[1].state).nbytes
+
+    # And it is the shape the composition expects, which is what would break silently.
+    v = raw_features(frame_at(0.3, 0.7, seed=1))
+    assert v.shape == (raw_width(),)
+    assert parts_raw[3].dim == raw_width()
+    assert len(parts_raw[5].features) == raw_width()
+
+
+def test_a_raw_head_learns_through_the_whole_composition(ready):
+    """Not merely a shape change: drive the real pipeline and require it to beat a centre guess."""
+    parts = build(1, "raw")
+    from demo.pointer import raw_features
+
+    backbone, _head, guard, features, taught, _fmap, pipe = parts
+    scale = 1.0 / max(float(np.std([raw_features(frame_at(0.5, 0.5, seed=i))
+                                    for i in range(8)])), 1e-9)
+    base = float(np.std(frame_at(0.5, 0.5, seed=0)))
+    g = np.random.default_rng(11)
+    t, rows = 0.0, []
+    for k in range(500):
+        t += 1.0 / 30.0
+        x, y = float(g.uniform(0.2, 0.8)), float(g.uniform(0.2, 0.8))
+        img = frame_at(x, y, seed=k)
+        guard.set_external(0, float(np.std(img)) / max(base, 1e-6))
+        features.push(t, raw_features(img) * scale)
+        taught.push(t, [x, y])
+        r = pipe.step()
+        if r.prediction is not None and k > 250:
+            rows.append(np.hypot(float(r.prediction[0]) - x, float(r.prediction[1]) - y))
+    assert rows, "the raw pipeline produced no prediction"
+    assert float(np.mean(rows)) < 0.24, (
+        f"a raw-input head reached {np.mean(rows):.3f}, no better than a centre guess")
+
+
+def test_the_source_is_in_the_fingerprint():
+    """A raw block and a backbone block are both valid bytes of the same length only by accident,
+    and they mean entirely different things. The CRC cannot see that; the fingerprint must."""
+    from demo.pointer import fingerprint
+
+    bb = build(1)[0]
+    assert fingerprint(bb, 1, "raw") != fingerprint(bb, 1, "backbone")
+    with pytest.raises(ValueError, match="source must be"):
+        build(1, "pixels")
