@@ -1558,6 +1558,48 @@ cluster survived every mask-IoU test, because the centres are what the head is t
 nothing compared them; and a rule keeping the *smallest* regions survived every fixture where
 `k = objects + 1` makes the two rules equivalent.
 
+**"전보단 나은데 라벨수가 적은것 같음" — the picture was showing the head's slots, 2026-08-12.**
+`--objects 3` bounds the head at three because that is its output width; a picture has no such
+limit, and this repository's own resolution of the vocabulary question is *unbounded vocabulary,
+bounded concurrency*. `label_field` paints every region, and `RegionTracker` gives each one a label
+that survives between frames. Three objects, two of them the same colour, k=4:
+
+| identity | coverage | purity | distinct | ids per object |
+|---|---|---|---|---|
+| raw region index | 1.00 | 0.66 | 1.00 | 2.7 |
+| cluster index | 1.00 | **1.00** | **0.00** | 1.0 |
+| **tracked** | 1.00 | **1.00** | **1.00** | **1.0** |
+
+**The cluster index scores a perfect purity and is useless**, which is why distinctness is measured
+beside it: two objects wearing one id are each perfectly pure, so purity alone cannot fail. The raw
+region index is what the display would use for free, and it flickers because a region's number comes
+out of a raster-order component pass.
+
+**More labels come from splitting, not from raising `k` — the opposite of what I assumed.** Five
+objects, `k` swept: **5.0 labels at purity 1.00 and 5 ids minted with k=4**, against **3.0 at 0.45
+over 43 ids at k=6, 8 and 10**. Five labels for five objects come out of a scene declared with four
+clusters because splitting separates the objects that share one; raising `k` carves the objects
+*across* clusters instead. An earlier version of this measurement said `k` did not matter at all,
+and it came from a fixture whose objects collided with the split's floor standing in for the
+picture's.
+
+**One area floor cannot serve the head and the picture, measured in both directions.** The split's
+floor feeds the head, and raising it 0.01 → 0.03 takes the taught centre on two same-coloured
+objects from **0.000 to 0.222** because a slot loses its region entirely. The picture's floor keeps
+background fragments out: 0.01 paints 7.0 labels of which **47%** are on a real object, 0.03 paints
+3.2 of which **95%** are, and 0.05 paints only objects but starts losing them (coverage 0.98) and
+re-minting labels when a region dips under (purity 0.83). So `--seg-min-frac` and `--seg-show-frac`
+are two thresholds on one split, and 0.03 is a middle rather than an optimum.
+
+**A minimum age was the mechanism I expected and it is measured not to work.** It helps only when
+the floor is too low (precision 0.44 → 0.85 at floor 0.01) and once the floor is right it is worse
+than nothing, costing coverage 1.00 → 0.90 for precision 0.98 → 0.90. Not offered.
+
+**Two fixtures of mine collided while claiming in a comment that they did not** — minimum separation
+0.148 against a touching threshold of 0.220, and 0.112 against 0.180 — so objects merged near the end
+of every run and the merge read as a labelling failure. Every number above was re-measured on
+separate orbits, and the fixture now **asserts** its own separation. Nine mutants, all caught.
+
 **Still undecided:** whether inference is *hosted* (an interface to ONNX Runtime/TFLite) or
 *embedded*, and whether the tiers ship as one library or two. Nothing on the camera/audio/speech
 path is built.
@@ -1580,7 +1622,7 @@ rollback, explicit recovery), `argmind/pipeline.py` (`FrameMap`, input gate, bou
 pipeline. `argmind/bench.py` has no C++ counterpart and is not getting one: it is a host
 measurement harness, and DESIGN.md already records that Python timings are not a baseline the
 C++ can be compared against.
-942 Python tests and 4,652 C++ checks pass; several exist to prove failures are visible
+948 Python tests and 4,652 C++ checks pass; several exist to prove failures are visible
 rather than silent. Every suite is mutation-checked, and surviving mutants are recorded where
 they live rather than tallied here — including the ones that turn out to be **equivalent on a
 64-bit host**, a distinction worth keeping rather than rounding away. Cumulative counts are

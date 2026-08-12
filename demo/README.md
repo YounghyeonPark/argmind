@@ -384,3 +384,44 @@ them. Eighteen mutants, all caught; two of them were real gaps rather than confi
 region's centre computed from its whole cluster survived every mask-IoU test in the file, because
 the centres are what the head is taught with and nothing compared them, and a rule keeping the
 *smallest* regions survived every fixture where `k = objects + 1` makes the two rules equivalent.
+
+## The picture is not the head's slots — 2026-08-12
+
+"전보단 나은데 라벨수가 적은것 같음". `--objects 3` bounds the head at three because that is its
+output width. A picture has no such limit, and the resolution recorded for the vocabulary question is
+*unbounded vocabulary, bounded concurrency* — so `label_field` paints every region and
+`RegionTracker` gives each one a label that survives between frames.
+
+| identity | coverage | purity | distinct | ids per object |
+|---|---|---|---|---|
+| raw region index | 1.00 | 0.66 | 1.00 | 2.7 |
+| cluster index | 1.00 | **1.00** | **0.00** | 1.0 |
+| **tracked** | 1.00 | **1.00** | **1.00** | **1.0** |
+
+Three objects, two the same colour, k=4. **The cluster index scores a perfect purity and is
+useless** — two objects wearing one id are each perfectly pure — which is why distinctness is
+measured beside it and why purity alone cannot fail.
+
+**More labels come from splitting, not from raising `k`, which is the opposite of what I assumed.**
+
+| k | labels shown | on a real object | purity | ids minted |
+|---|---|---|---|---|
+| **4** | **5.0** | 1.00 | **1.00** | **5** |
+| 6 / 8 / 10 | 3.0 | 1.00 | 0.45 | 43 |
+
+Five labels for five objects come out of a scene declared with four clusters, because splitting
+separates the objects that share one. Raising `k` carves the objects across clusters instead. Leave
+`k` at `objects + 1`.
+
+**Two floors on one split, and neither number can do both jobs.** The split's floor feeds the head:
+0.01 → 0.03 takes the taught centre on two same-coloured objects from 0.000 to **0.222**. The
+picture's floor keeps fragments out: 0.01 paints 7.0 labels at 47% on-object, 0.03 paints 3.2 at 95%,
+0.05 paints only objects but loses them (coverage 0.98) and re-mints labels (purity 0.83).
+`--seg-min-frac` and `--seg-show-frac`.
+
+**A minimum age was the mechanism I expected and it does not work**: it helps only when the floor is
+too low, and once the floor is right it costs coverage for precision. Not offered.
+
+**Two of my own fixtures collided while a comment claimed they did not** — 0.148 against a touching
+threshold of 0.220, and 0.112 against 0.180. Every number here was re-measured on separate orbits and
+the fixture asserts its own separation now. Nine mutants, all caught.

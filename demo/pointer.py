@@ -27,8 +27,8 @@ from argmind.persist import Store, fingerprint_of
 from argmind.pipeline import FrameMap, Pipeline
 from argmind.stream import Stream
 from demo.label_sources import (AppearanceMatcher, BackgroundLocator, CadenceDetector,
-                                FrameSegmenter, ObjectMemory, partition, pick_regions,
-                                split_regions)
+                                FrameSegmenter, ObjectMemory, RegionTracker, partition,
+                                pick_regions, split_regions)
 
 #: Small on purpose. Random convolutional features work shallow and carry nothing deep --
 #: brightness reads 0.009 at one layer and 1.119 at twenty-seven -- and a 3x3 grid is what
@@ -285,11 +285,75 @@ def regions_for_slots(detector, frame, n, *, split=True, edges=0.95, min_frac=0.
         keep = sorted(range(detector.k), key=lambda j: sizes[j])[:n]
         centres = detector(frame) if detector.labels is None else _cluster_centres(detector)
         pairs = sorted(((j, centres[j]) for j in keep), key=lambda jp: jp[1][0])
-        return detector.labels, [j for j, _p in pairs], [p for _j, p in pairs]
+        return detector.labels, None, [j for j, _p in pairs], [p for _j, p in pairs]
     region_map, centres, of_cluster = split_regions(detector.labels, detector.k, frame,
                                                     edges=edges, min_frac=min_frac)
     ids, points = pick_regions(detector.labels, region_map, centres, of_cluster, n)
-    return region_map, ids, points
+    return region_map, of_cluster, ids, points
+
+
+def label_field(region_map, of_cluster, cluster_labels, tracker, *, min_frac=0.03):
+    """Every region worth painting, with a label that survives between frames.
+
+    **The label count is not the head's slot count**, and conflating them is why the picture showed
+    three regions when the scene had more. A head with 2K outputs has K slots because that is its
+    output width; a picture has no such limit. This repository's own resolution of the vocabulary
+    question is "unbounded vocabulary, bounded concurrency", and this is the unbounded half.
+
+    **More labels come from splitting, not from raising `k`** -- which is the opposite of what I
+    assumed before measuring it. Five objects, the head's slot count irrelevant:
+
+    | k | labels shown | on a real object | purity | ids minted |
+    |---|---|---|---|---|
+    | **4** | **5.0** | 1.00 | **1.00** | **5** |
+    | 6 / 8 / 10 | 3.0 | 1.00 | 0.45 | 43 |
+
+    Five labels for five objects come out of a scene declared with **four** clusters, because
+    splitting separates the objects that share one. Raising `k` carves the objects *across* clusters
+    instead: two of the five labels are lost and 43 ids are minted where 5 would do. So leave `k` at
+    `objects + 1` and let the split do the work.
+
+    **`min_frac` here is NOT the split's floor, and one number cannot serve both.** The split's floor
+    must be low enough that every object has a region, because that is what the head is taught from:
+    raising it from 0.01 to 0.03 takes the taught centre on two same-coloured objects from **0.000
+    to 0.222**, losing a slot's region entirely. The picture's floor must be high enough to keep
+    background fragments out: at 0.01 it paints 6.8 labels of which **44%** sit on a real object, and
+    at 0.03 it paints 2.8 of which **98%** do. So there are two thresholds on one split.
+
+    Swept, three objects: floor 0.01 paints 7.0 labels at 0.47 precision, 0.02 paints 3.5 at 0.89,
+    0.03 paints 3.2 at 0.95, and 0.05 paints 3.0 at 1.00 but starts losing objects (coverage 0.98)
+    and re-minting labels when a region dips under it (purity 0.83). 0.03 is a middle, not an
+    optimum.
+
+    A minimum *age* was measured as the alternative and is not offered: it only helps when the floor
+    is too low -- precision 0.44 -> 0.85 at floor 0.01 -- and once the floor is right it is worse
+    than nothing, costing coverage 1.00 -> 0.90 for precision 0.98 -> 0.90.
+    """
+    lab = np.asarray(region_map)
+    if of_cluster is None:                       # clusters are the regions; there is nothing to add
+        return lab, []
+    cl = np.asarray(cluster_labels)
+    present = sorted(set(int(j) for j in of_cluster))
+    background = max(present, key=lambda j: (cl == j).sum()) if present else None
+    floor = max(int(min_frac * lab.size), 1)
+    live, centres, areas = [], [], []
+    for i in range(1, len(of_cluster) + 1):
+        if of_cluster[i - 1] == background:
+            continue
+        piece = lab == i
+        n = int(piece.sum())
+        if n < floor:
+            continue
+        yy, xx = np.nonzero(piece)
+        live.append(i)
+        centres.append((float(xx.mean()) / max(lab.shape[1] - 1, 1),
+                        float(yy.mean()) / max(lab.shape[0] - 1, 1)))
+        areas.append(n)
+    got = tracker(centres, areas)
+    out = np.zeros(lab.shape, dtype=np.int32)
+    for slot, i in enumerate(live):
+        out[lab == i] = slot + 1
+    return out, got
 
 
 def _cluster_centres(detector):
@@ -627,10 +691,15 @@ def main(argv=None):
                         "scene's contrast; swept 0.70-0.98, monotone, and 0.95 is where the cost "
                         "on easy scenes has gone")
     p.add_argument("--seg-min-frac", type=float, default=0.01, metavar="F",
-                   help="smallest region to keep, as a fraction of the frame (default 0.01). It "
-                        "does not change IoU -- it changes the region count, 924 pieces against "
-                        "13 on one fixture, which is the difference between a segmentation and a "
-                        "speckle field")
+                   help="smallest region the SPLIT keeps, as a fraction of the frame (default "
+                        "0.01). It does not change IoU -- it changes the region count, 924 pieces "
+                        "against 13 on one fixture. Keep it low: it is what the head is taught "
+                        "from, and 0.03 costs a slot its region entirely, 0.000 -> 0.222")
+    p.add_argument("--seg-show-frac", type=float, default=0.03, metavar="F",
+                   help="smallest region the PICTURE paints (default 0.03), a separate threshold "
+                        "on the same split because one number cannot serve both: at 0.01 the "
+                        "picture shows 6.8 labels of which 44%% are on a real object, at 0.03 it "
+                        "shows 2.8 of which 98%% are")
     p.add_argument("--seg-floor", type=float, default=0.25, metavar="F",
                    help="mask threshold as a fraction of the map's own peak (default 0.25). "
                         "Measured on one object: 0.15 gives recall 0.99 at precision 0.42, "
@@ -727,6 +796,9 @@ def main(argv=None):
                  "gives the leading and trailing edges of one object rather than its extent.")
     matcher = AppearanceMatcher(n_objects, describe) if args.identify else None
     memory = ObjectMemory(args.tol, max_ids=64) if args.remember else None
+    #: One label per region that survives between frames. Only the picture uses it: the head's slots
+    #: come from `pick_regions`, which is a different and bounded question.
+    tracker = RegionTracker()
     state = {"pred": None, "frozen": False, "frozen_by": (), "n_taught": 0,
              "updates": 0, "fps": 0.0, "drift": 0.0, "residual": 0.0,
              "taught_points": [], "learning": False, "last_update_frame": -999,
@@ -803,7 +875,7 @@ def main(argv=None):
             # A cluster is a region of similar appearance, not an object. Splitting it into
             # spatially separate pieces is what separates two objects that look alike, and the edge
             # gate is what separates an object from a background it resembles.
-            region_map, slot_cluster, auto = regions_for_slots(
+            region_map, of_cluster, slot_cluster, auto = regions_for_slots(
                 detector, small, n_objects,
                 split=not args.no_split_regions,
                 edges=None if args.no_edge_split else args.edge_quantile,
@@ -835,20 +907,23 @@ def main(argv=None):
             state["minted"] = [i for i, m in seen if m]
             state["vocab"] = len(memory)
             state["vocab_full"] = memory.full
+        field_ids = []
         if args.segments and auto is not None:
             if how == "texture":
-                # The clusters ARE the segmentation -- no threshold, no partition, no trail. Each
-                # kept cluster is painted with its SLOT number, so `segment_image` can look its id
-                # up; the dropped background cluster stays 0 and is drawn dark, which is also what
-                # makes the regions read as separate rather than tiling the whole frame.
-                labels = slot_label_map(region_map, slot_cluster)
+                # Every region gets a label, not only the head's slots: the head has K of them
+                # because that is its output width, and a picture has no such limit. The dropped
+                # background cluster stays 0 and is drawn dark, which is what makes the regions
+                # read as separate rather than tiling the whole frame.
+                labels, field_ids = label_field(region_map, of_cluster, detector.labels, tracker,
+                                                min_frac=args.seg_show_frac)
             elif getattr(detector, "foreground", None) is not None:
                 labels = partition(detector.foreground, auto, floor=args.seg_floor)
             else:
                 labels = None
             if labels is not None:
                 cv2.imshow("argmind - segments",
-                           segment_image(labels, state.get("slot_ids") or []))
+                           segment_image(labels, field_ids if field_ids else
+                                         (state.get("slot_ids") or [])))
         state["detector_ran"] = auto is not None
         if auto is not None:
             # Sorted leftmost-first by the detector, and flattened in that order. The order is
