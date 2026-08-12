@@ -1490,6 +1490,27 @@ paying — just less. Nothing here resolves that trade and it is recorded rather
 means a 108-output head, a 108-wide `taught` stream and a different overlay, which is a larger
 change than measuring the architecture was. The measurement is the deliverable here.
 
+**"움직임이 있을때마다 라벨id가 변경됨" — a real defect, and the first thing I blamed was wrong.**
+The suspicion was that `FrameSegmenter.descriptors` standardises **per frame** while the cluster
+centres are carried **across** frames, so the space moves under them. Measured over a scene with a
+large subject crossing *and* a global brightness drift: **0.0% switch rate**, and identical for a
+running or a fixed standardisation. Refuted, and kept as a test because it is the obvious next thing
+to blame.
+
+**The actual cause was the display's cluster-to-slot pairing.** `labels` was indexed by *cluster*
+and `slot_ids` by *slot*, and the chain between them destroys the correspondence: the background is
+dropped **by area**, the survivors are re-sorted **by x**, and the appearance matcher **permutes**
+them again. So cluster *n* was coloured with the id of slot *n* — an arbitrary pairing that shifts
+whenever anything moves. `slot_label_map` carries the cluster index through, and the dropped
+background cluster now stays 0 instead of being painted, which is also the other half of "영역간
+구분이 잘 안되는" — a cluster map tiles the whole frame by construction, so painting every cluster
+makes the regions read as a partition of the picture rather than as objects.
+
+**And it was in `main()`, where nothing could see it — the fourth time today.** `slot_label_map` is
+module-level now and the test drives it; two mutants are caught (keying on the slot, and painting
+every cluster). The three before it were `select_newest` compiled and called by no binary, `drive`'s
+`teach_every` that no caller ever passed, and a test that reimplemented the assembly it was checking.
+
 **Still undecided:** whether inference is *hosted* (an interface to ONNX Runtime/TFLite) or
 *embedded*, and whether the tiers ship as one library or two. Nothing on the camera/audio/speech
 path is built.
@@ -1512,7 +1533,7 @@ rollback, explicit recovery), `argmind/pipeline.py` (`FrameMap`, input gate, bou
 pipeline. `argmind/bench.py` has no C++ counterpart and is not getting one: it is a host
 measurement harness, and DESIGN.md already records that Python timings are not a baseline the
 C++ can be compared against.
-925 Python tests and 4,652 C++ checks pass; several exist to prove failures are visible
+928 Python tests and 4,652 C++ checks pass; several exist to prove failures are visible
 rather than silent. Every suite is mutation-checked, and surviving mutants are recorded where
 they live rather than tallied here — including the ones that turn out to be **equivalent on a
 64-bit host**, a distinction worth keeping rather than rounding away. Cumulative counts are

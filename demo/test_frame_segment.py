@@ -170,3 +170,89 @@ def test_an_empty_cluster_keeps_its_slot():
     assert len(got) == 3, "a degenerate frame returned fewer centres than clusters"
     assert all(0.0 <= x <= 1.0 and 0.0 <= y <= 1.0 for x, y in got)
     assert seg.labels.shape == (H, W)
+
+def test_the_cluster_a_region_came_from_decides_its_colour():
+    """The reported bug: the label id changed whenever anything moved.
+
+    The display painted cluster *n* with the id of slot *n*, and those are different orderings --
+    the background is dropped **by area**, the survivors are re-sorted **by x**, and the appearance
+    matcher **permutes** them again. So the pairing was arbitrary and shifted every frame.
+
+    `slot_label_map` closes it by carrying which cluster each slot came from. It also drops the
+    background cluster to 0: a cluster map tiles the whole frame by construction, so painting every
+    cluster makes the regions read as a partition of the picture rather than as objects, which is
+    the other half of what was reported.
+    """
+    from demo.pointer import slot_label_map
+
+    clusters = np.array([[0, 0, 1, 1],
+                         [2, 2, 1, 1],
+                         [2, 2, 0, 0]])
+
+    # Slot 0 came from cluster 2, slot 1 from cluster 1. Cluster 0 is the dropped background.
+    out = slot_label_map(clusters, [2, 1])
+    assert (out[clusters == 2] == 1).all(), "slot 0's cluster is not painted 1"
+    assert (out[clusters == 1] == 2).all(), "slot 1's cluster is not painted 2"
+    assert (out[clusters == 0] == 0).all(), "the dropped cluster was painted as a region"
+
+    # The same clusters with the slots swapped must produce the swapped map, or the colour is
+    # following the cluster index rather than the slot -- which is the bug.
+    swapped = slot_label_map(clusters, [1, 2])
+    assert (swapped[clusters == 1] == 1).all()
+    assert (swapped[clusters == 2] == 2).all()
+    assert not np.array_equal(out, swapped)
+
+    # Degenerate inputs answer rather than raising: no slots means everything is background.
+    assert not slot_label_map(clusters, []).any()
+    assert not slot_label_map(clusters, None).any()
+
+
+def test_the_background_cluster_is_the_largest_and_is_dropped_by_area():
+    """`k` is `objects + 1` because one cluster is the background, and it must be identified by
+    **area** rather than by index -- a cluster's index is stable but which cluster is the
+    background is not, so dropping index 0 would drop a real object as soon as the subject moved
+    to a different part of the frame."""
+    from demo.pointer import slot_label_map
+
+    seg = FrameSegmenter(3)
+    img, mask = scene_colour((0.35, 0.5), seed=1)
+    seg(img)
+    sizes = [(seg.labels == j).sum() for j in range(seg.k)]
+    keep = sorted(range(seg.k), key=lambda j: sizes[j])[:2]
+    assert int(np.argmax(sizes)) not in keep, (
+        "the largest cluster survived the drop; on a plain wall that cluster IS the wall")
+
+    painted = slot_label_map(seg.labels, keep)
+    covered = float(((painted > 0) & mask).sum() / max(mask.sum(), 1))
+    assert covered > 0.6, (
+        f"the kept clusters cover only {covered:.0%} of the object; dropping by area removed "
+        "something that was not the background")
+    # And the picture is not a tiling: most of a plain wall must stay unpainted.
+    assert float((painted == 0).mean()) > 0.4
+
+
+def test_cluster_indices_survive_a_scene_whose_statistics_move():
+    """The first suspicion for the flickering ids was that `descriptors` standardises **per frame**
+    while the centres are carried **across** frames, so the space moves under them.
+
+    Measured and **refuted**: over a scene with a large subject crossing *and* a global brightness
+    drift, the cluster holding the subject never changes index -- a 0.0% switch rate, and the same
+    for a running or a fixed standardisation. The instability was the display's cluster-to-slot
+    pairing, not the clustering. Kept because it is the obvious next thing to blame.
+    """
+    seg = FrameSegmenter(3)
+    holding = []
+    for k in range(120):
+        drift = 0.06 * np.sin(2 * np.pi * k / 90.0)
+        a = 2 * np.pi * k / 100.0
+        cx = 0.5 + 0.30 * np.cos(a)
+        img, mask = scene_colour((cx, 0.5), seed=k, base=0.34 + drift)
+        seg(img)
+        if k < 20:
+            continue
+        holding.append(int(np.argmax([(seg.labels == j)[mask].sum() for j in range(seg.k)])))
+    switches = sum(1 for a, b in zip(holding, holding[1:]) if a != b)
+    assert switches == 0, (
+        f"the subject's cluster changed index {switches} times over {len(holding)} frames; if the "
+        "clustering itself has become unstable, the per-frame standardisation is worth revisiting "
+        "after all")

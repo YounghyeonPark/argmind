@@ -261,6 +261,26 @@ ID_COLOURS = ((60, 200, 255), (255, 160, 60), (120, 240, 120), (200, 120, 255),
               (80, 220, 240), (240, 120, 160), (160, 255, 200), (255, 220, 120))
 
 
+def slot_label_map(cluster_labels, slot_cluster):
+    """Repaint a cluster map so each kept cluster carries its SLOT number, background 0.
+
+    **Module level because the version inside `main()` was wrong and nothing could see it.** The
+    display painted cluster *n* with the id of slot *n*, and those are different orderings: the
+    background is dropped by area, the survivors are re-sorted by x, and the appearance matcher
+    permutes them again. The pairing was arbitrary and shifted every frame, which is exactly the
+    "label id changes whenever something moves" a caller sees.
+
+    Dropping the background to 0 rather than colouring it is the other half: a cluster map tiles
+    the whole frame by construction, so painting every cluster makes the regions read as a
+    partition of the picture instead of as objects.
+    """
+    lab = np.asarray(cluster_labels)
+    out = np.zeros(lab.shape, dtype=np.int32)
+    for slot, j in enumerate(slot_cluster or []):
+        out[lab == j] = slot + 1
+    return out
+
+
 def segment_image(labels, ids=(), scale=6):
     """An RGB picture of a label map: background dark, each region in its id's colour.
 
@@ -705,13 +725,28 @@ def main(argv=None):
         # And running a detector every frame beats both at 0.010 against the head's ~0.08, so
         # this arrangement is about the detector being unaffordable, not about accuracy.
         auto = detector(small) if detector is not None else None
+        #: Which cluster each surviving label came from, in slot order. Carried because the
+        #: display used to colour cluster *n* with the id of slot *n*, and those are different
+        #: orderings: `keep` sorts by area, the x-sort below re-sorts, and the matcher permutes
+        #: again. The pairing was arbitrary and shifted every frame, which is what made the
+        #: region colours flicker whenever anything moved.
+        slot_cluster = None
         if auto is not None and how == "texture":
             # The biggest cluster is the background. Dropping it by AREA rather than by index is
             # what keeps this working when the subject moves to a different part of the frame.
             sizes = [(detector.labels == j).sum() for j in range(detector.k)]
             keep = sorted(range(detector.k), key=lambda j: sizes[j])[:n_objects]
-            auto = sorted((auto[j] for j in keep), key=lambda pt: pt[0])
-        if auto is not None and matcher is not None:
+            pairs = sorted(((j, auto[j]) for j in keep), key=lambda jp: jp[1][0])
+            slot_cluster = [j for j, _pt in pairs]
+            auto = [pt for _j, pt in pairs]
+        if auto is not None and matcher is not None and slot_cluster is not None:
+            # The matcher permutes the points, so the cluster list has to follow it. Matched by
+            # value, which is safe because two clusters with an identical centre would already be
+            # one cluster.
+            before = list(auto)
+            auto = matcher(small, auto)
+            slot_cluster = [slot_cluster[before.index(pt)] for pt in auto]
+        elif auto is not None and matcher is not None:
             # Slots by appearance rather than by position. This is what makes IDENTITY a function
             # of the current frame -- "which object is which" otherwise depends on which it was,
             # and DESIGN.md's *What it is not* says no instantaneous basis represents a history.
@@ -726,8 +761,11 @@ def main(argv=None):
             state["vocab_full"] = memory.full
         if args.segments and auto is not None:
             if how == "texture":
-                # The clusters ARE the segmentation -- no threshold, no partition, no trail.
-                labels = detector.labels + 1
+                # The clusters ARE the segmentation -- no threshold, no partition, no trail. Each
+                # kept cluster is painted with its SLOT number, so `segment_image` can look its id
+                # up; the dropped background cluster stays 0 and is drawn dark, which is also what
+                # makes the regions read as separate rather than tiling the whole frame.
+                labels = slot_label_map(detector.labels, slot_cluster)
             elif getattr(detector, "foreground", None) is not None:
                 labels = partition(detector.foreground, auto, floor=args.seg_floor)
             else:
