@@ -26,7 +26,8 @@ from argmind.guard import Bound, Divergence, Guard
 from argmind.persist import Store, fingerprint_of
 from argmind.pipeline import FrameMap, Pipeline
 from argmind.stream import Stream
-from demo.label_sources import AppearanceMatcher, BackgroundLocator, CadenceDetector
+from demo.label_sources import (AppearanceMatcher, BackgroundLocator, CadenceDetector,
+                                ObjectMemory)
 
 #: Small on purpose. Random convolutional features work shallow and carry nothing deep --
 #: brightness reads 0.009 at one layer and 1.119 at twenty-seven -- and a 3x3 grid is what
@@ -170,13 +171,25 @@ def draw(cv2, frame, state):
             px, py = int(pred[2 * i] * w), int(pred[2 * i + 1] * h)
             cv2.circle(frame, (px, py), 16, colour, 3)
             cv2.circle(frame, (px, py), 2, colour, -1)
-            if len(pred) > 2:
-                cv2.putText(frame, str(i), (px + 20, py + 5), cv2.FONT_HERSHEY_SIMPLEX,
+            # The slot number, and the remembered id it is currently matched to. They are
+            # different things: the slot is a fixed budget, the id is the growing vocabulary.
+            tag = str(i)
+            ids = state.get("slot_ids") or []
+            if i < len(ids):
+                tag = f"{i}:#{ids[i]}"
+            if len(pred) > 2 or state.get("remember"):
+                cv2.putText(frame, tag, (px + 20, py + 5), cv2.FONT_HERSHEY_SIMPLEX,
                             0.5, colour, 2, cv2.LINE_AA)
     for tx, ty in state["taught_points"][-8:]:
         cv2.drawMarker(frame, (int(tx * w), int(ty * h)), (255, 180, 0),
                        cv2.MARKER_TILTED_CROSS, 12, 1)
 
+    if state.get("minted"):
+        # A new label was just minted. Worth showing, because it is the moment the vocabulary
+        # grew and it is otherwise invisible.
+        cv2.putText(frame, "NEW LABEL #" + ", #".join(str(i) for i in state["minted"]),
+                    (8, frame.shape[0] - 12), cv2.FONT_HERSHEY_SIMPLEX, 0.6,
+                    (0, 200, 255), 2, cv2.LINE_AA)
     if state.get("detector_ran"):
         # Where the automatic labels just landed, so the two sources are distinguishable on
         # screen rather than both arriving as an unexplained jump in the dots.
@@ -184,7 +197,8 @@ def draw(cv2, frame, state):
             cv2.circle(frame, (int(px * w), int(py * h)), 9, (0, 200, 255), 2)
 
     lines = [
-        f"{state['how']}{'+id' if state['identify'] else ''} x{state['objects']}   "
+        f"{state['how']}{'+id' if state['identify'] else ''} x{state['objects']}"
+        f"{'   vocab ' + str(state['vocab']) if state['remember'] else ''}   "
         f"auto {state['n_auto']}   mouse {state['n_taught']}   "
         f"updates {state['updates']}   {state['fps']:.0f} fps",
         f"frame std x{state['drift']:.2f}   residual {state['residual']:.3f}",
@@ -236,6 +250,14 @@ def main(argv=None):
                         "through a crossing (0.041 against a centre-guess 0.222) where the sort "
                         "rule cannot (0.234). Needs the objects to LOOK different: with identical "
                         "ones the assignment falls to chance, measured 50.6%%")
+    p.add_argument("--remember", action="store_true",
+                   help="keep a growing dictionary of object appearances and show it. Every "
+                        "detection gets an id; new ones are minted when nothing stored matches. "
+                        "The vocabulary is unbounded, the tracked slots are not")
+    p.add_argument("--tol", type=float, default=ObjectMemory.DEFAULT_TOL, metavar="D",
+                   help=f"how close a detection must be to a remembered object to be it "
+                        f"(default {ObjectMemory.DEFAULT_TOL}). Lower over-segments -- more ids, "
+                        "each purer; higher loses objects into each other, which is worse")
     p.add_argument("--detect-every", type=int, default=10, metavar="N",
                    help="run the automatic detector every N frames (default 10). This is a "
                         "declaration of what the caller can afford, and it is what the learned "
@@ -290,26 +312,31 @@ def main(argv=None):
     else:
         detector = CadenceDetector(args.detect_every, k=n_objects)
 
-    matcher = None
-    if args.identify:
+    # Both `--identify` and `--remember` describe crops, so the describer is built once for
+    # either. It was built inside each branch at first, with the second branch testing `dir()` for
+    # a name the first may or may not have bound -- a construction that works and is a trap.
+    describe = None
+    if args.identify or args.remember:
         if how != "background":
-            sys.exit("--identify needs --locate background: appearance matching is only as good "
-                     "as the crops it describes, and motion differencing puts them on the "
+            sys.exit("--identify and --remember need --locate background: appearance is only as "
+                     "good as the crops it describes, and motion differencing puts those on the "
                      "leading and trailing edges of one object rather than on two objects.")
         crop_backbone = Backbone(PLAN, (CROP, CROP, 3), dtype="f4", seed=1, pool=2)
 
-        def describe(frame, point):
-            v = crop_backbone.features(crop_at(frame, point)).astype(np.float64)
+        def describe(frame, point, _bb=crop_backbone):
+            v = _bb.features(crop_at(frame, point)).astype(np.float64)
             n = float(np.linalg.norm(v))
             return v / n if n > 0 else v
 
-        matcher = AppearanceMatcher(n_objects, describe)
+    matcher = AppearanceMatcher(n_objects, describe) if args.identify else None
+    memory = ObjectMemory(args.tol, max_ids=64) if args.remember else None
     state = {"pred": None, "frozen": False, "frozen_by": (), "n_taught": 0,
              "updates": 0, "fps": 0.0, "drift": 0.0, "residual": 0.0,
              "taught_points": [], "learning": False, "last_update_frame": -999,
              "n_auto": 0, "detector_ran": False, "teach": args.teach,
              "every": args.detect_every, "objects": n_objects, "how": how,
-             "identify": args.identify}
+             "identify": args.identify, "vocab": 0, "slot_ids": [], "minted": [],
+             "remember": args.remember}
     # Calibrated from the first second: the scale of the caller's own statistic and of the
     # backbone's output. Both are numbers the library refuses to guess.
     frame_std = None
@@ -357,6 +384,13 @@ def main(argv=None):
             # of the current frame -- "which object is which" otherwise depends on which it was,
             # and DESIGN.md's *What it is not* says no instantaneous basis represents a history.
             auto = matcher(small, auto)
+        if auto is not None and memory is not None:
+            # One id per detection, minted when nothing remembered is close enough. This is the
+            # vocabulary growing in front of you; the head's slots are a separate, fixed budget.
+            seen = [memory.observe(describe(small, p)) for p in auto]
+            state["slot_ids"] = [i for i, _ in seen]
+            state["minted"] = [i for i, m in seen if m]
+            state["vocab"] = len(memory)
         state["detector_ran"] = auto is not None
         if auto is not None:
             # Sorted leftmost-first by the detector, and flattened in that order. The order is

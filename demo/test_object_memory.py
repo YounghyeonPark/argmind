@@ -335,3 +335,49 @@ def test_a_correlation_map_does_not_localise_the_queried_object(crop_backbone):
         f"a correlation map now localises the queried object {best:.1%} of the time. If that is "
         "real then per-object segmentation by correlation works and is worth building -- which "
         "would most likely mean the backbone weights are no longer random")
+
+def test_the_default_threshold_loses_objects_and_a_tight_one_over_segments():
+    """The two failure modes are not symmetric, and reading the trace is what showed it.
+
+    | objects | ids | objects represented | purity |
+    |---|---|---|---|
+    | 3 at the default 0.25 | 8 | **2 of 3** | 62.6% |
+    | 3 at 0.10 | 72 | **3 of 3** | **95.1%** |
+
+    At the default an object can end up with **no id of its own** — its detections are absorbed
+    into another id and can never be right, which is most of the purity gap. At a tight threshold
+    every object is represented and the fragments are pure; the cost is 18x inflation.
+
+    **Over-segmentation is the better failure**: pure fragments can in principle be merged, whereas
+    an object with no id is information already lost. That is where a merging step should be aimed,
+    and `test_grouping.py` measured merging at the default threshold instead — where the objects
+    were already gone.
+    """
+    from demo.label_trace import trace
+
+    loose = trace(objects=3, frames=1200, verbose=False, summary=False)
+    tight = trace(objects=3, frames=1200, tol=0.10, verbose=False, summary=False)
+
+    assert loose["objects_represented"] < 3, (
+        f"the default threshold now represents all {loose['objects_represented']} objects; if "
+        "that is real the purity gap has another cause and this file needs re-measuring")
+    assert tight["objects_represented"] == 3, (
+        f"a tight threshold now loses an object too ({tight['objects_represented']} of 3), so "
+        "over-segmentation is no longer the recoverable failure this claims")
+    assert tight["purity"] > loose["purity"] * 1.3, (
+        f"tight {tight['purity']:.1%} against loose {loose['purity']:.1%}")
+    assert tight["ids"] > loose["ids"] * 5, "the tight threshold no longer over-segments"
+
+
+def test_a_good_fraction_of_the_vocabulary_is_minted_from_noise():
+    """Ids that came from a detection on nothing at all: 1 of 3 at two objects, 3 of 8 at three,
+    7 of 11 at five. The detector's inability to count shows up here as vocabulary pollution, and
+    a caller cannot tell those ids from real ones without the ground truth this fixture has."""
+    from demo.label_trace import trace
+
+    got = trace(objects=5, frames=1200, verbose=False, summary=False)
+    junk = got["ids"] - got["ids_from_objects"]
+    assert junk > 0, "no id came from noise; the detector has stopped firing on nothing"
+    assert junk >= got["ids_from_objects"] * 0.5, (
+        f"only {junk} of {got['ids']} ids came from noise; if the pollution has dropped that far, "
+        "the detector improved and the scope here is understated")
