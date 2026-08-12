@@ -439,3 +439,51 @@ def test_the_source_is_in_the_fingerprint():
     assert fingerprint(bb, 1, "raw") != fingerprint(bb, 1, "backbone")
     with pytest.raises(ValueError, match="source must be"):
         build(1, "pixels")
+
+def _status_state(**over):
+    st = dict(source="raw", how="background", identify=True, objects=3, remember=True,
+              vocab=64, vocab_full=False, n_auto=3117, n_taught=0, updates=3909, fps=16.4,
+              drift=1.22, residual=0.136, frozen=False, frozen_by=(), learning=True,
+              teach="both")
+    st.update(over)
+    return st
+
+
+def test_the_status_block_fits_the_frame_it_is_drawn_on():
+    """One long status line ran past the window and read as overlapping text: at font scale 0.5
+    the outline stroke merges neighbouring glyphs, so a line that is merely *long* looks like two
+    lines drawn on top of each other. Measured against the real font rather than guessed from a
+    character count."""
+    cv2 = pytest.importorskip("cv2")
+    from demo.pointer import status_lines
+
+    lines = status_lines(_status_state())
+    assert len(lines) >= 3, "the status collapsed back into one or two lines"
+    widest = max(cv2.getTextSize(t, cv2.FONT_HERSHEY_SIMPLEX, 0.52, 1)[0][0] for t in lines)
+    assert widest < 560, (
+        f"the widest status line is {widest}px, which overruns a 640px camera frame -- that is "
+        "the overlap this test exists for")
+
+
+def test_the_vocabulary_ceiling_is_visible_on_screen():
+    """Past `max_ids` the memory stops learning new objects and returns the nearest id however far
+    away it is. A caller cannot see that from a count alone -- 64 looks like any other number."""
+    from demo.pointer import status_lines
+
+    assert "FULL" not in status_lines(_status_state(vocab_full=False))[0]
+    assert "FULL" in status_lines(_status_state(vocab_full=True))[0]
+    # And nothing about the vocabulary shows when it is not being kept.
+    assert "vocab" not in status_lines(_status_state(remember=False))[0]
+
+
+def test_the_status_says_which_of_the_four_things_is_happening():
+    """Frozen, learning, waiting to be taught, or predicting only. These are exclusive and the
+    overlay has to pick the right one -- the counter that used to answer this was hardwired to 0."""
+    from demo.pointer import status_lines
+
+    assert "FROZEN by external_0" in status_lines(
+        _status_state(frozen=True, frozen_by=("external_0",)))[3]
+    assert status_lines(_status_state(learning=True))[3] == "LEARNING"
+    assert "teach" in status_lines(
+        _status_state(learning=False, teach="mouse", n_taught=0))[3]
+    assert "not learning" in status_lines(_status_state(learning=False))[3]

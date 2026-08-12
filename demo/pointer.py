@@ -288,8 +288,10 @@ def draw(cv2, frame, state):
     if state.get("minted"):
         # A new label was just minted. Worth showing, because it is the moment the vocabulary
         # grew and it is otherwise invisible.
-        cv2.putText(frame, "NEW LABEL #" + ", #".join(str(i) for i in state["minted"]),
-                    (8, frame.shape[0] - 12), cv2.FONT_HERSHEY_SIMPLEX, 0.6,
+        banner = "NEW LABEL #" + ", #".join(str(i) for i in state["minted"])
+        cv2.putText(frame, banner, (8, frame.shape[0] - 14), cv2.FONT_HERSHEY_SIMPLEX, 0.6,
+                    (0, 0, 0), 4, cv2.LINE_AA)
+        cv2.putText(frame, banner, (8, frame.shape[0] - 14), cv2.FONT_HERSHEY_SIMPLEX, 0.6,
                     (0, 200, 255), 2, cv2.LINE_AA)
     if state.get("detector_ran"):
         # Where the automatic labels just landed, so the two sources are distinguishable on
@@ -297,28 +299,61 @@ def draw(cv2, frame, state):
         for px, py in state["taught_points"][-state.get("objects", 1):]:
             cv2.circle(frame, (int(px * w), int(py * h)), 9, (0, 200, 255), 2)
 
-    lines = [
-        f"{state['source']}/{state['how']}{'+id' if state['identify'] else ''} "
-        f"x{state['objects']}"
-        f"{'   vocab ' + str(state['vocab']) if state['remember'] else ''}   "
-        f"auto {state['n_auto']}   mouse {state['n_taught']}   "
-        f"updates {state['updates']}   {state['fps']:.0f} fps",
-        f"frame std x{state['drift']:.2f}   residual {state['residual']:.3f}",
-    ]
+    return _overlay(cv2, frame, state)
+
+
+def status_lines(state):
+    """The overlay text, as short lines rather than one long one.
+
+    Split because a single status line ran past the window and read as overlapping text: at font
+    scale 0.5 the outline stroke merges neighbouring glyphs, so a line that is merely *long* looks
+    like two lines drawn on top of each other. Returned separately from the drawing so the
+    wrapping can be tested without a camera.
+    """
+    vocab = ""
+    if state["remember"]:
+        vocab = f"   vocab {state['vocab']}"
+        if state.get("vocab_full"):
+            # The ceiling is not a detail: past it the memory stops learning new objects and
+            # returns the nearest id however far away it is. A caller cannot see that otherwise.
+            vocab += " FULL"
+    mode = (f"{state['source']}/{state['how']}"
+            f"{'+id' if state['identify'] else ''} x{state['objects']}{vocab}")
+    counts = (f"auto {state['n_auto']}   mouse {state['n_taught']}   "
+              f"updates {state['updates']}")
+    health = (f"{state['fps']:.0f} fps   std x{state['drift']:.2f}   "
+              f"residual {state['residual']:.3f}")
+
     if state["frozen"]:
-        lines.append("FROZEN by " + (", ".join(state["frozen_by"]) or "?"))
+        note = "FROZEN by " + (", ".join(state["frozen_by"]) or "?")
     elif state["learning"]:
-        lines.append("LEARNING")
+        note = "LEARNING"
     elif state["teach"] == "mouse" and state["n_taught"] < 4:
-        lines.append("hold the mouse button on yourself and move around to teach it")
+        note = "hold the button on yourself and move to teach it"
     else:
         # The answer to "do I have to keep teaching it?" -- with `--teach mouse`, yes; with a
         # detector wired in, the input teaches it and this line says which.
-        lines.append("predicting only, not learning - move, or hold the button to teach")
+        note = "predicting only, not learning"
+    return [mode, counts, health, note]
+
+
+def _overlay(cv2, frame, state):
+    """Draw the status block on a dimmed band, which is what makes it readable over any scene.
+
+    An outline stroke alone was not enough: over a bright window the white text washed out, and
+    over a dark chair the black outline vanished. A band is one blend and does not depend on what
+    is behind it.
+    """
+    lines = status_lines(state)
+    scale, step, pad = 0.52, 22, 8
+    height = pad + step * len(lines)
+    band = frame[:height].astype(np.float32) * 0.35
+    frame[:height] = band.astype(frame.dtype)
     for i, text in enumerate(lines):
-        cv2.putText(frame, text, (8, 20 + 20 * i), cv2.FONT_HERSHEY_SIMPLEX, 0.5,
+        y = pad + step * (i + 1) - 6
+        cv2.putText(frame, text, (pad, y), cv2.FONT_HERSHEY_SIMPLEX, scale,
                     (0, 0, 0), 3, cv2.LINE_AA)
-        cv2.putText(frame, text, (8, 20 + 20 * i), cv2.FONT_HERSHEY_SIMPLEX, 0.5,
+        cv2.putText(frame, text, (pad, y), cv2.FONT_HERSHEY_SIMPLEX, scale,
                     (255, 255, 255), 1, cv2.LINE_AA)
     return frame
 
@@ -466,7 +501,7 @@ def main(argv=None):
              "n_auto": 0, "detector_ran": False, "teach": args.teach,
              "every": args.detect_every, "objects": n_objects, "how": how,
              "identify": args.identify, "vocab": 0, "slot_ids": [], "minted": [],
-             "remember": args.remember, "source": args.input}
+             "remember": args.remember, "source": args.input, "vocab_full": False}
     # Calibrated from the first second: the scale of the caller's own statistic and of the
     # backbone's output. Both are numbers the library refuses to guess.
     frame_std = None
@@ -536,6 +571,7 @@ def main(argv=None):
             state["slot_ids"] = [i for i, _ in seen]
             state["minted"] = [i for i, m in seen if m]
             state["vocab"] = len(memory)
+            state["vocab_full"] = memory.full
         if args.segments and auto is not None and getattr(detector, "foreground", None)                 is not None:
             labels = partition(detector.foreground, auto, floor=args.seg_floor)
             cv2.imshow("argmind - segments",
