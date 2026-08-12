@@ -1139,6 +1139,45 @@ the live array — it survived because the test compared against an array the st
 Same class as the `shares_memory` defect recorded for `Adapter.state`. Both copy now, six mutants
 caught.
 
+**Bottom-up grouping of the minted ids into higher-order labels — the owner's next proposal,
+measured and refused on this backbone (2026-08-12).** The idea is right in shape and is the way to
+an automatically scaling vocabulary without trained weights, and there was a sharp test for it
+already in the data: `ObjectMemory` inflates ~2x, so if those ids merge on their own the proposal
+works *and* the inflation is fixed. Five things were measured and four are negative.
+
+**Grouping helps at two objects and hurts at three.** Clustered at the true k: **98.1%** purity at
+two against the online rule's 90.4%, but **65.4%** at three against the online rule's **91.5%**. So
+the instances of one object do not form one cluster — they form several *individually pure*
+fragments, and a fragment of one object can sit closer to a fragment of another than to its own.
+The idea is not wrong in principle; the descriptor is not good enough for it.
+
+**The number of groups cannot be found automatically**, which is the part "scalable" needs. A single
+distance cutoff, groups found (purity): at 0.10 → 19 (99%) / 60 (97%) / 133 (82%) for true 2/3/5; at
+0.20 → 4 (98%) / 11 (95%) / 12 (60%); at 0.25 → 1 / 5 / 4. Nothing reads 2 and 3. High-purity
+cutoffs give an order of magnitude too many groups; low ones destroy the distinction.
+
+**More observations make it worse, which inverts the assumption the proposal rests on.** Purity at
+n = 50/100/200/400: two objects 100.0/99.0/97.5/98.8%, three objects 94.0/68.0/95.5/**65.2%**. More
+views mean more edge-clipped ones, so within-object spread grows faster than evidence does.
+
+**The "commonality" mechanism specifically does not hold**: a group centroid is no better than one
+instance — 1.01x, 1.00x, 0.94x. Averaging view-dependent descriptors averages the views.
+
+**And co-occurrence, an appearance-free cue, fails for a reason that names the real bottleneck.**
+Two ids never seen together are candidates for being one object; measured, same-object pairs
+co-occur **57.2%** (max 98.7%) against different-object pairs at 72.8% (min 0.0%) — overlapping. The
+premise is violated by the **detector**, not by the world: it cannot count, so it puts two
+detections on one object and both ids appear in the same frame legitimately.
+
+**The through-line, and it is now strong enough to state as a conclusion.** Five independent routes
+— per-object correlation segmentation, identity on the head's input, an unbounded id registry,
+bottom-up grouping, and co-occurrence merging — are all blocked at the same two places: **an
+untrained backbone's crop descriptor conflates identity with view, and the classical detector
+cannot count.** Nothing in the adapter, the guard, the pipeline, the aligner or the head is the
+constraint. **Importing trained backbone weights is the next piece of work**, and the format for it
+already exists — `Backbone` keeps its weights in one flat block with `state`/`load_state`, and the
+layouts are TFLite's for exactly this reason.
+
 **Still undecided:** whether inference is *hosted* (an interface to ONNX Runtime/TFLite) or
 *embedded*, and whether the tiers ship as one library or two. Nothing on the camera/audio/speech
 path is built.
@@ -1161,7 +1200,7 @@ rollback, explicit recovery), `argmind/pipeline.py` (`FrameMap`, input gate, bou
 pipeline. `argmind/bench.py` has no C++ counterpart and is not getting one: it is a host
 measurement harness, and DESIGN.md already records that Python timings are not a baseline the
 C++ can be compared against.
-869 Python tests and 4,652 C++ checks pass; several exist to prove failures are visible
+874 Python tests and 4,652 C++ checks pass; several exist to prove failures are visible
 rather than silent. Every suite is mutation-checked, and surviving mutants are recorded where
 they live rather than tallied here — including the ones that turn out to be **equivalent on a
 64-bit host**, a distinction worth keeping rather than rounding away. Cumulative counts are
