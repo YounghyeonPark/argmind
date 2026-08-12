@@ -1436,6 +1436,60 @@ that: greedy pays 11 where the optimum pays 9, and it is caught. The other survi
 answer, slower; recorded rather than pinned with a timing assertion this project would refuse to
 gate on.
 
+## A segmentation map as the output, and a pyramid of past maps as input — 2026-08-12
+
+**The owner's redesign, and it dissolves three measured problems rather than working around them.**
+Every workaround in the demo existed because the head emits *coordinates*: 2K outputs have no
+intrinsic order, so labels had to arrive sorted (0.129) or appearance-matched (0.041) against 0.256
+for arbitrary order; `k` is a declaration in every locator because none can count; and an assignment
+algorithm exists only to decide which slot a detection belongs in. **A map output has no slots.**
+The output is deliberately coarser than the input — 9x12 against 72x96 — because a segmentation does
+not need per-pixel precision and the parameter count is `n_features x n_outputs`.
+
+**The pyramid is the multi-timescale memory already measured here, organised spatially**: past
+output maps as leaky integrators, each at its own rate *and* its own resolution — recent sharp,
+distant coarse. The rates and resolutions move together on purpose, since a band averaging over a
+long time has less to say about exactly where.
+
+**And it produces the first result in this session where a head beats the detector it learns from.**
+IoU at the output resolution, free-running:
+
+| scene | frame only | + pyramid | the segmenter (control) |
+|---|---|---|---|
+| one object | 0.99 | **1.00** | 1.00 |
+| plus a **same-colour twin** | 0.41 | **0.98** | **0.50** |
+
+A per-frame segmenter has nothing to tell identical twins apart with; the pyramid carries which one
+was the target.
+
+**Most of that 0.98 is persistence, and saying so is the point**: repeating the previous *true* map
+scores **0.92**, so the learned part adds 0.06 IoU. What is decisively better is the comparison
+against the segmenter, not against doing nothing.
+
+**And it fails absorbingly — worse than the coordinate version's stable wrong fixed point.** A
+60-frame blackout takes it from 0.98 to **0.00, permanently**: a blank frame drives the map to zero,
+the pyramid fills with zeros, and zero is a fixed point. The frame-only head **recovers** (0.13 →
+0.62) precisely because it has no memory to corrupt. **Resetting the pyramid does not help** — the
+head trained with a populated pyramid has never seen an empty one, so a reset lands in a
+distribution that never occurred. Exposure bias again.
+
+**What fixes it is training-time dropout of the pyramid, and the trade has no free lunch:**
+
+| dropout | while healthy | after the blackout |
+|---|---|---|
+| none | **0.98** | **0.14** (never recovers) |
+| 0.05–0.30 | ~0.49 | **~0.68** |
+| 0.50 | 0.11 | 0.10 |
+
+A caller chooses between a head that is excellent until something goes wrong and one that is
+mediocre and survives. The recovered 0.68 still beats the segmenter's 0.50, so the memory keeps
+paying — just less. Nothing here resolves that trade and it is recorded rather than tuned away.
+`demo/map_head.py`, four mutants caught.
+
+**Not wired into the live demo.** The window still tracks points; making the map the demo's output
+means a 108-output head, a 108-wide `taught` stream and a different overlay, which is a larger
+change than measuring the architecture was. The measurement is the deliverable here.
+
 **Still undecided:** whether inference is *hosted* (an interface to ONNX Runtime/TFLite) or
 *embedded*, and whether the tiers ship as one library or two. Nothing on the camera/audio/speech
 path is built.
