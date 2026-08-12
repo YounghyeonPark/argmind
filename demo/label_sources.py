@@ -775,6 +775,234 @@ def partition(foreground: np.ndarray, points, *, floor: float = 0.25,
     return out
 
 
+def edge_gate(frame, quantile: float = 0.95) -> np.ndarray:
+    """Mark the pixels that sit on the frame's strongest intensity steps.
+
+    A **relative** threshold, not an absolute one, for the reason every other threshold in this
+    package is relative: the strongest edge in a scene is the boundary between two things, whatever
+    the lighting. `quantile` is over the frame's own gradient magnitudes, so 0.95 marks one pixel
+    in twenty and the boundary between two touching objects is always in that set.
+
+    A gated pixel is treated as not joining across its **own** left or upper edge, which is where
+    the step it sits on lies.
+    """
+    if not 0.0 < quantile < 1.0:
+        raise ValueError(f"quantile must be in (0, 1), got {quantile}")
+    g = np.asarray(frame, dtype=np.float64)
+    if g.ndim == 3:
+        g = g.mean(axis=2)
+    gx = np.abs(np.diff(g, axis=1, prepend=g[:, :1]))
+    gy = np.abs(np.diff(g, axis=0, prepend=g[:1, :]))
+    mag = np.maximum(gx, gy)
+    return mag > np.quantile(mag, quantile)
+
+
+def _components(open_l, open_u, valid):
+    """Label every connected group of `valid` pixels, given which left/up joins are open.
+
+    **Hook-and-jump rather than propagate.** Seeding each pixel with its raster index and taking the
+    minimum over open neighbours needs one pass per pixel of the component's *diameter* -- 167 on a
+    72x96 blob, measured, which cost 7.4 ms and lost to a plain Python union-find at 5.8. Following
+    each label as a pointer collapses the chain instead, and the round count falls to about the
+    logarithm: **20 rounds on a sprawling noise-carved cluster, 4 on a disc.**
+
+    `scipy.ndimage.label` is 0.05 ms against this function and is deliberately not used: it cannot
+    express a *gated* join, so it would be a second implementation of the split for the ungated case
+    only, and this package has already paid for two implementations of one decision. The cost that
+    matters is `split_regions`, and it is measured there.
+    """
+    m = np.asarray(valid, dtype=bool)
+    if m.size == 0:
+        return np.zeros(m.shape, dtype=np.int32), np.empty(0, dtype=np.int32)
+    far = np.int32(m.size + 1)
+    flat = np.where(m.ravel(), np.arange(1, m.size + 1, dtype=np.int32), 0)
+    #: int32 rather than int64, and one reused buffer rather than a (4, H, W) stack: this loop runs
+    #: about twenty times per frame and its cost is memory traffic, not arithmetic.
+    near = np.empty(m.shape, dtype=np.int32)
+    while True:
+        lab = flat.reshape(m.shape)
+        near.fill(far)
+        np.minimum(near[:, :-1], np.where(open_l, lab[:, 1:], far), out=near[:, :-1])
+        np.minimum(near[:, 1:], np.where(open_l, lab[:, :-1], far), out=near[:, 1:])
+        np.minimum(near[:-1, :], np.where(open_u, lab[1:, :], far), out=near[:-1, :])
+        np.minimum(near[1:, :], np.where(open_u, lab[:-1, :], far), out=near[1:, :])
+        hooked = np.where(m, np.minimum(near, lab), 0).ravel()
+        while True:                                  # jump: a label points at a pixel of its own
+            on = hooked > 0                          # component, so following it collapses depth
+            nxt = np.where(on, np.minimum(hooked[np.where(on, hooked, 1) - 1], hooked), 0)
+            if np.array_equal(nxt, hooked):
+                break
+            hooked = nxt
+        if np.array_equal(hooked, flat):
+            break
+        flat = hooked
+    out = flat.reshape(m.shape)
+    ids = np.unique(out[out > 0])
+    dense = np.zeros(out.shape, dtype=np.int32)
+    for new, old in enumerate(ids, start=1):
+        dense[out == old] = new
+    return dense, np.arange(1, len(ids) + 1, dtype=np.int32)
+
+
+def _open_joins(same_l, same_u, gate, shape):
+    """Turn "these neighbours belong together" into "these neighbours may join", via the gate.
+
+    A gated pixel does not join across its **own** left or upper edge, which is where the step it
+    sits on lies. Applying it to the other side instead is a real mutant, and it is caught.
+    """
+    if gate is None:
+        return same_l, same_u
+    g = np.asarray(gate, dtype=bool)
+    if g.shape != shape:
+        raise ValueError(f"gate shape {g.shape} does not match mask shape {shape}")
+    return same_l & ~g[:, 1:], same_u & ~g[1:, :]
+
+
+def connected_regions(mask, gate=None):
+    """4-connected components of `mask`, as a 1-based label map and the ids present."""
+    m = np.asarray(mask, dtype=bool)
+    if m.size == 0:
+        return np.zeros(m.shape, dtype=np.int32), np.empty(0, dtype=np.int32)
+    open_l, open_u = _open_joins(m[:, 1:] & m[:, :-1], m[1:, :] & m[:-1, :], gate, m.shape)
+    return _components(open_l, open_u, m)
+
+
+def split_regions(cluster_labels, k, frame=None, *, edges=None, min_frac: float = 0.01):
+    """Split each appearance cluster into its spatially separate pieces. Regions, not clusters.
+
+    **Why**: a cluster is a region of similar appearance, not an object, so two objects that look
+    alike land in one cluster -- and its centroid then sits *between* them, which is the midpoint
+    failure this package already measured at 0.067 against the midpoint and 0.262 against either
+    object. Connectivity is what separates them. Measured, mean best IoU against ground truth over
+    two same-coloured discs held apart: **0.50 by cluster, 1.00 by region**, and no cost on a
+    fixture colour already segments exactly.
+
+    **`edges` earns its place only where `k` is under-declared, which is the normal condition** --
+    `k` is a declaration in every locator here, and nothing counts the appearance groups in a room.
+    Scored on the two objects a caller declared, with distractors eating the cluster budget:
+
+    | scene, caller declared 2 so k=3 | clusters | +connected | +edge-gated | k it would have needed |
+    |---|---|---|---|---|
+    | 2 targets touching + 1 distractor | 0.83 | 0.83 | 0.83 | 3 |
+    | 2 targets touching + 2 distractors | 0.60 | 0.60 | **0.83** | 5 |
+    | 2 targets **apart** + 2 distractors | 0.53 | 0.53 | **1.00** | 4 |
+    | 2 targets touching, no distractor | 0.83 | 0.83 | 0.83 | 3 |
+
+    The third row is the mechanism: a target that shares a cluster **with the background** is
+    connected to it, so connectivity alone does nothing and the edge at its own rim is what severs
+    it. That is the case an edge cue is for, and it is not the one I first tested -- on fixtures
+    with no distractor `k` was adequate by construction, the gate read 0.82 against 0.83 for simply
+    raising `k`, and the conclusion "it buys nothing" was drawn from a fixture set that could not
+    show it.
+
+    **What nothing here separates: two identical objects that touch.** 0.60 for clusters, for
+    connectivity and for the gate, at every `k` tried -- there is no edge between them to find.
+
+    **Cost, measured on this host at 72x96, gated, `min_frac` 0.01** -- and it is a range rather
+    than a figure because it is set by the *shape* of the largest region, not by the pixel count:
+    **1.5-2.0 ms** on five of the seven fixtures here, and **13.4-14.3 ms** on the two where the
+    background is carved into interleaved noise clusters, whose regions snake across the frame and
+    need 20 hook rounds against 4 for a disc. The worst case is 43% of a 33 ms frame; with the
+    segmenter's own 2.5 ms and the backbone-plus-pipeline's 0.58 the demo still clears 30 Hz. Host
+    figures, not target ones.
+
+    `min_frac` is a floor on a region's area as a fraction of the frame. It does not change IoU at
+    all -- the objects are found either way -- it changes the region *count*, 924 pieces against 13
+    on one fixture, which is the difference between a segmentation and a speckle field. A
+    best-IoU metric is blind to that, which is why the count is measured beside it.
+
+    Returns `(labels, centres, clusters)`. The third is which cluster each region came from, and it
+    is not decoration: **splitting makes the background stop being one region**, so "the largest
+    region is the background" -- true of clusters, and the rule this replaced -- is false here. On a
+    two-object scene the noisy wall fragmented into twelve pieces and the two objects became the
+    largest regions in the frame, so that rule dropped one of them. `pick_regions` needs the cluster
+    to drop the background as a whole.
+    """
+    lab = np.asarray(cluster_labels)
+    gate = None
+    if edges is not None:
+        if frame is None:
+            raise ValueError("edges needs the frame the labels came from")
+        gate = edge_gate(frame, edges)
+    floor = max(int(min_frac * lab.size), 1)
+    out = np.zeros(lab.shape, dtype=np.int32)
+    h, w = lab.shape
+    yy, xx = np.mgrid[0:h, 0:w]
+    #: **One pass over the whole field, not one per cluster.** A region is a maximal connected set
+    #: of same-cluster pixels, so "these neighbours may join" is "same cluster and not gated", and
+    #: the regions come out identical -- verified region-for-region against a per-cluster reference
+    #: in the tests, because "identical" is an argument until it is run.
+    #:
+    #: It is **1.5 to 2.1x** faster on five of seven fixtures and a **wash on the other two**, which
+    #: is not the third I predicted before measuring: the cost is the number of hook rounds, set by
+    #: the largest component's diameter, and that does not fall when the passes are shared.
+    open_l, open_u = _open_joins(lab[:, 1:] == lab[:, :-1], lab[1:, :] == lab[:-1, :], gate,
+                                 lab.shape)
+    comp, ids = _components(open_l, open_u, np.ones(lab.shape, dtype=bool))
+    #: Numbered cluster-major, which is the order the per-cluster loop produced. Both the display
+    #: and the head key on these ids, so the numbering is part of the interface.
+    at = [lab[comp == i].flat[0] for i in ids]
+    centres, clusters = [], []
+    for j in range(int(k)):
+        for i, owner in zip(ids, at):
+            if owner != j:
+                continue
+            piece = comp == i
+            if piece.sum() < floor:
+                continue
+            centres.append((float(xx[piece].mean()) / max(w - 1, 1),
+                            float(yy[piece].mean()) / max(h - 1, 1)))
+            clusters.append(j)
+            out[piece] = len(centres)
+    return out, centres, clusters
+
+
+def pick_regions(cluster_labels, labels, centres, clusters, n):
+    """The `n` largest regions, leftmost first, after dropping every region of the largest cluster.
+
+    **The background is dropped by CLUSTER, not by region, and that correction came from a fixture
+    rather than from reading.** The rule this replaces dropped the single largest region, which is
+    right while regions *are* clusters: with `k = objects + 1` there are exactly `objects + 1` of
+    them, so "all but the biggest" and "the biggest `n` after the biggest" are the same set.
+    Splitting breaks it. Measured on two same-coloured discs at k=3: the noisy wall occupies two
+    clusters and fragments into **twelve regions of 76-191 px**, while each object is **353 px** --
+    so the objects became the two largest regions in the frame and the old rule dropped one of them
+    as background.
+
+    Which cluster is the background is decided by **area**, as it always was, because a cluster's
+    index is stable but which one holds the wall is not.
+
+    **The limit this leaves, stated rather than tuned around**: a background of two large contiguous
+    surfaces -- a wall and a floor -- puts one of them in a slot at `k = objects + 1`, because only
+    one cluster is dropped. Declaring more objects is the answer, and the edge gate is what keeps
+    the real objects separable once `k` grows. A small object also loses to a large background
+    fragment: the wall's pieces reached 2.8% of the frame here against an object's 5.1%.
+
+    Returns `(ids, points)` -- the label-map value each slot came from, and its centre. `ids` is
+    what `slot_label_map` needs: the pairing between a slot and the region it was found in is the
+    thing that went wrong when the display keyed on the cluster index instead.
+
+    **Always `n` of each**, because a head with 2n outputs needs 2n numbers whatever the frame
+    contained. A slot with no region gets the centre and an id of `None`: the centre is the same
+    convention an empty cluster already uses, and the `None` is what stops the picture claiming a
+    region that is not there -- painting id 0 would colour the background.
+    """
+    cl = np.asarray(cluster_labels)
+    present = sorted(set(int(j) for j in clusters))
+    background = max(present, key=lambda j: (cl == j).sum()) if present else None
+    sizes = [((np.asarray(labels) == i).sum(), i) for i in range(1, len(centres) + 1)
+             if clusters[i - 1] != background]
+    order = [i for _s, i in sorted(sizes, key=lambda si: -si[0])]
+    kept = order[:int(n)]
+    pairs = sorted(((i, centres[i - 1]) for i in kept), key=lambda ip: ip[1][0])
+    ids = [i for i, _p in pairs]
+    points = [p for _i, p in pairs]
+    while len(ids) < int(n):
+        ids.append(None)
+        points.append((0.5, 0.5))
+    return ids, points
+
+
 def _box_mean(a, r):
     """Mean over a (2r+1) box by summed-area table. Edges use the clipped window."""
     pad = np.pad(a, r, mode="edge")

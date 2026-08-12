@@ -290,3 +290,97 @@ check that could not produce a negative result. Reading the coordinates caught i
 an object at (0.35, 0.50). **Three measurement bugs in this thread were all caught by reading the
 numbers** rather than the code — that one, a uniform 2.00 in every cell of a swept table, and a
 0.89 error on a frame 1.0 wide.
+
+## Separating objects inside one appearance cluster — 2026-08-12
+
+Two things were reported together: the label id changed whenever anything moved, and the regions
+were not separated from each other. They had different causes.
+
+**The flickering ids were the display's cluster-to-slot pairing, and the first thing I blamed was
+wrong.** The suspicion was `FrameSegmenter.descriptors`, which standardises **per frame** while the
+cluster centres are carried **across** frames, so the space moves under them. Measured over a scene
+with a large subject crossing *and* a global brightness drift: **0.0% switch rate**, and identical
+for a running or a fixed standardisation. Refuted, and kept as a test because it is the obvious next
+thing to blame.
+
+The real cause: `labels` was indexed by *cluster* and `slot_ids` by *slot*, and the chain between
+them destroys the correspondence — the background is dropped **by area**, the survivors are
+re-sorted **by x**, and the appearance matcher **permutes** them again. Cluster *n* was coloured
+with the id of slot *n*. `slot_label_map` carries the cluster through, and the dropped background
+cluster now stays 0 instead of being painted, which is also half of "the regions are not separated":
+a cluster map tiles the whole frame by construction.
+
+**The separation itself needed a new mechanism, and connectivity is most of it.** A cluster is a
+region of similar appearance, not an object, so two objects that look alike land in one cluster and
+its centroid sits *between* them. `split_regions` splits each cluster into its spatially separate
+pieces. Mean best IoU against ground truth, two same-coloured discs held apart: **0.50 by cluster,
+1.00 by region.**
+
+**The edge gate earns its place only where `k` is under-declared, which is the normal condition** —
+`k` is a declaration in every locator here and nothing counts the appearance groups in a room.
+Scored on the two objects a caller declared, with distractors eating the cluster budget:
+
+| scene, caller declared 2 so k=3 | clusters | +connected | +edge-gated | k it would have needed |
+|---|---|---|---|---|
+| 2 targets touching + 1 distractor | 0.83 | 0.83 | 0.83 | 3 |
+| 2 targets touching + 2 distractors | 0.60 | 0.60 | **0.83** | 5 |
+| 2 targets **apart** + 2 distractors | 0.53 | 0.53 | **1.00** | 4 |
+| 2 targets touching, no distractor | 0.83 | 0.83 | 0.83 | 3 |
+
+The third row is the mechanism: a target that shares a cluster **with the background** is connected
+to it, so connectivity alone does nothing and the step at the object's own rim is what severs it.
+**My first conclusion was that the gate buys nothing over raising `k`** — 0.82 against 0.83 — and it
+came from a fixture set with no distractors, where `k` was adequate by construction. The controls in
+the test are what stop that recurring: the gate must *not* help where `k` is already enough.
+
+**The end-to-end number is less flattering than the IoU table, and both are recorded.** Distance
+from each slot's taught centre to the target it should track:
+
+| scene | clusters | +connected | +edge-gated |
+|---|---|---|---|
+| same colour apart | 0.213 | **0.000** | 0.000 |
+| same colour touching | **0.053** | 0.188 | 0.187 |
+| touch + 2 distractors | 0.183 | 0.183 | 0.183 |
+| apart + 2 distractors | 0.179 | 0.179 | 0.179 |
+| mean over seven | 0.092 | **0.081** | 0.081 |
+
+**Splitting costs on the case nothing can separate** — two identical touching discs are one region,
+so the second slot gets a background fragment: 0.053 becomes 0.188. And **the edge gate does not
+improve what the head is taught at all.** It takes region IoU from 0.53 to 1.00 and moves the taught
+centre by 0.000, because it changes a region's *shape* and not which region wins by area. It is a
+segmentation-picture improvement and is claimed as nothing more — which is the right claim, since
+the picture is what was reported as wrong.
+
+**What nothing here separates: two identical objects that touch.** 0.60 for clusters, connectivity
+and the gate alike, at every `k` tried. There is no edge between them to find.
+
+**A fixture caught a real defect in my own selection rule.** Dropping the largest *region* as
+background is right while regions are clusters, and false once they split: on two same-coloured
+discs at k=3 the noisy wall occupies two clusters and fragments into **twelve regions of 76–191 px**
+while each object is **353 px**, so the objects became the largest regions and the rule dropped one
+of them. The background is dropped by **cluster** now. The limit that leaves is stated rather than
+tuned around: a background of two large contiguous surfaces puts one of them in a slot at
+`k = objects + 1`.
+
+**Two things about the implementation, both measured after being claimed wrongly first.**
+Components are found by hooking to the smallest open neighbour and then **jumping pointers**, which
+is 4 rounds on a disc and 20 on a region that snakes across the frame; plain neighbour propagation
+needs one pass per pixel of the *diameter* — 167 — and lost to a Python union-find. And the split
+runs **one pass over the whole field** rather than one per cluster, since "same cluster and not
+gated" is the same adjacency; that is verified region-for-region against a per-cluster reference and
+is **1.5–2.1× faster on five of seven fixtures and a wash on the other two**, not the third I
+predicted, because the cost is hook rounds and sharing passes does not reduce them.
+
+Cost, this host, 72x96, gated: **1.5–2.0 ms** on five fixtures and **13.4–14.3 ms** on the two with
+a noise-carved background — 43% of a 33 ms frame at worst, still clearing 30 Hz with the segmenter's
+2.5 ms. `scipy.ndimage.label` is 0.05 ms and is deliberately not used: it cannot express a gated
+join, so it would be a second implementation for the ungated case only.
+
+**And the whole selection path was inside `main()`, where nothing could reach it** — the fourth
+occurrence of that shape in one day, after `select_newest` compiled and called by no binary,
+`drive`'s `teach_every` that no caller ever passed, and a test that reimplemented the assembly it
+was checking. `slot_label_map` and `regions_for_slots` are module-level now and the tests drive
+them. Eighteen mutants, all caught; two of them were real gaps rather than confirmations — a
+region's centre computed from its whole cluster survived every mask-IoU test in the file, because
+the centres are what the head is taught with and nothing compared them, and a rule keeping the
+*smallest* regions survived every fixture where `k = objects + 1` makes the two rules equivalent.

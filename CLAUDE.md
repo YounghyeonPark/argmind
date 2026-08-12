@@ -1511,6 +1511,53 @@ module-level now and the test drives it; two mutants are caught (keying on the s
 every cluster). The three before it were `select_newest` compiled and called by no binary, `drive`'s
 `teach_every` that no caller ever passed, and a test that reimplemented the assembly it was checking.
 
+**Separating objects inside one appearance cluster — the other half of that report, 2026-08-12.**
+`영역간 구분이 잘 안되는건 있고, 에지를 통한 오브젝트를 구분하는 것 또한 필요해보임`. A cluster is a
+region of similar appearance, not an object, so two objects that look alike land in one cluster and
+its centroid sits *between* them. `split_regions` splits each cluster into its spatially separate
+pieces: mean best IoU on two same-coloured discs held apart, **0.50 by cluster against 1.00 by
+region**.
+
+**The edge gate earns its place only where `k` is under-declared, which is the normal condition** —
+`k` is a declaration in every locator here and nothing counts the appearance groups in a room. With
+distractors eating the cluster budget, scored on the two objects the caller declared: **0.53 by
+connectivity against 1.00 gated** (2 targets apart + 2 distractors), and 0.60 against 0.83 touching.
+The mechanism is the third row: a target that shares a cluster **with the background** is connected
+to it, so connectivity alone does nothing and the step at the object's own rim is what severs it.
+**My first conclusion — that the gate buys nothing over raising `k`, 0.82 against 0.83 — came from a
+fixture set with no distractors, where `k` was adequate by construction.** The controls are what
+stop that recurring: the gate must *not* help where `k` is already enough.
+
+**The end-to-end number is less flattering and both are kept.** Distance from each slot's taught
+centre to its target: `same colour apart` **0.213 → 0.000**, but `same colour touching` **0.053 →
+0.188** — two identical touching discs are one region, so the second slot gets a background
+fragment. Mean over seven fixtures 0.092 → 0.081. **And the edge gate does not improve what the head
+is taught at all**: region IoU 0.53 → 1.00, taught centre moved by 0.000, because it changes a
+region's *shape* and not which region wins by area. A picture improvement, claimed as nothing more —
+which is the right claim, since the picture is what was reported wrong. **What nothing separates is
+two identical objects that touch**: 0.60 for clusters, connectivity and the gate alike, at every `k`.
+
+**A fixture caught a real defect in my own selection rule.** Dropping the largest *region* as
+background is right while regions are clusters and false once they split: on two same-coloured discs
+at k=3 the noisy wall occupies two clusters and fragments into **twelve regions of 76–191 px** while
+each object is **353 px**, so the objects became the largest regions and the rule dropped one of
+them. It drops by **cluster** now, and the limit that leaves is stated rather than tuned around.
+
+**Two implementation claims were measured after being asserted wrongly.** Components hook to the
+smallest open neighbour and then **jump pointers** — 4 rounds on a disc, 20 on a region snaking
+across the frame — where plain propagation needs one pass per pixel of the *diameter*, 167, and lost
+to a Python union-find. And the split runs **one pass over the whole field** rather than one per
+cluster, verified region-for-region against a per-cluster reference: **1.5–2.1× faster on five of
+seven fixtures and a wash on the other two**, not the third I predicted, because the cost is hook
+rounds and sharing passes does not reduce them. Worst case **14.3 ms of a 33 ms frame**;
+`scipy.ndimage.label` is 0.05 ms and is not used because it cannot express a gated join.
+
+**The whole selection path was inside `main()` again** — `regions_for_slots` is module-level now.
+Eighteen mutants, all caught, and two were real gaps: a region's centre computed from its whole
+cluster survived every mask-IoU test, because the centres are what the head is taught with and
+nothing compared them; and a rule keeping the *smallest* regions survived every fixture where
+`k = objects + 1` makes the two rules equivalent.
+
 **Still undecided:** whether inference is *hosted* (an interface to ONNX Runtime/TFLite) or
 *embedded*, and whether the tiers ship as one library or two. Nothing on the camera/audio/speech
 path is built.
@@ -1533,7 +1580,7 @@ rollback, explicit recovery), `argmind/pipeline.py` (`FrameMap`, input gate, bou
 pipeline. `argmind/bench.py` has no C++ counterpart and is not getting one: it is a host
 measurement harness, and DESIGN.md already records that Python timings are not a baseline the
 C++ can be compared against.
-928 Python tests and 4,652 C++ checks pass; several exist to prove failures are visible
+942 Python tests and 4,652 C++ checks pass; several exist to prove failures are visible
 rather than silent. Every suite is mutation-checked, and surviving mutants are recorded where
 they live rather than tallied here — including the ones that turn out to be **equivalent on a
 64-bit host**, a distinction worth keeping rather than rounding away. Cumulative counts are

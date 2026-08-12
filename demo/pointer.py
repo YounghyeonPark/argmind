@@ -27,7 +27,8 @@ from argmind.persist import Store, fingerprint_of
 from argmind.pipeline import FrameMap, Pipeline
 from argmind.stream import Stream
 from demo.label_sources import (AppearanceMatcher, BackgroundLocator, CadenceDetector,
-                                FrameSegmenter, ObjectMemory, partition)
+                                FrameSegmenter, ObjectMemory, partition, pick_regions,
+                                split_regions)
 
 #: Small on purpose. Random convolutional features work shallow and carry nothing deep --
 #: brightness reads 0.009 at one layer and 1.119 at twenty-seven -- and a 3x3 grid is what
@@ -261,6 +262,49 @@ ID_COLOURS = ((60, 200, 255), (255, 160, 60), (120, 240, 120), (200, 120, 255),
               (80, 220, 240), (240, 120, 160), (160, 255, 200), (255, 220, 120))
 
 
+def regions_for_slots(detector, frame, n, *, split=True, edges=0.95, min_frac=0.01):
+    """Pick the `n` regions a `FrameSegmenter` frame offers, for the head and for the display.
+
+    **Module level for the reason `slot_label_map` is**: this ran inside `main()`'s loop, where no
+    test could reach it, and the last thing that lived there coloured every region with the wrong
+    id for weeks. Four separate defects in this package have had that shape in one day.
+
+    Returns `(region_map, ids, points)`. `region_map` is what `slot_label_map` paints from, `ids`
+    is the value in it each slot came from, and `points` is what the head is taught -- always `n`
+    of the last two.
+
+    `split=False` is the older rule: clusters are regions, and the largest cluster is the
+    background. It is kept because every other figure in this package was measured with it, and
+    because splitting **costs** on one measured case -- two identical touching objects give one
+    region, so the second slot gets a background fragment and the taught centre goes 0.053 -> 0.188.
+    What splitting buys is the case it was built for: two same-coloured objects held apart, 0.213 ->
+    0.000.
+    """
+    if not split:
+        sizes = [(detector.labels == j).sum() for j in range(detector.k)]
+        keep = sorted(range(detector.k), key=lambda j: sizes[j])[:n]
+        centres = detector(frame) if detector.labels is None else _cluster_centres(detector)
+        pairs = sorted(((j, centres[j]) for j in keep), key=lambda jp: jp[1][0])
+        return detector.labels, [j for j, _p in pairs], [p for _j, p in pairs]
+    region_map, centres, of_cluster = split_regions(detector.labels, detector.k, frame,
+                                                    edges=edges, min_frac=min_frac)
+    ids, points = pick_regions(detector.labels, region_map, centres, of_cluster, n)
+    return region_map, ids, points
+
+
+def _cluster_centres(detector):
+    """Each cluster's centroid in frame fractions, from the labels the detector already produced."""
+    lab = detector.labels
+    h, w = lab.shape
+    yy, xx = np.mgrid[0:h, 0:w]
+    out = []
+    for j in range(detector.k):
+        m = lab == j
+        out.append((0.5, 0.5) if not m.any() else
+                   (float(xx[m].mean()) / max(w - 1, 1), float(yy[m].mean()) / max(h - 1, 1)))
+    return out
+
+
 def slot_label_map(cluster_labels, slot_cluster):
     """Repaint a cluster map so each kept cluster carries its SLOT number, background 0.
 
@@ -277,7 +321,9 @@ def slot_label_map(cluster_labels, slot_cluster):
     lab = np.asarray(cluster_labels)
     out = np.zeros(lab.shape, dtype=np.int32)
     for slot, j in enumerate(slot_cluster or []):
-        out[lab == j] = slot + 1
+        if j is None:                                # a slot the frame had no region for; the head
+            continue                                 # still needs its two outputs, the picture does
+        out[lab == j] = slot + 1                     # not need a lie
     return out
 
 
@@ -564,6 +610,27 @@ def main(argv=None):
                         "Fills the regions instead of outlining them -- core coverage 0.00 to "
                         "0.31 on a mostly-still object -- but never forgets the PATH a moving "
                         "one swept, and peak pairing falls 80%% to 9%% at three objects")
+    p.add_argument("--no-split-regions", action="store_true",
+                   help="do not split an appearance cluster into its spatially separate pieces. "
+                        "Splitting is on because a cluster is not an object: two same-coloured "
+                        "objects held apart read IoU 0.50 as one cluster and 1.00 as two regions, "
+                        "and a cluster spanning both puts its centroid between them")
+    p.add_argument("--no-edge-split", action="store_true",
+                   help="do not let the frame's strongest intensity steps break a region. The edge "
+                        "is what separates an object from a background it happens to resemble: "
+                        "with two distractors eating the cluster budget, two targets read 0.53 by "
+                        "connectivity alone and 1.00 with the edge. Costs 1.00 to 0.99 where "
+                        "colour already separates everything")
+    p.add_argument("--edge-quantile", type=float, default=0.95, metavar="Q",
+                   help="gradient quantile above which a pixel may not join its neighbour "
+                        "(default 0.95). Relative to the frame's own gradients, so it follows the "
+                        "scene's contrast; swept 0.70-0.98, monotone, and 0.95 is where the cost "
+                        "on easy scenes has gone")
+    p.add_argument("--seg-min-frac", type=float, default=0.01, metavar="F",
+                   help="smallest region to keep, as a fraction of the frame (default 0.01). It "
+                        "does not change IoU -- it changes the region count, 924 pieces against "
+                        "13 on one fixture, which is the difference between a segmentation and a "
+                        "speckle field")
     p.add_argument("--seg-floor", type=float, default=0.25, metavar="F",
                    help="mask threshold as a fraction of the map's own peak (default 0.25). "
                         "Measured on one object: 0.15 gives recall 0.99 at precision 0.42, "
@@ -731,21 +798,30 @@ def main(argv=None):
         #: again. The pairing was arbitrary and shifted every frame, which is what made the
         #: region colours flicker whenever anything moved.
         slot_cluster = None
+        region_map = None
         if auto is not None and how == "texture":
-            # The biggest cluster is the background. Dropping it by AREA rather than by index is
-            # what keeps this working when the subject moves to a different part of the frame.
-            sizes = [(detector.labels == j).sum() for j in range(detector.k)]
-            keep = sorted(range(detector.k), key=lambda j: sizes[j])[:n_objects]
-            pairs = sorted(((j, auto[j]) for j in keep), key=lambda jp: jp[1][0])
-            slot_cluster = [j for j, _pt in pairs]
-            auto = [pt for _j, pt in pairs]
+            # A cluster is a region of similar appearance, not an object. Splitting it into
+            # spatially separate pieces is what separates two objects that look alike, and the edge
+            # gate is what separates an object from a background it resembles.
+            region_map, slot_cluster, auto = regions_for_slots(
+                detector, small, n_objects,
+                split=not args.no_split_regions,
+                edges=None if args.no_edge_split else args.edge_quantile,
+                min_frac=args.seg_min_frac)
         if auto is not None and matcher is not None and slot_cluster is not None:
             # The matcher permutes the points, so the cluster list has to follow it. Matched by
             # value, which is safe because two clusters with an identical centre would already be
             # one cluster.
             before = list(auto)
             auto = matcher(small, auto)
-            slot_cluster = [slot_cluster[before.index(pt)] for pt in auto]
+            taken = set()
+            perm = []
+            for pt in auto:
+                # First UNUSED match, not `before.index(pt)`: a slot with no region gets the frame
+                # centre, so two entries can be equal and `index` would hand both the same region.
+                perm.append(next(i for i, q in enumerate(before) if i not in taken and q == pt))
+                taken.add(perm[-1])
+            slot_cluster = [slot_cluster[i] for i in perm]
         elif auto is not None and matcher is not None:
             # Slots by appearance rather than by position. This is what makes IDENTITY a function
             # of the current frame -- "which object is which" otherwise depends on which it was,
@@ -765,7 +841,7 @@ def main(argv=None):
                 # kept cluster is painted with its SLOT number, so `segment_image` can look its id
                 # up; the dropped background cluster stays 0 and is drawn dark, which is also what
                 # makes the regions read as separate rather than tiling the whole frame.
-                labels = slot_label_map(detector.labels, slot_cluster)
+                labels = slot_label_map(region_map, slot_cluster)
             elif getattr(detector, "foreground", None) is not None:
                 labels = partition(detector.foreground, auto, floor=args.seg_floor)
             else:
