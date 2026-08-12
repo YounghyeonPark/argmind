@@ -1373,6 +1373,47 @@ stated rather than tuned around. Two mutants caught (a leak inside the mask, an 
 survivor was my own dud that slowed the update *outside* the mask, which is not the property under
 test.
 
+**Segment each frame on its own, by colour and optionally texture — the owner's proposal, and it
+removes both background-model failures at once (2026-08-12).** The reasoning is theirs and it is
+sound: **a per-frame segmentation has no memory, so it cannot have a trail, and cannot lose a
+stationary object.** Those were the two failures measured, and both are properties of the mechanism
+rather than of the scene. `--locate texture`, and it needs no cadence — every frame produces labels.
+
+Measured IoU against ground truth on single frames, with the shipped class:
+
+| fixture | descriptor | moving | still |
+|---|---|---|---|
+| colour differs | colour only | **1.00** | **1.00** |
+| colour differs | colour+texture | **0.25** | 0.25 |
+| same mean colour, texture differs | colour only | **0.32** | 0.32 |
+| same mean colour, texture differs | colour+texture | **0.63** | 0.62 |
+
+`still` equals `moving` in every row, which is the whole point — background subtraction detects a
+stationary object 0% of the time at every rate. And colour alone reaches an **exact** segmentation
+where the background locator paints 2.05x the object's area.
+
+**Texture is off by default because it is actively harmful when colour suffices**: 1.00 → **0.25**,
+worse than the control. It is not dilution, it is domination — the stripes-versus-smooth axis carves
+the frame somewhere else. It is also the *only* thing that works when object and background share a
+mean brightness (0.32 → 0.63), which is the fixture built to make the texture claim testable rather
+than a restatement of the colour result. The third row is the control that says the fixture is
+honest.
+
+**That 0.25 was 0.71 in the exploratory script**, and the difference is the shipped class: it
+**warm-starts its centres** and seeds deterministically where the script re-seeded at random every
+frame. Warm-starting is what makes a cluster's *index* stable — measured, the same cluster holds the
+object on all twelve frames — and it costs accuracy in exactly the configuration that was already
+the wrong one to use. The class's figures are the ones recorded.
+
+**Three iterations are a measured floor, not a preference**: IoU 1.00 at three against **0.16** at
+one, so the constructor refuses fewer than two and says why. Cost on this host at 72x96: 1.07 ms at
+k=2, 2.47 at k=3, 3.90 at k=4 — affordable against a 33 ms frame, and a host figure rather than a
+target one. `k` is `objects + 1` because one cluster is the background, and the background is
+dropped **by area** rather than by index so it keeps working when the subject moves.
+
+Four mutants caught: dropping the texture statistics, re-seeding every frame, skipping
+standardisation, and letting an empty cluster shift the others along.
+
 **Still undecided:** whether inference is *hosted* (an interface to ONNX Runtime/TFLite) or
 *embedded*, and whether the tiers ship as one library or two. Nothing on the camera/audio/speech
 path is built.

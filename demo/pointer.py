@@ -27,7 +27,7 @@ from argmind.persist import Store, fingerprint_of
 from argmind.pipeline import FrameMap, Pipeline
 from argmind.stream import Stream
 from demo.label_sources import (AppearanceMatcher, BackgroundLocator, CadenceDetector,
-                                ObjectMemory, partition)
+                                FrameSegmenter, ObjectMemory, partition)
 
 #: Small on purpose. Random convolutional features work shallow and carry nothing deep --
 #: brightness reads 0.009 at one layer and 1.119 at twenty-seven -- and a 3x3 grid is what
@@ -502,12 +502,19 @@ def main(argv=None):
                    help="how many moving things to track. The head gets 2K outputs and the "
                         "labels arrive leftmost-first: it learns ROLES, not identities, and "
                         "cannot follow which object is which through a crossing")
-    p.add_argument("--locate", choices=("motion", "background"), default=None,
+    p.add_argument("--locate", choices=("motion", "background", "texture"), default=None,
                    help="how the automatic labels find things. `motion` differences consecutive "
                         "frames; `background` differences against a running background estimate. "
                         "Defaults to background above one object, because a frame difference is a "
                         "temporal derivative and leaves a DIPOLE -- measured, two peaks land one "
-                        "per object 20.3%% of the time against 96.6%% for background")
+                        "per object 20.3%% of the time against 96.6%% for background. `texture` "
+                        "clusters each frame on its own, with no motion and no background model: "
+                        "IoU 1.00 against background subtraction's area of 2.05x the object, and "
+                        "it does not lose a stationary subject")
+    p.add_argument("--texture-stats", action="store_true",
+                   help="add local contrast and gradient to --locate texture. Measured HARMFUL "
+                        "when colour already separates the objects (IoU 1.00 -> 0.25) and the only "
+                        "thing that works when they share a mean brightness (0.32 -> 0.63)")
     p.add_argument("--identify", action="store_true",
                    help="assign the slots by APPEARANCE instead of left-to-right. Tracks identity "
                         "through a crossing (0.041 against a centre-guess 0.222) where the sort "
@@ -602,6 +609,11 @@ def main(argv=None):
     how = args.locate or ("background" if n_objects > 1 else "motion")
     if args.teach == "mouse":
         detector = None
+    elif how == "texture":
+        # Every frame produces labels, so there is no cadence and nothing to be blind about --
+        # which is the other half of dropping the background model. `k` is objects + 1 because
+        # one cluster is the background: a two-object scene needs three regions, not two.
+        detector = FrameSegmenter(n_objects + 1, texture=args.texture_stats)
     elif how == "background":
         detector = BackgroundLocator(n_objects, rate=0.05, selective=args.bg_selective)
     else:
@@ -612,10 +624,10 @@ def main(argv=None):
     # a name the first may or may not have bound -- a construction that works and is a trap.
     describe = None
     if args.identify or args.remember:
-        if how != "background":
-            sys.exit("--identify and --remember need --locate background: appearance is only as "
-                     "good as the crops it describes, and motion differencing puts those on the "
-                     "leading and trailing edges of one object rather than on two objects.")
+        if how == "motion":
+            sys.exit("--identify and --remember need --locate background or texture: appearance "
+                     "is only as good as the crops it describes, and motion differencing puts "
+                     "those on the leading and trailing edges of one object rather than on two.")
         crop_backbone = Backbone(PLAN, (CROP, CROP, 3), dtype="f4", seed=1, pool=2)
 
         def describe(frame, point, _bb=crop_backbone):
@@ -623,10 +635,9 @@ def main(argv=None):
             n = float(np.linalg.norm(v))
             return v / n if n > 0 else v
 
-    if args.segments and how != "background":
-        sys.exit("--segments needs --locate background: the mask is the background difference, "
-                 "and a frame difference gives the leading and trailing edges of one object "
-                 "rather than its extent.")
+    if args.segments and how == "motion":
+        sys.exit("--segments needs --locate background or --locate texture: a frame difference "
+                 "gives the leading and trailing edges of one object rather than its extent.")
     matcher = AppearanceMatcher(n_objects, describe) if args.identify else None
     memory = ObjectMemory(args.tol, max_ids=64) if args.remember else None
     state = {"pred": None, "frozen": False, "frozen_by": (), "n_taught": 0,
@@ -694,6 +705,12 @@ def main(argv=None):
         # And running a detector every frame beats both at 0.010 against the head's ~0.08, so
         # this arrangement is about the detector being unaffordable, not about accuracy.
         auto = detector(small) if detector is not None else None
+        if auto is not None and how == "texture":
+            # The biggest cluster is the background. Dropping it by AREA rather than by index is
+            # what keeps this working when the subject moves to a different part of the frame.
+            sizes = [(detector.labels == j).sum() for j in range(detector.k)]
+            keep = sorted(range(detector.k), key=lambda j: sizes[j])[:n_objects]
+            auto = sorted((auto[j] for j in keep), key=lambda pt: pt[0])
         if auto is not None and matcher is not None:
             # Slots by appearance rather than by position. This is what makes IDENTITY a function
             # of the current frame -- "which object is which" otherwise depends on which it was,
@@ -707,10 +724,17 @@ def main(argv=None):
             state["minted"] = [i for i, m in seen if m]
             state["vocab"] = len(memory)
             state["vocab_full"] = memory.full
-        if args.segments and auto is not None and getattr(detector, "foreground", None)                 is not None:
-            labels = partition(detector.foreground, auto, floor=args.seg_floor)
-            cv2.imshow("argmind - segments",
-                       segment_image(labels, state.get("slot_ids") or []))
+        if args.segments and auto is not None:
+            if how == "texture":
+                # The clusters ARE the segmentation -- no threshold, no partition, no trail.
+                labels = detector.labels + 1
+            elif getattr(detector, "foreground", None) is not None:
+                labels = partition(detector.foreground, auto, floor=args.seg_floor)
+            else:
+                labels = None
+            if labels is not None:
+                cv2.imshow("argmind - segments",
+                           segment_image(labels, state.get("slot_ids") or []))
         state["detector_ran"] = auto is not None
         if auto is not None:
             # Sorted leftmost-first by the detector, and flattened in that order. The order is
