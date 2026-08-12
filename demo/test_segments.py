@@ -277,3 +277,61 @@ def test_the_expected_cost_of_selective_update_is_not_the_one_that_bites():
     assert sel < plain, (
         f"selective now ghosts more than plain ({sel:.3f} vs {plain:.3f}), which is what I "
         "originally predicted; if that has become true the docstring must be corrected")
+
+def test_half_of_what_a_difference_detects_is_where_the_object_WAS():
+    """Why a filled region is not the whole story, and it is geometry rather than a defect.
+
+    For a translating object, `|frame - background|` is a crescent: half of it sits where the
+    object now is, and half where it just left. Measured on a flat-topped object -- `on-object` is
+    **exactly half** of `painted` in every configuration:
+
+    | background | floor | painted | on-object | above-floor |
+    |---|---|---|---|---|
+    | plain | 0.10 | 197.7 | 98.8 | 197.7 |
+    | plain | 0.40 | 79.0 | 39.6 | 79.0 |
+    | selective | 0.10 | 479.9 | 239.9 | 480.1 |
+    | selective | 0.40 | 479.9 | 239.9 | 480.1 |
+
+    That uniform 0.5 was checked rather than trusted, because this project treats a uniformly tidy
+    column as a broken measurement. It is real: `painted` tracks `above-floor` exactly, so the
+    floor is doing its job and the halving is the dipole in another guise.
+
+    And note the floor does **nothing** under selective -- 480 above it at both 0.10 and 0.40 --
+    because a background that never learns the object leaves a roughly *uniform* difference over
+    it, so any peak-relative threshold in that range selects the same pixels.
+    """
+    pytest.importorskip("scipy")
+    from demo.label_sources import BackgroundLocator, partition
+
+    def counts(selective, floor, frames=300, warm=80):
+        loc = BackgroundLocator(1, rate=0.03, warmup=15, suppress=0.10, selective=selective)
+        rows = []
+        for k in range(frames):
+            p = (0.25 + 0.0005 * k, 0.5)
+            img, mask = flat_disc(p, seed=k)
+            got = loc(img)
+            if loc.foreground is None or k < warm:
+                continue
+            lab = partition(loc.foreground, got or [p], floor=floor)
+            painted = lab > 0
+            above = (loc.foreground >= floor * loc.foreground.max()).sum()
+            rows.append((painted.sum(), (painted & mask).sum(), above))
+        a = np.array(rows, dtype=float)
+        return a[:, 0].mean(), a[:, 1].mean(), a[:, 2].mean()
+
+    for selective in (False, True):
+        for floor in (0.10, 0.40):
+            painted, on_object, above = counts(selective, floor)
+            assert painted == pytest.approx(above, rel=0.02), (
+                f"painted {painted:.0f} does not track above-floor {above:.0f}; the radius clamp "
+                "is dominating and the floor measurement means nothing")
+            assert on_object / painted == pytest.approx(0.5, abs=0.08), (
+                f"{selective}/{floor}: on-object is {on_object / painted:.2f} of painted, not the "
+                "half that a translating object's crescent implies")
+
+    # The floor is inert under selective, which is what a uniform difference over the object means.
+    lo = counts(True, 0.10)[2]
+    hi = counts(True, 0.40)[2]
+    assert lo == pytest.approx(hi, rel=0.02), (
+        f"the floor now changes what selective selects ({lo:.0f} vs {hi:.0f}); the difference over "
+        "the object has stopped being uniform and the flag's docstring needs re-measuring")
