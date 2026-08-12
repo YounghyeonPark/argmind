@@ -29,7 +29,8 @@ import pytest
 from argmind.adapt import NormalisedLeastMeanSquares
 from argmind.backbone import Backbone
 from demo.label_sources import AppearanceMatcher, BackgroundLocator, find_peaks, _grey
-from demo.pointer import CROP, IN_SHAPE, PLAN, POOL, crop_at
+from demo.label_sources import FrameSegmenter
+from demo.pointer import CROP, IN_SHAPE, PLAN, POOL, build, crop_at, fingerprint
 
 H, W = IN_SHAPE[0], IN_SHAPE[1]
 #: A red-ish and a blue-ish object, and the control that must fail: two the same.
@@ -264,15 +265,15 @@ def test_identical_objects_degrade_the_end_to_end_result(crop_backbone):
     assert poor < centre * 1.2
 
 
-def test_the_matcher_holds_its_templates_and_refuses_a_size_it_cannot_solve(crop_backbone):
-    """Two deliberate choices.
-
-    Templates are seeded once and **held**: updating them per frame would let a template drift
+def test_the_matcher_holds_its_templates(crop_backbone):
+    """Templates are seeded once and **held**: updating them per frame would let a template drift
     onto the other object during a crossing, which is the same shape as the guard's baseline
     tracking the very fault it was holding out against.
 
-    And above four objects it **refuses** rather than falling back to a greedy match, which would
-    be silently wrong exactly when the objects are hard to tell apart.
+    This test used to also assert that above four objects the matcher *refused*, because it solved
+    the assignment by enumerating k! permutations. It solves them now -- see
+    `test_more_than_four_objects_is_solved_rather_than_refused` -- so that half moved there rather
+    than being deleted.
     """
     describe = describer(crop_backbone)
     m = AppearanceMatcher(2, describe)
@@ -290,8 +291,6 @@ def test_the_matcher_holds_its_templates_and_refuses_a_size_it_cannot_solve(crop
     assert not m.seeded
     with pytest.raises(ValueError, match="expected 2 points"):
         AppearanceMatcher(2, describe)(img, [(0.5, 0.5)])
-    with pytest.raises(ValueError, match="assignment algorithm"):
-        AppearanceMatcher(5, describe)(img, [(0.1 * i, 0.5) for i in range(5)])
     with pytest.raises(ValueError, match="at least 1"):
         AppearanceMatcher(0, describe)
 
@@ -370,3 +369,103 @@ def test_the_locator_does_not_count_and_loses_a_stationary_object():
     assert all(len(v) == 2 for v in got), (
         "the locator now returns fewer than k on a one-object scene. That would be an "
         "improvement, and the docstring claiming it cannot count would need to change")
+
+def test_more_than_four_objects_is_solved_rather_than_refused(crop_backbone):
+    """The cap the owner hit. `AppearanceMatcher` used to refuse k > 4, because the exhaustive
+    permutation search it used is k! -- 2, 6, 24, then 120 and 720.
+
+    It solves them now, exactly, with `scipy.optimize.linear_sum_assignment` in O(k^3). A greedy
+    nearest-template match is **not** offered: it is wrong precisely in the ambiguous cases this
+    exists to handle, where two slots claim the same template. Verified against brute force where
+    brute force is affordable, and required to be a permutation above that.
+    """
+    pytest.importorskip("scipy")
+    rng = np.random.default_rng(4)
+    for k in (2, 3, 4, 5, 6, 8):
+        templates = rng.standard_normal((k, 6))
+        templates /= np.linalg.norm(templates, axis=1, keepdims=True)
+        shuffle = rng.permutation(k)
+        points = [(0.05 + 0.1 * i, 0.5) for i in range(k)]
+        table = {p: templates[shuffle[i]] for i, p in enumerate(points)}
+
+        m = AppearanceMatcher(k, lambda _f, p: table[p])
+        m._templates = list(templates)                            # noqa: SLF001
+        out = m(np.zeros((8, 8, 3)), points)
+
+        picked = [points.index(p) for p in out]
+        assert sorted(picked) == list(range(k)), (
+            f"k={k}: the result is not a permutation ({picked}); a slot was left empty or "
+            "doubled, which is what a greedy match does")
+        assert all(shuffle[picked[j]] == j for j in range(k)), (
+            f"k={k}: the assignment is not the true one, so it is not exact")
+
+
+def test_the_object_count_is_capped_by_accuracy_and_not_by_the_matcher(crop_backbone):
+    """Raising the cap does not make more objects *work*, and that has to be said in the same
+    breath. Measured elsewhere in this package: vocabulary purity 90% at two objects, 63% at
+    three, 29% at five; region IoU 0.71 / 0.55 / 0.46. The refusal was artificial; the degradation
+    is not.
+
+    So this asserts the pieces *admit* a larger k, not that they are good at it.
+    """
+    for k in (5, 6):
+        backbone, head, _guard, _features, taught, fmap, _pipe = build(k, "raw")
+        assert head.n_outputs == 2 * k
+        assert taught.dim == 2 * k and len(fmap.target) == 2 * k
+        seg = FrameSegmenter(k + 1)
+        got = seg(np.random.default_rng(1).random((24, 32, 3)).astype("f4"))
+        assert len(got) == k + 1, "the segmenter no longer returns one centre per cluster"
+        assert fingerprint(backbone, k, "raw") != fingerprint(backbone, k - 1, "raw")
+
+
+def test_region_colours_wrap_rather_than_running_out(crop_backbone):
+    """Eight colours for an unbounded vocabulary, so they must wrap. A crash at id 8 would make
+    the display the thing that limits the vocabulary, which is the wrong way round."""
+    from demo.pointer import ID_COLOURS, segment_image
+
+    lab = np.arange(24).reshape(4, 6) % 10
+    img = segment_image(lab, ids=list(range(10)), scale=1)
+    assert img.shape == (4, 6, 3)
+    # Ten ids over eight colours: two pairs share. Label 0 is the background and has its own
+    # colour, so the distinct count is the palette PLUS one -- which is what the first version of
+    # this assertion got wrong.
+    assert len(np.unique(img.reshape(-1, 3), axis=0)) == len(ID_COLOURS) + 1
+    assert tuple(img[0, 0]) == (26, 26, 26), "label 0 is the background and must stay dark"
+
+def test_a_greedy_nearest_template_match_would_be_wrong_here():
+    """The case the previous test could not see, and it is the whole reason for an assignment
+    algorithm rather than a loop.
+
+    A mutant replacing the assignment with greedy nearest-first **survived** a fixture where each
+    descriptor exactly equalled one template -- there, grabbing the nearest happens to be optimal.
+    Greedy only fails when two detections want the same template, so the fixture has to build that.
+
+    Costs here, detections down and templates across:
+
+    |  | T0 | T1 |
+    |---|---|---|
+    | D0 | 1 | 9 |
+    | D1 | 0 | 10 |
+
+    Greedy takes D0 to its nearest, T0, and forces D1 to T1: total 11. The optimum is D0 to T1 and
+    D1 to T0: total 9. So the two disagree, and only one of them is right.
+    """
+    pytest.importorskip("scipy")
+    templates = [np.array([0.0, 0.0]), np.array([10.0, 0.0])]
+    points = [(0.10, 0.5), (0.20, 0.5), (0.30, 0.5), (0.40, 0.5), (0.50, 0.5)]
+    desc = {points[0]: np.array([1.0, 0.0]), points[1]: np.array([0.0, 0.0])}
+    # Three filler objects far from both, so k is above PERMUTATION_LIMIT and the scipy path runs.
+    for i, p in enumerate(points[2:], start=1):
+        desc[p] = np.array([100.0 * i, 100.0 * i])
+        templates.append(np.array([100.0 * i, 100.0 * i]))
+
+    m = AppearanceMatcher(len(points), lambda _f, p: desc[p])
+    m._templates = list(templates)                                # noqa: SLF001
+    out = m(np.zeros((8, 8, 3)), list(points))
+
+    assert sorted(points.index(p) for p in out) == list(range(len(points)))
+    # Slot 0 must hold D1 (index 1) and slot 1 must hold D0 (index 0) -- the optimum, not greedy.
+    assert out[0] == points[1], (
+        f"slot 0 holds detection {points.index(out[0])}; a greedy nearest-first match puts "
+        "detection 0 there and pays 11 where the optimum pays 9")
+    assert out[1] == points[0]

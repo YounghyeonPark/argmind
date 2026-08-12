@@ -553,33 +553,56 @@ class AppearanceMatcher:
     def seeded(self) -> bool:
         return self._templates is not None
 
+    #: Above this, exhaustive permutations stop being reasonable: k! is 2, 6, 24, 120, 720.
+    #: A real assignment algorithm is used instead when SciPy is present.
+    PERMUTATION_LIMIT = 4
+
     def __call__(self, frame, points: list[tuple[float, float]]) -> list[tuple[float, float]]:
         """`points` reordered so slot i holds the object matching template i.
 
-        Exhaustive over permutations, which is exact and is fine for the k a caller can label:
-        k! is 2, 6, 24. A larger k wants the Hungarian algorithm, and this refuses rather than
-        pretending — a greedy fallback would be silently wrong in exactly the ambiguous cases.
+        Exact either way. Up to `PERMUTATION_LIMIT` this is exhaustive over permutations, which
+        needs nothing; above it the same optimum comes from `scipy.optimize.linear_sum_assignment`
+        in O(k^3). **A greedy nearest-template match is never used**, because it is wrong precisely
+        in the ambiguous cases this exists to handle -- two slots claiming the same template.
+
+        Without SciPy the old refusal stands rather than silently degrading, and it names the
+        install. That keeps the demo's hard dependencies to what `requirements.txt` lists.
         """
         if len(points) != self.k:
             raise ValueError(f"expected {self.k} points, got {len(points)}")
-        if self.k > 4:
-            raise ValueError(
-                f"k={self.k} needs an assignment algorithm rather than {self.k}! permutations; "
-                "this refuses instead of falling back to a greedy match that would be wrong "
-                "precisely when the objects are hard to tell apart")
         desc = [self.describe(frame, p) for p in points]
         if self._templates is None:
             order = sorted(range(self.k), key=lambda i: points[i][0])
             self._templates = [desc[i] for i in order]
             return [points[i] for i in order]
 
-        best, best_cost = None, float("inf")
-        for perm in _permutations(range(self.k)):
-            cost = sum(float(np.linalg.norm(desc[perm[i]] - self._templates[i]))
-                       for i in range(self.k))
-            if cost < best_cost:
-                best, best_cost = perm, cost
-        return [points[i] for i in best]
+        if self.k <= self.PERMUTATION_LIMIT:
+            best, best_cost = None, float("inf")
+            for perm in _permutations(range(self.k)):
+                cost = sum(float(np.linalg.norm(desc[perm[i]] - self._templates[i]))
+                           for i in range(self.k))
+                if cost < best_cost:
+                    best, best_cost = perm, cost
+            return [points[i] for i in best]
+
+        try:
+            from scipy.optimize import linear_sum_assignment
+        except ImportError as exc:                                  # pragma: no cover
+            raise ValueError(
+                f"k={self.k} is above the {self.PERMUTATION_LIMIT} this can solve by "
+                f"enumeration ({self.k}! permutations), and SciPy is not installed. "
+                "`pip install scipy`, or use fewer objects -- a greedy match is not offered "
+                "because it is wrong exactly when the objects are hard to tell apart"
+            ) from exc
+        cost = np.empty((self.k, self.k))
+        for i in range(self.k):                    # rows: detections, columns: templates
+            for j in range(self.k):
+                cost[i, j] = float(np.linalg.norm(desc[i] - self._templates[j]))
+        rows, cols = linear_sum_assignment(cost)
+        out = [None] * self.k
+        for i, j in zip(rows, cols):
+            out[j] = points[i]                     # slot j gets the detection matched to it
+        return out
 
 
 def _permutations(seq):

@@ -1414,6 +1414,28 @@ dropped **by area** rather than by index so it keeps working when the subject mo
 Four mutants caught: dropping the texture statistics, re-seeding every frame, skipping
 standardisation, and letting an empty cluster shift the others along.
 
+**The label count was capped at four, and the cap was mine rather than the problem's.**
+`AppearanceMatcher` refused `k > 4` because it solved the assignment by enumerating `k!`
+permutations. It solves them exactly now with `scipy.optimize.linear_sum_assignment` in O(k^3), and
+without SciPy the old refusal stands rather than degrading silently — a **greedy** nearest-template
+match is never used, because it is wrong precisely in the ambiguous cases the matcher exists for.
+
+**The other limits are different and worth separating**: the head has none (2K outputs for any K),
+`FrameSegmenter` has none, region colours wrap at eight, and `ObjectMemory`'s vocabulary ceiling is
+64. Only the matcher refused.
+
+**And raising the cap does not make more objects work**, which has to be said in the same breath:
+vocabulary purity is 90% at two objects, 63% at three, 29% at five; region IoU 0.71 / 0.55 / 0.46.
+The refusal was artificial, the degradation is not.
+
+**Two mutants survived the first test and one was a real gap.** A greedy match survived, because
+the fixture gave each descriptor a template it exactly equalled — where grabbing the nearest happens
+to be optimal. Greedy only fails when two detections want the same template, so a fixture now builds
+that: greedy pays 11 where the optimum pays 9, and it is caught. The other survivor is **equivalent**
+— raising `PERMUTATION_LIMIT` to 99 makes k=8 enumerate 40,320 permutations and return the same
+answer, slower; recorded rather than pinned with a timing assertion this project would refuse to
+gate on.
+
 **Still undecided:** whether inference is *hosted* (an interface to ONNX Runtime/TFLite) or
 *embedded*, and whether the tiers ship as one library or two. Nothing on the camera/audio/speech
 path is built.
