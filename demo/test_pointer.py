@@ -487,3 +487,35 @@ def test_the_status_says_which_of_the_four_things_is_happening():
     assert "teach" in status_lines(
         _status_state(learning=False, teach="mouse", n_taught=0))[3]
     assert "not learning" in status_lines(_status_state(learning=False))[3]
+
+def test_the_status_text_is_not_drawn_twice():
+    """The owner asked why black text was overlapping. It was: a thickness-3 black outline under a
+    thickness-1 white glyph, kept when the dimmed band was added.
+
+    At scale 0.52 that stroke puts black ink about **11 px past the last character** -- one
+    character width -- and fills the gaps between letters, so on a dim band it reads as a second,
+    bolder copy. The band already supplies the contrast, so the outline only supplied the double.
+
+    Measured rather than eyeballed: no ink darker than the band may sit past where the string ends.
+    """
+    cv2 = pytest.importorskip("cv2")
+    from demo.pointer import _overlay, status_lines
+
+    st = _status_state(vocab_full=True)
+    lines = status_lines(st)
+    grey = 120
+    out = _overlay(cv2, np.full((110, 640, 3), grey, np.uint8), st)
+    band = int(grey * 0.35)
+
+    for i, text in enumerate(lines):
+        seg = out[8 + 22 * i:8 + 22 * (i + 1)]
+        end = 8 + cv2.getTextSize(text, cv2.FONT_HERSHEY_SIMPLEX, 0.52, 1)[0][0]
+        darker = np.where(seg.min(axis=(0, 2)) < band - 10)[0]
+        stray = darker[darker > end + 4]
+        assert len(stray) == 0, (
+            f"line {i} has {len(stray)} columns of ink darker than the band past x={end}, at "
+            f"{stray.min()}..{stray.max()} -- that is the outline reading as a ghost character")
+
+    # And the band must still be doing its job, or the text is unreadable over a bright scene.
+    assert out[:96].mean() < grey * 0.6, "the dimmed band has gone"
+    assert out[100].mean() == grey, "the band spilled past the status block"

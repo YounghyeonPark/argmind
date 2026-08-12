@@ -343,6 +343,13 @@ def _overlay(cv2, frame, state):
     An outline stroke alone was not enough: over a bright window the white text washed out, and
     over a dark chair the black outline vanished. A band is one blend and does not depend on what
     is behind it.
+
+    **And with the band the outline has to go**, which is a bug I shipped by adding one and
+    keeping the other. A thickness-3 black stroke under a thickness-1 white glyph puts black ink
+    **11 px past the last character** at this scale -- about one character width -- and fills the
+    gaps between letters, so on a dim band it reads as a second, bolder copy of the text. That is
+    the "why is there black text overlapping" the owner saw. The band supplies the contrast; the
+    outline only supplies the double.
     """
     lines = status_lines(state)
     scale, step, pad = 0.52, 22, 8
@@ -351,8 +358,6 @@ def _overlay(cv2, frame, state):
     frame[:height] = band.astype(frame.dtype)
     for i, text in enumerate(lines):
         y = pad + step * (i + 1) - 6
-        cv2.putText(frame, text, (pad, y), cv2.FONT_HERSHEY_SIMPLEX, scale,
-                    (0, 0, 0), 3, cv2.LINE_AA)
         cv2.putText(frame, text, (pad, y), cv2.FONT_HERSHEY_SIMPLEX, scale,
                     (255, 255, 255), 1, cv2.LINE_AA)
     return frame
