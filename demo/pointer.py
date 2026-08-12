@@ -27,7 +27,7 @@ from argmind.persist import Store, fingerprint_of
 from argmind.pipeline import FrameMap, Pipeline
 from argmind.stream import Stream
 from demo.label_sources import (AppearanceMatcher, BackgroundLocator, CadenceDetector,
-                                ObjectMemory)
+                                ObjectMemory, partition)
 
 #: Small on purpose. Random convolutional features work shallow and carry nothing deep --
 #: brightness reads 0.009 at one layer and 1.119 at twenty-seven -- and a 3x3 grid is what
@@ -118,6 +118,40 @@ def crop_at(frame, point):
 
 def raw_width(factor=RAW_FACTOR, shape=IN_SHAPE):
     return (shape[0] // factor) * (shape[1] // factor)
+
+
+#: One stable BGR colour per label id, so a region keeps its colour as the vocabulary grows.
+#: Deliberately not random per frame: a colour that changes is a colour that says nothing.
+ID_COLOURS = ((60, 200, 255), (255, 160, 60), (120, 240, 120), (200, 120, 255),
+              (80, 220, 240), (240, 120, 160), (160, 255, 200), (255, 220, 120))
+
+
+def segment_image(labels, ids=(), scale=6):
+    """An RGB picture of a label map: background dark, each region in its id's colour.
+
+    **This shows what the detector saw, not a learned segmentation**, and the distinction is
+    measured rather than stylistic. The mask is real -- it is where the frame differs from its own
+    background -- and the per-object split is nearest-detection assignment. Against ground truth on
+    a synthetic scene, IoU is 0.76 for one object at `floor=0.40` (precision 1.00, recall 0.76) and
+    falls to 0.46 at three.
+
+    Learned per-object segmentation, by correlating a remembered descriptor against the backbone's
+    feature map, was measured separately and refused: it localises the queried object 4-50% of the
+    time. Nothing here claims otherwise.
+    """
+    lab = np.asarray(labels)
+    out = np.zeros((lab.shape[0], lab.shape[1], 3), dtype=np.uint8)
+    out[lab == 0] = (26, 26, 26)
+    for j in range(1, int(lab.max()) + 1 if lab.size else 1):
+        region = lab == j
+        if not region.any():
+            continue
+        # Colour by the remembered id when there is one, so the picture and the vocabulary agree.
+        key = ids[j - 1] if j - 1 < len(ids) else j - 1
+        out[region] = ID_COLOURS[key % len(ID_COLOURS)]
+    if scale > 1:
+        out = np.repeat(np.repeat(out, scale, axis=0), scale, axis=1)
+    return out
 
 
 def build(objects: int = 1, source: str = "backbone"):
@@ -301,6 +335,14 @@ def main(argv=None):
                    help="what reaches the head: the frozen random backbone's 144 features, or a "
                         "block-mean downsample of the raw frame (108 numbers). Raw is measured "
                         "smaller, ~2x faster and at least as accurate here -- see raw_features()")
+    p.add_argument("--segments", action="store_true",
+                   help="open a second window showing the label regions: the background-difference "
+                        "mask partitioned by nearest detection, coloured by remembered id. Needs "
+                        "--locate background, which is where the mask comes from")
+    p.add_argument("--seg-floor", type=float, default=0.25, metavar="F",
+                   help="mask threshold as a fraction of the map's own peak (default 0.25). "
+                        "Measured on one object: 0.15 gives recall 0.99 at precision 0.42, "
+                        "0.40 gives recall 0.76 at precision 1.00")
     p.add_argument("--remember", action="store_true",
                    help="keep a growing dictionary of object appearances and show it. Every "
                         "detection gets an id; new ones are minted when nothing stored matches. "
@@ -379,6 +421,10 @@ def main(argv=None):
             n = float(np.linalg.norm(v))
             return v / n if n > 0 else v
 
+    if args.segments and how != "background":
+        sys.exit("--segments needs --locate background: the mask is the background difference, "
+                 "and a frame difference gives the leading and trailing edges of one object "
+                 "rather than its extent.")
     matcher = AppearanceMatcher(n_objects, describe) if args.identify else None
     memory = ObjectMemory(args.tol, max_ids=64) if args.remember else None
     state = {"pred": None, "frozen": False, "frozen_by": (), "n_taught": 0,
@@ -457,6 +503,10 @@ def main(argv=None):
             state["slot_ids"] = [i for i, _ in seen]
             state["minted"] = [i for i, m in seen if m]
             state["vocab"] = len(memory)
+        if args.segments and auto is not None and getattr(detector, "foreground", None)                 is not None:
+            labels = partition(detector.foreground, auto, floor=args.seg_floor)
+            cv2.imshow("argmind - segments",
+                       segment_image(labels, state.get("slot_ids") or []))
         state["detector_ran"] = auto is not None
         if auto is not None:
             # Sorted leftmost-first by the detector, and flattened in that order. The order is

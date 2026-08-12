@@ -1178,6 +1178,45 @@ constraint. **Importing trained backbone weights is the next piece of work**, an
 already exists — `Backbone` keeps its weights in one flat block with `state`/`load_state`, and the
 layouts are TFLite's for exactly this reason.
 
+**Raw pixels beat the random backbone on every axis this demo exercises (2026-08-12), which is
+not what I expected.** The owner asked why the frame is not simply fed in. Position, one object,
+perfect labels:
+
+| input | features | head state | ms/frame | error | vs centre |
+|---|---|---|---|---|---|
+| backbone | 145 | 1.1 KB | 0.94 | 0.064 | 4.55x |
+| **raw /8** | **109** | **0.9 KB** | **0.42** | **0.063** | **4.58x** |
+| raw rgb | 20,737 | 162.0 KB | 0.73 | 0.062 | 4.72x |
+
+A 9x12 block-mean downsample is **fewer numbers** than the backbone's 144, half the time, and no
+worse. **Frozen** — which separates tracking from generalising — raw reaches **0.001 (215.8x a
+centre guess)** against the backbone's 0.027 (10.6x). At three objects raw is 0.070/4.00x against
+0.077/3.65x, and raw RGB crops separate appearance at **0.096** against the crop backbone's 0.177.
+
+The reason is mechanical: position is a linear readout of a spatial map, and `sum_i w_i·pixel_i`
+with coordinate weights is the centroid times the total brightness. The backbone pools to 3x3 and
+mixes channels randomly, which for this task can only lose information.
+
+**What a backbone buys is invariance, and a random one does not buy it.** Trained under one
+condition, frozen, then tested under another: brightness x1.6 gives 0.9x for the backbone against
+0.7x for raw, a +0.25 offset 1.0x against 0.8x — marginally better and **both at a centre guess**,
+i.e. both failed. Under clutter raw wins outright, 1.6x to 1.4x. So this strengthens the
+trained-weights conclusion from a new direction: the case for a backbone is *entirely* conditional
+on it being trained. `--input raw|backbone`, and the source is in the persistence fingerprint.
+
+**The first invariance fixture measured nothing**: with NLMS the frozen control read 0.89x, worse
+than guessing, so the freeze dominated the condition change. RLS converges to the least-squares
+solution and its control reads 10.6x and 215.8x. Fifth broken fixture caught by a control today.
+
+**Label regions are visible now** (`--segments`), and they are a partition of a mask rather than
+learned segmentation — the distinction is measured, not stylistic. `BackgroundLocator` already
+computed `|frame - background|` and discarded it; keeping it costs nothing. Against ground truth,
+one object: IoU **0.76** at `floor=0.40` (precision 1.00, recall 0.76), 0.71 at 0.25, 0.42 at 0.15
+(recall 0.99, precision 0.42) — a trade with no free setting, so it is a flag. Quality falls to
+0.55 at two objects and 0.46 at three, and a **stationary object has no region at all**, which is
+the locator's absorbed-into-the-background limit made visible. Learned per-object segmentation
+stays refused at 4–50% localisation; nothing here claims otherwise. Four mutants, all caught.
+
 **Still undecided:** whether inference is *hosted* (an interface to ONNX Runtime/TFLite) or
 *embedded*, and whether the tiers ship as one library or two. Nothing on the camera/audio/speech
 path is built.
@@ -1200,7 +1239,7 @@ rollback, explicit recovery), `argmind/pipeline.py` (`FrameMap`, input gate, bou
 pipeline. `argmind/bench.py` has no C++ counterpart and is not getting one: it is a host
 measurement harness, and DESIGN.md already records that Python timings are not a baseline the
 C++ can be compared against.
-874 Python tests and 4,652 C++ checks pass; several exist to prove failures are visible
+886 Python tests and 4,652 C++ checks pass; several exist to prove failures are visible
 rather than silent. Every suite is mutation-checked, and surviving mutants are recorded where
 they live rather than tallied here — including the ones that turn out to be **equivalent on a
 64-bit host**, a distinction worth keeping rather than rounding away. Cumulative counts are

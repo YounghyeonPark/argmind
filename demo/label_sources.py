@@ -55,7 +55,7 @@ import numpy as np
 
 __all__ = ["MotionLabeller", "CadenceDetector", "brightest_window",
            "motion_centroid", "find_peaks", "BackgroundLocator", "AppearanceMatcher",
-           "ObjectMemory"]
+           "ObjectMemory", "partition"]
 
 
 def _grey(frame) -> np.ndarray:
@@ -397,7 +397,7 @@ class BackgroundLocator:
     knob rather than as a solved problem.
     """
 
-    __slots__ = ("rate", "k", "floor", "suppress", "warmup", "_bg", "_n")
+    __slots__ = ("rate", "k", "floor", "suppress", "warmup", "_bg", "_n", "foreground")
 
     def __init__(self, k: int = 1, *, rate: float = 0.05, floor: float = 0.35,
                  suppress: float = 0.10, warmup: int = 10) -> None:
@@ -415,6 +415,10 @@ class BackgroundLocator:
     def reset(self) -> None:
         self._bg: np.ndarray | None = None
         self._n = 0
+        #: The last `|frame - background|` map, or None before the first call. It is computed on
+        #: every call anyway and was thrown away; keeping it is what lets a caller *see* the
+        #: regions the detections came from rather than only their coordinates.
+        self.foreground: np.ndarray | None = None
 
     @property
     def ready(self) -> bool:
@@ -433,9 +437,10 @@ class BackgroundLocator:
             return None
         self._bg += self.rate * (cur - self._bg)
         self._n += 1
+        self.foreground = np.abs(cur - self._bg)
         if not self.ready:
             return None
-        got = find_peaks(np.abs(cur - self._bg), self.k, floor=self.floor,
+        got = find_peaks(self.foreground, self.k, floor=self.floor,
                          suppress=self.suppress)
         if len(got) < self.k:
             return None
@@ -640,3 +645,42 @@ class ObjectMemory:
     def descriptor(self, i: int) -> np.ndarray:
         """The held descriptor for an id. A copy, so a caller cannot make it drift."""
         return self._store[i].copy()
+
+
+def partition(foreground: np.ndarray, points, *, floor: float = 0.25,
+              radius: float = 0.35) -> np.ndarray:
+    """Label every foreground pixel with the detection nearest to it. 0 means background.
+
+    **This is a partition of a mask, not learned segmentation, and the difference matters.** The
+    mask is real — it is where the frame differs from its own background — but the per-object
+    split is nearest-detection assignment, so it inherits every limit already measured for the
+    locator: it cannot count, a stationary object is absorbed into the background and vanishes,
+    and a region is only as good as the detection at its centre.
+
+    Learned per-object segmentation was measured separately and **refused**: correlating a
+    remembered descriptor against the backbone's feature map localises the queried object only
+    4-50% of the time. This function makes no such claim; it shows what the detector actually saw.
+
+    `floor` is a fraction of the map's own peak, so it follows the scene's contrast rather than
+    fixing an absolute. `radius` bounds how far a pixel may be from its detection, in fractions of
+    the frame's longer side — without it every noise pixel above the floor joins some region, and
+    the picture reads as confident where it is not.
+    """
+    fg = np.asarray(foreground, dtype=np.float64)
+    out = np.zeros(fg.shape, dtype=np.int32)
+    peak = float(fg.max()) if fg.size else 0.0
+    if peak <= 0.0 or not len(points):
+        return out
+    mask = fg >= floor * peak
+    if not mask.any():
+        return out
+    h, w = fg.shape
+    yy, xx = np.mgrid[0:h, 0:w]
+    lim = radius * max(h, w)
+    best = np.full(fg.shape, np.inf)
+    for i, (px, py) in enumerate(points, start=1):
+        d = np.hypot(xx - px * max(w - 1, 1), yy - py * max(h - 1, 1))
+        closer = mask & (d < best) & (d <= lim)
+        best = np.where(closer, d, best)
+        out = np.where(closer, i, out)
+    return out
