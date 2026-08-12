@@ -18,7 +18,9 @@ import numpy as np
 import pytest
 
 from argmind.adapt import RecursiveLeastSquares
-from demo.pointer import FEEDBACK_RATES, OutputMemory, build, feedback_width, raw_features
+from demo.pointer import (FEEDBACK_RATES, OutputMemory, basis, build, feedback_width,
+                          frame_width, raw_features, raw_width)
+from demo.test_pointer import frame_at
 from demo.test_object_memory import scene
 
 N = 2
@@ -213,3 +215,96 @@ def test_the_composition_grows_by_exactly_the_bank():
     assert fed[3].dim == plain[3].dim + feedback_width(2)
     assert len(fed[5].features) == len(plain[5].features) + feedback_width(2)
     assert fingerprint(plain[0], 2, "raw") != fingerprint(fed[0], 2, "raw-fb")
+
+def test_the_basis_keeps_its_width_across_calibration():
+    """The bug this file did not catch, and the reason it did not.
+
+    `main()` calibrates on frame 16 and **recomputes the basis** afterwards, so anything
+    concatenated outside the extraction path is silently dropped on that one frame. With
+    `--feedback` that produced `expected shape (162,), got (144,)` on the first calibrated frame --
+    and it is the same defect the extraction path was introduced to fix, arriving a second time by
+    the same door.
+
+    Every test here drove `build()`, which sizes the streams, and none drove the per-frame
+    assembly, which is where the widths actually have to agree. This drives the assembly the way
+    the loop does, calibration included.
+    """
+    objects = 3
+    _bb, _head, _guard, features, _taught, fmap, _pipe = build(objects, "raw", feedback=True)
+    mem = OutputMemory(2 * objects)
+    want = raw_width() + feedback_width(objects)
+    assert features.dim == want == len(fmap.features)
+
+    scale = 1.0
+    backbone = _bb
+
+    def extract(img):
+        """The APP's own function, not a local copy of it. Two deliberate bugs in the real one
+        survived the first version of this test, which reimplemented the concatenation here."""
+        return basis(img, backbone=backbone, source="raw", scale=scale, output_memory=mem)
+
+    t = 0.0
+    for k in range(40):
+        t += 1.0 / 30.0
+        img = frame_at(0.3 + 0.005 * k, 0.5, seed=k)
+        emb = extract(img)
+        assert emb.shape == (want,), f"frame {k}: basis is {emb.shape}, stream wants {want}"
+        if k == 16:
+            # Calibrate from the FRAME features only -- the bank starts at zero and would drag
+            # the standard deviation down on this one frame.
+            scale = 1.0 / max(float(np.std(emb[:frame_width(backbone, "raw")])), 1e-6)
+            emb = extract(img)
+            assert emb.shape == (want,), "the basis lost the bank across calibration"
+        features.push(t, emb)          # the push is what raised in the running app
+        mem.observe(np.full(2 * objects, 0.5))
+
+    # And the VALUE has to be checked, not merely its existence. Two mutants survived a version
+    # of this test that only asserted `scale != 1.0`: one that scaled from the zero-padded whole,
+    # and one that never applied the scale at all. What calibration is *for* is that the frame
+    # features come out at unit scale, so that is the assertion.
+    assert scale != 1.0, "calibration never ran"
+    n_frame = frame_width(backbone, "raw")
+    assert n_frame == raw_width(), (n_frame, raw_width())
+    final = extract(frame_at(0.3, 0.5, seed=99))
+    assert float(np.std(final[:n_frame])) == pytest.approx(1.0, rel=0.35), (
+        f"after calibration the frame features have std {np.std(final[:n_frame]):.3f}, not ~1. "
+        "Either the scale was derived from the zero-padded whole or it is not being applied")
+    # The bank is NOT scaled -- it is already O(1) by construction, and scaling it would make the
+    # head's memory terms depend on the frame's contrast.
+    assert float(np.max(np.abs(final[n_frame:]))) <= 1.0 + 1e-6
+
+
+def test_feedback_runs_through_the_whole_composition_headlessly():
+    """End to end with the pipeline and guard, which is what `main()` actually does. Without this
+    the only check on the feedback wiring was a shape assertion in `build()`."""
+    objects = 2
+    backbone, head, guard, features, taught, _fmap, pipe = build(objects, "raw", feedback=True)
+    mem = OutputMemory(2 * objects)
+    base_std = float(np.std(frame_at(0.5, 0.5, seed=0)))
+    scale = 1.0 / max(float(np.std([raw_features(frame_at(0.5, 0.5, seed=i))
+                                    for i in range(8)])), 1e-9)
+    g = np.random.default_rng(3)
+    t, errs, updated = 0.0, [], 0
+    for k in range(600):
+        t += 1.0 / 30.0
+        xs = [(float(g.uniform(0.2, 0.8)), float(g.uniform(0.2, 0.8))) for _ in range(objects)]
+        xs.sort(key=lambda p: p[0])
+        img = frame_at(xs[0][0], xs[0][1], seed=k)
+        guard.set_external(0, float(np.std(img)) / max(base_std, 1e-6))
+        features.push(t, np.concatenate([raw_features(img) * scale,
+                                         mem.features().astype(np.float32)]))
+        taught.push(t, [c for p in xs for c in p])
+        report = pipe.step()
+        if report.updated:
+            updated += 1
+        if report.prediction is not None:
+            pred = tuple(float(v) for v in report.prediction)
+            mem.observe(pred)                       # free-running, as the app does
+            if k > 300:
+                errs.append(np.hypot(pred[0] - xs[0][0], pred[1] - xs[0][1]))
+    assert updated > 400, f"only {updated} updates; the pipeline is not learning"
+    assert errs and np.all(np.isfinite(errs)), "the feedback loop produced non-finite output"
+    assert float(np.mean(errs)) < 0.35, (
+        f"the feedback composition reached {np.mean(errs):.3f}; it should at least stay bounded "
+        "and roughly track the leftmost object")
+    assert np.all(np.isfinite(np.asarray(head.state))), "the head went non-finite under feedback"

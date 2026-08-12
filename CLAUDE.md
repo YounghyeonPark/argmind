@@ -1323,6 +1323,25 @@ Objects at fixed different heights (height identifies them); different colours (
 solves it, measured at 118x last turn); and a trajectory crossing only in x, which never swapped
 anything. The shipped fixture asserts its own swap-invariance for that reason.
 
+**Launching it with `--feedback` crashed, and the bug is one this file already records — arriving
+by the same door for the second time.** `ValueError: features: expected shape (162,), got (144,)`
+on the first calibrated frame. The calibration branch **recomputes the basis** after setting the
+scale, so the feedback bank — concatenated at the call site rather than inside the extraction —
+was silently dropped on that one frame. A single extraction path was introduced precisely to stop
+this, and adding a term outside it reintroduced it.
+
+**And the first test written for it caught neither of two deliberate bugs, because it reimplemented
+the assembly instead of calling it.** That is the third occurrence today of the same shape:
+`select_newest` compiled and called by no binary, `drive`'s `teach_every` that no caller ever
+passed, and now a test rebuilding the logic it was meant to check. `basis()` and `frame_width()` are
+module-level functions now and the test drives *them*.
+
+**Two more mutants then survived because a value was computed and never compared** — the scale
+derived from the zero-padded whole, and the scale never applied at all. Both passed a test that
+asserted only `scale != 1.0`. What calibration is *for* is that the frame features come out at unit
+scale, so that is what is asserted now. Same class as the recorded `gain_norm` gap: present,
+decoded, and never looked at.
+
 **Still undecided:** whether inference is *hosted* (an interface to ONNX Runtime/TFLite) or
 *embedded*, and whether the tiers ship as one library or two. Nothing on the camera/audio/speech
 path is built.

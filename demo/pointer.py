@@ -142,6 +142,39 @@ def crop_at(frame, point):
 FEEDBACK_RATES = (0.5, 0.15, 0.03)
 
 
+def basis(small, *, backbone, source, colour=True, scale=1.0, output_memory=None):
+    """The head's whole basis for one frame: the frame's features, then the feedback bank.
+
+    **Module-level on purpose.** This lived as a closure inside `main()`, and the tests that were
+    supposed to cover it reimplemented the same concatenation locally -- so two deliberate bugs in
+    the real function survived the suite. Same shape as `select_newest` being compiled and called
+    by no binary, and as `drive`'s `teach_every` that no caller ever passed. A test that rebuilds
+    the logic it is checking is not a test.
+
+    The bank belongs *inside* here rather than at the call site, and that is not tidiness: the
+    calibration branch recomputes the basis after setting the scale, so anything concatenated
+    outside is silently dropped on that one frame. It cost `expected shape (162,), got (144,)` on
+    the first calibrated frame -- which is the same defect a single extraction path was introduced
+    to fix, arriving a second time by the same door.
+    """
+    if source == "backbone":
+        base = backbone.features(small)
+    else:
+        base = raw_features(small, colour=colour) * scale
+    if output_memory is None:
+        return base
+    return np.concatenate([base, output_memory.features().astype(base.dtype)])
+
+
+def frame_width(backbone, source, colour=True) -> int:
+    """How much of a basis is the frame, as opposed to the feedback bank.
+
+    Calibration needs this: the bank starts at zero, so scaling from the whole vector would be
+    scaling from something a third of which is padding.
+    """
+    return backbone.n_outputs if source == "backbone" else raw_width(colour=colour)
+
+
 def feedback_width(objects: int, rates=FEEDBACK_RATES) -> int:
     """How many extra basis terms an `OutputMemory` contributes, so `build` and `main` agree
     without one of them constructing the other's object."""
@@ -611,9 +644,9 @@ def main(argv=None):
     feature_scale = 1.0
 
     def extract(small):
-        if args.input == "backbone":
-            return backbone.features(small)
-        return raw_features(small, colour=not args.raw_grey) * feature_scale
+        return basis(small, backbone=backbone, source=args.input,
+                     colour=not args.raw_grey, scale=feature_scale,
+                     output_memory=output_memory)
     t0 = time.perf_counter()
     frames = 0
 
@@ -631,13 +664,12 @@ def main(argv=None):
         # version recomputed `backbone.features(small)` after calibrating, which would have
         # ignored `--input raw` on that frame and every frame after it.
         emb = extract(small)
-        if output_memory is not None:
-            emb = np.concatenate([emb, output_memory.features().astype(emb.dtype)])
 
         if not calibrated and frames > 15:
             # Scaling the input matters and is not optional: `p0` has units, and this project
             # measured an unscaled embedding at 6.8e-4 defeating every head until it was scaled.
-            feature_scale = 1.0 / max(float(np.std(emb)), 1e-6)
+            n_frame = frame_width(backbone, args.input, not args.raw_grey)
+            feature_scale = 1.0 / max(float(np.std(emb[:n_frame])), 1e-6)
             if args.input == "backbone":
                 backbone.output_scale = feature_scale
                 feature_scale = 1.0            # the backbone applies it internally
