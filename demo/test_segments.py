@@ -172,3 +172,108 @@ def test_the_segments_window_requires_the_background_locator():
     from demo.pointer import main
     with pytest.raises(SystemExit, match="--segments needs --locate background"):
         main(["--segments", "--locate", "motion"])
+
+def flat_disc(p, r=0.14, bright=0.85, base=0.35, seed=0, present=True):
+    """A flat-topped object: uniform interior, hard edge — a person in a plain shirt, which is
+    what a Gaussian blob is not. The blob fixture cannot show this effect at all, because it has
+    no uniform interior to absorb."""
+    yy, xx = np.mgrid[0:H, 0:W]
+    d = (np.hypot(xx - p[0] * W, yy - p[1] * H) <= r * W) if present else np.zeros((H, W), bool)
+    img = np.full((H, W, 3), base) + d[:, :, None] * (bright - base)
+    return (img + np.random.default_rng(seed).standard_normal(img.shape) * 0.01).astype("f4"), d
+
+
+def coverage(selective, speed, frames=300, warm=60, floor=0.25):
+    """How much of the object, and of its eroded core, the mask keeps."""
+    from scipy.ndimage import binary_erosion
+    loc = BackgroundLocator(1, rate=0.03, warmup=15, suppress=0.10, selective=selective)
+    whole, core = [], []
+    for k in range(frames):
+        p = (0.25 + speed * k, 0.5)
+        img, mask = flat_disc(p, seed=k)
+        loc(img)
+        if loc.foreground is None or k < warm:
+            continue
+        fg = loc.foreground
+        keep = fg >= floor * max(float(fg.max()), 1e-9)
+        inner = binary_erosion(mask, iterations=3)
+        whole.append(float((keep & mask).sum() / max(mask.sum(), 1)))
+        core.append(float((keep & inner).sum() / max(inner.sum(), 1)))
+    assert whole, "no frames measured"
+    return float(np.mean(whole)), float(np.mean(core))
+
+
+def test_a_plain_background_labels_only_the_edges_of_a_still_object():
+    """The reported symptom, reproduced and explained.
+
+    A running mean absorbs anything that stops moving, so the interior stops differing from the
+    background and only the boundary is left. Measured on a flat-topped object at 0.05 px/frame:
+
+    | update | whole object | **core** |
+    |---|---|---|
+    | plain | 0.10 | **0.00** |
+    | selective | 0.40 | **0.31** |
+
+    A Gaussian-blob fixture cannot show this — it has no uniform interior to absorb — which is why
+    this file carries a flat disc.
+    """
+    pytest.importorskip("scipy")
+    plain_whole, plain_core = coverage(False, 0.0005)
+    sel_whole, sel_core = coverage(True, 0.0005)
+    assert plain_core < 0.1, (
+        f"a plain background now keeps {plain_core:.2f} of a still object's core; if that is real "
+        "the absorption this file explains has stopped happening")
+    assert sel_core > plain_core * 3, (sel_core, plain_core)
+    assert sel_whole > plain_whole
+
+
+def test_selective_update_is_off_by_default_and_the_reason_is_the_path():
+    """It is better for a still subject and much worse for a moving one, so it is a flag.
+
+    Selective never forgets where an object has *been*, so a traverser leaves a permanent trail and
+    the peaks land on it: pairing falls from 80% to 9% at three objects. Every other measurement in
+    this package was taken with it off, which is the other reason the default cannot change quietly.
+    """
+    assert BackgroundLocator(1).selective is False
+
+    def pairing(n_true, selective, frames=600, warm=100):
+        loc = BackgroundLocator(n_true, rate=0.03, warmup=15, suppress=0.10, selective=selective)
+        ok = tot = 0
+        for k in range(frames):
+            pts = [orbit(k, i, n_true) for i in range(n_true)]
+            got = loc(scene(pts, PALETTE[:n_true], seed=k))
+            if got is None or k < warm:
+                continue
+            d = np.array([[np.hypot(f[0] - p[0], f[1] - p[1]) for p in pts] for f in got])
+            tot += 1
+            ok += (d.min(axis=0) < 0.06).all() and len(set(np.argmin(d, axis=1))) == n_true
+        return ok / max(tot, 1)
+
+    plain, sel = pairing(3, False), pairing(3, True)
+    assert plain > 0.6, f"plain pairing fell to {plain:.0%}"
+    assert sel < plain * 0.5, (
+        f"selective now pairs at {sel:.0%} against plain's {plain:.0%}; if the path trail has "
+        "stopped hurting, selective may be the better default and this needs re-measuring")
+
+
+def test_the_expected_cost_of_selective_update_is_not_the_one_that_bites():
+    """Ghosting was the predicted objection and it is measured to be wrong, which is worth keeping
+    so it is not raised again: sixty frames after an object leaves, the frame fraction still
+    labelled is **0.234 plain against 0.082 selective**. The plain model has a half-absorbed copy
+    to unlearn; the selective one never absorbed it."""
+    def ghost(selective, n=400, gone_at=250, floor=0.25):
+        loc = BackgroundLocator(1, rate=0.03, warmup=15, suppress=0.10, selective=selective)
+        after = []
+        for k in range(n):
+            img, _m = flat_disc((0.30 + 0.0006 * k, 0.5), seed=k, present=k < gone_at)
+            loc(img)
+            if loc.foreground is None or k < gone_at + 60:
+                continue
+            fg = loc.foreground
+            after.append(float((fg >= floor * max(float(fg.max()), 1e-9)).mean()))
+        return float(np.mean(after))
+
+    plain, sel = ghost(False), ghost(True)
+    assert sel < plain, (
+        f"selective now ghosts more than plain ({sel:.3f} vs {plain:.3f}), which is what I "
+        "originally predicted; if that has become true the docstring must be corrected")

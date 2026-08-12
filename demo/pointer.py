@@ -339,6 +339,11 @@ def main(argv=None):
                    help="open a second window showing the label regions: the background-difference "
                         "mask partitioned by nearest detection, coloured by remembered id. Needs "
                         "--locate background, which is where the mask comes from")
+    p.add_argument("--bg-selective", action="store_true",
+                   help="stop the background learning where the mask says there is an object. "
+                        "Fills the regions instead of outlining them -- core coverage 0.00 to "
+                        "0.31 on a mostly-still object -- but never forgets the PATH a moving "
+                        "one swept, and peak pairing falls 80%% to 9%% at three objects")
     p.add_argument("--seg-floor", type=float, default=0.25, metavar="F",
                    help="mask threshold as a fraction of the map's own peak (default 0.25). "
                         "Measured on one object: 0.15 gives recall 0.99 at precision 0.42, "
@@ -401,7 +406,7 @@ def main(argv=None):
     if args.teach == "mouse":
         detector = None
     elif how == "background":
-        detector = BackgroundLocator(n_objects, rate=0.05)
+        detector = BackgroundLocator(n_objects, rate=0.05, selective=args.bg_selective)
     else:
         detector = CadenceDetector(args.detect_every, k=n_objects)
 
