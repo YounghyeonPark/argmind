@@ -1342,6 +1342,37 @@ asserted only `scale != 1.0`. What calibration is *for* is that the frame featur
 scale, so that is what is asserted now. Same class as the recorded `gain_norm` gap: present,
 decoded, and never looked at.
 
+**"덩어리로 나오는데 움직이는 형상을 잡아내지 못한다" — the trail, measured, and it does not tune
+away.** With `--bg-selective` the object *is* fully covered (recall 0.98), and an **equal area is
+painted where it was**: precision pinned at 0.50, area exactly **2.05x** the object. That second
+blob is what makes the shape illegible.
+
+| background | precision | recall | area/object |
+|---|---|---|---|
+| running mean | 0.46 | 0.37 | 0.80 |
+| mean, selective | 0.48 | **0.98** | **2.05** |
+| median of 600 frames | 0.60 | 0.94 | 1.57 |
+| *the true wall* | **1.00** | **1.00** | **1.00** |
+
+The last row is the control, and it was run because a precision pinned near 0.5 across every method
+at every setting is exactly what this project treats as a broken measurement. It is not broken:
+given the true wall the metric reports 1.00/1.00, so 0.5 really is the trail.
+
+**A leak inside the mask is the obvious fix and it fails.** Swept 0.000 → 0.030, precision stays
+0.42–0.49 while recall collapses 0.95 → 0.37. The tension is structural: a background must be
+**slow** not to absorb the object and **fast** to forget its trail, and for a moving object those
+are the same timescale.
+
+**A median escapes absorption in principle, and its requirement is quantitative**: a pixel must be
+background for *more than half* the history, so the history must exceed **twice the object's transit
+across its own width**. For a 27 px subject drifting at 0.08 px/frame that is ~700 frames — over
+twenty seconds at 30 Hz. At 600 frames it still reads 0.60/0.94/1.57.
+
+So none of the shipped options gives a clean silhouette of a slowly-moving subject, and that is
+stated rather than tuned around. Two mutants caught (a leak inside the mask, an inverted hold); one
+survivor was my own dud that slowed the update *outside* the mask, which is not the property under
+test.
+
 **Still undecided:** whether inference is *hosted* (an interface to ONNX Runtime/TFLite) or
 *embedded*, and whether the tiers ship as one library or two. Nothing on the camera/audio/speech
 path is built.

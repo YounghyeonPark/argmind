@@ -444,6 +444,31 @@ class BackgroundLocator:
         #: So: selective for a mostly-still subject whose extent you want, plain for anything that
         #: traverses the scene. Neither is right for both, and every other measurement in this
         #: package was taken with it off.
+        #:
+        #: **And neither gives a clean silhouette of a slow-moving subject, which is a property of
+        #: the problem rather than of the knob.** Measured on a disc crossing the frame, where
+        #: `area` is painted pixels per object pixel and 1.0 would be exact:
+        #:
+        #: | background | precision | recall | area |
+        #: |---|---|---|---|
+        #: | running mean | 0.46 | 0.37 | 0.80 |
+        #: | mean, selective | 0.48 | **0.98** | **2.05** |
+        #: | median of 600 frames | 0.60 | 0.94 | 1.57 |
+        #: | *the true wall* | **1.00** | **1.00** | **1.00** |
+        #:
+        #: Selective covers the whole object and paints an **equal area where it was**: precision
+        #: pinned at 0.50, area exactly 2x. The trail cannot heal because the background is never
+        #: allowed to re-learn there, and a leak inside the mask does not fix it -- swept from
+        #: 0.000 to 0.030, precision stays 0.42-0.49 while recall collapses 0.95 to 0.37. The
+        #: tension is structural: a background must be **slow** not to absorb the object and
+        #: **fast** to forget its trail, and for a moving object those are the same timescale.
+        #:
+        #: A median escapes absorption in principle, and the requirement it imposes is
+        #: quantitative: a pixel must be background for **more than half** the history, so the
+        #: history has to exceed **twice the object transit across its own width**. For a 27 px
+        #: subject drifting at 0.08 px/frame that is ~700 frames -- over twenty seconds at 30 Hz.
+        #: The last row is the control that says the metric is sound rather than the methods being
+        #: equally bad: given the true wall, precision and recall are both exactly 1.00.
         self.selective = bool(selective)
         self.reset()
 

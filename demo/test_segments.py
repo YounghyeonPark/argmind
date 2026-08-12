@@ -335,3 +335,101 @@ def test_half_of_what_a_difference_detects_is_where_the_object_WAS():
     assert lo == pytest.approx(hi, rel=0.02), (
         f"the floor now changes what selective selects ({lo:.0f} vs {hi:.0f}); the difference over "
         "the object has stopped being uniform and the flag's docstring needs re-measuring")
+
+def test_selective_covers_the_object_and_paints_its_trail_in_equal_measure():
+    """Why a filled region still does not read as a shape, measured.
+
+    Selective covers the whole object -- recall 0.98 -- and paints an **equal area where it was**:
+    precision pinned at 0.50, area exactly 2x the object. The trail cannot heal, because a
+    background that never re-learns inside the mask never forgets.
+
+    | background | precision | recall | area/object |
+    |---|---|---|---|
+    | running mean | 0.46 | 0.37 | 0.80 |
+    | mean, selective | 0.48 | **0.98** | **2.05** |
+    | *the true wall* | **1.00** | **1.00** | **1.00** |
+
+    The last row is the control that makes the others readable: the metric reports 1.00 when the
+    reference is right, so 0.5 is the trail and not a broken measurement. It was checked because a
+    precision pinned near 0.5 across every method and every setting is exactly the shape this
+    project treats as evidence the measurement is broken.
+    """
+    from demo.label_sources import _grey
+
+    def track(selective, speed=0.002, frames=400, floor=0.25, warm=60):
+        loc = BackgroundLocator(1, rate=0.03, warmup=15, suppress=0.10, selective=selective)
+        prec, rec, area = [], [], []
+        for k in range(frames):
+            p = (0.20 + speed * k, 0.5)
+            img, mask = flat_disc(p, seed=k)
+            loc(img)
+            if loc.foreground is None or k < warm:
+                continue
+            fg = loc.foreground
+            keep = fg >= floor * max(float(fg.max()), 1e-9)
+            prec.append((keep & mask).sum() / max(keep.sum(), 1))
+            rec.append((keep & mask).sum() / max(mask.sum(), 1))
+            area.append(keep.sum() / max(mask.sum(), 1))
+        return float(np.mean(prec)), float(np.mean(rec)), float(np.mean(area))
+
+    # The control first: a perfect reference must score 1.00, or nothing below means anything.
+    wall = np.full((H, W), 0.35)
+    hits = []
+    for k in range(90, 400, 40):
+        p = (0.20 + 0.002 * k, 0.5)
+        img, mask = flat_disc(p, seed=k)
+        fg = np.abs(_grey(img).astype(np.float64) - wall)
+        keep = fg >= 0.25 * max(float(fg.max()), 1e-9)
+        hits.append(((keep & mask).sum() / max(keep.sum(), 1),
+                     (keep & mask).sum() / max(mask.sum(), 1)))
+    ideal = np.mean(hits, axis=0)
+    assert ideal[0] > 0.95 and ideal[1] > 0.95, (
+        f"a perfect reference scores precision {ideal[0]:.2f} recall {ideal[1]:.2f}; the metric "
+        "is broken and every number in this test is meaningless")
+
+    plain = track(False)
+    sel = track(True)
+    assert sel[1] > 0.85, f"selective recall fell to {sel[1]:.2f}; it should cover the object"
+    assert plain[1] < sel[1] * 0.6, f"plain recall {plain[1]:.2f} against selective {sel[1]:.2f}"
+    assert sel[2] > 1.7, (
+        f"selective now paints {sel[2]:.2f}x the object area; if the trail has stopped being an "
+        "equal-sized second blob, the explanation in label_sources.py needs re-measuring")
+    assert sel[0] == pytest.approx(0.5, abs=0.1), (
+        f"selective precision is {sel[0]:.2f}, not the ~0.5 an equal-area trail implies")
+
+
+def test_a_leak_inside_the_mask_does_not_heal_the_trail():
+    """The obvious fix, refused by measurement.
+
+    Swept from fully selective to fully plain, precision stays 0.42-0.49 while recall collapses
+    from 0.95 to 0.37. The tension is structural: a background must be **slow** not to absorb the
+    object and **fast** to forget its trail, and for a moving object those are the same timescale.
+    """
+    from demo.label_sources import _grey
+
+    def track(leak, rate=0.03, speed=0.002, frames=400, floor=0.25, warm=60):
+        bg = None
+        prec, rec = [], []
+        for k in range(frames):
+            p = (0.20 + speed * k, 0.5)
+            img, mask = flat_disc(p, seed=k)
+            g = _grey(img).astype(np.float64)
+            if bg is None:
+                bg = g.copy()
+                continue
+            fg = np.abs(g - bg)
+            keep = fg >= floor * max(float(fg.max()), 1e-9)
+            bg += np.where(keep, leak, rate) * (g - bg)
+            if k >= warm:
+                prec.append((keep & mask).sum() / max(keep.sum(), 1))
+                rec.append((keep & mask).sum() / max(mask.sum(), 1))
+        return float(np.mean(prec)), float(np.mean(rec))
+
+    swept = [track(leak) for leak in (0.0, 0.005, 0.01, 0.02, 0.03)]
+    best = max(p for p, _r in swept)
+    assert best < 0.6, (
+        f"a leak now reaches precision {best:.2f}; if the trail can be healed this way it is "
+        "worth shipping and the docstring in label_sources.py is wrong")
+    assert swept[0][1] > swept[-1][1] * 2, (
+        "the recall collapse across the sweep has gone, so the trade this test describes is not "
+        "the trade being measured")
