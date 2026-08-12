@@ -301,3 +301,231 @@ def test_the_unsplit_path_has_nothing_to_add_and_says_so():
     seg(img)
     field, ids = label_field(seg.labels, None, seg.labels, RegionTracker())
     assert np.array_equal(field, seg.labels) and ids == []
+
+
+# --- Keeping a label across an object hiding and coming back -------------------------------------
+
+
+def render(objs, seed=0, r=0.11):
+    """`objs` is a list of (centre, colour); returns the frame and one mask each."""
+    img = np.full((H, W, 3), 0.35)
+    masks = []
+    for p, colour in objs:
+        m = disc(p, r)
+        img[m] = colour
+        masks.append(m)
+    g = np.random.default_rng(seed)
+    return (img + g.standard_normal(img.shape) * 0.01).astype("f4"), masks
+
+
+def play(script, *, appearance, keep=30, tol=0.25, show_frac=0.03, seed0=0):
+    """Run a scripted scene and report the label each tagged object wore on each frame."""
+    k = max(len(objs) for objs, _tags in script) + 1
+    seg = FrameSegmenter(k)
+    tracker = RegionTracker(keep=keep, tol=tol)
+    worn = {}
+    for t, (objs, tags) in enumerate(script):
+        img, masks = render(objs, seed=t + seed0)
+        seg(img)
+        rmap, centres, of_cluster = split_regions(seg.labels, k, img, edges=0.95, min_frac=0.01)
+        # `label_field` is the shipped assembly; passing the frame is what turns appearance on.
+        field, ids = label_field(rmap, of_cluster, seg.labels, tracker, min_frac=show_frac,
+                                 frame=img if appearance else None)
+        for tag, mk in zip(tags, masks):
+            best, area = None, 0
+            for slot in range(1, len(ids) + 1):
+                ov = ((field == slot) & mk).sum()
+                if ov > area:
+                    best, area = slot, ov
+            worn.setdefault(tag, {})[t] = ids[best - 1] if best is not None else None
+        for tag in worn:
+            worn[tag].setdefault(t, None)
+    return worn
+
+
+def hide_and_return(gap, *, place, substitute=None, before=12, after=12):
+    """'a' is present, hides for `gap` frames, then something comes back. The tags say what."""
+    rest = [((0.75, 0.30), GREEN), ((0.50, 0.80), BLUE)]
+    home, away = (0.22, 0.30), (0.28, 0.72)
+    script = [([(home, RED)] + rest, ["a", "b", "c"]) for _ in range(before)]
+    #: A genuine ABSENCE. An earlier version of this fixture put the newcomer at `home` during the
+    #: gap, so a region sat there continuously and merely changed colour -- position matching linked
+    #: them with no vanish at all, and every mechanism including "no memory" read as stealing.
+    script += [(list(rest), ["b", "c"]) for _ in range(gap)]
+    if substitute is not None:
+        script += [([(home, substitute)] + rest, ["x", "b", "c"]) for _ in range(after)]
+    else:
+        script += [([(home if place == "home" else away, RED)] + rest, ["a", "b", "c"])
+                   for _ in range(after)]
+    return script, before, gap
+
+
+def came_back_as_itself(worn, before, gap, tag="a"):
+    was = worn[tag].get(before - 1)
+    seen = [worn[tag].get(t) for t in range(before + gap, before + gap + 12)]
+    seen = [v for v in seen if v is not None]
+    return bool(seen) and all(v == was for v in seen)
+
+
+def stole_a_dead_label(worn, before, gap):
+    was = worn["a"].get(before - 1)
+    return any(worn.get("x", {}).get(t) == was for t in range(before + gap, before + gap + 12))
+
+
+def test_a_hidden_object_gets_its_own_label_back_wherever_it_reappears():
+    """Appearance, not position. Recovery of 'a' after hiding for `gap` frames:
+
+    | returns | no memory | appearance |
+    |---|---|---|
+    | to the same place | no | **yes** |
+    | somewhere else | no | **yes** |
+    | after a gap past `keep` | no | no |
+
+    The "no memory" column is the control and is what shipped before: the tracker held one frame, so
+    a vanished label was gone.
+    """
+    for place in ("home", "elsewhere"):
+        for gap in (1, 3, 10):
+            script, before, g = hide_and_return(gap, place=place)
+            assert came_back_as_itself(play(script, appearance=True), before, g), (
+                f"returning {place} after {gap} frames did not reclaim the label")
+            assert not came_back_as_itself(play(script, appearance=False), before, g), (
+                f"a frame-to-frame tracker recovered a {gap}-frame absence returning {place}; it "
+                "has no memory to do that with, so this fixture is not testing what it claims")
+
+    # `keep` is a forget window and a real one, or the pool would grow without bound.
+    script, before, g = hide_and_return(20, place="home")
+    assert came_back_as_itself(play(script, appearance=True, keep=30), before, g)
+    assert not came_back_as_itself(play(script, appearance=True, keep=5), before, g), (
+        "a 20-frame absence recovered with a 5-frame forget window; `keep` is not being enforced")
+
+
+def test_a_newcomer_does_not_inherit_a_dead_label_unless_it_is_indistinguishable():
+    """The other direction, and the reason position coasting is not offered. A different object
+    arrives where 'a' was:
+
+    | newcomer | position coasting (not shipped) | appearance |
+    |---|---|---|
+    | a yellow disc | **steals the label** | refuses |
+    | an identical red disc | steals | steals |
+
+    The second row is a limit rather than a defect: an identical object arriving where an identical
+    object was is indistinguishable by construction, and this says so instead of pretending.
+    """
+    for gap in (3, 10):
+        script, before, g = hide_and_return(gap, place="home", substitute=YELLOW)
+        assert not stole_a_dead_label(play(script, appearance=True), before, g), (
+            f"a yellow disc took the red one's label after a {gap}-frame gap; re-identification is "
+            "by appearance, so a different colour must not match")
+
+    script, before, g = hide_and_return(3, place="home", substitute=RED)
+    assert stole_a_dead_label(play(script, appearance=True), before, g), (
+        "an identical disc no longer inherits the label. If that is real then appearance is "
+        "separating things it cannot possibly separate, and the descriptor is leaking something")
+
+
+def swap_script(gap, *, twin, swap, before=12, after=12):
+    """Two objects hide **together** and both return, optionally with their places exchanged."""
+    left, right = (0.22, 0.30), (0.75, 0.30)
+    other = RED if twin else GREEN
+    rest = [((0.50, 0.80), BLUE)]
+    script = [([(left, RED), (right, other)] + rest, ["a", "b", "c"]) for _ in range(before)]
+    script += [(list(rest), ["c"]) for _ in range(gap)]
+    ends = [(right, RED), (left, other)] if swap else [(left, RED), (right, other)]
+    script += [(ends + rest, ["a", "b", "c"]) for _ in range(after)]
+    return script, before, gap
+
+
+def test_two_objects_can_swap_places_while_hidden_unless_they_are_identical():
+    """Both hide together, both return, over eight seeds:
+
+    | objects | swapped | appearance | position coasting |
+    |---|---|---|---|
+    | different-looking | no | 8/8 | 8/8 |
+    | different-looking | **yes** | **8/8** | **0/8** |
+    | identical | no | 7/8 | 8/8 |
+    | identical | **yes** | **1/8** | 0/8 |
+
+    **The last row is worse than chance** -- a coin flip on two objects gives 4/8 -- because tied
+    descriptors are broken by the assignment's ordering, which follows position, so it is
+    systematically wrong rather than randomly. Identity through a swap while both are hidden is
+    history-dependent and there is no history to have: the output-feedback bank cannot help either,
+    because during the blackout there is nothing to integrate.
+    """
+    def hits(twin, swap):
+        n = 0
+        for s in range(8):
+            script, before, gap = swap_script(6, twin=twin, swap=swap)
+            worn = play(script, appearance=True, seed0=s * 7)
+            n += (came_back_as_itself(worn, before, gap, "a")
+                  and came_back_as_itself(worn, before, gap, "b"))
+        return n
+
+    assert hits(False, False) >= 7, "distinguishable objects no longer recover a plain absence"
+    assert hits(False, True) >= 7, (
+        "distinguishable objects no longer survive swapping places while hidden, which is the whole "
+        "claim for matching by appearance rather than by position")
+    assert hits(True, True) <= 2, (
+        "two IDENTICAL objects now come back correctly after swapping while both were hidden. "
+        "Nothing here can know that -- if it passes, the fixture is leaking a difference between "
+        "them and the identical-object claim is untested")
+
+
+def test_the_dormant_pool_empties_and_needs_descriptors_to_fill():
+    """Held labels are a bounded resource, and without descriptors there is nothing to re-match on --
+    so the pool stays empty rather than silently keeping position-matched labels alive."""
+    red = np.array([0.8, 0.2, 0.2, 0.01, 0.01, 0.01])
+    green = np.array([0.2, 0.8, 0.2, 0.01, 0.01, 0.01])
+
+    t = RegionTracker(keep=2)
+    assert t([(0.2, 0.3), (0.7, 0.3)], [300, 300], [red, green]) == [1, 2]
+    assert t([], [], []) == [] and t.dormant == 2
+    # Returned with their positions exchanged: the labels follow appearance, not place.
+    assert t([(0.7, 0.3), (0.2, 0.3)], [300, 300], [red, green]) == [1, 2]
+    assert t.dormant == 0
+
+    # Past the forget window the pool empties and a return is a new label.
+    t = RegionTracker(keep=2)
+    t([(0.2, 0.3)], [300], [red])
+    for _ in range(3):
+        t([], [], [])
+    assert t.dormant == 0
+    assert t([(0.2, 0.3)], [300], [red]) == [2]
+
+    # No descriptors means nothing to re-match on, so nothing goes dormant.
+    t = RegionTracker(keep=30)
+    t([(0.2, 0.3)], [300])
+    t([], [])
+    assert t.dormant == 0, "a label went dormant with no descriptor to reclaim it by"
+
+    for bad in ({"keep": -1}, {"tol": 0.0}, {"tol": -1.0}):
+        with pytest.raises(ValueError):
+            RegionTracker(**bad)
+    with pytest.raises(ValueError, match="descriptors against"):
+        RegionTracker()([(0.5, 0.5)], [10], [red, green])
+
+
+def test_the_descriptor_reads_the_region_and_not_its_neighbourhood():
+    """Masked rather than a bounding-box crop, which is a correction rather than a preference: this
+    package measured a crop carrying *position*, because a crop near a frame edge is clamped, and
+    that leak inflated an identity control from 50.6% to 74.3% until the fixture was levelled."""
+    from demo.label_sources import region_descriptor
+
+    img, masks = render([((0.22, 0.30), RED), ((0.75, 0.30), GREEN)], seed=0)
+    a = region_descriptor(img, masks[0])
+    b = region_descriptor(img, masks[1])
+    assert len(a) == 6, "six numbers at RGB: three means and three spreads"
+    assert np.linalg.norm(a - b) > 0.25, (
+        f"two differently coloured regions describe {np.linalg.norm(a - b):.3f} apart, inside the "
+        "default tol; colour is what does the work here")
+
+    # The same object at the frame's edge must describe the same as in the middle -- a crop would
+    # not, because it gets clamped and carries where it is.
+    mid, edge = render([((0.50, 0.50), RED)], seed=1), render([((0.12, 0.50), RED)], seed=1)
+    gap = np.linalg.norm(region_descriptor(mid[0], mid[1][0])
+                         - region_descriptor(edge[0], edge[1][0]))
+    assert gap < 0.02, f"the same object describes {gap:.4f} apart at the edge; position is leaking"
+
+    # An empty region answers rather than raising, and a greyscale frame gives four numbers.
+    assert not region_descriptor(img, np.zeros(img.shape[:2], dtype=bool)).any()
+    assert len(region_descriptor(img.mean(axis=2), masks[0])) == 2

@@ -28,7 +28,7 @@ from argmind.pipeline import FrameMap, Pipeline
 from argmind.stream import Stream
 from demo.label_sources import (AppearanceMatcher, BackgroundLocator, CadenceDetector,
                                 FrameSegmenter, ObjectMemory, RegionTracker, partition,
-                                pick_regions, split_regions)
+                                pick_regions, region_descriptor, split_regions)
 
 #: Small on purpose. Random convolutional features work shallow and carry nothing deep --
 #: brightness reads 0.009 at one layer and 1.119 at twenty-seven -- and a 3x3 grid is what
@@ -292,7 +292,7 @@ def regions_for_slots(detector, frame, n, *, split=True, edges=0.95, min_frac=0.
     return region_map, of_cluster, ids, points
 
 
-def label_field(region_map, of_cluster, cluster_labels, tracker, *, min_frac=0.03):
+def label_field(region_map, of_cluster, cluster_labels, tracker, *, min_frac=0.03, frame=None):
     """Every region worth painting, with a label that survives between frames.
 
     **The label count is not the head's slot count**, and conflating them is why the picture showed
@@ -325,6 +325,11 @@ def label_field(region_map, of_cluster, cluster_labels, tracker, *, min_frac=0.0
     and re-minting labels when a region dips under it (purity 0.83). 0.03 is a middle, not an
     optimum.
 
+    `frame` is what lets a label survive an object hiding and coming back: with it, each region
+    gets a masked appearance descriptor and `RegionTracker` can re-identify a dormant label. Without
+    it the tracker is frame-to-frame only and a hidden object returns as a new label. The measurement
+    for why re-identification is by appearance and never by position is in `RegionTracker`.
+
     A minimum *age* was measured as the alternative and is not offered: it only helps when the floor
     is too low -- precision 0.44 -> 0.85 at floor 0.01 -- and once the floor is right it is worse
     than nothing, costing coverage 1.00 -> 0.90 for precision 0.98 -> 0.90.
@@ -349,7 +354,10 @@ def label_field(region_map, of_cluster, cluster_labels, tracker, *, min_frac=0.0
         centres.append((float(xx.mean()) / max(lab.shape[1] - 1, 1),
                         float(yy.mean()) / max(lab.shape[0] - 1, 1)))
         areas.append(n)
-    got = tracker(centres, areas)
+    descs = None
+    if frame is not None:
+        descs = [region_descriptor(frame, lab == i) for i in live]
+    got = tracker(centres, areas, descs)
     out = np.zeros(lab.shape, dtype=np.int32)
     for slot, i in enumerate(live):
         out[lab == i] = slot + 1
@@ -700,6 +708,17 @@ def main(argv=None):
                         "on the same split because one number cannot serve both: at 0.01 the "
                         "picture shows 6.8 labels of which 44%% are on a real object, at 0.03 it "
                         "shows 2.8 of which 98%% are")
+    p.add_argument("--label-keep", type=int, default=30, metavar="N",
+                   help="how many frames a label waits for its object to come back (default 30, "
+                        "one second at 30 Hz). A real forget window: past it nothing recovers. "
+                        "Re-identification is by appearance only -- matching by where the object "
+                        "was hands its label to whatever arrives there, measured in every "
+                        "substitution case tried")
+    p.add_argument("--label-tol", type=float, default=0.25, metavar="D",
+                   help="how different a region may look and still reclaim a dormant label "
+                        "(default 0.25). Distinguishable objects reclaim theirs even after swapping "
+                        "places, 8/8; two IDENTICAL objects that hide together and swap come back "
+                        "exchanged, 1/8, and nothing here fixes that")
     p.add_argument("--seg-floor", type=float, default=0.25, metavar="F",
                    help="mask threshold as a fraction of the map's own peak (default 0.25). "
                         "Measured on one object: 0.15 gives recall 0.99 at precision 0.42, "
@@ -798,7 +817,7 @@ def main(argv=None):
     memory = ObjectMemory(args.tol, max_ids=64) if args.remember else None
     #: One label per region that survives between frames. Only the picture uses it: the head's slots
     #: come from `pick_regions`, which is a different and bounded question.
-    tracker = RegionTracker()
+    tracker = RegionTracker(keep=args.label_keep, tol=args.label_tol)
     state = {"pred": None, "frozen": False, "frozen_by": (), "n_taught": 0,
              "updates": 0, "fps": 0.0, "drift": 0.0, "residual": 0.0,
              "taught_points": [], "learning": False, "last_update_frame": -999,
@@ -915,7 +934,7 @@ def main(argv=None):
                 # background cluster stays 0 and is drawn dark, which is what makes the regions
                 # read as separate rather than tiling the whole frame.
                 labels, field_ids = label_field(region_map, of_cluster, detector.labels, tracker,
-                                                min_frac=args.seg_show_frac)
+                                                min_frac=args.seg_show_frac, frame=small)
             elif getattr(detector, "foreground", None) is not None:
                 labels = partition(detector.foreground, auto, floor=args.seg_floor)
             else:

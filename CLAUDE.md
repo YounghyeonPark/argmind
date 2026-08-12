@@ -1607,6 +1607,45 @@ milliseconds stay in the docstring as recorded figures rather than as a gate.
 of every run and the merge read as a labelling failure. Every number above was re-measured on
 separate orbits, and the fixture now **asserts** its own separation. Nine mutants, all caught.
 
+**"how to keep the memory of object if the network appear/hide subsequently" — built, and the
+mechanism is appearance while the obvious one is measured wrong (2026-08-13).** A vanished label now
+waits `keep` frames in a dormant pool and is reclaimed by what a region *looks like*. Scored on both
+directions at once, because either alone can look perfect:
+
+| | position coasting | appearance |
+|---|---|---|
+| hides, returns to the same place | recovers | recovers |
+| hides, returns **somewhere else** | **fails** | recovers |
+| both hide and **swap places**, distinguishable | **0/8** | **8/8** |
+| a different-looking object arrives in its place | **steals the label** | refuses |
+| an identical object arrives in its place | steals | steals |
+
+**Position coasting is refused, not merely unbuilt**: it recovers only the case where nothing moved
+and it hands a dead object's label to whatever arrives there — which is the reason `RegionTracker`
+held a single frame in the first place, now measured instead of argued.
+
+**The limit is two identical objects that hide together and swap: 1/8, which is worse than the 4/8
+a coin flip gives.** Tied descriptors are broken by the assignment's ordering, which follows
+position, so it is systematically wrong rather than randomly. Identity through a swap while both are
+hidden is history-dependent and there is no history to have — the output-feedback bank cannot help
+either, since during the blackout there is nothing to integrate. Distinguishable objects swap fine,
+8/8, and that is the whole case for matching on appearance rather than place.
+
+**The descriptor is masked, not a crop**, which is a correction this package already paid for: a crop
+near a frame edge is clamped and carries *position*, and that leak inflated an identity control from
+50.6% to 74.3% until the fixture was levelled. Measured, the same object at the frame edge and in the
+middle describes 0.0000 apart. Colour does the work — raw RGB separates two objects at 0.096 against
+greyscale's 0.984, which is chance.
+
+**Two of my own measurement errors, both caught by a row that could not be true.** The
+false-inheritance fixture put the newcomer at the hidden object's position *during* the gap, so a
+region sat there continuously and merely changed colour — position matching linked them with no
+vanish at all, and every mechanism including "no memory" read as stealing. And I reported the
+identical-twin recovery as chance from a non-monotone 3-gap row; over eight seeds it is 6/8, 7/8, 7/8,
+and the reason is mechanical rather than lucky — the twin never vanished, so one-to-one assignment
+has already consumed it and only the returning object is free. The case that is genuinely
+unrecoverable is both twins hiding together. Seven mutants, all caught.
+
 **Still undecided:** whether inference is *hosted* (an interface to ONNX Runtime/TFLite) or
 *embedded*, and whether the tiers ship as one library or two. Nothing on the camera/audio/speech
 path is built.
@@ -1629,7 +1668,7 @@ rollback, explicit recovery), `argmind/pipeline.py` (`FrameMap`, input gate, bou
 pipeline. `argmind/bench.py` has no C++ counterpart and is not getting one: it is a host
 measurement harness, and DESIGN.md already records that Python timings are not a baseline the
 C++ can be compared against.
-948 Python tests and 4,652 C++ checks pass; several exist to prove failures are visible
+953 Python tests and 4,652 C++ checks pass; several exist to prove failures are visible
 rather than silent. Every suite is mutation-checked, and surviving mutants are recorded where
 they live rather than tallied here — including the ones that turn out to be **equivalent on a
 64-bit host**, a distinction worth keeping rather than rounding away. Cumulative counts are

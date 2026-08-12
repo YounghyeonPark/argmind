@@ -425,3 +425,40 @@ too low, and once the floor is right it costs coverage for precision. Not offere
 **Two of my own fixtures collided while a comment claimed they did not** — 0.148 against a touching
 threshold of 0.220, and 0.112 against 0.180. Every number here was re-measured on separate orbits and
 the fixture asserts its own separation now. Nine mutants, all caught.
+
+## Keeping a label across an object hiding and coming back — 2026-08-13
+
+A vanished label waits `--label-keep` frames in a dormant pool and is reclaimed by what a region
+looks like. Both failure directions are scored together, because either alone can look perfect:
+
+| | position coasting | appearance |
+|---|---|---|
+| hides, returns to the same place | recovers | recovers |
+| hides, returns **somewhere else** | **fails** | recovers |
+| both hide and **swap places**, distinguishable | **0/8** | **8/8** |
+| a different-looking object arrives in its place | **steals the label** | refuses |
+| an identical object arrives in its place | steals | steals |
+
+**Position coasting is refused rather than unbuilt.** It recovers only the case where nothing moved,
+and it hands a dead object's label to whatever arrives there — the reason `RegionTracker` held a
+single frame to begin with.
+
+**The limit: two identical objects that hide together and swap come back exchanged, 1/8** — worse
+than the 4/8 a coin flip gives, because tied descriptors are broken by the assignment's ordering,
+which follows position. Identity through a swap while both are hidden is history-dependent and there
+is no history to have; the feedback bank cannot help either, since during the blackout there is
+nothing to integrate.
+
+`--label-keep` is a real forget window: at a gap past it, nothing recovers. `--label-tol` is how
+different a region may look and still reclaim its label.
+
+**The descriptor is masked, not a crop.** A crop near a frame edge is clamped and carries position,
+which inflated an identity control from 50.6% to 74.3% here once before. The same object at the edge
+and in the middle now describes 0.0000 apart.
+
+**Two measurement errors of mine, both caught by a row that could not be true.** The
+false-inheritance fixture put the newcomer at the hidden object's place *during* the gap, so nothing
+ever vanished and every mechanism — including no memory at all — read as stealing. And I called the
+identical-twin recovery chance from one non-monotone row; over eight seeds it is 6/8, 7/8, 7/8,
+because the twin never vanished and one-to-one assignment has already consumed it. Seven mutants, all
+caught.

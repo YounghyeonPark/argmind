@@ -984,29 +984,61 @@ class RegionTracker:
     area by more than `area_tol` is refused outright, so a region that vanishes and a region that
     appears do not get linked just because nothing better was on offer.
 
-    **What this is not.** It is frame-to-frame continuity and nothing more -- no appearance, no
-    memory of an object that left. Two objects that swap places while both are hidden come back
-    exchanged, and that is the history-dependence this repository's first section is about.
-    `ObjectMemory` and `AppearanceMatcher` are the appearance half; they are complements.
+    **An object that hides and comes back gets its label back, and by APPEARANCE only.** A vanished
+    id waits `keep` frames in a dormant pool and is re-matched by what a region looks like, never by
+    where it was. Position coasting was the obvious alternative and is measured to be the wrong one:
+
+    | scene | position coasting | appearance |
+    |---|---|---|
+    | hides, returns to the same place | recovers | recovers |
+    | hides, returns **somewhere else** | **fails** | recovers |
+    | both objects hide and **swap places** | **0/8** | **8/8** |
+    | a different-looking object arrives where it was | **steals the label** | refuses |
+    | an identical object arrives where it was | steals | steals |
+
+    So coasting recovers only the case where nothing moved, and it hands a dead object's label to
+    whatever arrives in its place -- which is exactly why this class held one frame before.
+
+    **The limit, measured and not fixable here: two identical objects that hide together and swap
+    come back exchanged, 1/8.** That is *worse* than the 4/8 a coin flip gives, because tied
+    descriptors are broken by the assignment's ordering, which follows position -- so it is
+    systematically wrong rather than randomly. Identity through a swap while both are hidden is
+    history-dependent, and there is no history to have: the output-feedback bank cannot help either,
+    since during the blackout there is nothing to integrate. Distinguishable objects swap fine, 8/8.
+
+    `keep` is a **forget window** and a real one: at a gap longer than it, nothing recovers. Holding
+    ids forever would grow the pool without bound and make a stale label available indefinitely.
+
+    `ObjectMemory` is the other appearance mechanism and they are not the same thing: it is a
+    *vocabulary* that grows across a whole session, this is continuity of the labels on screen.
     """
 
     PERMUTATION_LIMIT = 4
 
-    __slots__ = ("limit", "area_tol", "_live", "_next")
+    __slots__ = ("limit", "area_tol", "keep", "tol", "_live", "_dormant", "_next")
 
-    def __init__(self, *, limit: float = 0.18, area_tol: float = 3.0):
+    def __init__(self, *, limit: float = 0.18, area_tol: float = 3.0, keep: int = 30,
+                 tol: float = 0.25):
         if limit <= 0.0:
             raise ValueError(f"limit must be positive, got {limit}")
         if area_tol < 1.0:
             raise ValueError(f"area_tol must be at least 1.0, got {area_tol}")
+        if keep < 0:
+            raise ValueError(f"keep must not be negative, got {keep}")
+        if tol <= 0.0:
+            raise ValueError(f"tol must be positive, got {tol}")
         self.limit = float(limit)
         self.area_tol = float(area_tol)
+        self.keep = int(keep)
+        self.tol = float(tol)
         self.reset()
 
     def reset(self):
-        #: id -> (centre, area). Only the previous frame, deliberately: an id that vanishes is gone,
-        #: because holding it would let a new object inherit a label from wherever the old one was.
+        #: id -> (centre, area, descriptor) for the previous frame. Position matching only ever
+        #: looks here: a vanished id is not a place any more, which is the finding above.
         self._live = {}
+        #: id -> (descriptor, frames since it was last seen). Appearance matching looks here.
+        self._dormant = {}
         self._next = 1
 
     @property
@@ -1014,17 +1046,30 @@ class RegionTracker:
         """How many labels have ever been handed out. The inflation half of the measurement."""
         return self._next - 1
 
-    def __call__(self, centres, areas):
-        """One persistent label per region, in the order given. Unmatched regions get a new one."""
+    @property
+    def dormant(self):
+        """How many labels are being held for an object that might come back."""
+        return len(self._dormant)
+
+    def __call__(self, centres, areas, descriptors=None):
+        """One persistent label per region, in the order given.
+
+        Two stages. A region is first matched to the **previous frame** by position and area; what
+        is left over is matched to a **dormant** label by appearance, if descriptors are supplied.
+        Anything still unmatched gets a new label.
+        """
         if len(centres) != len(areas):
             raise ValueError(f"{len(centres)} centres against {len(areas)} areas")
+        if descriptors is not None and len(descriptors) != len(centres):
+            raise ValueError(f"{len(descriptors)} descriptors against {len(centres)} centres")
         got = [None] * len(centres)
+
         keys = list(self._live)
         if keys and centres:
             cost = np.full((len(centres), len(keys)), np.inf)
             for i, (c, a) in enumerate(zip(centres, areas)):
                 for j, key in enumerate(keys):
-                    q, b = self._live[key]
+                    q, b, _d = self._live[key]
                     d = float(np.hypot(c[0] - q[0], c[1] - q[1]))
                     ratio = max(a, b) / max(min(a, b), 1)
                     if d <= self.limit and ratio <= self.area_tol:
@@ -1032,15 +1077,69 @@ class RegionTracker:
             for i, j in _assign(cost, self.PERMUTATION_LIMIT, "regions"):
                 if np.isfinite(cost[i, j]):
                     got[i] = keys[j]
+
+        # Appearance, and appearance alone. Matching a dormant label by where it used to be hands
+        # it to whatever arrives in that place -- measured, in every substitution case tried.
+        free = [i for i in range(len(centres)) if got[i] is None]
+        taken = {g for g in got if g is not None}
+        dkeys = [k for k in self._dormant if k not in taken]
+        if descriptors is not None and free and dkeys:
+            cost = np.full((len(free), len(dkeys)), np.inf)
+            for r, i in enumerate(free):
+                for j, key in enumerate(dkeys):
+                    gap = float(np.linalg.norm(np.asarray(descriptors[i]) - self._dormant[key][0]))
+                    if gap <= self.tol:
+                        cost[r, j] = gap
+            for r, j in _assign(cost, self.PERMUTATION_LIMIT, "dormant regions"):
+                if np.isfinite(cost[r, j]):
+                    got[free[r]] = dkeys[j]
+
         fresh = {}
         for i, key in enumerate(got):
             if key is None:
                 key = self._next
                 self._next += 1
                 got[i] = key
-            fresh[key] = (centres[i], areas[i])
+            desc = None if descriptors is None else np.array(descriptors[i], dtype=np.float64)
+            fresh[key] = (centres[i], areas[i], desc)
+
+        for key, (_c, _a, desc) in self._live.items():
+            if key not in fresh and desc is not None:
+                self._dormant.setdefault(key, (desc, 0))
+        for key in list(self._dormant):
+            if key in fresh:
+                del self._dormant[key]
+                continue
+            desc, age = self._dormant[key]
+            if age + 1 > self.keep:
+                del self._dormant[key]                 # a forget window, and a real one
+            else:
+                self._dormant[key] = (desc, age + 1)
         self._live = fresh
         return got
+
+
+def region_descriptor(frame, mask):
+    """What a region looks like: the mean and spread of its own pixels. Six numbers at RGB.
+
+    **Masked rather than a bounding-box crop, and that is a correction rather than a preference.**
+    This package measured a crop carrying *position*, because a crop near a frame edge is clamped,
+    and that leak inflated an identity control until the fixture was levelled -- 74.3% for two
+    identical objects at different heights against 50.6% once they were levelled. A mask cannot leak
+    position.
+
+    Colour does the work: raw RGB crops separate two objects at **0.096** against greyscale's
+    **0.984**, which is chance. The spread is here because two objects of the same mean colour and
+    different texture are otherwise identical to this.
+    """
+    a = np.asarray(frame, dtype=np.float64)
+    m = np.asarray(mask, dtype=bool)
+    if a.ndim == 2:
+        a = a[:, :, None]
+    px = a[m]
+    if not px.size:
+        return np.zeros(2 * a.shape[2])
+    return np.concatenate([px.mean(axis=0), px.std(axis=0)])
 
 
 def _assign(cost, enumeration_limit, what):
