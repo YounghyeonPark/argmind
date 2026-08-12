@@ -462,3 +462,34 @@ ever vanished and every mechanism — including no memory at all — read as ste
 identical-twin recovery chance from one non-monotone row; over eight seeds it is 6/8, 7/8, 7/8,
 because the twin never vanished and one-to-one assignment has already consumed it. Seven mutants, all
 caught.
+
+## Why a region goes unlabelled — 2026-08-13
+
+"라벨링이 안되는 영역이 있는데 라벨링갯수가 고정되어서 잘 안되는거같음". **The count was never fixed** —
+it paints 4 labels for a declared 3 and 5 for five objects at k=4. A region was dropped for two
+reasons that have nothing to do with counting: sitting in the **background cluster**, which happens as
+soon as a scene has more appearance groups than `k` allows, and being under the **area floor**.
+
+Four mechanisms measured, three refused:
+
+| mechanism | result |
+|---|---|
+| raise or adapt `k` | non-monotone: five large objects want k=4 (purity 1.00 against 0.45 at k≥6), a small one wants k=8. No `k` serves both |
+| merge close clusters | folds the small object back into the wall, covered 1.00 → 0.80 |
+| drop the largest *region* rather than the background *cluster* | rescues it (0.80 → 1.00), destroys a noisy scene (precision 0.95 → **0.26**) |
+| **ring contrast** | covered **0.80 → 1.00**; precision 0.99 → **0.92** on a noise-carved wall |
+
+Contrast is the only *local* statistic in the list, which is why it is the one that works: a real
+object differs from the band just outside it, a wall fragment is a piece of the wall's own
+distribution. Object floor **0.136** against non-wall ceiling **0.118** over three scenes — a
+**1.15×** interval, so `--seg-contrast` carries its numbers, and 0 restores the old rule exactly.
+
+Inside the background cluster a region is admitted only by contrast, never if it is the largest piece
+of that cluster. Outside it, the floor and contrast are alternatives.
+
+**Two measurement errors of mine.** The contrast probe ran without the noise the sweep added, so it
+claimed a 0.5-against-0.01 gap where matched noise gives 0.519 against 0.118 — the conclusion
+survived, the margin did not. And the first reproduction scored a uniform 1.00 for every scheme, which
+is the signal that the measurement was broken: three distinct objects separate cleanly whatever you
+do. Nine mutants; the two survivors were real gaps, including `MIN_REGION_PX` being dead at the
+shipped floors.

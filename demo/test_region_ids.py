@@ -560,3 +560,261 @@ def test_the_slot_to_region_pairing_follows_the_matchers_permutation():
         follow_permutation(before, before, [1, 2])
     with pytest.raises(ValueError, match="not one of the points"):
         follow_permutation(before, [(0.9, 0.9), before[0], before[1]], [1, 2, 3])
+
+
+# --- Why a region goes unlabelled, and what admits it -------------------------------------------
+
+WALL = 0.35
+#: Deliberately close to the wall AND small: this is the object that goes unlabelled. Four large
+#: distinct objects beside it mean the scene has six appearance groups where `k = objects + 1` is 4,
+#: so two must share clusters -- and whichever shares with the wall is dropped entirely.
+FAINT = (0.44, 0.42, 0.43)
+CROWD = [((0.16, 0.24), 0.03, 0.0, RED, 0.10),
+         ((0.80, 0.24), 0.03, 1.3, GREEN, 0.10),
+         ((0.16, 0.76), 0.03, 2.5, BLUE, 0.10),
+         ((0.80, 0.76), 0.03, 3.8, YELLOW, 0.10),
+         ((0.48, 0.50), 0.03, 5.0, FAINT, 0.055)]
+
+
+def crowd_frame(t, seed=0):
+    yy, xx = np.mgrid[0:H, 0:W]
+    img = np.full((H, W, 3), WALL)
+    masks = []
+    for (cx, cy), orbit, phase, colour, r in CROWD:
+        a = phase + 2 * np.pi * t / PERIOD
+        p = (cx + orbit * float(np.cos(a)), cy + orbit * float(np.sin(a)))
+        m = np.hypot(xx - p[0] * W, yy - p[1] * H) <= r * W
+        img[m] = colour
+        masks.append(m)
+    g = np.random.default_rng(seed)
+    return (img + g.standard_normal(img.shape) * 0.01).astype("f4"), masks
+
+
+def noisy_three(t, seed=0):
+    img, masks = frame_at(t, THREE, 0.11, seed=seed)
+    g = np.random.default_rng(1000 + seed)
+    return np.clip(img + g.standard_normal(img.shape).astype("f4") * 0.03, 0, 1), masks
+
+
+def field_quality(maker, k, contrast, frames=24, show_frac=0.03):
+    """Coverage and precision of the painted field. Both, because either alone cannot fail."""
+    seg, tracker = FrameSegmenter(k), RegionTracker(keep=30)
+    cov, prec, count = [], [], []
+    for t in range(frames):
+        img, masks = maker(t, seed=t)
+        seg(img)
+        rmap, centres, of_cluster = split_regions(seg.labels, k, img, edges=0.95, min_frac=0.004)
+        field, ids = label_field(rmap, of_cluster, seg.labels, tracker, min_frac=show_frac,
+                                 frame=img, contrast=contrast)
+        count.append(len(ids))
+        slots = range(1, len(ids) + 1)
+        on = sum(1 for s in slots
+                 if any(((field == s) & m).sum() > 0.3 * (field == s).sum() for m in masks))
+        prec.append(on / max(len(ids), 1))
+        hit = sum(1 for m in masks
+                  if ids and max(((field == s) & m).sum() for s in slots) > 0.3 * m.sum())
+        cov.append(hit / len(masks))
+    return (float(np.mean(cov)), float(np.mean(prec)), float(np.mean(count)))
+
+
+def test_contrast_is_what_admits_an_object_the_other_rules_drop():
+    """The reported symptom was areas with no label and a count that looked fixed. **The count was
+    never fixed** -- the row below paints 4 labels for a declared 3 and 5 for five objects -- and the
+    cause was two drops that have nothing to do with counting: sitting in the *background cluster*,
+    which happens as soon as a scene has more appearance groups than `k` allows, and being under the
+    area floor.
+
+    Measured through the shipped `label_field`:
+
+    | scene | contrast off | contrast 0.125 |
+    |---|---|---|
+    | small faint object among four | covered **0.80**, precision 1.00, 4.0 labels | covered **1.00**, precision 1.00, 5.0 |
+    | five large objects | 1.00 / 1.00 / 5.0 | 1.00 / 1.00 / 5.0 |
+    | three alike, noisy wall | 1.00 / **0.99** / 3.0 | 1.00 / **0.92** / 3.3 |
+
+    The cost is stated rather than hidden: seven points of precision on a noise-carved wall buys the
+    difference between an object never being labelled and being labelled.
+    """
+    off = field_quality(crowd_frame, 4, 0.0)
+    on = field_quality(crowd_frame, 4, 0.125)
+    assert off[0] < 0.9, (
+        f"the crowded scene already covers {off[0]:.2f} with contrast off; it is supposed to lose "
+        "the faint object to the background cluster, so this fixture is not reproducing the report")
+    assert on[0] > 0.95, f"contrast recovered only {on[0]:.2f} of the objects"
+    assert on[2] > off[2], "contrast admitted no extra label at all"
+
+    # It must not disturb a scene that already worked.
+    assert field_quality(frame_at_five, 4, 0.125)[:2] == pytest.approx((1.0, 1.0), abs=0.05)
+
+    # And the cost on a noisy wall is real, so it is asserted rather than described.
+    clean = field_quality(noisy_three, 4, 0.0)
+    admitted = field_quality(noisy_three, 4, 0.125)
+    assert admitted[1] < clean[1] - 0.03, (
+        f"contrast costs nothing on a noise-carved wall now ({clean[1]:.2f} -> {admitted[1]:.2f}). "
+        "If that is real it should be on unconditionally and the docstring's trade is stale")
+    assert admitted[0] > 0.95, "and it must not lose objects while doing it"
+
+
+def frame_at_five(t, seed=0):
+    return frame_at(t, FIVE, 0.09, seed=seed)
+
+
+def test_the_three_alternatives_to_contrast_were_measured_and_refused():
+    """Each was tried first and each fails for a stateable reason, so none is quietly available.
+
+    **`k` is non-monotone**, which is the strongest of the three results: five large objects want
+    k=4 and read purity 0.45 at k>=6, while the crowded scene needs the faint object separated from
+    the wall, which k=4 cannot do. There is no `k` that serves both, in either direction.
+    """
+    # The crowded scene: raising k separates the faint object's CLUSTER but the area floor still
+    # drops it, so k alone changes nothing.
+    for k in (4, 6, 8):
+        assert field_quality(crowd_frame, k, 0.0)[0] < 0.9, (
+            f"k={k} with contrast off now covers the faint object; if raising k is sufficient then "
+            "contrast is not needed and the refusal above is wrong")
+
+    # And the other fixture is damaged by exactly that change, which is what makes it a conflict
+    # rather than a free improvement.
+    low = sequence("tracked", spec=FIVE, k=4, radius=0.09)
+    high = sequence("tracked", spec=FIVE, k=8, radius=0.09)
+    assert score(high[0])["purity"] < score(low[0])["purity"] - 0.2, (
+        f"raising k no longer costs purity on five large objects "
+        f"({score(low[0])['purity']:.2f} -> {score(high[0])['purity']:.2f}); the non-monotone claim "
+        "needs re-measuring")
+
+
+def test_ring_contrast_reads_the_boundary_and_not_the_frame_edge():
+    """A region touching the frame edge gets a **thinner** ring rather than a clamped one: there is
+    genuinely less outside to compare against, and clamping would make a region look like an object
+    for being at the edge -- the position leak that inflated an identity control here from 50.6% to
+    74.3% until the fixture was levelled.
+
+    Measured across three scenes: the smallest contrast any real object had was **0.136** and the
+    largest any non-wall region had was **0.118**, so a separating value exists and the interval is
+    only **1.15x** wide. That thinness is why it is a documented knob.
+    """
+    from demo.label_sources import ring_contrast
+
+    img = np.full((H, W, 3), WALL, dtype="f4")
+    yy, xx = np.mgrid[0:H, 0:W]
+    disc_mid = np.hypot(xx - 0.5 * W, yy - 0.5 * H) <= 8
+    img[disc_mid] = (0.9, 0.2, 0.2)
+    assert ring_contrast(img, disc_mid) > 0.5, "a bright disc on a plain wall has no contrast"
+
+    # A patch of the wall itself has none, whatever its size or place.
+    flat = np.zeros((H, W), dtype=bool)
+    flat[4:14, 4:14] = True
+    assert ring_contrast(img, flat) < 0.02, "a patch of plain wall reads as a boundary"
+
+    # The same object at the frame edge still reads as an object -- a thinner ring, not a wrong one.
+    edge = np.hypot(xx - 4, yy - 0.5 * H) <= 8
+    img2 = np.full((H, W, 3), WALL, dtype="f4")
+    img2[edge] = (0.9, 0.2, 0.2)
+    assert ring_contrast(img2, edge) > 0.4, "an object at the frame edge lost its contrast"
+
+    # Degenerate inputs answer rather than raising; a mask covering everything has no ring.
+    assert ring_contrast(img, np.zeros((H, W), dtype=bool)) == 0.0
+    assert ring_contrast(img, np.ones((H, W), dtype=bool)) == 0.0
+    with pytest.raises(ValueError, match="width"):
+        ring_contrast(img, disc_mid, width=0)
+
+
+def test_contrast_zero_restores_the_previous_behaviour_exactly():
+    """The knob has to be a true off switch, or "it used to work like this" stops being checkable."""
+    seg, k = FrameSegmenter(4), 4
+    img, _masks = crowd_frame(3, seed=3)
+    seg(img)
+    rmap, centres, of_cluster = split_regions(seg.labels, k, img, edges=0.95, min_frac=0.004)
+    a = label_field(rmap, of_cluster, seg.labels, RegionTracker(keep=30), frame=img, contrast=0.0)
+    b = label_field(rmap, of_cluster, seg.labels, RegionTracker(keep=30), frame=None,
+                    contrast=0.125)
+    assert np.array_equal(a[0], b[0]), (
+        "contrast=0 and no frame at all disagree; one of them is not the old rule")
+
+
+#: Three distinct colours so each gets its own cluster at k=4, and the third is SMALL. That puts it
+#: outside the background cluster and under the area floor -- the branch the crowded fixture never
+#: reaches, because there the faint object is inside the background cluster instead. A mutant
+#: dropping it survived every other test in this file.
+SPARSE = [((0.22, 0.30), 0.03, 0.0, RED, 0.10),
+          ((0.76, 0.30), 0.03, 2.1, GREEN, 0.10),
+          ((0.48, 0.72), 0.03, 4.2, BLUE, 0.045)]
+
+
+def sparse_frame(t, seed=0):
+    yy, xx = np.mgrid[0:H, 0:W]
+    img = np.full((H, W, 3), WALL)
+    masks = []
+    for (cx, cy), orbit, phase, colour, r in SPARSE:
+        a = phase + 2 * np.pi * t / PERIOD
+        p = (cx + orbit * float(np.cos(a)), cy + orbit * float(np.sin(a)))
+        m = np.hypot(xx - p[0] * W, yy - p[1] * H) <= r * W
+        img[m] = colour
+        masks.append(m)
+    g = np.random.default_rng(seed)
+    return (img + g.standard_normal(img.shape) * 0.01).astype("f4"), masks
+
+
+def test_a_small_object_in_its_own_cluster_is_admitted_by_contrast_too():
+    """**The area floor and contrast are alternatives, not both required.** Outside the background
+    cluster a small object still has to get past the floor, and the crowded fixture never reaches
+    that branch because its faint object is *inside* the background cluster. A mutant that kept the
+    floor as a veto there survived every other test here.
+
+    This object is about 0.9% of the frame against a show floor of 3%, and it is bright, so it is
+    exactly the case the rule exists for.
+    """
+    img, masks = sparse_frame(0, seed=0)
+    seg = FrameSegmenter(4)
+    for _ in range(3):
+        seg(img)
+    small = masks[2]
+    background = max(range(4), key=lambda j: (seg.labels == j).sum())
+    holds = int(np.bincount(seg.labels[small], minlength=4).argmax())
+    assert holds != background, (
+        "the small object landed in the background cluster, so this fixture is a copy of the "
+        "crowded one and does not reach the branch it was written for")
+    assert small.sum() < 0.03 * small.size, "the object is over the show floor and proves nothing"
+
+    off = field_quality(sparse_frame, 4, 0.0)
+    on = field_quality(sparse_frame, 4, 0.125)
+    assert off[0] < 0.9, f"the floor no longer drops it ({off[0]:.2f}); the fixture is not testing"
+    assert on[0] > 0.95, f"contrast admitted only {on[0]:.2f} of the objects"
+    assert on[1] > 0.9, f"and it brought junk with it, precision {on[1]:.2f}"
+
+
+def test_the_pixel_minimum_is_unreachable_at_the_shipped_floors_and_still_works():
+    """`MIN_REGION_PX` is **dead as the demo is configured** -- the split's own floor is 0.004 of a
+    72x96 frame, which is 27 pixels, so nothing smaller than 12 ever reaches `label_field`. Same
+    shape as the `at_most(PTrace, 1e4)` bound this repository found configured and unable to fire,
+    and as `min_dtype` being unreachable for every shipped adapter.
+
+    It is kept because it is not dead *code* -- a caller lowering `--seg-min-frac` reaches it
+    immediately -- so it is exercised with a floor that does, and the unreachability at the default
+    is asserted rather than assumed.
+    """
+    from demo.pointer import MIN_REGION_PX
+
+    # A noise-carved wall, because that is the only thing that produces specks at all -- a clean
+    # scene has contiguous clusters and cannot exercise this in either direction.
+    seg = FrameSegmenter(4)
+    img, _masks = noisy_three(1, seed=1)
+    for _ in range(3):
+        seg(img)
+
+    # At the shipped floor, nothing small enough to reach the guard exists.
+    rmap, _c, _of = split_regions(seg.labels, 4, img, edges=0.95, min_frac=0.004)
+    smallest = min((rmap == i).sum() for i in range(1, rmap.max() + 1)) if rmap.max() else 0
+    assert smallest >= MIN_REGION_PX, (
+        f"a {smallest}-pixel region reached label_field at the shipped floor, so the guard is live "
+        "after all and this test's premise is wrong")
+
+    # Below it, specks appear and the guard is what keeps them out of the picture.
+    rmap, _c, of = split_regions(seg.labels, 4, img, edges=0.95, min_frac=0.0004)
+    tiny = sum(1 for i in range(1, rmap.max() + 1) if (rmap == i).sum() < MIN_REGION_PX)
+    assert tiny > 0, "no sub-minimum region even at a floor of 0.0004; the guard cannot be tested"
+    field, ids = label_field(rmap, of, seg.labels, RegionTracker(keep=30), min_frac=0.03,
+                             frame=img, contrast=0.125)
+    painted = [int((field == s).sum()) for s in range(1, len(ids) + 1)]
+    assert painted and min(painted) >= MIN_REGION_PX, (
+        f"a region of {min(painted)} pixels was painted; the pixel minimum is not being applied")

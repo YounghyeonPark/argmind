@@ -1652,6 +1652,50 @@ and the reason is mechanical rather than lucky — the twin never vanished, so o
 has already consumed it and only the returning object is free. The case that is genuinely
 unrecoverable is both twins hiding together. Seven mutants, all caught.
 
+**"라벨링이 안되는 영역이 있는데 라벨링갯수가 고정되어서 잘 안되는거같음" — the count was never
+fixed, and what admits a region is CONTRAST (2026-08-13).** The label count already scales: 4 labels
+for a declared 3, 5 for five objects at k=4. A region went unlabelled for two reasons that have
+nothing to do with counting — sitting in the **background cluster**, which happens as soon as a scene
+has more appearance groups than `k` allows, and being under the **area floor**. Both were reproduced:
+a small faint object among four bright ones reads **covered 0.80**, and it is always the same object.
+
+**Four mechanisms measured, three refused.**
+
+| mechanism | result |
+|---|---|
+| raise or adapt `k` | **non-monotone and scene-dependent in both directions**: five large objects want k=4 (purity 1.00 against 0.45 at k≥6) while the small one needs k=8. The two fixtures disagree, so no `k` serves both |
+| merge clusters whose centres are close | folds the small object back into the wall, covered 1.00 → **0.80** at tol 1.5 |
+| drop the largest *region* instead of the background *cluster* | rescues the absorbed object (0.80 → 1.00) and **destroys** a noisy scene, precision 0.95 → **0.26** |
+| **ring contrast** | covered **0.80 → 1.00** on the failing scene; precision 0.99 → **0.92** on a noise-carved one |
+
+**Contrast is the only local statistic in the list, and that is why it is the one that works.** A real
+object differs from the band of pixels just outside it; a fragment of the wall is a piece of the
+wall's own distribution. Measured over three scenes, the smallest contrast any real object had was
+**0.136** and the largest any non-wall region had was **0.118** — a separating value exists and the
+interval is **1.15× wide**, thinner than the 1.35× margin that made `min_energy` ship disabled here.
+It ships **on** anyway, at 0.125, because the alternative is an object that is never labelled at all,
+and `--seg-contrast 0` restores the old rule exactly (asserted, not described).
+
+The rule: inside the background cluster a region is admitted **only** by contrast and never if it is
+the largest piece of that cluster — that piece is the wall. Outside it, the area floor and contrast
+are **alternatives**, since a small object with contrast is an object and a large patch without any
+is not.
+
+**Two fixtures of mine measured different scenes while being compared.** The contrast probe ran
+without the noise the sweep added, so it reported a three-order-of-magnitude gap (0.5 against 0.01)
+where the matched-noise probe gives 0.519 against 0.118 — the conclusion survived, the margin did not.
+And the first reproduction attempt scored a **uniform 1.00 for every scheme**, which is this project's
+own signal that the measurement rather than the world was broken: three distinct objects separate
+cleanly whatever you do, and the failure needs *more appearance groups than `k` allows*.
+
+**Nine mutants, and the two that survived were both real gaps.** A small high-contrast object still
+vetoed by the area floor survived everything, because in every fixture the small object was *inside*
+the background cluster and that branch was never reached. And `MIN_REGION_PX` is **dead as the demo
+is configured** — the split's own floor is 27 pixels against its 12 — the same shape as
+`at_most(PTrace, 1e4)` being configured and unable to fire, and as `min_dtype` being unreachable for
+every shipped adapter. It is kept because a caller lowering `--seg-min-frac` reaches it immediately,
+so it is exercised with a floor that does and its unreachability at the default is asserted.
+
 **Still undecided:** whether inference is *hosted* (an interface to ONNX Runtime/TFLite) or
 *embedded*, and whether the tiers ship as one library or two. Nothing on the camera/audio/speech
 path is built.
@@ -1674,7 +1718,7 @@ rollback, explicit recovery), `argmind/pipeline.py` (`FrameMap`, input gate, bou
 pipeline. `argmind/bench.py` has no C++ counterpart and is not getting one: it is a host
 measurement harness, and DESIGN.md already records that Python timings are not a baseline the
 C++ can be compared against.
-954 Python tests and 4,652 C++ checks pass; several exist to prove failures are visible
+960 Python tests and 4,652 C++ checks pass; several exist to prove failures are visible
 rather than silent. Every suite is mutation-checked, and surviving mutants are recorded where
 they live rather than tallied here — including the ones that turn out to be **equivalent on a
 64-bit host**, a distinction worth keeping rather than rounding away. Cumulative counts are

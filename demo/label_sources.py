@@ -1119,6 +1119,41 @@ class RegionTracker:
         return got
 
 
+def ring_contrast(frame, mask, width: int = 2) -> float:
+    """How much a region differs from the band of pixels just outside it.
+
+    **This is what tells a real object from a fragment of the wall, and no threshold on *size* can.**
+    Measured over three scenes, the smallest contrast any real object had was **0.136** and the
+    largest any non-wall region had was **0.118** -- a single separating value exists, and the
+    interval is only **1.15x** wide, which is why it is a knob with its numbers written down rather
+    than a constant.
+
+    Dilation by repeated 4-neighbour spreading, `width` steps, minus the region itself. A region
+    touching the frame edge gets a *thinner* ring rather than a clamped one: there is genuinely less
+    outside to compare against, and clamping would make a region look like an object for being at the
+    edge -- the same position leak that inflated an identity control in this package from 50.6% to
+    74.3% until the fixture was levelled.
+    """
+    if width < 1:
+        raise ValueError(f"width must be at least 1, got {width}")
+    m = np.asarray(mask, dtype=bool)
+    grown = m.copy()
+    for _ in range(width):
+        g = grown.copy()
+        g[1:, :] |= grown[:-1, :]
+        g[:-1, :] |= grown[1:, :]
+        g[:, 1:] |= grown[:, :-1]
+        g[:, :-1] |= grown[:, 1:]
+        grown = g
+    band = grown & ~m
+    a = np.asarray(frame, dtype=np.float64)
+    if a.ndim == 2:
+        a = a[:, :, None]
+    if not m.any() or not band.any():
+        return 0.0
+    return float(np.linalg.norm(a[m].mean(axis=0) - a[band].mean(axis=0)))
+
+
 def region_descriptor(frame, mask):
     """What a region looks like: the mean and spread of its own pixels. Six numbers at RGB.
 
