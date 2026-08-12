@@ -322,7 +322,8 @@ def fit_leak(rows) -> tuple[float, float]:
 
 
 def scaling(dims=(4, 8, 16, 32, 64, 128), updates: int = 2000,
-            dtype: str = "f8", warmup: int = 200) -> dict[int, float]:
+            dtype: str = "f8", warmup: int = 200,
+            repeats: int = 5) -> dict[int, float]:
     """Cost of one `update` against the state dimension.
 
     A ratio measured inside one run, so the machine cancels out and the result is
@@ -339,8 +340,23 @@ def scaling(dims=(4, 8, 16, 32, 64, 128), updates: int = 2000,
     codebase. It also sets an expectation for the port: the C++ core should not be
     judged against these figures, because it is not paying the cost these figures
     are made of.
+
+    Measured by **interleaved repeats**, taking the median per dimension, rather than one
+    sequential block each. The justification is the drifting-mean bias this repository has
+    already paid to learn: `adapter_scaling` records a single non-interleaved run reading
+    169 us where eight interleaved repeats give 460, and consecutive repeats measure a mean
+    that is moving.
+
+    **What prompted it is not what justifies it, and the difference is worth stating.** The
+    gate `test_update_cost_is_flat_at_small_dimensions_because_overhead_dominates` failed
+    once while a camera demo was running and passed four times in a row afterwards. A
+    six-core synthetic load then **failed to reproduce it** -- the sequential version read
+    1.12, 1.18 and 0.94 against a bound of 2.0, i.e. it passed -- so interleaving is **not
+    demonstrated** to fix that flake and this docstring does not claim it does. It removes a
+    bias that is real independently, and the transient remains unexplained.
     """
-    out: dict[int, float] = {}
+    adapters = {}
+    data = {}
     for n in dims:
         a = RecursiveLeastSquares(n_features=n, forgetting=0.999, dtype=dtype)
         rng = np.random.default_rng(17)
@@ -348,11 +364,23 @@ def scaling(dims=(4, 8, 16, 32, 64, 128), updates: int = 2000,
         ys = rng.standard_normal((updates, 1)).astype(dtype)
         for i in range(min(warmup, updates)):
             a.update(xs[i], ys[i])
-        start = _NS()
-        for i in range(updates):
-            a.update(xs[i], ys[i])
-        out[n] = (_NS() - start) / updates
-    return out
+        adapters[n], data[n] = a, (xs, ys)
+
+    chunk = max(1, updates // repeats)
+    seen: dict[int, list[float]] = {n: [] for n in dims}
+    for r in range(repeats):
+        for n in dims:                     # round-robin, so no dimension owns a stretch of time
+            xs, ys = data[n]
+            lo = (r * chunk) % updates
+            a = adapters[n]
+            start = _NS()
+            for i in range(lo, min(lo + chunk, updates)):
+                a.update(xs[i], ys[i])
+            took = _NS() - start
+            done = min(lo + chunk, updates) - lo
+            if done:
+                seen[n].append(took / done)
+    return {n: float(np.median(v)) for n, v in seen.items()}
 
 
 
