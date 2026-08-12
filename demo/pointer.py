@@ -47,43 +47,64 @@ STATE_PATH = STATE_DIR / "head"
 #: identical objects at different heights are still told apart 74.3% of the time through their
 #: crops, falling to 50.6% (chance) when they sit at the same height.
 CROP = 20
-#: Block-mean downsample factor for `--input raw`. 8 turns a 72x96 frame into 9x12 = 108 numbers,
-#: which is FEWER than the backbone's 144 and measured at least as good on every axis tried.
-RAW_FACTOR = 8
+#: Block-mean downsample factor for `--input raw`. 12 turns a 72x96 frame into 6x8, and in
+#: colour that is 6*8*3 = 144 numbers -- **exactly the backbone's width**, which makes the
+#: comparison a like-for-like one rather than a trade.
+RAW_FACTOR = 12
 
 
-def raw_features(frame, factor=RAW_FACTOR):
-    """A block-mean downsample of the greyscale frame, flattened.
+def raw_features(frame, factor=RAW_FACTOR, colour=True):
+    """A block-mean downsample of the frame, flattened. **In colour by default.**
 
     **Measured better than the random backbone on every axis this demo exercises**, which is not
-    what I expected and is worth stating plainly. Position, one object, perfect labels:
+    what I expected. Position, one object, perfect labels:
 
     | input | features | head state | ms/frame | error | vs centre |
     |---|---|---|---|---|---|
     | backbone | 145 | 1.1 KB | 0.94 | 0.064 | 4.55x |
-    | raw /8 | **109** | **0.9 KB** | **0.42** | **0.063** | **4.58x** |
-    | raw rgb | 20737 | 162 KB | 0.73 | 0.062 | 4.72x |
+    | raw /8 grey | **109** | **0.9 KB** | **0.42** | **0.063** | **4.58x** |
 
-    And frozen, which separates tracking from generalising: raw /8 reaches **0.001 (215.8x a
-    centre guess)** against the backbone's 0.027 (10.6x).
+    Frozen, which separates tracking from generalising, raw reaches **0.001 (215.8x a centre
+    guess)** against the backbone's 0.027 (10.6x).
 
-    The reason is mechanical: position is a linear readout of a spatial map. `sum_i w_i * pixel_i`
-    with weights proportional to a pixel's coordinate *is* the centroid times the total brightness,
-    so a linear head computes it almost exactly from raw pixels. The backbone pools to a 3x3 grid
-    and mixes channels randomly, which for this task can only lose information.
+    **Colour is not optional, and the first version of this function threw it away.** The demo's
+    appearance descriptor had already measured colour doing all the work -- raw crop RGB separates
+    two objects at 0.096 against raw crop *grey* at 0.984, which is useless -- so a greyscale head
+    input meant the head could never express identity while the caller's memory could. Measured on
+    three objects, frozen, with slot 0 always the same object whatever its position:
 
-    **What a backbone is supposed to buy is invariance, and a random one does not buy it.** Trained
-    under one condition and frozen, then tested under another: brightness x1.6 gives 0.9x for the
-    backbone against 0.7x for raw, and a +0.25 offset 1.0x against 0.8x -- the backbone is
-    marginally better and *both are at a centre guess*, i.e. both have failed. Under clutter raw
-    is better outright, 1.6x against 1.4x. A trained backbone with batch normalisation is a
-    different proposition; this file's is random.
+    | input | features | roles | identity |
+    |---|---|---|---|
+    | backbone | 145 | 4.61x | 4.01x |
+    | raw /8 grey | 109 | **12.09x** | **1.71x** |
+    | raw /8 RGB | 325 | 10.09x | **133.60x** |
+    | **raw /12 RGB** | **145** | 8.34x | **118.87x** |
+
+    Grey is best for *roles*, where position is the whole question and colour is one more thing to
+    fit. It nearly fails at identity. And `/12` in colour is 144 numbers -- the backbone's own
+    width -- for 118.87x against the backbone's 4.01x, so the default is like-for-like and thirty
+    times better at the harder task.
+
+    The reason position works at all is mechanical: `sum_i w_i * pixel_i` with weights proportional
+    to a pixel's coordinate *is* the centroid times the total brightness, so a linear head computes
+    it almost exactly from pixels. The backbone pools to a 3x3 grid and mixes channels randomly,
+    which for this task can only lose information.
+
+    **What a backbone buys is invariance, and a random one does not buy it.** Trained under one
+    condition and frozen, then tested under another: brightness x1.6 gives 0.9x for the backbone
+    against 0.7x for raw, a +0.25 offset 1.0x against 0.8x -- marginally better and *both at a
+    centre guess*, i.e. both failed. Under clutter raw wins outright, 1.6x to 1.4x. A trained
+    backbone with batch normalisation is a different proposition; this one is random.
     """
-    g = np.asarray(frame, dtype=np.float32)
-    if g.ndim == 3:
-        g = g.mean(axis=2)
-    h, w = g.shape[0] // factor * factor, g.shape[1] // factor * factor
-    return g[:h, :w].reshape(h // factor, factor, w // factor, factor).mean(axis=(1, 3)).ravel()
+    a = np.asarray(frame, dtype=np.float32)
+    if a.ndim == 2:
+        a = a[:, :, None]
+    if not colour:
+        a = a.mean(axis=2, keepdims=True)
+    h, w = a.shape[0] // factor * factor, a.shape[1] // factor * factor
+    a = a[:h, :w]
+    return a.reshape(h // factor, factor, w // factor, factor,
+                     a.shape[2]).mean(axis=(1, 3)).ravel()
 
 
 def should_save(updates: int, restored: bool) -> bool:
@@ -116,8 +137,8 @@ def crop_at(frame, point):
     return frame[y0:y0 + CROP, x0:x0 + CROP, :]
 
 
-def raw_width(factor=RAW_FACTOR, shape=IN_SHAPE):
-    return (shape[0] // factor) * (shape[1] // factor)
+def raw_width(factor=RAW_FACTOR, shape=IN_SHAPE, colour=True):
+    return (shape[0] // factor) * (shape[1] // factor) * (shape[2] if colour else 1)
 
 
 #: One stable BGR colour per label id, so a region keeps its colour as the vocabulary grows.
@@ -154,7 +175,7 @@ def segment_image(labels, ids=(), scale=6):
     return out
 
 
-def build(objects: int = 1, source: str = "backbone"):
+def build(objects: int = 1, source: str = "backbone", *, colour: bool = True):
     """The whole composition, and every piece of it is load-bearing here.
 
     `objects` is how many things to track: the head gets `2 * objects` outputs, and the labels
@@ -172,7 +193,7 @@ def build(objects: int = 1, source: str = "backbone"):
     # The backbone is built either way: `--identify` and `--remember` describe crops with it, and
     # the guard's calibration uses it. `source` decides only what reaches the HEAD.
     backbone = Backbone(PLAN, IN_SHAPE, dtype="f4", seed=1, pool=POOL)
-    width = backbone.n_outputs if source == "backbone" else raw_width()
+    width = backbone.n_outputs if source == "backbone" else raw_width(colour=colour)
     n = width + 1                                    # + the constant
 
     head = NormalisedLeastMeanSquares(n, 2 * objects, mu=0.3, dtype="f4")
@@ -333,8 +354,13 @@ def main(argv=None):
                         "ones the assignment falls to chance, measured 50.6%%")
     p.add_argument("--input", choices=("backbone", "raw"), default="backbone",
                    help="what reaches the head: the frozen random backbone's 144 features, or a "
-                        "block-mean downsample of the raw frame (108 numbers). Raw is measured "
-                        "smaller, ~2x faster and at least as accurate here -- see raw_features()")
+                        "block-mean downsample of the raw frame, in colour, also 144. Raw is "
+                        "measured 8.34x a centre guess on roles against the backbone's 4.61x, and "
+                        "118.87x on identity against 4.01x -- see raw_features()")
+    p.add_argument("--raw-grey", action="store_true",
+                   help="drop colour from --input raw. Better for roles (12.09x against 8.34x, "
+                        "with a third of the features) and nearly useless for identity (1.71x "
+                        "against 118.87x), because colour is what tells the objects apart")
     p.add_argument("--segments", action="store_true",
                    help="open a second window showing the label regions: the background-difference "
                         "mask partitioned by nearest detection, coloured by remembered id. Needs "
@@ -366,10 +392,12 @@ def main(argv=None):
     if n_objects > 1 and args.teach == "mouse":
         sys.exit("--objects > 1 needs the automatic detector: one mouse position cannot say "
                  "where two objects are. Use --teach auto or --teach both.")
-    backbone, head, guard, features, taught, fmap, pipe = build(n_objects, args.input)
+    backbone, head, guard, features, taught, fmap, pipe = build(
+        n_objects, args.input, colour=not args.raw_grey)
     STATE_DIR.mkdir(parents=True, exist_ok=True)
     store = Store(STATE_PATH)
-    fp = fingerprint(backbone, n_objects, args.input)
+    fp = fingerprint(backbone, n_objects,
+                     args.input + ("-grey" if args.raw_grey else ""))
     if args.load:
         rec = store.load(guard, fingerprint=fp)
         if rec is None:
@@ -449,7 +477,7 @@ def main(argv=None):
     def extract(small):
         if args.input == "backbone":
             return backbone.features(small)
-        return raw_features(small) * feature_scale
+        return raw_features(small, colour=not args.raw_grey) * feature_scale
     t0 = time.perf_counter()
     frames = 0
 

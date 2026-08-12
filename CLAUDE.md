@@ -1252,6 +1252,33 @@ for both**, and every other measurement in the package was taken with it off, so
 change quietly. `--bg-selective` exposes it. Two mutants caught: an inert flag, and flipping the
 default.
 
+**"raw면 텍스쳐랑 컬러도 볼텐데" — the owner's observation, and it caught a real defect I had
+just shipped.** `raw_features` averaged the channels away, so the head input was greyscale while
+the caller's appearance memory was RGB. That was not a simplification: the demo's own descriptor
+measurement had already shown colour doing all the work — raw crop RGB separates two objects at
+**0.096** against raw crop grey at **0.984**, which is chance.
+
+Measured on three objects, frozen, with slot 0 always the same object whatever its position:
+
+| input | features | roles | identity |
+|---|---|---|---|
+| backbone | 145 | 4.61x | 4.01x |
+| raw /8 grey (what shipped) | 109 | **12.09x** | **1.71x** |
+| raw /8 RGB | 325 | 10.09x | **133.60x** |
+| **raw /12 RGB (now the default)** | **145** | 8.34x | **118.87x** |
+
+**Greyscale nearly destroys identity** (1.71x) while being the *best* at roles (12.09x), where
+position is the whole question and colour is one more thing to fit. So grey stays reachable as
+`--raw-grey` rather than being removed.
+
+**And the default is deliberately 144 numbers — the backbone's own width — so the comparison is
+like-for-like rather than a trade.** At identical cost it is **118.87x against 4.01x on identity**,
+thirty times better at the harder task. The architectural consequence is larger than the number:
+`AppearanceMatcher` exists because the head could not express identity, and with colour in the
+input it can — the matcher is still needed to keep *labels* consistent while learning, but the
+head's representation has stopped being the bottleneck. Two mutants: averaging the channels away
+again, and moving the factor off the backbone's width.
+
 **Still undecided:** whether inference is *hosted* (an interface to ONNX Runtime/TFLite) or
 *embedded*, and whether the tiers ship as one library or two. Nothing on the camera/audio/speech
 path is built.
@@ -1274,7 +1301,7 @@ rollback, explicit recovery), `argmind/pipeline.py` (`FrameMap`, input gate, bou
 pipeline. `argmind/bench.py` has no C++ counterpart and is not getting one: it is a host
 measurement harness, and DESIGN.md already records that Python timings are not a baseline the
 C++ can be compared against.
-889 Python tests and 4,652 C++ checks pass; several exist to prove failures are visible
+890 Python tests and 4,652 C++ checks pass; several exist to prove failures are visible
 rather than silent. Every suite is mutation-checked, and surviving mutants are recorded where
 they live rather than tallied here — including the ones that turn out to be **equivalent on a
 64-bit host**, a distinction worth keeping rather than rounding away. Cumulative counts are
