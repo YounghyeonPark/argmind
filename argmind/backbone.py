@@ -313,16 +313,11 @@ class Backbone:
             raise ValueError("refusing a state block that is not finite")
         self._state[:] = arr
 
-    def peak_activation_values(self):
-        """The largest pair of adjacent buffers, which is what a device must reserve.
-
-        Reported rather than inferred, because it is the number that decides whether a
-        configuration fits at all -- 54 KB in int8 for the smallest useful vision backbone,
-        against a declared core floor of 8 KB for the whole library.
-        """
+    def _activation_sizes(self):
+        """Every intermediate buffer, in values, input first. Shared by both cost reports."""
         h, w, c = self.in_shape
         sizes = [h * w * c]
-        for entry, (ws, _bs) in zip(self.plan, self._shapes):
+        for entry in self.plan:
             if entry[0] == "conv":
                 _, cout, _k, s = entry
                 h, w, c = (h + s - 1) // s, (w + s - 1) // s, cout
@@ -332,7 +327,53 @@ class Backbone:
                 _, _k, s = entry
                 h, w = (h + s - 1) // s, (w + s - 1) // s
             sizes.append(h * w * c)
+        return sizes
+
+    def peak_activation_values(self):
+        """The largest pair of adjacent buffers, which is what a device must reserve to INFER.
+
+        Reported rather than inferred, because it is the number that decides whether a
+        configuration fits at all -- 54 KB in int8 for the smallest useful vision backbone,
+        against a declared core floor of 8 KB for the whole library.
+        """
+        sizes = self._activation_sizes()
         return max(a + b for a, b in zip(sizes[:-1], sizes[1:]))
+
+    def training_activation_values(self):
+        """Every activation at once, which is what learning the hidden layers costs.
+
+        **Backprop's cost is retained activations, not weights**: a weight gradient needs the
+        activation that layer consumed, so a backward pass cannot stream the way a forward pass can.
+        Measured as a ratio to inference it is **4.7x** for MobileNet v1 alpha=0.25 -- 259,200 values
+        against a 55,296 adjacent pair -- and only **1.1x** for the shallow three-layer plan the demo
+        uses, because that plan's first buffer dominates everything after it.
+
+        **This corrects a claim this project had recorded.** CLAUDE.md said end-to-end on-device
+        training "is not available under 4.2 MB and no heap"; the arithmetic says otherwise at
+        96x96 alpha=0.25 in fp32:
+
+        | | values | fp32 |
+        |---|---|---|
+        | weights | 210,336 | 821.6 KB |
+        | weight gradients | 210,336 | 821.6 KB |
+        | retained activations | 259,200 | 1,012.5 KB |
+        | **total** | | **2.59 MB** |
+
+        against an STM32N6's **4.2 MB** of SRAM. It fits, with room to spare. At 224x224 it does not
+        -- 5,512.5 KB of activations alone, 6.9 MB in total.
+
+        **What is genuinely blocking is compute, not memory, and it has never been measured.** The
+        NPU cannot train -- Arm calls Ethos-U55 an inference accelerator and its path is TFLite Micro
+        -- so a backward pass runs on the M55 in software, and no throughput figure for that exists
+        anywhere in this repository. Do not read this method as saying continuous learning is
+        practical on that part; it says the memory objection was wrong and the timing question is
+        open.
+
+        This is derived arithmetic, not a measurement of a running trainer: it counts each layer's
+        output once and does not include the one gradient buffer a backward pass also needs, so it is
+        a lower bound on the activation term by roughly one layer's worth.
+        """
+        return sum(self._activation_sizes())
 
     def features(self, image):
         """One image in, one feature vector out. No state changes -- this is frozen."""

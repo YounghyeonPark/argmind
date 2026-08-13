@@ -406,3 +406,49 @@ def test_a_random_backbone_dies_with_depth():
     assert deep > shallow * 3.0, (
         f"depth no longer destroys the signal ({shallow:.3f} against {deep:.3f}); if random "
         "deep features have become usable the demo's architecture should be re-derived")
+
+
+def test_learning_the_hidden_layers_is_a_compute_question_not_a_memory_one():
+    """**This test exists because it corrects a claim CLAUDE.md had recorded** -- that end-to-end
+    on-device training "is not available under 4.2 MB and no heap". The arithmetic says otherwise for
+    the smallest useful vision backbone in fp32:
+
+    | | values | fp32 |
+    |---|---|---|
+    | weights | 210,336 | 821.6 KB |
+    | weight gradients | 210,336 | 821.6 KB |
+    | retained activations | 259,200 | 1,012.5 KB |
+    | **total** | | **2.59 MB** against an STM32N6's 4.2 MB |
+
+    What blocks it is that the NPU cannot train, so a backward pass runs on the M55 in software, and
+    no throughput figure for that exists. The memory objection was wrong; the timing one is open.
+    """
+    m = mobilenet_v1(0.25, (96, 96, 3), dtype="f4")
+    infer = m.peak_activation_values()
+    train = m.training_activation_values()
+    assert train > infer, "retaining every activation cannot cost less than the largest pair"
+    assert train / infer == pytest.approx(4.7, abs=0.3), (
+        f"the training-to-inference activation ratio is {train / infer:.1f}x, not the 4.7x recorded; "
+        "the plan changed and the tier arithmetic needs redoing")
+
+    total_bytes = (2 * m.state.size + train) * 4
+    assert total_bytes < 4.2e6, (
+        f"learning this backbone needs {total_bytes / 1e6:.2f} MB, over an STM32N6's 4.2 MB. If that "
+        "is real then the memory objection is back and CLAUDE.md's correction is wrong")
+    assert total_bytes > 2.0e6, (
+        f"only {total_bytes / 1e6:.2f} MB; if it has become cheap, say by how much rather than "
+        "leaving the 2.59 MB figure stale")
+
+    # And at 224x224 it does not fit, which is what makes the 96x96 result a real constraint rather
+    # than a blanket permission.
+    wide = mobilenet_v1(0.25, (224, 224, 3), dtype="f4")
+    wide_bytes = (2 * wide.state.size + wide.training_activation_values()) * 4
+    assert wide_bytes > 4.2e6, (
+        f"224x224 training now fits in {wide_bytes / 1e6:.2f} MB; the resolution ceiling has moved")
+
+    # The demo's own shallow plan is nearly free to train, because its first buffer dominates.
+    shallow = Backbone([("conv", 12, 5, 4), ("dw", 3, 2), ("pw", 16)], (72, 96, 3),
+                       dtype="f4", seed=1, pool=3)
+    ratio = shallow.training_activation_values() / shallow.peak_activation_values()
+    assert ratio == pytest.approx(1.1, abs=0.15), (
+        f"the shallow plan's ratio is {ratio:.2f}x, not the 1.1x recorded")

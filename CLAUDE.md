@@ -165,8 +165,14 @@ min standing, in `docs/REQUIREMENTS.md` of `YounghyeonPark/tomcat`), which itsel
 **Learning and inference can be integrated, at one forced place: the head.** The NPU does not
 learn — Arm calls Ethos-U55 an *inference* accelerator and its path is TFLite **Micro**
 ([Arm](https://developer.arm.com/Processors/Ethos-U55)) — and backprop's cost is retained
-*activations*, not weights, so end-to-end on-device training is not available under 4.2 MB and
-no heap. What is available is a frozen int8 backbone on the NPU whose feature vector **is** the
+*activations*, not weights. **The sentence that used to follow this one said end-to-end on-device
+training "is not available under 4.2 MB and no heap", and that is WITHDRAWN as of 2026-08-13**: the
+arithmetic is 2.59 MB against an STM32N6's 4.2 (weights 821.6 KB + gradients 821.6 + retained
+activations 1,012.5, at 96×96 α=0.25 in fp32), so it fits with room to spare, and it is 224×224 that
+does not at 6.9 MB. `Backbone.training_activation_values()` reports it rather than leaving it in
+prose, and a test carries the tier arithmetic. **What blocks it is compute, and that has never been
+measured**: the NPU cannot train, so a backward pass runs on the M55 in software and no throughput
+figure for that exists anywhere here. What is available is a frozen int8 backbone on the NPU whose feature vector **is** the
 regressor for an `Adapter` under a `Guard`: inference and learning share the computation rather
 than duplicating it, and one flat state block still covers persistence. Measured on both cores,
 a 128-wide head: `Guard<Rls<f32,128,1>,4,4>` is **330,544 B** against `Guard<Nlms<...>>` at
@@ -1763,6 +1769,50 @@ it would take is re-pointing `ObjectMemory` at `region_descriptor` — its 96.7/
 measured on the crop descriptor and are now suspect for the same reason the refusal was.
 `demo/test_grouping_again.py` is the evidence, protected both ways.
 
+## The stated purpose, 2026-08-13 — and it is larger than what is built
+
+**The owner's words**: the project is to make a **24/7 training and inferencing brain** that gives a
+robot "a heart mind and thinking mechanism"; the **thinking structure** matters most, especially that
+**without a trained initial state it can be learned from input sensor data**; **recognition works in
+the middle hidden network**; and **the output can be any of the robot's outputs, configured by the
+user**. Performance is explicitly deferred.
+
+Recorded rather than argued, as the 2026-08-09 widening was. What follows is only which parts the
+repository already supports, which are open, and which are blocked *and by what* — because three of
+this file's own recorded claims bear on it and one of them was wrong.
+
+**Already supported.** Arbitrary configured outputs is close to done: `MultilayerPerceptron(n, m,
+hidden=...)` takes its widths at construction, `RuntimeShapedMlp<T>` does the same across the C ABI,
+and `FrameMap` binds declared sensor indices to features and targets with a fingerprint that refuses
+a block restored against a different order. Continuous adaptation with a guard, rollback, freezing and
+persistence is the part that is finished and verified on the declared floor.
+
+**Not blocked, and I had it recorded as blocked.** Learning the hidden layers on the second tier is a
+**compute** question, not a memory one — 2.59 MB against 4.2, see the withdrawal above. The blocking
+fact is that the NPU is an inference part, so a backward pass is software on the M55, and **nobody has
+measured that throughput**. That is the first number this vision needs.
+
+**Open, and the 24/7 requirement is what opens it.** fp32 is measured exact against fp64 to **ten
+million** updates on a stationary target, inconclusive on a non-stationary one, and its own step
+underflow climbs 0.1% → 38.7% across five checkpoints **without saturating**. At 50 Hz a device
+reaches ten million in under three days and **one hundred million in twenty-three days**; a year is
+1.6 billion. So a 24/7 brain spends essentially all its life two orders of magnitude beyond where the
+measurement stops, on the axis that is already trending. Nothing has cost anything yet and nobody has
+run it.
+
+**What is measured *against* one part of it, and the scoping matters.** "Recognition in the middle
+hidden network" is representation learning, and every negative result in this file about hidden
+features is about **frozen random** ones — an untrained stack emits a 6.8e-4 embedding on which every
+head fails, a random backbone buys no invariance, per-object correlation segmentation localises 4–50%.
+**None of that is evidence against learning the layers**, which is what the owner is asking for; it is
+evidence against not learning them. The distinction was not drawn in this file before today.
+
+**What is genuinely absent**, so it is not mistaken for deferred work: backprop through a
+convolutional stack (the library has dense-layer SGD only, and `Backbone` is forward-only), any
+audio path, any actuator or speech path, and any measurement of a learned-from-scratch stack becoming
+object-selective. The last of those is the falsifiable version of "recognition works in the middle
+hidden network" and is the experiment worth running first.
+
 **Still undecided:** whether inference is *hosted* (an interface to ONNX Runtime/TFLite) or
 *embedded*, and whether the tiers ship as one library or two. Nothing on the camera/audio/speech
 path is built.
@@ -1785,7 +1835,7 @@ rollback, explicit recovery), `argmind/pipeline.py` (`FrameMap`, input gate, bou
 pipeline. `argmind/bench.py` has no C++ counterpart and is not getting one: it is a host
 measurement harness, and DESIGN.md already records that Python timings are not a baseline the
 C++ can be compared against.
-968 Python tests and 4,652 C++ checks pass; several exist to prove failures are visible
+969 Python tests and 4,652 C++ checks pass; several exist to prove failures are visible
 rather than silent. Every suite is mutation-checked, and surviving mutants are recorded where
 they live rather than tallied here — including the ones that turn out to be **equivalent on a
 64-bit host**, a distinction worth keeping rather than rounding away. Cumulative counts are
