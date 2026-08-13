@@ -1,7 +1,8 @@
 # argmind
 
-**On-device online adaptation and inference for multi-sensor systems.** A C++17 core
-behind a C ABI, plus a Python reference that is also the specification.
+**On-device online adaptation and inference for multi-sensor systems.** A freestanding
+C++17 core behind a C ABI, a hosted tier for runtime shapes and networks, and a Python
+reference that is also the specification.
 
 Apache-2.0. A side project, open source, no support commitment.
 
@@ -38,15 +39,29 @@ Nothing there allocates. `step()` is bounded. The storage is yours.
 
 ## What it is *not*
 
-- **Not a deep-learning runtime.** It adapts *parameters and estimates*. For a CNN use
-  ONNX Runtime or TFLite; argmind sits alongside one, adapting the last layer.
-- **Not a training framework.** No backpropagation, no autograd, no GPU.
+- **Not a deep-learning runtime.** There is a convolutional `Backbone` here, forward and
+  backward, and it runs MobileNet-shaped plans — but there is no importer for trained
+  weights, no graph format, and no operator coverage worth the name. For a *trained* CNN
+  use ONNX Runtime or TFLite; argmind sits alongside one, adapting the head whose input it
+  is handed.
+- **Not a training framework.** There *is* backpropagation through the convolutional
+  stack, with every gradient checked against central differences. What there is not:
+  autograd, a GPU path, any optimiser beyond SGD, or batching. One sample at a time.
+- **Not a representation learner — and that is measured rather than declared.** Learning
+  the hidden layers is expressible, and on a position task it does **not** make units
+  object-selective: d-prime 0.511 after training against 0.532 at random initialisation,
+  while the same stack learns the task to 0.010 against 0.53 on shuffled labels.
+  Recognition is not a by-product of an objective that does not need it.
 - **Not a driver layer or middleware.** It owns no threads, talks to no hardware and
   does not depend on ROS. You feed it samples.
-- **Not a model that learns a representation.** Both adapters are *linear in the
-  parameters* — you supply the basis, and nothing whose output depends on the input's
-  *history* (hysteresis, stiction, backlash) can be fitted by instantaneous features.
-  What this is genuinely for is tracking a **drift** in something whose form is known.
+
+Two of the three adapters are **linear in the parameters** — you supply the basis, and
+nothing whose output depends on the input's *history* (hysteresis, stiction, backlash) can
+be fitted from instantaneous features. What those two are genuinely for is tracking a
+**drift** in something whose form is already known. `MultilayerPerceptron` is the
+exception, and it is a hosted-tier adapter by arithmetic rather than by preference: the
+guard's checkpoint ring is 47.5 KB for a 3-32-32-1 network against 1.6 KB for RLS at six
+features.
 
 That last point is the one people get wrong, so `DESIGN.md` spells it out at length.
 
@@ -58,6 +73,8 @@ That last point is the one people get wrong, so `DESIGN.md` spells it out at len
 | `Aligner` | four explicit policies, signed staleness, causal/non-causal declared |
 | `Rls` | exponentially weighted recursive least squares, `O(n²)` state |
 | `Nlms` | normalised LMS, `O(n)` state and no covariance — for wide inputs |
+| `Mlp` | dense feed-forward network, SGD, hosted tier — same `Adapter` contract |
+| `Backbone` | convolutional feature extractor, forward and backward, plans in TFLite's layouts |
 | `Guard` | bounds, divergence detection, freeze, bounded rollback, caller-supplied health scalars |
 | `Pipeline` | frame mapping through a declared index table, two input gates, bounded `step()` |
 | `persist` | two-slot record format, CRC, configuration fingerprint |
@@ -110,6 +127,11 @@ taken on silicon.
   with the measurement that identified each.
 - RLS is checked against the **closed-form** exponentially weighted solution, not against
   itself. NLMS is checked against its **exact one-step law**.
+- Every gradient is checked against **central differences** — the network's, and each of
+  the four convolutional ones, per operation and again over the composed stack. A wrong
+  backward pass still trains, just worse, so "it learns" is not a check.
+- The convolution itself is checked against **the definition written as four nested
+  loops**, which shares no implementation trick with the im2col version it verifies.
 - Every suite is **mutation-tested**, and surviving mutants are recorded where they live
   — including the ones that turn out to be equivalent on a 64-bit host.
 - `python -m pytest` runs everything, skipping cleanly without the cross toolchain or

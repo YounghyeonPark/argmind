@@ -1,7 +1,7 @@
 [project]
 name = "argmind"
 version = "0.0.1.dev0"
-description = "Sensor-agnostic on-device online adaptation and inference for embedded targets"
+description = "On-device online adaptation and inference for sensor systems: guarded adapters, a bounded pipeline, and a versioned record format"
 requires-python = ">=3.11"
 authors = [{ name = "Younghyeon Park", email = "ypark.dev@gmail.com" }]
 license = "Apache-2.0"
