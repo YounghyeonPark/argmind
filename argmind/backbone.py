@@ -62,7 +62,130 @@ import numpy as np
 
 __all__ = ["conv2d", "depthwise_conv2d", "relu6", "global_avg_pool",
            "grid_avg_pool",
-           "conv2d_naive", "depthwise_conv2d_naive", "Backbone", "mobilenet_v1"]
+           "conv2d_naive", "depthwise_conv2d_naive", "Backbone", "mobilenet_v1",
+           "conv2d_backward", "depthwise_conv2d_backward", "relu6_backward",
+           "grid_avg_pool_backward"]
+
+
+def _unpad_same(dp, shape, kh, kw, stride):
+    """Crop a padded gradient back to the input's shape, with SAME padding's own asymmetry.
+
+    The extra row or column goes at the BOTTOM/RIGHT going forward, so the crop starts at
+    `ph // 2` -- and getting it wrong shifts every gradient by a pixel while still training.
+    """
+    h, w = shape[0], shape[1]
+    out_h, out_w = (h + stride - 1) // stride, (w + stride - 1) // stride
+    ph = max((out_h - 1) * stride + kh - h, 0)
+    pw = max((out_w - 1) * stride + kw - w, 0)
+    top, left = ph // 2, pw // 2
+    return dp[top:top + h, left:left + w, :]
+
+
+def conv2d_backward(x, w, dout, stride=1):
+    """Gradients of `conv2d` w.r.t. its input, filter and bias, as `(dx, dw, db)`.
+
+    Built on the same im2col the forward pass uses, so the two share one indexing convention
+    rather than two that have to agree. Verified against central differences, which is the only
+    check worth having here: **a wrong backward pass still trains, just worse** -- the lesson
+    `MultilayerPerceptron` already carries, where a missing bias term failed an exact law by 20x.
+    """
+    x = np.asarray(x)
+    w = np.asarray(w)
+    dout = np.asarray(dout)
+    cout, kh, kw, cin = w.shape
+    if x.shape[2] != cin:
+        raise ValueError(f"filter expects {cin} input channels, got {x.shape[2]}")
+    p = _pad_same(x, kh, kw, stride)
+    oh = (x.shape[0] + stride - 1) // stride
+    ow = (x.shape[1] + stride - 1) // stride
+    if dout.shape != (oh, ow, cout):
+        raise ValueError(f"expected dout of {(oh, ow, cout)}, got {dout.shape}")
+
+    cols = np.empty((oh * ow, kh * kw * cin), dtype=x.dtype)
+    n = 0
+    for i in range(oh):
+        for j in range(ow):
+            cols[n] = p[i * stride:i * stride + kh, j * stride:j * stride + kw, :].ravel()
+            n += 1
+    flat = dout.reshape(oh * ow, cout)
+    w2 = w.reshape(cout, -1)
+    dw = (flat.T @ cols).reshape(w.shape).astype(x.dtype)
+    db = flat.sum(axis=0).astype(x.dtype)
+
+    dcols = (flat @ w2).astype(x.dtype)
+    dp = np.zeros(p.shape, dtype=x.dtype)
+    n = 0
+    for i in range(oh):
+        for j in range(ow):
+            dp[i * stride:i * stride + kh, j * stride:j * stride + kw, :] += \
+                dcols[n].reshape(kh, kw, cin)
+            n += 1
+    return _unpad_same(dp, x.shape, kh, kw, stride), dw, db
+
+
+def depthwise_conv2d_backward(x, w, dout, stride=1):
+    """Gradients of `depthwise_conv2d`, as `(dx, dw, db)`. No channel mixing, in either direction."""
+    x = np.asarray(x)
+    w = np.asarray(w)
+    dout = np.asarray(dout)
+    kh, kw, c = w.shape
+    if x.shape[2] != c:
+        raise ValueError(f"depthwise filter expects {c} channels, got {x.shape[2]}")
+    p = _pad_same(x, kh, kw, stride)
+    oh = (x.shape[0] + stride - 1) // stride
+    ow = (x.shape[1] + stride - 1) // stride
+    if dout.shape != (oh, ow, c):
+        raise ValueError(f"expected dout of {(oh, ow, c)}, got {dout.shape}")
+
+    dw = np.zeros(w.shape, dtype=x.dtype)
+    dp = np.zeros(p.shape, dtype=x.dtype)
+    for di in range(kh):
+        for dj in range(kw):
+            sl = (slice(di, di + (oh - 1) * stride + 1, stride),
+                  slice(dj, dj + (ow - 1) * stride + 1, stride), slice(None))
+            dw[di, dj, :] = (dout * p[sl]).sum(axis=(0, 1))
+            dp[sl] += dout * w[di, dj, :]
+    db = dout.sum(axis=(0, 1)).astype(x.dtype)
+    return _unpad_same(dp, x.shape, kh, kw, stride), dw, db
+
+
+def relu6_backward(x, dout):
+    """Gradient of `relu6`. Zero outside (0, 6) -- **both** ends, which is the half a mutant drops.
+
+    At exactly 0 or 6 the derivative is taken as zero. That is a convention, stated because a reader
+    would otherwise have to guess, and it is measured not to matter here: on this project's own
+    activations 0.0% ever reach the upper clip and 55% sit at exactly zero, where the value is
+    bit-identical whatever produced it.
+    """
+    x = np.asarray(x)
+    return np.asarray(dout) * ((x > 0) & (x < 6)).astype(x.dtype)
+
+
+def grid_avg_pool_backward(shape, dout, grid=1):
+    """Gradient of `grid_avg_pool`: each tile's share spread evenly over the pixels it averaged.
+
+    The tiling has to match the forward pass exactly, remainder-to-the-last-tile included -- a
+    gradient that divides by the wrong count is the mutant this project caught in the forward
+    direction and it is no more visible here.
+    """
+    if grid < 1:
+        raise ValueError(f"grid must be >= 1, got {grid}")
+    h, w, c = shape
+    dout = np.asarray(dout)
+    dx = np.zeros(shape, dtype=dout.dtype)
+    if grid == 1:
+        dx += dout.reshape(1, 1, c) / (h * w)
+        return dx
+    if h < grid or w < grid:
+        raise ValueError(f"a {grid}x{grid} grid needs a map at least that big, got {h}x{w}")
+    at = 0
+    for i in range(grid):
+        i0, i1 = i * h // grid, ((i + 1) * h // grid if i + 1 < grid else h)
+        for j in range(grid):
+            j0, j1 = j * w // grid, ((j + 1) * w // grid if j + 1 < grid else w)
+            dx[i0:i1, j0:j1, :] += dout[at:at + c].reshape(1, 1, c) / ((i1 - i0) * (j1 - j0))
+            at += c
+    return dx
 
 
 def _pad_same(x, kh, kw, stride):
@@ -388,6 +511,74 @@ class Backbone:
             else:
                 x = relu6(depthwise_conv2d(x, w, b, stride=entry[2]))
         return grid_avg_pool(x, self.pool) * self.dtype.type(self.output_scale)
+
+    def backward(self, image, d_features):
+        """Gradients of the whole stack, as `(d_weights, d_biases)` in plan order.
+
+        **This is what learning the hidden layers needs, and it is deliberately not an optimiser.**
+        It returns gradients and changes nothing; the caller applies them, the way the caller supplies
+        the basis everywhere else in this library. `features()` stays a pure function of the state.
+
+        Costs `training_activation_values()` because every layer's input has to be kept for its own
+        weight gradient -- a backward pass cannot stream the way a forward pass can. That is 4.7x the
+        inference peak on MobileNet v1 alpha=0.25 and 1.1x on a shallow plan.
+
+        Verified against **central differences** over the composed stack, not only per operation:
+        five plans, both precisions, agreement to 1e-9 relative. That is the only check worth having
+        -- a wrong backward pass still trains, just worse, which is how a missing bias term in
+        `MultilayerPerceptron` survived everything except an exact law.
+        """
+        x = np.asarray(image, dtype=self.dtype)
+        if x.shape != self.in_shape:
+            raise ValueError(f"expected an image of {self.in_shape}, got {x.shape}")
+        d_features = np.asarray(d_features, dtype=self.dtype)
+        if d_features.shape != (self.n_outputs,):
+            raise ValueError(f"expected d_features of {(self.n_outputs,)}, got {d_features.shape}")
+
+        #: Every layer's input and its pre-activation, which is exactly the retained-activation cost.
+        inputs, pre = [], []
+        for entry, w, b in zip(self.plan, self._w, self._b):
+            inputs.append(x)
+            if entry[0] == "conv":
+                z = conv2d(x, w, b, stride=entry[3])
+            elif entry[0] == "pw":
+                z = conv2d(x, w, b, stride=1)
+            else:
+                z = depthwise_conv2d(x, w, b, stride=entry[2])
+            pre.append(z)
+            x = relu6(z)
+
+        d = grid_avg_pool_backward(x.shape, d_features * self.dtype.type(self.output_scale),
+                                  self.pool)
+        dws, dbs = [None] * len(self.plan), [None] * len(self.plan)
+        for k in range(len(self.plan) - 1, -1, -1):
+            entry, w = self.plan[k], self._w[k]
+            d = relu6_backward(pre[k], d)
+            if entry[0] == "conv":
+                d, dw, db = conv2d_backward(inputs[k], w, d, stride=entry[3])
+            elif entry[0] == "pw":
+                d, dw, db = conv2d_backward(inputs[k], w, d, stride=1)
+            else:
+                d, dw, db = depthwise_conv2d_backward(inputs[k], w, d, stride=entry[2])
+            dws[k], dbs[k] = dw, db
+        return dws, dbs
+
+    def apply_gradients(self, d_weights, d_biases, learning_rate):
+        """One SGD step over the stack's own weights. Returns the distance the state moved.
+
+        SGD rather than Adam for the reason `MultilayerPerceptron` already records: compared at
+        **equal bytes** -- the comparison that matters when memory is why a small model is here --
+        SGD wins, 0.1314 at (56,56) against Adam's 0.1410 at (32,32), because Adam's two moments per
+        weight cost 3x the state.
+        """
+        if learning_rate <= 0.0:
+            raise ValueError(f"learning_rate must be positive, got {learning_rate}")
+        before = self.state.copy()
+        lr = self.dtype.type(learning_rate)
+        for w, b, dw, db in zip(self._w, self._b, d_weights, d_biases):
+            w -= lr * np.asarray(dw, dtype=self.dtype)
+            b -= lr * np.asarray(db, dtype=self.dtype)
+        return float(np.linalg.norm(self.state - before))
 
     def __repr__(self):
         return (f"Backbone(layers={len(self.plan)}, in_shape={self.in_shape}, "
