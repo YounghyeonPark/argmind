@@ -1807,11 +1807,61 @@ head fails, a random backbone buys no invariance, per-object correlation segment
 **None of that is evidence against learning the layers**, which is what the owner is asking for; it is
 evidence against not learning them. The distinction was not drawn in this file before today.
 
-**What is genuinely absent**, so it is not mistaken for deferred work: backprop through a
-convolutional stack (the library has dense-layer SGD only, and `Backbone` is forward-only), any
-audio path, any actuator or speech path, and any measurement of a learned-from-scratch stack becoming
-object-selective. The last of those is the falsifiable version of "recognition works in the middle
-hidden network" and is the experiment worth running first.
+**What is genuinely absent**, so it is not mistaken for deferred work: any audio path, and any
+actuator or speech path. The other two items this paragraph used to list — backprop through a
+convolutional stack, and a measurement of whether a learned-from-scratch stack becomes
+object-selective — are done as of the same day, and the measurement came back negative; see the
+section below.
+
+**The convolutional stack is differentiable now, and the first experiment it enabled returns a
+negative result (2026-08-13).** `Backbone` was forward-only, so "recognition in the middle hidden
+network" was not expressible. `conv2d_backward`, `depthwise_conv2d_backward`, `relu6_backward` and
+`grid_avg_pool_backward` are the four gradients; `Backbone.backward` composes them and
+`apply_gradients` is one SGD step, kept separate so `features()` stays a pure function of the state.
+Verified against **central differences** per operation (1e-11) and over the composed stack (1e-8 over
+five plans, two pool settings and two output scales) — the only check worth having, since a wrong
+backward pass still trains, just worse.
+
+**The reference had a trap that had to be diagnosed rather than assumed.** The composed check
+disagreed by 1.5e-02 to 7.6e-01 on three plans, and the cause is `relu6`'s corner, not the gradient:
+**biases initialise to exactly zero** and `relu6` emits exact zeros, so an all-zero receptive field
+puts a pre-activation precisely on the kink, where a central difference averages slope 0 and slope 1.
+Confirmed by counting — the plans that disagree have 8 and 3 pre-activations at exactly zero, the plan
+agreeing to 3.9e-10 has none — and by nudging the biases, which takes the same configurations to
+6e-11. A test asserts the un-nudged version *still* disagrees, so it is not rediscovered as a bug.
+
+**The experiment: learning the hidden layers from sensor data does NOT make units object-selective,
+and the stack does learn.** That pairing is the finding. Trained end to end on a position task the
+stack reaches 0.010–0.016 against 0.53–0.56 with the labels shuffled, so the gradient works and the
+layers move — while object selectivity stays where random initialisation left it:
+
+| run | mean d-prime | per seed |
+|---|---|---|
+| random init | **0.532** | 0.339, 0.499, 0.757 |
+| trained | **0.511** | 0.423, 0.313, 0.796 |
+
+The direction differs by seed and the random control's own spread is wider than any effect.
+**Recognition is not a by-product of an objective that does not need it**: position is a linear readout
+of a spatial map, so the gradient's cheapest route is to preserve spatial layout rather than to become
+selective for what is there. The next thing to try is therefore an objective that *requires* identity,
+not more layers or more updates.
+
+**Two measurement errors of mine, both inside one turn.** A **single seed said the opposite** — at
+seed 7 alone, random 0.676 against trained 1.157, which I reported as "1.7× the control" before
+running the other seeds; at seed 11 training made it *worse*, 2.276 → 1.995. Fourth single-seed or
+aggregation artifact recorded here. And **the first metric could not fail**: with objects of different
+*colours* a random filter has a random colour preference for free and scores **1.532 before any
+training**, 3–9 of 12 units already above 1.0. The shipped fixture gives all three objects the same
+colour and different shapes, and a test keeps the colour version's triviality measured rather than
+described.
+
+**The shuffled-label control is vacuous and is recorded as such** so it is not quoted later: its 0.090
+comes with unit liveness of 0–58% against 75–100%, so training on noise kills the units and the low
+score is the dead-unit explanation rather than evidence about learning.
+
+Eleven mutants on the backward pass, one real gap: `output_scale` defaults to 1.0, so dropping it from
+the backward pass was invisible until the check swept that axis — the same "computed and never
+compared" shape as the `gain_norm` gap found twice before.
 
 **Still undecided:** whether inference is *hosted* (an interface to ONNX Runtime/TFLite) or
 *embedded*, and whether the tiers ship as one library or two. Nothing on the camera/audio/speech
@@ -1835,7 +1885,7 @@ rollback, explicit recovery), `argmind/pipeline.py` (`FrameMap`, input gate, bou
 pipeline. `argmind/bench.py` has no C++ counterpart and is not getting one: it is a host
 measurement harness, and DESIGN.md already records that Python timings are not a baseline the
 C++ can be compared against.
-982 Python tests and 4,652 C++ checks pass; several exist to prove failures are visible
+987 Python tests and 4,652 C++ checks pass; several exist to prove failures are visible
 rather than silent. Every suite is mutation-checked, and surviving mutants are recorded where
 they live rather than tallied here — including the ones that turn out to be **equivalent on a
 64-bit host**, a distinction worth keeping rather than rounding away. Cumulative counts are
