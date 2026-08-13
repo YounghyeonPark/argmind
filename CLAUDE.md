@@ -1575,13 +1575,14 @@ beside it: two objects wearing one id are each perfectly pure, so purity alone c
 region index is what the display would use for free, and it flickers because a region's number comes
 out of a raster-order component pass.
 
-**More labels come from splitting, not from raising `k` — the opposite of what I assumed.** Five
-objects, `k` swept: **5.0 labels at purity 1.00 and 5 ids minted with k=4**, against **3.0 at 0.45
-over 43 ids at k=6, 8 and 10**. Five labels for five objects come out of a scene declared with four
-clusters because splitting separates the objects that share one; raising `k` carves the objects
-*across* clusters instead. An earlier version of this measurement said `k` did not matter at all,
-and it came from a fixture whose objects collided with the split's floor standing in for the
-picture's.
+**The labels come from splitting, and `k` turns out to be close to irrelevant.** Five objects give
+**5.0 labels at purity 1.00 over 5 minted ids, identically at k = 4, 6, 8 and 10** — five labels for
+five objects out of a scene declared with four clusters, because splitting separates the objects that
+share one. **An earlier version of this paragraph said raising `k` was worse (3.0 labels at 0.45 over
+43 ids) and that is WITHDRAWN**: it was an artefact of the background-selection defect recorded
+below, not a property of `k`. A version before that said `k` did not matter at all, from a fixture
+whose objects collided — so this measurement has been wrong twice in opposite directions, and what
+survives is the splitting half, which never depended on either.
 
 **One area floor cannot serve the head and the picture, measured in both directions.** The split's
 floor feeds the head, and raising it 0.01 → 0.03 takes the taught centre on two same-coloured
@@ -1696,6 +1697,29 @@ is configured** — the split's own floor is 27 pixels against its 12 — the sa
 every shipped adapter. It is kept because a caller lowering `--seg-min-frac` reaches it immediately,
 so it is exercised with a floor that does and its unreachability at the default is asserted.
 
+**"레이블 갯수가 상황에 따라 변하는거 맞음?" — yes, and asking found a defect with a very common
+trigger (2026-08-13).** Objects entering and leaving a scene give a true count of 1,2,3,4,3,2,1,0 and
+the painted count agrees on **30 of 30 frames**, minting exactly **4** ids for 4 objects — so it
+follows the scene rather than re-minting its way to the right number. `k` and `--objects` are fixed
+for the whole run; the count is not.
+
+**The defect: `label_field` chose its background from the clusters that had produced a surviving
+region.** On a clean wall the wall's clusters produce none — their fragments sit under the split's
+floor — so the object's own cluster became "the largest present" and was dropped. Measured, a frame
+containing exactly one region, the object's own at contrast 0.519, painted **nothing**; a lone object
+on a plain background is now labelled on 12 of 12 frames. The background is the largest cluster **in
+the frame** now, whether or not it produced a region. Same shape as the `pick_regions` correction of
+the day before, which also identified the background from the wrong population.
+
+**And it invalidated a finding this file had recorded twice.** "Raising `k` makes the labelling
+worse — 3.0 labels at purity 0.45 over 43 minted ids from k=6" was the defect, not `k`: at high `k`
+the wall splits into clusters whose fragments all fall under the floor, so the background was
+mis-identified and real objects were dropped and re-minted. Re-measured, five objects give **5.0
+labels at purity 1.00 over 5 ids at every k from 4 to 10**, and the crowded scene covers 0.80 with
+contrast off and 1.00 with it on, *at every k*. So `k` is close to irrelevant and **contrast is the
+mechanism** — which is a cleaner statement of the same conclusion, reached for a correct reason
+rather than a lucky one. Three mutants, including one restoring the exact defect, all caught.
+
 **Still undecided:** whether inference is *hosted* (an interface to ONNX Runtime/TFLite) or
 *embedded*, and whether the tiers ship as one library or two. Nothing on the camera/audio/speech
 path is built.
@@ -1718,7 +1742,7 @@ rollback, explicit recovery), `argmind/pipeline.py` (`FrameMap`, input gate, bou
 pipeline. `argmind/bench.py` has no C++ counterpart and is not getting one: it is a host
 measurement harness, and DESIGN.md already records that Python timings are not a baseline the
 C++ can be compared against.
-960 Python tests and 4,652 C++ checks pass; several exist to prove failures are visible
+963 Python tests and 4,652 C++ checks pass; several exist to prove failures are visible
 rather than silent. Every suite is mutation-checked, and surviving mutants are recorded where
 they live rather than tallied here — including the ones that turn out to be **equivalent on a
 64-bit host**, a distinction worth keeping rather than rounding away. Cumulative counts are

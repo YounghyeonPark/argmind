@@ -402,16 +402,10 @@ Three objects, two the same colour, k=4. **The cluster index scores a perfect pu
 useless** — two objects wearing one id are each perfectly pure — which is why distinctness is
 measured beside it and why purity alone cannot fail.
 
-**More labels come from splitting, not from raising `k`, which is the opposite of what I assumed.**
-
-| k | labels shown | on a real object | purity | ids minted |
-|---|---|---|---|---|
-| **4** | **5.0** | 1.00 | **1.00** | **5** |
-| 6 / 8 / 10 | 3.0 | 1.00 | 0.45 | 43 |
-
-Five labels for five objects come out of a scene declared with four clusters, because splitting
-separates the objects that share one. Raising `k` carves the objects across clusters instead. Leave
-`k` at `objects + 1`.
+**The labels come from splitting, and `k` is close to irrelevant** — five objects give 5.0 labels at
+purity 1.00 over 5 minted ids, identically at k = 4, 6, 8 and 10, because splitting separates the
+objects that share a cluster. An earlier version of this section said raising `k` was *worse* (3.0
+labels at 0.45 over 43 ids); that was the background-selection defect below and is **withdrawn**.
 
 **Two floors on one split, and neither number can do both jobs.** The split's floor feeds the head:
 0.01 → 0.03 takes the taught centre on two same-coloured objects from 0.000 to **0.222**. The
@@ -474,7 +468,7 @@ Four mechanisms measured, three refused:
 
 | mechanism | result |
 |---|---|
-| raise or adapt `k` | non-monotone: five large objects want k=4 (purity 1.00 against 0.45 at k≥6), a small one wants k=8. No `k` serves both |
+| raise or adapt `k` | **changes nothing**: covered 0.80 at k=4, 6 and 8 alike. (An earlier row here claimed it was non-monotone and *worse*; that was the background defect below, and is withdrawn) |
 | merge close clusters | folds the small object back into the wall, covered 1.00 → 0.80 |
 | drop the largest *region* rather than the background *cluster* | rescues it (0.80 → 1.00), destroys a noisy scene (precision 0.95 → **0.26**) |
 | **ring contrast** | covered **0.80 → 1.00**; precision 0.99 → **0.92** on a noise-carved wall |
@@ -493,3 +487,19 @@ survived, the margin did not. And the first reproduction scored a uniform 1.00 f
 is the signal that the measurement was broken: three distinct objects separate cleanly whatever you
 do. Nine mutants; the two survivors were real gaps, including `MIN_REGION_PX` being dead at the
 shipped floors.
+
+## Does the count really vary? — 2026-08-13
+
+Yes, and asking found a defect with a common trigger. Objects entering and leaving give a true count
+of 1,2,3,4,3,2,1,0 and the painted count agrees on **30 of 30 frames**, minting exactly **4** ids for
+4 objects. `k` and `--objects` are fixed for the run; the count is not.
+
+**The defect**: `label_field` picked its background from the clusters that had produced a surviving
+region. On a clean wall the wall's clusters produce none, so the object's own cluster became "the
+largest present" and was dropped — a frame with exactly one region, the object's own at contrast
+0.519, painted nothing. A lone object on a plain background is now labelled on 12 of 12 frames.
+
+**It also invalidated a recorded finding.** "Raising `k` is worse" was this defect, not `k`. Five
+objects now give 5.0 labels at purity 1.00 over 5 ids at every k from 4 to 10, and the crowded scene
+covers 0.80 without contrast and 1.00 with it *at every k*. So `k` is close to irrelevant and
+contrast is the mechanism — the same conclusion, for a correct reason.

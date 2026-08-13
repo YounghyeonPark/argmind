@@ -186,43 +186,40 @@ def test_a_tracked_label_is_the_only_scheme_that_is_both_stable_and_distinct():
     assert tracked["coverage"] > 0.95
 
 
-def test_more_labels_come_from_splitting_and_not_from_raising_k():
-    """**More clusters is worse, which is the opposite of what I assumed before measuring it.** Five
-    objects in a scene, `k` swept with the head's slot count irrelevant:
+def test_more_labels_come_from_splitting_and_k_barely_matters():
+    """**Five labels for five objects come out of a scene declared with four clusters**, because
+    splitting separates the objects that share one. `k` swept, with the head's slot count irrelevant:
 
-    | k | labels shown | on a real object | purity | ids minted |
+    | k | labels | on a real object | purity | ids minted |
     |---|---|---|---|---|
-    | **4** | **5.0** | 1.00 | **1.00** | **5** |
-    | 6 | 3.0 | 1.00 | 0.45 | 43 |
-    | 8 | 3.0 | 1.00 | 0.45 | 43 |
-    | 10 | 3.0 | 1.00 | 0.45 | 43 |
+    | 4 | 5.0 | 1.00 | 1.00 | 5 |
+    | 6 | 5.0 | 1.00 | 1.00 | 5 |
+    | 8 | 5.0 | 1.00 | 1.00 | 5 |
+    | 10 | 5.0 | 1.00 | 1.00 | 5 |
 
-    So five labels for five objects come out of a scene declared with **four** clusters -- splitting
-    separates the objects that share one -- and raising `k` carves the objects across clusters
-    instead, losing two of the five labels and minting 43 ids where 5 would do.
+    **An earlier version of this test asserted that raising `k` was WORSE -- 3.0 labels at purity
+    0.45 over 43 minted ids from k=6 -- and that was an artefact of a defect, not a property of
+    `k`.** `label_field` chose its background from the clusters that had produced a surviving region;
+    at high `k` the wall splits into clusters whose fragments all fall under the split's floor, so the
+    background was mis-identified and real objects were dropped and re-minted. With the background
+    taken from the largest cluster in the frame, `k` is flat across 4 to 10.
 
-    That is the answer to "there are too few labels": paint every region rather than the head's
-    slots, and leave `k` at `objects + 1`. An earlier version of this test asserted the opposite --
-    that `k` did not matter at all -- from a run on a fixture whose objects collided and with the
-    split's floor standing in for the picture's.
-
-    The control is here because a flat row is this project's own signal of a broken measurement: the
-    clusters must genuinely differ across `k`, and at k=10 all ten are occupied.
+    A flat row is this project's own signal of a broken measurement, so the control is still here:
+    the clusters must genuinely differ across `k`, and at k=10 all ten are occupied. What is flat is
+    the *outcome*, not the input.
     """
     seen = {}
     for k in (4, 6, 10):
         carried, shown, precision, minted = sequence("tracked", spec=FIVE, k=k, radius=0.09)
         seen[k] = (shown, score(carried)["purity"], minted)
         assert precision > 0.90, f"k={k}: only {precision:.0%} of labels sat on a real object"
-
-    assert seen[4][0] > 4.5, (
-        f"k=4 shows only {seen[4][0]:.1f} labels for five objects; splitting is no longer separating "
-        "the objects that share a cluster, which is what makes the whole field worth painting")
-    assert seen[4][1] > 0.95 and seen[4][2] <= 8, (
-        f"k=4 purity {seen[4][1]:.2f} over {seen[4][2]} minted ids")
-    assert seen[10][0] < seen[4][0] - 1.0 and seen[10][1] < 0.70, (
-        f"raising k no longer costs anything: {seen}. If that is real then `k` is free after all and "
-        "the recommendation to leave it at objects+1 needs re-deriving")
+        assert shown > 4.5, (
+            f"k={k} shows only {shown:.1f} labels for five objects; splitting is no longer "
+            "separating the objects that share a cluster")
+        assert seen[k][1] > 0.95 and seen[k][2] <= 8, (
+            f"k={k}: purity {seen[k][1]:.2f} over {seen[k][2]} minted ids. If raising k has started "
+            "costing again, check the background selection before blaming k -- that is what it was "
+            "the first time")
 
     img, _masks = frame_at(10, FIVE, 0.09, seed=10)
     seg = FrameSegmenter(10)
@@ -659,28 +656,23 @@ def frame_at_five(t, seed=0):
     return frame_at(t, FIVE, 0.09, seed=seed)
 
 
-def test_the_three_alternatives_to_contrast_were_measured_and_refused():
-    """Each was tried first and each fails for a stateable reason, so none is quietly available.
+def test_raising_k_does_not_fix_coverage_at_any_value():
+    """**`k` is not the mechanism, and this is the cleanest statement of it**: with contrast off the
+    crowded scene covers 0.80 at k=4, k=6 and k=8 alike, and with contrast on it covers 1.00 at all
+    three. Raising `k` separates the faint object's *cluster* -- measured, at k=6 it has its own --
+    and the area floor drops it anyway, so nothing changes.
 
-    **`k` is non-monotone**, which is the strongest of the three results: five large objects want
-    k=4 and read purity 0.45 at k>=6, while the crowded scene needs the faint object separated from
-    the wall, which k=4 cannot do. There is no `k` that serves both, in either direction.
+    An earlier version of this test also asserted that raising `k` *damaged* another fixture, and
+    that was an artefact of the background-selection defect rather than a property of `k`. The claim
+    withdrawn; what survives is the one below, which never depended on it.
     """
-    # The crowded scene: raising k separates the faint object's CLUSTER but the area floor still
-    # drops it, so k alone changes nothing.
     for k in (4, 6, 8):
         assert field_quality(crowd_frame, k, 0.0)[0] < 0.9, (
             f"k={k} with contrast off now covers the faint object; if raising k is sufficient then "
-            "contrast is not needed and the refusal above is wrong")
-
-    # And the other fixture is damaged by exactly that change, which is what makes it a conflict
-    # rather than a free improvement.
-    low = sequence("tracked", spec=FIVE, k=4, radius=0.09)
-    high = sequence("tracked", spec=FIVE, k=8, radius=0.09)
-    assert score(high[0])["purity"] < score(low[0])["purity"] - 0.2, (
-        f"raising k no longer costs purity on five large objects "
-        f"({score(low[0])['purity']:.2f} -> {score(high[0])['purity']:.2f}); the non-monotone claim "
-        "needs re-measuring")
+            "contrast is not needed")
+        assert field_quality(crowd_frame, k, 0.125)[0] > 0.95, (
+            f"k={k} with contrast on does not cover it either, so the mechanism is not what this "
+            "file claims")
 
 
 def test_ring_contrast_reads_the_boundary_and_not_the_frame_edge():
@@ -818,3 +810,97 @@ def test_the_pixel_minimum_is_unreachable_at_the_shipped_floors_and_still_works(
     painted = [int((field == s).sum()) for s in range(1, len(ids) + 1)]
     assert painted and min(painted) >= MIN_REGION_PX, (
         f"a region of {min(painted)} pixels was painted; the pixel minimum is not being applied")
+
+
+# --- Does the count actually follow the scene? ---------------------------------------------------
+
+
+def entering_frame(t, seed=0):
+    """Four objects, each present only between frames 4i and 4i+14, so the true count rises 1..4
+    and falls back to 0. Nothing about `k` or `--objects` changes across the run."""
+    yy, xx = np.mgrid[0:H, 0:W]
+    img = np.full((H, W, 3), WALL)
+    masks = []
+    for i, (cx, cy, colour) in enumerate(((0.22, 0.28, RED), (0.78, 0.28, GREEN),
+                                          (0.22, 0.74, BLUE), (0.78, 0.74, YELLOW))):
+        if 4 * i <= t < 4 * i + 14:
+            m = np.hypot(xx - cx * W, yy - cy * H) <= 0.10 * W
+            img[m] = colour
+            masks.append(m)
+    g = np.random.default_rng(seed)
+    return (img + g.standard_normal(img.shape) * 0.01).astype("f4"), masks
+
+
+def lone_frame(t, seed=0):
+    """One object on a clean wall -- the case that exposed the background-selection defect."""
+    yy, xx = np.mgrid[0:H, 0:W]
+    img = np.full((H, W, 3), WALL)
+    m = np.hypot(xx - (0.30 + 0.02 * t) * W, yy - 0.5 * H) <= 0.10 * W
+    img[m] = RED
+    g = np.random.default_rng(seed)
+    return (img + g.standard_normal(img.shape) * 0.01).astype("f4"), [m]
+
+
+def label_counts(maker, k=4, frames=30, contrast=0.125):
+    seg, tracker = FrameSegmenter(k), RegionTracker(keep=30)
+    true, got = [], []
+    for t in range(frames):
+        img, masks = maker(t, seed=t)
+        seg(img)
+        rmap, _c, of_cluster = split_regions(seg.labels, k, img, edges=0.95, min_frac=0.004)
+        _field, ids = label_field(rmap, of_cluster, seg.labels, tracker, min_frac=0.03,
+                                  frame=img, contrast=contrast)
+        true.append(len(masks))
+        got.append(len(ids))
+    return true, got, tracker.minted
+
+
+def test_the_label_count_follows_the_scene_frame_by_frame():
+    """`k` and `--objects` are fixed for the whole run; the count is not.
+
+    Objects enter and leave so the true count goes 1, 2, 3, 4, 3, 2, 1, 0 and the painted count
+    **agrees on all 30 frames**, minting exactly **4** labels for 4 objects -- so it is following the
+    scene rather than re-minting its way to the right number.
+    """
+    true, got, minted = label_counts(entering_frame)
+    assert len(set(true)) >= 4, "the fixture no longer varies its object count"
+    agree = sum(a == b for a, b in zip(true, got))
+    assert agree >= 29, f"the count matched on only {agree}/30 frames: {list(zip(true, got))}"
+    assert minted <= 6, (
+        f"{minted} labels minted for four objects; the count is being reached by re-minting rather "
+        "than by following the scene")
+
+
+def test_a_lone_object_on_a_clean_wall_is_labelled_on_every_frame():
+    """**The defect this test was written for, found by asking whether the count really varies.**
+    `label_field` chose its background from the clusters that had produced a surviving region. On a
+    clean wall the wall's clusters produce none -- their fragments are under the split's floor -- so
+    the object's own cluster became "the largest present" and was dropped as background.
+
+    Measured before the fix: a frame with exactly one region, the object's own, contrast 0.519,
+    painted **nothing**. The background is the largest cluster in the *frame* now, whether or not it
+    produced a region.
+    """
+    true, got, minted = label_counts(lone_frame, frames=12)
+    assert got == [1] * 12, f"a lone object was not labelled on every frame: {got}"
+    assert minted == 1, f"{minted} labels minted for one object that never left"
+
+
+def test_the_background_is_the_biggest_cluster_in_the_frame_not_the_biggest_that_has_a_region():
+    """The defect in isolation: a frame where only the object's cluster has a surviving region."""
+    img, masks = lone_frame(3, seed=3)
+    seg = FrameSegmenter(4)
+    for _ in range(3):
+        seg(img)
+    rmap, _c, of_cluster = split_regions(seg.labels, 4, img, edges=0.95, min_frac=0.004)
+
+    survivors = sorted(set(int(j) for j in of_cluster))
+    biggest = int(np.argmax([(seg.labels == j).sum() for j in range(4)]))
+    assert biggest not in survivors, (
+        "the wall's cluster still has a region here, so this frame no longer isolates the defect")
+
+    _field, ids = label_field(rmap, of_cluster, seg.labels, RegionTracker(keep=30), min_frac=0.03,
+                              frame=img, contrast=0.125)
+    assert len(ids) == 1, (
+        f"{len(ids)} labels where the object is the only region in the frame; picking the "
+        "background from the clusters that have regions drops the object itself")

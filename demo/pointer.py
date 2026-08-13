@@ -333,18 +333,14 @@ def label_field(region_map, of_cluster, cluster_labels, tracker, *, min_frac=0.0
     output width; a picture has no such limit. This repository's own resolution of the vocabulary
     question is "unbounded vocabulary, bounded concurrency", and this is the unbounded half.
 
-    **More labels come from splitting, not from raising `k`** -- which is the opposite of what I
-    assumed before measuring it. Five objects, the head's slot count irrelevant:
+    **The labels come from splitting, and `k` is close to irrelevant.** Five objects, the head's
+    slot count irrelevant: 5.0 labels at purity 1.00 over 5 minted ids, identically at k = 4, 6, 8
+    and 10. Five labels for five objects come out of a scene declared with **four** clusters, because
+    splitting separates the objects that share one.
 
-    | k | labels shown | on a real object | purity | ids minted |
-    |---|---|---|---|---|
-    | **4** | **5.0** | 1.00 | **1.00** | **5** |
-    | 6 / 8 / 10 | 3.0 | 1.00 | 0.45 | 43 |
-
-    Five labels for five objects come out of a scene declared with **four** clusters, because
-    splitting separates the objects that share one. Raising `k` carves the objects *across* clusters
-    instead: two of the five labels are lost and 43 ids are minted where 5 would do. So leave `k` at
-    `objects + 1` and let the split do the work.
+    An earlier version of this docstring said raising `k` was **worse** -- 3.0 labels at purity 0.45
+    over 43 ids -- and that was an artefact of the background-selection defect described above, not a
+    property of `k`. Withdrawn and re-measured.
 
     **`min_frac` here is NOT the split's floor, and one number cannot serve both.** The split's floor
     must be low enough that every object has a region, because that is what the head is taught from:
@@ -373,7 +369,7 @@ def label_field(region_map, of_cluster, cluster_labels, tracker, *, min_frac=0.0
 
     | mechanism | result |
     |---|---|
-    | raise or adapt `k` | **non-monotone**; five large objects want k=4 (purity 1.00 against 0.45 at k>=6) and a small one wants k=8 |
+    | raise `k` | **changes nothing**: covered 0.80 at k=4, 6 and 8 alike. It separates the faint object's cluster and the area floor drops it anyway |
     | merge clusters whose centres are close | folds the small object back into the wall, covered 1.00 -> 0.80 |
     | drop the largest *region* instead of the background *cluster* | rescues the absorbed object, and destroys a noisy scene: precision 0.95 -> **0.26** |
     | **ring contrast** | covered **0.80 -> 1.00** on the failing scene, precision 0.99 -> **0.92** on a noisy one |
@@ -396,8 +392,13 @@ def label_field(region_map, of_cluster, cluster_labels, tracker, *, min_frac=0.0
     if of_cluster is None:                       # clusters are the regions; there is nothing to add
         return lab, []
     cl = np.asarray(cluster_labels)
-    present = sorted(set(int(j) for j in of_cluster))
-    background = max(present, key=lambda j: (cl == j).sum()) if present else None
+    #: The background is the largest cluster **in the frame**, not the largest among the clusters
+    #: that happened to produce a surviving region. Restricting it to those was a real defect with
+    #: a common trigger: one object on a clean wall leaves the wall's clusters with no region above
+    #: the split's floor, so the object's own cluster became "the largest present" and was dropped.
+    #: Measured, a lone object on a plain background got NO label on the frame where that happened.
+    counts = np.bincount(cl.ravel())
+    background = int(counts.argmax()) if counts.size else None
     floor = max(int(min_frac * lab.size), 1)
     sizes = {i: int((lab == i).sum()) for i in range(1, len(of_cluster) + 1)}
     in_bg = [i for i in sizes if of_cluster[i - 1] == background]
