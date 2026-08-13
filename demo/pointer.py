@@ -42,6 +42,10 @@ STATE_DIR = Path(__file__).resolve().parent / "state"
 #: directory, so the slots landed as `demo/state.0` NEXT TO it while the demo printed
 #: "saved to demo/state". It saved correctly and told the user the wrong place.
 STATE_PATH = STATE_DIR / "head"
+#: The learned backbone's own record, under `--input learned`. A separate two-slot store rather than
+#: one combined block, because the two have different shapes and a caller switching `--input` should
+#: be refused by the fingerprint rather than handed a block that unpacks and means something else.
+FEATURES_PATH = STATE_DIR / "features"
 #: The appearance window around a detected object, in pixels of the resized frame. It has to be
 #: big enough to contain an object and small enough not to contain its neighbour -- and it carries
 #: POSITION as well as appearance whenever it is clamped at a frame edge, which is measured: two
@@ -158,7 +162,7 @@ def basis(small, *, backbone, source, colour=True, scale=1.0, output_memory=None
     the first calibrated frame -- which is the same defect a single extraction path was introduced
     to fix, arriving a second time by the same door.
     """
-    if source == "backbone":
+    if source in ("backbone", "learned"):
         base = backbone.features(small)
     else:
         base = raw_features(small, colour=colour) * scale
@@ -167,13 +171,80 @@ def basis(small, *, backbone, source, colour=True, scale=1.0, output_memory=None
     return np.concatenate([base, output_memory.features().astype(base.dtype)])
 
 
+#: Default step for the feature learner. Small, because the head is adapting underneath it: the
+#: features move the ground the head stands on, and 0.05 was measured to oscillate.
+FEATURE_LR = 0.02
+
+
+def head_theta(head):
+    """The head's coefficient matrix, `(n_features, n_outputs)`, with the layout checked.
+
+    Both linear adapters lay `theta` out row-major over features and put it first in the state
+    block, which is what makes this a reshape rather than an accessor. It is *asserted* rather than
+    assumed, because a transposed read would still produce a gradient -- one that trains something
+    else, silently. The tolerance is f32's over a few hundred terms; 1e-6 was too tight and that was
+    my error rather than a layout error.
+    """
+    n, m = head.n_features, head.n_outputs
+    theta = np.asarray(head.state[:n * m]).reshape(n, m)
+    probe = np.arange(1.0, n + 1.0, dtype=np.float64) / n
+    if not np.allclose(probe @ theta, np.asarray(head.predict(probe)), rtol=1e-3, atol=1e-4):
+        raise ValueError("the head's theta is not (n_features, n_outputs) row-major")
+    return theta
+
+
+def learn_features(backbone, small, theta, residual, learning_rate=FEATURE_LR):
+    """Backpropagate the head's residual into the backbone. Returns how far the weights moved.
+
+    **This is the whole of what makes the features learned rather than frozen**, and it is a
+    module-level function for the reason six other things in this file are: the version that lived
+    inside `main()`'s loop could not be tested, and every one of those turned out to be wrong.
+
+    `residual` is `prediction - target`, so `dL/dfeatures` for the squared error is
+    `2 * theta[:-1] @ residual` -- the last row of `theta` belongs to the constant, which the
+    backbone does not produce.
+
+    **Measured, and the trade is real in both directions.** Against the same demo with the backbone
+    frozen, on a three-object tracking fixture with an RLS head:
+
+    | source | tracking error | frozen, then the scene brightens x1.6 | ms/frame |
+    |---|---|---|---|
+    | raw pixels | **0.0010** | 0.6506 — **0.78x, worse than guessing** | 0.07 |
+    | frozen random backbone | 0.0241 | **0.0816 — 6.19x** | 0.68 |
+    | **learned backbone** | **0.0163** | 0.1658 — 3.05x | 0.70 + **2.42 backward** |
+
+    So learning the features **beats the frozen backbone at tracking** and **costs generalisation**:
+    the learned stack fits the condition it was trained under more tightly than a random projection
+    does, and transfers worse when the light changes. Raw pixels win at tracking by a wide margin and
+    fail the condition change outright. None of the three dominates, which is why this is a flag.
+
+    The caller gates it on the head having actually updated -- which also means it stops while the
+    guard is frozen, since a frozen guard applies nothing. That is the behaviour you want: a fault is
+    exactly when you do not wish to push it into the features.
+    """
+    if learning_rate <= 0.0:
+        raise ValueError(f"learning_rate must be positive, got {learning_rate}")
+    theta = np.asarray(theta)
+    resid = np.asarray(residual, dtype=np.float64)
+    if theta.shape[0] != backbone.n_outputs + 1:
+        raise ValueError(
+            f"theta has {theta.shape[0]} rows for a backbone of {backbone.n_outputs} features "
+            "plus the constant")
+    if resid.shape != (theta.shape[1],):
+        raise ValueError(f"expected a residual of {(theta.shape[1],)}, got {resid.shape}")
+    d_feat = 2.0 * (theta[:-1] @ resid)
+    dws, dbs = backbone.backward(small, d_feat.astype(backbone.dtype))
+    return backbone.apply_gradients(dws, dbs, learning_rate)
+
+
 def frame_width(backbone, source, colour=True) -> int:
     """How much of a basis is the frame, as opposed to the feedback bank.
 
     Calibration needs this: the bank starts at zero, so scaling from the whole vector would be
     scaling from something a third of which is padding.
     """
-    return backbone.n_outputs if source == "backbone" else raw_width(colour=colour)
+    return (backbone.n_outputs if source in ("backbone", "learned")
+            else raw_width(colour=colour))
 
 
 def feedback_width(objects: int, rates=FEEDBACK_RATES) -> int:
@@ -508,12 +579,13 @@ def build(objects: int = 1, source: str = "backbone", *, colour: bool = True,
     """
     if objects < 1:
         raise ValueError(f"objects must be at least 1, got {objects}")
-    if source not in ("backbone", "raw"):
-        raise ValueError(f"source must be 'backbone' or 'raw', got {source!r}")
+    if source not in ("backbone", "raw", "learned"):
+        raise ValueError(f"source must be 'backbone', 'raw' or 'learned', got {source!r}")
     # The backbone is built either way: `--identify` and `--remember` describe crops with it, and
     # the guard's calibration uses it. `source` decides only what reaches the HEAD.
     backbone = Backbone(PLAN, IN_SHAPE, dtype="f4", seed=1, pool=POOL)
-    width = backbone.n_outputs if source == "backbone" else raw_width(colour=colour)
+    width = (backbone.n_outputs if source in ("backbone", "learned")
+             else raw_width(colour=colour))
     # Sized here, CONSTRUCTED by the caller -- like the detector, the matcher and the object
     # memory. `build` owns the shapes; `main` owns the caller-side state.
     fb = feedback_width(objects) if feedback else 0
@@ -725,11 +797,18 @@ def main(argv=None):
                         "through a crossing (0.041 against a centre-guess 0.222) where the sort "
                         "rule cannot (0.234). Needs the objects to LOOK different: with identical "
                         "ones the assignment falls to chance, measured 50.6%%")
-    p.add_argument("--input", choices=("backbone", "raw"), default="backbone",
-                   help="what reaches the head: the frozen random backbone's 144 features, or a "
-                        "block-mean downsample of the raw frame, in colour, also 144. Raw is "
-                        "measured 8.34x a centre guess on roles against the backbone's 4.61x, and "
-                        "118.87x on identity against 4.01x -- see raw_features()")
+    p.add_argument("--input", choices=("backbone", "raw", "learned"), default="backbone",
+                   help="what reaches the head: the frozen random backbone's 144 features, a "
+                        "block-mean downsample of the raw frame in colour (also 144), or the same "
+                        "backbone with its weights LEARNED from the head's residual. Raw is 8.34x a "
+                        "centre guess on roles against the backbone's 4.61x and 118.87x on identity "
+                        "against 4.01x; learned beats the frozen backbone at tracking (0.0163 "
+                        "against 0.0241) and costs generalisation (3.05x against 6.19x under a "
+                        "brightness change) -- see raw_features() and learn_features()")
+    p.add_argument("--feature-lr", type=float, default=FEATURE_LR, metavar="R",
+                   help=f"step for the feature learner under --input learned (default "
+                        f"{FEATURE_LR}). Small on purpose: the features move the ground the head "
+                        "stands on")
     p.add_argument("--raw-grey", action="store_true",
                    help="drop colour from --input raw. Better for roles (12.09x against 8.34x, "
                         "with a third of the features) and nearly useless for identity (1.71x "
@@ -820,6 +899,9 @@ def main(argv=None):
     output_memory = OutputMemory(2 * n_objects) if args.feedback else None
     STATE_DIR.mkdir(parents=True, exist_ok=True)
     store = Store(STATE_PATH)
+    #: Only under `--input learned` do the backbone's weights become state worth surviving a power
+    #: cut; frozen ones are reproduced from the seed and belong in the fingerprint instead.
+    feature_store = Store(FEATURES_PATH) if args.input == "learned" else None
     fp = fingerprint(backbone, n_objects,
                      args.input + ("-grey" if args.raw_grey else "")
                      + ("-fb" if args.feedback else ""))
@@ -829,6 +911,10 @@ def main(argv=None):
             print("nothing saved yet")
         else:
             print(f"restored a head from sequence {rec.sequence}")
+        if feature_store is not None:
+            frec = feature_store.load(backbone, fingerprint=fp)
+            print(f"restored learned features from sequence {frec.sequence}" if frec is not None
+                  else "no learned features saved yet")
 
     cap = cv2.VideoCapture(args.camera)
     if not cap.isOpened():
@@ -1036,6 +1122,17 @@ def main(argv=None):
         report = pipe.step()
         if report.prediction is not None:
             state["pred"] = tuple(float(v) for v in report.prediction)
+        #: Learn the FEATURES, not only the head. Gated on the head having actually updated, which
+        #: also stops it while the guard is frozen -- a fault is exactly when you do not want it
+        #: pushed into the representation. The target is the label pushed this frame, which is exact
+        #: under `--locate texture` (one label per frame) and an approximation otherwise.
+        if (args.input == "learned" and report.updated and not report.frozen
+                and auto is not None and report.prediction is not None):
+            want = np.asarray([c for xy in auto for c in xy], dtype=np.float64)
+            resid = np.asarray(report.prediction, dtype=np.float64) - want
+            state["feat_moved"] = learn_features(backbone, small, head_theta(guard), resid,
+                                                 args.feature_lr)
+            state["feat_steps"] = state.get("feat_steps", 0) + 1
         state["frozen"] = bool(report.frozen)
         state["frozen_by"] = tuple(report.frozen_by)
         # Counted from the reports, because `Guard` exposes no update counter. This line used
@@ -1078,6 +1175,8 @@ def main(argv=None):
             state["n_taught"] = 0
         if key == ord("s"):
             store.save(guard, fingerprint=fp)
+            if feature_store is not None:
+                feature_store.save(backbone, fingerprint=fp)
             print("saved")
         if key == ord("l"):
             rec = store.load(guard, fingerprint=fp)
@@ -1090,7 +1189,11 @@ def main(argv=None):
     cv2.destroyAllWindows()
     if should_save(state["updates"], args.load):
         store.save(guard, fingerprint=fp)
-        print(f"saved to {store.slot_path(0)} and .1")
+        if feature_store is not None:
+            feature_store.save(backbone, fingerprint=fp)
+        print(f"saved to {store.slot_path(0)} and .1"
+              + (f", features to {feature_store.slot_path(0)} and .1"
+                 if feature_store is not None else ""))
     else:
         print(f"nothing learned this session ({state['updates']} updates), so the saved head "
               f"at {store.slot_path(0)} is left alone")

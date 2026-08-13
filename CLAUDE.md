@@ -1863,6 +1863,53 @@ Eleven mutants on the backward pass, one real gap: `output_scale` defaults to 1.
 the backward pass was invisible until the check swept that axis — the same "computed and never
 compared" shape as the `gain_norm` gap found twice before.
 
+**The demo runs on the new structure now — `--input learned`, and the trade cuts both ways
+(2026-08-14).** The differentiable backbone made a third input source expressible: the same
+convolutional stack the demo already built, with its weights moved by the head's own residual.
+Measured on a three-object tracking fixture with an RLS head, against the two sources that already
+shipped:
+
+| source | tracking error | frozen, then the scene brightens ×1.6 | ms/frame |
+|---|---|---|---|
+| raw pixels | **0.0010** (510×) | 0.6506 — **0.78×, worse than guessing** | 0.07 |
+| frozen random backbone | 0.0241 (21×) | **0.0816 — 6.19×** | 0.68 |
+| **learned backbone** | **0.0163** (31×) | 0.1658 — 3.05× | 0.70 + **2.42 backward** |
+
+**Learning the features beats freezing them at tracking and costs generalisation.** The learned stack
+fits the condition it trained under more tightly than a random projection does and transfers worse
+when the light changes; raw pixels win tracking by a wide margin and fail the condition change
+outright. None of the three dominates, so it is a flag and the default does not move.
+
+**And it corrects a claim recorded here twice.** *"What a backbone buys is invariance, and a random
+one does not buy it"* was measured with an **NLMS** head whose frozen control read 0.89× — worse than
+guessing — so it compared two failures. With RLS the frozen control is meaningful and the random
+backbone reaches **6.19×** against raw pixels' **0.78×**. A random backbone *does* buy invariance; the
+earlier fixture could not see it. Same shape as the recorded note that the first invariance fixture
+"measured nothing" for exactly that reason — the correction was applied to the fixture then and not
+to the conclusion.
+
+**`learn_features` is module-level**, for the reason six other things in `demo/pointer.py` are, and
+the caller gates it on `report.updated` — which also stops it while the guard is frozen, since a
+frozen guard applies nothing. A fault is precisely when you do not want it pushed into the
+representation. The learned weights persist through the **same two-slot record format** as the head,
+in their own store: `pack` needs only `state`, `dtype`, `n_features` and `n_outputs`, all of which
+`Backbone` already had.
+
+**Two properties found by testing rather than by reading.** At initialisation `theta` is all zeros,
+so there is **no gradient into the features at all** until the head has learned something — real, not
+a defect, and pinned. And a test that builds the composition without calling `set_external` sees a
+head that never learns: `Bound("external_0", lo=0.35)` is evaluated from the first update, reads 0,
+and freezes before anything is applied. Third occurrence of that shape here.
+
+**Eight mutants, and the two survivors were both real gaps.** Taking `theta[1:]` instead of
+`theta[:-1]` — dropping the first feature's row rather than the constant's — **still trains**, just
+against a shifted objective, and survived every accuracy assertion; it is caught now by checking the
+applied step against central differences of the real loss, the same discipline the convolutional
+gradients themselves are held to. And a mutant letting `learned` fall through to raw features was
+invisible to width, because `RAW_FACTOR` was deliberately chosen to make the raw downsample 144 —
+the backbone's own width. Values discriminate where widths cannot, and `--raw-grey` is what separates
+them for `frame_width`.
+
 **Still undecided:** whether inference is *hosted* (an interface to ONNX Runtime/TFLite) or
 *embedded*, and whether the tiers ship as one library or two. Nothing on the camera/audio/speech
 path is built.
@@ -1885,7 +1932,7 @@ rollback, explicit recovery), `argmind/pipeline.py` (`FrameMap`, input gate, bou
 pipeline. `argmind/bench.py` has no C++ counterpart and is not getting one: it is a host
 measurement harness, and DESIGN.md already records that Python timings are not a baseline the
 C++ can be compared against.
-987 Python tests and 4,652 C++ checks pass; several exist to prove failures are visible
+995 Python tests and 4,652 C++ checks pass; several exist to prove failures are visible
 rather than silent. Every suite is mutation-checked, and surviving mutants are recorded where
 they live rather than tallied here — including the ones that turn out to be **equivalent on a
 64-bit host**, a distinction worth keeping rather than rounding away. Cumulative counts are

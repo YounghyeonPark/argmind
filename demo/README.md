@@ -536,3 +536,35 @@ asserts its own variation.
 Not wired into the demo: measured to add nothing on a continuous run. Doing so means re-pointing
 `ObjectMemory` at `region_descriptor`, whose 96.7/66.5/43.1% figures were measured on the crop
 descriptor and are now suspect for the same reason.
+
+## `--input learned` — the demo on the differentiable backbone, 2026-08-14
+
+The backbone became differentiable, so the demo's features can adapt instead of being frozen random
+or raw pixels. Measured with an RLS head on three tracked objects:
+
+| source | tracking error | frozen, then the scene brightens ×1.6 | ms/frame |
+|---|---|---|---|
+| raw pixels | **0.0010** (510×) | 0.6506 — **0.78×, worse than guessing** | 0.07 |
+| frozen random backbone | 0.0241 (21×) | **0.0816 — 6.19×** | 0.68 |
+| **learned backbone** | **0.0163** (31×) | 0.1658 — 3.05× | 0.70 + **2.42 backward** |
+
+Learning the features **beats freezing them at tracking** and **costs generalisation** — the learned
+stack fits the condition it trained under more tightly than a random projection does. Raw pixels win
+tracking outright and fail the condition change. None of the three dominates, so `--input` has three
+values and the default does not move. `--feature-lr` sets the step.
+
+**It corrects a claim recorded twice**: "a random backbone does not buy invariance" was measured with
+an NLMS head whose frozen control read 0.89×, i.e. between two failures. With RLS the random backbone
+reaches 6.19× against raw's 0.78×.
+
+The learner is gated on the head having updated, which also stops it while the guard is frozen. The
+learned weights persist through the same two-slot record as the head, in their own store.
+
+**Two properties found by testing**: at initialisation `theta` is all zeros so there is no gradient
+into the features until the head has learned something; and a composition built without
+`set_external` freezes on its first update, because `Bound("external_0", lo=0.35)` is evaluated from
+the first one.
+
+Eight mutants; the two survivors were real gaps — a one-row shift in `theta` still trains, caught now
+by checking the step against central differences of the real loss, and a fall-through to raw features
+is invisible to width because `RAW_FACTOR` was chosen to make raw 144 as well.
