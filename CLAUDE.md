@@ -1720,6 +1720,49 @@ contrast off and 1.00 with it on, *at every k*. So `k` is close to irrelevant an
 mechanism** — which is a cleaner statement of the same conclusion, reached for a correct reason
 rather than a lucky one. Three mutants, including one restoring the exact defect, all caught.
 
+**Bottom-up grouping, refused on 2026-08-12, is now measured to WORK — and the refusal was right
+at the time (2026-08-13).** The owner restated the strategy: cluster low, group similar labels at a
+deeper level. It was refused a day earlier, and re-tested rather than restated, because **the
+refusal's stated cause had since been removed**: it was "an untrained backbone's *crop* descriptor
+conflates identity with view", and `region_descriptor` now reads the region's own pixels in raw RGB,
+where the same object at the frame edge and in the middle describes 0.0000 apart.
+
+| | grouping | the online rule (`RegionTracker`) |
+|---|---|---|
+| purity where the descriptor separates | **1.00** at any cutoff in 0.10–0.30 | 1.00 |
+| number of groups | **found**, not declared: 2/4/6 for 2/3/5 objects | n/a |
+| labels per object, continuous run | 1.0 | 1.0 |
+| labels per object, **absence longer than the forget window** | **1.0** | **3.0** |
+| purity where the descriptor does NOT separate | 0.76–0.80 | 0.95–1.00 |
+
+**It buys nothing where continuity already works and everything where continuity cannot reach.** Three
+objects vanishing together for 40 frames with a 30-frame forget window: the tracker mints **3.0**
+labels per object, grouping consolidates them to **1.0** at purity 1.00. **Purity cannot be the metric
+here** — a fresh label per episode is perfectly pure — which is the same metric hole this file already
+records for distinctness.
+
+**And the two results are one finding read at two points, not a contradiction.** Grouping works iff
+within-object descriptor distance stays below between-object distance. The 2026-08-12 descriptor was
+in the overlapping regime — (0.081, 0.225) at two objects, (0.131, 0.288) at three — and a fixture
+built to overlap now (similar colours under a 0.9 illumination gradient, within 0.243 against between
+0.014) reproduces the failure exactly: 0.76 against the online rule's 1.00.
+
+**Forcing the group count is what hurt.** Constrained to exactly `n` groups purity falls to 0.80 at
+three objects and 0.86 at five, because single linkage must then merge two objects to hit the number.
+Letting a cutoff decide is the proposal's whole point, and the cutoff is insensitive over a 3× band.
+
+**One fixture bug of mine, caught by the project's own rule.** The first version scored a **uniform
+1.00 everywhere** — a flat disc on a flat wall has *no* within-object variation, so a mean-RGB
+descriptor describes it identically every frame (within 0.002 against between 0.85) and no scheme can
+fail. The shipped fixture adds an illumination gradient, a size cycle and an occluder, and
+`test_the_fixture_gives_the_same_object_something_to_vary` asserts the variation rather than assuming
+it.
+
+**Deliberately not wired into the demo.** It is measured to add nothing on a continuous run, and what
+it would take is re-pointing `ObjectMemory` at `region_descriptor` — its 96.7/66.5/43.1% figures were
+measured on the crop descriptor and are now suspect for the same reason the refusal was.
+`demo/test_grouping_again.py` is the evidence, protected both ways.
+
 **Still undecided:** whether inference is *hosted* (an interface to ONNX Runtime/TFLite) or
 *embedded*, and whether the tiers ship as one library or two. Nothing on the camera/audio/speech
 path is built.
@@ -1742,7 +1785,7 @@ rollback, explicit recovery), `argmind/pipeline.py` (`FrameMap`, input gate, bou
 pipeline. `argmind/bench.py` has no C++ counterpart and is not getting one: it is a host
 measurement harness, and DESIGN.md already records that Python timings are not a baseline the
 C++ can be compared against.
-963 Python tests and 4,652 C++ checks pass; several exist to prove failures are visible
+968 Python tests and 4,652 C++ checks pass; several exist to prove failures are visible
 rather than silent. Every suite is mutation-checked, and surviving mutants are recorded where
 they live rather than tallied here — including the ones that turn out to be **equivalent on a
 64-bit host**, a distinction worth keeping rather than rounding away. Cumulative counts are

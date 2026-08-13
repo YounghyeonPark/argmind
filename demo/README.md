@@ -503,3 +503,36 @@ largest present" and was dropped — a frame with exactly one region, the object
 objects now give 5.0 labels at purity 1.00 over 5 ids at every k from 4 to 10, and the crowded scene
 covers 0.80 without contrast and 1.00 with it *at every k*. So `k` is close to irrelevant and
 contrast is the mechanism — the same conclusion, for a correct reason.
+
+## Grouping low-level labels: refused a day earlier, measured to work — 2026-08-13
+
+"low level clustering first and grouping similar label together in high level (deep level) network
+layer". Refused on 2026-08-12, and **re-tested rather than restated** because the refusal's stated
+cause had been removed: it was the random backbone's *crop* descriptor carrying view, and
+`region_descriptor` now reads the region's own pixels in raw RGB.
+
+| | grouping | online rule |
+|---|---|---|
+| purity, descriptor separates | **1.00** (any cutoff 0.10–0.30) | 1.00 |
+| number of groups | **found**: 2/4/6 for 2/3/5 objects | n/a |
+| labels per object, continuous | 1.0 | 1.0 |
+| labels per object, **long absence** | **1.0** | **3.0** |
+| purity, descriptor overlaps | 0.76–0.80 | 0.95–1.00 |
+
+It buys nothing where continuity works and everything where continuity cannot reach. Purity cannot be
+the metric — a fresh label per episode is perfectly pure — so inflation is what discriminates.
+
+Both results are one finding: grouping works iff within-object distance stays below between-object
+distance. A fixture built to overlap (similar colours, 0.9 gradient) reproduces the old failure at
+0.76 against 1.00.
+
+**Forcing the count is what hurt** — constrained to exactly `n` groups, purity falls to 0.80 at three
+objects, because single linkage must merge two to hit the number.
+
+**One fixture bug of mine**: the first version scored a uniform 1.00, because a flat disc on a flat
+wall has no within-object variation at all (within 0.002 against between 0.85). The fixture now
+asserts its own variation.
+
+Not wired into the demo: measured to add nothing on a continuous run. Doing so means re-pointing
+`ObjectMemory` at `region_descriptor`, whose 96.7/66.5/43.1% figures were measured on the crop
+descriptor and are now suspect for the same reason.
