@@ -1935,6 +1935,53 @@ measured on**: it was derived for a *frozen* backbone, where nothing propagates 
 scale. Seventh piece of logic to need moving out of `main()`'s loop, and three mutants — including
 one restoring the exact defect — are caught.
 
+## argmind must do the learning and inferencing itself — decided 2026-08-14
+
+**The owner's words**: performance will keep improving as the architecture is updated, and the
+important thing is that **argmind must do the learning and inferencing by itself**. Recorded as a
+decision, as the 2026-08-09 widening and the 2026-08-13 purpose were, and the current numbers are
+explicitly not the argument against it.
+
+**What it rules out, concretely.** The demo's perception is **1,396 lines of classical code** in
+`demo/label_sources.py` — k-means segmentation, connected-component splitting, ring contrast,
+appearance matching, region tracking, an object memory — plus the assembly in `pointer.py`. argmind
+never learns any of it: those algorithms *produce the labels* and the 145 → 6 head consumes them. The
+block diagram made that visible and it is what the decision is aimed at. Under it, that code is
+scaffolding to be replaced, not a component to be improved.
+
+**What is already built toward it.** The pieces exist and two are measured:
+
+- **The map output.** `demo/map_head.py` makes the head emit a segmentation map rather than
+  coordinates, with past maps as a resolution pyramid. Measured **IoU 0.98 against a per-frame
+  segmenter's 0.50** on same-colour twins — the first result here where a head beat the classical
+  detector it learns from. It is **not wired into the demo**: that needs a 108-output head, a
+  108-wide `taught` stream and a different overlay.
+- **A differentiable backbone.** `Backbone.backward` exists and is verified against central
+  differences, so the features can be learned rather than projected.
+- **Arbitrary configured outputs.** `MultilayerPerceptron(n, m, hidden=...)` and
+  `RuntimeShapedMlp<T>` already take their widths at construction on both sides of the C ABI.
+
+**The one obstacle that is measured rather than guessed: where the training signal comes from.**
+If argmind is to learn the labelling itself, something must supply the target, and the three
+candidates are not equal:
+
+| source of the signal | measured |
+|---|---|
+| self-supervision (predict the next embedding) | **fails** — a linear map to the next embedding reads a diagonal of 0.004 against an identity's 1.0 |
+| an aiding sensor that is blind sometimes | `CadenceDetector` **1.31×** a hold-last baseline; `MotionLabeller` **0.87×**, i.e. worse than holding |
+| the classical segmenter as a bootstrap teacher | works, and is what the map-head result used — but it is the thing the decision wants removed |
+
+So the honest shape of the work is **bootstrap then wean**: let the classical labeller teach the map
+head, then measure whether the head still holds up as the teacher is withdrawn. That is a
+falsifiable programme rather than a hope, and the withdrawal is the experiment.
+
+**And today's negative result tells us which knob to turn, not that the goal is wrong.** Learning the
+hidden layers on a *position* task left object selectivity where random initialisation put it, 0.511
+against 0.532. Position is a linear readout of a spatial map, so the gradient's cheapest route is to
+preserve layout rather than to become selective. **An objective that requires identity is the
+untested case**, and a map output is exactly such an objective — which is the second reason to wire
+it in.
+
 **Still undecided:** whether inference is *hosted* (an interface to ONNX Runtime/TFLite) or
 *embedded*, and whether the tiers ship as one library or two. Nothing on the camera/audio/speech
 path is built.
