@@ -2008,6 +2008,35 @@ memory's problem is staleness rather than corruption, and the recorded "a reset 
 distribution that never occurred" is not the whole story, since an in-distribution held memory fails
 identically.
 
+**"how to set the target map? and is the training just a substitution between two maps?" — the
+second question is right, and the answer corrects the map head's own headline (2026-08-14).**
+
+The target is three steps and no more: the classical labeller's `field`, then `field > 0` for a
+boolean foreground mask at 72x96 — **object identity is discarded** — then `block_mean` to 9x12, so
+each of the 108 cells is the *fraction* of its 8x8 block that is foreground. Soft, not binary.
+
+**And the training is effectively a map-to-map substitution.** Ablating the basis by zeroing halves
+of it — same model, same widths, only what it is told differs:
+
+| input | head IoU |
+|---|---|
+| frame + memory (what ships) | 0.98 |
+| **memory only, frame zeroed** | **0.98** |
+| frame only, memory zeroed | 0.41 |
+| repeating the previous true map | 0.92 |
+
+**Zeroing the camera costs nothing.** The head does not look at the frame at all on this fixture: it
+learns a recurrence and propagates the previous map forward. That is why it beats a per-frame
+segmenter on identical twins — the segmenter has nothing to tell them apart and a propagator keeps
+following whichever it was already on — and why free-running collapses over a long gap, since nothing
+anchors it to the world.
+
+So the recorded "most of that 0.98 is persistence, the learned part adds 0.06 IoU" **understates it**:
+the *frame* adds 0.00. A head that ignores the camera is not doing perception whatever its IoU says,
+and that bears directly on the 2026-08-14 decision — this is not yet argmind inferring for itself, it
+is argmind propagating a map the classical labeller drew. `test_map_head.py` carries the ablation as a
+control that fails if the frame ever starts mattering.
+
 **Still undecided:** whether inference is *hosted* (an interface to ONNX Runtime/TFLite) or
 *embedded*, and whether the tiers ship as one library or two. Nothing on the camera/audio/speech
 path is built.
@@ -2030,7 +2059,7 @@ rollback, explicit recovery), `argmind/pipeline.py` (`FrameMap`, input gate, bou
 pipeline. `argmind/bench.py` has no C++ counterpart and is not getting one: it is a host
 measurement harness, and DESIGN.md already records that Python timings are not a baseline the
 C++ can be compared against.
-1,003 Python tests and 4,652 C++ checks pass; several exist to prove failures are visible
+1,004 Python tests and 4,652 C++ checks pass; several exist to prove failures are visible
 rather than silent. Every suite is mutation-checked, and surviving mutants are recorded where
 they live rather than tallied here — including the ones that turn out to be **equivalent on a
 64-bit host**, a distinction worth keeping rather than rounding away. Cumulative counts are

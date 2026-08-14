@@ -292,3 +292,35 @@ def test_holding_the_pyramid_does_not_help_and_the_reason_is_staleness():
     assert short_free > 0.5, (
         f"a 5-frame blackout only reaches {short_free:.2f}; if a short gap is as fatal as a long "
         "one then the cause is not the object moving and the explanation above is wrong")
+
+
+def test_the_frame_contributes_nothing_and_the_head_is_a_propagator():
+    """**The unflattering control, and it reframes the 0.98 above.** Ablating the two halves of the
+    basis by zeroing them -- same model, same widths, only what it is told differs:
+
+    | input | head IoU |
+    |---|---|
+    | frame + memory | 0.98 |
+    | **memory only, frame zeroed** | **0.98** |
+    | frame only, memory zeroed | 0.41 |
+    | repeating the previous true map | 0.92 |
+
+    **Zeroing the camera costs nothing.** On this fixture the head does not look at the frame at all:
+    it learns a map-to-map recurrence and propagates the previous map forward. That is why it beats a
+    per-frame segmenter on identical twins -- the segmenter has nothing to tell them apart with, and a
+    propagator simply keeps following whichever one it was already on -- and it is why free-running
+    collapses over a long gap, since nothing anchors it to the world.
+
+    So "the learned part adds 0.06 IoU over persistence" understates the problem. The *frame* adds
+    0.00. A head that ignores the camera is not doing perception, whatever its IoU says, and this is
+    the control that says so.
+
+    The assertion is the gap rather than the numbers: if the frame ever starts mattering, this fails
+    and the claim above has to be re-derived rather than quietly inherited.
+    """
+    both, _p1, _s1, _t1 = drive(memory=True, twin=True)
+    frame_only, _p2, _s2, _t2 = drive(memory=False, twin=True)
+    assert both > 0.9, f"the memory head no longer reaches 0.98, reading {both:.2f}"
+    assert frame_only < 0.6, (
+        f"the frame alone now reaches {frame_only:.2f}; if the frame has become sufficient then this "
+        "head is perceiving rather than propagating, which would be the result this file wants")
