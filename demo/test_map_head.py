@@ -305,22 +305,40 @@ def test_the_frame_contributes_nothing_and_the_head_is_a_propagator():
     | frame only, memory zeroed | 0.41 |
     | repeating the previous true map | 0.92 |
 
-    **Zeroing the camera costs nothing.** On this fixture the head does not look at the frame at all:
-    it learns a map-to-map recurrence and propagates the previous map forward. That is why it beats a
-    per-frame segmenter on identical twins -- the segmenter has nothing to tell them apart with, and a
-    propagator simply keeps following whichever one it was already on -- and it is why free-running
-    collapses over a long gap, since nothing anchors it to the world.
+    **Zeroing the camera costs nothing HERE, and the scope of "here" is the whole finding.** On the
+    twin fixture the target is *one of two identical blobs*, so a single frame genuinely cannot say
+    which one it is -- the memory is not a shortcut, it is the only available source of the answer.
 
-    So "the learned part adds 0.06 IoU over persistence" understates the problem. The *frame* adds
-    0.00. A head that ignores the camera is not doing perception, whatever its IoU says, and this is
-    the control that says so.
+    **The head does learn to read the frame when the frame is the only thing that can answer.** Two
+    controls, added after an earlier version of this docstring claimed the frame was ignored outright:
 
-    The assertion is the gap rather than the numbers: if the frame ever starts mattering, this fails
-    and the claim above has to be re-derived rather than quietly inherited.
+    | scene | frame only | memory only | persistence |
+    |---|---|---|---|
+    | orbit, twin (this test) | **0.41** | 0.98 | 0.92 |
+    | orbit, no twin | **0.99** | — | 0.92 |
+    | **jump** (teleports each frame), no twin | **0.95** | **0.00** | 0.10 |
+
+    The jump row is the one that settles it: with the previous map carrying no information at all, the
+    head reaches 0.95 from pixels and the memory contributes nothing. That is a learned perception
+    map, not a copy.
+
+    So the honest statement is narrower than "it ignores the camera": **the head uses whichever input
+    can answer the question it is being asked.** Where a single frame is underdetermined it leans
+    entirely on memory, which is also why free-running collapses over a long gap. `map_head.py`'s
+    "most of that 0.98 is persistence" stands; "the frame adds 0.00" does not, outside this fixture.
     """
     both, _p1, _s1, _t1 = drive(memory=True, twin=True)
     frame_only, _p2, _s2, _t2 = drive(memory=False, twin=True)
     assert both > 0.9, f"the memory head no longer reaches 0.98, reading {both:.2f}"
     assert frame_only < 0.6, (
-        f"the frame alone now reaches {frame_only:.2f}; if the frame has become sufficient then this "
-        "head is perceiving rather than propagating, which would be the result this file wants")
+        f"the frame alone now reaches {frame_only:.2f} on the TWIN fixture, where one frame cannot "
+        "say which of two identical blobs is the target. If it has become sufficient, the fixture has "
+        "stopped being ambiguous and the memory's contribution is no longer being measured")
+
+    # The disambiguating control: without a twin the frame IS sufficient, so the head is not blind to
+    # it -- it leans on memory only where a single frame cannot answer.
+    solo, _p3, _s3, _t3 = drive(memory=False, twin=False)
+    assert solo > 0.9, (
+        f"the frame alone reaches only {solo:.2f} on an unambiguous scene. That would mean the head "
+        "cannot learn a segmentation from pixels at all, which is a much larger claim than this file "
+        "makes and would need its own measurement")

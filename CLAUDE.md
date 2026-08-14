@@ -2025,17 +2025,37 @@ of it — same model, same widths, only what it is told differs:
 | frame only, memory zeroed | 0.41 |
 | repeating the previous true map | 0.92 |
 
-**Zeroing the camera costs nothing.** The head does not look at the frame at all on this fixture: it
-learns a recurrence and propagates the previous map forward. That is why it beats a per-frame
-segmenter on identical twins — the segmenter has nothing to tell them apart and a propagator keeps
-following whichever it was already on — and why free-running collapses over a long gap, since nothing
-anchors it to the world.
+**Zeroing the camera costs nothing on that fixture — and I then overstated what it meant, which the
+next question caught.** "The frame adds 0.00" is true of the **twin** scene only, where the target is
+one of two *identical* blobs and a single frame genuinely cannot say which; the memory is not a
+shortcut there, it is the only available source of the answer. Two controls settle it:
 
-So the recorded "most of that 0.98 is persistence, the learned part adds 0.06 IoU" **understates it**:
-the *frame* adds 0.00. A head that ignores the camera is not doing perception whatever its IoU says,
-and that bears directly on the 2026-08-14 decision — this is not yet argmind inferring for itself, it
-is argmind propagating a map the classical labeller drew. `test_map_head.py` carries the ablation as a
-control that fails if the frame ever starts mattering.
+| scene | frame only | memory only | persistence |
+|---|---|---|---|
+| orbit, twin | **0.41** | 0.98 | 0.92 |
+| orbit, no twin | **0.99** | — | 0.92 |
+| **jump** — teleports every frame, no twin | **0.95** | **0.00** | 0.10 |
+
+The jump row is decisive: with the previous map carrying no information whatever, the head reaches
+**0.95 from pixels** and the memory contributes nothing. **So it does learn a perception map**, and
+the honest statement is narrower than "it ignores the camera": the head uses whichever input can
+answer the question it is asked, and leans entirely on memory where one frame is underdetermined —
+which is also why free-running collapses over a long gap.
+
+What survives of the caution: `map_head.py`'s "most of that 0.98 is persistence" stands, and the twin
+headline is a *tracking* result rather than a perception one. What is withdrawn is my own stronger
+claim that the frame is ignored in general. Both controls are checked in, so the scope cannot be lost
+again.
+
+**And a timing test of this project's own preferred kind failed anyway, which sharpens the rule.**
+`test_the_gate_is_cheaper_per_frame_than_adapting` asserts a **ratio measured inside one run** —
+exactly the form adopted after the absolute-millisecond gate failed earlier — and it read 0.23 alone
+and **0.78 inside the full suite**, failing its 0.7 bound. A ratio cancels the machine's *speed* and
+not its *load*: the gated path is dominated by fixed per-step overhead and the adapting path by
+per-frame arithmetic, so contention inflates them unequally and the ratio drifts toward 1. The
+**estimator** was changed, not the threshold — `min` over three repeats, which is the standard
+estimate of an uncontended cost, and "the gate skips work" is a claim about work rather than about the
+scheduler.
 
 **Still undecided:** whether inference is *hosted* (an interface to ONNX Runtime/TFLite) or
 *embedded*, and whether the tiers ship as one library or two. Nothing on the camera/audio/speech
