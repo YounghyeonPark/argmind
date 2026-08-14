@@ -1982,6 +1982,32 @@ preserve layout rather than to become selective. **An objective that requires id
 untested case**, and a map output is exactly such an objective — which is the second reason to wire
 it in.
 
+**The first step under that decision is built: `--output map` (2026-08-14).** The head emits a
+9x12 segmentation instead of coordinates, with past maps fed back as a resolution pyramid, and the
+classical labeller supplies the target rather than the answer. A map output has **no slots** —
+nothing to permute, nothing to count, no assignment — which removes three measured problems at once.
+Shapes: 295 -> 108 under a guard, `taught` widened to 108, `map_teacher` isolated as one named
+function precisely because it is the thing to be withdrawn. The points head is untouched.
+
+**The wean is the experiment and its result is NOT yet usable, which is recorded rather than
+glossed.** With the teacher the head reaches IoU **0.80-0.84** against its own labeller; withdrawn,
+it free-runs at **0.09-0.16**, against 0.92 for simply repeating the previous true map. **But this
+harness disagrees with `test_map_head.py`'s, which free-runs at 0.96-0.98 on the same scene, and I
+have not localised the difference.** Three explanations tested and refuted: *exposure bias* (training
+on the head's own prediction gives an identical 0.80/0.10), *the head* (a bare RLS reads 0.02 free,
+worse), and *my dropout default* (0.0, 0.05 and 0.15 all read 0.10). So the composition wires up and
+learns, and the wean number cannot be quoted until the two harnesses agree.
+
+**And a mechanism I proposed for the blackout failure is refuted, with the reason.** `map_head.py`
+records that free-running through a blackout goes to 0.00 and that *resetting* the pyramid does not
+help; the guard already knows a frame is untrustworthy, so **holding** the pyramid looked like the
+missing option. It makes no difference at all. Measured against blackout length, the object orbiting
+in 160 frames: 5 frames gives 0.72 either way, 15 gives 0.24/0.22, 40 and 60 give **0.00 for both**.
+**The failure scales with how far the object moved, not with what the memory was fed** — so the
+memory's problem is staleness rather than corruption, and the recorded "a reset lands in a
+distribution that never occurred" is not the whole story, since an in-distribution held memory fails
+identically.
+
 **Still undecided:** whether inference is *hosted* (an interface to ONNX Runtime/TFLite) or
 *embedded*, and whether the tiers ship as one library or two. Nothing on the camera/audio/speech
 path is built.
@@ -2004,7 +2030,7 @@ rollback, explicit recovery), `argmind/pipeline.py` (`FrameMap`, input gate, bou
 pipeline. `argmind/bench.py` has no C++ counterpart and is not getting one: it is a host
 measurement harness, and DESIGN.md already records that Python timings are not a baseline the
 C++ can be compared against.
-997 Python tests and 4,652 C++ checks pass; several exist to prove failures are visible
+1,003 Python tests and 4,652 C++ checks pass; several exist to prove failures are visible
 rather than silent. Every suite is mutation-checked, and surviving mutants are recorded where
 they live rather than tallied here — including the ones that turn out to be **equivalent on a
 64-bit host**, a distinction worth keeping rather than rounding away. Cumulative counts are

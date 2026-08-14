@@ -29,6 +29,7 @@ from argmind.stream import Stream
 from demo.label_sources import (AppearanceMatcher, BackgroundLocator, CadenceDetector,
                                 FrameSegmenter, ObjectMemory, RegionTracker, partition,
                                 pick_regions, region_descriptor, ring_contrast, split_regions)
+from demo.map_head import Pyramid, block_mean, map_iou, map_target
 
 #: Small on purpose. Random convolutional features work shallow and carry nothing deep --
 #: brightness reads 0.009 at one layer and 1.119 at twenty-seven -- and a 3x3 grid is what
@@ -46,6 +47,43 @@ STATE_PATH = STATE_DIR / "head"
 #: one combined block, because the two have different shapes and a caller switching `--input` should
 #: be refused by the fingerprint rather than handed a block that unpacks and means something else.
 FEATURES_PATH = STATE_DIR / "features"
+#: The segmentation map the head emits under `--output map`, deliberately coarser than the frame:
+#: a segmentation does not need per-pixel precision to say where something is, and the head's
+#: parameter count is `n_features x n_outputs`.
+MAP_H, MAP_W = 9, 12
+#: How often the pyramid is blanked while learning. **The only thing measured to survive a blackout**
+#: -- holding the pyramid and resetting it both fail identically, because the memory's problem after
+#: a gap is that it is about a world that has moved on, not that it was corrupted. It costs peak
+#: accuracy: 0.98 healthy without it against ~0.38, for 0.00 after a blackout against ~0.54.
+MAP_DROPOUT = 0.15
+
+
+def map_memory_width(out_h=None, out_w=None) -> int:
+    """How many inputs the pyramid contributes, so `build` and `main` agree on the width without
+    one of them constructing the other's object."""
+    return Pyramid(out_h or MAP_H, out_w or MAP_W).width
+
+
+def map_basis(frame_features, pyramid, *, blank=False):
+    """The map head's whole input: this frame's features, then the pyramid of past output maps.
+
+    Module-level for the reason seven other things in this file are. `blank` is the training-time
+    dropout: it zeroes the memory rather than removing it, so the width never changes -- a head whose
+    input width moved between frames would be a different model, and `FrameMap` would refuse it.
+    """
+    mem = np.zeros(pyramid.width) if blank else pyramid.features()
+    return np.concatenate([np.asarray(frame_features, dtype=np.float64), mem])
+
+
+def map_teacher(field):
+    """The target map, from whatever produced the label field. Foreground is any labelled region.
+
+    **This is the teacher the decision of 2026-08-14 wants withdrawn.** It is the classical
+    labeller -- k-means, connected components, contrast -- and the head learns to reproduce it. The
+    measurement that matters is what survives when it is taken away, which is why this is one small
+    function with a name rather than an inline expression.
+    """
+    return map_target(np.asarray(field) > 0, MAP_H, MAP_W)
 #: The appearance window around a detected object, in pixels of the resized frame. It has to be
 #: big enough to contain an object and small enough not to contain its neighbour -- and it carries
 #: POSITION as well as appearance whenever it is clamped at a frame edge, which is measured: two
@@ -616,7 +654,7 @@ def segment_image(labels, ids=(), scale=6):
 
 
 def build(objects: int = 1, source: str = "backbone", *, colour: bool = True,
-          feedback: bool = False):
+          feedback: bool = False, output: str = "points"):
     """The whole composition, and every piece of it is load-bearing here.
 
     `objects` is how many things to track: the head gets `2 * objects` outputs, and the labels
@@ -631,6 +669,8 @@ def build(objects: int = 1, source: str = "backbone", *, colour: bool = True,
         raise ValueError(f"objects must be at least 1, got {objects}")
     if source not in ("backbone", "raw", "learned"):
         raise ValueError(f"source must be 'backbone', 'raw' or 'learned', got {source!r}")
+    if output not in ("points", "map"):
+        raise ValueError(f"output must be 'points' or 'map', got {output!r}")
     # The backbone is built either way: `--identify` and `--remember` describe crops with it, and
     # the guard's calibration uses it. `source` decides only what reaches the HEAD.
     backbone = Backbone(PLAN, IN_SHAPE, dtype="f4", seed=1, pool=POOL)
@@ -639,15 +679,25 @@ def build(objects: int = 1, source: str = "backbone", *, colour: bool = True,
     # Sized here, CONSTRUCTED by the caller -- like the detector, the matcher and the object
     # memory. `build` owns the shapes; `main` owns the caller-side state.
     fb = feedback_width(objects) if feedback else 0
-    n = width + fb + 1                               # + the constant
+    #: Under `--output map` the head emits a segmentation instead of coordinates, and its input
+    #: carries the pyramid of past output maps. A map output has no slots: nothing to permute,
+    #: nothing to count, and no assignment to make -- which is three measured problems removed at
+    #: once rather than one problem made smaller.
+    #: Sized here, CONSTRUCTED by the caller -- the convention this file already uses for the
+    #: detector, the matcher and the object memory. `build` owns the shapes; `main` owns the state.
+    extra = map_memory_width() if output == "map" else 0
+    n = width + fb + extra + 1                       # + the constant
+    m = MAP_H * MAP_W if output == "map" else 2 * objects
 
-    head = NormalisedLeastMeanSquares(n, 2 * objects, mu=0.3, dtype="f4")
+    head = NormalisedLeastMeanSquares(n, m, mu=0.3, dtype="f4")
     guard = Guard(
         head,
         [
             # The head's own residual, in the units the target is in: screen fractions, so a
             # residual above 3 means it is pointing off the screen and further every step.
-            Bound("residual_norm", hi=3.0),
+            # In frame fractions for points; for a map the residual is over 108 soft cells, so the
+            # same bound would be meaningless -- scaled by sqrt(m) to keep it a per-output statement.
+            Bound("residual_norm", hi=3.0 * (m / 6) ** 0.5),
             # Growth against recent history, which needs no units -- the check for a fault
             # whose scale nobody knows in advance.
             Divergence(ratio=6.0, floor=0.05, warmup=40),
@@ -673,10 +723,10 @@ def build(objects: int = 1, source: str = "backbone", *, colour: bool = True,
     # The feedback bank rides in the SAME stream as the frame features: it is part of the
     # basis, not a second sensor, and giving it its own stream would make the aligner responsible
     # for something that has no independent clock.
-    features = Stream("features", dim=width + fb, capacity=64, dtype="f4")
-    taught = Stream("taught", dim=2 * objects, capacity=16, dtype="f4")
-    fmap = FrameMap(features=[("features", i) for i in range(width + fb)],
-                    target=[("taught", i) for i in range(2 * objects)], constant=True)
+    features = Stream("features", dim=width + fb + extra, capacity=64, dtype="f4")
+    taught = Stream("taught", dim=m, capacity=16, dtype="f4")
+    fmap = FrameMap(features=[("features", i) for i in range(width + fb + extra)],
+                    target=[("taught", i) for i in range(m)], constant=True)
     # The reference is the CAMERA, not the labels, and getting this wrong was the demo's
     # third caller-side bug: with `reference="taught"` a frame exists only at a label
     # instant, so the dot moved while dragging and never otherwise -- 0 predictions out of
@@ -855,6 +905,18 @@ def main(argv=None):
                         "against 4.01x; learned beats the frozen backbone at tracking (0.0163 "
                         "against 0.0241) and costs generalisation (3.05x against 6.19x under a "
                         "brightness change) -- see raw_features() and learn_features()")
+    p.add_argument("--output", choices=("points", "map"), default="points",
+                   help="what the HEAD emits. 'points' is 2 coordinates per object; 'map' is a "
+                        f"{MAP_H}x{MAP_W} segmentation the head learns from the classical labeller, "
+                        "with past maps fed back as a resolution pyramid. A map has no slots -- "
+                        "nothing to permute, nothing to count, no assignment -- and on same-colour "
+                        "twins it reaches IoU 0.98 against a per-frame segmenter's 0.50, the only "
+                        "case here where a head beats the detector it learns from")
+    p.add_argument("--map-dropout", type=float, default=MAP_DROPOUT, metavar="P",
+                   help=f"how often the pyramid is blanked while learning (default {MAP_DROPOUT}). "
+                        "The only remedy measured to survive a blackout: holding the memory and "
+                        "resetting it both fail identically, because after a gap the memory is about "
+                        "a world that has moved on. It costs peak accuracy, 0.98 against ~0.38")
     p.add_argument("--feature-lr", type=float, default=FEATURE_LR, metavar="R",
                    help=f"step for the feature learner under --input learned (default "
                         f"{FEATURE_LR}). Small on purpose: the features move the ground the head "
@@ -944,8 +1006,10 @@ def main(argv=None):
     if n_objects > 1 and args.teach == "mouse":
         sys.exit("--objects > 1 needs the automatic detector: one mouse position cannot say "
                  "where two objects are. Use --teach auto or --teach both.")
+    pyramid = Pyramid(MAP_H, MAP_W) if args.output == "map" else None
     backbone, head, guard, features, taught, fmap, pipe = build(
-        n_objects, args.input, colour=not args.raw_grey, feedback=args.feedback)
+        n_objects, args.input, colour=not args.raw_grey, feedback=args.feedback,
+        output=args.output)
     output_memory = OutputMemory(2 * n_objects) if args.feedback else None
     STATE_DIR.mkdir(parents=True, exist_ok=True)
     store = Store(STATE_PATH)
@@ -1042,10 +1106,16 @@ def main(argv=None):
     camera_failed = False
     feature_scale = 1.0
 
-    def extract(small):
-        return basis(small, backbone=backbone, source=args.input,
-                     colour=not args.raw_grey, scale=feature_scale,
-                     output_memory=output_memory)
+    def extract(small, blank=False):
+        #: The pyramid rides in the SAME extraction path as everything else. Adding a term outside
+        #: it is how `--feedback` broke on its first launch: the calibration branch recomputes the
+        #: basis, so anything concatenated at the call site is silently dropped on that one frame.
+        frame_part = basis(small, backbone=backbone, source=args.input,
+                           colour=not args.raw_grey, scale=feature_scale,
+                           output_memory=output_memory)
+        if pyramid is None:
+            return frame_part
+        return map_basis(frame_part, pyramid, blank=blank)
     t0 = time.perf_counter()
     frames = 0
 
@@ -1062,7 +1132,12 @@ def main(argv=None):
         # One extraction path, so calibration cannot silently switch the source. The first
         # version recomputed `backbone.features(small)` after calibrating, which would have
         # ignored `--input raw` on that frame and every frame after it.
-        emb = extract(small)
+        #: Training-time dropout of the pyramid. The head is always learning here, so "while
+        #: training" is every frame it updates -- and this is the only remedy measured to survive a
+        #: blackout, at a real cost to peak accuracy.
+        blank = (pyramid is not None and args.map_dropout > 0.0
+                 and np.random.random() < args.map_dropout)
+        emb = extract(small, blank=blank)
 
         if not calibrated and frames > 15:
             # Scaling the input matters and is not optional: `p0` has units, and this project
@@ -1071,7 +1146,7 @@ def main(argv=None):
             backbone.output_scale, feature_scale = calibration_scales(args.input, emb, n_frame)
             frame_std = float(np.std(small))
             calibrated = True
-            emb = extract(small)
+            emb = extract(small, blank=blank)
             applied = max(backbone.output_scale, feature_scale)
             print(f"calibrated: feature scale {applied:.1f}, frame std {frame_std:.3f}")
         if calibrated:
@@ -1125,8 +1200,11 @@ def main(argv=None):
             state["minted"] = [i for i, m in seen if m]
             state["vocab"] = len(memory)
             state["vocab_full"] = memory.full
-        field_ids = []
-        if args.segments and auto is not None:
+        field_ids, labels = [], None
+        #: The map head needs the label field as its TEACHER, so it is computed whenever either the
+        #: picture or the teacher wants it -- not only when `--segments` is drawing.
+        want_field = (args.segments or args.output == "map") and auto is not None
+        if want_field:
             if how == "texture":
                 # Every region gets a label, not only the head's slots: the head has K of them
                 # because that is its output width, and a picture has no such limit. The dropped
@@ -1137,9 +1215,7 @@ def main(argv=None):
                                                 contrast=args.seg_contrast)
             elif getattr(detector, "foreground", None) is not None:
                 labels = partition(detector.foreground, auto, floor=args.seg_floor)
-            else:
-                labels = None
-            if labels is not None:
+            if labels is not None and args.segments:
                 cv2.imshow("argmind - segments",
                            segment_image(labels, field_ids if field_ids else
                                          (state.get("slot_ids") or [])))
@@ -1149,8 +1225,16 @@ def main(argv=None):
             # the whole reason this works at all: a head with 2k outputs is permutation-
             # symmetric, and labels in whatever order they were found reach 0.256 against a
             # centre-guess 0.312 -- i.e. learn nothing.
-            taught.push(now, [c for xy in auto for c in xy])
-            state["n_auto"] += 1
+            if args.output == "map":
+                #: The classical labeller is the TEACHER here, not the output. It produces the map
+                #: the head learns to reproduce -- and withdrawing it is the experiment the
+                #: 2026-08-14 decision asks for, not a step already taken.
+                if labels is not None:
+                    taught.push(now, map_teacher(labels))
+                    state["n_auto"] += 1
+            else:
+                taught.push(now, [c for xy in auto for c in xy])
+                state["n_auto"] += 1
             state["taught_points"].extend(auto)
         if click["xy"] is not None:
             cx, cy = click["xy"]
@@ -1166,7 +1250,18 @@ def main(argv=None):
             state["taught_points"].append((cx / w, cy / h))
 
         report = pipe.step()
-        if report.prediction is not None:
+        if report.prediction is not None and pyramid is not None:
+            #: FREE-RUNNING: the pyramid sees the head's own prediction, not the label. Teacher
+            #: forcing reads an order of magnitude better and describes no system anyone can deploy.
+            pred_map = np.clip(np.asarray(report.prediction, dtype=np.float64), 0.0, 1.0)
+            pyramid.observe(pred_map)
+            state["map_iou"] = (map_iou(pred_map, map_teacher(labels))
+                                if labels is not None else None)
+            if args.segments:
+                shown = (pred_map.reshape(MAP_H, MAP_W) >= 0.4).astype(np.int32)
+                cv2.imshow("argmind - head output",
+                           segment_image(np.repeat(np.repeat(shown, 8, 0), 8, 1), [], scale=1))
+        if report.prediction is not None and pyramid is None:
             state["pred"] = tuple(float(v) for v in report.prediction)
         #: Learn the FEATURES, not only the head. Gated on the head having actually updated, which
         #: also stops it while the guard is frozen -- a fault is exactly when you do not want it

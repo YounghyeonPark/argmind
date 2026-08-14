@@ -40,7 +40,7 @@ def scene(k, *, twin=False, seed=0):
 
 
 def drive(*, memory, twin=False, n=2400, blind=None, dropout=0.0, reset_on_bad=False,
-          seed=7, floor=0.5):
+          hold_on_bad=False, seed=7, floor=0.5):
     """Returns (head IoU, persistence IoU, segmenter IoU, trace) over the held-out half."""
     g = np.random.default_rng(seed)
     pyr = Pyramid(OUT_H, OUT_W) if memory else None
@@ -68,7 +68,9 @@ def drive(*, memory, twin=False, n=2400, blind=None, dropout=0.0, reset_on_bad=F
         if train:
             head.update(x, y)
         if pyr:
-            if reset_on_bad and not healthy:
+            if not healthy and hold_on_bad:
+                pass                             # neither integrate the blank frame nor forget
+            elif reset_on_bad and not healthy:
                 pyr.reset()
             else:
                 pyr.observe(y if train else pred)
@@ -242,3 +244,51 @@ def test_the_bands_hold_different_time_constants():
         "different time constants and the pyramid is three copies of one thing")
     pyr.reset()
     assert not pyr.features().any()
+
+
+def test_holding_the_pyramid_does_not_help_and_the_reason_is_staleness():
+    """**A third remedy, refuted — and it sharpens why the other two fail.**
+
+    The guard already knows when a frame is untrustworthy, so the obvious idea is to *hold* the
+    pyramid through a blackout: neither integrate the blank frame nor forget what was there. That
+    leaves the memory in a state the head has actually seen, which is exactly what the recorded
+    objection to `reset` was.
+
+    It makes no difference at all. Measured against blackout length, with the object completing an
+    orbit in 160 frames:
+
+    | blackout | orbit fraction | free-running | hold |
+    |---|---|---|---|
+    | 5 | 0.03 | 0.72 | 0.72 |
+    | 15 | 0.09 | 0.24 | 0.22 |
+    | 40 | 0.25 | **0.00** | **0.00** |
+    | 60 | 0.38 | 0.00 | 0.00 |
+
+    **The failure scales with how far the object moved, not with what the pyramid was fed.** So the
+    memory's problem is not that it was corrupted; it is that it is about a world that has moved on,
+    and no policy over the gap can fix that. The "reset lands in a distribution that never occurred"
+    explanation is therefore not the whole story — an *in-distribution* held memory fails identically.
+
+    Training-time dropout remains the only thing that works, and it works by making the head rely on
+    the memory less, not by keeping the memory good.
+    """
+    def after(trace, hi):
+        tail = [v for k, v in trace if k >= hi]
+        return float(np.mean(tail[-100:])) if tail else 0.0
+
+    long_gap = (1600, 1660)
+    free = after(drive(memory=True, twin=True, blind=long_gap)[3], long_gap[1])
+    held = after(drive(memory=True, twin=True, blind=long_gap, hold_on_bad=True)[3], long_gap[1])
+    assert held < 0.1 and free < 0.1, (
+        f"a 60-frame blackout now recovers (free {free:.2f}, held {held:.2f}); if that is real the "
+        "absorbing failure has gone and this file's central caution needs re-measuring")
+    assert abs(held - free) < 0.1, (
+        f"holding the pyramid now differs from free-running ({held:.2f} against {free:.2f}). The "
+        "claim here is that it does NOT, because the failure is staleness rather than corruption")
+
+    # And the short gap is what proves it is staleness: the object barely moves, and both recover.
+    short_gap = (1600, 1605)
+    short_free = after(drive(memory=True, twin=True, blind=short_gap)[3], short_gap[1])
+    assert short_free > 0.5, (
+        f"a 5-frame blackout only reaches {short_free:.2f}; if a short gap is as fatal as a long "
+        "one then the cause is not the object moving and the explanation above is wrong")
