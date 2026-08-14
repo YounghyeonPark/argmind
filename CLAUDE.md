@@ -1910,6 +1910,31 @@ invisible to width, because `RAW_FACTOR` was deliberately chosen to make the raw
 the backbone's own width. Values discriminate where widths cannot, and `--raw-grey` is what separates
 them for `frame_width`.
 
+**Running it found a defect I had just introduced, and fixing it naively made things worse
+(2026-08-14).** The calibration branch tested `source == "backbone"`, so adding a third source that
+also reads the backbone left `--input learned` with the scale **computed, printed, and applied
+nowhere** — `output_scale` stayed 1.0 and `basis()` ignores its `scale` argument on that branch. The
+run printed `feature scale 19.6` while nothing used it.
+
+**Applying it made the result five times worse**, and the mechanism is the finding: `output_scale`
+multiplies the **backward** pass as well as the forward one, so calibrating without touching the rate
+takes an effective feature step 29× too large. Measured, three objects, RLS head, 900 updates:
+
+| calibration | feature lr | vs a centre guess |
+|---|---|---|
+| not applied (what shipped) | 0.02 | 31.00× |
+| applied, rate unchanged | 0.02 | **1.81×** |
+| **applied, rate ÷ output_scale** | 0.00068 | **36.21×** |
+
+So the two halves belong together and both now ship: `calibration_scales` routes the scale per source
+and `feature_step` divides the rate by it. Dividing by `output_scale²` reads 37.51× and is **not**
+done — one factor is what the mechanism explains and the second would be fitted.
+
+**This is the recorded rule "scale the input, it is not optional" meeting a case it was never
+measured on**: it was derived for a *frozen* backbone, where nothing propagates back through the
+scale. Seventh piece of logic to need moving out of `main()`'s loop, and three mutants — including
+one restoring the exact defect — are caught.
+
 **Still undecided:** whether inference is *hosted* (an interface to ONNX Runtime/TFLite) or
 *embedded*, and whether the tiers ship as one library or two. Nothing on the camera/audio/speech
 path is built.
@@ -1932,7 +1957,7 @@ rollback, explicit recovery), `argmind/pipeline.py` (`FrameMap`, input gate, bou
 pipeline. `argmind/bench.py` has no C++ counterpart and is not getting one: it is a host
 measurement harness, and DESIGN.md already records that Python timings are not a baseline the
 C++ can be compared against.
-995 Python tests and 4,652 C++ checks pass; several exist to prove failures are visible
+997 Python tests and 4,652 C++ checks pass; several exist to prove failures are visible
 rather than silent. Every suite is mutation-checked, and surviving mutants are recorded where
 they live rather than tallied here — including the ones that turn out to be **equivalent on a
 64-bit host**, a distinction worth keeping rather than rounding away. Cumulative counts are

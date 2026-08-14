@@ -278,3 +278,62 @@ def test_the_learned_source_feeds_the_backbone_and_not_raw_pixels():
     # make them equal -- so a `frame_width` that forgets the learned source is invisible without it.
     assert frame_width(bb, "raw", colour=False) != bb.n_outputs
     assert frame_width(bb, "learned", colour=False) == bb.n_outputs
+
+
+def test_the_calibration_is_applied_for_every_source_that_reads_the_backbone():
+    """**The defect this test exists for.** The calibration branch tested `source == "backbone"`,
+    so adding a third source that also reads the backbone left `--input learned` with the scale
+    computed, printed, and applied nowhere — `Backbone.output_scale` stayed 1.0 and `basis()`
+    ignores its `scale` argument on that branch.
+
+    Exactly one of the two scales is ever not 1.0, which is what makes the routing checkable."""
+    from demo.pointer import calibration_scales
+
+    emb = np.linspace(0.0, 0.1, 144)
+    for source in ("backbone", "learned"):
+        out_scale, basis_scale = calibration_scales(source, emb, 144)
+        assert out_scale > 1.0, f"{source}: the backbone was left unscaled"
+        assert basis_scale == 1.0, f"{source}: the scale would be applied twice"
+    out_scale, basis_scale = calibration_scales("raw", emb, 144)
+    assert out_scale == 1.0 and basis_scale > 1.0, "raw features are scaled at the call site"
+
+
+def test_calibrating_without_correcting_the_rate_is_worse_than_not_calibrating():
+    """**Both halves belong together, and that was measured after the naive fix made things worse.**
+    `output_scale` multiplies the backward pass as well as the forward one, so calibrating without
+    dividing the rate takes an effective step 29x too large:
+
+    | calibration | feature lr | vs a centre guess |
+    |---|---|---|
+    | not applied | 0.02 | 31.00x |
+    | applied, rate unchanged | 0.02 | **1.81x** |
+    | applied, rate / output_scale | 0.00068 | **36.21x** |
+    """
+    from demo.pointer import calibration_scales, feature_step
+
+    def drive_scaled(correct_rate):
+        bb = Backbone(PLAN, IN_SHAPE, dtype="f4", seed=1, pool=POOL)
+        warm = np.asarray(bb.features(frame_at(0)[0]))
+        bb.output_scale, _ = calibration_scales("learned", warm, bb.n_outputs)
+        head = RecursiveLeastSquares(bb.n_outputs + 1, 6, forgetting=0.999, p0=100.0, dtype="f4")
+        lr = feature_step(FEATURE_LR, bb.output_scale) if correct_rate else FEATURE_LR
+        err, guess = [], []
+        for t in range(500):
+            img, truth = frame_at(t, seed=t)
+            x = np.concatenate([np.asarray(bb.features(img)), [1.0]]).astype(np.float64)
+            r = head.update(x, truth)
+            err.append(float(np.linalg.norm(r.residual)))
+            guess.append(float(np.linalg.norm(np.full(6, 0.5) - truth)))
+            learn_features(bb, img, head_theta(head), -np.asarray(r.residual), lr)
+        n = max(len(err) // 5, 1)
+        return float(np.mean(err[-n:])), float(np.mean(guess[-n:]))
+
+    bad, bg = drive_scaled(False)
+    good, gg = drive_scaled(True)
+    assert gg / good > 5.0 * (bg / bad), (
+        f"corrected {gg / good:.2f}x against uncorrected {bg / bad:.2f}x. If the two are close now, "
+        "output_scale has stopped multiplying the backward pass and this correction is unnecessary")
+
+    assert feature_step(0.02, 1.0) == 0.02, "an unscaled backbone must leave the rate alone"
+    with pytest.raises(ValueError, match="base_lr"):
+        feature_step(0.0, 1.0)

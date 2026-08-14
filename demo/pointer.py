@@ -237,6 +237,56 @@ def learn_features(backbone, small, theta, residual, learning_rate=FEATURE_LR):
     return backbone.apply_gradients(dws, dbs, learning_rate)
 
 
+def calibration_scales(source, embedding, n_frame):
+    """Where the measured feature scale has to be applied, per source. Returns
+    `(backbone_output_scale, basis_scale)` — exactly one of them is ever not 1.0.
+
+    **Scaling the input is not optional and this project measured why**: `p0` has units, so the RLS
+    gain is `p0·x/(1 + p0·‖x‖²)`, and an untrained stack's embedding at a magnitude of 6.8e-4 puts
+    the data term eight orders of magnitude below the default prior — every head then scores about
+    1.0 against a constant predictor until it is scaled.
+
+    Module level because the version inside `main()`'s loop tested `source == "backbone"` and I added
+    a third source that also reads the backbone. Under `--input learned` the scale was therefore
+    computed, printed, and **applied nowhere**: `Backbone.output_scale` stayed 1.0 and `basis()`
+    ignores its `scale` argument on the backbone branch. Seventh piece of logic in this file to need
+    moving out of that loop, and the same "computed and never used" shape the project has now found
+    in `gain_norm` twice and in `output_scale`'s own backward pass.
+    """
+    sd = float(np.std(np.asarray(embedding)[:n_frame]))
+    scale = 1.0 / max(sd, 1e-6)
+    if source in ("backbone", "learned"):
+        return scale, 1.0                    # the backbone applies it inside `features()`
+    return 1.0, scale                        # raw features are multiplied at the call site
+
+
+def feature_step(base_lr, output_scale):
+    """The feature learning rate, corrected for the calibration applied to the same features.
+
+    **`Backbone.output_scale` multiplies the backward pass as well as the forward one**, so a
+    calibration that makes the features unit-scale also multiplies every gradient into the stack by
+    the same factor. Leaving the rate alone then takes an effective step of 0.02 x 29 and the
+    learning oscillates. Measured, three objects, RLS head, 900 updates:
+
+    | calibration | feature lr | error | vs a centre guess |
+    |---|---|---|---|
+    | not applied | 0.02 | 0.0171 | 31.00x |
+    | applied, rate unchanged | 0.02 | 0.2920 | **1.81x** |
+    | **applied, rate / output_scale** | 0.00068 | **0.0146** | **36.21x** |
+
+    So the two halves belong together: applying the calibration without this correction is worse than
+    not calibrating at all, and applying both is better than either. Dividing by `output_scale`
+    squared is marginally better still (37.51x) and is *not* done, because one factor is the one the
+    mechanism explains and the second would be fitted.
+
+    This is the rule "scale the input, it is not optional" meeting a case it was not measured on: it
+    was derived for a FROZEN backbone, where nothing propagates back through the scale.
+    """
+    if base_lr <= 0.0:
+        raise ValueError(f"base_lr must be positive, got {base_lr}")
+    return base_lr / max(float(output_scale), 1e-9)
+
+
 def frame_width(backbone, source, colour=True) -> int:
     """How much of a basis is the frame, as opposed to the feedback bank.
 
@@ -1018,16 +1068,12 @@ def main(argv=None):
             # Scaling the input matters and is not optional: `p0` has units, and this project
             # measured an unscaled embedding at 6.8e-4 defeating every head until it was scaled.
             n_frame = frame_width(backbone, args.input, not args.raw_grey)
-            feature_scale = 1.0 / max(float(np.std(emb[:n_frame])), 1e-6)
-            if args.input == "backbone":
-                backbone.output_scale = feature_scale
-                feature_scale = 1.0            # the backbone applies it internally
+            backbone.output_scale, feature_scale = calibration_scales(args.input, emb, n_frame)
             frame_std = float(np.std(small))
             calibrated = True
             emb = extract(small)
-            print(f"calibrated: feature scale "
-                  f"{backbone.output_scale if args.input == 'backbone' else feature_scale:.1f}, "
-                  f"frame std {frame_std:.3f}")
+            applied = max(backbone.output_scale, feature_scale)
+            print(f"calibrated: feature scale {applied:.1f}, frame std {frame_std:.3f}")
         if calibrated:
             state["drift"] = float(np.std(small)) / max(frame_std, 1e-6)
             guard.set_external(0, state["drift"])
@@ -1130,8 +1176,9 @@ def main(argv=None):
                 and auto is not None and report.prediction is not None):
             want = np.asarray([c for xy in auto for c in xy], dtype=np.float64)
             resid = np.asarray(report.prediction, dtype=np.float64) - want
-            state["feat_moved"] = learn_features(backbone, small, head_theta(guard), resid,
-                                                 args.feature_lr)
+            state["feat_moved"] = learn_features(
+                backbone, small, head_theta(guard), resid,
+                feature_step(args.feature_lr, backbone.output_scale))
             state["feat_steps"] = state.get("feat_steps", 0) + 1
         state["frozen"] = bool(report.frozen)
         state["frozen_by"] = tuple(report.frozen_by)
