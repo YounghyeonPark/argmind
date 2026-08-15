@@ -2057,6 +2057,41 @@ per-frame arithmetic, so contention inflates them unequally and the ratio drifts
 estimate of an uncontended cost, and "the gate skips work" is a claim about work rather than about the
 scheduler.
 
+**"the core blackbox need to any to any and the initial start runs without any pre-trained
+background" — both checked rather than asserted, 2026-08-14.** Two owner requirements, and the
+measurement is in `tests/test_any_to_any.py`, driven through the *whole* composition — `Stream` →
+`Aligner` → `FrameMap` → `Guard` → adapter under `Pipeline.step()` — so a shape that only worked in a
+bare adapter would fail.
+
+| n → m | RLS | NLMS | MLP(8) |
+|---|---|---|---|
+| 1 → 1 | 0.0000 | 0.0000 | 0.92 |
+| 1 → 7 | 0.0000 | 0.0000 | 0.26 |
+| 6 → 3 | 0.0000 | 0.0000 | 0.20 |
+| 40 → 12 | 0.0000 | 0.0821 | 0.62 |
+| 128 → 64 | 0.0000 | 0.3525 | 0.86 |
+| 12 → 200 | 0.0000 | 0.0009 | 0.66 |
+
+relative error after 400 samples. **Any-to-any holds**: every shape builds and runs with no special
+case and no refusal, both directions — 12 → 200 is sixteen times more outputs than inputs and is the
+shape a segmentation map takes. **RLS reaches the exact least-squares solution at every one of them.**
+NLMS degrades with width, which is its recorded convergence rate rather than a shape limit, and 400
+samples is far too few for SGD, which this file already records as worse than a constant in its first
+few hundred.
+
+**Cold start holds everywhere, and "no pre-trained background" is reported rather than assumed to be
+zero** — for two of the three adapters it is not: NLMS starts at exactly **0.000**, RLS at **100.000**
+(θ is zero; the 100 is `p0` on the covariance diagonal), the network at **~0.5–1.0** of seeded Glorot,
+because zero weights would make every hidden unit identical with identical gradients. Nothing anywhere
+imports a trained weight.
+
+**The one place any-to-any stops is the C ABI**, and it is a declared list rather than a hidden
+limit: 25 `AM_DECLARE_*` instantiations, because the freestanding core keeps shapes in the *type* so
+the memory is declared. Adding one is three lines and a rebuild. The hosted tier has no list —
+`RuntimeShapedRls/Nlms/Mlp/Guard/Pipeline` all take their shapes at construction. So any-to-any is
+available at the tier that can afford a heap and enumerated at the tier that cannot, which is the
+trade `argmind.h` already documents.
+
 **Still undecided:** whether inference is *hosted* (an interface to ONNX Runtime/TFLite) or
 *embedded*, and whether the tiers ship as one library or two. Nothing on the camera/audio/speech
 path is built.
@@ -2079,7 +2114,7 @@ rollback, explicit recovery), `argmind/pipeline.py` (`FrameMap`, input gate, bou
 pipeline. `argmind/bench.py` has no C++ counterpart and is not getting one: it is a host
 measurement harness, and DESIGN.md already records that Python timings are not a baseline the
 C++ can be compared against.
-1,004 Python tests and 4,652 C++ checks pass; several exist to prove failures are visible
+1,013 Python tests and 4,652 C++ checks pass; several exist to prove failures are visible
 rather than silent. Every suite is mutation-checked, and surviving mutants are recorded where
 they live rather than tallied here — including the ones that turn out to be **equivalent on a
 64-bit host**, a distinction worth keeping rather than rounding away. Cumulative counts are
