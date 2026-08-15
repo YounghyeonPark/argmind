@@ -746,16 +746,41 @@ def build(objects: int = 1, source: str = "backbone", *, colour: bool = True,
     return backbone, head, guard, features, taught, fmap, pipe
 
 
-def fingerprint(backbone, objects: int = 1, source: str = "backbone"):
+def fingerprint_for(backbone, objects, args):
+    """`main()`'s own call, hoisted out of it so a test can reach it.
+
+    A mutant that read `args.output` in `fingerprint` and never passed it here survived the whole
+    suite — the argument had a default, so the omission was silent. That is the same shape as
+    `select_newest` compiled and called by no binary, `drive`'s `teach_every` that no caller ever
+    passed, and the six other blocks moved out of this `main()` for the same reason.
+    """
+    return fingerprint(backbone, objects,
+                       args.input + ("-grey" if getattr(args, "raw_grey", False) else "")
+                       + ("-fb" if getattr(args, "feedback", False) else ""),
+                       getattr(args, "output", "points"))
+
+
+def fingerprint(backbone, objects: int = 1, source: str = "backbone", output: str = "points"):
     """Refuses a saved head restored against a different backbone or readout. The CRC cannot
     see that -- the bytes are perfectly valid, they just mean something else.
 
     `objects` is in it because it changes what the outputs *mean*, not only how many there are:
     a two-object block restored into a one-object head would put the leftmost object's y into
     the x slot of nothing.
+
+    `output` joined it when `--output map` did, and the gap is worth stating because it was
+    survivable rather than harmless: a points block and a map block hashed **identically**, and what
+    refused a cross-load was `unpack`'s *shape* check -- "record is for 145x6 but this adapter is
+    295x108". That protection is accidental. It holds only while the two sizes differ, and the
+    fingerprint exists precisely for the case where the bytes are valid and mean something else. A
+    map head's basis also carries 150 pyramid values whose meaning depends on the band layout, which
+    no length check can see, so the map shape and memory width go in beside the mode.
     """
-    return fingerprint_of("pointer", str(PLAN), str(IN_SHAPE), f"pool{POOL}",
-                          f"n{backbone.n_outputs}", f"obj{objects}", f"src{source}")
+    parts = ["pointer", str(PLAN), str(IN_SHAPE), f"pool{POOL}", f"n{backbone.n_outputs}",
+             f"obj{objects}", f"src{source}", f"out{output}"]
+    if output == "map":
+        parts.append(f"map{MAP_H}x{MAP_W}x{map_memory_width()}")
+    return fingerprint_of(*parts)
 
 
 def draw(cv2, frame, state):
@@ -1016,9 +1041,7 @@ def main(argv=None):
     #: Only under `--input learned` do the backbone's weights become state worth surviving a power
     #: cut; frozen ones are reproduced from the seed and belong in the fingerprint instead.
     feature_store = Store(FEATURES_PATH) if args.input == "learned" else None
-    fp = fingerprint(backbone, n_objects,
-                     args.input + ("-grey" if args.raw_grey else "")
-                     + ("-fb" if args.feedback else ""))
+    fp = fingerprint_for(backbone, n_objects, args)
     if args.load:
         rec = store.load(guard, fingerprint=fp)
         if rec is None:

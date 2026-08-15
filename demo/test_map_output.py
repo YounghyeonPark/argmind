@@ -22,8 +22,15 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
+import tempfile
+from pathlib import Path
+
+from argmind.backbone import Backbone
+from argmind.persist import Store
 from demo.map_head import map_iou
-from demo.pointer import (MAP_DROPOUT, MAP_H, MAP_W, build, map_basis, map_memory_width,
+from demo.pointer import (IN_SHAPE, MAP_DROPOUT, MAP_H, MAP_W, PLAN, POOL, build, fingerprint,
+                          fingerprint_for,
+                          map_basis, map_memory_width,
                           map_teacher)
 from demo.map_head import Pyramid
 
@@ -189,3 +196,112 @@ def test_the_teacher_is_one_named_function_because_it_is_what_gets_withdrawn():
     assert target.shape == (MAP_H * MAP_W,)
     assert 0.0 < target.max() <= 1.0 and target.min() == 0.0
     assert map_teacher(np.zeros((H, W), dtype=np.int32)).max() == 0.0
+
+
+def test_the_fingerprint_tells_the_two_output_modes_apart():
+    """**A gap found by asking, not by a failure — and it was survivable rather than harmless.**
+
+    `fingerprint()` covered the backbone plan, the input shape, the pooling, the embedding width, the
+    object count and the input source, and **not** the output mode. So a points head and a map head
+    built from the same backbone hashed identically (`0x224c2fa3` both, measured).
+
+    What refused a cross-mode load was `unpack`'s *shape* check — "record is for 145x6 but this
+    adapter is 295x108" — which is the accidental protection, not the designed one: it holds only
+    while the two state sizes differ. The fingerprint exists for exactly the case a length check
+    cannot see, which is why it now carries the mode, the map shape and the memory width.
+    """
+    backbone = Backbone(PLAN, IN_SHAPE, pool=POOL, seed=0)
+    points = fingerprint(backbone, 3, "backbone", "points")
+    mapped = fingerprint(backbone, 3, "backbone", "map")
+    assert points != mapped, (
+        f"both modes hash to {points:#x}; a points record and a map record are indistinguishable")
+    assert fingerprint(backbone, 3, "backbone") == points, "the default is no longer points"
+
+    # **And the two contributions are asserted separately, because the first version of this test
+    # could not tell them apart.** `fingerprint` puts the mode in *and* appends the map geometry on
+    # the map branch, so either alone makes these two integers differ: a mutant dropping the mode
+    # survived, and so did a mutant dropping the geometry, each masked by the other. Same shape as
+    # every "passed for a reason other than the one it names" finding in this repository.
+    assert fingerprint(backbone, 3, "backbone", "coords") != points, (
+        "the mode itself is not in the hash — two non-map readouts would collide, and the map "
+        "branch is what happened to separate points from map")
+
+
+def test_the_fingerprint_refuses_a_cross_mode_load_where_the_length_check_CANNOT():
+    """The sharp version, because the test above only compares two integers.
+
+    Here the record and the adapter have the **same shape**, so `unpack`'s length and dimension
+    checks all pass and the CRC is genuinely correct — the bytes are valid and mean something else,
+    which is the one corruption nothing downstream can detect. Only the fingerprint refuses it.
+    """
+    backbone = Backbone(PLAN, IN_SHAPE, pool=POOL, seed=0)
+    _bb, _h, guard, *_ = build(3, "backbone")
+    with tempfile.TemporaryDirectory() as d:
+        store = Store(Path(d) / "head")
+        store.save(guard, fingerprint=fingerprint(backbone, 3, "backbone", "points"))
+        # Same adapter, same shape, same CRC. Only the declared output mode differs.
+        with pytest.raises(ValueError, match="fingerprint|configuration"):
+            store.load(guard, fingerprint=fingerprint(backbone, 3, "backbone", "map"))
+        # And the control: the mode it was written under still loads, so the refusal above is the
+        # mode and not the store refusing everything.
+        store.load(guard, fingerprint=fingerprint(backbone, 3, "backbone", "points"))
+
+
+def test_the_map_geometry_is_in_the_fingerprint_too(monkeypatch):
+    """The other half, isolated the same way. A map head's basis carries `map_memory_width()` pyramid
+    values whose meaning depends on the band layout, and the 108 outputs are a 9x12 grid — a block
+    restored against a different grid puts the right numbers in the wrong cells.
+
+    The grid used here is *larger*, not a rearrangement of the same 108 cells: `map_memory_width`
+    refuses a map finer than its own coarsest band, so no same-cell-count grid is expressible with
+    the default bands. That makes this the weaker of the two available fixtures and it is said rather
+    than glossed — a length check would also catch this one. What it does establish is that the
+    geometry reaches the hash at all, which was the surviving mutant.
+    """
+    import demo.pointer as pointer
+    backbone = Backbone(PLAN, IN_SHAPE, pool=POOL, seed=0)
+    before_map = fingerprint(backbone, 3, "backbone", "map")
+    before_points = fingerprint(backbone, 3, "backbone", "points")
+
+    monkeypatch.setattr(pointer, "MAP_H", MAP_H + 3)     # 12x15, a different grid
+    monkeypatch.setattr(pointer, "MAP_W", MAP_W + 3)
+    assert fingerprint(backbone, 3, "backbone", "map") != before_map, (
+        "the map geometry is not in the hash; a 9x12 block and a differently-shaped one are "
+        "indistinguishable")
+    assert fingerprint(backbone, 3, "backbone", "points") == before_points, (
+        "the points fingerprint moved with the map geometry, which it has nothing to do with")
+
+
+def test_the_memory_WIDTH_is_in_the_fingerprint_and_not_only_the_grid(monkeypatch):
+    """A mutant keeping `map{MAP_H}x{MAP_W}` and dropping `map_memory_width()` survived, and it is a
+    real gap rather than an equivalent one: the bands could be re-split to a *different layout at the
+    same total width*, where every length check agrees and the 150 values mean something else.
+    """
+    import demo.pointer as pointer
+    backbone = Backbone(PLAN, IN_SHAPE, pool=POOL, seed=0)
+    before = fingerprint(backbone, 3, "backbone", "map")
+    monkeypatch.setattr(pointer, "map_memory_width", lambda *a, **k: map_memory_width() + 1)
+    assert fingerprint(backbone, 3, "backbone", "map") != before, (
+        "the memory width does not reach the hash; a re-split band layout at the same total width "
+        "would restore into a head that reads it differently")
+
+
+def test_the_call_site_passes_the_mode_and_not_only_the_signature_accepting_it():
+    """**The mutant that survived everything**: `fingerprint` grew an `output` argument with a
+    default, and `main()`'s call site never passed it. Every fingerprint test above still passed,
+    because they all call `fingerprint` directly. `fingerprint_for` is that call site, module-level
+    for exactly this reason.
+    """
+    class Args:
+        input, raw_grey, feedback, output = "backbone", False, False, "points"
+    backbone = Backbone(PLAN, IN_SHAPE, pool=POOL, seed=0)
+    args = Args()
+    points = fingerprint_for(backbone, 3, args)
+    args.output = "map"
+    assert fingerprint_for(backbone, 3, args) != points, (
+        "the demo's own call site does not carry the output mode into the fingerprint")
+    assert points == fingerprint(backbone, 3, "backbone", "points"), (
+        "fingerprint_for no longer composes the source string the way main() did")
+
+    args.output, args.feedback = "points", True                 # the suffixes it also carries
+    assert fingerprint_for(backbone, 3, args) != points

@@ -2092,6 +2092,25 @@ the memory is declared. Adding one is three lines and a rebuild. The hosted tier
 available at the tier that can afford a heap and enumerated at the tier that cannot, which is the
 trade `argmind.h` already documents.
 
+**And adding the mode left the persistence fingerprint blind to it (2026-08-15).** A points record
+and a map record hashed **identically** — `0x224c2fa3` both — because `fingerprint()` covered the
+backbone plan, input shape, pooling, embedding width, object count and input source, and not the
+readout. What refused a cross-mode load was `unpack`'s **shape** check, "record is for 145x6 but this
+adapter is 295x108", and that protection is **accidental**: it holds only while the two state sizes
+differ, and the fingerprint exists precisely for the case where the bytes are valid and mean
+something else. A map head's basis also carries 150 pyramid values whose meaning depends on the band
+layout, which no length check can see. The mode, the grid and the memory width are all in it now.
+
+**The first test for it passed for the wrong reason, and the mutants said so.** `fingerprint` puts
+the mode in *and* appends the map geometry on the map branch, so **either alone** makes a points and
+a map hash differ — a mutant dropping the mode survived, and so did one dropping the geometry, each
+masked by the other. The two contributions are asserted separately now, the mode against a
+hypothetical third readout. **Two more survivors were real gaps**: dropping `map_memory_width()`
+while keeping the grid, which a re-split band layout at the same total width would walk straight
+through; and `main()`'s call site **never passing the mode at all** — the argument has a default, so
+the omission was silent while every direct-call test still passed. `fingerprint_for` is that call
+site, module-level for the reason seven other blocks in this `main()` are. Five mutants, all caught.
+
 **Still undecided:** whether inference is *hosted* (an interface to ONNX Runtime/TFLite) or
 *embedded*, and whether the tiers ship as one library or two. Nothing on the camera/audio/speech
 path is built.
