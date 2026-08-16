@@ -166,6 +166,7 @@ of these findings are corrections of a plausible first answer, and several are o
 | `docs/findings/vocabulary-and-labelling.md` | segmentation, splitting, contrast admission, region tracking, object memory, bottom-up grouping |
 | `docs/findings/map-output.md` | the map head, the pyramid, the wean experiment, `--output map`, the persistence fingerprint |
 | `docs/findings/purpose-and-decisions.md` | the stated purpose, the self-learning decision, the constraint re-audit, and the "is this a brain" audit |
+| `docs/ARCHITECTURE.md` | **the block diagrams** — the forward stack layer by layer with every tensor shape and weight count, the backward edge added 2026-08-16 and what it replaced, and the `Stack` that is not built yet. Checked against the running code by `tests/test_architecture_doc.py`, not generated |
 | `docs/findings/runtime-library-and-cpp.md` | the C++ core, the C ABI, parity, target build and sizes, verification limits |
 
 `DESIGN.md` carries the design reasoning, including *What it is not* for the model class.
