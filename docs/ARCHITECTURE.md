@@ -140,36 +140,72 @@ backbone's depth. That is this repository's recorded "the wall is RLS's n²" sho
 structure rather than in a sentence.
 
 
-## 4. What this does not yet do
+## 4. The hierarchy: `Stack` is itself an `Adapter`
 
-The seam exists and is verified. The **composite** that would use it does not, so the chain rule
-still runs in the demo rather than in the library.
+Built 2026-08-17. The claim is **not** that it learns — it is that nothing above it changed.
 
 ```
-  TODAY
+  BEFORE -- the backbone sat outside the guard entirely
   ------------------------------------------------------------------------------
-   +------------+     +==============+
-   |  Backbone  |     |    Guard     |   two state blocks. One is checkpointed,
-   |            |     | wraps the    |   rolled back and persisted; the other is
-   | (no Guard) |     | HEAD ONLY    |   not. The chain rule is caller code.
-   +------------+     +==============+
+   +------------+       +==============+       two state blocks. One is
+   |  Backbone  |       |    Guard     |       checkpointed, rolled back and
+   |            |       | wraps the    |       persisted; the other is not.
+   | (no Guard) |       | HEAD ONLY    |       The chain rule is caller code.
+   +------------+       +==============+
 
-  NEXT -- Stack IS an Adapter
+  NOW -- one Adapter, one state block, every level inside it
   ------------------------------------------------------------------------------
    +=========================================+     +==================+
-   | Stack(layers=[...], head=...)           | --> |      Guard       |
+   | Stack([layer], head, feature_lr=...)    | --> |      Guard       |
    |  +-------------+   +----------------+   |     | wraps EVERYTHING |
-   |  |  Backbone   |   |      head      |   |     +==================+
-   |  +-------------+   +----------------+   |
-   +=========================================+
-        one flat state block covering every level, so checkpoint, rollback,
-        freeze and the persistence record all reach the layers unchanged
+   |  |  Backbone   |-->|      head      |   |     +==================+
+   |  +-------------+   +----------------+   |              |
+   +=========================================+              v
+        state = [ layer block | head block ]        Pipeline, persist,
+                  one flat contiguous array          all unchanged
 ```
 
-**The Stack must change no other component.** That is the test it has to pass, and it is this
-project's own standard: *if the Guard needed one change to accommodate a hierarchy, the contract
-would not be one.*
+One `update(x, y)` does both levels:
 
+```
+   x  (flat: prod(in_shape) image values, then the extras)
+    |
+    +-- [:image] --> reshape --> layer.features() --.
+    |                                               >-- concat --> head.update(h, y)
+    +-- [image:] --> extras ------------------------'                     |
+                                                                          v
+                       layer.apply_gradients() <-- layer.backward() <-- input_gradient()
+                                                        d_feat            295 values
+                                                     = d_h[:144]        sliced at the
+                                                                        feature width
+```
+
+**The input is flat on purpose.** `FrameMap` builds a 1-D regressor, so an image-shaped adapter
+could not be fed by a `Pipeline` at all. The first `prod(in_shape)` entries are reshaped; the rest
+are **extras** — the demo's memory pyramid and constant — which bypass the layers, because the
+head's gradient with respect to them is not the layers' to receive.
+
+What it buys, measured against the arrangement it replaces:
+
+| | backbone outside the guard | `Stack` |
+|---|---|---|
+| layers checkpointed | no | **yes** |
+| layers rolled back on a trip | no | **yes**, against an unguarded control |
+| layers frozen with the head | no — the fault enters the representation | **yes** |
+| layers in the persistence record | a second store, a second fingerprint | **one record** |
+| who owns the chain rule | 42 lines of `demo/pointer.py`, linear heads only | the library, any head |
+
+**Two limits, refused rather than half-built.** More than one layer is refused at construction —
+`backward` returns no gradient with respect to its own input, so layers cannot be chained; depth
+belongs *inside* a layer, and a `Backbone` plan is already a stack. And a `Stack`'s own
+`input_gradient()` refuses, because its input is the raw image and nothing sits below it.
+
+**`Stack.state` is a snapshot, not live storage**, which diverges from every other adapter here: the
+components own their own arrays, so the block is re-gathered when read. Safe for the paths that
+matter — a guard copies out of it and calls `load_state` to restore — and pinned by a test rather
+than described.
+
+**Still in the demo**: `learn_features` and its 42 lines. Moving the demo on to `Stack` is next.
 
 ## How the seam was verified
 
