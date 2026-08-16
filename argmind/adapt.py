@@ -161,6 +161,30 @@ class Adapter(abc.ABC):
     def update(self, x, y) -> UpdateReport:
         """Take one observation. Must not raise on bad *data* — reject and report."""
 
+    def input_gradient(self) -> np.ndarray:
+        """`d(loss)/d(input)` for the most recent **applied** update, at the pre-update parameters.
+
+        This is the seam a hierarchy is built on. Everything else an `Adapter` reports describes
+        *itself*; this is the only quantity that describes what it wants of whatever produced its
+        input, so it is what lets a level below it descend. Without it a composite has to reach
+        inside the head and know its algebra -- which is what `demo/pointer.py::learn_features`
+        does today, in 42 lines that only work for a linear head.
+
+        The loss is ``||y - predict(x)||^2`` with the parameters as they stood *before* the update,
+        so every level in a stack differentiates at the same point, which is what ordinary backprop
+        does. **Zero when the last update was rejected**: a level below must not descend on a step
+        its own head refused to take.
+
+        The buffer is preallocated and overwritten by the next `update()` -- the same contract, and
+        the same trap, as `StepReport.prediction`. Copy it if you need to keep it.
+
+        Not abstract, because an adapter that genuinely cannot differentiate its input is a
+        legitimate thing to write and should say so rather than be impossible to define.
+        """
+        raise NotImplementedError(
+            f"{type(self).__name__} does not report an input gradient, so it cannot sit above "
+            "another learner in a stack")
+
     @abc.abstractmethod
     def predict(self, x) -> np.ndarray:
         """Current model output for `x`, shape ``(n_outputs,)``."""
@@ -293,7 +317,7 @@ class RecursiveLeastSquares(Adapter):
     __slots__ = ("n_features", "n_outputs", "dtype", "forgetting", "p0",
                  "_state", "_state_ro", "_theta", "_p", "_px", "_k", "_e", "_e_post",
                  "_yhat", "_pn", "_tn", "_psym",
-                 "_updates", "_rejected_nonfinite", "_rejected_denominator")
+                 "_updates", "_rejected_nonfinite", "_rejected_denominator", "_dx")
 
     def __init__(self, n_features: int, n_outputs: int = 1,
                  forgetting: float = 0.999, p0: float = 1e2,
@@ -345,6 +369,10 @@ class RecursiveLeastSquares(Adapter):
         self._e = np.zeros(m, dtype=self.dtype)
         self._e_post = np.zeros(m, dtype=self.dtype)
         self._yhat = np.zeros(m, dtype=self.dtype)
+        #: d(loss)/d(input) for the most recent applied update, at the pre-update
+        #: parameters. Preallocated for the reason `StepReport.prediction` is: a fresh
+        #: array per step allocates once per step.
+        self._dx = np.zeros(n, dtype=self.dtype)
         self._pn = np.zeros((n, n), dtype=self.dtype)
         self._tn = np.zeros((n, m), dtype=self.dtype)
         self._psym = np.zeros((n, n), dtype=self.dtype)
@@ -451,6 +479,10 @@ class RecursiveLeastSquares(Adapter):
             p_min_diag=min_diag,
             reason=reason)
 
+    def input_gradient(self) -> np.ndarray:
+        """See `Adapter.input_gradient`. Preallocated; the next `update()` overwrites it."""
+        return self._dx
+
     def update(self, x, y) -> UpdateReport:
         """Take one observation and report what happened.
 
@@ -466,12 +498,19 @@ class RecursiveLeastSquares(Adapter):
             self._rejected_nonfinite += 1
             self._e[:] = 0
             self._e_post[:] = 0
+            self._dx[:] = 0
             return self._report(False, "nonfinite_input")
 
         # a priori residual, before the state moves. Computed first because it is
         # the only error figure that means anything for monitoring.
         np.dot(xa, self._theta, out=self._yhat)
         np.subtract(ya, self._yhat, out=self._e)
+
+        # d/dx of ||y - x.theta||^2 at the *pre-update* theta, which is still what `_theta` holds.
+        # Here rather than after the update, because a level below must differentiate at the same
+        # parameters this step was derived from.
+        np.dot(self._theta, self._e, out=self._dx)
+        np.multiply(self._dx, self.dtype.type(-2.0), out=self._dx)
 
         np.dot(self._p, xa, out=self._px)
         den = self.dtype.type(self.forgetting) + np.dot(xa, self._px)
@@ -482,6 +521,7 @@ class RecursiveLeastSquares(Adapter):
             # gain would be meaningless; refuse rather than propagate it.
             self._rejected_denominator += 1
             self._e_post[:] = self._e
+            self._dx[:] = 0
             return self._report(False, "nonpositive_denominator")
 
         np.divide(self._px, den, out=self._k)
@@ -645,7 +685,7 @@ class NormalisedLeastMeanSquares(Adapter):
 
     __slots__ = ("n_features", "n_outputs", "dtype", "mu", "eps",
                  "_state", "_state_ro", "_theta", "_e", "_e_post", "_yhat", "_tn",
-                 "_updates", "_rejected_nonfinite", "_rejected_denominator")
+                 "_updates", "_rejected_nonfinite", "_rejected_denominator", "_dx")
 
     def __init__(self, n_features: int, n_outputs: int = 1,
                  mu: float = 0.5, eps: float = 1e-6, dtype: str = "f4") -> None:
@@ -678,6 +718,10 @@ class NormalisedLeastMeanSquares(Adapter):
         self._e = np.zeros(n_outputs, dtype=self.dtype)
         self._e_post = np.zeros(n_outputs, dtype=self.dtype)
         self._yhat = np.zeros(n_outputs, dtype=self.dtype)
+        #: d(loss)/d(input) for the most recent applied update, at the pre-update
+        #: parameters. Preallocated for the reason `StepReport.prediction` is: a fresh
+        #: array per step allocates once per step.
+        self._dx = np.zeros(n_features, dtype=self.dtype)
         self._tn = np.zeros((n_features, n_outputs), dtype=self.dtype)
         self._updates = 0
         self._rejected_nonfinite = 0
@@ -743,6 +787,10 @@ class NormalisedLeastMeanSquares(Adapter):
             p_min_diag=0.0,
             reason=reason)
 
+    def input_gradient(self) -> np.ndarray:
+        """See `Adapter.input_gradient`. Preallocated; the next `update()` overwrites it."""
+        return self._dx
+
     def update(self, x, y) -> UpdateReport:
         """Take one observation and report what happened.
 
@@ -755,10 +803,15 @@ class NormalisedLeastMeanSquares(Adapter):
             self._rejected_nonfinite += 1
             self._e[:] = 0
             self._e_post[:] = 0
+            self._dx[:] = 0
             return self._report(False, "nonfinite_input", 0.0)
 
         np.dot(xa, self._theta, out=self._yhat)
         np.subtract(ya, self._yhat, out=self._e)
+
+        # As RLS: d/dx of ||y - x.theta||^2 at the pre-update theta.
+        np.dot(self._theta, self._e, out=self._dx)
+        np.multiply(self._dx, self.dtype.type(-2.0), out=self._dx)
 
         power = self.dtype.type(self.eps) + np.dot(xa, xa)
         if not np.isfinite(power) or power <= 0:
@@ -767,6 +820,7 @@ class NormalisedLeastMeanSquares(Adapter):
             # thing whichever adapter is underneath.
             self._rejected_denominator += 1
             self._e_post[:] = self._e
+            self._dx[:] = 0
             return self._report(False, "nonpositive_denominator", 0.0)
 
         g = self.dtype.type(self.mu) / power
@@ -981,7 +1035,7 @@ class MultilayerPerceptron(Adapter):
 
     __slots__ = ("n_features", "n_outputs", "dtype", "hidden", "activation",
                  "learning_rate", "_shapes", "_state", "_state_ro", "_w", "_b",
-                 "_e", "_e_post", "_updates", "_rejected_nonfinite")
+                 "_e", "_e_post", "_updates", "_rejected_nonfinite", "_dx")
 
     def __init__(self, n_features: int, n_outputs: int = 1, *,
                  hidden: tuple[int, ...] = (), activation: str = "tanh",
@@ -1036,6 +1090,10 @@ class MultilayerPerceptron(Adapter):
 
         self._e = np.zeros(n_outputs, dtype=self.dtype)
         self._e_post = np.zeros(n_outputs, dtype=self.dtype)
+        #: d(loss)/d(input) for the most recent applied update, at the pre-update
+        #: parameters. Preallocated for the reason `StepReport.prediction` is: a fresh
+        #: array per step allocates once per step.
+        self._dx = np.zeros(n_features, dtype=self.dtype)
         self._updates = 0
         self._rejected_nonfinite = 0
 
@@ -1126,6 +1184,10 @@ class MultilayerPerceptron(Adapter):
             p_min_diag=0.0,
             reason=reason)
 
+    def input_gradient(self) -> np.ndarray:
+        """See `Adapter.input_gradient`. Preallocated; the next `update()` overwrites it."""
+        return self._dx
+
     def update(self, x, y) -> UpdateReport:
         """One observation: forward, backward, one gradient step.
 
@@ -1144,6 +1206,7 @@ class MultilayerPerceptron(Adapter):
             self._rejected_nonfinite += 1
             self._e[:] = 0
             self._e_post[:] = 0
+            self._dx[:] = 0
             return self._report(False, "nonfinite_input", 0.0)
 
         acts = self._forward(xa)
@@ -1156,6 +1219,9 @@ class MultilayerPerceptron(Adapter):
             grads.append((np.outer(acts[i], delta), delta.copy()))
             if i:
                 delta = (delta @ self._w[i].T) * self._dact(acts[i])
+        # One more hop, to the input itself. No activation derivative here: `acts[0]` is `x`,
+        # which the network did not produce, so there is no non-linearity to differentiate.
+        self._dx[:] = delta @ self._w[0].T
         grads.reverse()
 
         # Cast explicitly rather than relying on `float(lr) * array`. Under NEP 50 a

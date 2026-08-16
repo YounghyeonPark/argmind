@@ -453,3 +453,48 @@ inference" against a repository containing one algorithm. "24/7 brain" is the sa
 about the whole system. It stands as the **stated purpose**, recorded as a decision on 2026-08-13;
 it is not a description of what is built, and the two must not be quoted as if they were the same
 sentence.
+
+## The restructure, begun 2026-08-16 — the seam, verified
+
+**The owner's words**: `argmind의 내부구조를 재구성해보자`, following the constraint re-audit.
+
+**What the re-audit left as the one real constraint is now built.** `Adapter.input_gradient()`
+returns `d(loss)/d(input)` for the most recent **applied** update, evaluated at the **pre-update**
+parameters. Everything else an adapter reports describes *itself*; this is the only quantity that
+describes what it wants of whatever produced its input, which is what lets a level below descend.
+
+**Three design choices, each of which could have gone the other way.**
+
+- **A method, not a field on `UpdateReport`.** The report crosses the C ABI as a struct of scalars
+  and is compared byte-for-byte by three parity harnesses; an array field there would change the
+  record format for every adapter, including the two that will never stack. A method leaves parity
+  and the ABI untouched.
+- **Pre-update parameters.** Ordinary backprop differentiates every level at the same point. A test
+  asserts the pre- and post-update gradients are *distinguishable* on its fixture, so "pre-update"
+  is measured rather than merely written in the docstring.
+- **Zero on a refused update.** A level below must not descend on a step its own head refused. The
+  control is that a good sample immediately afterwards is non-zero, so the zero is not the buffer
+  simply never being written.
+
+**Verified against central differences, not against "it learns"** — the standard `Backbone.backward`
+is held to, and the reason is that a wrong backward pass still trains, just worse. `demo/pointer.py`'s
+42-line `learn_features` had never been checked this way at all. Max relative error against
+`(L(x+h) − L(x−h))/2h`: **~1e-10** for RLS and NLMS, **~1e-9** for the network, over shapes 4→2, 7→1
+and 6→3 and architectures `()`, `(8,)`, `(6,5)`.
+
+**The network's last hop is new code rather than a rearrangement**, which is why it was the case
+worth doubting: its backward loop stopped one layer short of the input, so `delta @ w[0].T` is
+added — with **no** activation derivative, because `acts[0]` is `x` and the network did not produce
+it. A mutant applying `_dact` there is caught.
+
+**Five mutants caught; one is equivalent and recorded rather than contrived around.** Writing
+`self._w[0] @ delta` instead of `delta @ self._w[0].T` survived, and it is not a gap: the two are
+**bit-identical** by definition of the transpose, measured. The five caught are dropping the −2
+scaling, flipping its sign, leaking a gradient from a rejected sample, handing out a copy instead of
+the preallocated buffer, and computing from the post-update `theta`.
+
+**What is deliberately not built yet**: a `Stack` that owns the chain rule and is itself an
+`Adapter` — which is what would make `Guard`, `Pipeline` and `persist` cover every level at once —
+and `Backbone` formally declaring the layer protocol it already satisfies in substance. The seam had
+to be verified first, because a composite built on an unchecked gradient would train and look fine.
+

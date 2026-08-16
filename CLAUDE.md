@@ -133,12 +133,19 @@ the demo's perception is 1,087 lines of hand-written classical code, what argmin
 linear map, and eight faculties usually taken to be needed are absent rather than unfinished.
 `tests/test_what_this_is_not.py` holds that under test rather than in prose.
 
-**The one constraint that survived the 2026-08-16 re-audit**, stated precisely because most of the
-others turned out to be mine: `Adapter.update(x, y)` needs a target and `UpdateReport` carries **no
-gradient term**. A monolithic deep learner needs neither — 16 hidden layers work through the guard
-in one flat state block — but a hierarchy of separately-guarded levels needs both. And `Backbone` is
-not an `Adapter` (no `update`/`predict`/`reset`/`health_fields`), so feature learning lives in 42
-lines of the demo. Extending the contract is the next design step.
+**The restructure begun 2026-08-16: the seam exists.** The re-audit found one real constraint — an
+`Adapter` reported nothing a level below it could descend on — and `Adapter.input_gradient()` is
+that quantity: `d(loss)/d(input)` for the last **applied** update, at the **pre-update** parameters,
+in a preallocated buffer, zero when the update was refused. All three adapters implement it and it
+is **checked against central differences** (~1e-10 for RLS/NLMS, ~1e-9 for the network) across three
+shapes and three architectures, because a wrong gradient still trains. The base declares it and
+*refuses* rather than leaving it abstract, so an adapter that genuinely cannot differentiate its
+input can say so.
+
+**Not yet built**: a `Stack` that owns the chain rule and is itself an `Adapter` — which is what makes
+Guard, Pipeline and persist cover every level at once — and `Backbone` formally satisfying the layer
+protocol it already meets in substance (`features`/`backward`/`apply_gradients`). Until then feature
+learning still lives in 42 lines of the demo.
 
 **Open numbers nobody has**: backward-pass throughput on an M55; whether fp32 holds past ten million
 updates on a non-stationary target; and why the map head's two harnesses disagree on free-running
