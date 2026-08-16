@@ -2115,6 +2115,59 @@ site, module-level for the reason seven other blocks in this `main()` are. Five 
 *embedded*, and whether the tiers ship as one library or two. Nothing on the camera/audio/speech
 path is built.
 
+## Is this a cognitive brain? Asked 2026-08-16 — no, and the gap is specific
+
+**The owner's question**: `여전히 의심스러운 부분이 있음. 인지적 지능기능을 가진 두뇌를 만드는게
+맞는지 확인바람`. The suspicion is correct, and the answer is recorded here because nothing in this
+repository said what it is *not* at the system level — DESIGN.md's *What it is not* is about the
+model class, one level down. `tests/test_what_this_is_not.py` protects it, since a negative result
+left in prose is the kind this project has already had to withdraw twice.
+
+**Measured, not argued.** The demo's perception is **1,087 lines of hand-written classical code**
+(`demo/label_sources.py`) plus 1,013 of assembly; what argmind learns is **one linear map** — 145→6
+at 870 parameters for points, 295→108 at 31,860 (124.5 KB) for the map — and `predict` is literally
+`np.dot(arr, self._theta)`. The backbone's 1,240 parameters are **frozen** unless `--input learned`.
+So the perception is not learned; it is consumed. That is exactly what the 2026-08-14 decision is
+aimed at, and the test states the starting position so the wean is visible as a *failing* test
+rather than as a claim.
+
+**Eight faculties a cognitive brain is usually taken to need are absent**, not unfinished: a goal the
+system holds for itself, action selection, episodic or working memory, attention, concept formation,
+language, audio input, a self-model.
+
+**And the measurement I reached for first was broken in the flattering direction.** A keyword grep
+over the sources reported four of those as PRESENT. Every hit was a false positive — `policy` is the
+*aligner's* synchronisation policy, `action` is a substring of `subtraction`, `mic ` of `dynamic
+range`, `language` of "the language decision in DESIGN.md", and `reward`/`salien` are the retired
+objective-sweep harness. Checked against the library's public API instead, all eight are absent. The
+substring trap is pinned by a test so the same grep is not quoted again.
+
+**Two of my own test defects on the way, both the shape this file keeps recording.** The control that
+was supposed to show the network is *not* linear passed **vacuously on NaN** — an identity-activation
+mutant made it diverge, and `nan != approx(nan)` is True, so the mutant survived while the assertion
+"held". And the first fix made the test brittle to *training stability*: forcing `relu`, a legitimate
+activation, diverged at that rate and failed a test it has no business failing. The control is an
+**untrained** network now, because the claim is about the form of the map, which initialisation
+already settles. Six mutants, all behaving as intended including the one that must **not** be caught.
+
+**What is not in question**, and is deliberately not argued down: the online adaptation, guard,
+rollback, persistence, any-to-any shapes, cold start with nothing pretrained, and execution on the
+declared floor are measured and hold. The gap is between that and the stated purpose of 2026-08-13,
+not in the built part.
+
+**Four things would change the answer, and all four are open.** The wean must succeed — it currently
+free-runs at 0.09–0.16 while a second harness reads 0.96–0.98 on the same scene and the discrepancy
+is unlocalised. An objective that *requires* identity, since position provably does not (d-prime
+0.511 trained against 0.532 random). A throughput figure for a backward pass on the M55, which has
+never been measured. And memory, goal and attention, which do not exist at all.
+
+**The naming risk is this file's own precedent one level up.** CLAUDE.md's first line was already
+corrected once for overselling — "Multi-sensor AI software: fusion, on-device learning, and
+inference" against a repository containing one algorithm. "24/7 brain" is the same shape of claim
+about the whole system. It stands as the **stated purpose**, recorded as a decision on 2026-08-13;
+it is not a description of what is built, and the two must not be quoted as if they were the same
+sentence.
+
 The original design driver, still the one the core tier's API is shaped against: an inertial +
 aiding-sensor estimator with online bias calibration. Sensor-agnostic in the API, specific in
 what it must handle.
