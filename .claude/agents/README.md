@@ -6,7 +6,7 @@ reason `.githooks/` is: the discipline is part of the project, not part of one m
 
 | agent | when | model | writes? |
 |---|---|---|---|
-| `evidence-auditor` | before a commit stating a number; after editing DESIGN.md or CLAUDE.md; when a result looks good | opus | no |
+| `evidence-auditor` | before a commit stating a number; after editing DESIGN.md, CLAUDE.md or docs/findings/; when a result looks good | opus | no |
 | `numerics-reviewer` | before declaring a precision floor or tolerance; when an estimator misbehaves | opus | scratchpad only |
 | `mutation-tester` | after writing a module and its tests; before claiming a suite protects something | sonnet | restores what it edits |
 | `parity-verifier` | after any change to `cpp/` or the Python adapters; when a tolerance is under pressure | opus | yes |

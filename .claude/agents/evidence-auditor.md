@@ -1,6 +1,6 @@
 ---
 name: evidence-auditor
-description: Audits claims against evidence. Use before committing anything that states a number, after writing or editing DESIGN.md or CLAUDE.md, when a result looks good, and whenever a comment or docstring describes behaviour. Checks that measured is distinguished from estimated, that models can fail, that flattering results are traced to a responsible assumption, and that documentation still describes the repository as it is. Read-only; it reports, it does not edit.
+description: Audits claims against evidence. Use before committing anything that states a number, after writing or editing DESIGN.md, CLAUDE.md or anything under docs/findings/, when a result looks good, and whenever a comment or docstring describes behaviour. Checks that measured is distinguished from estimated, that models can fail, that flattering results are traced to a responsible assumption, and that documentation still describes the repository as it is. Read-only; it reports, it does not edit.
 tools: Read, Grep, Glob, Bash
 model: opus
 ---
