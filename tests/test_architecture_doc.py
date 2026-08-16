@@ -171,6 +171,12 @@ def test_the_svg_carries_the_same_figures_as_the_prose(facts):
     assert f"{facts['peak']:,}" in svg, "the peak activation figure is missing from the picture"
     n, m, size = facts["heads"]["map"]
     assert f"{n} → {m}" in svg or f"{n} -> {m}" in svg, "the head shape is missing from the picture"
-    assert f"{size:,}" in svg, "the head's parameter count is missing from the picture"
+    # **Both places, not "somewhere".** The head's parameter count appears twice — in the Stack's
+    # state-block label and in the head box — so a presence check passed while one of them was
+    # stale. Same bag-of-strings weakness this file already had to fix for the markdown.
+    assert f"[ backbone {facts['backbone_params']:,} | head {size:,} ]" in svg, (
+        "the Stack's state-block label does not carry the two component sizes")
+    assert f"{n} → {m} · {size:,} θ" in svg, (
+        "the head box does not carry its shape and parameter count together")
     h, w = facts["grid"]
     assert f"{h}×{w}={h * w}" in svg or f"{h}x{w}={h * w}" in svg
