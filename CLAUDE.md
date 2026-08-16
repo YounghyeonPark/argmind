@@ -25,39 +25,24 @@ Side project — open source, not a product, no support commitment.
 
 The whole repository. There is one project here.
 
-**A previous, unrelated project — a hardware accelerator IP study — was stopped and removed from
-the working tree on 2026-08-08.** It is not deleted: it lives in history under the tag
-`accelerator-final`, which is where an archive belongs. It is out of the tree because carrying
-forty files and ten documents of a different project taxes every search and every exploration
-from here on, and makes the repository look like two projects to anyone reading it.
+**A previous, unrelated project — a hardware accelerator IP study — was stopped and removed from the
+working tree on 2026-08-08.** It lives in history under the tag `accelerator-final`, which is where
+an archive belongs; it is out of the tree because forty files of a different project tax every
+search from here on. **Do not restore it to continue it** — everything worth carrying forward was
+extracted before removal.
 
     git show accelerator-final:accelerator/README.md      # browse
-    git checkout accelerator-final -- accelerator/        # restore, if ever needed
 
-**Do not restore it to continue it.** Everything worth carrying forward was extracted into this
-file before removal.
+Two of its results are still worth knowing, because they were measured and they bear on estimation
+work: **the EKF covariance recursion needs fp32 minimum, in every filter form**, and **precision
+floors are a property of the algorithm, not of the platform** — three distinct floors appeared
+across one workload set, so no single precision policy works everywhere.
 
-Two things from it are still worth knowing, because they were measured rather than assumed and
-they bear on sensor/estimation work:
+Re-derived *here* for RLS on 2026-08-08 rather than inherited, because carrying a conclusion across
+algorithms is the borrowed-assumption error: **fp16 fails the RLS covariance recursion even at κ=1**
+(refused at construction), and **fp32 survives but does not hold positive-definiteness exactly**.
+Both halves have tests. Full detail: `docs/findings/retired-accelerator-project.md`.
 
-- **The EKF covariance recursion needs fp32 minimum. There is no fp16/bf16 path in any filter
-  form** — conventional, Joseph and square-root all lose positive-definiteness on the *first*
-  step, and fp16 additionally overflows at κ(P)=1e6. Measured numerically.
-- **Precision floors are a property of the algorithm, not of the platform.** Three distinct
-  floors appeared across one workload set. Do not assume a single precision policy works
-  everywhere.
-
-Measured *here*, on 2026-08-08, for RLS — deliberately re-derived rather than inherited from the
-above, because carrying a conclusion across algorithms is the borrowed-assumption error:
-
-- **fp16 fails the RLS covariance recursion even at κ=1**, losing positive-definiteness by step
-  115 with every regressor inside fp16's range, so it is arithmetic and not dynamic range. It is
-  refused at construction.
-- **fp32 survives but does not hold positive-definiteness exactly** — a negative eigenvalue at
-  roundoff scale (≈-5e-7 against tr(P)~1e2) on the first update when `p0·‖x‖² >> 1`. The fix if
-  it ever bites is a square-root/UD form, not more precision. Both halves have tests.
-
-Full detail lives in the tag, not in this tree: `git show accelerator-final:accelerator/PHASE0_FINDINGS.md`.
 
 ## Standards of evidence — carried over deliberately
 
@@ -166,10 +151,10 @@ of these findings are corrections of a plausible first answer, and several are o
 | `docs/findings/vocabulary-and-labelling.md` | segmentation, splitting, contrast admission, region tracking, object memory, bottom-up grouping |
 | `docs/findings/map-output.md` | the map head, the pyramid, the wean experiment, `--output map`, the persistence fingerprint |
 | `docs/findings/purpose-and-decisions.md` | the stated purpose, the self-learning decision, the constraint re-audit, and the "is this a brain" audit |
+| `DESIGN.md` + `docs/design/` | the design document — what it is, what it is not, the abstractions; the dated log moved to `docs/design/status-log.md` and `basis-and-scope.md` |
 | `docs/ARCHITECTURE.md` | **the block diagrams** — the forward stack layer by layer with every tensor shape and weight count, the backward edge added 2026-08-16 and what it replaced, and the `Stack` that is not built yet. Checked against the running code by `tests/test_architecture_doc.py`, not generated |
 | `docs/findings/runtime-library-and-cpp.md` | the C++ core, the C ABI, parity, target build and sizes, verification limits |
 
-`DESIGN.md` carries the design reasoning, including *What it is not* for the model class.
 
 ## Sub-agent team
 
