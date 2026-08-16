@@ -189,83 +189,57 @@ scaled to the problem rather than left large by default.
 `interpolate`, `drop-if-stale` give different answers. The user chooses; the framework records
 the choice and reports staleness.
 
-## API sketch — for review, not final
+## What `step()` returns, and why that is the design
 
-Updated 2026-08-08 for the guard as built — it wraps rather than sits beside, for the reason
-given above.
+**`step()` returns a report rather than nothing.** Observability is not a logging afterthought here;
+it is the return value. `StepReport` carries `updated`, `frozen_by`, `staleness_s` and the
+prediction, so a caller can answer "is it learning right now" without reaching inside anything —
+which is exactly the question the demo could not answer until its overlay was fixed.
 
-```python
-from argmind import (Stream, Pipeline, Aligner, Guard, Bound, Divergence,
-                     RecursiveLeastSquares)
+**A worked example used to sit here and it did not run.** It was written before `FrameMap` existed
+and omitted it, so it was missing a required argument — and `FrameMap` is not a detail: mapping a
+frame to `(x, y)` through a *declared index table* rather than a callable is one of the load-bearing
+decisions in this library, because a callable does not cross a C ABI. A sample that predates the
+decision it should be demonstrating is worse than no sample.
 
-imu   = Stream("imu",  dim=6, rate_hz=200, dtype="f4")
-aid   = Stream("aid",  dim=3, rate_hz=5,   dtype="f4")
+Examples that are executed rather than written: `README.md`'s C program is compiled and run against
+an installed prefix by `tests/test_packaging.py`; `tests/test_pipeline.py` and `demo/test_pointer.py`
+drive the whole composition. Read those.
 
-pipe = Pipeline(
-    streams=[imu, aid],
-    aligner=Aligner.hold_last(reference="imu", max_stale_s=0.5),
-    adapter=Guard(
-        RecursiveLeastSquares(n_features=6, forgetting=0.999, dtype="f4"),
-        checks=[Divergence(ratio=5.0, floor=1e-3),
-                Bound("p_trace", hi=1e4),
-                Bound("p_min_diag", lo=0.0)],
-        rollback_depth=10,
-        checkpoint_every=5,       # reaches 50 updates back, for 10 * (state+2)
-        recover_after=None,       # thaw() is deliberate; nothing thaws itself
-    ),
-)
+## Adaptation methods — the plan, and where it did not hold
 
-imu.push(t=0.005, values=[...])       # bounded ring buffer, no allocation
-aid.push(t=0.004, values=[...])
-
-report = pipe.step()                  # bounded work; never blocks
-report.updated                        # did adaptation apply this step?
-report.frozen_by                      # which guard, if any
-report.staleness_s                    # per stream
-y = pipe.predict(x)
-```
-
-The shape to notice: **`step()` returns a report rather than nothing.** Observability is not a
-logging afterthought; it is the return value.
-
-## Adaptation methods, in the order they should exist
-
-Chosen for stability that can be argued about, not for novelty.
+Chosen for stability that can be argued about, not for novelty. **Two of the four are built, and
+they are not the first two** — recording that is the point of keeping the list, since a plan that is
+quietly re-ordered stops being evidence of anything.
 
 1. **Recursive least squares** with a forgetting factor — the workhorse. Bounded state, well
-   understood, and directly useful for online calibration. **Built** (Python reference,
-   `argmind/adapt.py`), checked against the closed-form exponentially weighted solution rather
-   than against itself.
+   understood, directly useful for online calibration. **BUILT**, and checked against the
+   closed-form exponentially weighted solution rather than against itself.
 2. **Kalman-family parameter estimation** — an EKF whose state is the parameters. Carries the
-   covariance conditioning problem, and therefore the precision floor above.
+   covariance conditioning problem, and therefore the precision floor above. **NOT BUILT.**
 3. **Online gradient methods** for the cases the first two cannot express, with explicit step-size
-   control.
-4. **Drift/change detection** to decide *when* to adapt, which is often more valuable than how.
+   control. **BUILT, out of order** — `NormalisedLeastMeanSquares` came first because a network
+   head's width made RLS's n² the binding constraint (330,544 B against 2,872 at 128 features), and
+   `MultilayerPerceptron` followed the 2026-08-10 scope decision. Neither was reached by working
+   down this list; both were forced by a measurement.
+4. **Drift/change detection to decide *when* to adapt**, which is often more valuable than how.
+   **NOT BUILT.** `Divergence` is adjacent and is not this: it is a guard *check* that freezes an
+   adapter that has already gone wrong, not a detector that decides adaptation is warranted.
 
 ## Open questions
 
-Genuinely open, listed rather than guessed:
+Genuinely open, listed rather than guessed. Questions this file used to carry with their answers
+struck through — language, target range, persistence, whether a guard's own state persists — are
+**decided**, and their reasoning lives in `docs/design/status-log.md` and CLAUDE.md rather than
+being restated here as crossed-out text.
 
-- ~~Language~~ — **DECIDED 2026-08-08: a C++ core with a C ABI, optimised for speed.** See
-  "Language and structure" below.
-- ~~Target range~~ — **DECIDED 2026-08-08: the floor is Cortex-M4F class**, ARMv7E-M with a
-  single-precision hardware FPU. Set by the measured fp32 precision floor rather than by memory or
-  speed, both of which are comfortable. See "Target range" below. This closes the matrix-type
-  question with own minimal fixed-size types and no Eigen.
-- **How much of a timebase to own.** Does the library assume a monotonic clock per stream, or
-  handle clock skew estimation between sources?
+- **How much of a timebase to own.** `Stream` enforces monotonic time at the source, so ordering
+  within one stream is settled. Clock *skew* between sources is not: nothing here estimates it, and
+  whether that belongs in the library or in the caller has never been decided.
 - **Where inference sits.** The library adapts parameters and estimates. Whether it also wraps a
   third-party inference runtime, or simply provides adapted inputs to one, is a scope boundary
-  not yet drawn.
-- ~~**Persistence**~~ — **BUILT 2026-08-08** (`argmind/persist.py`). See below.
-- ~~**Whether a guard's own state should persist**~~ — **ANSWERED 2026-08-08.** The checkpoints
-  and the EWMAs inside checks are not persisted: they describe a run, and a run ends at power-off,
-  so restoring them would assert a continuity that does not exist. The *frozen flag* is carried,
-  with what tripped it, because it is a conclusion rather than working state. What to do with it
-  on load is a real decision with no correct default, so it is the caller's — `on_frozen` is
-  `"thaw"` (default), `"keep"` or `"refuse"`. Both arguments stand and neither wins in general:
-  thawing risks re-learning into the same trouble; keeping risks stranding a device that a power
-  cycle would have fixed, with no way back except a site visit. The record says which happened.
+  still not drawn — and the 2026-08-14 decision that argmind must do the learning and inferencing
+  itself sharpens the question rather than answering it.
 
 ## Language and structure — decided 2026-08-08
 
@@ -471,7 +445,7 @@ block/frame — because a leak detector that has never detected a leak is not ev
 
 ## Standards
 
-Carried from the parked project, where seventeen modelling errors were found and most flattered
-the design. See [CLAUDE.md](CLAUDE.md). The one that matters most here: **anything that can
-report only success is not evidence.** Tests must be able to show the adapter diverging, the
-guard tripping, and the aligner dropping data.
+The evidence rules are in CLAUDE.md and are not restated here. The one that bites hardest at this
+level: **anything that can report only success is not evidence.** Tests must be able to show the
+adapter diverging, the guard tripping, and the aligner dropping data — and this repository has
+caught fixtures failing that three times, each of which passed until a control was added.
