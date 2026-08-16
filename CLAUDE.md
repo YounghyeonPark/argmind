@@ -127,10 +127,33 @@ shapes and three architectures, because a wrong gradient still trains. The base 
 *refuses* rather than leaving it abstract, so an adapter that genuinely cannot differentiate its
 input can say so.
 
-**Not yet built**: a `Stack` that owns the chain rule and is itself an `Adapter` — which is what makes
-Guard, Pipeline and persist cover every level at once — and `Backbone` formally satisfying the layer
-protocol it already meets in substance (`features`/`backward`/`apply_gradients`). Until then feature
-learning still lives in 42 lines of the demo.
+**And `Stack` uses it (2026-08-17).** One layer below a head, presented as one `Adapter`, so
+**nothing above it changed** — that was the test, not that it learns. One flat state block covers
+every level, so a checkpoint checkpoints the layers, a rollback rolls them back (measured against an
+unguarded control), a freeze stops them learning, and **one** persistence record carries them. It
+goes through `Pipeline` unchanged because its input is flat by design: `FrameMap` builds a 1-D
+regressor, and the first `prod(in_shape)` entries are reshaped while the rest are **extras** that
+bypass the layers.
+
+**Two real limits, refused rather than half-built.** More than one layer is refused at construction:
+`backward` returns no gradient with respect to its own input, so layers cannot be chained — depth
+belongs *inside* a layer, and a `Backbone` plan is already a stack. And a `Stack`'s own
+`input_gradient()` refuses, because its input is the raw image.
+
+**`Stack.state` is a snapshot, not live storage** — the components own their arrays — which diverges
+from every other adapter here and is pinned by a test rather than described. Safe for the paths that
+matter, since a guard copies out and calls `load_state`.
+
+**Eight mutants; three survived the first pass and two were real gaps.** Nothing checked that the
+extras reach the head, and nothing checked the gradient slice took the *front* of the head's input.
+The third was the finding: descending on a refused sample looked equivalent — `input_gradient()` is
+zero — and is **not**, because the forward pass has already put a NaN in the image buffer and
+`0 * nan` is `nan`. The `if report.applied` check is load-bearing, and only a fixture supplying a
+NaN rather than merely a rejected step can see it.
+
+**Still in the demo**: `learn_features` and its 42 lines. Moving the demo on to `Stack` is the next
+step, and `state_size` is not on every adapter (`NormalisedLeastMeanSquares` has none) although
+this file's statement of the contract lists it — a small doc/code mismatch found on the way.
 
 **Open numbers nobody has**: backward-pass throughput on an M55; whether fp32 holds past ten million
 updates on a non-stationary target; and why the map head's two harnesses disagree on free-running
