@@ -2115,6 +2115,57 @@ site, module-level for the reason seven other blocks in this `main()` are. Five 
 *embedded*, and whether the tiers ship as one library or two. Nothing on the camera/audio/speech
 path is built.
 
+## Learning applies everywhere, deep structures allowed, low to high — decided 2026-08-16
+
+**The owner's words**: `제약사항이 있다면 재검토바람. 학습은 모든부분에 적용됨. 딥러닝네트워크
+구조를 사용가능하고, 저수준 인지부터 고수준 인지까지 가능한 형태여야함`. Recorded as a decision,
+like the 2026-08-09 widening and the 2026-08-13 purpose. What follows is the re-audit it asked for,
+and **most of the constraints I had been reporting turn out to be mine rather than the problem's** —
+the same finding this file already records for `AppearanceMatcher`'s `k > 4` refusal and for the
+withdrawn "training does not fit under 4.2 MB".
+
+**Withdrawn — not constraints:**
+
+- **Depth is not limited by anything.** Measured: `MultilayerPerceptron` at 16 hidden layers is
+  67,600 parameters in **one contiguous state block**, and a 6-layer network goes through `Guard`
+  unchanged — checkpointed, rolled back and persisted like any other adapter. The contract never
+  mentioned depth; I had been arguing from the *core tier's* 8 KB, which is a different question.
+- **RLS refusing to widen `n_outputs` was load-bearing in the wrong argument.** It is what produced
+  "unbounded vocabulary, bounded concurrency", and it is a property of **RLS's row-major theta**, not
+  of the architecture. `MultilayerPerceptron` has both `widened()` and `deepened()`. With a network
+  head that constraint is simply absent.
+- **"Recognition does not emerge in the hidden layers"** is a result about the **objective**, not the
+  architecture. It was measured on *position*, which is a linear readout of a spatial map, so the
+  gradient's cheapest route is to preserve layout. This file already scoped it on 2026-08-13; it had
+  been reading as an architectural limit and it is not one.
+- **The 8 KB / Cortex-M4F floor is the core tier only.** The hosted tier takes shapes at construction
+  and has a heap; an STM32N6 has 4.2 MB against training arithmetic of 2.59 MB.
+
+**What is real, and it is one thing stated precisely.** The `Adapter` contract is
+`update(x, y) -> UpdateReport`, and `UpdateReport` carries `applied`, `residual`, `residual_post`,
+`gain_norm`, `p_trace`, `p_min_diag`, `reason` — **no gradient term**. So:
+
+- a **monolithic** deep learner fits perfectly, because it owns all its layers and needs no term for
+  passing anything between them — which is why 16 layers work;
+- a **hierarchy of separately-guarded levels does not**, because a hidden level has no `y` to be
+  given and returns nothing a level below it could descend on.
+
+**And the conv stack is not an adapter at all.** `Backbone` has `state`, `load_state`, `n_features`,
+`n_outputs` and `state_size`, and is **missing `update`, `predict`, `reset` and `health_fields`** — so
+it cannot go under a `Guard`, cannot be checkpointed or rolled back, cannot be persisted through the
+same record path, and cannot sit in a `Pipeline`. Feature learning is **42 lines inside the demo**
+(`demo/pointer.py::learn_features`), not in the library. There is also no composite type — no
+`Sequential`, `Stack` or `Hierarchy` anywhere in `argmind`.
+
+**So "학습은 모든 부분에 적용됨" is already true inside one adapter and false across two**, and the
+gap is a contract extension rather than a relaxed number. That is a deliberate design change and it
+is recorded here before being made, because the contract is what `Guard`, `Pipeline`, `persist` and
+the C ABI are all written against — this file's own note that "if the guard needed one change for a
+network, the contract would not be one" is the standard the extension has to meet.
+
+**Nothing here is a measurement of whether it works, only of what is expressible.** The backward
+throughput on an M55 is still the number nobody has.
+
 ## Is this a cognitive brain? Asked 2026-08-16 — no, and the gap is specific
 
 **The owner's question**: `여전히 의심스러운 부분이 있음. 인지적 지능기능을 가진 두뇌를 만드는게

@@ -181,3 +181,59 @@ def test_the_keyword_search_that_got_this_wrong_still_gets_it_wrong():
     assert "hold_last" in align, (
         "align.py's 'policy' is no longer the synchronisation policy — the word may now mean action "
         "selection, which is exactly the reading the false positive produced")
+
+
+def test_depth_is_not_a_constraint_and_the_contract_never_limited_it():
+    """**Re-audit of 2026-08-16.** I had been reporting depth as constrained. Measured, it is not:
+    a 16-hidden-layer network is one contiguous state block and goes through the `Guard` unchanged.
+
+    This is the *withdrawal* half of the constraint audit, and it gets a test for the same reason
+    every withdrawn claim here does — so the constraint is not quietly reasserted later.
+    """
+    from argmind.guard import Bound, Guard
+
+    deep = MultilayerPerceptron(64, 16, hidden=(64,) * 16, dtype="f8")
+    assert deep.state.ndim == 1 and deep.state.flags["C_CONTIGUOUS"], (
+        "a deep network no longer keeps one flat contiguous state block, which is what makes "
+        "persistence a copy and the C ABI need no serialisation")
+    assert deep.state.size > 60000
+
+    guard = Guard(MultilayerPerceptron(20, 5, hidden=(64,) * 6, dtype="f8"),
+                  [Bound("residual_norm", hi=1e6)], rollback_depth=4, checkpoint_every=10)
+    rng = np.random.default_rng(0)
+    for _ in range(50):
+        guard.update(rng.standard_normal(20), rng.standard_normal(5))
+    assert not guard.frozen, "a six-layer network no longer survives the guard it is wrapped in"
+
+
+def test_the_real_constraint_is_that_the_contract_has_no_term_for_a_GRADIENT():
+    """**The one constraint that survived the audit, pinned so it is not confused with a size limit.**
+
+    `Adapter.update(x, y)` needs a *target*, and `UpdateReport` carries no gradient. A monolithic deep
+    learner needs neither — it owns all its layers, which is why depth is free above. A hierarchy of
+    separately-guarded levels needs both: a hidden level has no `y` to be given, and gets back nothing
+    a level below it could descend on.
+
+    When the contract grows that term, this test is where the old shape was recorded.
+    """
+    from argmind.adapt import Adapter, UpdateReport
+
+    fields = set(UpdateReport.__dataclass_fields__)
+    assert not (fields & {"gradient", "grad", "d_input", "backward"}), (
+        f"UpdateReport now carries a gradient term ({fields}); the hierarchy constraint recorded on "
+        "2026-08-16 has been lifted and CLAUDE.md's audit should move with it")
+
+    import inspect
+    assert list(inspect.signature(Adapter.update).parameters)[1:3] == ["x", "y"], (
+        "Adapter.update no longer takes a supervised pair; the 'a hidden level has no y' finding "
+        "needs re-deriving")
+
+    from argmind.backbone import Backbone
+    bb = Backbone([("conv", 12, 5, 4), ("dw", 3, 2), ("pw", 16)], (32, 32, 3), pool=2)
+    absent = [m for m in ("update", "predict", "reset", "health_fields") if not hasattr(bb, m)]
+    assert absent == ["update", "predict", "reset", "health_fields"], (
+        f"the conv stack has gained {set(('update','predict','reset','health_fields')) - set(absent)}"
+        " — it is becoming a first-class learner, which is the 2026-08-16 decision being executed "
+        "rather than a regression. Update this test and CLAUDE.md's audit together")
+    assert hasattr(bb, "backward") and hasattr(bb, "apply_gradients"), (
+        "the backbone lost its gradients; learning the features is no longer expressible at all")
