@@ -10,7 +10,12 @@ There is no generator. The prose carries reasoning that a generator would flatte
 are *checked* rather than *written* — which is the weaker half of what `SIZES.md` does, and is said
 plainly rather than implied.
 
-Plain ASCII on purpose. It renders in a terminal, in VS Code, on GitHub and in a diff, and needs no
+**A graphical version is beside this one: [`architecture.svg`](architecture.svg)** — the whole
+composition on one page, with the network drawn inside the guard. VS Code previews it, GitHub
+renders it, and its figures are checked by the same test as this file's, because a picture that
+disagrees with the prose next to it is worse than either alone: a reader trusts the picture.
+
+Plain ASCII on purpose here. It renders in a terminal, in VS Code, on GitHub and in a diff, and needs no
 extension installed.
 
 

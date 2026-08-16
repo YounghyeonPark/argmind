@@ -155,3 +155,22 @@ def test_the_doc_does_not_promise_a_generator_it_does_not_have(text):
         assert invented not in text, (
             f"the doc references {invented!r}; if that tool now exists, delete this line, and if it "
             "does not, delete the reference")
+
+
+def test_the_svg_carries_the_same_figures_as_the_prose(facts):
+    """`docs/architecture.svg` is the graphical version of the same diagram, and a picture that
+    disagrees with the document beside it is worse than either alone — a reader trusts the picture.
+
+    Only the figures are checked, not the layout: an SVG's coordinates are not a claim about the
+    repository, and gating them would fail on every cosmetic edit.
+    """
+    svg = (DOC.parent / "architecture.svg").read_text(encoding="utf-8", errors="replace")
+    for n in facts["layer_weights"]:
+        assert f"{n} w" in svg, f"the picture does not label a layer with its {n} weights"
+    assert f"{facts['embedding']}" in svg
+    assert f"{facts['peak']:,}" in svg, "the peak activation figure is missing from the picture"
+    n, m, size = facts["heads"]["map"]
+    assert f"{n} → {m}" in svg or f"{n} -> {m}" in svg, "the head shape is missing from the picture"
+    assert f"{size:,}" in svg, "the head's parameter count is missing from the picture"
+    h, w = facts["grid"]
+    assert f"{h}×{w}={h * w}" in svg or f"{h}x{w}={h * w}" in svg
