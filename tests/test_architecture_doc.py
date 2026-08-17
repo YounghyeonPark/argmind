@@ -180,3 +180,22 @@ def test_the_svg_carries_the_same_figures_as_the_prose(facts):
         "the head box does not carry its shape and parameter count together")
     h, w = facts["grid"]
     assert f"{h}×{w}={h * w}" in svg or f"{h}x{w}={h * w}" in svg
+
+
+def test_the_learned_sources_guard_sizes_are_the_ones_the_code_produces():
+    """`870 → 2,110` appears in both the prose and the picture, and it is the whole point of the
+    demo migration: the guard's block grew by the backbone's weights. A figure nothing recomputes
+    goes stale, which this repository has paid for three times."""
+    from demo.pointer import build
+
+    _bb, _l, plain, *_ = build(3, "backbone")
+    bb2, _l2, learned, *_ = build(3, "learned")
+    assert learned.state.size == plain.state.size + bb2.state.size, (
+        f"the learned guard is {learned.state.size}; it should be the head's "
+        f"{plain.state.size} plus the backbone's {bb2.state.size}")
+
+    pair = f"{plain.state.size} → {learned.state.size:,}"
+    doc = DOC.read_text(encoding="utf-8", errors="replace")
+    svg = (DOC.parent / "architecture.svg").read_text(encoding="utf-8", errors="replace")
+    for where, body in (("ARCHITECTURE.md", doc), ("architecture.svg", svg)):
+        assert pair in body, f"{where} does not carry the measured pair {pair!r}"

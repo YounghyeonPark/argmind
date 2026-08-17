@@ -170,7 +170,7 @@
         font-family="ui-monospace, Consolas, monospace">3 — WHAT IT REPLACES, AND WHAT IS STILL OUTSIDE</text>
 
   <rect x="34" y="682" width="540" height="150" fill="#FFFFFF" stroke="#6B747C" stroke-width="1.2"/>
-  <text x="52" y="706" font-size="12" font-weight="700" fill="#14181C">Before — two objects, two state blocks</text>
+  <text x="52" y="706" font-size="12" font-weight="700" fill="#14181C">Before — two objects, two state blocks (historical)</text>
   <rect x="52" y="718" width="130" height="40" fill="none" stroke="#6B747C" stroke-width="1.2"/>
   <text x="117" y="743" font-size="11" text-anchor="middle" fill="#14181C"
         font-family="ui-monospace, Consolas, monospace">Backbone</text>
@@ -186,8 +186,8 @@
     wherever the fault pushed it.</text>
   <text x="52" y="799" font-size="10.5" fill="#5C666F">The composite had to know the head was linear, and that its
     constant sat in the last row.</text>
-  <text x="52" y="820" font-size="10.5" fill="#B4551F" font-weight="600">Still live in demo/pointer.py — moving the demo on to
-    Stack is the next step.</text>
+  <text x="52" y="820" font-size="10.5" fill="#B4551F" font-weight="600">Retired 2026-08-17 — the demo runs on Stack for
+    --input learned; guard state 870 → 2,110.</text>
 
   <rect x="600" y="682" width="546" height="150" fill="#FDF7F2" stroke="#B4551F" stroke-width="1.6"/>
   <text x="618" y="706" font-size="12" font-weight="700" fill="#14181C">Deliberately outside the network</text>

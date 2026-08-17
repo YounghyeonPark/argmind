@@ -210,7 +210,15 @@ components own their own arrays, so the block is re-gathered when read. Safe for
 matter — a guard copies out of it and calls `load_state` to restore — and pinned by a test rather
 than described.
 
-**Still in the demo**: `learn_features` and its 42 lines. Moving the demo on to `Stack` is next.
+**The demo is on it, for `--input learned`.** The guard's block goes 870 → 2,110 there, so the
+convolutional weights are checkpointed, rolled back and frozen with the head, and one record carries
+both. `main()` runs no chain rule at all now. Only that source: a frozen backbone has nothing to
+descend and `--input raw` has no layer, so wrapping either would pay for a backward pass that
+changes nothing.
+
+`learn_features` is kept as the reference implementation ten comparison fixtures measure against,
+and a test asserts `main()` does not call it — via the AST, because `main()` mentions the name in a
+help string and a substring search cannot tell a mention from a call.
 
 ## How the seam was verified
 
