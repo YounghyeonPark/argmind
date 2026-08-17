@@ -29,7 +29,7 @@ from argmind.backbone import Backbone
 from argmind.persist import Store
 from demo.map_head import map_iou
 from demo.pointer import (IN_SHAPE, MAP_DROPOUT, MAP_H, MAP_W, PLAN, POOL, build, fingerprint,
-                          fingerprint_for,
+                          fingerprint_for, mouse_target,
                           map_basis, map_memory_width,
                           map_teacher)
 from demo.map_head import Pyramid
@@ -305,3 +305,47 @@ def test_the_call_site_passes_the_mode_and_not_only_the_signature_accepting_it()
 
     args.output, args.feedback = "points", True                 # the suffixes it also carries
     assert fingerprint_for(backbone, 3, args) != points
+
+
+def test_a_mouse_CLICK_in_map_mode_teaches_nothing_and_does_not_crash():
+    """**Found by running the demo, not by a test** — `ValueError: taught: expected shape (108,),
+    got (6,)`. When `--output map` widened the `taught` stream to 108, the *automatic* label branch
+    was updated and the *mouse* branch was not, so a single click pushed six values into a
+    108-wide stream and the demo died.
+
+    It was inside `main()`, where nothing could reach it — the eighth block here to need hoisting
+    for that reason, after `select_newest`, `drive`'s `teach_every`, `slot_label_map`,
+    `regions_for_slots`, `follow_permutation`, `learn_features` and `fingerprint_for`.
+
+    The fix is a **refusal**, not a conversion: the map target is a foreground mask over the whole
+    frame, so building one from one point would assert every other cell is background — mostly
+    false whenever anything else is in the scene.
+    """
+    assert mouse_target(0.5, 0.25, 3, "map") is None, (
+        "a click in map mode produced a target; whatever it is, it cannot be a full foreground "
+        "mask derived from one point")
+
+    # The control: in points mode it still teaches, and at the width the stream expects.
+    for n in (1, 2, 3):
+        target = mouse_target(0.5, 0.25, n, "points")
+        assert target is not None and len(target) == 2 * n, (
+            f"points mode at {n} objects produced {target}, which the taught stream would refuse")
+        assert target[:2] == [0.5, 0.25]
+
+
+def test_the_taught_stream_width_matches_what_each_mode_pushes():
+    """The invariant the crash violated, checked directly rather than by driving the demo: whatever
+    a mode pushes must be the width that mode's stream was built with."""
+    import numpy as np
+    for mode, objects in (("points", 3), ("map", 3)):
+        _bb, _h, guard, *_ = build(objects, "backbone", output=mode)
+        width = guard.n_outputs
+        click = mouse_target(0.5, 0.5, objects, mode)
+        if click is not None:
+            assert len(click) == width, (
+                f"{mode}: a click pushes {len(click)} values into a {width}-wide stream")
+        if mode == "map":
+            field = np.zeros((72, 96), dtype=np.int32)
+            field[20:40, 30:60] = 1
+            assert map_teacher(field).shape == (width,), (
+                "the automatic branch and the stream disagree in map mode too")

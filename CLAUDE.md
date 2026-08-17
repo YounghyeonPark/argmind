@@ -151,6 +151,18 @@ zero — and is **not**, because the forward pass has already put a NaN in the i
 `0 * nan` is `nan`. The `if report.applied` check is load-bearing, and only a fixture supplying a
 NaN rather than merely a rejected step can see it.
 
+**Running the demo found a crash `--output map` had left behind (2026-08-17).** `taught: expected
+shape (108,), got (6,)` — widening the stream to 108 updated the *automatic* label branch and not
+the *mouse* one, so one click pushed six values into a 108-wide stream. The fix is a **refusal**,
+not a conversion: a map target is a foreground mask over the whole frame, so building one from a
+single point asserts that every other cell is background. Same shape as this demo's own finding that
+a difference map with two movers puts its centroid between them — a point cannot stand in for a
+field. **Eighth block to need hoisting out of `main()`**, and the surviving mutant exposed the
+deeper cause: the headless harness **re-implemented** `taught.push` instead of calling it, so both
+sides now go through `teach_from_click`. The limit that remains is stated rather than implied — a
+change bypassing `main()`'s call site entirely still survives the suite, and this bug was found by
+*running* the demo, not by a test.
+
 **Still in the demo**: `learn_features` and its 42 lines. Moving the demo on to `Stack` is the next
 step, and `state_size` is not on every adapter (`NormalisedLeastMeanSquares` has none) although
 this file's statement of the contract lists it — a small doc/code mismatch found on the way.

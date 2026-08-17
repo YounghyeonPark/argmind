@@ -75,6 +75,47 @@ def map_basis(frame_features, pyramid, *, blank=False):
     return np.concatenate([np.asarray(frame_features, dtype=np.float64), mem])
 
 
+def mouse_target(x: float, y: float, n_objects: int, output: str):
+    """What a mouse click teaches, or `None` if it teaches nothing. Module-level so a test can
+    reach it -- the eighth block in this `main()` to be moved out for that reason, and this one was
+    found by the demo **crashing**: the automatic branch was updated for `--output map` and this one
+    was not, so a click pushed 6 values into a 108-wide stream.
+
+    **In map mode a click teaches nothing, and that is a refusal rather than an omission.** The
+    target is a full foreground mask over the whole frame, so making one from a single point would
+    assert that every other cell is background -- a strong claim, and mostly a false one whenever
+    anything else is in the scene. The same shape as this demo's recorded finding that a difference
+    map with two movers puts its centroid between them: a point cannot stand in for a field.
+
+    In points mode it teaches every slot the same point, which is only sensible at `--objects 1`;
+    with more, the detector is the label source and the mouse is a nudge. Stated rather than
+    silently doing something clever.
+    """
+    if output == "map":
+        return None
+    return [x, y] * int(n_objects)
+
+
+def teach_from_click(taught, t: float, x: float, y: float, n_objects: int, output: str) -> bool:
+    """Push what a click teaches, if it teaches anything. Returns whether it pushed.
+
+    The *push* lives here and not only the decision, so the demo and the headless harness go
+    through the same code. `demo/test_pointer.py`'s `drive` used to build the vector itself, which
+    is the "a test that reimplements the assembly instead of calling it" defect this package has
+    already been caught by once.
+
+    **What this still cannot cover, stated rather than implied**: a change to `main()`'s call site
+    that bypasses this function entirely. A mutant doing exactly that survives the suite, and the
+    original bug was found by *running the demo*, not by a test. The demo's own failures have been
+    the ones that report success or crash on a path no fixture visits.
+    """
+    target = mouse_target(x, y, n_objects, output)
+    if target is None:
+        return False
+    taught.push(t, target)
+    return True
+
+
 def map_teacher(field):
     """The target map, from whatever produced the label field. Foreground is any labelled region.
 
@@ -1262,14 +1303,15 @@ def main(argv=None):
         if click["xy"] is not None:
             cx, cy = click["xy"]
             click["xy"] = None
+
             # Pushed a hair later so a mouse label always wins the instant it shares with an
             # automatic one: `hold_last` takes the newest at or before the reference, and a
             # correction the user made by hand should not be the one that gets dropped.
             # One mouse position teaches every slot the same point, which is only sensible
             # at --objects 1; with more, the automatic detector is the label source and the
             # mouse is a nudge. Stated rather than silently doing something clever.
-            taught.push(now + 1e-6, [cx / w, cy / h] * n_objects)
-            state["n_taught"] += 1
+            if teach_from_click(taught, now + 1e-6, cx / w, cy / h, n_objects, args.output):
+                state["n_taught"] += 1
             state["taught_points"].append((cx / w, cy / h))
 
         report = pipe.step()

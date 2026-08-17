@@ -12,7 +12,8 @@ import numpy as np
 import pytest
 
 from argmind.persist import Store
-from demo.pointer import IN_SHAPE, STATE_DIR, STATE_PATH, build, fingerprint
+from demo.pointer import (IN_SHAPE, STATE_DIR, STATE_PATH, build, fingerprint,
+                          teach_from_click)
 
 
 def frame_at(x, y, bright=0.45, seed=0):
@@ -42,7 +43,9 @@ def drive(parts, path, steps=260, covered=(), t0=0.0, teach_every=1):
         # `teach_every=0` means never, which `k % teach_every` cannot express -- at k=0
         # any modulus is zero, so a case meaning "no labels at all" pushed one anyway.
         if teach_every and k % teach_every == 0:
-            taught.push(t, [x, y])
+            # Through the shipped function, not a re-implementation of it -- a harness that
+            # rebuilds the assembly cannot see the assembly break.
+            teach_from_click(taught, t, x, y, 1, "points")
         r = pipe.step()
         # The prediction must be read NOW. `StepReport.prediction` is a preallocated buffer
         # the next step overwrites, so a list of reports read afterwards holds one value
@@ -187,7 +190,9 @@ def _count_updates(parts, path, steps, t0, teach_every):
         guard.set_external(0, float(np.std(img)) / max(path["frame_std"], 1e-6))
         features.push(t, backbone.features(img))
         if teach_every and k % teach_every == 0:
-            taught.push(t, [x, y])
+            # Through the shipped function, not a re-implementation of it -- a harness that
+            # rebuilds the assembly cannot see the assembly break.
+            teach_from_click(taught, t, x, y, 1, "points")
         n += bool(pipe.step().updated)
     return n, t
 
@@ -421,7 +426,9 @@ def test_a_raw_head_learns_through_the_whole_composition(ready):
         img = frame_at(x, y, seed=k)
         guard.set_external(0, float(np.std(img)) / max(base, 1e-6))
         features.push(t, raw_features(img) * scale)
-        taught.push(t, [x, y])
+        # Through the shipped function, not a re-implementation of it -- a harness that
+        # rebuilds the assembly cannot see the assembly break.
+        teach_from_click(taught, t, x, y, 1, "points")
         r = pipe.step()
         if r.prediction is not None and k > 250:
             rows.append(np.hypot(float(r.prediction[0]) - x, float(r.prediction[1]) - y))
