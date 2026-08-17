@@ -127,31 +127,48 @@ def test_raw_pixels_still_win_tracking_and_still_fail_the_condition_change():
         "worse than a centre guess, which is what makes the backbone's 6.19x worth having")
 
 
-def test_the_learner_is_gated_on_the_head_having_updated():
-    """`main()` calls this only when `report.updated` is non-zero, which means it also stops while
-    the guard is frozen — a fault is exactly when you do not want it pushed into the features.
+def test_the_learned_source_puts_the_BACKBONE_INSIDE_THE_GUARD():
+    """**Rewritten 2026-08-17, and the failure was progress.** This used to pin a property of
+    `main()`'s hand-written gate: `learn_features` was called only when `report.updated`, so a
+    frozen guard also stopped the features moving. The composition no longer works that way —
+    `--input learned` builds a `Stack`, which *is* the adapter, so the guard covers the
+    convolutional weights and the head as one state block and cannot forget to.
 
-    Pinned here as the *property* the gate provides, since the gate itself lives in the loop."""
-    bb, head, guard, _f, _t, _m, _p = build(objects=3, source="learned")
-    #: The composition carries `Bound("external_0", lo=0.35)`, and a bound is evaluated from the
-    #: FIRST update -- so with no external supplied it reads 0, trips, and freezes before anything is
-    #: applied. `main()` sets it after calibration; a test that forgets sees a head that never learns
-    #: and blames the learner. This is the same "a bound has no not-enough-evidence-yet" shape the
-    #: project recorded for the policy-collapse detector.
+    The claim is therefore stronger and needs no gate at the call site at all.
+    """
+    from argmind.stack import Stack
+
+    bb, learner, guard, feat, _t, _m, _p = build(objects=3, source="learned")
+    assert isinstance(learner, Stack), "--input learned no longer builds a Stack"
+    assert guard.state.size == bb.state.size + 870, (
+        f"the guard's block is {guard.state.size}; it must cover the backbone's "
+        f"{bb.state.size} weights as well as the head's")
+    assert feat.dim == int(np.prod(IN_SHAPE)), (
+        "the feature stream must carry the frame under this source — a Stack's basis is its "
+        "layer's input, not the embedding")
+
+    #: The bound is evaluated from the FIRST update, so with no external supplied it reads 0 and
+    #: freezes before anything is applied. Third occurrence of that shape in this repository.
     guard.set_external(0, 1.0)
     img, truth = frame_at(0, seed=0)
+    # + the constant, which `FrameMap(constant=True)` appends in the pipeline and a direct
+    # `guard.update()` must supply itself. It arrives as a Stack *extra*: it bypasses the layers,
+    # because the head's gradient with respect to a constant is not the backbone's to receive.
+    x = np.concatenate([np.asarray(img, dtype=np.float32).ravel(), [1.0]])
+    before = np.asarray(bb.state).copy()
+    for _ in range(12):
+        guard.update(x, truth)
+    assert not np.array_equal(np.asarray(bb.state), before), (
+        "the convolutional weights never moved through the guard")
 
-    # At initialisation theta is all zeros, so there is no gradient into the features at all. That
-    # is a real property of starting from a zero head, not a defect: the head has to learn first.
-    assert np.all(head_theta(guard) == 0)
-    assert learn_features(bb, img, head_theta(guard), np.full(6, 0.1)) == 0.0
-
-    x = np.concatenate([np.asarray(bb.features(img)), [1.0]])
-    guard.update(x, truth)
-    theta = head_theta(guard)
-    assert np.abs(theta).max() > 0.0, "one update left the head at zero"
-    moved = learn_features(bb, img, theta, np.full(6, 0.1))
-    assert moved > 0.0, "with a non-zero head the features still did not move"
+    # And a frozen guard stops them, without the caller gating anything.
+    guard.freeze("test")
+    held = np.asarray(bb.state).copy()
+    for _ in range(10):
+        guard.update(x, truth)
+    assert np.array_equal(np.asarray(bb.state), held), (
+        "the layers kept learning while frozen — a fault is precisely when you do not want it "
+        "pushed into the representation")
 
 
 def test_the_learner_refuses_shapes_and_rates_it_cannot_use():
@@ -180,37 +197,39 @@ class _FakeHead:
         return np.zeros(self.n_outputs) + 1.0
 
 
-def test_the_learned_source_builds_and_persists_like_any_other():
-    """The backbone's weights become state worth surviving a power cut only when they are learned,
-    and they go through the same record format as the head — `pack` needs only `state`, `dtype`,
-    `n_features` and `n_outputs`, all of which `Backbone` already had."""
-    from argmind.persist import Store, unpack
-
-    bb, _head, guard, feat, _taught, _fmap, _pipe = build(objects=3, source="learned")
-    assert feat.dim == bb.n_outputs, "the learned source must feed the head the backbone's width"
-    assert guard.n_features == bb.n_outputs + 1, "plus the constant"
-
+def test_ONE_record_carries_the_backbone_and_the_head_together():
+    """**The other thing `Stack` buys, and this test used to assert the opposite.** The backbone's
+    learned weights needed a second `Store` with a second fingerprint, and `main()` had to keep the
+    two in step. One adapter means one record.
+    """
     import tempfile
-    from pathlib import Path
-    with tempfile.TemporaryDirectory() as d:
-        store = Store(Path(d) / "features")
-        img, truth = frame_at(3, seed=3)
-        guard.set_external(0, 1.0)               # or the bound freezes it on the first update
-        x = np.concatenate([np.asarray(bb.features(img)), [1.0]])
-        guard.update(x, truth)
-        learn_features(bb, img, head_theta(guard), np.full(6, 0.2))
-        moved = np.array(bb.state)
-        store.save(bb, fingerprint=1234)
+    from pathlib import Path as _P
 
-        bb2 = Backbone(PLAN, IN_SHAPE, dtype="f4", seed=1, pool=POOL)
-        assert not np.array_equal(bb2.state, moved), "a fresh backbone already matches the learned one"
-        assert store.load(bb2, fingerprint=1234) is not None
-        assert np.array_equal(bb2.state, moved), "the learned weights did not come back"
-        # And a record written under one configuration is refused against another -- LOUDLY.
-        # It raises rather than returning None, because a block that loads and means something else
-        # is the one corruption nothing downstream can detect.
+    from argmind.persist import Store
+
+    bb, learner, guard, _f, _t, _m, _p = build(objects=3, source="learned")
+    guard.set_external(0, 1.0)
+    img, truth = frame_at(3, seed=3)
+    # + the constant, which `FrameMap(constant=True)` appends in the pipeline and a direct
+    # `guard.update()` must supply itself. It arrives as a Stack *extra*: it bypasses the layers,
+    # because the head's gradient with respect to a constant is not the backbone's to receive.
+    x = np.concatenate([np.asarray(img, dtype=np.float32).ravel(), [1.0]])
+    for _ in range(10):
+        guard.update(x, truth)
+    trained = np.asarray(guard.state).copy()
+    assert not np.array_equal(trained[:bb.state.size], np.zeros(bb.state.size))
+
+    with tempfile.TemporaryDirectory() as d:
+        store = Store(_P(d) / "stack")
+        store.save(guard, fingerprint=1234)
+
+        _bb2, _l2, fresh, *_rest = build(objects=3, source="learned")
+        assert not np.array_equal(np.asarray(fresh.state), trained)
+        assert store.load(fresh, fingerprint=1234) is not None
+        assert np.array_equal(np.asarray(fresh.state), trained), (
+            "one record did not restore both levels")
         with pytest.raises(ValueError, match="fingerprint"):
-            store.load(bb2, fingerprint=9999)
+            store.load(fresh, fingerprint=9999)
 
 
 def test_the_applied_step_is_the_loss_gradient_and_not_merely_a_step():
@@ -256,10 +275,16 @@ def test_the_applied_step_is_the_loss_gradient_and_not_merely_a_step():
         "something, but not this loss — check which row of theta is dropped")
 
 
-def test_the_learned_source_feeds_the_backbone_and_not_raw_pixels():
-    """A mutant letting `learned` fall through to `raw_features` is **invisible to width**, because
-    the raw downsample was deliberately sized to the backbone's own 144. It is visible only in the
-    values, so that is what is compared."""
+def test_the_learned_basis_is_the_FRAME_because_the_backbone_moved_inside():
+    """**Inverted 2026-08-17.** This used to assert that `learned` reads the backbone like the
+    frozen source does, and that a mutant falling through to `raw_features` is invisible to width
+    (both are 144 by construction) so values must be compared.
+
+    Under a `Stack` the adapter's basis is its *layer's input* — the frame — and extracting the
+    embedding here would run the forward pass twice and hand the head a vector it cannot descend
+    through. The width discriminates now, and the values still do: a raw downsample is 144 numbers,
+    the frame is 20,736, and neither is the embedding.
+    """
     from demo.pointer import basis, frame_width
 
     bb = Backbone(PLAN, IN_SHAPE, dtype="f4", seed=1, pool=POOL)
@@ -269,15 +294,15 @@ def test_the_learned_source_feeds_the_backbone_and_not_raw_pixels():
     frozen = np.asarray(basis(img, backbone=bb, source="backbone"))
     raw = np.asarray(basis(img, backbone=bb, source="raw"))
 
-    assert len(learned) == len(raw) == 144, "the widths are equal, which is why values must be used"
-    assert np.array_equal(learned, frozen), "learned must read the backbone, like the frozen source"
-    assert not np.allclose(learned, raw), "learned is returning the raw downsample"
-    assert frame_width(bb, "learned") == bb.n_outputs
-    # `colour=False` is what discriminates: raw drops to 48 there while the backbone's width does
-    # not depend on colour at all. At the default the two are both 144 -- RAW_FACTOR was chosen to
-    # make them equal -- so a `frame_width` that forgets the learned source is invisible without it.
+    assert learned.size == int(np.prod(IN_SHAPE)), "the learned basis is not the frame"
+    assert np.array_equal(learned, np.asarray(img, dtype=learned.dtype).ravel()), (
+        "the learned basis is not the frame the layer consumes")
+    assert frozen.size == raw.size == 144 and not np.allclose(frozen, raw), (
+        "the other two sources moved; this test's controls are about them not changing")
+
+    assert frame_width(bb, "learned") == int(np.prod(IN_SHAPE))
+    assert frame_width(bb, "backbone") == bb.n_outputs
     assert frame_width(bb, "raw", colour=False) != bb.n_outputs
-    assert frame_width(bb, "learned", colour=False) == bb.n_outputs
 
 
 def test_the_calibration_is_applied_for_every_source_that_reads_the_backbone():
@@ -337,3 +362,30 @@ def test_calibrating_without_correcting_the_rate_is_worse_than_not_calibrating()
     assert feature_step(0.02, 1.0) == 0.02, "an unscaled backbone must leave the rate alone"
     with pytest.raises(ValueError, match="base_lr"):
         feature_step(0.0, 1.0)
+
+
+def test_nothing_in_the_demo_loop_calls_the_old_chain_rule():
+    """`Stack` owns the chain rule now, so `learn_features` must not be reachable from `main()`.
+
+    It is deliberately **kept**, because the comparison fixtures above measure learned-against-
+    frozen-against-raw with it and rewriting those would put recorded measurements at risk. What
+    is not acceptable is leaving it wired in *and* the Stack doing the same job — nor leaving it
+    present with nothing at all using it, which is the `select_newest` defect this repository
+    found once already. This assertion is the difference between the two.
+    """
+    import inspect
+
+    import demo.pointer as pointer
+
+    # **The AST, not a substring.** `main()` mentions `learn_features()` inside a help string, and
+    # a text search cannot tell a mention from a call — which it duly failed on.
+    import ast
+    tree = ast.parse(inspect.getsource(pointer.main))
+    called = {n.func.id for n in ast.walk(tree)
+              if isinstance(n, ast.Call) and isinstance(n.func, ast.Name)}
+    assert "learn_features" not in called, (
+        "main() still calls learn_features; the Stack and the caller-side chain rule would both "
+        "be stepping the same weights")
+    assert callable(pointer.learn_features), (
+        "learn_features was deleted — the comparison fixtures in this file use it as the "
+        "reference implementation and would need rewriting with it")

@@ -163,7 +163,29 @@ sides now go through `teach_from_click`. The limit that remains is stated rather
 change bypassing `main()`'s call site entirely still survives the suite, and this bug was found by
 *running* the demo, not by a test.
 
-**Still in the demo**: `learn_features` and its 42 lines. Moving the demo on to `Stack` is the next
+**The demo is on `Stack` for `--input learned` (2026-08-17)**, so the backbone is inside the guard:
+its state block goes **870 → 2,110**, a rollback rolls the convolutional weights back, a freeze
+stops them, and **one** record carries both where there used to be a second `Store` with a second
+fingerprint. `main()` no longer runs a chain rule — `Stack` owns it, gated on the head's own step
+rather than a hand-written `report.updated` check.
+
+**The cost is that the feature stream carries the FRAME**, 20,736 values against 144, because a
+`Stack`'s basis is its *layer's* input; capacity drops 64 → 8 to match, the camera being the
+reference stream. Only this source: a frozen backbone has nothing to descend and `--input raw` has
+no layer, so wrapping either would pay for a backward pass that changes nothing.
+
+**Three tests failed, and the failure was progress** — they pinned properties of the arrangement
+this replaced. One asserted `main()`'s hand-written gate; it now asserts the stronger thing, that
+the guard's block covers the backbone. One asserted a *second* store for the weights; it now
+asserts one record restores both. One asserted the learned basis reads the backbone like the frozen
+source — inverted, since the basis is now the frame.
+
+**`learn_features` is kept and is no longer reachable from the loop.** Ten comparison fixtures use
+it as the reference implementation for learned-against-frozen, and rewriting those would put
+recorded measurements at risk. A test asserts `main()` does not call it — **via the AST, not a
+substring**, because `main()` mentions it inside a help string and the text search duly failed on
+that. Present-and-called-by-nothing would be the `select_newest` defect; both halves are asserted.
+Four mutants, all caught. Moving the demo on to `Stack` is the next
 step, and `state_size` is not on every adapter (`NormalisedLeastMeanSquares` has none) although
 this file's statement of the contract lists it — a small doc/code mismatch found on the way.
 

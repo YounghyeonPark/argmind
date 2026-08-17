@@ -25,6 +25,7 @@ from argmind.backbone import Backbone
 from argmind.guard import Bound, Divergence, Guard
 from argmind.persist import Store, fingerprint_of
 from argmind.pipeline import FrameMap, Pipeline
+from argmind.stack import Stack
 from argmind.stream import Stream
 from demo.label_sources import (AppearanceMatcher, BackgroundLocator, CadenceDetector,
                                 FrameSegmenter, ObjectMemory, RegionTracker, partition,
@@ -241,7 +242,12 @@ def basis(small, *, backbone, source, colour=True, scale=1.0, output_memory=None
     the first calibrated frame -- which is the same defect a single extraction path was introduced
     to fix, arriving a second time by the same door.
     """
-    if source in ("backbone", "learned"):
+    if source == "learned":
+        #: The **frame itself**, because under this source the backbone lives inside the adapter
+        #: (`Stack`) and its input is the basis. Extracting the embedding here would compute the
+        #: forward pass twice and hand the head a vector it cannot descend through.
+        base = np.asarray(small, dtype=backbone.dtype).ravel()
+    elif source == "backbone":
         base = backbone.features(small)
     else:
         base = raw_features(small, colour=colour) * scale
@@ -273,7 +279,14 @@ def head_theta(head):
 
 
 def learn_features(backbone, small, theta, residual, learning_rate=FEATURE_LR):
-    """Backpropagate the head's residual into the backbone. Returns how far the weights moved.
+    """**No longer the demo's path (2026-08-17).** `--input learned` builds a `Stack`, which owns
+    the chain rule, so `main()` calls this nowhere. It survives as the *reference implementation*
+    the comparison fixtures in `demo/test_learned_input.py` measure learned-against-frozen with,
+    and `test_nothing_in_the_demo_loop_calls_the_old_chain_rule` asserts that it stays out of the
+    loop — otherwise this would be the "compiled and called by no binary" defect this repository
+    already found once in `select_newest`.
+
+    Backpropagate the head's residual into the backbone. Returns how far the weights moved.
 
     **This is the whole of what makes the features learned rather than frozen**, and it is a
     module-level function for the reason six other things in this file are: the version that lived
@@ -371,9 +384,14 @@ def frame_width(backbone, source, colour=True) -> int:
 
     Calibration needs this: the bank starts at zero, so scaling from the whole vector would be
     scaling from something a third of which is padding.
+
+    **`learned` is the frame itself**, not the embedding: under that source the backbone lives
+    inside a `Stack`, so the adapter's input is what the *layer* consumes. This used to return
+    `backbone.n_outputs` for it and is now wrong by 144x if it does.
     """
-    return (backbone.n_outputs if source in ("backbone", "learned")
-            else raw_width(colour=colour))
+    if source == "learned":
+        return int(np.prod(IN_SHAPE))
+    return (backbone.n_outputs if source == "backbone" else raw_width(colour=colour))
 
 
 def feedback_width(objects: int, rates=FEEDBACK_RATES) -> int:
@@ -731,8 +749,22 @@ def build(objects: int = 1, source: str = "backbone", *, colour: bool = True,
     m = MAP_H * MAP_W if output == "map" else 2 * objects
 
     head = NormalisedLeastMeanSquares(n, m, mu=0.3, dtype="f4")
+    #: **`--input learned` puts the backbone INSIDE the adapter (2026-08-17).** A `Stack` is itself
+    #: an `Adapter`, so one flat state block covers the convolutional weights and theta together:
+    #: the guard checkpoints both, a rollback rolls both back, a freeze stops both learning, and
+    #: one persistence record carries both. None of that was true while the backbone sat outside,
+    #: where `learn_features` had to be gated on `report.updated` by hand and its weights lived in
+    #: a second store with a second fingerprint.
+    #:
+    #: Only this source. A frozen backbone has nothing to descend, and `--input raw` has no layer
+    #: at all -- wrapping either in a `Stack` would pay for a backward pass that changes nothing.
+    #: The cost is that the feature stream then carries the **frame** rather than the embedding,
+    #: because a Stack's basis is its layer's input; capacity drops to match, since the camera is
+    #: the reference stream and a frame is consumed at the step it arrives.
+    learner = (Stack([backbone], head, feature_lr=FEATURE_LR / max(backbone.output_scale, 1e-9))
+               if source == "learned" else head)
     guard = Guard(
-        head,
+        learner,
         [
             # The head's own residual, in the units the target is in: screen fractions, so a
             # residual above 3 means it is pointing off the screen and further every step.
@@ -764,9 +796,11 @@ def build(objects: int = 1, source: str = "backbone", *, colour: bool = True,
     # The feedback bank rides in the SAME stream as the frame features: it is part of the
     # basis, not a second sensor, and giving it its own stream would make the aligner responsible
     # for something that has no independent clock.
-    features = Stream("features", dim=width + fb + extra, capacity=64, dtype="f4")
+    stream_width = (int(np.prod(IN_SHAPE)) if source == "learned" else width) + fb + extra
+    features = Stream("features", dim=stream_width,
+                      capacity=8 if source == "learned" else 64, dtype="f4")
     taught = Stream("taught", dim=m, capacity=16, dtype="f4")
-    fmap = FrameMap(features=[("features", i) for i in range(width + fb + extra)],
+    fmap = FrameMap(features=[("features", i) for i in range(stream_width)],
                     target=[("taught", i) for i in range(m)], constant=True)
     # The reference is the CAMERA, not the labels, and getting this wrong was the demo's
     # third caller-side bug: with `reference="taught"` a frame exists only at a label
@@ -784,7 +818,7 @@ def build(objects: int = 1, source: str = "backbone", *, colour: bool = True,
     pipe = Pipeline([features, taught],
                     Aligner(reference="features", policy="hold_last", max_stale_s=0.4),
                     guard, fmap, require_fresh_target=True)
-    return backbone, head, guard, features, taught, fmap, pipe
+    return backbone, learner, guard, features, taught, fmap, pipe
 
 
 def fingerprint_for(backbone, objects, args):
@@ -1332,13 +1366,11 @@ def main(argv=None):
         #: also stops it while the guard is frozen -- a fault is exactly when you do not want it
         #: pushed into the representation. The target is the label pushed this frame, which is exact
         #: under `--locate texture` (one label per frame) and an approximation otherwise.
-        if (args.input == "learned" and report.updated and not report.frozen
-                and auto is not None and report.prediction is not None):
-            want = np.asarray([c for xy in auto for c in xy], dtype=np.float64)
-            resid = np.asarray(report.prediction, dtype=np.float64) - want
-            state["feat_moved"] = learn_features(
-                backbone, small, head_theta(guard), resid,
-                feature_step(args.feature_lr, backbone.output_scale))
+        #: **The feature step used to be here, in 42 lines of caller code.** `Stack` owns the
+        #: chain rule now: one `update(x, y)` moves the convolutional weights and theta together,
+        #: gated on the head's own step rather than on a hand-written `report.updated` check, and
+        #: the guard covers both. What is left is bookkeeping.
+        if args.input == "learned" and report.updated and not report.frozen:
             state["feat_steps"] = state.get("feat_steps", 0) + 1
         state["frozen"] = bool(report.frozen)
         state["frozen_by"] = tuple(report.frozen_by)
