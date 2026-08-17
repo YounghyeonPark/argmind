@@ -330,3 +330,36 @@ it.
 it would take is re-pointing `ObjectMemory` at `region_descriptor` — its 96.7/66.5/43.1% figures were
 measured on the crop descriptor and are now suspect for the same reason the refusal was.
 `demo/test_grouping_again.py` is the evidence, protected both ways.
+
+## The two-harness discrepancy, localised to one axis — 2026-08-17
+
+The open item was that `demo/test_map_output.py` free-runs at **0.09–0.16** while
+`demo/test_map_head.py` reaches **0.96–0.98**, with three explanations already refuted (exposure
+bias, dropout, and "the head"). It is not unlocalised any more, and one of those refutations is now
+suspect.
+
+**Axes checked and eliminated, by reading the two harnesses rather than by reasoning:**
+
+| axis | `test_map_head.py` | `test_map_output.py` | |
+|---|---|---|---|
+| basis source | raw block-mean pixels | `build(1, "raw", ...)` — also raw | **same** |
+| input grid | `IN_H, IN_W = 6, 8` ×3 = 144 | `RAW_FACTOR` 12 → 6×8×3 = 144 | **same** |
+| output grid | `OUT_H, OUT_W = 9, 12` | `MAP_H, MAP_W = 9, 12` | **same** |
+| **head** | `RecursiveLeastSquares(..., forgetting=1.0, p0=100.0, dtype="f8")` | `NormalisedLeastMeanSquares(mu=0.3, dtype="f4")` from `build()` | **differs** |
+
+**So the difference is the head, and it is the explanation this file already records as refuted.**
+That refutation — "a bare RLS reads 0.02, worse" — is the thing to re-derive rather than trust: RLS
+converges to the least-squares solution, so 0.02 is not a result about RLS, it is a symptom of how
+the substitution was made. The candidates are that the swap kept `dtype="f4"`, kept the default
+`p0`, or left the composition's `Bound("external_0", lo=0.35)` unfed, which freezes on the first
+update and has caught three separate fixtures in this repository already.
+
+**An earlier hypothesis of mine is refuted here and kept so it is not tried again**: that the
+demo's raw downsample is too coarse to express the output — a 6×8 grid read off as a 9×12 field.
+Both harnesses have exactly that shape, so it cannot be the cause of a difference between them.
+
+**Not measured yet, and the wean number stays unquotable until it is**: an RLS head, f8, `p0=100`,
+`forgetting=1.0`, driven through `build()`'s composition with the external supplied. If that
+reaches 0.9+, the discrepancy is NLMS's convergence rate at 108 outputs — which this repository
+already measured degrading with width (0.3525 relative error at 128→64 after 400 samples) — and not
+a defect in either harness.
