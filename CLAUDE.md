@@ -200,10 +200,16 @@ guard are each eliminated by moving one axis at a time. A residual factor of ~2.
 entirely on its own memory — memory-only 0.349 against a whole-basis 0.359, so removing the frame
 costs 0.010 — which confirms the failure dropout was built to prevent. But dropout does not fix it:
 it breaks the dependence (memory-only 0.349 → 0.080) without the head picking the frame up instead
-(frame-only 0.115 → **0.073**, slightly worse). **The crutch is removed and the capability is not
-produced.** So the map head does not read the frame in *either* configuration, and **the wean
-experiment cannot be read against it** — whether the head can be made to use its input is the prior
-question, and the number to move is *frame-only*, not the headline score.
+(frame-only 0.115 → **0.073**, slightly worse). **That conclusion is WITHDRAWN the same day**: it ran on the *twin*
+scene, where the frame provably cannot resolve which of two identical blobs is the target — the
+recorded per-frame segmenter control there is 0.50. It measured the fixture, not the model. On a
+scene where the previous map predicts nothing, the same head reads **0.928 from the frame alone**
+against memory-only **0.000** and a collapsed persistence baseline of **0.126**; on a smooth orbit
+it leans on memory because persistence alone scores 0.920 there. **The head uses whichever half
+carries the information**, which is least squares working. `demo/test_map_perception.py` holds it,
+gated on the persistence baseline so the scene cannot quietly stop discriminating. **The wean
+experiment is unblocked.** A second correction: "too slow for a per-commit suite" was a runtime
+asserted without measuring — it is 2.6 s.
 
 ## Where the detail lives
 

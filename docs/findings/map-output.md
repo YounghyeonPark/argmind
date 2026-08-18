@@ -438,3 +438,44 @@ a test then.
 — cannot be read against a head that is not using its input. Whether the head can be made to read
 the frame is now the prior question, and the ablation above is the instrument for answering it: the
 number to move is **frame-only**, not *both*.
+
+### The ablation above was scoped wrong, and the head DOES read the frame — 2026-08-17
+
+**Withdrawn**: "the map head does not read the frame in either configuration". That ablation ran on
+the **twin** scene — two identical same-coloured blobs — where the frame *provably* cannot resolve
+which is the target, and this file's own recorded control says so: a per-frame segmenter reads
+**0.50** there. So it measured a task the frame cannot do, not a head that will not use it. The
+fixture, not the model. Same class as every "a model that cannot express a cost, so an axis looks
+free" entry in CLAUDE.md, arriving through the scene instead of through the model.
+
+Re-measured across four scenes, one axis at a time, `dropout=0`, `p0=100`, `forgetting=1.0`:
+
+| scene | persistence | both | frame only | memory only |
+|---|---|---|---|---|
+| smooth orbit, **twin** (the withdrawn row) | — | 0.359 | 0.115 | 0.349 |
+| smooth orbit, single | 0.920 | 0.994 | 0.177 | 0.685 |
+| new position every 7 frames | 0.873 | 0.910 | 0.882 | 0.000 |
+| **new position every frame** | **0.126** | 0.949 | **0.928** | **0.000** |
+
+**The head uses whichever half carries the information**, which is least squares doing its job. On a
+smooth orbit the previous map predicts the next one — persistence alone scores **0.920** — so weight
+goes there and frame-only reads 0.177. Make memory worthless and the same head, same basis, same
+rates reads **0.928 from the frame alone** against a persistence baseline collapsed to **0.126**.
+
+**This rescopes the dropout result too.** Dropout did not "remove the crutch without producing the
+capability"; on the twin scene it destroyed the only signal that could work, and the frame had
+nothing to offer as a substitute *there*. What dropout costs on a frame-resolvable scene has not
+been measured.
+
+**And it unblocks the wean experiment**, which is what this whole chain was for: withdrawing the
+classical labeller can now be read against a head that demonstrably uses its input, on a scene
+chosen so that coasting cannot fake the score.
+
+`demo/test_map_perception.py` holds all of it, with the persistence baseline as the gate — an
+assertion fires if the scene stops discriminating, so the result cannot quietly become vacuous. Four
+mutants, all caught.
+
+**A second correction, smaller and worse**: the earlier entry justified having no test with "each
+row is a 1,400-step run and the pair takes minutes". Timed, it is **2.6 seconds**. That was a
+runtime asserted without being measured, in a commit careful about everything else, and it is the
+reason the finding sat unprotected. The new tests run in 2.8 s.
