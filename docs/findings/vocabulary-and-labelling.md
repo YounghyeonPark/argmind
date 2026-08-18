@@ -359,3 +359,64 @@ that: greedy pays 11 where the optimum pays 9, and it is caught. The other survi
 — raising `PERMUTATION_LIMIT` to 99 makes k=8 enumerate 40,320 permutations and return the same
 answer, slower; recorded rather than pinned with a timing assertion this project would refuse to
 gate on.
+
+## Recognition memory: the crop is load-bearing, not the learning — 2026-08-19
+
+**The proposal** was to raise perception by holding each label's characteristic features in a
+long-term memory and re-assigning the label when the features reappear. It is well aimed:
+`demo/test_wean.py` had just measured self-training degrading the head 0.938 → 0.804, and a
+descriptor matched against a *stored exemplar* is an anchor rather than a moving target — the
+training signal that is not the head's own output, which 2026-08-14 requires.
+
+**First, the recorded next step was tried and it fails.** `tests/test_learned_features.py` records
+that a *position* objective leaves single-unit selectivity at random-init level (0.511 against
+0.532) and names "an objective that requires identity" as what to try. Posed as three-way shape
+classification with each object rendered **alone at the centre** — so position cannot answer it —
+and measured **paired**, same initialisation before and after, four seeds, at a rate where both
+objectives train:
+
+| objective | paired change in mean d-prime | every seed positive |
+|---|---|---|
+| position | +0.031 | no (worst −0.025) |
+| identity | **−0.061** | no (worst −0.170) |
+
+An objective that requires identity does not produce object-selective units either. The paired
+design is an improvement on the recorded one, which compared means across seeds where the random
+control's own spread (0.339–0.757) was wider than any effect.
+
+**A learning-rate collapse had to be diagnosed first**, and it is not monotonic: at lr 0.005 every
+unit dies (alive 0.00, residual 0.8175 = the constant predictor), at 0.02 most do (alive 0.17), and
+at 0.001 the task trains cleanly (alive 1.00, residual 0.272). A first run at 0.02 produced d-prime
+0.000 and would have been recorded as "identity destroys selectivity"; it measured a dead network.
+
+**Then the instrument was wrong, and the correction is the finding.** Single-unit selectivity is not
+the question — whether the *population* carries shape is. Linear decoding, held out by position:
+
+| descriptor | frozen random backbone | features learned too |
+|---|---|---|
+| whole frame, hold-out sharing positions | 0.822–1.000 | 0.989–1.000 |
+| whole frame, **positions disjoint** | **0.367** | 0.342 |
+| **24×24 crop centred on the object, positions disjoint** | **0.996** | — |
+
+Chance is 0.333. **The first row was nearly recorded as "the descriptor already exists, no learning
+needed".** Its hold-out shared phases with training — the orbit is periodic mod 61, so it differed
+only in noise, and a linear head with 109 coefficients over 600 samples memorises that. Splitting
+the positions properly takes it to chance.
+
+**So a whole-frame embedding carries no position-invariant shape, and no objective gives it one.**
+Grid pooling entangles *what* with *where* by construction, which is the honest reading of every
+d-prime result here: units are not object-selective because the representation is not
+object-factored.
+
+**A crop removes position by construction, and then an untrained backbone is already enough** —
+0.996 at positions it never saw, no gradient having touched it. That is also why the colour
+re-identification result (0.048 within against 0.232 between) worked: it was measured on crops.
+
+**The consequence.** Recognition memory needs no representation learning. It needs *where to look* —
+**attention**, one of the eight faculties `tests/test_what_this_is_not.py` records as absent. The
+proposal's memory half is sound and largely already built; the half that is missing is the one that
+selects a region to describe, and that is what would have to be learned rather than hand-written for
+the 2026-08-14 decision to be met.
+
+`tests/test_recognition_memory.py` holds both halves and their contrast, 30 s. Three mutants caught,
+including the split silently ceasing to be disjoint — the exact error this entry had to correct.
