@@ -208,7 +208,13 @@ against memory-only **0.000** and a collapsed persistence baseline of **0.126**;
 it leans on memory because persistence alone scores 0.920 there. **The head uses whichever half
 carries the information**, which is least squares working. `demo/test_map_perception.py` holds it,
 gated on the persistence baseline so the scene cannot quietly stop discriminating. **The wean
-experiment is unblocked.** A second correction: "too slow for a per-commit suite" was a runtime
+experiment then ran, and is negative**: self-training on the head's own hardened output falls 0.938
+→ 0.839 against a frozen control, declines monotonically to 0.717 over 4,000 steps and is still
+declining, while a teacher ceiling reads 0.943 — so the 0.10 is the cost of the *labels*, not of
+updating. It is **not** the zero-fixed-point collapse recorded elsewhere: the mask spreads into the
+wrong cells while its area moves *toward* the truth, which a degeneracy detector would not catch.
+**The classical labeller cannot be deleted by self-training**, and a signal that is not the head's
+own output is what 2026-08-14 requires; nothing here provides one. `demo/test_wean.py`, 3.9 s. A second correction: "too slow for a per-commit suite" was a runtime
 asserted without measuring — it is 2.6 s.
 
 ## Where the detail lives

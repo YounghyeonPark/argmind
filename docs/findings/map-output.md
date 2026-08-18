@@ -479,3 +479,43 @@ mutants, all caught.
 row is a 1,400-step run and the pair takes minutes". Timed, it is **2.6 seconds**. That was a
 runtime asserted without being measured, in a commit careful about everything else, and it is the
 reason the finding sat unprotected. The new tests run in 2.8 s.
+
+### The wean experiment, run at last — the labeller cannot be deleted this way, 2026-08-17
+
+What this file had been calling the wean result is **free-running IoU**, and that is a *frozen-model*
+evaluation: the teacher stops and so does learning. Deleting `demo/label_sources.py` means something
+else — the head must go on learning from a signal it produces itself. Axes and pass criteria were
+fixed before running, on `jump_every=1` where persistence collapses to 0.126 so coasting cannot fake
+the score.
+
+| regime | IoU mean | IoU last quarter |
+|---|---|---|
+| teacher throughout (ceiling) | 0.943 | 0.941 |
+| frozen at withdrawal | 0.938 | 0.931 |
+| **self-trained on its own hardened output** | **0.839** | **0.804** |
+
+**Criterion 1 — self-training must be at least as good as freezing — fails, and keeps failing.**
+Over 4,000 steps it declines monotonically and is still declining at the end:
+
+    self    0.851 0.802 0.775 0.761 0.748 0.736 0.719 0.717
+    frozen  0.940 0.935 0.934 0.940 0.937 0.934 0.933 0.937
+
+**Criterion 2 passes, and that sharpens the finding rather than softening it.** This is **not** the
+zero-fixed-point collapse recorded elsewhere here: the thresholded foreground fraction moves
+0.084 → 0.102, *toward* the truth's 0.129, while accuracy falls. **The mask spreads into the wrong
+cells rather than vanishing** — so a degeneracy detector watching for collapse would not fire, which
+is worth knowing given that this project already has one such detector recorded as not working.
+
+**The teacher ceiling is the control that makes the loss attributable.** Continuing to teach buys
+almost nothing over freezing (0.943 against 0.938), so the 0.10 that self-training gives up is the
+cost of the *labels*, not of updating.
+
+**What it means for 2026-08-14.** The head perceives — frozen, it holds 0.937 from the frame where
+persistence scores 0.126. What it cannot do is supply its own training signal. So the classical
+labeller cannot be deleted by self-training on the head's own output, and a signal that is **not**
+the head's own output is what the decision actually requires. Nothing in the repository currently
+provides one.
+
+`demo/test_wean.py` holds all three regimes, runs in 3.9 s, and carries the ceiling control beside
+the negative result so "self-training fails" and "nothing works on this scene" stay distinguishable.
+Three mutants, all caught.
