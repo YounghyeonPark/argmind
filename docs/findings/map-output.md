@@ -363,3 +363,38 @@ Both harnesses have exactly that shape, so it cannot be the cause of a differenc
 reaches 0.9+, the discrepancy is NLMS's convergence rate at 108 outputs — which this repository
 already measured degrading with width (0.3525 relative error at 128→64 after 400 samples) — and not
 a defect in either harness.
+
+### Measured 2026-08-17: the cause is DROPOUT, and both of my localisations were wrong
+
+The section above localised the discrepancy to the head. **That was wrong, and so was the earlier
+refutation it called suspect.** Measured, not argued — every axis driven through the failing harness
+with one variable moved at a time:
+
+| axis moved | free-running IoU | verdict |
+|---|---|---|
+| NLMS → RLS (f8, p0=100, λ=1.0) | 0.110 → **0.135** | **not the cause.** The original refutation was right |
+| pyramid never teacher-forced | 0.135 → 0.270 | matters for RLS, but the good harness teacher-forces *identically* (`observe(y if train else pred)`), so it is not a difference between them |
+| `map_teacher` → `map_target` | 0.135 → **0.135** | the two are **bit-identical** on the same truth (mean 0.071, 15 non-zero cells); not an axis at all |
+| Guard → bare head | 0.135 → **0.135** | **zero difference to three decimals.** The guard never intervenes on this fixture |
+| **dropout 0.15 → 0.00** | 0.135 → **0.359** | **2.7x. This is the axis.** |
+
+**And it reproduces in the other harness, which is what makes it a finding rather than a fixture
+quirk.** `demo/test_map_head.py`'s `drive(memory=True, twin=True)` returns **0.984** today, exactly
+the recorded 0.96–0.98 — so that number is live, not stale. Adding `dropout=0.15` to *it* gives
+**0.458**, a 2.1x loss in the same direction.
+
+So `MAP_DROPOUT = 0.15` — blanking the memory on 15% of teaching frames, added to stop the head
+leaning on the pyramid — is the dominant cause of the gap, in both harnesses independently. **This
+file previously recorded dropout as refuted. That refutation is withdrawn.**
+
+**What is still open, stated so the gap is not called closed**: at matched dropout the two harnesses
+are 0.359 against 0.984, and 0.135 against 0.458 — a residual factor of about 2.7 that none of the
+axes above explains. The discrepancy is no longer 0.09-vs-0.98; it is 0.36-vs-0.98, with the
+ordering consistent. The residual is the next thing to localise, and the remaining untested
+differences are the free-run length (400 steps against 1,200) and the basis *ordering* that
+`map_basis` produces against a plain `concatenate`.
+
+**Three of my own refutations in this area have now been overturned by measurement** — the head one
+was right and I doubted it, the dropout one was wrong and I trusted it. The pattern is that each was
+a single-variable check written after the conclusion; the table above moves one axis at a time
+against a fixed harness, which is what should have been done first.

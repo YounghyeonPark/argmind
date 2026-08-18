@@ -191,8 +191,10 @@ this file's statement of the contract lists it — a small doc/code mismatch fou
 
 **Open numbers nobody has**: backward-pass throughput on an M55; whether fp32 holds past ten million
 updates on a non-stationary target; and why the map head's two harnesses disagree on free-running
-IoU (0.09–0.16 against 0.96–0.98) — **localised 2026-08-17 to the head alone**, RLS against NLMS,
-which makes this file's own recorded refutation of that explanation the thing to re-derive.
+IoU — **measured 2026-08-17 to be `MAP_DROPOUT = 0.15`**, which costs 0.359 → 0.135 here and
+0.984 → 0.458 in the other harness, reproducing in both. Head, basis, grids, target function and the
+guard are each eliminated by moving one axis at a time. A residual factor of ~2.7 is still open, and
+**the previously recorded refutation of dropout is withdrawn**.
 
 ## Where the detail lives
 
