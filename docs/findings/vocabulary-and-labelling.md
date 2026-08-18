@@ -420,3 +420,43 @@ the 2026-08-14 decision to be met.
 
 `tests/test_recognition_memory.py` holds both halves and their contrast, 30 s. Three mutants caught,
 including the split silently ceasing to be disjoint — the exact error this entry had to correct.
+
+### Attention by recognition: a stored exemplar can say where to look — 2026-08-19
+
+The entry above ends by naming *where to look* as the missing half. Measured the same day, and the
+signal exists: score candidate crop centres by similarity to the nearest stored exemplar, take the
+best, on an **untrained** backbone.
+
+| memory | distractor in the same frame | lands on the remembered object |
+|---|---|---|
+| red disc | blue disc | 1.000 (other 0.000) |
+| blue disc | red disc | 1.000 (other 0.000) |
+| disc | bar, **same colour** | 1.000 |
+| bar | disc, **same colour** | 1.000 |
+| square | bar, **same colour** | 1.000 |
+
+**Every figure is 1.000, so the controls are the finding.** A tidy result here is evidence the
+measurement is broken, and the first two versions of this experiment were:
+
+- **v1 scored 1.000 against a 0.153 chance rate** on a frame with *one* object on a plain wall,
+  where "not wall" already answers it. It could not distinguish recognition from saliency.
+- **v2 put two objects in the frame but always the remembered one on the left**, and the exemplars
+  came from a left-band training split — so matching *position* would score 1.000 too. This is the
+  same confound that turned the earlier "the descriptor already exists" result into position
+  memorisation, recurring two hours later in a new fixture.
+
+Alternating the sides leaves it at 1.000, and swapping which colour is remembered **flips** the
+answer 1.000/0.000 in both directions. So it is reading the memory, not the wall and not the place.
+
+**What this is not, stated so the result is not over-read.** It is a brute-force scan of ~117
+candidate crops per frame — *search*, not attention; no cheap proposal mechanism exists. And the
+exemplars were seeded from ground-truth-centred crops, so the bootstrap question is untouched:
+where the first exemplar comes from without the classical segmenter is exactly the 2026-08-14
+problem and this does not answer it.
+
+**What it does establish** is that the matching signal discriminates on colour *and* on shape at
+equal colour — the condition under which single-unit selectivity stayed at random-init level under
+both a position and an identity objective. Attention has something to be learned *from*.
+
+`tests/test_attention_by_memory.py`, 9 s. Two mutants survive and are recorded as such; a third,
+dropping the distractor, was a real gap and is closed.
