@@ -196,6 +196,15 @@ IoU — **measured 2026-08-17 to be `MAP_DROPOUT = 0.15`**, which costs 0.359 �
 guard are each eliminated by moving one axis at a time. A residual factor of ~2.7 is still open, and
 **the previously recorded refutation of dropout is withdrawn**.
 
+**Ablated the same day, and the result is negative for dropout.** At dropout 0 the head runs almost
+entirely on its own memory — memory-only 0.349 against a whole-basis 0.359, so removing the frame
+costs 0.010 — which confirms the failure dropout was built to prevent. But dropout does not fix it:
+it breaks the dependence (memory-only 0.349 → 0.080) without the head picking the frame up instead
+(frame-only 0.115 → **0.073**, slightly worse). **The crutch is removed and the capability is not
+produced.** So the map head does not read the frame in *either* configuration, and **the wean
+experiment cannot be read against it** — whether the head can be made to use its input is the prior
+question, and the number to move is *frame-only*, not the headline score.
+
 ## Where the detail lives
 
 Every measurement, correction and withdrawal is recorded verbatim under `docs/findings/`. This file

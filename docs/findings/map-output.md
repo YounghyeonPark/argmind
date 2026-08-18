@@ -398,3 +398,43 @@ differences are the free-run length (400 steps against 1,200) and the basis *ord
 was right and I doubted it, the dropout one was wrong and I trusted it. The pattern is that each was
 a single-variable check written after the conclusion; the table above moves one axis at a time
 against a fixed harness, which is what should have been done first.
+
+### What `MAP_DROPOUT` actually buys — ablated 2026-08-17
+
+Dropout was added on the reasoning that a head with a pyramid in its basis will lean on the memory
+and stop reading the frame. It costs 2.7x free-running IoU. **Nobody had measured what it prevents**,
+so the axes were fixed before running rather than after: teach-time dropout in {0.00, 0.15}, and at
+test time the basis ablated three ways — whole, memory zeroed, frame zeroed.
+
+| teach dropout | both | frame only | memory only |
+|---|---|---|---|
+| 0.00 | 0.359 | 0.115 | **0.349** |
+| 0.15 | 0.135 | 0.073 | 0.080 |
+
+**The diagnosis dropout was built for is confirmed.** At 0.00 the head is running almost entirely on
+its own memory: memory-only reads 0.349 against a whole-basis 0.359, and knocking the frame out
+costs it 0.010. The frame is nearly decorative. That is a free-running loop feeding on its own
+output, and it is the same mechanism as this file's recorded blackout result — a 60-frame blank
+takes it from 0.98 to 0.00 **permanently**, because zero is a fixed point of a self-sustaining map.
+
+**And the cure does not work.** Dropout does break the dependence — memory-only falls 0.349 → 0.080,
+which is what it was for. But the head does not pick the frame up instead: frame-only goes 0.115 →
+**0.073**, slightly *worse*. Both halves collapse together. **Dropout removes the crutch without
+producing the capability**, and the 2.7x is paid for nothing.
+
+So the honest statement of the map head as it stands is that it does not read the frame in either
+configuration, and its apparent 0.36 free-running score at dropout 0 is memory autocorrelation on a
+smoothly moving scene rather than perception. A control this file already carries makes the same
+point from the other side: a plain persistence baseline reads 0.921 on the good harness, against the
+head's 0.984.
+
+**Not turned into a test**, and the reason is stated rather than left as an omission: each row is a
+1,400-step run and the pair takes minutes, which is too slow for a suite that runs on every commit.
+It is a recorded measurement with its conditions, reproducible from
+`docs/findings/map-output.md`'s description; if the wean experiment comes to depend on it, it earns
+a test then.
+
+**What this changes about the next step.** The wean experiment — withdrawing the classical labeller
+— cannot be read against a head that is not using its input. Whether the head can be made to read
+the frame is now the prior question, and the ablation above is the instrument for answering it: the
+number to move is **frame-only**, not *both*.
