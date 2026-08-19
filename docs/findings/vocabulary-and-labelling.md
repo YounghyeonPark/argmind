@@ -668,3 +668,80 @@ figures already published rest on the argmin form.
 
 `tests/test_sparse.py`, 7 s. Three mutants caught, including `topk` silently keeping the *smallest*
 entries.
+
+### Making the suite affordable, and the claim got stronger doing it — 2026-08-20
+
+`tests/test_proposal.py` had grown to **161 s** and pushed the pre-commit hook past ten minutes,
+which is a defect in itself: this repository's discipline rests on the suite running at every
+commit, and a hook that times out is a hook people switch off. Measured, the slowest single test in
+the suite is not one of these (`test_mlp.py`'s fp16 comparison, 70.9 s) and several C++ target tests
+sit at 35–41 s — the suite was already heavy and this file pushed it over.
+
+**Coarsening the candidate grid left the teacher untouched.** 247 crops per frame down to 70, and
+the teacher scores **0.938 either way**. What did change was the student's map-over-point advantage,
+which fell from +0.283 to +0.100 — and that turned out not to be the grid:
+
+| training frames | map | point | gap | seconds |
+|---|---|---|---|---|
+| 80 | 0.567 | 0.467 | +0.100 | 12 |
+| 200 | 0.583 | 0.300 | **+0.283** | 39 |
+| 400 | 0.667 | 0.300 | +0.367 | 109 |
+
+**The 80-frame setting was under-trained, and it was flattering the wrong side**: the *point* head
+scores 0.467 on noise it loses with more data, settling at 0.300. So the coarser grid paid for the
+frames that sharpen the contrast, and the assertion threshold went **up**, 0.15 → 0.2.
+
+| | before | after |
+|---|---|---|
+| candidates per frame | 247 | 70 |
+| training frames | 80 | 200 |
+| map − point | +0.100 | **+0.283** |
+| file runtime | 161 s | **75.5 s** |
+
+`interior()` takes a `step` parameter so this trade does not disturb `test_bootstrap.py`, whose
+published figures are at the default density and rest on it.
+
+**And the bootstrap gained the rank-separation assertion** that `test_sparse.py` showed was the
+sound measure. Added rather than substituted: the argmin tests are kept because the figures already
+published for them are computed that way, and swapping the measure silently would leave those
+numbers describing something no longer computed.
+
+**One mutant is equivalent and recorded as such**: reverting both call sites to the dense grid
+survives, because a denser grid only makes the file slower and its assertions stricter. It is not a
+gap.
+
+### `ExemplarMemory`: the recognition loop becomes a component — 2026-08-20
+
+Everything measured over 2026-08-19 was a *measurement*: crop descriptors recognise, a stored
+exemplar steers attention, rarity bootstraps without labels, sixteen of 108 dimensions suffice.
+None of it went through a contract. `argmind/memory.py` does.
+
+| requirement | why it is not a formality | measured |
+|---|---|---|
+| one flat contiguous state block | persistence is a copy; the C ABI needs no serialisation | 8 slots × 108 features at k=16 → **1,056 B** |
+| fixed capacity | the target tier has no heap, and the demo's `ObjectMemory` grows a Python list | a full memory replaces, never grows |
+| `state`/`load_state`/`n_features`/`n_outputs`/`dtype` | what `persist.pack` reads | goes through `Store` unchanged, and an 8-slot record is **refused** by a 16-slot memory |
+
+**It is deliberately not an `Adapter`**, and that is recorded as a decision. `update(x, y)` presumes
+a target; an exemplar is admitted, not fitted, and a `y` no caller could supply would be the
+half-built shape this project refuses. `n_outputs` **is** declared, as the capacity — what it would
+emit read as a layer, and what makes the record's shape check mean something.
+
+**Indices live in the same float block as the values**, which is exact: f4 represents integers below
+2²⁴ without loss. A second integer array would make the state two blocks and break the one property
+the persistence path depends on.
+
+**Two defects, both found by tests rather than by reading.**
+
+The replacement test caught `look_up` refreshing the age of the **nearest** slot rather than the
+**matched** one. A near miss then counts as a recognition, every age converges, and the tie-break
+evicts whichever came first — which is the exemplar most recently recognised, exactly the one to
+keep. Measured: storing a, b, c then touching a and admitting d evicted **a**.
+
+And a mutant storing the *smallest* `k` coefficients instead of the largest **survived every test**,
+because they all used random Gaussian descriptors where any consistent subset self-matches exactly.
+Real crop embeddings carry structure and keeping the wrong half destroys discrimination while
+leaving self-matching intact. The suite now stores a disc and queries a same-coloured bar against
+it; the mutant is caught.
+
+`tests/test_memory.py`, 3 s, twelve tests. Six mutants caught.

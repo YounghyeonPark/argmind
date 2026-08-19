@@ -64,13 +64,18 @@ def crop_at(img, cx, cy, h, w):
     return img[y0:y0 + CROP, x0:x0 + CROP].astype("f8")
 
 
-def interior(h, w):
+def interior(h, w, step=STEP):
     """Only crops lying **entirely** inside the frame. A padded crop straddling the border has an
     unusual composition and is genuinely the rarest thing in the picture — an artefact of cropping,
-    not a fact about objects, and it won 8 of 8 frames before this restriction."""
+    not a fact about objects, and it won 8 of 8 frames before this restriction.
+
+    `step` is a parameter so a caller can trade candidate density for time **without changing this
+    file's own figures**, which are published at the default and rest on it. `tests/test_proposal.py`
+    uses a coarser grid; its numbers were re-measured there rather than inherited from here.
+    """
     return [(px / w, py / h)
-            for py in range(CROP // 2, h - CROP // 2 + 1, STEP)
-            for px in range(CROP // 2, w - CROP // 2 + 1, STEP)]
+            for py in range(CROP // 2, h - CROP // 2 + 1, step)
+            for px in range(CROP // 2, w - CROP // 2 + 1, step)]
 
 
 def rarest(bb, img, cs, h, w):
@@ -138,3 +143,43 @@ def test_the_frame_size_changes_what_a_crop_can_isolate_and_the_rest_is_NOT_repr
             assert pure > small_pure, (
                 f"the large frame ({pure:.3f}) no longer offers more isolating crops than the small "
                 f"one ({small_pure:.3f}), which is the only part of the scale story that survived")
+
+
+def test_the_rarity_RANKING_is_the_sound_measure_and_the_argmin_is_the_fragile_one(bb):
+    """**Added after `tests/test_sparse.py` showed the argmin metric misbehaving.**
+
+    Everything above scores the bootstrap as "is the single rarest crop within 0.10 of an object
+    centre". Sparsifying the descriptor made that read 0.167 / 1.000 / 0.000 / 0.750 / 1.000 across
+    k = 4, 8, 16, 32, 108 — non-monotonic and reproducible at three times the sample. The ranking
+    underneath is sound at every one of those k: on-object crops rank 43.2 → 21.2 while off-object
+    ones sit near 134, improving monotonically. The argmin lands on crops covering only a fifth of
+    their area with object, which the centre tolerance scores as a miss.
+
+    So this asserts the ranking as well. The argmin tests are **kept**, not replaced: the figures
+    published for them rest on that form, and swapping the measure silently would leave those
+    numbers describing something no longer computed.
+    """
+    cs = interior(H, W)
+    specs = [("disc", 0.30, 0.40), ("bar", 0.70, 0.62)]
+    img = render(specs, seed=1, texture="none")
+    on = np.asarray([any(np.hypot(cx - p[1], cy - p[2]) < 0.10 for p in specs) for cx, cy in cs])
+    assert 0.05 < on.mean() < 0.25, (
+        f"{on.mean():.3f} of candidates are on an object; the rank comparison below needs them to "
+        "be a clear minority or the separation is not meaningful")
+
+    E = []
+    for cx, cy in cs:
+        v = np.asarray(bb.features(crop_at(img, cx, cy, H, W)), dtype=np.float64)
+        n = float(np.linalg.norm(v))
+        E.append(v / n if n > 1e-12 else v)
+    E = np.asarray(E)
+    S = E @ E.T
+    rare = -(S.sum(axis=1) - np.diag(S)) / (len(cs) - 1)
+    order = np.argsort(-rare)
+    rank = np.empty(len(cs), int)
+    rank[order] = np.arange(len(cs))
+
+    on_rank, off_rank = float(rank[on].mean()), float(rank[~on].mean())
+    assert on_rank < off_rank - 60, (
+        f"on-object crops rank {on_rank:.1f} against off-object {off_rank:.1f}; the rarity signal "
+        "the whole bootstrap rests on no longer separates them")

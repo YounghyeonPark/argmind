@@ -16,10 +16,14 @@ the head's own output, so the teacher does not drift as the student learns. Self
 | learned **point**, one frame pass | 0.267 |
 | chance (a grid cell) | 0.062 |
 
-Those are at 160 training frames. **This file trains on 80** so it costs 55 s rather than two
-minutes, and the gap narrows there — map 0.500 against point 0.300. The assertions below are set to
-what is reproducible at the size they actually run, and the larger figures are quoted as
-measurements rather than being asserted at a size nothing here reaches.
+Those are at 160 training frames on a 247-candidate grid. **This file uses a 70-candidate grid**
+(`STEP = 8`), which leaves the teacher unchanged at 0.938 and runs 3.4× faster, and trains on 200
+frames. Measured at that setting the map reads 0.583 against the point's 0.300.
+
+**80 frames was too few and the first version of this file used it.** The gap there is only +0.100,
+because the *point* head scores 0.467 on noise it loses with more data (0.300 at 200 frames and at
+400). Sharpening the contrast cost nothing here, since the coarser grid had already paid for the
+extra frames: 12 s at 80/30, 39 s at 200/60, 109 s at 400/60.
 
 **A point fails for a measured reason, not a mysterious one.** With two objects the teacher picks one
 or the other, so a least-squares point regression learns their average: **8 of 10** proposals land
@@ -51,6 +55,11 @@ from tests.test_bootstrap import PLAN as CROP_PLAN
 from tests.test_recognition_memory import CROP
 
 FRAME_PLAN = [("conv", 12, 5, 4), ("dw", 3, 2), ("pw", 16)]
+#: A coarser candidate grid than `test_bootstrap`'s default — 70 crops per frame instead of 247.
+#: The teacher is **unchanged** by it (0.938 either way, measured) and the file runs 3.4x faster,
+#: which matters because the pre-commit hook runs the whole suite and this was its slowest file.
+#: Every figure in this module is re-measured at this density rather than inherited.
+STEP = 8
 GH, GW = 6, 8
 TOL = 0.10
 
@@ -86,10 +95,10 @@ def rarity_map(crop_bb, img, cs):
     return ((grid - lo) / (hi - lo + 1e-12)).ravel()
 
 
-def train_and_score(kind, *, seed=23, n_train=80, n_test=30):
+def train_and_score(kind, *, seed=23, n_train=200, n_test=60):
     crop_bb = Backbone(CROP_PLAN, (CROP, CROP, 3), dtype="f8", seed=seed, pool=POOL)
     frame_bb = Backbone(FRAME_PLAN, (H, W, 3), dtype="f8", seed=seed, pool=3)
-    cs = interior(H, W)
+    cs = interior(H, W, STEP)
     m = GH * GW if kind == "map" else 2
     head = RecursiveLeastSquares(frame_bb.n_outputs + 1, m, forgetting=1.0, p0=100.0, dtype="f8")
 
@@ -132,7 +141,7 @@ def test_a_MAP_proposal_beats_a_POINT_proposal_by_a_wide_margin(scores):
     (m_hit, _mb, chance), (p_hit, _pb, _c) = scores["map"], scores["point"]
     assert chance < 0.15, f"a grid cell hits an object {chance:.3f} of the time by luck"
     assert m_hit > 3 * chance, f"the map proposal reaches only {m_hit:.3f} against chance {chance:.3f}"
-    assert m_hit > p_hit + 0.15, (
+    assert m_hit > p_hit + 0.2, (
         f"map {m_hit:.3f} against point {p_hit:.3f} — the gap that says a point cannot stand in for "
         "a field has closed, and the conclusion should move with it")
 
@@ -268,7 +277,7 @@ def test_the_last_gap_belongs_to_the_TARGET_and_not_to_the_head():
     Two seeds here rather than four, for runtime; the four-seed table is quoted as a measurement.
     """
     crop_bb = Backbone(CROP_PLAN, (CROP, CROP, 3), dtype="f8", seed=23, pool=POOL)
-    cs = interior(H, W)
+    cs = interior(H, W, STEP)
     raws, mappeds = [], []
     for ts in (77, 202):
         tr, raw, mapped, n = np.random.default_rng(ts), 0, 0, 30

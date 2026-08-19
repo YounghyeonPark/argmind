@@ -15,10 +15,11 @@ from .guard import Bound, Check, Divergence, Guard, GuardReport
 from .persist import Record, Store, fingerprint_of
 from .pipeline import FrameMap, Pipeline, StepReport
 from .stack import Stack
+from .memory import ExemplarMemory, MatchReport
 from .stream import Sample, Stream
 
 __version__ = "0.0.1.dev0"
-__all__ = ["Stack", "Sample", "Stream", "Aligner", "Frame",
+__all__ = ["ExemplarMemory", "MatchReport", "Stack", "Sample", "Stream", "Aligner", "Frame",
            "Adapter", "UpdateReport", "RecursiveLeastSquares",
            "NormalisedLeastMeanSquares", "MultilayerPerceptron",
            "Backbone", "mobilenet_v1",
