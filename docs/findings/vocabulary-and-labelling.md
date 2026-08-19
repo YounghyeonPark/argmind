@@ -510,3 +510,45 @@ been through `Adapter`, `Guard` or `Pipeline` — it is a measurement, not a com
 
 `tests/test_bootstrap.py`, 20 s. Three mutants caught, including rarity silently becoming
 commonality and border crops being allowed back in.
+
+### Distilling the scan into a proposal: a map works partly, a point not at all — 2026-08-19
+
+The bootstrap entry left the loop as *search* — 247 crop embeddings and ~61,000 similarities per
+frame. This asks whether a head can predict where the scan would have looked, from one whole-frame
+pass. It is not the trap `demo/test_wean.py` found: rarity is a fixed function of the frame, so the
+teacher does not drift as the student learns.
+
+| proposal | lands on an object |
+|---|---|
+| full scan (the teacher) | 0.933 |
+| learned **map**, one frame pass | **0.617** |
+| learned **point**, one frame pass | 0.267 |
+| chance (a grid cell) | 0.062 |
+
+**The point fails for a measured reason.** With two objects the teacher picks one or the other, so
+least squares learns their average: **8 of 10** proposals land between them, and every predicted `y`
+sits at 0.42–0.49 — the mean of the two bands. That is this file's own recorded "a difference map
+with two movers puts its centroid between them; a point cannot stand in for a field", and the
+recorded remedy is what works: a map output has nothing to permute, nothing to count and no
+assignment to make. It more than doubles the score.
+
+**The shortfall to the teacher is the head's, not the grid's.** Asked before concluding: an oracle
+choosing the best cell of the 6×8 grid scores **1.000** at this tolerance, so quantisation is not
+the limit and the map head reaches 62% of what the grid can express.
+
+**A hold-out was corrected mid-experiment, and the reason matters more than the number.** The first
+split trained on objects in the left band and tested in the right. That is the correct hold-out for
+*recognition* — does the descriptor carry identity independently of place — and the wrong one for
+*localisation*, where the position **is** the output: it demands extrapolation beyond any value the
+head has ever emitted. Measured, it scores **0.000**. The split was changed because the demand was
+incoherent, not because the number was bad, and both numbers are recorded.
+
+**Where this leaves the owner's proposal.** Every step is measured and none needs representation
+learning, but the cheap-proposal step is only two-thirds of the way: a single linear map over a
+whole-frame embedding recovers most of the structure the point form throws away and still loses a
+third of the teacher. Closing that is the open engineering problem; the scan remains the fallback,
+and it works.
+
+`tests/test_proposal.py`, 55 s at 80 training frames, where the gap narrows to 0.500 against 0.300 —
+the assertions are set to what is reproducible at the size they run, not to the 160-frame figures
+quoted above. Three mutants caught.
