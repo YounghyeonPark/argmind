@@ -55,7 +55,7 @@ class Stack(Adapter):
     pass as well as the forward one.
     """
 
-    def __init__(self, layers, head: Adapter, *, feature_lr: float):
+    def __init__(self, layers, head: Adapter, *, feature_lr: float | None):
         self.layers = list(layers)
         if not self.layers:
             raise ValueError("a Stack with no layers is just its head; use the head directly")
@@ -70,7 +70,26 @@ class Stack(Adapter):
                 "gradient with respect to its input, so layers cannot be chained; put the depth "
                 "inside the layer instead (a Backbone plan is itself a stack)")
         self.head = head
-        self.feature_lr = float(feature_lr)
+        #: `None` means the layers are **frozen**: no backward pass is attempted at all.
+        #:
+        #: Declared at construction rather than discovered at frame 1. A layer that selects by
+        #: argmax -- a scan over candidate crops, say -- has no gradient with respect to its input,
+        #: and with a rate set it raises from inside `update()` on the first sample. Measured: such
+        #: a layer is accepted by this constructor, `predict()` works end to end, and `update()`
+        #: dies at `backward`. Failing on live data for a property knowable at build time is the
+        #: shape this project refuses.
+        #:
+        #: It also covers a case the demo already has and could not express here: a *frozen*
+        #: backbone has nothing to descend, so wrapping it used to mean paying for a backward pass
+        #: that changes nothing.
+        self.feature_lr = None if feature_lr is None else float(feature_lr)
+        if self.feature_lr is not None and self.feature_lr <= 0.0:
+            raise ValueError(
+                f"feature_lr must be positive or None (meaning frozen layers), got {feature_lr}")
+        if self.feature_lr is not None and not hasattr(self.layers[0], "backward"):
+            raise ValueError(
+                "the layer has no backward(), so it cannot learn; pass feature_lr=None to declare "
+                "it frozen rather than finding out on the first update")
 
         self.in_shape = tuple(self.layers[0].in_shape)
         self._image_size = int(np.prod(self.in_shape))
@@ -158,7 +177,7 @@ class Stack(Adapter):
             raise ValueError(f"features: expected shape ({self.n_features},), got ({xa.size},)")
 
         report = self.head.update(self._forward(xa), y)
-        if report.applied:
+        if report.applied and self.feature_lr is not None:
             d_h = np.asarray(self.head.input_gradient())
             d_feat = d_h[:self.layers[-1].n_outputs]
             self._descend(d_feat)
@@ -174,6 +193,11 @@ class Stack(Adapter):
         layer.apply_gradients(dws, dbs, self.feature_lr)
 
     # ---- the rest of the contract ----------------------------------------------------------
+
+    @property
+    def frozen_layers(self) -> bool:
+        """Whether the layers learn. Stated so a caller can report it rather than infer it."""
+        return self.feature_lr is None
 
     @property
     def health_fields(self):

@@ -295,3 +295,118 @@ def test_the_EXTRAS_reach_the_head_and_are_not_the_layers_business():
     stack.update(x, g.standard_normal(stack.n_outputs))
     moved_features = np.abs(np.asarray(bb.state).ravel() - before).max()
     assert moved_features > 0.0, "the layers did not move at all, so the slice is untested"
+
+
+class ArgmaxLayer:
+    """A layer that selects by argmax over candidate crops — the shape a *search* takes.
+
+    It satisfies the forward half of the layer protocol and refuses the backward half, because an
+    argmax has no gradient with respect to the frame. Written here rather than imported so the
+    contract question is answered by something minimal.
+    """
+
+    def __init__(self, inner, h, w):
+        self.inner, self.in_shape = inner, (h, w, 3)
+        self.h, self.w = h, w
+        self.n_outputs, self.dtype = inner.n_outputs, inner.dtype
+        self.looked_at = None
+
+    def features(self, image):
+        best, out = -np.inf, None
+        for cy in (0.3, 0.5, 0.7):
+            for cx in (0.3, 0.5, 0.7):
+                y0, x0 = int(cy * self.h) - 8, int(cx * self.w) - 8
+                patch = np.asarray(image)[max(y0, 0):max(y0, 0) + 16, max(x0, 0):max(x0, 0) + 16]
+                if patch.shape[:2] != (16, 16):
+                    continue
+                v = np.asarray(self.inner.features(patch.astype(self.inner.dtype)))
+                if float(np.abs(v).max()) > best:
+                    best, out, self.looked_at = float(np.abs(v).max()), v, (cx, cy)
+        return out.astype(self.dtype)
+
+    def backward(self, image, d_features):
+        raise NotImplementedError("an argmax has no gradient with respect to the frame")
+
+    def apply_gradients(self, dws, dbs, lr):
+        raise NotImplementedError("this layer has no weights of its own")
+
+    @property
+    def state(self):
+        return self.inner.state
+
+    def load_state(self, flat):
+        self.inner.load_state(flat)
+
+
+def _argmax_stack(feature_lr):
+    inner = Backbone([("conv", 8, 3, 2), ("pw", 6)], (16, 16, 3), pool=2, seed=0, dtype="f8")
+    layer = ArgmaxLayer(inner, 24, 32)
+    head = RecursiveLeastSquares(layer.n_outputs + 1, 2, dtype="f8")
+    return layer, Stack([layer], head, feature_lr=feature_lr)
+
+
+def test_a_layer_that_cannot_be_DIFFERENTIATED_is_declared_frozen_at_construction():
+    """**The contract extension of 2026-08-20, and what it is for.**
+
+    A search — scan candidate crops, keep one — is a legitimate layer: how a layer turns an input
+    into features is its own business. What it cannot do is `backward`. Measured before the change:
+    such a layer was *accepted* by this constructor, `predict()` worked end to end, and `update()`
+    died at `backward` on the first sample. Failing on live data for a property knowable at build
+    time is the shape this project refuses.
+
+    `feature_lr=None` declares the layers frozen and no backward pass is attempted at all. It also
+    covers a case the demo already had and could not express: a frozen backbone has nothing to
+    descend, so wrapping it meant paying for a pass that changes nothing.
+    """
+    layer, stack = _argmax_stack(None)
+    assert stack.frozen_layers, "feature_lr=None must declare the layers frozen"
+
+    rng = np.random.default_rng(0)
+    x = np.concatenate([rng.standard_normal(24 * 32 * 3), [1.0]])
+    assert np.asarray(stack.predict(x)).shape == (2,)
+    assert layer.looked_at is not None, "the layer never ran its search"
+
+    before = np.asarray(layer.state).copy()
+    report = stack.update(x, [0.3, 0.4])
+    assert report.applied, "the head did not learn above a frozen layer"
+    assert np.array_equal(np.asarray(layer.state), before), "a frozen layer's weights moved"
+
+
+def test_the_same_layer_with_a_RATE_still_fails_and_that_is_why_the_flag_exists():
+    """The control. Without the declaration the failure is real and arrives on live data — which is
+    the whole argument for making it a construction-time choice."""
+    _layer, stack = _argmax_stack(0.01)
+    rng = np.random.default_rng(0)
+    x = np.concatenate([rng.standard_normal(24 * 32 * 3), [1.0]])
+    with pytest.raises(NotImplementedError, match="no gradient"):
+        stack.update(x, [0.3, 0.4])
+
+
+def test_a_non_positive_rate_is_refused_rather_than_silently_meaning_frozen():
+    """`0.0` is not a way to spell `None`: `apply_gradients` refuses a non-positive rate, so a caller
+    writing `feature_lr=0` would get a construction that dies later. It is refused here instead."""
+    with pytest.raises(ValueError, match="positive or None"):
+        _argmax_stack(0.0)
+    with pytest.raises(ValueError, match="positive or None"):
+        _argmax_stack(-0.5)
+
+
+def test_frozen_layers_still_go_through_the_guard_and_persist(tmp_path):
+    """The test every component here has to pass: nothing above it changed."""
+    layer, stack = _argmax_stack(None)
+    guard = Guard(stack, [Bound("residual_norm", hi=1e6)], rollback_depth=2, checkpoint_every=3)
+    rng = np.random.default_rng(1)
+    for _ in range(12):
+        guard.update(np.concatenate([rng.standard_normal(24 * 32 * 3), [1.0]]),
+                     rng.standard_normal(2))
+    trained = np.asarray(guard.state).copy()
+
+    store = Store(tmp_path / "argmax")
+    store.save(guard, fingerprint=0xC0FFEE)
+    _l2, fresh_stack = _argmax_stack(None)
+    fresh = Guard(fresh_stack, [Bound("residual_norm", hi=1e6)], rollback_depth=2,
+                  checkpoint_every=3)
+    fresh.update(np.concatenate([rng.standard_normal(24 * 32 * 3), [1.0]]), rng.standard_normal(2))
+    assert not np.array_equal(np.asarray(fresh.state), trained)
+    assert store.load(fresh, fingerprint=0xC0FFEE) is not None
+    assert np.array_equal(np.asarray(fresh.state), trained), "one record did not restore the stack"

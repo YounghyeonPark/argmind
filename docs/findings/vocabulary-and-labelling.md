@@ -745,3 +745,46 @@ leaving self-matching intact. The suite now stores a disc and queries a same-col
 it; the mutant is caught.
 
 `tests/test_memory.py`, 3 s, twelve tests. Six mutants caught.
+
+### Can a SEARCH enter the contract? Audited 2026-08-20 — yes, with one declaration
+
+The recognition loop's remaining steps are a scan: crop N candidates, score them, keep one. The
+`Pipeline` contract has no place for "N updates per frame", so the question was whether that puts
+the whole loop outside the library. **Answered by building it rather than by reading**, the way the
+`Stack` audit was.
+
+**The shape that works is a layer.** A layer's contract is `features(image) -> vector`, and *how* it
+produces that vector is its own business — so a layer that scans candidates and returns the winner's
+descriptor is expressible. Measured, in order:
+
+1. `Stack` **accepts** it at construction — `n_features` 20,737, the frame plus the constant
+2. `predict()` **works end to end**, and the layer reports looking at (0.292, 0.389) with the disc at
+   (0.30, 0.40)
+3. `update()` **dies at `backward`** — an argmax has no gradient with respect to the frame
+
+**So exactly one call blocked it, and the fix is a declaration rather than a workaround.**
+`Stack(..., feature_lr=None)` states at construction that the layers are frozen, and no backward
+pass is attempted. Failing on live data for a property knowable at build time is the shape this
+project refuses, and the failure above arrives on the *first sample*.
+
+`0.0` is refused rather than silently meaning frozen: `apply_gradients` rejects a non-positive rate,
+so a caller writing `feature_lr=0` would get a construction that dies later — the same defect one
+level down.
+
+**It also fixes a case the demo already had.** A frozen backbone has nothing to descend, so
+`--input backbone` could not be wrapped in a `Stack` without paying for a pass that changes nothing.
+It can now.
+
+**And the scanning stack goes through `Guard` and `persist` unchanged** — the test every component
+here has to pass. Four mutants caught, including a frozen stack descending anyway and `None` being
+coerced to a rate.
+
+**One test failed on the way and it was the right one failing.** Adding `argmind/memory.py` tripped
+`test_what_this_is_not.py`'s assertion that eight cognitive faculties are absent, because the keyword
+`memory` now matches a module. That test's own message says to update it deliberately if a faculty
+has genuinely been built. It has, **partly**: `ExemplarMemory` is a bounded content-addressable store
+of appearance and it recognises what it has seen. It is **not** episodic memory — which binds *what*
+to *where* and *when* — and it is not working memory, which maintains items against a task. The
+faculty list is narrowed to `episodic`/`recollect`/`workingmemory`, and a new test holds the line the
+narrowing costs: `ExemplarMemory` must keep `admit`/`look_up`/`observe` and must **not** grow
+`timestamp`, `episode`, `context` or `sequence`, nor report a time on a match.

@@ -143,7 +143,18 @@ def test_the_faculties_a_cognitive_brain_needs_are_absent_from_the_library():
     forbidden = {
         "a goal the system holds for itself": ("goal", "objective", "drive", "motivation"),
         "action selection or planning":       ("planner", "plan", "act", "actuator"),
-        "episodic or working memory":         ("episodic", "memory", "recollect"),
+        # **Narrowed 2026-08-20, deliberately, because one of these was built.**
+        # `ExemplarMemory` is a bounded content-addressable store of appearance descriptors: it
+        # recognises something it has seen before. That is a memory in a real sense and the plain
+        # keyword `memory` now matches it, which is this test doing its job.
+        #
+        # It is **not** episodic memory and not working memory, and saying otherwise would be the
+        # overselling this file exists to prevent. Episodic memory binds *what* to *where* and
+        # *when*; `ExemplarMemory` stores no time and no context, only appearance. Working memory
+        # actively maintains a few items against a current task; nothing here has a task.
+        # `test_what_was_actually_built_is_narrower_than_the_word_memory` states the difference and
+        # holds the line the narrowing costs.
+        "episodic or working memory":         ("episodic", "recollect", "workingmemory"),
         "attention":                          ("attention", "attend", "salience"),
         "concept formation":                  ("concept", "abstraction", "symbol"),
         "language":                           ("language", "speech", "tts", "asr"),
@@ -156,6 +167,31 @@ def test_the_faculties_a_cognitive_brain_needs_are_absent_from_the_library():
     assert not found, (
         f"argmind now exposes {found}. If a faculty has genuinely been built, this test is where "
         "the 'what this is not' claim was recorded and both should move together")
+
+
+def test_what_was_actually_built_is_narrower_than_the_word_memory():
+    """The other half of the narrowing above, so it cannot become a loophole.
+
+    `ExemplarMemory` recognises an appearance it has stored. It carries **no time and no context**,
+    which is what separates it from the episodic memory the list still says is absent — and the
+    distinction has to be checkable, not merely written down.
+    """
+    from argmind.memory import ExemplarMemory
+
+    m = ExemplarMemory(capacity=4, n_features=8, k=2, threshold=0.8)
+    stored = {a for a in dir(m) if not a.startswith("_")}
+
+    assert {"admit", "look_up", "observe"} <= stored, (
+        "the store lost its recognition operations; the narrowing above was justified by them")
+    for temporal in ("timestamp", "when", "episode", "context", "sequence", "recall_at"):
+        assert temporal not in stored, (
+            f"ExemplarMemory has grown `{temporal}`. If it now binds appearance to time or context "
+            "it is closer to episodic memory than this file claims, and the faculty list should "
+            "move with it rather than this assertion being deleted")
+
+    report = m.observe(np.arange(8, dtype=float))
+    assert not hasattr(report, "when") and not hasattr(report, "time"), (
+        "a match now reports a time; that is the binding episodic memory is defined by")
 
 
 def test_the_keyword_search_that_got_this_wrong_still_gets_it_wrong():
