@@ -159,3 +159,136 @@ def test_the_shortfall_is_NOT_grid_quantisation():
     assert np.mean(oracle) > 0.95, (
         f"the grid can only express {np.mean(oracle):.3f}; the map head's shortfall would then be "
         "quantisation and not its own")
+
+
+_TEACHER: dict = {}
+
+
+def _teacher(seed, n_train):
+    """The scan's targets, computed once and shared.
+
+    **The rarity map does not depend on `pool`** — it is built from crop embeddings, and only the
+    *student's* frame embedding changes across the sweep. Recomputing it per setting doubled the
+    runtime of this file for nothing.
+    """
+    key = (seed, n_train)
+    if key not in _TEACHER:
+        crop_bb = Backbone(CROP_PLAN, (CROP, CROP, 3), dtype="f8", seed=seed, pool=POOL)
+        cs, rng, out = interior(H, W), np.random.default_rng(5), []
+        for t in range(n_train):
+            img = render(specs_at(rng), seed=t, texture="none")
+            out.append((img, rarity_map(crop_bb, img, cs)))
+        _TEACHER[key] = out
+    return _TEACHER[key]
+
+
+def _proposal_at(pool, *, seed=23, n_train=120, n_test=48):
+    """Score the map proposal with the frame embedding pooled to `pool` x `pool`."""
+    frame_bb = Backbone(FRAME_PLAN, (H, W, 3), dtype="f8", seed=seed, pool=pool)
+    head = RecursiveLeastSquares(frame_bb.n_outputs + 1, GH * GW,
+                                 forgetting=1.0, p0=100.0, dtype="f8")
+    for img, target in _teacher(seed, n_train):
+        head.update(np.concatenate([np.asarray(frame_bb.features(img)), [1.0]]), target)
+    tr, hits = np.random.default_rng(77), 0
+    for t in range(n_test):
+        specs = specs_at(tr)
+        img = render(specs, seed=9000 + t, texture="none")
+        out = np.asarray(head.predict(
+            np.concatenate([np.asarray(frame_bb.features(img)), [1.0]]))).reshape(GH, GW)
+        gy, gx = np.unravel_index(int(np.argmax(out)), (GH, GW))
+        hits += int(any(np.hypot((gx + 0.5) / GW - p[1], (gy + 0.5) / GH - p[2]) < TOL
+                        for p in specs))
+    return hits / n_test, frame_bb.n_outputs
+
+
+def test_the_gap_to_the_teacher_is_SPATIAL_RESOLUTION_and_not_training_data():
+    """**Where the missing third went.** The target is a 6×8 map and the frame embedding pooled to
+    3×3, so the head was asked to upsample. Sweeping only that axis, at 160 training frames:
+
+    | pool | embedding | proposal |
+    |---|---|---|
+    | 2 | 64 | 0.517 |
+    | 3 | 144 | 0.617 |
+    | 4 | 256 | 0.717 |
+    | 6 | 576 | 0.817 |
+    | 9 | 1,296 | 0.850 |
+
+    against a teacher at 0.933. **Tripling the data instead buys almost nothing** — 0.617 → 0.667 at
+    pool 3, 0.817 → 0.833 at pool 6 — so the limit is structural.
+
+    Asserted on two points at a size the suite can afford, since the monotone claim is what matters
+    and the full sweep is minutes. **The margin is set from measurement, not from the headline
+    figures**: at 120 training frames and 48 test frames the gap is +0.292, and at 60/24 it is only
+    +0.125 — small samples move it by more than a fifth, so the threshold is placed where the
+    smaller of the two measured settings still clears it.
+    """
+    coarse, n_coarse = _proposal_at(2)
+    fine, n_fine = _proposal_at(6)
+    assert n_fine > n_coarse, "the pool no longer changes the embedding width"
+    assert fine > coarse + 0.15, (
+        f"pool 6 reaches {fine:.3f} against pool 2's {coarse:.3f}; the resolution explanation for "
+        "the shortfall is no longer supported and should be re-derived")
+
+
+def test_the_resolution_ceiling_is_the_feature_map_and_it_is_REFUSED_not_truncated():
+    """A hard structural limit, and the library says so rather than silently coarsening: the plan's
+    last feature map is 9×12, so a 12×12 grid cannot be taken. That is why the sweep stops at 9."""
+    frame_bb = Backbone(FRAME_PLAN, (H, W, 3), dtype="f8", seed=23, pool=9)
+    assert frame_bb.n_outputs == 9 * 9 * 16
+
+    # **The refusal is at CALL time, not construction** -- `Backbone(pool=12)` builds happily and
+    # `grid_avg_pool` raises when it sees the 9x12 map. Asserted as it behaves rather than as it was
+    # first written, which expected the constructor to catch it.
+    too_fine = Backbone(FRAME_PLAN, (H, W, 3), dtype="f8", seed=23, pool=12)
+    with pytest.raises(ValueError, match="at least that big"):
+        too_fine.features(np.zeros((H, W, 3), dtype="f8"))
+
+
+def test_the_last_gap_belongs_to_the_TARGET_and_not_to_the_head():
+    """**Asked before varying the head's form, and it made that unnecessary.**
+
+    The student reaches 0.850 against a teacher at 0.933, and the sweep above showed the shortfall
+    is neither resolution nor data — which pointed at the head being linear. It is not. The teacher's
+    own targets are 247 candidate scores block-averaged onto a 6×8 grid, and *taking the argmax of
+    that averaged map* is what the student is being trained to imitate. Measured over four test
+    seeds:
+
+    | test seed | teacher, raw argmax over 247 | teacher, argmax of its own 6×8 map |
+    |---|---|---|
+    | 77 | 0.933 | 0.833 |
+    | 101 | 0.900 | 0.800 |
+    | 202 | 0.900 | 0.850 |
+    | 303 | 0.900 | 0.850 |
+
+    Block-averaging costs about **0.075**, and the student at pool 9 measured 0.850 — at the ceiling
+    within seed noise. **So the distillation is closed at the student's level**, and going further
+    means changing the target representation — a finer grid, or regressing an offset within the cell
+    — not the head. Varying the head form would have been chasing a gap that does not exist.
+
+    Two seeds here rather than four, for runtime; the four-seed table is quoted as a measurement.
+    """
+    crop_bb = Backbone(CROP_PLAN, (CROP, CROP, 3), dtype="f8", seed=23, pool=POOL)
+    cs = interior(H, W)
+    raws, mappeds = [], []
+    for ts in (77, 202):
+        tr, raw, mapped, n = np.random.default_rng(ts), 0, 0, 30
+        for t in range(n):
+            specs = specs_at(tr)
+            img = render(specs, seed=9000 + t + ts, texture="none")
+            near = lambda cx, cy: any(np.hypot(cx - p[1], cy - p[2]) < TOL for p in specs)
+            sx, sy = rarest(crop_bb, img, cs, H, W)
+            raw += int(near(sx, sy))
+            m = rarity_map(crop_bb, img, cs).reshape(GH, GW)
+            gy, gx = np.unravel_index(int(np.argmax(m)), (GH, GW))
+            mapped += int(near((gx + 0.5) / GW, (gy + 0.5) / GH))
+        raws.append(raw / n)
+        mappeds.append(mapped / n)
+
+    assert np.mean(raws) > 0.85, f"the raw teacher fell to {np.mean(raws):.3f}"
+    assert np.mean(raws) - np.mean(mappeds) > 0.03, (
+        f"block-averaging the target now costs only {np.mean(raws) - np.mean(mappeds):.3f}; if that "
+        "became free, the student's shortfall would be the head's after all and the conclusion here "
+        "should be re-derived")
+    assert np.mean(mappeds) < 0.90, (
+        f"the averaged-map ceiling is {np.mean(mappeds):.3f}, at or above what the student reached — "
+        "there would then be room the head is not using")

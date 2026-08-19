@@ -552,3 +552,65 @@ and it works.
 `tests/test_proposal.py`, 55 s at 80 training frames, where the gap narrows to 0.500 against 0.300 —
 the assertions are set to what is reproducible at the size they run, not to the 160-frame figures
 quoted above. Three mutants caught.
+
+### Closing the distillation's missing third: it is resolution, and RLS's n² is the price — 2026-08-19
+
+The map proposal reached 0.617 against a teacher's 0.933. Sweeping one axis — the frame embedding's
+spatial resolution, since the target is a 6×8 map and the embedding pooled to **3×3**, so the head
+was being asked to upsample:
+
+| pool | embedding | proposal (RLS, 160 frames) |
+|---|---|---|
+| 2 | 64 | 0.517 |
+| 3 | 144 | 0.617 |
+| 4 | 256 | 0.717 |
+| 6 | 576 | 0.817 |
+| 9 | 1,296 | **0.850** |
+
+**It is structural, not data.** Tripling the training frames buys almost nothing: 0.617 → 0.667 at
+pool 3, 0.817 → 0.833 at pool 6. So the missing third was the head being asked to invent spatial
+detail its input had already thrown away, and raising the pool recovers it to **91% of the teacher**.
+
+**And 9 is a hard ceiling for this plan, refused rather than truncated.** The last feature map is
+9×12, so `grid_avg_pool` at 12 raises "a 12x12 grid needs a feature map at least that big". The
+refusal happens at **call** time, not construction — a `Backbone(pool=12)` builds happily and fails
+when it sees a frame. Asserted as it behaves; the first version of the test expected the constructor
+to catch it.
+
+**The price is the wall this repository already named.** Under RLS the covariance is n²:
+
+| pool | head | proposal | state, f4 |
+|---|---|---|---|
+| 6 | RLS | 0.833 | **1.44 MB** |
+| 6 | NLMS | 0.733 | **111 KB** |
+| 9 | RLS | 0.850 | ~6.7 MB — 480 training frames **did not finish in 560 s** |
+| 9 | NLMS | 0.783 | **249 KB** |
+
+So NLMS gives up 0.07–0.10 accuracy for a 6–13× smaller state, which is exactly the trade it was
+added for (330,544 B against 2,872 B at 128 features, recorded). And the RLS timeout is a
+measurement, not an inconvenience: at pool 9 the n² cost is prohibitive in *time* as well as memory.
+
+**Where the distillation now stands.** 0.617 → **0.850** against a 0.933 teacher, at 1,296 features
+under RLS or 0.783 at 249 KB under NLMS. The scan remains the fallback and still works.
+
+**And the last 9% is not the head's — that was checked before varying it, and the check made the
+variation unnecessary.** The student imitates the argmax of the teacher's *block-averaged* 6×8 map,
+not the teacher's raw argmax over 247 candidates. Those are different, measured over four test
+seeds:
+
+| test seed | raw argmax over 247 | argmax of the 6×8 map |
+|---|---|---|
+| 77 | 0.933 | 0.833 |
+| 101 | 0.900 | 0.800 |
+| 202 | 0.900 | 0.850 |
+| 303 | 0.900 | 0.850 |
+
+Averaging costs about **0.075**, and the student measured 0.850 — **at that ceiling within seed
+noise**. So the distillation is closed at the student's level. Going further means changing the
+*target representation* — a finer grid, or regressing an offset within the chosen cell — and not the
+head. Varying the head's form would have been chasing a gap that does not exist, which is the fifth
+time today that asking "can this metric even reach it" before concluding has changed the answer.
+
+`tests/test_proposal.py` pins the monotone relation and the ceiling, 1 m 43 s. The teacher's targets
+are computed once and shared across pool settings — the rarity map does not depend on the student's
+pooling, and recomputing it per setting doubled the file's runtime for nothing. Five mutants caught.
