@@ -460,3 +460,53 @@ both a position and an identity objective. Attention has something to be learned
 
 `tests/test_attention_by_memory.py`, 9 s. Two mutants survive and are recorded as such; a third,
 dropping the distractor, was a real gap and is closed.
+
+### Bootstrap: the first exemplar can be acquired with no labels — 2026-08-19
+
+The entry above left one thing open: the exemplars were seeded from ground-truth-centred crops, so
+the loop still rested on the classical segmenter. **Rarity closes it.** Score every candidate crop by
+its mean similarity to all the others, take the minimum — the crop least like the rest of the
+picture. No labels, no segmenter, no trained weights.
+
+| background | rarest crop lands on an object | chance |
+|---|---|---|
+| plain wall | 1.000 | 0.101 |
+| sinusoidal stripes | 1.000 | 0.101 |
+| 40 small clutter blobs | 1.000 | 0.101 |
+
+Two objects in every frame, on the demo's own 72×96 geometry.
+
+**A confound was found and removed.** The first version picked a border crop on **8 of 8** frames:
+`crop_at` pads outside the frame with background, so a crop straddling the edge has an unusual
+composition and is genuinely the rarest thing there — an artefact of cropping, not a fact about
+objects. Candidates are restricted to crops lying entirely inside the frame, which is also the
+honest restriction: a crop you cannot take is not a candidate.
+
+**And a claim was withdrawn while the test for it was being written.** An exploratory run scored
+**0.000** against a 0.444 chance rate on a 36×48 frame, and the explanation offered was scale — a
+24×24 crop covers two thirds of that height, so no candidate can hold one object surrounded by
+background. The geometric half is true and is asserted. The 0.000 is **not reproducible**: the test
+fixture, differing in object radius and using unpadded crops, reaches 1.000 on the same frame size.
+So the failure was real in that run and its cause was never isolated. Asserting the scale limit
+would have been asserting a mechanism that cannot be reproduced, which is the error this repository
+keeps finding in its own records — this time caught by writing the test rather than after.
+
+**What the four measurements together say.** The owner's proposal — long-term memory of each label's
+features, re-assigned when the features reappear — is measurable end to end and needs **no
+representation learning at any step**:
+
+| step | mechanism | measured |
+|---|---|---|
+| bootstrap | rarest crop | 1.000 against 0.101, three backgrounds |
+| descriptor | crop embedding, untrained backbone | 0.996 shape decoding at unseen positions |
+| attention | nearest stored exemplar | 1.000, flips when the memory is swapped |
+| recognition | same match, same label | 1.000 on shape at equal colour |
+
+**What is still not built.** Every step is a full scan — 247 candidates and ~61,000 similarities per
+frame — so this is *search*, not attention, and a cheap proposal mechanism is the thing that would
+have to be learned. The clutter tested is uniform in appearance and becomes background
+statistically; a distractor that looks like a different *object* is untested. And nothing here has
+been through `Adapter`, `Guard` or `Pipeline` — it is a measurement, not a component.
+
+`tests/test_bootstrap.py`, 20 s. Three mutants caught, including rarity silently becoming
+commonality and border crops being allowed back in.
