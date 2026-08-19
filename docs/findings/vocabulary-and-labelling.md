@@ -620,3 +620,51 @@ the findings. Do not run two `git add -A` commits concurrently.)*
 `tests/test_proposal.py` pins the monotone relation and the ceiling, 1 m 43 s. The teacher's targets
 are computed once and shared across pool settings — the rarity map does not depend on the student's
 pooling, and recomputing it per setting doubled the file's runtime for nothing. Five mutants caught.
+
+### A sparse descriptor: sixteen of 108 dimensions are free — 2026-08-19
+
+The crop embedding is 108-d with 100 non-zeros and its energy is spread — top-8 holds 37%, top-16
+holds 60% — so keeping only the largest `k` discards real signal. Measured across all three
+capabilities:
+
+| k | recognition | attention | bytes per exemplar |
+|---|---|---|---|
+| 4 | 0.967 | 0.875 | 24 |
+| 8 | 0.978 | 0.938 | 48 |
+| **16** | **1.000** | **1.000** | **96** |
+| 32 | 1.000 | 1.000 | 192 |
+| 108 (dense) | 1.000 | 1.000 | 432 |
+
+Bytes are `(value f4, index u16)` pairs against a dense f4 vector. **k = 16 costs nothing** — both
+tasks sit at the dense score for 4.5× less storage and a sixth of the multiply-adds per match. And
+the degradation below that is graceful: four dimensions out of 108 still recognise at 0.967, which
+says the code is distributed rather than brittle.
+
+**The bootstrap number looked erratic, and the cause is the metric.** Scored as "is the single rarest
+crop within 0.10 of an object centre" it reads 0.167 / 1.000 / 0.000 / 0.750 / 1.000 across those k
+— non-monotonic, and reproducible at three times the sample, so not noise. Two explanations were
+tested and the first was mine, named in advance:
+
+- **support mismatch**, where two independently sparsified vectors share few active dimensions and
+  the dot product collapses. **Refuted**: at k ≥ 16, 0.000 of candidate pairs share no support.
+- **the ranking**, which turns out to be sound at every k and to improve monotonically:
+
+| k | mean rarity rank, on-object | off-object |
+|---|---|---|
+| 4 | 43.2 | 132.0 |
+| 8 | 29.4 | 133.5 |
+| 16 | 25.1 | 134.0 |
+| 32 | 21.2 | 134.5 |
+| 108 | 21.2 | 134.5 |
+
+25 of 247 candidates are on an object. **So sparsity does not break the bootstrap signal; taking a
+single argmin and demanding its centre fall within 0.10 does.** The crop at the argmin covers only
+0.20–0.28 of its area with object — it contains one without being centred on it.
+
+**That is also a finding about `tests/test_bootstrap.py`'s own metric**, which uses the same
+argmin-within-tolerance rule. It was not wrong at the dense setting, but it is fragile, and the rank
+separation is the sound measure. Recorded rather than silently switched, because the bootstrap
+figures already published rest on the argmin form.
+
+`tests/test_sparse.py`, 7 s. Three mutants caught, including `topk` silently keeping the *smallest*
+entries.
