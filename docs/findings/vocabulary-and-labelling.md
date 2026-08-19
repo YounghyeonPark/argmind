@@ -611,6 +611,12 @@ noise**. So the distillation is closed at the student's level. Going further mea
 head. Varying the head's form would have been chasing a gap that does not exist, which is the fifth
 time today that asking "can this metric even reach it" before concluding has changed the answer.
 
+*(Bookkeeping: this ceiling result shipped inside commit `ae22245`, whose message describes only the
+resolution sweep. Two commits were launched in the background concurrently and the first one's
+`git add -A` swept up the second's files. Nothing was lost — the test and this text are both in that
+commit — but `git log` under-describes it, which matters in a repository where the messages carry
+the findings. Do not run two `git add -A` commits concurrently.)*
+
 `tests/test_proposal.py` pins the monotone relation and the ceiling, 1 m 43 s. The teacher's targets
 are computed once and shared across pool settings — the rarity map does not depend on the student's
 pooling, and recomputing it per setting doubled the file's runtime for nothing. Five mutants caught.
