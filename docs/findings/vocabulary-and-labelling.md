@@ -788,3 +788,43 @@ to *where* and *when* — and it is not working memory, which maintains items ag
 faculty list is narrowed to `episodic`/`recollect`/`workingmemory`, and a new test holds the line the
 narrowing costs: `ExemplarMemory` must keep `admit`/`look_up`/`observe` and must **not** grow
 `timestamp`, `episode`, `context` or `sequence`, nor report a time on a match.
+
+### The five pieces wired together — 2026-08-20
+
+`RecognitionLayer` composes them: crop every candidate, describe each, then recognise if something
+in memory matches and otherwise admit the rarest. It is a `Stack` layer, frozen (`feature_lr=None`),
+because selection is an argmax. Driven over **appear → absent → a different object → the same object
+returns**:
+
+| candidate grid | first appearance | on return | same label |
+|---|---|---|---|
+| step 6, 117 candidates | slot 0 | slot 0 **and 2** | no |
+| **step 2, 925 candidates** | **slot 0** | **slot 0** | **yes** |
+
+**So the claim the proposal was made for holds** — a returning object gets its old label back —
+**and the cost is a fine candidate grid.**
+
+**Two failures on the way, and the first was predicted and then built anyway.** When the proposal was
+first assessed the note read: *"잘못된 descriptor가 기억에 들어가면 그 오차가 영구히 고정됩니다…
+무엇을 기억에 쓸 자격이 있는지의 관문이 기제만큼 중요합니다."* The first version had no gate. On an
+empty frame the rarest crop is a patch of **wall**, and every wall crop then matches it forever:
+measured, the object recognised as slot 0 came back as **slot 1** after a three-frame absence, with
+the layer looking at (0.81, 0.58) and (0.88, 0.83) — background.
+
+The gate is a margin on rarity, and it works because the separation is not marginal: `median − min`
+of the candidates' mean similarity is **0.0007–0.0011** on an empty wall against **0.126–0.143** with
+an object present, two orders of magnitude. `admit_margin` is **required**, not defaulted, for the
+reason `ExemplarMemory.threshold` is. A frame that admits nothing reports slot **−1** rather than
+reusing the last one, because "there was nothing here" is a real answer.
+
+**The second failure is crop centring and it is recorded as a cost rather than tuned away.** With
+the gate in place a coarse grid still lost the identity, and the reason is measured directly: the
+best match score available anywhere on the grid is **0.8835** at steps 12, 6 and 3 and **0.9990** at
+step 1, against a 0.85 threshold. A coarse grid leaves the score on the decision boundary where
+frame noise decides. Every recognition figure in this repository was measured on crops centred on
+the object by construction, so the sensitivity was there all along and only appeared once the centre
+came from a grid. Lowering the threshold would have hidden it.
+
+`tests/test_recognise.py`, 52 s, seven tests including two controls that must fail: a coarse grid
+must lose the identity, and opening the gate must reproduce the background-exemplar failure. Four
+mutants caught.
