@@ -143,3 +143,80 @@ def test_it_refuses_a_memory_that_cannot_hold_the_backbone_s_descriptor():
     with pytest.raises(ValueError, match="must match"):
         RecognitionLayer(bb, ExemplarMemory(4, bb.n_outputs + 1, 8, threshold=0.8),
                          (H, W, 3), grid(12), admit_margin=0.02)
+
+
+def counted(L):
+    """Wrap `_describe` so a test can state the cost as a number instead of asserting it is small."""
+    L._n = 0
+    inner = L._describe
+
+    def _describe(img):
+        out = inner(img)
+        L._n += len(L.centres)
+        return out
+    L._describe = _describe
+    return L
+
+
+def test_local_REFINEMENT_keeps_the_identity_at_a_sixth_of_the_crops():
+    """**The cost of a fine grid, paid down.** A coarse pass picks the region and a fine pass around
+    the winner decides there:
+
+    | variant | crops per frame | identity across the absence |
+    |---|---|---|
+    | plain step 2 | 925 | yes |
+    | plain step 8 | 70 | **no** |
+    | **step 8 + refine(8, 2)** | **147** | **yes** |
+    | step 12 + refine(12, 2) | 188 | yes |
+
+    6.3× fewer crops than the fine grid, for the same answer.
+    """
+    L = counted(layer(step=8))
+    L.refine = (8, 2)
+    seq = drive(L)
+    first = {s for p, s, _r in seq if p == "A" and s >= 0}
+    back = {s for p, s, _r in seq if p == "again" and s >= 0}
+    assert back and back <= first, (
+        f"refinement lost the identity: {sorted(first)} → {sorted(back)}")
+    per_frame = L._n / 10
+    assert per_frame < 200, f"{per_frame:.0f} crops per frame; the point of refining is to spend less"
+    assert per_frame > len(L.centres), "the fine pass never ran — only the coarse grid was counted"
+
+
+def test_refinement_must_happen_BEFORE_the_memory_is_consulted():
+    """**A design error caught by measurement, recorded so it is not reintroduced.**
+
+    The first version refined the centre *after* the slot had been assigned. It changed the reported
+    centre and nothing else, and the identity results were byte-identical to no refinement at all —
+    70 crops, slots [0, 1] → [0, 3], still wrong. The point of a better centre is to look *that*
+    descriptor up.
+
+    Asserted structurally: the refined pass must change which descriptor is handed to the memory, so
+    a refining layer and a plain one must disagree about what they attended to on the same frame.
+    """
+    plain, fine = layer(step=8), layer(step=8)
+    fine.refine = (8, 2)
+    img = scene("A", 0)
+    plain.features(img)
+    fine.features(img)
+    assert fine.last_centre != plain.last_centre, (
+        "the refining layer attended to exactly the coarse grid point; refinement is not changing "
+        "what gets looked up")
+
+    # **And it must be LOCAL to the coarse choice.** A mutant refining around a fixed frame centre
+    # survived the identity test, because on this fixture a neighbourhood of the middle still
+    # overlaps the object — the fixture is insensitive to it, so the property is pinned directly.
+    span_x = 8 / W
+    span_y = 8 / H
+    assert abs(fine.last_centre[0] - plain.last_centre[0]) <= span_x + 1e-9, (
+        f"the refined centre {fine.last_centre} is outside the neighbourhood of the coarse choice "
+        f"{plain.last_centre}; refinement is searching somewhere it was not asked to")
+    assert abs(fine.last_centre[1] - plain.last_centre[1]) <= span_y + 1e-9
+
+
+def test_a_malformed_refine_specification_is_refused():
+    with pytest.raises(ValueError, match=r"\(span, step\)"):
+        layer(step=8).__class__(
+            Backbone(PLAN, (CROP, CROP, 3), dtype="f8", seed=0, pool=POOL),
+            ExemplarMemory(4, 108, 16, threshold=0.8), (H, W, 3), grid(12),
+            admit_margin=0.02, refine=(0, 2))

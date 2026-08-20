@@ -828,3 +828,29 @@ came from a grid. Lowering the threshold would have hidden it.
 `tests/test_recognise.py`, 52 s, seven tests including two controls that must fail: a coarse grid
 must lose the identity, and opening the gate must reproduce the background-exemplar failure. Four
 mutants caught.
+
+### Centre refinement: the same identity at a sixth of the crops — 2026-08-20
+
+Identity across an absence needed 925 crops per frame, which is not a rate anything can run. A
+coarse pass to pick the region, then a fine pass around the winner to decide there:
+
+| variant | crops per frame | identity across the absence |
+|---|---|---|
+| plain step 2 | 925 | yes |
+| plain step 8 | 70 | **no** |
+| **step 8 + refine(8, 2)** | **147** | **yes** |
+| step 12 + refine(12, 2) | 188 | yes |
+
+**6.3× fewer crops for the same answer.**
+
+**The first version refined in the wrong place and the numbers said so immediately.** It re-centred
+*after* the slot had been assigned, so it changed the reported centre and nothing else — 70 crops,
+slots [0, 1] → [0, 3], byte-identical to no refinement. The point of a better centre is to look
+*that* descriptor up, so the refinement has to run before the memory is consulted. A test asserts
+the refining layer and a plain one disagree about what they attended to.
+
+**And a mutant refining around a fixed frame centre survived**, because on this fixture a
+neighbourhood of the middle still overlaps the object — the identity test is insensitive to it. The
+locality property is pinned directly instead: the refined centre must lie within the declared span
+of the coarse choice. That is the fixture being weak, not the code, and saying which is which
+matters.
