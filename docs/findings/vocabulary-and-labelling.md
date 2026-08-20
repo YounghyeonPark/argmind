@@ -854,3 +854,40 @@ neighbourhood of the middle still overlaps the object — the identity test is i
 locality property is pinned directly instead: the refined centre must lie within the declared span
 of the coarse choice. That is the fixture being weak, not the code, and saying which is which
 matters.
+
+### The 21× speedup is not available, and the reason is the method's own precision — 2026-08-20
+
+At 147 crops per frame the composed loop runs at **6.5 fps** (153.8 ms), and the time is entirely
+the backbone: one forward pass on a 24×24 crop is **1.05 ms**, so 147 of them is 154 ms. Cropping
+(0.67 ms), the 147×147 similarity matrix (0.18 ms) and a memory look-up (0.026 ms) are noise beside
+it.
+
+The obvious fix is to run the backbone **once** on the whole frame and pool descriptors out of the
+feature map: a 72×96 pass costs **7.5 ms**, a **21×** saving.
+
+**The descriptors agree well enough** — cosine 0.91–0.96 between a crop run alone and the
+corresponding region pooled from the whole-frame map, against a 0.85 match threshold. The difference
+is padding: a crop run alone pads with zeros where the whole frame has neighbours.
+
+**And it does not work.** Driven through the same appear → absent → return sequence with region
+pooling used consistently for both storing and querying, identity fails at every candidate density:
+
+| candidate density | first appearance | on return | same | ms/frame |
+|---|---|---|---|---|
+| 70 regions | slots 0 **and 1** | slot 2 | no | 22.0 |
+| 247 regions | slots 0 and 1 | slot 2 | no | 39.5 |
+| 925 regions | slots 0 and 1 | slot 2 | no | 140.8 |
+
+The first appearance already takes **two** slots, so the object is not even recognised frame to
+frame — with per-crop descriptors it took one.
+
+**The mechanism is the one every measurement today has been circling.** A region's boundary on the
+feature map can only be placed to the nearest **map cell**, and this plan's cells are 4 frame pixels
+apart. Centre refinement measured the precision the method needs at **2 pixels**: at step 8 the best
+available match score is 0.8835 against a 0.85 threshold and identity is lost, at step 2 it holds.
+**The speedup and the required precision come from the same stride**, so buying one spends the
+other.
+
+**So the cost is intrinsic to the method as it stands, not an implementation inefficiency.** Saying
+that is worth more than a tuned number: a cheaper descriptor, or one less sensitive to centring, is
+what would change it — not a faster loop.
