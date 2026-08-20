@@ -27,7 +27,7 @@ from argmind.persist import Store, fingerprint_of
 from argmind.pipeline import FrameMap, Pipeline
 from argmind.stack import Stack
 from argmind.stream import Stream
-from demo.label_sources import (AppearanceMatcher, BackgroundLocator, CadenceDetector,
+from demo.label_sources import (RecogniseLocator,AppearanceMatcher, BackgroundLocator, CadenceDetector,
                                 FrameSegmenter, ObjectMemory, RegionTracker, partition,
                                 pick_regions, region_descriptor, ring_contrast, split_regions)
 from demo.map_head import Pyramid, block_mean, map_iou, map_target
@@ -52,6 +52,16 @@ FEATURES_PATH = STATE_DIR / "features"
 #: a segmentation does not need per-pixel precision to say where something is, and the head's
 #: parameter count is `n_features x n_outputs`.
 MAP_H, MAP_W = 9, 12
+
+#: `--locate recognise`. The crop side and the coarse step are the two that were measured: identity
+#: across an absence holds at a 2-pixel effective centre and is lost at 8, and a coarse pass with
+#: local refinement reaches it at 147 crops a frame instead of 925.
+RECOGNISE_CROP, RECOGNISE_STEP = 24, 8
+RECOGNISE_SLOTS, RECOGNISE_K = 16, 16
+#: A cosine similarity, and the margin on rarity below which nothing is admitted. Both measured
+#: rather than guessed: `median - min` of the candidates' mean similarity is 0.0007-0.0011 on an
+#: empty wall against 0.126-0.143 with an object present.
+RECOGNISE_THRESHOLD, RECOGNISE_MARGIN = 0.85, 0.02
 #: How often the pyramid is blanked while learning. **The only thing measured to survive a blackout**
 #: -- holding the pyramid and resetting it both fail identically, because the memory's problem after
 #: a gap is that it is about a world that has moved on, not that it was corrupted. It costs peak
@@ -979,7 +989,8 @@ def main(argv=None):
                    help="how many moving things to track. The head gets 2K outputs and the "
                         "labels arrive leftmost-first: it learns ROLES, not identities, and "
                         "cannot follow which object is which through a crossing")
-    p.add_argument("--locate", choices=("motion", "background", "texture"), default=None,
+    p.add_argument("--locate", choices=("motion", "background", "texture", "recognise"),
+                   default=None,
                    help="how the automatic labels find things. `motion` differences consecutive "
                         "frames; `background` differences against a running background estimate. "
                         "Defaults to background above one object, because a frame difference is a "
@@ -1156,6 +1167,29 @@ def main(argv=None):
     how = args.locate or ("background" if n_objects > 1 else "motion")
     if args.teach == "mouse":
         detector = None
+    elif how == "recognise":
+        #: **argmind doing the perception**, rather than consuming a classical labeller's output.
+        #: The region and its identity come from `RecognitionLayer`: crop the candidates, recognise
+        #: what is remembered or admit what stands out. `--objects 1` only, and it is refused above
+        #: that rather than approximated -- see `RecogniseLocator`.
+        #:
+        #: 147 crops a frame at 1.05 ms each is 6.5 fps, measured. That is the method's rate and not
+        #: the wiring's: one whole-frame pass would be 21x cheaper and loses the identity, because a
+        #: region pooled from the feature map can only be centred to 4 pixels and the descriptor
+        #: needs 2.
+        crop_bb = Backbone(PLAN, (RECOGNISE_CROP, RECOGNISE_CROP, 3), dtype="f4", seed=1, pool=POOL)
+        h, w = IN_SHAPE[0], IN_SHAPE[1]
+        half = RECOGNISE_CROP // 2
+        centres = [(x / w, y / h)
+                   for y in range(half, h - half + 1, RECOGNISE_STEP)
+                   for x in range(half, w - half + 1, RECOGNISE_STEP)]
+        detector = RecogniseLocator(
+            RecognitionLayer(crop_bb,
+                             ExemplarMemory(RECOGNISE_SLOTS, crop_bb.n_outputs, RECOGNISE_K,
+                                            threshold=RECOGNISE_THRESHOLD, dtype="f4"),
+                             IN_SHAPE, centres, admit_margin=RECOGNISE_MARGIN,
+                             refine=(RECOGNISE_STEP, 2)),
+            n_objects)
     elif how == "texture":
         # Every frame produces labels, so there is no cadence and nothing to be blind about --
         # which is the other half of dropping the background model. `k` is objects + 1 because

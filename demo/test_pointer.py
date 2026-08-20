@@ -526,3 +526,82 @@ def test_the_status_text_is_not_drawn_twice():
     # And the band must still be doing its job, or the text is unreadable over a bright scene.
     assert out[:96].mean() < grey * 0.6, "the dimmed band has gone"
     assert out[100].mean() == grey, "the band spilled past the status block"
+
+
+def test_locate_recognise_is_argmind_doing_the_perception():
+    """**The 2026-08-14 decision, wired.** `--locate recognise` takes its region and its identity
+    from `argmind.RecognitionLayer` instead of from `demo/label_sources.py`'s classical locators.
+
+    Driven here rather than described: an object appears, is recognised on the next frame, the frame
+    empties and **nothing is stored**, and when the object returns it gets **the same slot**.
+
+    The frame cost is the method's and is recorded rather than hidden: 147 crop embeddings at
+    1.05 ms is 6.5 fps against a camera at ~30. One whole-frame pass would be 21x cheaper and loses
+    the identity, because a region pooled from the feature map centres to 4 pixels and the
+    descriptor needs 2.
+    """
+    import numpy as np
+
+    import demo.pointer as P
+    from argmind.backbone import Backbone
+    from argmind.memory import ExemplarMemory
+    from argmind.recognise import RecognitionLayer
+    from demo.label_sources import RecogniseLocator
+
+    h, w = P.IN_SHAPE[0], P.IN_SHAPE[1]
+    half = P.RECOGNISE_CROP // 2
+    crop_bb = Backbone(P.PLAN, (P.RECOGNISE_CROP, P.RECOGNISE_CROP, 3), dtype="f4", seed=1,
+                       pool=P.POOL)
+    centres = [(x / w, y / h) for y in range(half, h - half + 1, P.RECOGNISE_STEP)
+               for x in range(half, w - half + 1, P.RECOGNISE_STEP)]
+    det = RecogniseLocator(
+        RecognitionLayer(crop_bb,
+                         ExemplarMemory(P.RECOGNISE_SLOTS, crop_bb.n_outputs, P.RECOGNISE_K,
+                                        threshold=P.RECOGNISE_THRESHOLD, dtype="f4"),
+                         P.IN_SHAPE, centres, admit_margin=P.RECOGNISE_MARGIN,
+                         refine=(P.RECOGNISE_STEP, 2)), 1)
+
+    yy, xx = np.mgrid[0:h, 0:w]
+
+    def frame(cx, cy, empty=False):
+        img = np.full((h, w, 3), 0.35, dtype="f4")
+        if not empty:
+            img[np.hypot(xx - cx * w, yy - cy * h) <= 0.075 * w] = (0.85, 0.25, 0.20)
+        return img
+
+    first = det(frame(0.30, 0.40))
+    assert first is not None and det.last_slot >= 0 and not det.last_recognised, (
+        "the first sighting should be admitted, not recognised")
+    stored = det.last_slot
+
+    det(frame(0.31, 0.41))
+    assert det.last_recognised and det.last_slot == stored, "the object was not recognised again"
+
+    assert det(frame(0, 0, empty=True)) is None and det.last_slot == -1, (
+        "an empty frame produced a label; the admission gate is letting background in")
+
+    det(frame(0.30, 0.40))
+    assert det.last_recognised and det.last_slot == stored, (
+        f"the object came back as slot {det.last_slot} instead of {stored} — identity across an "
+        "absence is what this locator exists to provide")
+
+    # **And the reported centre must be the attended one.** A mutant returning a fixed (0.5, 0.5)
+    # survived until this existed, because nothing checked the coordinate the demo actually draws.
+    #
+    # Asserted as *tracking* rather than proximity, because the crop is a third of the frame height
+    # and the attended centre sits off the object by design — measured at (0.3125, 0.50) for an
+    # object at (0.30, 0.40). It contains the object without being centred on it, which this
+    # repository already records for the argmin of a rarity scan.
+    left = det(frame(0.25, 0.40))[0]
+    right = det(frame(0.72, 0.40))[0]
+    assert right[0] > left[0] + 0.2, (
+        f"the object moved from x=0.25 to x=0.72 and the reported centre went {left} -> {right}; it "
+        "is not tracking what was attended to")
+
+
+def test_more_than_one_object_is_REFUSED_by_the_recognising_locator():
+    """It attends once per frame. Refused rather than approximated by attending twice, because
+    suppressing the first choice needs a rule nobody has measured."""
+    from demo.label_sources import RecogniseLocator
+    with pytest.raises(ValueError, match="one region per frame"):
+        RecogniseLocator(object(), 2)

@@ -189,6 +189,26 @@ Four mutants, all caught. Moving the demo on to `Stack` is the next
 step, and `state_size` is not on every adapter (`NormalisedLeastMeanSquares` has none) although
 this file's statement of the contract lists it — a small doc/code mismatch found on the way.
 
+**The recognition memory the owner proposed is built, wired and measured (2026-08-19/20).** Five
+pieces, none of which needs representation learning: rarity finds an object with no labels (1.000
+against a 0.101 chance rate), a crop descriptor from an **untrained** backbone decodes shape at 0.996
+across unseen positions, a stored exemplar steers attention to the remembered object (1.000, and it
+flips when the memory is swapped), sixteen of 108 dimensions carry all of it, and a distilled map
+proposal reaches its target's own ceiling. `ExemplarMemory` is the bounded store — 8 slots in
+**1,056 B**, one flat block, `Store` unchanged — and `RecognitionLayer` composes them as a *frozen*
+`Stack` layer, which needed the one contract extension `feature_lr=None`.
+
+**It answers the question it was proposed for**: over appear → absent → a different object → the same
+object returns, the returning object gets **its old slot back**. `demo/pointer.py --locate recognise`
+runs it, so the region and the identity come from the library rather than from the classical
+labeller.
+
+**Two costs are the method's own and are recorded rather than tuned away.** It runs at **6.5 fps**
+(147 crop embeddings at 1.05 ms), and the obvious 21× — one whole-frame pass, descriptors pooled from
+the feature map — **loses the identity**: a pooled region can only be centred to the map's 4-pixel
+stride and the descriptor needs 2, so the speedup and the precision come from the same place. And it
+attends to **one region per frame**, so more than one object is refused rather than approximated.
+
 **Open numbers nobody has**: backward-pass throughput on an M55; whether fp32 holds past ten million
 updates on a non-stationary target; and why the map head's two harnesses disagree on free-running
 IoU — **measured 2026-08-17 to be `MAP_DROPOUT = 0.15`**, which costs 0.359 → 0.135 here and

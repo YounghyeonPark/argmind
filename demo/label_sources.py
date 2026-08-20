@@ -1394,3 +1394,52 @@ class FrameSegmenter:
             out.append((float(xx[m].mean()) / max(w - 1, 1),
                         float(yy[m].mean()) / max(h - 1, 1)))
         return out
+
+
+class RecogniseLocator:
+    """argmind's own recognition in the detector interface this demo already has.
+
+    Every other locator in this file is classical: `FrameSegmenter` clusters colour,
+    `BackgroundLocator` differences against a running estimate, `CadenceDetector` differences
+    frames. This one is the 2026-08-14 decision arriving — it wraps `argmind.RecognitionLayer`, so
+    the region and its identity come from the library rather than from hand-written perception.
+
+    **What it costs, measured, because the demo will show it.** 147 crop embeddings per frame at
+    1.05 ms each is **153.8 ms → 6.5 fps**, against a camera running at ~30. Running the backbone
+    once on the whole frame instead would be 21× cheaper and **does not work**: a region pooled from
+    the feature map can only be placed to the nearest map cell, 4 frame pixels, and the descriptor
+    needs 2 — the speedup and the precision come from the same stride. So the frame rate is the
+    method's, not the wiring's.
+
+    **One region per frame.** `features()` attends once, so more than one object is refused rather
+    than approximated by attending to the same place twice.
+    """
+
+    __slots__ = ("layer", "labels", "last_slot", "last_recognised")
+
+    def __init__(self, layer, n_objects: int = 1):
+        if n_objects != 1:
+            raise ValueError(
+                f"RecogniseLocator attends to one region per frame, so it cannot supply "
+                f"{n_objects} labels. The classical locators return k centres because they "
+                "threshold a whole map; this one selects, and selecting twice needs a rule for "
+                "suppressing the first choice that has not been measured")
+        self.layer = layer
+        #: Declared so `detector.labels` reads as absent rather than raising. This locator produces
+        #: a point, not a segmentation, so `--segments` has nothing to draw from it.
+        self.labels = None
+        self.last_slot = -1
+        self.last_recognised = False
+
+    def __call__(self, frame):
+        """The attended centre, or `None` when nothing was recognised and nothing admitted.
+
+        `None` is the honest answer for a featureless frame — the same contract the motion detector
+        has — and it is what stops the caller teaching on a frame where the layer stored nothing.
+        """
+        self.layer.features(frame)
+        self.last_slot = self.layer.last_slot
+        self.last_recognised = self.layer.last_recognised
+        if self.last_slot < 0:
+            return None
+        return [tuple(self.layer.last_centre)]
