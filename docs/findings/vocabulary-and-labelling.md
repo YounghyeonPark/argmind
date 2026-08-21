@@ -947,3 +947,28 @@ learned invariance — and none of those has been measured here.
 
 `tests/test_descriptor_frontier.py`, 1.8 s. Four mutants caught, including lowering the criteria
 until something passes, and the margin quietly comparing an object with itself.
+
+### The demo showed only the camera — the decision was wired and the display was not, 2026-08-20
+
+Owner feedback after running it: *"카메라영상만 나오고 인식하는 내용이 안나와서 앱이 어떤식으로
+동작하는지 판단하기 어려움."* Correct, and a real defect. `--locate recognise` decided a slot every
+frame and drew **nothing about it** — the slot, whether it was recognised or freshly admitted, and
+how full the memory is were all invisible, so nothing on screen distinguished this mode from any
+other.
+
+The recogniser's state is now carried out of the loop into `state["recognise"]`, and the overlay
+shows it as the **attended crop box** — drawn as the box it actually is, because the crop is a third
+of the frame height and contains the object without being centred on it, which is confusing if only
+a point is shown — plus a status line reading `slot 0 RECOGNISED   memory 1/16`, `slot 2 new --
+admitted`, or `nothing here -- stored nothing`. Green for a recognition, amber for an admission,
+grey for neither.
+
+**Third defect in this demo found by launching it rather than by a fixture, and the third that lived
+in `main()`.** The other two were the `--output map` mouse-teaching crash and the missing
+`RecognitionLayer` import.
+
+**And one of the three mutants for it survived the first pass**, for a reason this file has already
+recorded once: the test searched `main()` for the string `"recognise"`, which also appears in
+`elif how == "recognise":`, so a mutant that stopped assigning the state passed. Checked through the
+**AST** now — an `ast.Assign` whose target is `state["recognise"]` — exactly as the `learn_features`
+check had to be after it was fooled by a help string.

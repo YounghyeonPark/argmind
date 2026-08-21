@@ -916,6 +916,21 @@ def draw(cv2, frame, state):
             if len(pred) > 2 or state.get("remember"):
                 cv2.putText(frame, tag, (px + 20, py + 5), cv2.FONT_HERSHEY_SIMPLEX,
                             0.5, colour, 2, cv2.LINE_AA)
+    rec = state.get("recognise")
+    if rec is not None:
+        #: The attended crop, drawn as the box it actually is rather than as a point: the crop is a
+        #: third of the frame height and contains the object without being centred on it, which is a
+        #: measured property and confusing if only its centre is shown.
+        known = rec["slot"] >= 0
+        colour = (0, 220, 0) if rec["recognised"] else ((0, 200, 255) if known else (120, 120, 120))
+        if rec["centre"] is not None and known:
+            cw = rec["crop"] * w // IN_SHAPE[1]
+            ch = rec["crop"] * h // IN_SHAPE[0]
+            cx, cy = int(rec["centre"][0] * w), int(rec["centre"][1] * h)
+            cv2.rectangle(frame, (cx - cw // 2, cy - ch // 2), (cx + cw // 2, cy + ch // 2),
+                          colour, 2)
+            cv2.drawMarker(frame, (cx, cy), colour, cv2.MARKER_CROSS, 10, 1)
+
     for tx, ty in state["taught_points"][-8:]:
         cv2.drawMarker(frame, (int(tx * w), int(ty * h)), (255, 180, 0),
                        cv2.MARKER_TILTED_CROSS, 12, 1)
@@ -969,7 +984,20 @@ def status_lines(state):
         # The answer to "do I have to keep teaching it?" -- with `--teach mouse`, yes; with a
         # detector wired in, the input teaches it and this line says which.
         note = "predicting only, not learning"
-    return [mode, counts, health, note]
+    rec = state.get("recognise")
+    if rec is None:
+        return [mode, counts, health, note]
+    #: **The line that was missing.** With `--locate recognise` the screen showed only the camera:
+    #: the slot, whether it was recognised or freshly admitted, and how full the memory is were all
+    #: invisible, so nothing distinguished this mode from any other. Found by running it, which is
+    #: the third defect in this demo found that way and the third that lived in `main()`.
+    if rec["slot"] < 0:
+        seen = "nothing here -- stored nothing"
+    elif rec["recognised"]:
+        seen = f"slot {rec['slot']} RECOGNISED"
+    else:
+        seen = f"slot {rec['slot']} new -- admitted"
+    return [mode, counts, health, f"{seen}   memory {rec['occupied']}/{rec['capacity']}", note]
 
 
 def _overlay(cv2, frame, state):
@@ -1311,6 +1339,19 @@ def main(argv=None):
         # And running a detector every frame beats both at 0.010 against the head's ~0.08, so
         # this arrangement is about the detector being unaffordable, not about accuracy.
         auto = detector(small) if detector is not None else None
+        if isinstance(detector, RecogniseLocator):
+            #: **What the recogniser just did, so the window can show it.** Wiring the decision and
+            #: not the display left the demo showing only the camera: the slot, whether it was
+            #: recognised or freshly admitted, and where it looked were all invisible, so nothing on
+            #: screen distinguished this mode from any other. Found by running it.
+            state["recognise"] = {
+                "slot": detector.last_slot,
+                "recognised": detector.last_recognised,
+                "centre": detector.layer.last_centre,
+                "occupied": detector.layer.memory.occupied,
+                "capacity": detector.layer.memory.capacity,
+                "crop": RECOGNISE_CROP,
+            }
         #: Which cluster each surviving label came from, in slot order. Carried because the
         #: display used to colour cluster *n* with the id of slot *n*, and those are different
         #: orderings: `keep` sorts by area, the x-sort below re-sorts, and the matcher permutes

@@ -596,3 +596,69 @@ def test_more_than_one_object_is_REFUSED_by_the_recognising_locator():
     from demo.label_sources import RecogniseLocator
     with pytest.raises(ValueError, match="one region per frame"):
         RecogniseLocator(object(), 2)
+
+
+def test_the_recognition_state_REACHES_THE_SCREEN():
+    """**Found by running the demo, which showed only the camera.**
+
+    `--locate recognise` decided a slot every frame and drew nothing about it: the slot, whether it
+    was recognised or freshly admitted, and how full the memory is were all invisible, so nothing on
+    screen distinguished this mode from any other. The decision was wired and the display was not.
+
+    Third defect in this demo found by launching it rather than by a fixture, and the third that
+    lived in `main()`.
+    """
+    from demo.pointer import status_lines
+
+    base = dict(remember=False, vocab=0, source="backbone", how="recognise", identify=False,
+                objects=1, n_auto=3, n_taught=0, updates=3, fps=6.5, drift=1.0, residual=0.12,
+                frozen=False, frozen_by=(), learning=True, teach="auto")
+
+    without = status_lines(dict(base))
+    recognised = status_lines({**base, "recognise": dict(slot=0, recognised=True, occupied=1,
+                                                         capacity=16)})
+    admitted = status_lines({**base, "recognise": dict(slot=2, recognised=False, occupied=3,
+                                                       capacity=16)})
+    empty = status_lines({**base, "recognise": dict(slot=-1, recognised=False, occupied=1,
+                                                    capacity=16)})
+
+    assert len(recognised) == len(without) + 1, (
+        "the recognition summary did not add a line; the mode is invisible on screen again")
+    assert "RECOGNISED" in recognised[3] and "slot 0" in recognised[3]
+    assert "new" in admitted[3] and "slot 2" in admitted[3]
+    assert "nothing here" in empty[3], (
+        "an empty frame reads as a recognition; the -1 slot has to be distinguishable on screen or "
+        "the admission gate's effect cannot be seen")
+    assert "1/16" in recognised[3] and "3/16" in admitted[3], (
+        "the memory occupancy is not shown, so a viewer cannot see exemplars being stored")
+
+    # The three states must be distinguishable from each other, not merely present.
+    assert len({recognised[3], admitted[3], empty[3]}) == 3
+
+
+def test_the_recogniser_state_is_CARRIED_out_of_the_loop():
+    """The other half: `status_lines` can only show what `main()` puts in `state`. Asserted through
+    the shipped construction, because a test that builds its own locator cannot see the loop fail to
+    populate it — which is exactly how the missing import survived earlier."""
+    import inspect
+
+    import demo.pointer as pointer
+
+    # **The AST, not a substring.** A first version searched `main()` for the string
+    # `"recognise"`, which also appears in `elif how == "recognise":` — so a mutant that stopped
+    # assigning the state survived. This file has been caught by exactly that once before, with
+    # `learn_features` named inside a help string.
+    import ast
+
+    tree = ast.parse(inspect.getsource(pointer.main))
+    assigned = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Assign):
+            for target in node.targets:
+                if (isinstance(target, ast.Subscript) and isinstance(target.value, ast.Name)
+                        and target.value.id == "state"
+                        and isinstance(target.slice, ast.Constant)):
+                    assigned.add(target.slice.value)
+    assert "recognise" in assigned, (
+        "main() no longer assigns state['recognise'], so the status line has nothing to show and "
+        "the window goes back to being just the camera")
