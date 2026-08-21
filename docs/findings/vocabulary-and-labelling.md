@@ -1073,3 +1073,44 @@ defect underneath.**
 **Named in advance, not measured**: a panning camera gives scenery spells too, and a slot can be
 evicted during a temporary absence — which is the failure this was built to prevent, arriving by
 another door.
+
+### Long-term memory should be unbounded, and the per-slot loop was what stopped it — 2026-08-20
+
+The owner's judgement on capacity: *"동시에 보는게 4개인건 괜찮은데 장기기억이 무한대여야 하는건
+맞는듯."* Right, and the two are different quantities that this implementation had collapsed into one
+number. `capacity` was both the store size **and** the width of the presence vector — the same
+conflation as the serial-recognition one, and caught the same way.
+
+Human figures, as standardly reported and **needing their sources verified before being quoted
+here**: simultaneous tracking ~4–5 (Pylyshyn & Storm), visual working memory ~4 (Luck & Vogel; Cowan
+revising Miller), subitizing ~4 — against **long-term visual memory in the thousands** (Brady et al.,
+~2,500 objects with detail after one exposure). So a bounded store is the wrong shape for the
+long-term half.
+
+**What actually stopped it was the look-up.** `look_up` walks the slots, so it is linear in capacity:
+**0.018 ms at 8 slots, 2.033 ms at 1,000**, and 147 candidates of the latter is 479 ms a frame —
+3.35 fps from look-ups alone. `look_up_many` does it as one matrix product:
+
+| slots | loop ×147 | batched | speed-up |
+|---|---|---|---|
+| 8 | 3 ms | 1.0 ms | 3× |
+| 128 | 34 ms | 1.2 ms | 28× |
+| 1,000 | 479 ms | 8.8 ms | 54× |
+| 4,000 | 2,479 ms | 9.4 ms | **263×** |
+
+**Nearly flat from 1,000 to 4,000**, because what remains is sparsifying the queries rather than the
+slot count. The dense matrix it needs is **derived, not state**: a 4,000-slot cache is 3.5 MB of
+float64 and would triple the record, so it is rebuilt on admit, `load_state` and `reset`.
+
+The demo's capacity goes **16 → 256** (35 KB at f4). The 8 KB core tier still caps near 32 slots, and
+that is a memory budget rather than a design choice — said so in the code.
+
+**And a figure I published was wrong.** The recorded "6.5 fps" for `--locate recognise` was measured
+with the *test fixture's* backbone plan (8 then 12 channels), not the demo's (12 then 16), and before
+the batched look-up. Measured on the demo's own construction: **119.7 ms → 8.4 fps**, of which the
+backbone is 112 ms at 0.763 ms a crop. So *"the time is entirely the backbone"* holds, but the
+number was from a different configuration and was presented as the demo's.
+
+**Four mutants, and one needed a case none of the others could reach**: removing the empty-slot mask
+survived, because an empty slot scores exactly 0 and that beats only *negative* scores. A query
+anti-correlated with everything stored is the only thing that sees it.

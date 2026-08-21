@@ -268,3 +268,95 @@ def test_with_EQUAL_spells_the_less_recently_seen_slot_goes():
     assert ages[late] > ages[early], (
         "presence is not refreshing the age, so recency cannot break a tie and this test would pass "
         "for the wrong reason")
+
+
+def test_the_BATCHED_look_up_is_what_makes_a_large_memory_usable():
+    """**The per-slot loop made capacity a cost, and it should not be one.**
+
+    `look_up` walks the slots, so it is linear in the capacity: measured **0.018 ms at 8 slots and
+    2.033 ms at 1,000**, and 147 candidates of the latter is 479 ms a frame — 3.35 fps from the
+    look-ups alone. `look_up_many` does the same work as one matrix product:
+
+    | slots | loop ×147 | batched | speed-up |
+    |---|---|---|---|
+    | 8 | 3 ms | 1.0 ms | 3× |
+    | 128 | 34 ms | 1.2 ms | 28× |
+    | 1,000 | 479 ms | 8.8 ms | 54× |
+    | 4,000 | 2,479 ms | 9.4 ms | **263×** |
+
+    **It is nearly flat from 1,000 to 4,000**, because the remaining cost is sparsifying the queries
+    rather than the slot count. That is what makes an effectively unbounded long-term memory viable —
+    the owner's requirement, and the right one: human long-term visual memory holds thousands, while
+    the ~4 limit belongs to simultaneous tracking, a different quantity.
+    """
+    m = ExemplarMemory(capacity=64, n_features=32, k=8, threshold=0.5)
+    g = np.random.default_rng(3)
+    stored = [g.standard_normal(32) for _ in range(20)]
+    for d in stored:
+        m.admit(d)
+
+    queries = stored[:10] + [g.standard_normal(32) for _ in range(5)]
+    batched = m.look_up_many(queries)
+    assert len(batched) == len(queries)
+
+    # **The two must agree**, or the fast path is computing something else. Slot and matched flag
+    # are compared; scores to a tolerance, since one path accumulates in a different order.
+    for q, fast in zip(queries, batched):
+        slow = m.look_up(q)
+        assert fast.slot == slow.slot, f"batched chose slot {fast.slot}, the loop chose {slow.slot}"
+        assert fast.matched == slow.matched
+        assert abs(fast.score - slow.score) < 1e-9
+
+    # And a stored descriptor must find itself, or the agreement above is between two broken paths.
+    assert all(m.look_up_many(stored)[i].slot == i for i in range(len(stored))), (
+        "a stored exemplar does not match its own slot under the batched path")
+
+
+def test_an_EMPTY_memory_batches_to_no_matches_rather_than_slot_zero():
+    """The empty case has to be handled separately in the fast path: an all-zero dense matrix scores
+    0 against everything, and `argmax` of ties is slot 0 — a confident nearest neighbour to nothing.
+    """
+    m = ExemplarMemory(capacity=4, n_features=16, k=4, threshold=0.5)
+    out = m.look_up_many(descriptors(3, dim=16))
+    assert all(r.slot == -1 and not r.matched for r in out), f"{out}"
+
+
+def test_the_dense_cache_is_derived_and_INVALIDATED_not_persisted():
+    """It is not in the state block — a 4,000-slot cache is 3.5 MB of float64 and would triple the
+    record. So it must be rebuilt after anything that changes the slots, and the two paths agreeing
+    after an admit is what says it was."""
+    m = ExemplarMemory(capacity=4, n_features=16, k=4, threshold=0.5)
+    a, b = descriptors(2, dim=16, seed=9)
+    m.admit(a)
+    assert m.look_up_many([a])[0].slot == 0
+    slot_b = m.admit(b)
+    got = m.look_up_many([b])[0]
+    assert got.slot == slot_b, (
+        f"after admitting into slot {slot_b} the batched path returned {got.slot}; the dense cache "
+        "was not invalidated")
+    m.reset()
+    assert m.look_up_many([a])[0].slot == -1, "reset did not invalidate the cache"
+
+
+def test_a_NEGATIVELY_correlated_query_still_names_the_occupied_slot():
+    """**The case the empty-slot mask exists for**, and the only one that can see it.
+
+    An empty slot is an all-zero row in the dense matrix, so it scores exactly 0 — which beats any
+    *negative* score. Without masking, a query anti-correlated with everything stored would come back
+    pointing at a slot that holds nothing. A mutant removing the mask survived every other test here,
+    because they all produce positive matches.
+    """
+    m = ExemplarMemory(capacity=4, n_features=8, k=8, threshold=0.9)
+    stored = np.array([1.0, 1.0, 0.5, 0.0, -0.5, 0.0, 0.0, 0.0])
+    slot = m.admit(stored)
+    assert slot == 0 and m.occupied == 1
+
+    opposite = -stored
+    got = m.look_up_many([opposite])[0]
+    assert got.score < 0.0, f"the query is not anti-correlated: score {got.score:.3f}"
+    assert got.slot == slot, (
+        f"a negative-scoring query returned slot {got.slot}, which holds nothing — an empty slot "
+        "scores 0 and outranks a negative match unless it is masked out")
+    assert not got.matched
+    # And the loop path agrees, which is what says the two are the same function.
+    assert m.look_up(opposite).slot == slot

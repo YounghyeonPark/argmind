@@ -97,6 +97,15 @@ class ExemplarMemory:
         self._here = self._block[2 * ck + 2 * c:]
         self._idx[:] = -1.0                      # -1 marks an empty slot
         self._clock = 0
+        #: A dense `(capacity, n_features)` view of the sparse slots, rebuilt when they change.
+        #: **Derived, not state** -- it is not in the block, is not persisted, and `load_state`
+        #: invalidates it.
+        #:
+        #: It exists because `look_up` was a Python loop over slots, so its cost was linear in the
+        #: capacity: measured at 0.018 ms for 8 slots and **2.033 ms for 1,000**, which over 147
+        #: candidates is 299 ms a frame and 3.35 fps from the look-ups alone. A memory that is meant
+        #: to be effectively unbounded cannot be walked one slot at a time.
+        self._dense = None
 
     # ---- state -------------------------------------------------------------------------------
 
@@ -110,11 +119,13 @@ class ExemplarMemory:
         if arr.size != self.state_size:
             raise ValueError(f"state is {self.state_size} values, got {arr.size}")
         self._block[:] = arr
+        self._dense = None
 
     def reset(self) -> None:
         self._block[:] = 0.0
         self._idx[:] = -1.0
         self._clock = 0
+        self._dense = None
 
     @property
     def occupied(self) -> int:
@@ -158,6 +169,48 @@ class ExemplarMemory:
         vals = v[idx]
         n = float(np.linalg.norm(vals))
         return idx, (vals / n if n > 1e-12 else vals)
+
+    def _dense_slots(self) -> np.ndarray:
+        """The occupied slots as one dense matrix, cached. Rows for empty slots stay zero, which is
+        why `_occupied_mask` is consulted rather than relying on a zero row to lose."""
+        if self._dense is None:
+            d = np.zeros((self.capacity, self.n_features), dtype=np.float64)
+            live = self._idx[:, 0] >= 0
+            for s in np.flatnonzero(live):
+                d[s, self._idx[s].astype(np.int64)] = self._val[s].astype(np.float64)
+            self._dense = d
+        return self._dense
+
+    def look_up_many(self, descriptors) -> list:
+        """One `MatchReport` per descriptor, in **one matrix product** instead of a loop per slot.
+
+        This is the shape the parallel path needs and the only shape a large memory can afford: the
+        per-slot loop costs 2.033 ms at 1,000 slots, and 147 candidates of that is 299 ms a frame.
+
+        Ages are refreshed for every match, exactly as `look_up` does, so the two agree.
+        """
+        D = np.asarray(descriptors, dtype=np.float64)
+        if D.ndim != 2 or D.shape[1] != self.n_features:
+            raise ValueError(f"expected (n, {self.n_features}) descriptors, got {D.shape}")
+        sparse = np.zeros_like(D)
+        for i in range(D.shape[0]):
+            idx, vals = self._sparse(D[i])
+            sparse[i, idx] = vals
+
+        live = self._idx[:, 0] >= 0
+        if not live.any():
+            return [MatchReport(-1, 0.0, False)] * D.shape[0]
+        scores = sparse @ self._dense_slots().T             # (n, capacity)
+        scores[:, ~live] = -np.inf
+        best = np.argmax(scores, axis=1)
+        out = []
+        for i, s in enumerate(best):
+            score = float(scores[i, s])
+            matched = score >= self.threshold
+            if matched:
+                self._age[s] = self._clock
+            out.append(MatchReport(int(s), score, matched))
+        return out
 
     def look_up(self, descriptor) -> MatchReport:
         """Nearest stored exemplar by cosine similarity on the shared support.
@@ -209,6 +262,7 @@ class ExemplarMemory:
         #: the next thing evicted.
         self._spells[slot] = 1.0
         self._here[slot] = 1.0
+        self._dense = None
         return slot
 
     def observe(self, descriptor) -> MatchReport:

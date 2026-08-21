@@ -203,8 +203,9 @@ object returns, the returning object gets **its old slot back**. `demo/pointer.p
 runs it, so the region and the identity come from the library rather than from the classical
 labeller.
 
-**Two costs are the method's own and are recorded rather than tuned away.** It runs at **6.5 fps**
-(147 crop embeddings at 1.05 ms), and the obvious 21× — one whole-frame pass, descriptors pooled from
+**Two costs are the method's own and are recorded rather than tuned away.** It runs at **8.4 fps** on the demo's own
+plan (147 crop embeddings at 0.763 ms; an earlier **6.5 fps was measured on the test fixture's
+smaller plan and presented as the demo's** — corrected 2026-08-20), and the obvious 21× — one whole-frame pass, descriptors pooled from
 the feature map — **loses the identity**: a pooled region can only be centred to the map's 4-pixel
 stride and the descriptor needs 2, so the speedup and the precision come from the same place. And it
 attends to **one region per frame**, so more than one object is refused rather than approximated.

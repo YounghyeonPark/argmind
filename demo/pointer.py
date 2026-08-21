@@ -59,7 +59,14 @@ MAP_H, MAP_W = 9, 12
 #: across an absence holds at a 2-pixel effective centre and is lost at 8, and a coarse pass with
 #: local refinement reaches it at 147 crops a frame instead of 925.
 RECOGNISE_CROP, RECOGNISE_STEP = 24, 8
-RECOGNISE_SLOTS, RECOGNISE_K = 16, 16
+#: **Long-term memory is meant to be effectively unbounded**, which is the owner's requirement and
+#: the right one: human long-term visual memory holds thousands of objects, while the well-known ~4
+#: belongs to *simultaneous tracking* — a different quantity, and one this layer does not limit yet.
+#:
+#: 256 is not a cognitive figure, it is what the arithmetic allows here: 35 values a slot at k=16, so
+#: 256 slots is **35 KB** at f4 and the batched look-up costs 1.2 ms against 1.0 ms at 8 slots. The
+#: 8 KB core tier caps out near 32 slots, and that is a memory budget rather than a design choice.
+RECOGNISE_SLOTS, RECOGNISE_K = 256, 16
 #: A cosine similarity, and the margin on rarity below which nothing is admitted. Both measured
 #: rather than guessed: `median - min` of the candidates' mean similarity is 0.0007-0.0011 on an
 #: empty wall against 0.126-0.143 with an object present.
