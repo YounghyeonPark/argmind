@@ -662,3 +662,53 @@ def test_the_recogniser_state_is_CARRIED_out_of_the_loop():
     assert "recognise" in assigned, (
         "main() no longer assigns state['recognise'], so the status line has nothing to show and "
         "the window goes back to being just the camera")
+
+
+def test_the_demo_recognises_MORE_THAN_ONE_object_and_orders_them_by_IDENTITY():
+    """**The owner's objection, wired.** The locator used to refuse `--objects 2` on the grounds that
+    selecting twice needed an unmeasured rule. It is measured now, so the refusal is gone.
+
+    And the ordering is the part that matters. Every classical locator here returns centres
+    leftmost-first, because that is a function of the current frame and therefore learnable. This one
+    orders by **slot**, so output pair *i* is always the same object — which is what the memory is
+    for, and what "leftmost" can never give.
+    """
+    from demo.label_sources import RecogniseLocator
+    from demo.pointer import build_recogniser, status_lines
+
+    det = build_recogniser(2)
+    assert det.layer.emit == "presence", "the demo is back on the one-region-per-frame layer"
+    assert det.layer.n_outputs == det.layer.memory.capacity, (
+        "the layer no longer emits one score per slot, so a head above it cannot see two objects")
+
+    # A partial frame teaches nothing: an absent object has no location and inventing one is the
+    # "a point cannot stand in for a field" error a level up.
+    class OnePresent:
+        emit = "presence"
+        last_slot, last_recognised = 0, True
+        last_present = [(0, 0.9, (0.3, 0.4))]
+
+        def features(self, frame):
+            return None
+    partial = RecogniseLocator(OnePresent(), 2)
+    assert partial(None) is None, (
+        "a frame with only slot 0 present produced two labels; the missing one would be invented")
+
+    class BothPresent(OnePresent):
+        last_present = [(1, 0.95, (0.7, 0.6)), (0, 0.90, (0.3, 0.4))]
+    both = RecogniseLocator(BothPresent(), 2)
+    out = both(None)
+    assert out == [(0.3, 0.4), (0.7, 0.6)], (
+        f"got {out}: the centres must come out in SLOT order, not in score or scan order — the slot "
+        "is the identity and the head's output pairs are fixed to it")
+
+    line = status_lines(dict(remember=False, vocab=0, source="backbone", how="recognise",
+                            identify=False, objects=2, n_auto=0, n_taught=0, updates=0, fps=6.5,
+                            drift=1.0, residual=0.1, frozen=False, frozen_by=(), learning=True,
+                            teach="auto",
+                            recognise=dict(slot=1, recognised=True, occupied=2, capacity=16,
+                                           present=[(0, 0.97, (0.3, 0.4)),
+                                                    (1, 0.93, (0.7, 0.6))])))[3]
+    assert "2 RECOGNISED" in line and "#0" in line and "#1" in line, (
+        f"the status line reads {line!r}; with two objects present it must say so, or the screen "
+        "looks serial while the mechanism is not")

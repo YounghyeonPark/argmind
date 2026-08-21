@@ -745,7 +745,7 @@ def build_recogniser(n_objects: int = 1):
                          ExemplarMemory(RECOGNISE_SLOTS, crop_bb.n_outputs, RECOGNISE_K,
                                         threshold=RECOGNISE_THRESHOLD, dtype="f4"),
                          IN_SHAPE, centres, admit_margin=RECOGNISE_MARGIN,
-                         refine=(RECOGNISE_STEP, 2)),
+                         refine=(RECOGNISE_STEP, 2), emit="presence"),
         n_objects)
 
 
@@ -923,13 +923,17 @@ def draw(cv2, frame, state):
         #: measured property and confusing if only its centre is shown.
         known = rec["slot"] >= 0
         colour = (0, 220, 0) if rec["recognised"] else ((0, 200, 255) if known else (120, 120, 120))
-        if rec["centre"] is not None and known:
-            cw = rec["crop"] * w // IN_SHAPE[1]
-            ch = rec["crop"] * h // IN_SHAPE[0]
-            cx, cy = int(rec["centre"][0] * w), int(rec["centre"][1] * h)
+        cw = rec["crop"] * w // IN_SHAPE[1]
+        ch = rec["crop"] * h // IN_SHAPE[0]
+        #: **Every slot present, not only the strongest.** Drawing one box while the layer reports
+        #: several would put the display back to looking serial when the mechanism is not.
+        for slot, score, (fx, fy) in (rec.get("present") or []):
+            cx, cy = int(fx * w), int(fy * h)
             cv2.rectangle(frame, (cx - cw // 2, cy - ch // 2), (cx + cw // 2, cy + ch // 2),
                           colour, 2)
             cv2.drawMarker(frame, (cx, cy), colour, cv2.MARKER_CROSS, 10, 1)
+            cv2.putText(frame, f"#{slot} {score:.2f}", (cx - cw // 2 + 3, cy - ch // 2 - 5),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.42, colour, 1, cv2.LINE_AA)
 
     for tx, ty in state["taught_points"][-8:]:
         cv2.drawMarker(frame, (int(tx * w), int(ty * h)), (255, 180, 0),
@@ -991,7 +995,11 @@ def status_lines(state):
     #: the slot, whether it was recognised or freshly admitted, and how full the memory is were all
     #: invisible, so nothing distinguished this mode from any other. Found by running it, which is
     #: the third defect in this demo found that way and the third that lived in `main()`.
-    if rec["slot"] < 0:
+    n_present = len(rec.get("present") or [])
+    if n_present > 1:
+        slots = ", ".join(f"#{sl}" for sl, _sc, _c in rec["present"])
+        seen = f"{n_present} RECOGNISED: {slots}"
+    elif rec["slot"] < 0:
         seen = "nothing here -- stored nothing"
     elif rec["recognised"]:
         seen = f"slot {rec['slot']} RECOGNISED"
@@ -1345,6 +1353,7 @@ def main(argv=None):
             #: recognised or freshly admitted, and where it looked were all invisible, so nothing on
             #: screen distinguished this mode from any other. Found by running it.
             state["recognise"] = {
+                "present": [(sl, sc, tuple(c)) for sl, sc, c in detector.last_present],
                 "slot": detector.last_slot,
                 "recognised": detector.last_recognised,
                 "centre": detector.layer.last_centre,

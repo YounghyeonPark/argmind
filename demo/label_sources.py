@@ -1415,15 +1415,27 @@ class RecogniseLocator:
     than approximated by attending to the same place twice.
     """
 
-    __slots__ = ("layer", "labels", "last_slot", "last_recognised")
+    __slots__ = ("layer", "labels", "last_slot", "last_recognised", "n_objects", "last_present")
 
     def __init__(self, layer, n_objects: int = 1):
-        if n_objects != 1:
+        #: **More than one object is supported now**, and the earlier refusal was wrong. It read
+        #: "this one selects, and selecting twice needs a rule for suppressing the first choice that
+        #: has not been measured" — the rule is measured: candidates near an already-matched slot are
+        #: accounted for, and admission runs on the remainder. `emit="presence"` recognises every
+        #: remembered slot in one pass.
+        #:
+        #: **Ordered by slot, not by position.** Every classical locator here returns centres
+        #: leftmost-first, because that is a function of the current frame and so is learnable. This
+        #: one can do better: the slot *is* the identity, so output pair `i` is always slot `i` and
+        #: stays with the same object across an absence. That is the whole point of the memory.
+        if n_objects < 1:
+            raise ValueError(f"n_objects must be at least 1, got {n_objects}")
+        if getattr(layer, "emit", "descriptor") != "presence" and n_objects != 1:
             raise ValueError(
-                f"RecogniseLocator attends to one region per frame, so it cannot supply "
-                f"{n_objects} labels. The classical locators return k centres because they "
-                "threshold a whole map; this one selects, and selecting twice needs a rule for "
-                "suppressing the first choice that has not been measured")
+                f"a descriptor-emitting layer attends to one region per frame and cannot supply "
+                f"{n_objects} labels; build the layer with emit='presence'")
+        self.n_objects = int(n_objects)
+        self.last_present = []
         self.layer = layer
         #: Declared so `detector.labels` reads as absent rather than raising. This locator produces
         #: a point, not a segmentation, so `--segments` has nothing to draw from it.
@@ -1440,6 +1452,17 @@ class RecogniseLocator:
         self.layer.features(frame)
         self.last_slot = self.layer.last_slot
         self.last_recognised = self.layer.last_recognised
+        self.last_present = list(self.layer.last_present)
         if self.last_slot < 0:
             return None
-        return [tuple(self.layer.last_centre)]
+        if self.n_objects == 1:
+            return [tuple(self.layer.last_centre)]
+
+        #: `None` until every requested slot is present. A partial frame would teach the head a
+        #: position for a slot that is not there, which is the "a point cannot stand in for a field"
+        #: error one level up: an absent object has no location, and inventing one is worse than
+        #: pushing nothing.
+        where = {s: c for s, _sc, c in self.last_present}
+        if not all(i in where for i in range(self.n_objects)):
+            return None
+        return [tuple(where[i]) for i in range(self.n_objects)]

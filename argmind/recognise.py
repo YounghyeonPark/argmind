@@ -45,7 +45,8 @@ class RecognitionLayer:
     """
 
     def __init__(self, backbone: Backbone, memory: ExemplarMemory, in_shape, centres, *,
-                 admit_margin: float, refine: tuple[int, int] | None = None):
+                 admit_margin: float, refine: tuple[int, int] | None = None,
+                 emit: str = "descriptor"):
         if backbone.n_outputs != memory.n_features:
             raise ValueError(
                 f"the backbone emits {backbone.n_outputs} features and the memory stores "
@@ -88,13 +89,42 @@ class RecognitionLayer:
         self.refine = None if refine is None else (int(refine[0]), int(refine[1]))
         if self.refine is not None and (self.refine[0] < 1 or self.refine[1] < 1):
             raise ValueError(f"refine is (span, step) in pixels and both must be >= 1, got {refine}")
-        self.n_outputs = backbone.n_outputs
+        #: What the layer emits, and it is an architectural choice rather than a formatting one.
+        #:
+        #: `"descriptor"` returns the attended crop's descriptor: **one region per frame**, which is
+        #: what the first version did. The owner's objection is the right one — nothing about vision
+        #: says only one thing may be recognised at a time. Foveal *selection* is largely serial;
+        #: *recognition* is not, and a viewer knows a chair, a bookshelf and a face are present
+        #: without visiting each in turn.
+        #:
+        #: The reason it was serial was not a principle. `features()` must emit a fixed-width vector
+        #: for the head above, and one descriptor is fixed width — so an implementation constraint
+        #: was allowed to decide the architecture. `"presence"` fixes it at no cost: the scan already
+        #: computes every candidate's descriptor and looks each one up, and the serial version threw
+        #: all but the best away. A look-up is 0.026 ms, so nothing was being saved.
+        #:
+        #: `"presence"` returns **one score per memory slot** — the best match found anywhere in the
+        #: frame for that exemplar, zero where the slot is empty or unmatched. Fixed width by
+        #: construction, and it is exactly what `ExemplarMemory.n_outputs = capacity` anticipated.
+        if emit not in ("descriptor", "presence"):
+            raise ValueError(f"emit must be 'descriptor' or 'presence', got {emit!r}")
+        self.emit = emit
+        #: How far from a matched centre a candidate counts as "already accounted for". One crop
+        #: side, in frame fractions: two objects closer than that share a crop and cannot be
+        #: separated by this mechanism anyway.
+        self._claim_x = backbone.in_shape[1] / float(in_shape[1])
+        self._claim_y = backbone.in_shape[0] / float(in_shape[0])
+        self.n_outputs = backbone.n_outputs if emit == "descriptor" else memory.capacity
         self.dtype = np.dtype(backbone.dtype)
 
         #: What the last forward pass did, for a caller that wants to draw or log it.
         self.last_centre = None
         self.last_slot = -1
         self.last_recognised = False
+        #: `[(slot, score, (cx, cy)), ...]` for every slot recognised this frame, strongest first.
+        #: Empty when nothing was. Under `emit="descriptor"` it holds at most one entry, which is
+        #: the whole difference between the two modes made visible to a caller.
+        self.last_present: list = []
 
         n_bb = int(np.asarray(backbone.state).size)
         self._split = n_bb
@@ -156,8 +186,25 @@ class RecognitionLayer:
                 for x in range(int(cx * w) - span, int(cx * w) + span + 1, step)
                 if ch // 2 <= y <= h - ch // 2 and cw // 2 <= x <= w - cw // 2]
 
+    def _presence(self, described, centres) -> np.ndarray:
+        """Best match per slot, over the whole frame. One pass, every slot, in parallel."""
+        out = np.zeros(self.memory.capacity, dtype=np.float64)
+        where: dict = {}
+        for j, d in enumerate(described):
+            report = self.memory.look_up(d)
+            if report.slot >= 0 and report.matched and report.score > out[report.slot]:
+                out[report.slot] = report.score
+                where[report.slot] = centres[j]
+        self.last_present = sorted(
+            ((s, float(out[s]), where[s]) for s in where), key=lambda t: -t[1])
+        return out
+
     def features(self, image) -> np.ndarray:
-        """Look, then either recognise or admit. Returns the attended crop's descriptor."""
+        """Look, then either recognise or admit.
+
+        Returns the attended crop's descriptor under `emit="descriptor"`, or one score per memory
+        slot under `emit="presence"` — see the note on `emit`.
+        """
         centres = self.centres
         described = self._describe(image)
 
@@ -172,6 +219,38 @@ class RecognitionLayer:
                 finally:
                     self.centres = keep
                 centres = local
+
+        if self.emit == "presence":
+            scores = self._presence(described, centres)
+            self.last_recognised = bool(self.last_present)
+
+            #: **Admission has to be parallel too**, or the memory can only grow while the scene is
+            #: empty of everything it already knows. Measured before this: with a disc in memory and
+            #: a disc *and* a bar in the frame, the bar was never admitted -- the early return fired
+            #: on the disc's match and nothing else was considered. Recognising in parallel and
+            #: admitting serially is still a one-object system.
+            #:
+            #: The rule is "explain the scene, then remember what is left over": candidates near a
+            #: slot already matched are accounted for, and the rarity gate runs on the remainder.
+            claimed = [c for _s, _sc, c in self.last_present]
+            free = [j for j, c in enumerate(centres)
+                    if all(abs(c[0] - q[0]) > self._claim_x or abs(c[1] - q[1]) > self._claim_y
+                           for q in claimed)]
+            if free and self.memory.occupied < self.memory.capacity:
+                sub = described[free]
+                S = sub @ sub.T
+                mean_sim = (S.sum(axis=1) - np.diag(S)) / max(len(sub) - 1, 1)
+                k = int(np.argmin(mean_sim))
+                if float(np.median(mean_sim) - mean_sim[k]) >= self.admit_margin:
+                    slot = self.memory.admit(sub[k])
+                    scores[slot] = 1.0
+                    self.last_present.append((slot, 1.0, centres[free[k]]))
+                    self.last_present.sort(key=lambda t: -t[1])
+            if self.last_present:
+                self.last_slot, _s, self.last_centre = self.last_present[0]
+            else:
+                self.last_slot, self.last_centre = -1, centres[0]
+            return scores.astype(self.dtype)
 
         best_j, best_score = -1, -np.inf
         if self.memory.occupied:
@@ -198,6 +277,8 @@ class RecognitionLayer:
                 self.last_slot = -1
 
         self.last_centre = centres[best_j]
+        self.last_present = ([(self.last_slot, float(max(best_score, 0.0)), self.last_centre)]
+                             if self.last_slot >= 0 and self.last_recognised else [])
         return described[best_j].astype(self.dtype)
 
     def backward(self, image, d_features):

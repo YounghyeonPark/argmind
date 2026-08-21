@@ -273,3 +273,97 @@ def test_the_gate_fires_on_every_REAL_frame_and_no_fixture_here_can_show_it():
         "that these backgrounds are too uniform to stand in for a room would then be weaker")
 
 
+
+
+def _presence_layer(step=4, capacity=8, threshold=0.85, seed=23):
+    from argmind.backbone import Backbone
+    bb = Backbone(PLAN, (CROP, CROP, 3), dtype="f8", seed=seed, pool=POOL)
+    mem = ExemplarMemory(capacity, bb.n_outputs, 16, threshold=threshold)
+    return RecognitionLayer(bb, mem, (H, W, 3), grid(step), admit_margin=0.02, emit="presence")
+
+
+def test_MORE_THAN_ONE_object_is_recognised_in_the_SAME_frame():
+    """**The owner's objection, answered.** *"인식을 한번에 한개씩만 함? … 여러개를 동시에 인지해야
+    하는거 아닌가?"* — correct, and the serial version was not a principle.
+
+    `features()` must emit a fixed-width vector for the head above, and one descriptor is fixed
+    width, so an implementation constraint was allowed to decide the architecture. `emit="presence"`
+    returns one score per memory slot instead — parallel by construction, and exactly what
+    `ExemplarMemory.n_outputs = capacity` had already anticipated.
+
+    Measured: a disc at (0.30, 0.40) and a bar at (0.70, 0.62) are both reported, at (0.33, 0.44)
+    and (0.71, 0.61), from the third pass onward.
+    """
+    L = _presence_layer()
+    assert L.n_outputs == L.memory.capacity, (
+        "presence mode must emit one score per slot; that is what makes it fixed width")
+    img = render([("disc", 0.30, 0.40), ("bar", 0.70, 0.62)], seed=1, texture="none")
+    for _ in range(4):
+        scores = L.features(img)
+
+    assert len(L.last_present) >= 2, (
+        f"only {len(L.last_present)} object(s) reported with two in the frame — recognition is "
+        "still serial")
+    assert int((np.asarray(scores) > 0).sum()) >= 2, (
+        "the emitted vector marks fewer than two slots present, so a head above it cannot learn "
+        "about both")
+    seen = {s for s, _sc, _c in L.last_present}
+    assert len(seen) >= 2, f"two reports but only slots {seen}"
+
+    # **Both must be RECOGNISED, not one recognised and one freshly admitted.** A mutant truncating
+    # the presence list to its strongest entry survived until this existed: parallel admission then
+    # refilled the list from the unexplained region, so the length recovered while the memory kept
+    # growing. Occupancy holding steady is what distinguishes the two.
+    settled = L.memory.occupied
+    for _ in range(4):
+        L.features(img)
+        assert len(L.last_present) >= 2, "a later pass dropped back to one object"
+    assert L.memory.occupied == settled == 2, (
+        f"occupancy went {settled} -> {L.memory.occupied} on frames with nothing new in them; the "
+        "system is re-admitting what it already knows")
+    for _s, _sc, (cx, cy) in L.last_present:
+        assert (abs(cx - 0.30) < 0.12 and abs(cy - 0.40) < 0.12) or \
+               (abs(cx - 0.70) < 0.12 and abs(cy - 0.62) < 0.12), (
+            f"a reported centre ({cx:.2f}, {cy:.2f}) is at neither object")
+
+
+def test_the_DESCRIPTOR_mode_reports_at_most_one_and_that_is_the_contrast():
+    """Either number alone says nothing; the difference on the same frame is the finding."""
+    serial = layer(step=4)
+    parallel = _presence_layer(step=4)
+    img = render([("disc", 0.30, 0.40), ("bar", 0.70, 0.62)], seed=1, texture="none")
+    for _ in range(4):
+        serial.features(img)
+        parallel.features(img)
+    assert len(serial.last_present) <= 1, (
+        f"descriptor mode reported {len(serial.last_present)} objects; if it became parallel too, "
+        "the two modes no longer differ and this file's argument should change")
+    assert len(parallel.last_present) > len(serial.last_present)
+
+
+def test_ADMISSION_is_parallel_too_or_the_memory_cannot_grow_while_anything_is_known():
+    """**The half that was still serial after the first fix**, and it is the deeper one.
+
+    With a disc in memory and a disc *and* a bar in the frame, the bar was never admitted: the
+    recognition path returned as soon as the disc matched. Recognising in parallel and admitting
+    serially is still a one-object system. The rule is "explain the scene, then remember what is
+    left over" — candidates near an already-matched slot are accounted for, and the rarity gate runs
+    on the remainder.
+    """
+    L = _presence_layer()
+    L.features(render([("disc", 0.30, 0.40)], seed=1, texture="none"))
+    assert L.memory.occupied == 1, "the first object was not admitted"
+
+    both = render([("disc", 0.30, 0.40), ("bar", 0.70, 0.62)], seed=1, texture="none")
+    L.features(both)
+    assert L.memory.occupied == 2, (
+        f"the memory holds {L.memory.occupied} after a second object appeared beside a known one — "
+        "admission is still gated on nothing being recognised")
+
+
+def test_an_unknown_emit_mode_is_refused():
+    from argmind.backbone import Backbone
+    bb = Backbone(PLAN, (CROP, CROP, 3), dtype="f8", seed=0, pool=POOL)
+    with pytest.raises(ValueError, match="emit must be"):
+        RecognitionLayer(bb, ExemplarMemory(4, bb.n_outputs, 16, threshold=0.8), (H, W, 3),
+                         grid(12), admit_margin=0.02, emit="both")

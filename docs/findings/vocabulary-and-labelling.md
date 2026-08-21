@@ -995,3 +995,42 @@ stay under the gate, and says to update it deliberately if they ever stop.
 
 **What admission needs is a criterion about the object, not about the frame** — recurrence rather
 than momentary distinctness. That is not built.
+
+### Recognition is parallel now — the serial version was an implementation constraint, 2026-08-20
+
+Owner's objection after watching the demo: *"인지를 한번에 한개씩만 함? 본인은 시각정보 판단할때
+한개만 봄? 여러개를 동시에 인지해야 하는거 아닌가?"* Correct on every count.
+
+**The reason it was serial was not a principle.** `features()` must emit a fixed-width vector for the
+head above, and one descriptor is fixed width — so an implementation constraint was allowed to decide
+the architecture. Foveal *selection* is largely serial; *recognition* is not, and a viewer knows a
+chair, a bookshelf and a face are present without visiting each in turn.
+
+**And it cost nothing to fix.** The scan already computed every candidate's descriptor and looked
+each one up; the serial version threw all but the best away. A look-up is 0.026 ms.
+`emit="presence"` returns **one score per memory slot** instead — exactly what
+`ExemplarMemory.n_outputs = capacity` had anticipated. Measured: a disc at (0.30, 0.40) and a bar at
+(0.70, 0.62) are both reported, at (0.33, 0.44) and (0.71, 0.61), from the third pass onward.
+
+**The deeper half was still serial after the first fix, and a measurement caught it.** With a disc in
+memory and a disc *and* a bar in the frame, the bar was never admitted — the recognition path
+returned as soon as the disc matched. **Recognising in parallel and admitting serially is still a
+one-object system.** The rule is *explain the scene, then remember what is left over*: candidates
+within one crop side of an already-matched centre are accounted for, and the rarity gate runs on the
+remainder.
+
+**The demo orders its outputs by slot, not by position**, and that is the point. Every classical
+locator here returns centres leftmost-first because that is a function of the current frame and
+therefore learnable; this one can do better, because the slot *is* the identity — output pair *i* is
+always the same object, across an absence. A frame where only some requested slots are present
+teaches **nothing**: an absent object has no location and inventing one is the "a point cannot stand
+in for a field" error a level up.
+
+**The earlier refusal of `--objects 2` is withdrawn.** It read "selecting twice needs a rule for
+suppressing the first choice that has not been measured". The rule is measured now.
+
+Five mutants on the layer, two on the locator. One survived the first pass and needed the test
+strengthened: truncating the presence list to its strongest entry was **masked by parallel
+admission**, which refilled the list from the unexplained region while the memory kept growing.
+Occupancy holding steady across frames with nothing new is what distinguishes recognising two things
+from recognising one and admitting another.
