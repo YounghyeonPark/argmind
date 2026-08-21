@@ -891,3 +891,26 @@ other.
 **So the cost is intrinsic to the method as it stands, not an implementation inefficiency.** Saying
 that is worth more than a tuned number: a cheaper descriptor, or one less sensitive to centring, is
 what would change it — not a faster loop.
+
+### Running it found the wiring broken, for the second time this session — 2026-08-20
+
+`--locate recognise` crashed on launch: `NameError: name 'RecognitionLayer' is not defined`. The
+imports were never added, and **three checks passed anyway**:
+
+- `import demo.pointer` — the names are only referenced inside `main()`, so nothing touches them
+- the demo suite — my test for the locator **built the layer itself** rather than calling `main()`'s
+  construction
+- the full suite, for the same reason
+
+**The proximate cause was a guard against double-editing that prevented editing at all.** The script
+adding the import was conditioned on `if "ExemplarMemory" not in s`, and that name was already in
+the file — in the code that *needed* the import. A safety check on the wrong string.
+
+**The real cause is the one this file has now recorded twice.** `demo/test_pointer.py`'s harness
+re-implemented the assembly instead of calling it, exactly as it did for `taught.push` before
+`teach_from_click` was hoisted. A harness that rebuilds the thing it is checking cannot see the thing
+break. The construction is now `build_recogniser()` at module level — the **ninth** block moved out
+of this `main()` for that reason — and the test calls it. Deleting the import fails the test.
+
+**And this is the second time running the demo found a defect no fixture visited**, after the
+`--output map` mouse-teaching crash. Both were in `main()`; both were found by launching it.

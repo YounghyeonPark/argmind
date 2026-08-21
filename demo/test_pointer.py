@@ -543,23 +543,14 @@ def test_locate_recognise_is_argmind_doing_the_perception():
     import numpy as np
 
     import demo.pointer as P
-    from argmind.backbone import Backbone
-    from argmind.memory import ExemplarMemory
-    from argmind.recognise import RecognitionLayer
-    from demo.label_sources import RecogniseLocator
+    from demo.pointer import build_recogniser
 
+    # **Through the shipped construction, not a re-implementation of it.** The first version of this
+    # test built the layer itself, so it passed while `main()` crashed with
+    # `NameError: name 'RecognitionLayer' is not defined` -- the imports had never been added, and
+    # `import demo.pointer` does not touch them because they are only referenced inside `main()`.
     h, w = P.IN_SHAPE[0], P.IN_SHAPE[1]
-    half = P.RECOGNISE_CROP // 2
-    crop_bb = Backbone(P.PLAN, (P.RECOGNISE_CROP, P.RECOGNISE_CROP, 3), dtype="f4", seed=1,
-                       pool=P.POOL)
-    centres = [(x / w, y / h) for y in range(half, h - half + 1, P.RECOGNISE_STEP)
-               for x in range(half, w - half + 1, P.RECOGNISE_STEP)]
-    det = RecogniseLocator(
-        RecognitionLayer(crop_bb,
-                         ExemplarMemory(P.RECOGNISE_SLOTS, crop_bb.n_outputs, P.RECOGNISE_K,
-                                        threshold=P.RECOGNISE_THRESHOLD, dtype="f4"),
-                         P.IN_SHAPE, centres, admit_margin=P.RECOGNISE_MARGIN,
-                         refine=(P.RECOGNISE_STEP, 2)), 1)
+    det = build_recogniser(1)
 
     yy, xx = np.mgrid[0:h, 0:w]
 

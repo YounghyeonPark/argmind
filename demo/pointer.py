@@ -22,6 +22,8 @@ import numpy as np
 from argmind.adapt import NormalisedLeastMeanSquares
 from argmind.align import Aligner
 from argmind.backbone import Backbone
+from argmind.memory import ExemplarMemory
+from argmind.recognise import RecognitionLayer
 from argmind.guard import Bound, Divergence, Guard
 from argmind.persist import Store, fingerprint_of
 from argmind.pipeline import FrameMap, Pipeline
@@ -722,6 +724,31 @@ def segment_image(labels, ids=(), scale=6):
     return out
 
 
+def build_recogniser(n_objects: int = 1):
+    """`main()`'s own construction of the recognising locator, hoisted so a test can reach it.
+
+    The **ninth** block in this `main()` to be moved out for that reason, and this one was found by
+    the demo crashing with `NameError: name 'RecognitionLayer' is not defined` — the imports were
+    never added, `import demo.pointer` passed because the names are only referenced inside `main()`,
+    and the test for `--locate recognise` built the layer itself instead of calling this. That is the
+    same "a harness that re-implements the assembly cannot see the assembly break" defect this file
+    already fixed once for `teach_from_click`.
+    """
+    crop_bb = Backbone(PLAN, (RECOGNISE_CROP, RECOGNISE_CROP, 3), dtype="f4", seed=1, pool=POOL)
+    h, w = IN_SHAPE[0], IN_SHAPE[1]
+    half = RECOGNISE_CROP // 2
+    centres = [(x / w, y / h)
+               for y in range(half, h - half + 1, RECOGNISE_STEP)
+               for x in range(half, w - half + 1, RECOGNISE_STEP)]
+    return RecogniseLocator(
+        RecognitionLayer(crop_bb,
+                         ExemplarMemory(RECOGNISE_SLOTS, crop_bb.n_outputs, RECOGNISE_K,
+                                        threshold=RECOGNISE_THRESHOLD, dtype="f4"),
+                         IN_SHAPE, centres, admit_margin=RECOGNISE_MARGIN,
+                         refine=(RECOGNISE_STEP, 2)),
+        n_objects)
+
+
 def build(objects: int = 1, source: str = "backbone", *, colour: bool = True,
           feedback: bool = False, output: str = "points"):
     """The whole composition, and every piece of it is load-bearing here.
@@ -1177,19 +1204,7 @@ def main(argv=None):
         #: the wiring's: one whole-frame pass would be 21x cheaper and loses the identity, because a
         #: region pooled from the feature map can only be centred to 4 pixels and the descriptor
         #: needs 2.
-        crop_bb = Backbone(PLAN, (RECOGNISE_CROP, RECOGNISE_CROP, 3), dtype="f4", seed=1, pool=POOL)
-        h, w = IN_SHAPE[0], IN_SHAPE[1]
-        half = RECOGNISE_CROP // 2
-        centres = [(x / w, y / h)
-                   for y in range(half, h - half + 1, RECOGNISE_STEP)
-                   for x in range(half, w - half + 1, RECOGNISE_STEP)]
-        detector = RecogniseLocator(
-            RecognitionLayer(crop_bb,
-                             ExemplarMemory(RECOGNISE_SLOTS, crop_bb.n_outputs, RECOGNISE_K,
-                                            threshold=RECOGNISE_THRESHOLD, dtype="f4"),
-                             IN_SHAPE, centres, admit_margin=RECOGNISE_MARGIN,
-                             refine=(RECOGNISE_STEP, 2)),
-            n_objects)
+        detector = build_recogniser(n_objects)
     elif how == "texture":
         # Every frame produces labels, so there is no cadence and nothing to be blind about --
         # which is the other half of dropping the background model. `k` is objects + 1 because
