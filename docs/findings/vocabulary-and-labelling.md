@@ -914,3 +914,36 @@ of this `main()` for that reason — and the test calls it. Deleting the import 
 
 **And this is the second time running the demo found a defect no fixture visited**, after the
 `--output map` mouse-teaching crash. Both were in `main()`; both were found by launching it.
+
+### The descriptor's centre sensitivity is a frontier, not a bug — 2026-08-20
+
+The 6.5 fps and the missing 21× have one cause: the descriptor tolerates a 2-pixel shift and the
+feature map's stride is 4. So — is there a descriptor that tolerates 4 and still tells shapes apart?
+Criteria fixed first, from what the method needs: cosine **≥ 0.97** at a 4-pixel shift, and a
+same-versus-cross-shape margin **≥ 0.10**.
+
+| descriptor | dims | 2 px | 4 px | 6 px | margin |
+|---|---|---|---|---|---|
+| global pool (1×1) | 12 | 0.9993 | **0.9988** | 0.9879 | **+0.0040** |
+| hard 2×2 | 48 | 0.9834 | 0.9484 | 0.9331 | +0.0071 |
+| **hard 3×3 (in use)** | 108 | 0.9723 | 0.9109 | 0.8598 | **+0.0989** |
+| soft 2×2 | 48 | 0.9884 | 0.9646 | 0.9430 | +0.0071 |
+| soft 3×3 | 108 | 0.9810 | 0.9427 | 0.9081 | +0.0353 |
+| soft 4×4 | 192 | 0.9691 | 0.9161 | 0.8732 | +0.0619 |
+
+**Nothing reaches the corner.** Global pooling wins invariance outright and cannot tell a disc from a
+bar — margin 0.004. The grid in use discriminates and fails invariance.
+
+**And soft binning — the standard remedy for exactly this quantisation — does not break the
+tension.** It moves along the same frontier and slightly worse: soft 4×4 matches hard 3×3's
+invariance (0.9161 against 0.9109) with a smaller margin (0.0619 against 0.0989). So the trade is a
+property of spatial pooling *as such*, not of the binning's hardness: discrimination here **comes
+from** encoding where inside the crop the content sits, which is precisely what a shift disturbs.
+
+**Which closes the loop on the whole line of inquiry.** The 147 crops a frame are buying *explicit
+centring*, and centring is the only thing measured that gets both. Escaping the frontier needs a
+descriptor outside this family — oriented-gradient histograms, max instead of mean within cells, a
+learned invariance — and none of those has been measured here.
+
+`tests/test_descriptor_frontier.py`, 1.8 s. Four mutants caught, including lowering the criteria
+until something passes, and the margin quietly comparing an object with itself.

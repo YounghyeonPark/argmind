@@ -209,6 +209,15 @@ the feature map — **loses the identity**: a pooled region can only be centred 
 stride and the descriptor needs 2, so the speedup and the precision come from the same place. And it
 attends to **one region per frame**, so more than one object is refused rather than approximated.
 
+**And the sensitivity is a frontier, not a bug (2026-08-20).** Asked whether a descriptor exists that
+tolerates the map's 4-pixel stride *and* still separates shapes: **none of six does.** Global pooling
+is invariant at 0.9988 and cannot tell a disc from a bar (margin 0.004); the 3×3 grid in use
+discriminates at 0.099 and is invariant only to 0.911. **Soft bilinear binning, the standard remedy
+for this quantisation, does not escape it** — soft 4×4 matches hard 3×3's invariance with a smaller
+margin. Discrimination *comes from* encoding where inside the crop the content sits, which is what a
+shift disturbs. So the 147 crops buy explicit centring, and centring is the only thing measured that
+gets both.
+
 **Open numbers nobody has**: backward-pass throughput on an M55; whether fp32 holds past ten million
 updates on a non-stationary target; and why the map head's two harnesses disagree on free-running
 IoU — **measured 2026-08-17 to be `MAP_DROPOUT = 0.15`**, which costs 0.359 → 0.135 here and
