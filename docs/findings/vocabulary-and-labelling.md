@@ -972,3 +972,26 @@ recorded once: the test searched `main()` for the string `"recognise"`, which al
 `elif how == "recognise":`, so a mutant that stopped assigning the state passed. Checked through the
 **AST** now — an `ast.Assign` whose target is `state["recognise"]` — exactly as the `learn_features`
 check had to be after it was fooled by a help string.
+
+### The admission gate fires on every real frame, and no fixture here can show it — 2026-08-20
+
+The owner ran the demo and it read **`memory 13/16`** after ~1,900 frames, against one or two
+exemplars on the synthetic scene. Measured on 40 real camera frames: `median - min` of the
+candidates' mean similarity is **0.235–0.306**, above the 0.02 gate on **100%** of them — and above
+even the synthetic *object present* range of 0.126–0.143.
+
+**The threshold is not wrong.** It does exactly what it was measured to do. The **design assumption**
+is wrong: it treats "the frame is featureless" as "there is nothing worth remembering", and a real
+room is never featureless. A chair, a bookshelf, a window and a face are all genuinely unlike their
+surroundings, so rarity fires every frame — correctly.
+
+**And no fixture in this repository can demonstrate that.** Measured: synthetic clutter reads
+**0.0070** and stripes **0.0092**, both *under* the gate, against a real scene's 0.235. The textured
+backgrounds here are two orders of magnitude too uniform to stand in for a room — they become
+background statistically, which `tests/test_bootstrap.py` already records as an untested limit. So
+the real-camera figure is a **recorded measurement with its conditions**, in the same class as this
+project's frame rates, and the suite pins only the *inadequacy*: a test asserts those backgrounds
+stay under the gate, and says to update it deliberately if they ever stop.
+
+**What admission needs is a criterion about the object, not about the frame** — recurrence rather
+than momentary distinctness. That is not built.

@@ -220,3 +220,56 @@ def test_a_malformed_refine_specification_is_refused():
             Backbone(PLAN, (CROP, CROP, 3), dtype="f8", seed=0, pool=POOL),
             ExemplarMemory(4, 108, 16, threshold=0.8), (H, W, 3), grid(12),
             admit_margin=0.02, refine=(0, 2))
+
+
+def test_the_gate_fires_on_every_REAL_frame_and_no_fixture_here_can_show_it():
+    """**What the admission gate actually distinguishes, and the fixture that cannot see it.**
+
+    Measured on a real camera scene, 40 frames: `median - min` of the candidates' mean similarity is
+    **0.235-0.306** — above the 0.02 gate on **100%** of frames, and above even the synthetic
+    "object present" range of 0.126-0.143. The demo showed `memory 13/16` after ~1,900 frames as a
+    direct consequence.
+
+    **The threshold is not wrong.** It does exactly what it was measured to do. The *design
+    assumption* is wrong: it treats "the frame is featureless" as "there is nothing worth
+    remembering", and a real room is never featureless. A chair, a bookshelf, a window and a face are
+    all genuinely unlike their surroundings, so rarity fires every frame — correctly.
+
+    **And no fixture in this repository can demonstrate that**, which is the point of this test.
+    Measured below: synthetic clutter reads 0.0070 and stripes 0.0092, both *under* the gate, against
+    a real scene's 0.235. The textured backgrounds here are far too uniform to stand in for a room —
+    they become background statistically, which `tests/test_bootstrap.py` already records as an
+    untested limit. So the real-camera figure is a **recorded measurement with its conditions**, in
+    the same class as this project's frame rates, and not something the suite protects.
+
+    What admission needs is a criterion about the *object* — recurrence rather than momentary
+    distinctness — and that is not built.
+    """
+    L = layer(step=6)
+
+    def spread(img):
+        d = L._describe(img)
+        S = d @ d.T
+        ms = (S.sum(axis=1) - np.diag(S)) / (len(L.centres) - 1)
+        return float(np.median(ms) - ms.min())
+
+    empty = spread(render([], seed=1, texture="none"))
+    one = spread(render([("disc", 0.30, 0.40)], seed=1, texture="none"))
+    clutter = spread(render([], seed=2, texture="clutter"))
+    stripes = spread(render([], seed=3, texture="stripes"))
+
+    assert empty < L.admit_margin, (
+        f"an empty wall reads {empty:.4f}, at or above the {L.admit_margin} gate")
+    assert one > L.admit_margin * 3, f"one object reads only {one:.4f}"
+
+    # **The inadequacy, asserted.** If these ever rose above the gate, the fixture would at last be
+    # able to reproduce the real-scene failure -- and this test's message should change with it.
+    assert clutter < L.admit_margin and stripes < L.admit_margin, (
+        f"synthetic clutter ({clutter:.4f}) or stripes ({stripes:.4f}) now trip the gate. That would "
+        "mean a fixture here can finally show the real-camera failure of 0.235-0.306, which this "
+        "test currently records as unreproducible -- update it deliberately")
+    assert clutter < one / 10, (
+        f"clutter ({clutter:.4f}) is within a factor of ten of a real object ({one:.4f}); the claim "
+        "that these backgrounds are too uniform to stand in for a room would then be weaker")
+
+
