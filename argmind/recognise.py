@@ -46,7 +46,7 @@ class RecognitionLayer:
 
     def __init__(self, backbone: Backbone, memory: ExemplarMemory, in_shape, centres, *,
                  admit_margin: float, refine: tuple[int, int] | None = None,
-                 emit: str = "descriptor"):
+                 emit: str = "descriptor", max_reported: int | None = None):
         if backbone.n_outputs != memory.n_features:
             raise ValueError(
                 f"the backbone emits {backbone.n_outputs} features and the memory stores "
@@ -109,6 +109,22 @@ class RecognitionLayer:
         if emit not in ("descriptor", "presence"):
             raise ValueError(f"emit must be 'descriptor' or 'presence', got {emit!r}")
         self.emit = emit
+        #: How many recognitions to hand the caller per frame, strongest first. `None` reports every
+        #: slot present.
+        #:
+        #: **It is a caller setting and not a cognitive claim.** Human simultaneous tracking is
+        #: around four, but "people manage four so this should" is the borrowed-assumption error this
+        #: project keeps catching: the reason people are limited (attention, wiring, something else)
+        #: has not been shown to apply here, and measured, the limit buys **nothing** — the batched
+        #: look-up reports every slot for the same cost. What a limit is genuinely for is a fixed
+        #: output width for a head above, and a readable overlay.
+        #:
+        #: **Truncation touches reporting only, never `end_frame`.** A slot that is present but ranks
+        #: fifth is still present, and letting the cap decide would cost it a spell — corrupting the
+        #: retention signal for a display setting.
+        if max_reported is not None and max_reported < 1:
+            raise ValueError(f"max_reported must be at least 1 or None, got {max_reported}")
+        self.max_reported = max_reported
         #: How far from a matched centre a candidate counts as "already accounted for". One crop
         #: side, in frame fractions: two objects closer than that share a crop and cannot be
         #: separated by this mechanism anyway.
@@ -212,16 +228,61 @@ class RecognitionLayer:
         described = self._describe(image)
 
         if self.refine is not None:
-            j, _how = self._choose(described)
-            local = self._neighbourhood(*centres[j])
+            #: **Refine around every region of interest, not one.**
+            #:
+            #: A first version chose a single region, re-described its neighbourhood, and then ran
+            #: the presence pass on *that* -- so a parallel recogniser could only ever see one
+            #: object, whatever the frame held. Measured: five distinct objects, three in memory, and
+            #: exactly **one** reported at every report cap. Composing refinement with parallel
+            #: recognition re-serialised it, and neither feature was wrong on its own.
+            #:
+            #: In presence mode the coarse pass says *which* slots are here and roughly where; each
+            #: of those neighbourhoods is then refined, and the fine descriptors are what the memory
+            #: is asked about. In descriptor mode there is one region by definition, so the old path
+            #: is exactly this with a single seed.
+            if self.emit == "presence":
+                self._presence(described, centres)          # populates `last_present`
+                seeds = [c for _s, _sc, c in self.last_present]
+                if not seeds:
+                    j, _how = self._choose(described)
+                    seeds = [centres[j]]
+            else:
+                j, _how = self._choose(described)
+                seeds = [centres[j]]
+
+            local, seen = [], set()
+            for sx, sy in seeds:
+                for c in self._neighbourhood(sx, sy):
+                    if c not in seen:
+                        seen.add(c)
+                        local.append(c)
             if local:
+                #: **Refinement ADDS candidates; it does not replace them.**
+                #:
+                #: Replacing them cost recall: the seeds come from the coarse pass, so a slot the
+                #: coarse grid mis-centred badly enough to miss was never refined and never
+                #: recovered. Measured on five distinct objects with four in memory — **4 of 4
+                #: reported without refinement, 2 of 3 with it.** Refinement buys precision for the
+                #: regions it visits and cannot buy back a region nobody looked at.
+                #:
+                #: Concatenating is sound because presence takes the best score per slot: a coarse
+                #: candidate can only lose to its own refinement, never beat a better one elsewhere.
+                #:
+                #: **Refining every seed rather than one is kept on principle, not on evidence.** It
+                #: is right to refine what you are about to report on, but once refinement became
+                #: additive the coarse candidates cover the rest anyway, and a mutant refining only
+                #: the first seed **survives**: no fixture here shows a benefit. The comparison is
+                #: confounded — the two versions admit differently, so they report different slot
+                #: counts and their scores are not comparable. The cost is real: one extra
+                #: neighbourhood of crops per reported slot.
                 keep = self.centres
                 self.centres = local
                 try:
-                    described = self._describe(image)
+                    fine = self._describe(image)
                 finally:
                     self.centres = keep
-                centres = local
+                described = np.concatenate([described, fine], axis=0)
+                centres = list(centres) + list(local)
 
         if self.emit == "presence":
             scores = self._presence(described, centres)
@@ -253,10 +314,15 @@ class RecognitionLayer:
                 self.last_slot, _s, self.last_centre = self.last_present[0]
             else:
                 self.last_slot, self.last_centre = -1, centres[0]
-            #: **Close the frame**, which is what turns per-frame presence into the retention
-            #: signal. Only this mode can: the descriptor path reports at most one slot, so it
-            #: cannot say which of the others were absent rather than merely not the strongest.
+            #: **Close the frame** on the FULL presence, which is what turns per-frame presence
+            #: into the retention signal. Only this mode can: the descriptor path reports at most one
+            #: slot, so it cannot say which of the others were absent rather than merely not the
+            #: strongest. And it happens before truncation deliberately -- see `max_reported`.
             self.memory.end_frame([sl for sl, _sc, _c in self.last_present])
+            if self.max_reported is not None:
+                self.last_present = self.last_present[:self.max_reported]
+                if self.last_present:
+                    self.last_slot, _s, self.last_centre = self.last_present[0]
             return scores.astype(self.dtype)
 
         best_j, best_score = -1, -np.inf

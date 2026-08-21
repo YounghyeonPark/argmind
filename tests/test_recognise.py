@@ -367,3 +367,86 @@ def test_an_unknown_emit_mode_is_refused():
     with pytest.raises(ValueError, match="emit must be"):
         RecognitionLayer(bb, ExemplarMemory(4, bb.n_outputs, 16, threshold=0.8), (H, W, 3),
                          grid(12), admit_margin=0.02, emit="both")
+
+
+COLOURS = [(0.85, 0.25, 0.20), (0.20, 0.35, 0.85), (0.25, 0.80, 0.30),
+           (0.85, 0.80, 0.20), (0.70, 0.25, 0.80)]
+SPOTS = [(0.20, 0.30), (0.50, 0.30), (0.80, 0.30), (0.30, 0.72), (0.70, 0.72)]
+
+
+def coloured(specs, seed):
+    """Genuinely distinct objects. A disc/bar fixture looks like five objects and is **two
+    identities** — the descriptor is shape-based, so the third disc matches the first disc's
+    exemplar, correctly. That mistake made an earlier cap measurement meaningless."""
+    yy, xx = np.mgrid[0:H, 0:W]
+    img = np.full((H, W, 3), 0.35)
+    for col, (cx, cy) in specs:
+        img[np.hypot(xx - cx * W, yy - cy * H) <= 0.075 * W] = col
+    g = np.random.default_rng(seed)
+    return np.clip(img + g.standard_normal(img.shape) * 0.01, 0, 1).astype("f8")
+
+
+def _seeded(cap=None, refine=(8, 2)):
+    """Five distinct objects shown one at a time, then all together."""
+    from argmind.backbone import Backbone
+    bb = Backbone(PLAN, (CROP, CROP, 3), dtype="f8", seed=23, pool=POOL)
+    L = RecognitionLayer(bb, ExemplarMemory(32, bb.n_outputs, 16, threshold=0.85),
+                         (H, W, 3), grid(8), admit_margin=0.02, refine=refine,
+                         emit="presence", max_reported=cap)
+    for i, (col, spot) in enumerate(zip(COLOURS, SPOTS)):
+        for k in range(2):
+            L.features(coloured([(col, spot)], seed=100 * i + k))
+    L.features(coloured(list(zip(COLOURS, SPOTS)), seed=0))
+    return L
+
+
+def test_REFINEMENT_ADDS_candidates_rather_than_replacing_them():
+    """**A recall bug from composing two features that were each fine alone.**
+
+    Refinement re-described the neighbourhood of the coarse choice and ran the presence pass on
+    *that*, so a slot the coarse grid mis-centred badly enough to miss was never refined and never
+    recovered. Measured on five distinct objects: **4 of 4 reported without refinement, 2 of 3 with
+    it.** Concatenating instead restores it to 3 of 3, and is sound because presence takes the best
+    score per slot — a coarse candidate can only lose to its own refinement.
+    """
+    fine, plain = _seeded(refine=(8, 2)), _seeded(refine=None)
+    assert len(fine.last_present) >= min(3, fine.memory.occupied), (
+        f"refinement reported {len(fine.last_present)} of {fine.memory.occupied} remembered "
+        "objects; it is losing regions the coarse pass missed instead of adding to them")
+    assert len(plain.last_present) >= 3, (
+        f"the unrefined control reported only {len(plain.last_present)}; without it there is no "
+        "baseline to say refinement lost anything")
+
+
+def test_the_report_CAP_truncates_what_you_are_told_and_NOT_what_is_remembered():
+    """**The setting, and the invariant that makes it safe.**
+
+    A cap is a caller preference — a fixed output width for a head, a readable overlay — and not a
+    cognitive claim: measured, it buys nothing, because the batched look-up reports every slot for
+    the same cost. What it must never do is decide what counted as *present*, or a slot ranked fifth
+    would lose a spell and the retention signal would be corrupted by a display setting.
+    """
+    unlimited = _seeded(cap=None)
+    available = len(unlimited.last_present)
+    assert available >= 2, f"the fixture only produced {available} recognitions; nothing to truncate"
+
+    spells_seen = set()
+    for cap in (1, 2, available):
+        L = _seeded(cap=cap)
+        assert len(L.last_present) == min(cap, len(L.last_present) or 1) <= cap, (
+            f"cap {cap} reported {len(L.last_present)}")
+        assert len(L.last_present) <= cap
+        spells_seen.add(int((np.asarray(L.memory.spells) > 0).sum()))
+
+    assert len(spells_seen) == 1, (
+        f"the number of slots with spells varies with the report cap: {sorted(spells_seen)}. "
+        "Truncation is reaching end_frame, so a display setting is deciding what the memory "
+        "considers present")
+
+
+def test_a_report_cap_below_one_is_refused():
+    from argmind.backbone import Backbone
+    bb = Backbone(PLAN, (CROP, CROP, 3), dtype="f8", seed=0, pool=POOL)
+    with pytest.raises(ValueError, match="max_reported"):
+        RecognitionLayer(bb, ExemplarMemory(4, bb.n_outputs, 16, threshold=0.8), (H, W, 3),
+                         grid(12), admit_margin=0.02, emit="presence", max_reported=0)

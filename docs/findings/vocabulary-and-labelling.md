@@ -1114,3 +1114,42 @@ number was from a different configuration and was presented as the demo's.
 **Four mutants, and one needed a case none of the others could reach**: removing the empty-slot mask
 survived, because an empty slot scores exactly 0 and that beats only *negative* scores. A query
 anti-correlated with everything stored is the only thing that sees it.
+
+### A configurable report cap, and a recall bug from composing two good features — 2026-08-20
+
+The owner's call on the ~4 limit: make it a setting. `RecognitionLayer(max_reported=N)` and
+`--recognise-max N`, defaulting to no limit.
+
+**It is a setting and not a cognitive claim, and the code says so.** Human simultaneous tracking is
+around four, but *"people manage four so this should"* is the borrowed-assumption error this project
+keeps catching. Measured, the cap buys **nothing**: the batched look-up reports every slot for the
+same cost. What a cap is genuinely for is a fixed output width for a head above and a readable
+overlay.
+
+**And the invariant that makes it safe**: truncation touches *reporting* only, never `end_frame`. A
+slot present but ranked fifth is still present, and letting the cap decide would cost it a spell —
+corrupting the retention signal with a display setting. A mutant moving the truncation before
+`end_frame` is caught.
+
+**Two fixture errors and one real bug, in that order.**
+
+A first cap measurement was meaningless: the six-object scene was **two identities**, because it
+alternated disc and bar and the descriptor is shape-based, so the third disc correctly matched the
+first disc's exemplar. Rebuilt with five distinct colours.
+
+Then, with a proper fixture, only **one** slot was reported at every cap. The cause was real:
+**refinement had re-serialised the parallel path.** It re-described the neighbourhood of the coarse
+choice and ran the presence pass on *that*, so only one object could ever be seen. Neither feature
+was wrong alone; composing them without checking the interaction was.
+
+Refining every seed instead of one did not fix it either — the seeds come from the coarse pass, so a
+slot the coarse grid mis-centred badly enough to miss was never refined and never recovered:
+**4 of 4 reported without refinement, 2 of 3 with it.** The fix is that refinement **adds** candidates
+rather than replacing them, which restores 3 of 3 and is sound because presence takes the best score
+per slot. A coarse candidate can only lose to its own refinement.
+
+**And one thing is kept on principle rather than on evidence, stated as such.** Refining every seed
+rather than the first survives as a mutant: once refinement is additive the coarse candidates cover
+the rest, and no fixture here shows a benefit. The comparison is confounded — the two versions admit
+differently, report different slot counts, and their scores are not comparable. The cost is one extra
+neighbourhood of crops per reported slot.
