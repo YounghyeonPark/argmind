@@ -1153,3 +1153,48 @@ rather than the first survives as a mutant: once refinement is additive the coar
 the rest, and no fixture here shows a benefit. The comparison is confounded — the two versions admit
 differently, report different slot counts, and their scores are not comparable. The cost is one extra
 neighbourhood of crops per reported slot.
+
+### "It keeps wandering" — the observation is right, the morphing hypothesis is not the cause, 2026-08-20
+
+Owner, watching `--locate recognise --recognise-max 4` on a real room: boxes do appear in several
+places, but *"계속 헤매는 것으로 보여지는데 아마 피사체의 morphing을 동일 객체적 특징을 놓치는게
+아닌가"*. The wandering is real and now quantified. The explanation is a different one.
+
+**The wandering, measured** over 120 real frames through the shipped locator:
+
+| | |
+|---|---|
+| the top slot changed on | **30% of frames** (36 of 119) |
+| distinct top slots | **8** |
+| mean reported score | **0.989** |
+| motion under the reported box | **0.92×** the whole-frame mean |
+
+**The morphing hypothesis is in the right direction and is not the dominant cause.** Descriptor
+self-similarity at a location, against frame lag, on a real capture:
+
+| lag (frames) | static locations | moving locations | moving pairs below the 0.85 threshold |
+|---|---|---|---|
+| 1 | 1.0000 | 0.9976 | 0% |
+| 10 | 0.9999 | 0.9727 | 0% |
+| 40 | 0.9998 | 0.9510 | 1% |
+| 80 (~9 s) | 0.9998 | **0.9219** | **8%** |
+
+So a deforming subject **does** drift — exactly as predicted, and static scenery does not — but only 8%
+of nine-second pairs fall below threshold, which cannot account for 27 admissions in 1,867 frames. At
+lag 1 it is **0 of 70 locations**, so the first version of this measurement, frame to frame, was
+asking at the wrong timescale and found nothing.
+
+**What the numbers point at instead.** The reported box sits where motion is **0.92× the frame mean**
+— that is, *not* on the person — and matches at **0.989**. Three of the four boxes in the owner's
+screenshot are on blank wall, one reading `#23 1.00`. The memory is filling with background, which
+this file already measured: the admission gate's rarity spread is **0.235–0.306 on every real frame**
+against a 0.02 threshold, because a real room is never featureless.
+
+**And interchangeable background patches all match near-perfectly, so which one wins is arbitrary.**
+That is what 30% switching at score 0.989 is: not lost tracking, but a tie. The wandering is the
+absence of anything distinguishing the candidates, not the loss of a subject's features.
+
+**So the fix is upstream of the descriptor.** Morphing would need a tolerant descriptor; this needs
+admission to stop storing wall. `spells` was built for exactly that and helps — occupancy settled at
+**27/256** where the earlier ungated run reached 13/16 and kept replacing — but it is a *retention*
+rule, and what is still missing is an *admission* criterion about the object rather than the frame.
