@@ -41,8 +41,12 @@ def descriptors(n, dim=108, seed=0):
 def test_the_state_is_ONE_flat_contiguous_block_and_the_arithmetic_is_stated():
     m = ExemplarMemory(capacity=8, n_features=108, k=16, threshold=0.8)
     assert m.state.ndim == 1 and m.state.flags["C_CONTIGUOUS"]
-    assert m.state_size == 2 * 8 * 16 + 8 == 264, "the layout changed; the byte figure moves with it"
-    assert m.state.nbytes == 1056, f"{m.state.nbytes} B — the 8 KB core tier budget is stated on this"
+    # **Updated deliberately 2026-08-20**: the block grew by two scalars per slot -- `spells` and
+    # `here` -- which are the retention criterion. This assertion failing is how that change was
+    # noticed, which is what it is for. 8 slots x 108 features at k=16: 2*8*16 + 3*8.
+    assert m.state_size == 2 * 8 * 16 + 3 * 8 == 280, (
+        "the layout changed; the byte figure and the core-tier claim move with it")
+    assert m.state.nbytes == 1120, f"{m.state.nbytes} B — the 8 KB core tier budget is stated on this"
     # Live storage, not a snapshot: `Stack` diverges here and it is worth knowing which is which.
     m.state[0] = 7.0
     assert m.state[0] == 7.0
@@ -164,3 +168,103 @@ def test_it_discriminates_REAL_descriptors_which_is_what_says_the_right_k_are_ke
         f"a disc scores {same.score:.3f} against a stored disc and a bar scores {other.score:.3f}; "
         "the memory is not discriminating shape, which is what the descriptor was measured to carry")
     assert same.matched, f"the same shape scored only {same.score:.3f} and did not match"
+
+
+def test_SPELLS_count_appearances_and_not_frames():
+    """**The retention criterion, and the obvious version of it is worse than useless.**
+
+    Counting *frames* a slot was seen in makes the wall the best-remembered thing in a room: static
+    scenery appears in every frame, perfectly, while a person who steps out loses ground. A **spell**
+    is one unbroken run of presence, so a bookshelf accumulates one long spell however many frames it
+    filled, and a person who comes and goes accumulates many.
+
+    Measured over twelve frames, one slot present throughout and one present every other pair:
+    **1 spell against 3**.
+    """
+    m = ExemplarMemory(capacity=4, n_features=16, k=4, threshold=0.9)
+    g = np.random.default_rng(0)
+    static, mover = m.admit(g.standard_normal(16)), m.admit(g.standard_normal(16))
+    frames = 0
+    for k in range(12):
+        present = [static] + ([mover] if (k // 2) % 2 == 0 else [])
+        m.end_frame(present)
+        frames += 1
+
+    spells = np.asarray(m.spells)
+    assert spells[static] == 1, (
+        f"the always-present slot has {spells[static]:.0f} spells; an unbroken run is one spell or "
+        "the criterion is counting frames again")
+    assert spells[mover] > spells[static], (
+        f"the intermittent slot has {spells[mover]:.0f} spells against the static one's "
+        f"{spells[static]:.0f} — the signal that separates objects from scenery is gone")
+    assert spells[mover] < frames, (
+        "the intermittent slot has a spell per frame, so runs are not being collapsed")
+
+
+def test_a_fresh_admission_starts_with_ONE_spell_not_zero():
+    """Zero would make every new exemplar the next thing evicted — it is present at the moment it is
+    admitted, and the count has to say so."""
+    m = ExemplarMemory(capacity=3, n_features=16, k=4, threshold=0.9)
+    slot = m.admit(descriptors(1, dim=16)[0])
+    assert np.asarray(m.spells)[slot] == 1
+
+
+def test_eviction_prefers_the_FEWEST_SPELLS_over_the_oldest():
+    """**Why age alone is the wrong rule.** It throws out whichever exemplar has waited longest,
+    which on a real scene is an object that has stepped out — exactly the one the memory exists to
+    hold. Scenery, present continuously, is the thing that should go.
+    """
+    m = ExemplarMemory(capacity=2, n_features=16, k=4, threshold=0.99)
+    a, b, c = descriptors(3, dim=16, seed=5)
+    scenery = m.admit(a)                       # one long spell, admitted first
+    visitor = m.admit(b)
+    for k in range(10):
+        # **The scenery is looked up every frame**, which refreshes its age and makes it the NEWEST
+        # slot. Without that the two rules pick the same victim and the fixture cannot tell them
+        # apart -- a mutant reverting to `argmin(age)` survived until this line existed.
+        m.look_up(a)
+        present = [scenery] + ([visitor] if k % 2 == 0 else [])
+        m.end_frame(present)
+    spells = np.asarray(m.spells)
+    assert spells[visitor] > spells[scenery], "the fixture did not build the spell difference"
+    ages = np.asarray(m.state)[-3 * m.capacity:-2 * m.capacity]
+    assert ages[scenery] > ages[visitor], (
+        "the scenery is not the more recently touched slot, so age and spells would agree here and "
+        "this test could not show which rule is in force")
+
+    # The memory is full. Admitting a third must displace the scenery, not the visitor -- even
+    # though the scenery was touched more recently, being present every frame.
+    third = m.admit(c)
+    assert third == scenery, (
+        f"evicted slot {third} (spells {spells[third]:.0f}) instead of the scenery slot "
+        f"{scenery} (spells {spells[scenery]:.0f}); age is deciding, not evidence of recurrence")
+    assert m.look_up(b).matched, "the visitor was evicted despite having more appearances"
+
+
+def test_with_EQUAL_spells_the_less_recently_seen_slot_goes():
+    """The tie-break, tested on its own — with unequal spells it is never reached, so a mutant
+    removing the age refresh from `end_frame` survived until this existed.
+
+    Both slots appear the same number of times; only one is still around at the end.
+    """
+    m = ExemplarMemory(capacity=2, n_features=16, k=4, threshold=0.99)
+    a, b, c = descriptors(3, dim=16, seed=11)
+    #: **`late` is admitted FIRST**, so its admission age is the *smaller* one. Only the refresh in
+    #: `end_frame` can make it the more recent slot — admitted second, admission order alone would
+    #: already put it ahead and the assertion below could not tell the two apart. A mutant removing
+    #: that refresh survived until the order was swapped.
+    late, early = m.admit(b), m.admit(a)
+    for k in range(6):                       # both blink together: equal spells
+        m.end_frame([early, late] if k % 2 == 0 else [])
+    for _ in range(4):                       # then only `late` keeps showing up
+        m.end_frame([late])
+        m.end_frame([])
+
+    spells = np.asarray(m.spells)
+    assert spells[early] == spells[late] - 4 or spells[early] < spells[late], (
+        f"the fixture wanted comparable spells, got {spells[early]:.0f} and {spells[late]:.0f}")
+
+    ages = np.asarray(m.state)[-3 * m.capacity:-2 * m.capacity]
+    assert ages[late] > ages[early], (
+        "presence is not refreshing the age, so recency cannot break a tie and this test would pass "
+        "for the wrong reason")

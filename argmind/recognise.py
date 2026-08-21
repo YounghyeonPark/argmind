@@ -250,6 +250,10 @@ class RecognitionLayer:
                 self.last_slot, _s, self.last_centre = self.last_present[0]
             else:
                 self.last_slot, self.last_centre = -1, centres[0]
+            #: **Close the frame**, which is what turns per-frame presence into the retention
+            #: signal. Only this mode can: the descriptor path reports at most one slot, so it
+            #: cannot say which of the others were absent rather than merely not the strongest.
+            self.memory.end_frame([sl for sl, _sc, _c in self.last_present])
             return scores.astype(self.dtype)
 
         best_j, best_score = -1, -np.inf

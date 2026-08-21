@@ -75,13 +75,26 @@ class ExemplarMemory:
         #: load into a 16-slot one.
         self.n_outputs = self.capacity
 
-        #: [ indices (capacity*k) | values (capacity*k) | ages (capacity) ]
-        self.state_size = 2 * self.capacity * self.k + self.capacity
+        #: [ indices (c*k) | values (c*k) | ages (c) | spells (c) | here (c) ]
+        #:
+        #: **`spells` is the retention criterion**, and it exists because the obvious one is worse
+        #: than useless. Counting *frames* a slot was seen in makes the wall the best-remembered
+        #: thing in the room: static scenery appears in every frame, perfectly, while a person who
+        #: steps out loses ground. A **spell** is one unbroken run of presence, so a bookshelf that
+        #: never moves accumulates a single long spell and a person who comes and goes accumulates
+        #: many. That is what separates the two, and it is the phenomenon the owner asked about:
+        #: appear, be absent, appear again.
+        #:
+        #: `here` is the previous frame's presence, which is all that is needed to spot the
+        #: absent-to-present transition without storing a history.
+        c, ck = self.capacity, self.capacity * self.k
+        self.state_size = 2 * ck + 3 * c
         self._block = np.zeros(self.state_size, dtype=self.dtype)
-        self._idx = self._block[:self.capacity * self.k].reshape(self.capacity, self.k)
-        self._val = self._block[self.capacity * self.k:2 * self.capacity * self.k] \
-            .reshape(self.capacity, self.k)
-        self._age = self._block[2 * self.capacity * self.k:]
+        self._idx = self._block[:ck].reshape(c, self.k)
+        self._val = self._block[ck:2 * ck].reshape(c, self.k)
+        self._age = self._block[2 * ck:2 * ck + c]
+        self._spells = self._block[2 * ck + c:2 * ck + 2 * c]
+        self._here = self._block[2 * ck + 2 * c:]
         self._idx[:] = -1.0                      # -1 marks an empty slot
         self._clock = 0
 
@@ -106,6 +119,31 @@ class ExemplarMemory:
     @property
     def occupied(self) -> int:
         return int((self._idx[:, 0] >= 0).sum())
+
+    @property
+    def spells(self) -> np.ndarray:
+        """Separate appearances per slot. A view, so it follows `load_state`."""
+        return self._spells
+
+    def end_frame(self, present) -> None:
+        """Close a frame: `present` is the slots recognised in it.
+
+        Called by the caller rather than inferred, because a *frame* is not something this class can
+        see — `look_up` runs many times within one. A slot that was absent and is now present starts
+        a new spell; one that stays present continues the spell it is in.
+        """
+        #: **The clock advances here too.** It used to move only on `admit`, so between two
+        #: admissions every age was identical and "least recently matched" meant nothing — a mutant
+        #: reverting eviction to `argmin(age)` survived because age could not distinguish anything.
+        #: Found by building a fixture that needed the two rules to disagree.
+        self._clock += 1
+        seen = np.zeros(self.capacity, dtype=bool)
+        for s in present:
+            if 0 <= int(s) < self.capacity:
+                seen[int(s)] = True
+        self._spells[seen & (self._here < 0.5)] += 1.0
+        self._here[:] = seen.astype(self.dtype)
+        self._age[seen] = self._clock
 
     # ---- the two operations ------------------------------------------------------------------
 
@@ -155,10 +193,22 @@ class ExemplarMemory:
         self._clock += 1
         idx, vals = self._sparse(descriptor)
         empty = np.flatnonzero(self._idx[:, 0] < 0)
-        slot = int(empty[0]) if empty.size else int(np.argmin(self._age))
+        if empty.size:
+            slot = int(empty[0])
+        else:
+            #: **Evict the fewest spells, not the oldest.** Age alone throws out whichever exemplar
+            #: has waited longest, which on a real scene is an object that has stepped out — exactly
+            #: the one the memory exists to hold. Spells rank scenery below objects: a bookshelf has
+            #: one long spell however many frames it filled. Age remains the tie-break.
+            fewest = np.flatnonzero(self._spells == self._spells.min())
+            slot = int(fewest[np.argmin(self._age[fewest])])
         self._idx[slot] = idx.astype(self.dtype)
         self._val[slot] = np.asarray(vals, dtype=self.dtype)
         self._age[slot] = self._clock
+        #: One spell in progress, not zero: it is present now. Zero would make every new admission
+        #: the next thing evicted.
+        self._spells[slot] = 1.0
+        self._here[slot] = 1.0
         return slot
 
     def observe(self, descriptor) -> MatchReport:

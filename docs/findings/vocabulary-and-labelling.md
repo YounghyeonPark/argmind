@@ -1034,3 +1034,42 @@ strengthened: truncating the presence list to its strongest entry was **masked b
 admission**, which refilled the list from the unexplained region while the memory kept growing.
 Occupancy holding steady across frames with nothing new is what distinguishes recognising two things
 from recognising one and admitting another.
+
+### The retention criterion: spells, not frames — 2026-08-20
+
+The gate on *admission* fires on every real frame, so what was missing is a rule for what **stays**.
+The obvious version of "it keeps appearing" is worse than useless: counting **frames** makes the wall
+the best-remembered thing in the room, because static scenery appears in every one, perfectly, while
+a person who steps out loses ground.
+
+**A spell is one unbroken run of presence.** A bookshelf accumulates a single long spell however many
+frames it filled; a person who comes and goes accumulates many. Measured over twelve frames, one slot
+present throughout and one present every other pair: **1 spell against 3.**
+
+**And it is a retention criterion, not an admission one** — you cannot notice that something left and
+came back until it is already stored. So admission stays liberal and **eviction takes the fewest
+spells**, with age as the tie-break. Age alone was the wrong rule: it throws out whichever exemplar
+has waited longest, which on a real scene is an object that has stepped out — exactly the one the
+memory exists to hold.
+
+The block grows by two scalars per slot, `spells` and `here`: 8 slots at k=16 goes **280 values,
+1,120 B** from 264/1,056. `ExemplarMemory.end_frame(present)` closes a frame, called by the caller
+because a *frame* is not something the memory can see — `look_up` runs many times within one. Only
+`emit="presence"` can call it, since the descriptor path reports at most one slot and cannot say
+which others were absent rather than merely not the strongest.
+
+**Three fixture weaknesses had to be fixed before the mutants were caught, and one exposed a real
+defect underneath.**
+
+- A mutant reverting eviction to `argmin(age)` survived because `end_frame` did not touch the ages —
+  so between two admissions **every age was identical** and "least recently matched" meant nothing.
+  The clock now advances per frame. That was a genuine hole in the LRU built earlier, and the earlier
+  test for it passed for a weaker reason than it claimed.
+- A mutant removing the age refresh from `end_frame` survived twice: first because unequal spells
+  never reach the tie-break, then because the admission order already put the frequently-seen slot
+  ahead. The tie-break has its own test now, with the **frequent slot admitted first** so only the
+  refresh can reverse the order.
+
+**Named in advance, not measured**: a panning camera gives scenery spells too, and a slot can be
+evicted during a temporary absence — which is the failure this was built to prevent, arriving by
+another door.
