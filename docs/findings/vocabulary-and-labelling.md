@@ -1198,3 +1198,51 @@ absence of anything distinguishing the candidates, not the loss of a subject's f
 admission to stop storing wall. `spells` was built for exactly that and helps — occupancy settled at
 **27/256** where the earlier ungated run reached 13/16 and kept replacing — but it is a *retention*
 rule, and what is still missing is an *admission* criterion about the object rather than the frame.
+
+### An admission criterion about the object: descriptor CHANGE — 2026-08-20
+
+The rarity gate asks *"is anything here unlike its surroundings"*, and on a real scene the answer is
+always yes. What was missing is a question about the object. **Descriptor change** is one, and unlike
+rarity it separates on a real scene.
+
+**It is not a frame difference.** A pixel difference of a moving edge gives a dipole, which this
+repository records as a failure of motion-based location. This is one scalar per fixed crop centre:
+how far the descriptor there has moved from an exponential baseline.
+
+Measured on real frames, per candidate:
+
+| | quietest 10 | busiest 10 | ratio |
+|---|---|---|---|
+| lag 5 frames | 0.00024 | 0.05893 | **243×** |
+| EMA, rate 0.05 | 0.00005 | 0.01893 | **348×** |
+
+The EMA form is what shipped: one descriptor set of storage rather than a ring of `lag` of them —
+40 KB at f4 for 70 candidates, derived and never persisted.
+
+**And the first design was wrong in an instructive way.** It kept rarity as the chooser and added
+change as a *gate* on top. Measured on real frames, it admitted **nothing at any threshold** — 0
+exemplars at 0.002, 0.005 and 0.01 against 4–6 with the gate off. Rarity picks quiet, distinctive
+places, a patch of blank wall among other blank wall, and the change test then rejects exactly what
+rarity chose. **A gate cannot improve a wrong choice, only refuse it.** Change has to *select*.
+
+**With change selecting, measured on 120 real frames:**
+
+| selector | occupied | switching | motion under the box |
+|---|---|---|---|
+| rarity | 8 | **29%** | 1.04× frame mean |
+| change ≥ 0.002 | 10 | **16%** | 0.96× |
+| change ≥ 0.005 | 8 | 16% | 0.98× |
+| change ≥ 0.01 | 6 | 19% | 1.00× |
+
+**The wandering nearly halves** — 29% of frames switching top slot down to 16%. **And attention still
+does not prefer moving regions**: the motion under the reported box stays at the frame mean. So this
+fixes what is admitted, not where recognition then looks, and saying so matters more than the
+improvement.
+
+`--recognise-change D` in the demo. Named in advance and untested: an object that is *still* when
+first seen is never admitted, and a panning camera makes everything change so the criterion stops
+discriminating.
+
+Five mutants. One needed a fixture nothing else had: a frozen baseline reads correctly while things
+keep moving, so only a scene where something **moves once and then stops** shows that the baseline
+must forget.

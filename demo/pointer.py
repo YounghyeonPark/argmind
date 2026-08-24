@@ -731,7 +731,8 @@ def segment_image(labels, ids=(), scale=6):
     return out
 
 
-def build_recogniser(n_objects: int = 1, max_reported: int | None = None):
+def build_recogniser(n_objects: int = 1, max_reported: int | None = None,
+                     admit_change: float | None = None):
     """`main()`'s own construction of the recognising locator, hoisted so a test can reach it.
 
     The **ninth** block in this `main()` to be moved out for that reason, and this one was found by
@@ -753,7 +754,7 @@ def build_recogniser(n_objects: int = 1, max_reported: int | None = None):
                                         threshold=RECOGNISE_THRESHOLD, dtype="f4"),
                          IN_SHAPE, centres, admit_margin=RECOGNISE_MARGIN,
                          refine=(RECOGNISE_STEP, 2), emit="presence",
-                         max_reported=max_reported),
+                         max_reported=max_reported, admit_change=admit_change),
         n_objects)
 
 
@@ -1060,6 +1061,14 @@ def main(argv=None):
                    help="how many moving things to track. The head gets 2K outputs and the "
                         "labels arrive leftmost-first: it learns ROLES, not identities, and "
                         "cannot follow which object is which through a crossing")
+    p.add_argument("--recognise-change", type=float, default=None, metavar="D",
+                   help="with --locate recognise, choose what to remember by how much the "
+                        "descriptor at a place has CHANGED rather than by how rare it is. Measured "
+                        "on real frames, change separates the quietest ten locations from the "
+                        "busiest by 348x (0.00005 against 0.01893) where rarity fires on every "
+                        "frame; it roughly halves the wandering (29%% of frames switching to 16%%) "
+                        "and does NOT yet make attention prefer moving regions. 0.002 is a "
+                        "reasonable value. An object that is still when first seen is not admitted.")
     p.add_argument("--recognise-max", type=int, default=None, metavar="N",
                    help="with --locate recognise, report at most N recognitions per frame, "
                         "strongest first. Default: all of them. It is a SETTING, not a cognitive "
@@ -1255,7 +1264,8 @@ def main(argv=None):
         #: the wiring's: one whole-frame pass would be 21x cheaper and loses the identity, because a
         #: region pooled from the feature map can only be centred to 4 pixels and the descriptor
         #: needs 2.
-        detector = build_recogniser(n_objects, max_reported=args.recognise_max)
+        detector = build_recogniser(n_objects, max_reported=args.recognise_max,
+                                    admit_change=args.recognise_change)
     elif how == "texture":
         # Every frame produces labels, so there is no cadence and nothing to be blind about --
         # which is the other half of dropping the background model. `k` is objects + 1 because

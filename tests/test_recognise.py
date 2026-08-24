@@ -450,3 +450,98 @@ def test_a_report_cap_below_one_is_refused():
     with pytest.raises(ValueError, match="max_reported"):
         RecognitionLayer(bb, ExemplarMemory(4, bb.n_outputs, 16, threshold=0.8), (H, W, 3),
                          grid(12), admit_margin=0.02, emit="presence", max_reported=0)
+
+
+def _moving_scene(k, n=10):
+    """A static object and a moving one. The static one never changes; the mover crosses."""
+    return coloured([(COLOURS[0], (0.25, 0.30)),
+                     (COLOURS[1], (0.35 + 0.35 * (k % n) / n, 0.70))], seed=k)
+
+
+def _change_layer(admit_change, step=8):
+    from argmind.backbone import Backbone
+    bb = Backbone(PLAN, (CROP, CROP, 3), dtype="f8", seed=23, pool=POOL)
+    return RecognitionLayer(bb, ExemplarMemory(16, bb.n_outputs, 16, threshold=0.85),
+                            (H, W, 3), grid(step), admit_margin=0.02, emit="presence",
+                            admit_change=admit_change, change_rate=0.05)
+
+
+def test_change_SELECTS_what_to_admit_it_does_not_merely_veto_it():
+    """**A gate on a wrong choice cannot improve it, only refuse it.**
+
+    A first version kept rarity as the chooser and added descriptor change as a gate on top. On real
+    frames it admitted **nothing at any threshold** — 0 exemplars at 0.002, 0.005 and 0.01 against
+    4–6 with the gate off — because rarity picks quiet, distinctive places (a patch of blank wall
+    among other blank wall) and the change test then rejects exactly what rarity chose.
+
+    With change as the *selector* the admissions happen and land on the thing that moved.
+    """
+    L = _change_layer(0.002)
+    for k in range(12):
+        L.features(_moving_scene(k))
+    assert L.memory.occupied >= 1, (
+        "nothing was admitted with change as the selector; the veto-only failure has returned")
+
+    where = [c for _s, _sc, c in L.last_present]
+    assert where, "nothing recognised after twelve frames"
+    # The mover's band is y ~ 0.70; the static object sits at y ~ 0.30.
+    assert any(abs(cy - 0.70) < 0.15 for _cx, cy in where), (
+        f"reported centres {where} are all in the static object's band; change-based selection is "
+        "not finding the thing that moves")
+
+
+def test_the_change_signal_separates_a_STATIC_object_from_a_MOVING_one():
+    """The measurement the selector rests on, on a fixture rather than on a camera.
+
+    On real frames the separation is **348×** at `change_rate=0.05` — quietest ten locations 0.00005
+    against busiest ten 0.01893. That figure needs a camera; this asserts the ordering, which does
+    not.
+    """
+    L = _change_layer(0.002)
+    for k in range(12):
+        L.features(_moving_scene(k))
+
+    ch = L._change
+    assert ch is not None and len(ch) == len(L.centres)
+    static = [i for i, (cx, cy) in enumerate(L.centres)
+              if abs(cx - 0.25) < 0.10 and abs(cy - 0.30) < 0.10]
+    mover = [i for i, (_cx, cy) in enumerate(L.centres) if abs(cy - 0.70) < 0.10]
+    assert static and mover, "the fixture's bands do not land on the candidate grid"
+    assert max(ch[i] for i in mover) > max(ch[i] for i in static) * 3, (
+        f"the mover's band peaks at {max(ch[i] for i in mover):.5f} against the static object's "
+        f"{max(ch[i] for i in static):.5f}; the signal the selector uses is not separating them")
+
+
+def test_a_non_positive_change_threshold_or_rate_is_refused():
+    from argmind.backbone import Backbone
+    bb = Backbone(PLAN, (CROP, CROP, 3), dtype="f8", seed=0, pool=POOL)
+    mem = lambda: ExemplarMemory(4, bb.n_outputs, 16, threshold=0.8)
+    with pytest.raises(ValueError, match="admit_change"):
+        RecognitionLayer(bb, mem(), (H, W, 3), grid(12), admit_margin=0.02, admit_change=0.0)
+    with pytest.raises(ValueError, match="change_rate"):
+        RecognitionLayer(bb, mem(), (H, W, 3), grid(12), admit_margin=0.02, change_rate=0.0)
+
+
+def test_the_baseline_ADVANCES_so_a_thing_that_moved_once_stops_reading_as_changed():
+    """A frozen baseline compares against frame zero forever, so a chair that was pushed once and
+    then left alone keeps scoring as movement — and keeps earning admissions.
+
+    An exponential baseline forgets: after the motion stops, change decays back toward zero. A mutant
+    that stops advancing the baseline survived every other test here, because their fixtures keep
+    moving and a frozen baseline reads that correctly.
+    """
+    L = _change_layer(0.002)
+    for k in range(8):                                  # it moves
+        L.features(_moving_scene(k))
+    band = [i for i, (_cx, cy) in enumerate(L.centres) if abs(cy - 0.70) < 0.10]
+    while_moving = max(L._change[i] for i in band)
+
+    settled = _moving_scene(7)                          # then stops, in one place
+    for _ in range(30):
+        L.features(settled)
+    after_stopping = max(L._change[i] for i in band)
+
+    assert while_moving > 0.002, f"the fixture never registered movement: {while_moving:.5f}"
+    assert after_stopping < while_moving / 5, (
+        f"change stayed at {after_stopping:.5f} against {while_moving:.5f} while moving — the "
+        "baseline is not advancing, so anything that ever moved keeps earning admissions forever")

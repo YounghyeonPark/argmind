@@ -46,7 +46,8 @@ class RecognitionLayer:
 
     def __init__(self, backbone: Backbone, memory: ExemplarMemory, in_shape, centres, *,
                  admit_margin: float, refine: tuple[int, int] | None = None,
-                 emit: str = "descriptor", max_reported: int | None = None):
+                 emit: str = "descriptor", max_reported: int | None = None,
+                 admit_change: float | None = None, change_rate: float = 0.05):
         if backbone.n_outputs != memory.n_features:
             raise ValueError(
                 f"the backbone emits {backbone.n_outputs} features and the memory stores "
@@ -125,6 +126,39 @@ class RecognitionLayer:
         if max_reported is not None and max_reported < 1:
             raise ValueError(f"max_reported must be at least 1 or None, got {max_reported}")
         self.max_reported = max_reported
+
+        #: **A second admission gate, this one about the OBJECT rather than the frame.**
+        #:
+        #: `admit_margin` asks "is anything here unlike its surroundings", and on a real scene the
+        #: answer is always yes -- measured, the rarity spread is 0.235-0.306 on **every** frame
+        #: against a 0.02 threshold, because a room is never featureless. The consequence was
+        #: visible: three of four boxes on blank wall, and the reported box sitting where motion is
+        #: 0.92x the frame mean.
+        #:
+        #: This one asks whether what is *there* has **changed**. Measured on real frames, per
+        #: candidate, against an exponential baseline at `change_rate=0.05`: the quietest ten
+        #: locations read **0.00005** and the busiest ten **0.01893** — a **348x** separation, and
+        #: unlike the rarity gate it is a real-scene separation rather than a synthetic one.
+        #:
+        #: **It is descriptor change, not a frame difference.** A pixel difference of a moving edge
+        #: gives a dipole, which this repository records as a failure of motion-based location; this
+        #: is one scalar per fixed crop centre and has no such structure.
+        #:
+        #: **Named in advance**: an object that is *still* at the moment it is first seen will not be
+        #: admitted. That is the cost of asking about change, and it is the same shape as the
+        #: retention rule, which also needs an object to do something before it earns its place.
+        #: A panning camera makes everything change, so the gate stops discriminating -- untested.
+        if admit_change is not None and admit_change <= 0.0:
+            raise ValueError(f"admit_change must be positive or None, got {admit_change}")
+        if not 0.0 < change_rate <= 1.0:
+            raise ValueError(f"change_rate is an EMA rate in (0, 1], got {change_rate}")
+        self.admit_change = admit_change
+        self.change_rate = float(change_rate)
+        #: The baseline, over the COARSE grid only, which is the one fixed candidate set. Derived
+        #: state: not in any block, not persisted. 70 candidates x 108 features is 40 KB at f4 --
+        #: real, and on a tier with 8 KB the candidate grid would be small in the same proportion.
+        self._baseline = None
+        self._change = None
         #: How far from a matched centre a candidate counts as "already accounted for". One crop
         #: side, in frame fractions: two objects closer than that share a crop and cannot be
         #: separated by this mechanism anyway.
@@ -202,6 +236,44 @@ class RecognitionLayer:
                 for x in range(int(cx * w) - span, int(cx * w) + span + 1, step)
                 if ch // 2 <= y <= h - ch // 2 and cw // 2 <= x <= w - cw // 2]
 
+    def _update_change(self, coarse: np.ndarray) -> None:
+        """Per-coarse-candidate distance from the baseline, then advance the baseline."""
+        if self._baseline is None:
+            self._baseline = coarse.copy()
+            self._change = np.zeros(len(coarse))
+            return
+        nb = self._baseline / np.maximum(
+            np.linalg.norm(self._baseline, axis=1, keepdims=True), 1e-12)
+        self._change = 1.0 - (coarse * nb).sum(axis=1)
+        self._baseline = (1.0 - self.change_rate) * self._baseline + self.change_rate * coarse
+
+    def _change_at(self, centre) -> float:
+        """Change at the coarse candidate nearest `centre`."""
+        if self._change is None:
+            return 0.0
+        cx, cy = centre
+        j = int(np.argmin([(cx - a) ** 2 + (cy - b) ** 2 for a, b in self.centres]))
+        return float(self._change[j])
+
+    def _pick_to_admit(self, described, centres, free):
+        """`(index into `free`, whether it qualifies)` — which unexplained candidate to store.
+
+        **Change SELECTS; it does not merely veto.** A first version kept rarity as the chooser and
+        added change as a gate on top, and it admitted **nothing at any threshold** — measured, 0
+        exemplars at 0.002, 0.005 and 0.01, against 4–6 with the gate off. Rarity picks quiet,
+        distinctive places, a patch of blank wall among other blank wall, and the change gate then
+        rejects exactly what rarity chose. **A gate cannot improve a wrong choice, only refuse it.**
+        """
+        if self.admit_change is None:
+            sub = described[free]
+            S = sub @ sub.T
+            mean_sim = (S.sum(axis=1) - np.diag(S)) / max(len(sub) - 1, 1)
+            k = int(np.argmin(mean_sim))
+            return k, float(np.median(mean_sim) - mean_sim[k]) >= self.admit_margin
+        changes = [self._change_at(centres[j]) for j in free]
+        k = int(np.argmax(changes))
+        return k, changes[k] >= self.admit_change
+
     def _presence(self, described, centres) -> np.ndarray:
         """Best match per slot, over the whole frame. One pass, every slot, in parallel."""
         out = np.zeros(self.memory.capacity, dtype=np.float64)
@@ -226,6 +298,8 @@ class RecognitionLayer:
         """
         centres = self.centres
         described = self._describe(image)
+        if self.admit_change is not None:
+            self._update_change(described)      # the coarse set is the fixed one
 
         if self.refine is not None:
             #: **Refine around every region of interest, not one.**
@@ -302,10 +376,8 @@ class RecognitionLayer:
                            for q in claimed)]
             if free and self.memory.occupied < self.memory.capacity:
                 sub = described[free]
-                S = sub @ sub.T
-                mean_sim = (S.sum(axis=1) - np.diag(S)) / max(len(sub) - 1, 1)
-                k = int(np.argmin(mean_sim))
-                if float(np.median(mean_sim) - mean_sim[k]) >= self.admit_margin:
+                k, ok = self._pick_to_admit(described, centres, free)
+                if ok:
                     slot = self.memory.admit(sub[k])
                     scores[slot] = 1.0
                     self.last_present.append((slot, 1.0, centres[free[k]]))
@@ -338,11 +410,9 @@ class RecognitionLayer:
         else:
             # Nothing known is here. Fall back to rarity, which needs no labels -- but admit only
             # what stands out, or the background becomes an exemplar and wins forever.
-            S = described @ described.T
-            mean_sim = (S.sum(axis=1) - np.diag(S)) / max(len(self.centres) - 1, 1)
-            best_j = int(np.argmin(mean_sim))
             self.last_recognised = False
-            if float(np.median(mean_sim) - mean_sim[best_j]) >= self.admit_margin:
+            best_j, ok = self._pick_to_admit(described, centres, list(range(len(described))))
+            if ok:
                 self.last_slot = self.memory.admit(described[best_j])
             else:
                 #: Looked, recognised nothing, stored nothing. Reported as -1 rather than silently
