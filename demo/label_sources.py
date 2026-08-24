@@ -1453,6 +1453,13 @@ class RecogniseLocator:
         self.last_slot = self.layer.last_slot
         self.last_recognised = self.layer.last_recognised
         self.last_present = list(self.layer.last_present)
+        #: The demo's `--segments` window reads `detector.labels`, so the match map goes there. It
+        #: is a *label field over the candidate grid*, not a pixel segmentation -- this locator
+        #: selects regions and does not partition the frame -- and that is what it looks like.
+        #: `getattr`, because a layer is not required to publish a field -- a descriptor-emitting
+        #: layer has no per-candidate match to report, and a test double should not have to grow the
+        #: attribute to be usable here.
+        self.labels = getattr(self.layer, "last_field", None)
         if self.last_slot < 0:
             return None
         if self.n_objects == 1:

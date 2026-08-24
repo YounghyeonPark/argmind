@@ -1246,3 +1246,27 @@ discriminating.
 Five mutants. One needed a fixture nothing else had: a frozen baseline reads correctly while things
 keep moving, so only a scene where something **moves once and then stops** shows that the baseline
 must forget.
+
+### A match map, because boxes and slot numbers were unreadable — 2026-08-20
+
+Owner, after running it: *"segment 라벨링이 안나오니까 뭐가 어떻게 돌아가는지 하나도 파악이 안됨."*
+Fair. Four rectangles and four slot numbers on a photograph of a room say **where the layer looked**
+and nothing about how it is carving the scene, so there is no way to judge whether the mechanism is
+working or flailing.
+
+**The information was already being computed and thrown away.** The presence pass finds a best
+matching slot for every candidate; `last_field` keeps it, as an integer map over the coarse grid —
+`slot + 1` where the match cleared the threshold, `0` where it did not. That plugs straight into the
+demo's existing `--segments` window, which already colours an integer label field by slot.
+
+**It is a field over the candidate grid, not a pixel segmentation**, and it looks like what it is:
+7×10 cells for the demo's 70 candidates. This locator *selects regions*; it does not partition the
+frame, and drawing it as though it did would be the more legible lie.
+
+`--locate recognise --segments` now opens that window. Four mutants caught, including unmatched cells
+being marked as slot 0 + 1 — which would fill the grid and tell a viewer nothing while looking
+busier.
+
+**One small correction on the way**: the locator read `self.layer.last_field` directly, which broke
+an existing test's layer double. A layer is not required to publish a field — a descriptor-emitting
+one has no per-candidate match to report — so it is a `getattr` with a default.

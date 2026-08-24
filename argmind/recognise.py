@@ -175,6 +175,19 @@ class RecognitionLayer:
         #: Empty when nothing was. Under `emit="descriptor"` it holds at most one entry, which is
         #: the whole difference between the two modes made visible to a caller.
         self.last_present: list = []
+        #: **What the layer thinks is where**, as an integer map over the coarse grid: `slot + 1`
+        #: for each candidate whose best match cleared the threshold, `0` for the rest.
+        #:
+        #: It exists because boxes and slot numbers alone are unreadable — the owner's words after
+        #: watching it: *"segment 라벨링이 안나오니까 뭐가 어떻게 돌아가는지 하나도 파악이 안됨."*
+        #: Right: four rectangles on a room tell you where the layer looked and nothing about how it
+        #: is carving the scene. This is the same information the presence pass already computes,
+        #: kept instead of discarded, and it plugs straight into the demo's existing segment window.
+        self.last_field = None
+        ys = sorted({c[1] for c in self.centres})
+        xs = sorted({c[0] for c in self.centres})
+        self._grid_shape = (len(ys), len(xs))
+        self._grid_index = {(x, y): (ys.index(y), xs.index(x)) for x, y in self.centres}
 
         n_bb = int(np.asarray(backbone.state).size)
         self._split = n_bb
@@ -274,6 +287,20 @@ class RecognitionLayer:
         k = int(np.argmax(changes))
         return k, changes[k] >= self.admit_change
 
+    def _field(self, described, centres, reports) -> None:
+        """Paint the coarse grid with each candidate's best matching slot.
+
+        Only coarse candidates are painted: they are the fixed set with a known grid position, and a
+        refined candidate sits inside one of their cells anyway.
+        """
+        field = np.zeros(self._grid_shape, dtype=np.int32)
+        for c, r in zip(centres, reports):
+            cell = self._grid_index.get((c[0], c[1]))
+            if cell is not None and r.slot >= 0 and r.matched:
+                row, col = cell
+                field[row, col] = r.slot + 1
+        self.last_field = field
+
     def _presence(self, described, centres) -> np.ndarray:
         """Best match per slot, over the whole frame. One pass, every slot, in parallel."""
         out = np.zeros(self.memory.capacity, dtype=np.float64)
@@ -282,7 +309,9 @@ class RecognitionLayer:
         #: costs 2.033 ms at 1,000 slots, so 147 candidates of it is 479 ms a frame; batched it is
         #: 8.8 ms, and 4,000 slots is 9.4 ms — nearly flat, because the cost is the queries'
         #: sparsification rather than the slot count. That is what makes a large memory usable.
-        for j, report in enumerate(self.memory.look_up_many(described)):
+        reports = self.memory.look_up_many(described)
+        self._field(described, centres, reports)
+        for j, report in enumerate(reports):
             if report.slot >= 0 and report.matched and report.score > out[report.slot]:
                 out[report.slot] = report.score
                 where[report.slot] = centres[j]

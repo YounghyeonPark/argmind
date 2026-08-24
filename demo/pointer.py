@@ -1292,7 +1292,9 @@ def main(argv=None):
             n = float(np.linalg.norm(v))
             return v / n if n > 0 else v
 
-    if args.segments and how == "motion":
+    if args.segments and how == "recognise":
+        pass                    # the match map is the field; nothing else is needed
+    elif args.segments and how == "motion":
         sys.exit("--segments needs --locate background or --locate texture: a frame difference "
                  "gives the leading and trailing edges of one object rather than its extent.")
     matcher = AppearanceMatcher(n_objects, describe) if args.identify else None
@@ -1437,6 +1439,12 @@ def main(argv=None):
                                                 contrast=args.seg_contrast)
             elif getattr(detector, "foreground", None) is not None:
                 labels = partition(detector.foreground, auto, floor=args.seg_floor)
+            if how == "recognise" and args.segments and detector.labels is not None:
+                #: **The match map**, one cell per candidate, coloured by slot. Boxes and slot
+                #: numbers alone said where the layer looked and nothing about how it carves the
+                #: scene, which the owner reported as making the whole thing unreadable.
+                cv2.imshow("argmind - segments",
+                           segment_image(detector.labels, [], scale=44))
             if labels is not None and args.segments:
                 cv2.imshow("argmind - segments",
                            segment_image(labels, field_ids if field_ids else

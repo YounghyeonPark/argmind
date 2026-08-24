@@ -712,3 +712,42 @@ def test_the_demo_recognises_MORE_THAN_ONE_object_and_orders_them_by_IDENTITY():
     assert "2 RECOGNISED" in line and "#0" in line and "#1" in line, (
         f"the status line reads {line!r}; with two objects present it must say so, or the screen "
         "looks serial while the mechanism is not")
+
+
+def test_the_recognising_locator_publishes_a_MATCH_MAP_for_the_segments_window():
+    """**Boxes and slot numbers alone are unreadable**, which the owner reported after watching it:
+    four rectangles on a room say where the layer looked and nothing about how it carves the scene.
+
+    The presence pass already computes a best-matching slot for every candidate; the map is that,
+    kept instead of discarded, as an integer field the demo's existing `--segments` window paints by
+    slot. It is a field over the *candidate grid*, not a pixel segmentation — this locator selects
+    regions rather than partitioning the frame, and it should look like what it is.
+    """
+    import numpy as np
+
+    from demo.pointer import build_recogniser, segment_image
+    from tests.test_bootstrap import render
+
+    det = build_recogniser(1, max_reported=4)
+    img = render([("disc", 0.30, 0.40), ("bar", 0.70, 0.62)], seed=1,
+                 texture="none").astype("f4")
+    for _ in range(4):
+        det(img)
+
+    field = det.labels
+    assert field is not None, (
+        "the locator publishes no field, so `--segments` has nothing to draw and the mode is "
+        "unreadable again")
+    assert field.ndim == 2 and field.dtype.kind in "iu", f"{field.shape} {field.dtype}"
+    assert field.shape[0] * field.shape[1] == len(det.layer.centres), (
+        "the field is not one cell per coarse candidate, so its geometry does not match what was "
+        "actually looked at")
+
+    slots = set(int(v) for v in np.unique(field))
+    assert slots - {0}, "no cell was assigned a slot; the map would render as a blank grid"
+    assert 0 in slots, (
+        "every cell claims a slot — a match map with no unmatched cells is telling you nothing, and "
+        "would mean the threshold is doing no work")
+
+    painted = segment_image(field, [], scale=8)
+    assert painted.shape == (field.shape[0] * 8, field.shape[1] * 8, 3)
