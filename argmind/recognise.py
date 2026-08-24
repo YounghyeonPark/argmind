@@ -188,6 +188,14 @@ class RecognitionLayer:
         xs = sorted({c[0] for c in self.centres})
         self._grid_shape = (len(ys), len(xs))
         self._grid_index = {(x, y): (ys.index(y), xs.index(x)) for x, y in self.centres}
+        #: **The axes `last_field` is indexed by**, in frame fractions: cell `(row, col)` is the
+        #: candidate centred at `(grid_x[col], grid_y[row])`.
+        #:
+        #: Public because a field with no geometry cannot be placed on an image. Its own window
+        #: needs none -- it draws the grid as a picture in the abstract -- but that is exactly what
+        #: made it unreadable: nothing tied a cell to a place in the room. An overlay on the camera
+        #: frame needs precisely these two axes and nothing else.
+        self.grid_y, self.grid_x = tuple(ys), tuple(xs)
 
         n_bb = int(np.asarray(backbone.state).size)
         self._split = n_bb

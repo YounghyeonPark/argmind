@@ -731,6 +731,28 @@ def segment_image(labels, ids=(), scale=6):
     return out
 
 
+def head_residual(learner):
+    """The residual norm to show in the status line, for whatever the learner turned out to be.
+
+    The **eleventh** block hoisted out of this `main()`, and it earned it the same way as the other
+    ten: `main()` read `head._e` directly, `build()` returns the LEARNER under the name `head`, and
+    with `--input learned` that is a `Stack` -- which has no `_e`. `--locate recognise --input
+    learned` died with `AttributeError: 'Stack' object has no attribute '_e'`, found by RUNNING the
+    demo. No fixture reaches that line: it needs a guard-watched update from a real teach signal.
+    Out here, a test can call the same thing `main()` calls.
+
+    `Stack.head` is public, so the step down is documented rather than guessed.
+
+    **The residual still comes out of a private buffer and that is stated rather than dressed up.**
+    There is deliberately no adapter-level accessor: it is a per-update quantity on `UpdateReport`,
+    which is what `Guard` evaluates, and `Pipeline.step()` does not forward it. Surfacing it
+    properly means a new field on `StepReport`, which the C++ port mirrors -- a library change with
+    a parity cost, not a status line's business.
+    """
+    inner = getattr(learner, "head", learner)
+    return float(np.linalg.norm(inner._e))   # noqa: SLF001
+
+
 def build_recogniser(n_objects: int = 1, max_reported: int | None = None,
                      admit_change: float | None = None):
     """`main()`'s own construction of the recognising locator, hoisted so a test can reach it.
@@ -904,6 +926,57 @@ def fingerprint(backbone, objects: int = 1, source: str = "backbone", output: st
     return fingerprint_of(*parts)
 
 
+#: How strongly a matched cell is tinted. 0.45 leaves the scene readable underneath -- the point is
+#: to see WHICH THING a cell landed on, which needs the thing to still be visible.
+MAP_TINT = 0.45
+
+
+def match_overlay(frame, field, grid, tint=MAP_TINT):
+    """Tint the camera frame where the recognition layer matched a slot, in that slot's colour.
+
+    The match map existed only in its own window, upscaled 44x, with nothing tying a cell to a place
+    in the room -- which is the *"뭐가뭔지 모르겠음"* the owner reported after watching it. Here it is
+    drawn on the camera frame at the display's own resolution, so a cell sits on the thing it
+    matched.
+
+    **A cell marks a crop CENTRE, not the crop's extent**, and that has to be said because the
+    picture implies otherwise. The crop is `RECOGNISE_CROP` px of the *analysis* frame -- a third of
+    its height -- so the tinted square is far smaller than what the descriptor actually saw. Tinting
+    the crop instead would cover the frame in overlapping squares and say less; the boxes already
+    drawn carry the extent, this carries the carving.
+
+    Colours come from `ID_COLOURS` indexed by slot, which is what `segment_image` does for the same
+    field, so the overlay and the window cannot disagree about what colour a slot is.
+    """
+    field = np.asarray(field)
+    if field.size == 0 or not field.any():
+        return frame
+    gx, gy = grid
+    h, w = frame.shape[:2]
+    # Half a candidate step, so cells tile the grid without overlapping. A single-cell axis has no
+    # step to read, and half the frame is the honest extent of "the only candidate".
+    hx = (gx[1] - gx[0]) / 2.0 if len(gx) > 1 else 0.5
+    hy = (gy[1] - gy[0]) / 2.0 if len(gy) > 1 else 0.5
+    colour = np.zeros_like(frame)
+    painted = np.zeros(frame.shape[:2], dtype=bool)
+    for row in range(min(field.shape[0], len(gy))):
+        for col in range(min(field.shape[1], len(gx))):
+            slot = int(field[row, col]) - 1
+            if slot < 0:
+                continue
+            y0, y1 = max(0, int((gy[row] - hy) * h)), min(h, int((gy[row] + hy) * h))
+            x0, x1 = max(0, int((gx[col] - hx) * w)), min(w, int((gx[col] + hx) * w))
+            if y1 <= y0 or x1 <= x0:
+                continue
+            colour[y0:y1, x0:x1] = ID_COLOURS[slot % len(ID_COLOURS)]
+            painted[y0:y1, x0:x1] = True
+    if not painted.any():
+        return frame
+    blend = (frame.astype(np.float32) * (1.0 - tint) + colour.astype(np.float32) * tint)
+    frame[painted] = blend[painted].astype(frame.dtype)
+    return frame
+
+
 def draw(cv2, frame, state):
     h, w = frame.shape[:2]
     if state["pred"] is not None:
@@ -926,6 +999,9 @@ def draw(cv2, frame, state):
                 cv2.putText(frame, tag, (px + 20, py + 5), cv2.FONT_HERSHEY_SIMPLEX,
                             0.5, colour, 2, cv2.LINE_AA)
     rec = state.get("recognise")
+    if rec is not None and state.get("map_overlay") and rec.get("field") is not None:
+        #: First, so the boxes and slot numbers stay legible on top of it.
+        match_overlay(frame, rec["field"], rec["grid"])
     if rec is not None:
         #: The attended crop, drawn as the box it actually is rather than as a point: the crop is a
         #: third of the frame height and contains the object without being centred on it, which is a
@@ -1043,15 +1119,16 @@ def _overlay(cv2, frame, state):
     return frame
 
 
-def main(argv=None):
-    # Imported here, not at module scope, so `build()` and the composition test it drives
-    # need nothing but argmind. The demo's dependency must not become the library's, and a
-    # test that could not run without a camera is a demo that rots.
-    try:
-        import cv2
-    except ImportError:  # pragma: no cover - the demo's dependency, not the library's
-        sys.exit("this demo needs OpenCV: pip install -r demo/requirements.txt")
+def parser():
+    """The command line, hoisted out of `main()` so a test can reach it.
 
+    The **tenth** block in this `main()` to be moved out for that reason, and the reason is
+    always the same one: a flag that only exists inside `main()` can be accepted by the parser
+    and never reach the thing it is supposed to control, and no test can tell. The parser also
+    sat after `import cv2`, so checking a default needed a camera library.
+
+    `main()` calls this and parses; nothing else changed.
+    """
     p = argparse.ArgumentParser(prog="python -m demo.pointer", description=__doc__)
     p.add_argument("--camera", type=int, default=0)
     p.add_argument("--load", action="store_true", help="restore a saved head at startup")
@@ -1123,6 +1200,11 @@ def main(argv=None):
                    help="drop colour from --input raw. Better for roles (12.09x against 8.34x, "
                         "with a third of the features) and nearly useless for identity (1.71x "
                         "against 118.87x), because colour is what tells the objects apart")
+    p.add_argument("--no-map-overlay", action="store_true",
+                   help="do not tint the camera frame with the recognition match map. The overlay "
+                        "is on by default under --locate recognise, because the map in its own "
+                        "window was measured against the thing it is for -- being able to tell "
+                        "what the layer is doing -- and failed: nothing tied a cell to a place.")
     p.add_argument("--segments", action="store_true",
                    help="open a second window showing the label regions: the background-difference "
                         "mask partitioned by nearest detection, coloured by remembered id. Needs "
@@ -1198,7 +1280,20 @@ def main(argv=None):
                    help="run the automatic detector every N frames (default 10). This is a "
                         "declaration of what the caller can afford, and it is what the learned "
                         "head is covering; N=1 needs no learned head at all")
-    args = p.parse_args(argv)
+    return p
+
+
+
+def main(argv=None):
+    # Imported here, not at module scope, so `build()` and the composition test it drives
+    # need nothing but argmind. The demo's dependency must not become the library's, and a
+    # test that could not run without a camera is a demo that rots.
+    try:
+        import cv2
+    except ImportError:  # pragma: no cover - the demo's dependency, not the library's
+        sys.exit("this demo needs OpenCV: pip install -r demo/requirements.txt")
+
+    args = parser().parse_args(argv)
 
     n_objects = args.objects
     if n_objects > 1 and args.teach == "mouse":
@@ -1309,7 +1404,8 @@ def main(argv=None):
              "n_auto": 0, "detector_ran": False, "teach": args.teach,
              "every": args.detect_every, "objects": n_objects, "how": how,
              "identify": args.identify, "vocab": 0, "slot_ids": [], "minted": [],
-             "remember": args.remember, "source": args.input, "vocab_full": False}
+             "remember": args.remember, "source": args.input, "vocab_full": False,
+             "map_overlay": not args.no_map_overlay}
     # Calibrated from the first second: the scale of the caller's own statistic and of the
     # backbone's output. Both are numbers the library refuses to guess.
     frame_std = None
@@ -1388,6 +1484,10 @@ def main(argv=None):
                 "occupied": detector.layer.memory.occupied,
                 "capacity": detector.layer.memory.capacity,
                 "crop": RECOGNISE_CROP,
+                #: The match map and the geometry it is indexed by, so it can be drawn ON the
+                #: camera frame instead of only in a window of its own.
+                "field": detector.layer.last_field,
+                "grid": (detector.layer.grid_x, detector.layer.grid_y),
             }
         #: Which cluster each surviving label came from, in slot order. Carried because the
         #: display used to colour cluster *n* with the id of slot *n*, and those are different
@@ -1520,7 +1620,13 @@ def main(argv=None):
         if report.updated:
             state["updates"] += 1
             state["last_update_frame"] = frames
-            state["residual"] = float(np.linalg.norm(head._e))   # noqa: SLF001
+            #: `build()` returns the LEARNER under the name `head`, so with `--input learned` this
+            #: is a `Stack` -- and `Stack` has no `_e`. `--locate recognise --input learned` died
+            #: here with `AttributeError: 'Stack' object has no attribute '_e'`, found by RUNNING
+            #: the demo: no fixture reaches this line, because it needs a guard-watched update from
+            #: a real teach signal.
+            #:
+            state["residual"] = head_residual(head)
         # Learning is not continuous and the demo must say so: the head adapts only on a frame
         # that carries a NEW label, which means only while the button is held. There is no
         # self-supervision here, and that is measured rather than unfinished -- predicting the

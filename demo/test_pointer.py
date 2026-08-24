@@ -751,3 +751,256 @@ def test_the_recognising_locator_publishes_a_MATCH_MAP_for_the_segments_window()
 
     painted = segment_image(field, [], scale=8)
     assert painted.shape == (field.shape[0] * 8, field.shape[1] * 8, 3)
+
+class _StubCv2:
+    """Enough of `cv2` for `draw()` to run: it records call names and touches nothing.
+
+    Written because **nothing tested `draw()` at all**, and every demo bug this file has caught so
+    far lived in exactly that kind of untested wiring — `main()` building one thing and the harness
+    building another.
+    """
+
+    FONT_HERSHEY_SIMPLEX = 0
+    LINE_AA = 16
+    MARKER_CROSS = 0
+    MARKER_TILTED_CROSS = 1
+
+    def __init__(self):
+        self.calls = []
+
+    def __getattr__(self, name):
+        def record(*a, **k):
+            self.calls.append(name)
+        return record
+
+
+def _recognise_state(field, overlay=True):
+    import demo.pointer as P
+
+    layer = P.build_recogniser(1).layer
+    #: Every key `draw`, `status_lines` and `_overlay` read, listed by walking their ASTs rather
+    #: than by adding one each time a KeyError appeared — a stub filled in by trial and error is a
+    #: stub that stops matching `main()` the moment the display grows a field.
+    state = {
+        "pred": None, "frozen": False, "frozen_by": (), "taught_points": [], "learning": False,
+        "n_taught": 0, "teach": "both", "remember": False, "vocab_full": False, "vocab": 0,
+        "detector_ran": False, "minted": [], "objects": 1, "slot_ids": [], "drift": 0.0,
+        "fps": 0.0, "how": "recognise", "identify": False, "n_auto": 0, "residual": 0.0,
+        "source": "learned", "updates": 0, "map_overlay": overlay,
+        "recognise": {"present": [], "slot": 0, "recognised": True, "centre": (0.5, 0.5),
+                      "occupied": 1, "capacity": 8, "crop": P.RECOGNISE_CROP,
+                      "field": field, "grid": (layer.grid_x, layer.grid_y)},
+    }
+    return state
+
+
+def test_the_match_map_is_drawn_ON_the_camera_frame_where_it_matched():
+    """The owner's report was *"뭐가뭔지 모르겠음"* — the map existed only in a window of its own,
+    upscaled 44x, with nothing tying a cell to a place in the room. Drawn on the frame, a cell sits
+    on the thing it matched.
+
+    Asserted as placement rather than as "something changed": cell `(0, 0)` must land at the first
+    candidate centre and **not** in the middle of the frame, which is what a field drawn with the
+    wrong geometry would do.
+    """
+    import numpy as np
+
+    import demo.pointer as P
+
+    layer = P.build_recogniser(1).layer
+    field = np.zeros((len(layer.grid_y), len(layer.grid_x)), dtype=np.int32)
+    field[0, 0] = 1
+    frame = np.zeros((480, 640, 3), dtype=np.uint8)
+    P.match_overlay(frame, field, (layer.grid_x, layer.grid_y))
+
+    ys, xs = np.nonzero(frame.any(axis=2))
+    assert len(ys), "a matched cell painted nothing"
+    cy, cx = (ys.min() + ys.max()) / 2, (xs.min() + xs.max()) / 2
+    want_y, want_x = layer.grid_y[0] * 480, layer.grid_x[0] * 640
+    assert abs(cy - want_y) <= 2 and abs(cx - want_x) <= 2, (
+        f"cell (0,0) painted around ({cy:.0f}, {cx:.0f}) and its candidate is at "
+        f"({want_y:.0f}, {want_x:.0f}) — the overlay would tint the wrong part of the room")
+    assert np.array_equal(frame[240:260, 300:320], np.zeros((20, 20, 3), np.uint8)), (
+        "the frame centre was tinted by a cell at the corner, so the geometry is being ignored")
+
+    #: The extent too, not only the centre: swapping the two half-steps moves no centre and would
+    #: survive everything above. A candidate step is 8 px of a 72x96 analysis frame either way, and
+    #: the display shares that aspect ratio, so a cell must come out SQUARE in display pixels.
+    ph, pw = ys.max() - ys.min() + 1, xs.max() - xs.min() + 1
+    assert abs(ph - pw) <= 2, (
+        f"a cell painted {ph}x{pw} display pixels; the candidate step is the same number of pixels "
+        "on both axes here, so the two half-steps have been crossed")
+
+
+def test_an_UNMATCHED_cell_leaves_the_frame_untouched():
+    """The control. A tint that covered the frame regardless would look informative and carry
+    nothing — and the field is mostly zeros on any real scene."""
+    import numpy as np
+
+    import demo.pointer as P
+
+    layer = P.build_recogniser(1).layer
+    empty = np.zeros((len(layer.grid_y), len(layer.grid_x)), dtype=np.int32)
+    frame = np.full((480, 640, 3), 77, dtype=np.uint8)
+    before = frame.copy()
+    P.match_overlay(frame, empty, (layer.grid_x, layer.grid_y))
+    assert np.array_equal(frame, before), "an all-zero field still tinted the frame"
+
+
+def test_two_slots_get_DIFFERENT_colours_and_they_are_the_window_s_own():
+    """The overlay and the separate window must not disagree about what colour a slot is; they read
+    the same palette by slot, which is what `segment_image` does for the same field."""
+    import numpy as np
+
+    import demo.pointer as P
+
+    layer = P.build_recogniser(1).layer
+    field = np.zeros((len(layer.grid_y), len(layer.grid_x)), dtype=np.int32)
+    field[0, 0], field[-1, -1] = 1, 2
+    frame = np.zeros((480, 640, 3), dtype=np.uint8)
+    P.match_overlay(frame, field, (layer.grid_x, layer.grid_y), tint=1.0)
+
+    a = tuple(int(v) for v in frame[int(layer.grid_y[0] * 480), int(layer.grid_x[0] * 640)])
+    b = tuple(int(v) for v in frame[int(layer.grid_y[-1] * 480), int(layer.grid_x[-1] * 640)])
+    assert a != b, "both slots were tinted the same colour, so the carving is invisible"
+    assert a == tuple(P.ID_COLOURS[0]) and b == tuple(P.ID_COLOURS[1]), (
+        f"the overlay used {a} and {b}; segment_image colours the same field by slot from "
+        "ID_COLOURS, and two views that disagree are worse than one")
+
+
+def test_draw_APPLIES_the_overlay_and_the_flag_turns_it_OFF():
+    """The wiring, which is where this demo's bugs live. `--no-map-overlay` has to reach the drawing
+    and not merely be accepted by the parser."""
+    import numpy as np
+
+    import demo.pointer as P
+
+    layer = P.build_recogniser(1).layer
+    field = np.zeros((len(layer.grid_y), len(layer.grid_x)), dtype=np.int32)
+    field[2, 3] = 1
+
+    on = np.full((480, 640, 3), 90, dtype=np.uint8)
+    P.draw(_StubCv2(), on, _recognise_state(field, overlay=True))
+    off = np.full((480, 640, 3), 90, dtype=np.uint8)
+    P.draw(_StubCv2(), off, _recognise_state(field, overlay=False))
+
+    band = P.status_lines(_recognise_state(field))
+    below = 8 + 22 * len(band) + 8          # under the status band, which dims rows either way
+    assert not np.array_equal(on[below:], off[below:]), (
+        "draw() produced the same frame with the overlay on and off, so the flag is not reaching it")
+    assert np.array_equal(off[below:], np.full_like(off[below:], 90)), (
+        "with the overlay off draw() still tinted the frame below the status band")
+
+    args = P.parser().parse_args(["--locate", "recognise", "--no-map-overlay"])
+    assert args.no_map_overlay is True
+    assert P.parser().parse_args([]).no_map_overlay is False, (
+        "the overlay must be ON by default — its own window was measured against the thing it is "
+        "for and failed")
+
+def test_the_stub_state_COVERS_what_the_drawing_actually_reads():
+    """A hand-listed fixture drifts. This walks `draw`, `status_lines` and `_overlay` for every
+    `state[...]` they touch and asserts the stub supplies it — so a display that grows a field fails
+    here instead of raising `KeyError` from inside a test that was passing yesterday.
+
+    The same defect, twice fixed in this file already: a harness that re-implements the assembly
+    cannot see the assembly break.
+    """
+    import ast
+    import io as _io
+
+    import demo.pointer as P
+
+    tree = ast.parse(_io.open(P.__file__, encoding="utf-8").read())
+    reads = set()
+    for fn in tree.body:
+        if not (isinstance(fn, ast.FunctionDef)
+                and fn.name in ("draw", "status_lines", "_overlay")):
+            continue
+        for n in ast.walk(fn):
+            if (isinstance(n, ast.Subscript) and isinstance(n.value, ast.Name)
+                    and n.value.id == "state" and isinstance(n.slice, ast.Constant)):
+                reads.add(n.slice.value)
+            if (isinstance(n, ast.Call) and isinstance(n.func, ast.Attribute)
+                    and n.func.attr == "get" and isinstance(n.func.value, ast.Name)
+                    and n.func.value.id == "state" and n.args
+                    and isinstance(n.args[0], ast.Constant)):
+                reads.add(n.args[0].value)
+
+    assert reads, "no state keys were found, so this test is checking nothing"
+    missing = reads - set(_recognise_state(None).keys())
+    assert not missing, (
+        f"the drawing reads {sorted(missing)} and the stub does not supply it; add it here so the "
+        "fixture keeps matching main()")
+
+def test_the_tint_touches_NOTHING_outside_the_cells_it_painted():
+    """The surviving mutant, closed. Blending the whole frame instead of only the painted cells
+    dims the entire scene by the tint fraction — and every test above missed it, because a black
+    frame stays black however much you scale it and an empty field returns before the blend.
+
+    A non-black frame and a field with one cell in it is the only fixture that can see it.
+    """
+    import numpy as np
+
+    import demo.pointer as P
+
+    layer = P.build_recogniser(1).layer
+    field = np.zeros((len(layer.grid_y), len(layer.grid_x)), dtype=np.int32)
+    field[3, 4] = 1
+    frame = np.full((480, 640, 3), 120, dtype=np.uint8)
+    P.match_overlay(frame, field, (layer.grid_x, layer.grid_y))
+
+    changed = np.any(frame != 120, axis=2)
+    assert changed.any(), "the matched cell painted nothing"
+    step_x = layer.grid_x[1] - layer.grid_x[0]
+    step_y = layer.grid_y[1] - layer.grid_y[0]
+    expected = int(round(step_x * 640)) * int(round(step_y * 480))
+    assert changed.sum() <= expected * 1.2, (
+        f"{changed.sum()} pixels changed for one cell, which covers about {expected} — the tint is "
+        "being applied outside the cells it matched, so the whole scene is dimmed")
+    assert (frame[0, 0] == 120).all() and (frame[-1, -1] == 120).all(), (
+        "a corner far from the only matched cell was modified")
+
+def test_the_status_RESIDUAL_works_for_every_input_source():
+    """The crash `--input learned` shipped with, held under test.
+
+    `main()` read `head._e` while `build()` hands back a `Stack` for `--input learned`, and no
+    fixture could see it because the line needs a guard-watched update from a real teach signal.
+    So the expression is hoisted and both callers use it — `main()` is asserted to call it below,
+    the same AST check this file already applies to `learn_features`.
+    """
+    import numpy as np
+
+    import demo.pointer as P
+
+    for source in ("backbone", "raw", "learned"):
+        _bb, learner, _guard, _feat, _taught, _fmap, _pipe = P.build(1, source=source)
+        r = P.head_residual(learner)
+        assert isinstance(r, float) and np.isfinite(r), (
+            f"--input {source} gives residual {r!r}; the status line would crash or read NaN")
+
+    stack_sourced = P.build(1, source="learned")[1]
+    assert hasattr(stack_sourced, "head"), (
+        "--input learned no longer produces something with a public `.head`, so the walk down in "
+        "head_residual() is guessing again")
+
+
+def test_main_CALLS_head_residual_rather_than_reaching_in_itself():
+    """Via the AST, not a substring: a mention in a docstring is not a call, and the point of the
+    hoist is that `main()` stops doing the algebra. Present-and-called-by-nothing is the other half
+    of the same defect."""
+    import ast
+    import io as _io
+
+    import demo.pointer as P
+
+    tree = ast.parse(_io.open(P.__file__, encoding="utf-8").read())
+    main = next(n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name == "main")
+    called = {n.func.id for n in ast.walk(main)
+              if isinstance(n, ast.Call) and isinstance(n.func, ast.Name)}
+    assert "head_residual" in called, "main() no longer calls head_residual()"
+
+    reaches = [n for n in ast.walk(main)
+               if isinstance(n, ast.Attribute) and n.attr == "_e"]
+    assert not reaches, (
+        "main() reaches for `_e` itself again; that is the attribute whose absence on Stack crashed "
+        "--input learned")

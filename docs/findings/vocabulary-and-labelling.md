@@ -1386,3 +1386,61 @@ test closes it.
 different axis (more scene context per descriptor, not more detail) and it costs the same 16x. And
 the demo was not run at high resolution end to end; the descriptor is the bottleneck measured here,
 not the display.
+
+### The match map on the camera frame, and a crash `--input learned` had been carrying — 2026-08-24
+
+The map in its own window failed at the one thing it was added for. The owner's report after watching
+it: *"뭐가뭔지 모르겠음."* Right — a 44x upscaled grid of coloured cells beside the camera view has
+nothing tying a cell to a place in the room, so it says no more than the boxes did.
+
+**Drawn on the camera frame instead**, at the display's own resolution, so a cell sits on the thing
+it matched. `RecognitionLayer.grid_x` / `grid_y` are the missing piece and are now public: the field
+is an integer map with **no geometry of its own**, and its own window needed none, which is exactly
+why it could not be placed. Cells are tinted at 0.45 so the scene stays visible underneath — the
+point is to see *which thing* a cell landed on, which needs the thing.
+
+**A cell marks a crop CENTRE, not the crop's extent**, and the code says so because the picture
+implies otherwise: the crop is 24 px of the 72x96 analysis frame, a third of its height, so the
+tinted square is far smaller than what the descriptor saw. Tinting the crop would cover the frame in
+overlapping squares and say less. The boxes carry the extent; the tint carries the carving. Colours
+come from `ID_COLOURS` indexed by slot, which is what `segment_image` already does for the same
+field, so the overlay and the window cannot disagree about what colour a slot is.
+
+**On by default under `--locate recognise`, with `--no-map-overlay` to turn it off.** Default-on
+because the alternative was measured against its purpose and failed.
+
+**Eight mutants, one survived and it was a real gap.** Applying the tint to the whole frame instead
+of only the painted cells dims the entire scene, and every test missed it: a black fixture frame
+stays black however much you scale it, and an all-zero field returns before the blend. A non-black
+frame with one populated cell is the only thing that sees it. Also caught: an off-by-one slot colour,
+dropping slot 0, crossing the two half-steps (which moves no centre, so the *extent* had to be
+asserted as well), transposing the field, ignoring the flag, and handing out the axes unsorted or
+swapped.
+
+**Running it found a crash that had nothing to do with the overlay.** `--locate recognise --input
+learned` died with `AttributeError: 'Stack' object has no attribute '_e'`: `build()` returns the
+**learner** under the name `head`, so with `--input learned` that name holds a `Stack`, and `main()`
+was reading `head._e` for the status line. Every other `--input` gives an adapter that has it. This
+is the **eleventh** block hoisted out of `main()` for the same reason as the previous ten — no
+fixture reaches that line, because it needs a guard-watched update from a real teach signal — and
+`head_residual()` is now called by `main()` and by a test that exercises all three sources. A second
+test asserts `main()` calls it and no longer reaches for `_e` itself, **via the AST**, the same check
+this file already applies to `learn_features`.
+
+**The residual still comes out of a private buffer, and that is stated rather than dressed up.**
+There is deliberately no adapter-level accessor: it is a per-update quantity on `UpdateReport`, which
+is what `Guard` evaluates, and `Pipeline.step()` does not forward it. Surfacing it properly means a
+new field on `StepReport`, which the C++ port mirrors — a library change with a parity cost, and not
+a status line's business.
+
+**And `main()`'s argument parser is out too**, as the tenth hoist: it sat *after* `import cv2`, so
+checking a flag's default needed a camera library, and a flag can be accepted by the parser and never
+reach the thing it controls with no test able to tell. `demo/test_pointer.py` now drives `draw()`
+itself against a stub `cv2` — **nothing tested `draw()` at all before this** — and the stub's state
+dict is checked against every key `draw`, `status_lines` and `_overlay` actually read, by walking
+their ASTs, so a display that grows a field fails there instead of raising `KeyError` inside a test
+that was passing yesterday.
+
+**What this does not do.** It does not make the layer attend to more regions, change any descriptor,
+or alter what is recognised: the same field that went to the window goes to the frame. It is a
+display change, and the wandering the owner reported is measured elsewhere and unaffected.

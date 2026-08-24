@@ -80,7 +80,7 @@ install once per clone with `git config core.hooksPath .githooks`.
 **Built and verified**: `argmind/` (`stream`, `align`, `adapt`, `guard`, `pipeline`, `persist`,
 `bench`, `backbone`) and the whole runtime library across to C++ in `cpp/` — a freestanding core
 with compile-time shapes behind a C ABI, and a hosted tier (`cpp/include/argmind/host/`) whose
-`RuntimeShaped*` classes take their shapes at construction. 1,177 Python tests and 4,652 C++ checks
+`RuntimeShaped*` classes take their shapes at construction. 1,187 Python tests and 4,652 C++ checks
 pass; every suite is mutation-checked. Compilation, linking **and execution** are verified on the
 declared floor — the full C++ self-check suite runs under QEMU on Cortex-M4 and Cortex-M55.
 
@@ -226,6 +226,16 @@ p~0.016). **My first two answers were single-seed draws and are withdrawn** — 
 collapse reads 1.07 ± 1.37 over ten seeds, and a margin that halved at seed 1 *triples* at seed 23.
 Carry-forward: **on this question the seed spread exceeds the effect, so one seed is not evidence**,
 and the tidiness that fooled me was a monotone collapse rather than a round number.
+
+**The match map is drawn ON the camera frame now (2026-08-24)**, not only in its own 44x-upscaled
+window — `RecognitionLayer.grid_x`/`grid_y` are public because a field with no geometry cannot be
+placed, and a cell marks a crop *centre*, not the crop's extent, which the code says because the
+picture implies otherwise. On by default under `--locate recognise`; `--no-map-overlay` turns it off.
+Eight mutants, one survived and was real: tinting the whole frame instead of the matched cells dims
+the scene, and a black fixture frame cannot see it. **Running it also found a crash the overlay had
+nothing to do with** — `--input learned` died on `head._e` because `build()` returns the *learner*
+under that name and a `Stack` has no `_e`. That is the **eleventh** hoist out of `main()`
+(`head_residual`), the parser is the tenth, and `draw()` now has tests at all — it had none.
 
 **Open numbers nobody has**: backward-pass throughput on an M55; whether fp32 holds past ten million
 updates on a non-stationary target; and why the map head's two harnesses disagree on free-running

@@ -545,3 +545,55 @@ def test_the_baseline_ADVANCES_so_a_thing_that_moved_once_stops_reading_as_chang
     assert after_stopping < while_moving / 5, (
         f"change stayed at {after_stopping:.5f} against {while_moving:.5f} while moving — the "
         "baseline is not advancing, so anything that ever moved keeps earning admissions forever")
+
+def test_the_grid_AXES_place_every_painted_cell_where_the_layer_says_it_LOOKED():
+    """`last_field` is an integer map with no geometry of its own, and `grid_x` / `grid_y` are the
+    geometry. Without them the field can only be shown as a picture in the abstract — which is
+    exactly what made it unreadable, since nothing tied a cell to a place in the room.
+
+    The property an overlay on the camera frame depends on, and the only one that can turn it into a
+    lie: a cell painted for a slot must sit within one candidate step of the centre the layer
+    *reports* for that slot. If those disagreed the tint would contradict the box drawn beside it —
+    the same unreadability the field was added to fix, arriving with more colour this time.
+
+    Within one step and not exactly equal, deliberately: `_field` paints only the **coarse**
+    candidates, so a slot whose best match was a refined position is reported up to the refinement
+    span away from its cell.
+    """
+    L = _presence_layer()
+    assert L.last_field is None, "a layer that has seen nothing must not claim a field"
+    img = render([("disc", 0.30, 0.40), ("bar", 0.70, 0.62)], seed=1, texture="none")
+    for _ in range(4):
+        L.features(img)
+
+    assert L.last_field.shape == (len(L.grid_y), len(L.grid_x)), (
+        f"the field is {L.last_field.shape} and the axes are "
+        f"{(len(L.grid_y), len(L.grid_x))}; a drawing indexes one by the other")
+    step_x, step_y = L.grid_x[1] - L.grid_x[0], L.grid_y[1] - L.grid_y[0]
+    assert L.last_present, "nothing was recognised, so the placement claim would be vacuous"
+
+    checked = 0
+    for slot, _score, (cx, cy) in L.last_present:
+        cells = np.argwhere(L.last_field == slot + 1)
+        if not len(cells):
+            continue                      # its best match was a refined position; see the docstring
+        checked += 1
+        off = min(max(abs(L.grid_x[c] - cx) / step_x, abs(L.grid_y[r] - cy) / step_y)
+                  for r, c in cells)
+        assert off <= 1.0, (
+            f"slot {slot} is reported at ({cx:.3f}, {cy:.3f}) but its nearest painted cell is "
+            f"{off:.2f} candidate steps away — an overlay would tint one place and box another")
+    assert checked, (
+        "no reported slot had a painted cell, so nothing above was actually compared; the field "
+        "and the presence report have stopped agreeing about anything")
+
+
+def test_the_axes_are_the_SORTED_UNIQUE_candidate_coordinates():
+    """Stated as the round trip, because "the axes" is only meaningful if a caller can go from a
+    candidate to its cell and back. A duplicated or unsorted axis would still have the right
+    *length* and would place every cell wrongly."""
+    L = _presence_layer()
+    assert list(L.grid_x) == sorted(set(L.grid_x)) and list(L.grid_y) == sorted(set(L.grid_y))
+    assert set(L.centres) == {(x, y) for x in L.grid_x for y in L.grid_y}, (
+        "the candidate set is not the product of the two axes, so a rectangular field cannot "
+        "represent it and some cell in any drawing means nothing")
