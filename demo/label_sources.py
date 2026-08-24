@@ -1407,7 +1407,13 @@ class RecogniseLocator:
     **What it costs, measured, because the demo will show it.** 147 crop embeddings per frame at
     0.763 ms each is 112 ms of a **119.7 ms frame → 8.4 fps**, against a camera running at ~30.
     (An earlier 6.5 fps here was measured with the *test fixture's* narrower plan and published as
-    this one's; corrected 2026-08-20.) Running the backbone
+    this one's; corrected 2026-08-20.)
+
+    **That rate is for a memory holding ONE recognised object, and the demo does not stay there.**
+    147 crops is one reported slot. Refinement adds a neighbourhood per reported slot, so over
+    2,005 camera frames — 48 exemplars, 19.6 slots present a frame — it is **~995 crops and a
+    measured 2.6 fps**. Counted, not extrapolated: 95 crops at 2 reported slots, 565 at 8, 995 at
+    33, against a 70-candidate coarse pass. Running the backbone
     once on the whole frame instead would be 21× cheaper and **does not work**: a region pooled from
     the feature map can only be placed to the nearest map cell, 4 frame pixels, and the descriptor
     needs 2 — the speedup and the precision come from the same stride. So the frame rate is the

@@ -80,7 +80,7 @@ install once per clone with `git config core.hooksPath .githooks`.
 **Built and verified**: `argmind/` (`stream`, `align`, `adapt`, `guard`, `pipeline`, `persist`,
 `bench`, `backbone`) and the whole runtime library across to C++ in `cpp/` — a freestanding core
 with compile-time shapes behind a C ABI, and a hosted tier (`cpp/include/argmind/host/`) whose
-`RuntimeShaped*` classes take their shapes at construction. 1,187 Python tests and 4,652 C++ checks
+`RuntimeShaped*` classes take their shapes at construction. 1,190 Python tests and 4,652 C++ checks
 pass; every suite is mutation-checked. Compilation, linking **and execution** are verified on the
 declared floor — the full C++ self-check suite runs under QEMU on Cortex-M4 and Cortex-M55.
 
@@ -236,6 +236,18 @@ the scene, and a black fixture frame cannot see it. **Running it also found a cr
 nothing to do with** — `--input learned` died on `head._e` because `build()` returns the *learner*
 under that name and a `Stack` has no `_e`. That is the **eleventh** hoist out of `main()`
 (`head_residual`), the parser is the tenth, and `draw()` now has tests at all — it had none.
+
+**The long run happened (2026-08-24) and the patchwork is not fragmentation — it is the room.**
+2,005 frames, 48 exemplars: **19.6 of 43.3 slots present every frame** (45% of the memory), **51.4 of
+70 cells claimed** (73% of the frame), 13.6 slot colours tiling it, and coverage saturates by frame
+250 while `occupied` goes on 20 → 48. On admission the memory already scores **≥0.80 for 57%** of
+what it stores, dominated by the band *just below* the 0.85 threshold (40%) rather than by outright
+duplicates (17%) — **I predicted the opposite ranking and withdraw it**; the claim filter's
+one-position-per-slot explains all eight of the 17% and leaves no residue. **And the published rate
+is for ONE reported slot**: 147 crops is one slot, ~995 at the ~20 slots this reaches, measured
+**2.6 fps against a published 8.4**, because refinement costs a neighbourhood per reported slot
+(10-13× timed, 14× counted). The look-up is not the cause and its "nearly flat" stands. Refinement's
+*benefit* is still unmeasured and nothing was changed on that basis.
 
 **Open numbers nobody has**: backward-pass throughput on an M55; whether fp32 holds past ten million
 updates on a non-stationary target; and why the map head's two harnesses disagree on free-running

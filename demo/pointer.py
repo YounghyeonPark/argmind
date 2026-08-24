@@ -1356,7 +1356,9 @@ def main(argv=None):
         #: that rather than approximated -- see `RecogniseLocator`.
         #:
         #: 147 crops a frame at 0.763 ms each is 8.4 fps, measured on this construction -- the
-        #: earlier 6.5 fps was the test fixture's narrower plan. That is the method's rate and not
+        #: earlier 6.5 fps was the test fixture's narrower plan. **That is the rate with ONE slot
+        #: reported**; refinement adds a neighbourhood per reported slot, so at the ~20 slots a
+        #: 2,000-frame run settles on it is ~995 crops and a measured 2.6 fps. The method's rate and not
         #: the wiring's: one whole-frame pass would be 21x cheaper and loses the identity, because a
         #: region pooled from the feature map can only be centred to 4 pixels and the descriptor
         #: needs 2.

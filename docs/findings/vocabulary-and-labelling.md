@@ -1444,3 +1444,101 @@ that was passing yesterday.
 **What this does not do.** It does not make the layer attend to more regions, change any descriptor,
 or alter what is recognised: the same field that went to the window goes to the frame. It is a
 display change, and the wandering the owner reported is measured elsewhere and unaffected.
+
+### 2,005 frames of camera: what the patchwork is, and what it costs there — 2026-08-24
+
+Every capture here had stopped at 60 frames and 9 exemplars while the owner's screen showed 88 after
+2,967, which is why the patchwork was recorded as *untested* rather than explained. Run properly,
+through `build_recogniser()` so it cannot measure a different assembly than the demo runs:
+
+    2,005 frames, 781 s, 48 exemplars admitted, capacity 256
+    last 500 frames:  19.6 of 43.3 slots PRESENT every frame  — 45% of the memory
+                      51.4 of 70 candidate cells claimed      — 73% of the frame
+                      13.6 distinct slots painted in the map
+    cell coverage saturates by frame 250 (52 cells) while `occupied` goes on 20 -> 48
+
+**The memory is holding the room, not the objects in it.** After frame 250 a new exemplar buys no
+coverage — only another claimant for cells that were already claimed. Thirteen or fourteen slot
+colours tile three quarters of the frame every frame, which is the patchwork, and it is not one
+object fragmenting: it is the whole scene being remembered.
+
+**On admission, what did the memory already know?** `look_up` on the descriptor about to be stored,
+47 admissions with a memory to compare against:
+
+| best existing similarity | count | share |
+|---|---|---|
+| [0.00, 0.50) | 2 | 4% |
+| [0.50, 0.70) | 9 | 19% |
+| [0.70, 0.80) | 9 | 19% |
+| **[0.80, 0.85)** — just below threshold | **19** | **40%** |
+| [0.85, 1.01) — already matched | 8 | 17% |
+
+**57% of admissions are 0.80-or-more similar to something already stored**, and the dominant band is
+*just below* the 0.85 threshold. `_pick_to_admit` selects by rarity **within the frame** and never
+asks the memory what it holds, so a crop the memory almost recognises is stored as if it were new.
+
+**My own prediction was wrong and is withdrawn.** I predicted that duplication through the claim
+filter would dominate. It is 17%; the near-threshold band is 40%, more than twice as large. The
+mechanism I named is real and secondary.
+
+Where it does happen it is fully accounted for: of the eight duplicates admitted at or above
+threshold, **seven cleared the claim filter on x, three on y, two on both, and none on neither** —
+`claimed = [c for _s, _sc, c in self.last_present]` holds one position per slot, so the same
+remembered thing seen far enough from that one position is still `free`. No unexplained residue.
+
+**And the published frame rate describes a memory holding one object.** Crops described per frame,
+counted rather than timed, on camera frames:
+
+| reported slots | 2 | 5 | 8 | 16 | 33 |
+|---|---|---|---|---|---|
+| with refinement | 95 | 338 | 565 | 935 | **995** |
+
+The coarse pass alone is 70. **147 crops — the recorded figure — is one reported slot.** At the ~20
+slots this run settles on it is ~995, and the measured rate is **2.6 fps against a published 8.4**
+(that 8.4 was measured on a nearly-empty memory; a 60-frame run at 8 exemplars reads 10.9 fps, a
+different run and stated as such). Timed at matched reported-slot counts, refinement costs **10-13x**:
+726 ms against 72 ms at 17 present, 671 against 51 at 33.
+
+**The memory look-up is not the cause**, and the recorded "nearly flat from 1,000 to 4,000 slots"
+stands: without refinement the pass stays 13-80 ms across the same range. The cost is refinement's
+one neighbourhood per reported slot, and the saturation at ~995 is those neighbourhoods overlapping
+until their union covers the frame.
+
+This bears directly on a note already in the code: *"Refining every seed rather than one is kept on
+principle, not on evidence… a mutant refining only the first seed **survives**: no fixture here shows
+a benefit."* The principle now has a measured price — 14x the crops, 10-13x the time, in the regime
+the demo actually reaches. **Nothing was changed on that basis**; it is the owner's call, and the
+benefit is still unmeasured, which is the half that matters.
+
+`tests/test_recognise.py` holds three of these camera-free: the near-threshold admission (the
+fixture lands on 0.8132 against 0.85 by itself, which is why it is the test), the above-threshold
+duplicate getting in through the claim filter, and refinement's per-slot cost **as a count, not a
+clock** — a wall-clock figure is not something this suite gets to assert.
+
+**The claim-filter test needed THREE copies of the object and the reason is the finding restated.**
+With two, the layer recognises both from one slot and the reported position lands on whichever scores
+higher, so nothing is left far enough away to be `free` — measured, and the first version of the test
+failed on exactly that. A third copy is what a moving camera scene supplies continuously: more of the
+remembered thing than one reported position can cover. The threshold is lowered to 0.80 there, said
+plainly, and the separation is asserted against `_claim_x` so the fixture cannot quietly stop showing
+the mechanism.
+
+**A fourth test was written and removed: the DISTRIBUTION cannot be held here.** No synthetic scene
+in that file reproduces the 57%-at-0.80 share — twelve frames of `render(...)` at every texture
+setting give **two** admissions with best priors 0.49–0.68, because these scenes are near-static and
+the admission gate barely fires. That is the same fixture limit already recorded above under *the
+gate fires on every real frame and no fixture here can show it*. Forcing it with a tuned threshold
+would have been a test measuring its own fixture, so the shares stay camera-measured and unprotected,
+and the tests hold the mechanisms instead.
+
+Five mutants, all caught: admission consulting the memory, the claim filter excluding every candidate
+near any reported position, refinement skipped, refinement running for the first seed only (which the
+weaker first version of the cost test let through — a total-count assertion cannot see it, so a
+one-slot scene is measured beside the many-slot one), and a look-up that always reports a match. The
+last survives the three tests here and is caught by `test_a_COARSE_grid_loses_the_identity`; a mutant
+surviving a `-k` subset is not a gap, and checking that rather than reporting it was the difference.
+
+**What is still not measured.** Whether the 88-exemplar state differs in kind from 48 — this run
+stopped at 48 in 781 s and the growth was still linear, so the answer is probably "more of the same",
+but that is an expectation and not a measurement. And what refinement *buys*, which is the number
+that would justify its price.

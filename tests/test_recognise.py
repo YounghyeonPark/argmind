@@ -275,11 +275,12 @@ def test_the_gate_fires_on_every_REAL_frame_and_no_fixture_here_can_show_it():
 
 
 
-def _presence_layer(step=4, capacity=8, threshold=0.85, seed=23):
+def _presence_layer(step=4, capacity=8, threshold=0.85, seed=23, refine=None):
     from argmind.backbone import Backbone
     bb = Backbone(PLAN, (CROP, CROP, 3), dtype="f8", seed=seed, pool=POOL)
     mem = ExemplarMemory(capacity, bb.n_outputs, 16, threshold=threshold)
-    return RecognitionLayer(bb, mem, (H, W, 3), grid(step), admit_margin=0.02, emit="presence")
+    return RecognitionLayer(bb, mem, (H, W, 3), grid(step), admit_margin=0.02, emit="presence",
+                            refine=refine)
 
 
 def test_MORE_THAN_ONE_object_is_recognised_in_the_SAME_frame():
@@ -597,3 +598,221 @@ def test_the_axes_are_the_SORTED_UNIQUE_candidate_coordinates():
     assert set(L.centres) == {(x, y) for x in L.grid_x for y in L.grid_y}, (
         "the candidate set is not the product of the two axes, so a rectangular field cannot "
         "represent it and some cell in any drawing means nothing")
+
+# --------------------------------------------------------------------------------------------
+# What 2,005 frames of camera showed, and what it costs there -- 2026-08-24
+#
+# Every earlier capture here stopped at 60 frames and 9 exemplars while the owner's screen showed 88
+# after 2,967, so the patchwork had been recorded as untested rather than explained. Run through
+# `build_recogniser()`, so it cannot measure a different assembly than the demo runs:
+#
+#     2,005 frames, 781 s, 48 exemplars admitted, capacity 256
+#     last 500 frames:  19.6 of 43.3 slots PRESENT every frame  -- 45% of the memory
+#                       51.4 of 70 candidate cells claimed      -- 73% of the frame
+#                       13.6 distinct slots painted in the map
+#     cell coverage saturates by frame 250 (52 cells) while `occupied` goes on 20 -> 48
+#
+# **The memory is holding the room, not the objects in it.** After frame 250 a new exemplar buys no
+# coverage, only another claimant for cells already claimed. That is the patchwork, and it is not one
+# object fragmenting -- it is the whole scene being remembered.
+#
+# On admission, what did the memory already know? `look_up` on the descriptor about to be stored, 47
+# admissions with a memory to compare against:
+#
+#     [0.00,0.50)  4%   [0.50,0.70) 19%   [0.70,0.80) 19%   [0.80,0.85) 40%   >= 0.85  17%
+#
+# **57% are 0.80-or-more similar to something already stored**, dominated by the band JUST BELOW the
+# 0.85 threshold. `_pick_to_admit` selects by rarity within the frame and never asks the memory what
+# it holds, so a crop the memory almost recognises is stored as if it were new.
+#
+# **I predicted the opposite ranking and withdraw it.** I expected duplication through the claim
+# filter to dominate; it is 17% against the near-threshold band's 40%. Where it does happen it is
+# fully accounted for: seven of eight cleared the claim filter on x, three on y, and **none on
+# neither** -- `claimed` holds ONE position per slot.
+#
+# **And the published frame rate describes a memory holding one object.** Crops described per frame,
+# counted rather than timed, on camera frames:
+#
+#     reported slots     2     5     8    16    33
+#     with refinement   95   338   565   935   995        (the coarse pass alone is 70)
+#
+# 147 crops -- the recorded figure -- is ONE reported slot. At the ~20 slots this run settles on it is
+# ~995, and the measured rate is **2.6 fps against a published 8.4**. Timed at matched slot counts,
+# refinement costs 10-13x: 726 ms against 72 at 17 present, 671 against 51 at 33. The memory look-up
+# is not the cause and its recorded "nearly flat from 1,000 to 4,000 slots" stands.
+#
+# That bears on a note already in this code: refining every seed rather than one is *"kept on
+# principle, not on evidence"*, and a mutant refining only the first seed survives. The principle now
+# has a measured price. **Nothing was changed on that basis** -- the benefit is still unmeasured,
+# which is the half that matters.
+#
+# **The DISTRIBUTION is not held here and cannot be.** A test asserting the 57%-at-0.80 share was
+# written and removed: no synthetic scene in this file reproduces it. Twelve frames of `render(...)`
+# at every texture setting give **two** admissions, best prior scores 0.49-0.68, because these scenes
+# are near-static and the admission gate barely fires -- the same fixture limit already recorded in
+# `test_the_gate_fires_on_every_REAL_frame_and_no_fixture_here_can_show_it`. So the shares rest on
+# camera frames, and what the three tests below hold is the MECHANISM.
+#
+# Costs are held as COUNTS, not clocks: a wall-clock figure is not something this suite gets to assert.
+
+
+def _second_copy():
+    """One disc, then the same disc twice -- the second far enough to clear the claim filter on x --
+    with the crop at that second position, so a test can ask what the memory makes of it."""
+    two = render([("disc", 0.25, 0.35), ("disc", 0.80, 0.75)], seed=1, texture="none")
+    y, x = int(0.75 * H), int(0.80 * W)
+    crop = np.asarray(two)[y - CROP // 2:y + CROP // 2, x - CROP // 2:x + CROP // 2]
+    return render([("disc", 0.25, 0.35)], seed=1, texture="none"), two, crop
+
+
+def _describe_with(layer, crop):
+    d = np.asarray(layer.backbone.features(crop), dtype=np.float64)
+    return d / max(float(np.linalg.norm(d)), 1e-12)
+
+
+def _watch_admissions(layer):
+    """The long run's own instrumentation, as a fixture: what did the memory already say about each
+    descriptor at the moment it was stored?
+
+    `look_up` before the write, which is public API -- the store has no public accessor and needs
+    none for this. Returns the list the run collected 47 of.
+    """
+    seen = []
+    real = layer.memory.admit
+
+    def watched(descriptor, _s=seen, _r=real, _m=layer.memory):
+        prior = _m.look_up(descriptor) if _m.occupied else None
+        _s.append(None if prior is None else (float(prior.score), bool(prior.matched)))
+        return _r(descriptor)
+
+    layer.memory.admit = watched
+    return seen
+
+
+def test_ADMISSION_stores_what_the_memory_NEARLY_recognises():
+    """**The dominant mechanism over 2,005 camera frames**, and the one I did not predict: 40% of
+    admissions sit in [0.80, 0.85) against something already stored, more than twice the 17% that
+    clear the threshold outright.
+
+    `_pick_to_admit` selects by rarity WITHIN THE FRAME and never asks the memory what it holds, so
+    a crop the memory *almost* recognises is stored as if it were new. This fixture lands in that
+    band on its own -- 0.8132 against a 0.85 threshold -- which is why it is the test.
+
+    A record of current behaviour, not an endorsement: it is why the owner saw a patchwork.
+    """
+    L = _presence_layer(step=4)
+    one, two, crop = _second_copy()
+    for _ in range(3):
+        L.features(one)
+    assert L.memory.occupied >= 1, "nothing was admitted at all"
+
+    known = L.memory.look_up(_describe_with(L, crop))
+    assert 0.75 <= known.score < L.memory.threshold, (
+        f"the second copy scores {known.score:.4f} against threshold {L.memory.threshold}; this test "
+        "is about the band just BELOW threshold and the fixture has left it")
+
+    before = L.memory.occupied
+    for _ in range(3):
+        L.features(two)
+    assert L.memory.occupied > before, (
+        f"occupied stayed at {before} -- admission has started consulting the memory, which would be "
+        "a real improvement and not the behaviour recorded here")
+
+
+def test_a_duplicate_ABOVE_threshold_gets_in_through_the_claim_filter():
+    """The secondary mechanism, 17% of admissions on camera, and the one with no unexplained residue:
+    seven of eight cleared the claim filter on x, three on y, **none on neither**.
+
+    `claimed = [c for _s, _sc, c in self.last_present]` holds ONE position per slot, so the same
+    remembered thing seen far enough from where its slot was reported is still `free`.
+
+    Asserted with the run's own instrumentation -- `look_up` on the descriptor about to be stored --
+    because "occupied grew" is too weak: the admitted candidate is the rarest FREE one and need not
+    be the duplicate. A mutant making admission consult the memory SURVIVED that weaker form.
+
+    The threshold is lowered so this scene reaches the regime the camera reaches on its own. Stated
+    rather than hidden, and it is a constructor parameter, not a fixture trick.
+    """
+    L = _presence_layer(step=4, threshold=0.80, capacity=16)
+    seen = _watch_admissions(L)
+    #: THREE copies, not two. With two the layer recognises both from one slot and the reported
+    #: position lands on whichever scores higher, so nothing is left far enough away -- measured, and
+    #: it is why the first version of this test failed. A third copy is what the camera's moving
+    #: scene supplies continuously: more of the remembered thing than one reported position covers.
+    here = [("disc", 0.20, 0.30), ("disc", 0.80, 0.30), ("disc", 0.50, 0.80)]
+    dx = abs(0.80 - 0.20)
+    assert dx > L._claim_x, (
+        f"the copies are {dx:.3f} apart and the claim filter is {L._claim_x:.3f}; they would all be "
+        "excluded and this test would prove nothing")
+
+    for _ in range(3):
+        L.features(render([here[0]], seed=1, texture="none"))
+    for _ in range(5):
+        L.features(render(here, seed=1, texture="none"))
+
+    scored = [p for p in seen if p is not None]
+    assert scored, "only the very first admission happened, so nothing was compared"
+    matched = [sc for sc, m in scored if m]
+    assert matched, (
+        f"no admission was of something the memory already matched -- best prior scores were "
+        f"{sorted(round(sc, 4) for sc, _m in scored)[-4:]} against threshold {L.memory.threshold}. "
+        "Admission consulting the memory would be a real improvement, not the behaviour recorded")
+    assert max(matched) >= L.memory.threshold
+
+
+def test_REFINEMENT_costs_one_neighbourhood_per_REPORTED_slot():
+    """Why the published 8.4 fps describes a memory holding one object.
+
+    Counted, not timed: a wall-clock figure is not something this suite may assert, and the count is
+    what the clock was following anyway -- 95 crops at 2 reported slots against 995 at 33 on camera,
+    alongside timings of 10-13x at matched slot counts.
+    """
+    def described(layer, image):
+        total = [0]
+        real = layer._describe
+
+        def counted(img, _t=total, _r=real, _L=layer):
+            _t[0] += len(_L.centres)
+            return _r(img)
+
+        layer._describe = counted
+        layer.features(image)
+        return total[0]
+
+    img = render([("disc", 0.25, 0.35), ("bar", 0.72, 0.70)], seed=1, texture="none")
+
+    flat = _presence_layer(step=4)
+    for _ in range(4):
+        flat.features(img)
+    coarse_only = described(flat, img)
+
+    refined = _presence_layer(step=4, refine=(4, 2))
+    for _ in range(4):
+        refined.features(img)
+    with_refine = described(refined, img)
+    n = len(refined.last_present)
+
+    assert coarse_only == len(flat.centres), (
+        f"without refinement a pass must describe exactly the candidate grid; got {coarse_only} for "
+        f"{len(flat.centres)} candidates")
+    assert n >= 1, "nothing was reported, so there is no per-slot cost to measure"
+    assert with_refine > coarse_only, (
+        "refinement described no more candidates than the coarse pass, so it is not running")
+
+    #: **The cost must SCALE with reported slots**, which is the whole claim -- 95 crops at 2 slots
+    #: against 995 at 33. A mutant refining only the first seed passes any assertion on the total, so
+    #: a one-slot scene is measured beside the many-slot one. The neighbourhoods overlap, so the
+    #: growth is sublinear and 1.5x is the bar rather than n-fold.
+    lone = _presence_layer(step=4, refine=(4, 2))
+    solo = render([("disc", 0.25, 0.35)], seed=1, texture="none")
+    for _ in range(4):
+        lone.features(solo)
+    added_one = described(lone, solo) - len(lone.centres)
+    assert len(lone.last_present) < n, (
+        f"the one-object scene reports {len(lone.last_present)} slots and the two-object scene {n}; "
+        "they are not distinguishable, so the scaling below is not being measured")
+    added_many = with_refine - coarse_only
+    assert added_many > added_one * 1.5, (
+        f"refinement added {added_many} candidates at {n} reported slots and {added_one} at "
+        f"{len(lone.last_present)}; it is documented as one neighbourhood PER REPORTED SLOT and this "
+        "says it runs for one seed regardless")
