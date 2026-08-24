@@ -1270,3 +1270,39 @@ busier.
 **One small correction on the way**: the locator read `self.layer.last_field` directly, which broke
 an existing test's layer double. A layer is not required to publish a field — a descriptor-emitting
 one has no per-candidate match to report — so it is a `getattr` with a default.
+
+### The match map is a patchwork, and my measurements do not reach the state that produces it
+
+Owner, on the segment window: *"뭐가뭔지 모르겠음."* The picture is a scatter of coloured cells
+unrelated to anything in the room. Two hypotheses were tested and **neither is confirmed**, and the
+reason the second could not be is the important part.
+
+**Ties — refuted.** If the best and second-best slots for a cell were within noise, its colour would
+be arbitrary. Measured on a real capture: of 70 cells, 20 cleared the 0.85 threshold, and among those
+the best scored **0.8960** against a second-best **0.7218** — a gap of **0.174**, with a mean of
+**1.0** slot within 0.05 of the winner out of 9. Every cell decides confidently. The patchwork is not
+indecision.
+
+**Adjacent disagreement — untested, because the state could not be reached.** The next hypothesis was
+that neighbouring cells decisively pick *different* slots, which the frontier measurement makes
+plausible: the descriptor's self-similarity is 0.9109 at a 4-pixel shift and 0.8598 at 6, against a
+0.85 threshold and an 8-pixel grid step, so one step already looks like a different stored patch. The
+run to test it matched **1 cell of 70** — no adjacent pairs to compare, and nothing measured.
+
+**That is the limitation worth recording.** The owner's screenshot shows **88 exemplars after 2,967
+frames**. A 60-frame capture reaches **9**. The patchwork is a property of a memory that has
+accumulated for thousands of frames, and every measurement in this section samples a state two orders
+of magnitude away from it. So the explanations offered for the wandering and the scatter rest on short
+captures, and the regime the owner is actually looking at is **unmeasured**.
+
+**What is established** stays established: rarity fires on every real frame (0.235–0.306 against
+0.02); change-based selection halves the switching (29% → 16%) and does not move attention onto
+moving regions; the descriptor's invariance and discrimination trade off along a frontier no pooling
+escapes. **What is not** is why 88 accumulated exemplars paint the scene the way they do — and
+answering it needs a long run instrumented from inside, not another mechanism.
+
+**Nine mechanisms have been added along this line** — rarity gate, spells, parallel recognition,
+parallel admission, refinement, additive refinement, report cap, change selection, match map — each
+measured, each helping a little, and the behaviour on a real room is still not explained. That
+pattern is itself the finding: the additions are working around a descriptor that does not support
+scene-level identity there, and the frontier measurement says this descriptor family cannot.
