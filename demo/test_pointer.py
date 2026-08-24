@@ -536,7 +536,7 @@ def test_locate_recognise_is_argmind_doing_the_perception():
     empties and **nothing is stored**, and when the object returns it gets **the same slot**.
 
     The frame cost is the method's and is recorded rather than hidden: 147 crop embeddings at
-    1.05 ms is 6.5 fps against a camera at ~30. One whole-frame pass would be 21x cheaper and loses
+    0.763 ms is 8.4 fps against a camera at ~30. One whole-frame pass would be 21x cheaper and loses
     the identity, because a region pooled from the feature map centres to 4 pixels and the
     descriptor needs 2.
     """

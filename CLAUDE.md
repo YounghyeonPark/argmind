@@ -80,7 +80,7 @@ install once per clone with `git config core.hooksPath .githooks`.
 **Built and verified**: `argmind/` (`stream`, `align`, `adapt`, `guard`, `pipeline`, `persist`,
 `bench`, `backbone`) and the whole runtime library across to C++ in `cpp/` — a freestanding core
 with compile-time shapes behind a C ABI, and a hosted tier (`cpp/include/argmind/host/`) whose
-`RuntimeShaped*` classes take their shapes at construction. 1,024 Python tests and 4,652 C++ checks
+`RuntimeShaped*` classes take their shapes at construction. 1,177 Python tests and 4,652 C++ checks
 pass; every suite is mutation-checked. Compilation, linking **and execution** are verified on the
 declared floor — the full C++ self-check suite runs under QEMU on Cortex-M4 and Cortex-M55.
 
@@ -218,6 +218,14 @@ for this quantisation, does not escape it** — soft 4×4 matches hard 3×3's in
 margin. Discrimination *comes from* encoding where inside the crop the content sits, which is what a
 shift disturbs. So the 147 crops buy explicit centring, and centring is the only thing measured that
 gets both.
+
+**Not downsampling the input was measured 2026-08-24 and the answer is no** — but the reason is the
+cost: `peak_activation_values()` goes **2,160 → 34,560, exactly 16×, for the same 144 numbers out**,
+against a measured **13% loss** in discrimination (30 seeds, ratio 0.87 ± 0.26, 22/30 down, sign-test
+p~0.016). **My first two answers were single-seed draws and are withdrawn** — a 19-fold coherence
+collapse reads 1.07 ± 1.37 over ten seeds, and a margin that halved at seed 1 *triples* at seed 23.
+Carry-forward: **on this question the seed spread exceeds the effect, so one seed is not evidence**,
+and the tidiness that fooled me was a monotone collapse rather than a round number.
 
 **Open numbers nobody has**: backward-pass throughput on an M55; whether fp32 holds past ten million
 updates on a non-stationary target; and why the map head's two harnesses disagree on free-running

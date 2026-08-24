@@ -1260,7 +1260,8 @@ def main(argv=None):
         #: what is remembered or admit what stands out. `--objects 1` only, and it is refused above
         #: that rather than approximated -- see `RecogniseLocator`.
         #:
-        #: 147 crops a frame at 1.05 ms each is 6.5 fps, measured. That is the method's rate and not
+        #: 147 crops a frame at 0.763 ms each is 8.4 fps, measured on this construction -- the
+        #: earlier 6.5 fps was the test fixture's narrower plan. That is the method's rate and not
         #: the wiring's: one whole-frame pass would be 21x cheaper and loses the identity, because a
         #: region pooled from the feature map can only be centred to 4 pixels and the descriptor
         #: needs 2.

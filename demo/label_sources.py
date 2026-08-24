@@ -1405,7 +1405,9 @@ class RecogniseLocator:
     the region and its identity come from the library rather than from hand-written perception.
 
     **What it costs, measured, because the demo will show it.** 147 crop embeddings per frame at
-    1.05 ms each is **153.8 ms → 6.5 fps**, against a camera running at ~30. Running the backbone
+    0.763 ms each is 112 ms of a **119.7 ms frame → 8.4 fps**, against a camera running at ~30.
+    (An earlier 6.5 fps here was measured with the *test fixture's* narrower plan and published as
+    this one's; corrected 2026-08-20.) Running the backbone
     once on the whole frame instead would be 21× cheaper and **does not work**: a region pooled from
     the feature map can only be placed to the nearest map cell, 4 frame pixels, and the descriptor
     needs 2 — the speedup and the precision come from the same stride. So the frame rate is the

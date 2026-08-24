@@ -858,7 +858,10 @@ matters.
 ### The 21× speedup is not available, and the reason is the method's own precision — 2026-08-20
 
 At 147 crops per frame the composed loop runs at **6.5 fps** (153.8 ms), and the time is entirely
-the backbone: one forward pass on a 24×24 crop is **1.05 ms**, so 147 of them is 154 ms. Cropping
+the backbone: one forward pass on a 24×24 crop is **1.05 ms**, so 147 of them is 154 ms.
+**These two figures are the test fixture's narrower plan, not the demo's, and were published as the
+demo's — corrected below to 119.7 ms → 8.4 fps at 0.763 ms a crop.** Left standing rather than
+rewritten, because the correction's subject is this sentence. Cropping
 (0.67 ms), the 147×147 similarity matrix (0.18 ms) and a memory look-up (0.026 ms) are noise beside
 it.
 
@@ -1306,3 +1309,80 @@ parallel admission, refinement, additive refinement, report cap, change selectio
 measured, each helping a little, and the behaviour on a real room is still not explained. That
 pattern is itself the finding: the additions are working around a descriptor that does not support
 scene-level identity there, and the frontier measurement says this descriptor family cannot.
+
+### Not downsampling the input: no measurable gain, and 16x the working set — 2026-08-24
+
+The owner asked whether the input and output resolution could simply be left alone instead of being
+downsampled to 72x96. The mechanism is real and worth stating before the numbers, because it is why
+the question is a good one: the crop is fixed at 24x24 by the backbone's `in_shape`, so at a higher
+frame resolution the same crop covers a *smaller* part of the scene — object-sized rather than
+scene-sized — and that costs nothing per crop.
+
+**Three readings were measured. The first two were single-seed draws and are withdrawn.**
+
+**(1) Crop fixed, frame raised.** Adjacent-crop against far-crop similarity, real camera frames:
+
+| frame | crop covers | adjacent | far | coherence |
+|---|---|---|---|---|
+| 72x96 | 33% | 0.8745 | 0.8161 | **+0.0584** |
+| 144x192 | 17% | 0.8974 | 0.8640 | +0.0333 |
+| 288x384 | 8% | 0.9220 | 0.9176 | +0.0044 |
+| 432x576 | 6% | 0.9383 | 0.9352 | **+0.0031** |
+
+Neighbours do become more alike, exactly as the proposal predicts — but distant crops become more
+alike faster, so the coherence collapses 19-fold. It even had a mechanism: a 24 px window on a
+432x576 frame is mostly featureless surface. **Withdrawn.** Across ten backbone seeds — on the synthetic 1/f scene, not the camera — the ratio
+is mean **1.07, sd 1.37**, and three of the ten have *negative* coherence at 72x96. That fixture is
+the weaker one and it is named as such, but a sign-unstable sweep is enough to withdraw a monotone
+19-fold collapse: there was no effect, there was one draw with a story attached to it.
+
+**(2) Crop scaled with the frame** — the proposal read properly, the same part of the scene at more
+detail, the backbone's input growing with it. Tolerance-to-shift minus confusability read
++0.1536 -> +0.0789, a halving, at backbone seed 1 on camera frames. On the synthetic scene at seed
+23 the same measurement **triples** (+0.1029 -> +0.3189) — and reading (3)'s own camera sweep below
+puts seed 1 at ratio 0.59 against a max of 1.59 over thirty seeds, so the halving was the low end of
+a wide spread rather than the effect. Sign-unstable on one draw, and that is what sent the third
+reading to a sweep before it was believed. **Withdrawn.**
+
+**(3) The swept reading, which is the only one that says anything.** Tolerance to a physical
+displacement of 3% of the frame, against confusability with a different place — this is the recorded
+descriptor frontier with resolution as the axis instead of the pooling scheme, and it is where the
+proposal could have won, since a 3% shift is 3 px in a 24 px crop and 12 px in a 96 px crop, the same
+fraction of the crop either way.
+
+    72x96 -> 288x384, crop 24 -> 96, the demo's plan, 3 real camera frames, THIRTY backbone seeds
+    margin ratio: mean 0.87, sd 0.26, min 0.47, max 1.59
+    22 of 30 seeds DOWN  ->  two-sided sign test p ~ 0.016
+
+**Established at p<0.05, and small: not downsampling makes the descriptor about 13% less
+discriminative.** Tolerance rises, as the proposal reasons it should (0.919 -> 0.984 on the first
+frames measured) — and confusability rises faster (0.766 -> 0.905). It is the same frontier as the
+soft-binning result, reached along a different axis, which is now twice-measured evidence that the
+trade is a property of spatial pooling as such.
+
+**The cost needs no clock and no seed, and it is what decides it.**
+`Backbone.peak_activation_values()` goes **2,160 -> 34,560, exactly 16x, for the same 144 numbers
+out** — 135 KB at fp32 against the declared 8 KB tier, and 33% more than the whole-frame backbone's
+own 25,920, which `docs/ARCHITECTURE.md` already names as the figure a target tier has to hold. A
+certain 16x working set for a measured 13% loss. **The answer is no, and the reason is the cost side
+rather than the quality side.**
+
+**The methodological result is the one worth carrying.** Two clean, mechanistically explicable
+numbers died in a ten-seed sweep, and the second one changed *sign*. The seed spread here is larger
+than the effect, so on this question a single-seed measurement is not evidence in either direction —
+and both of my first two answers were exactly that. This is the "a uniformly tidy result is evidence
+the measurement is broken" rule arriving in a form I did not recognise: the tidiness was not in the
+table, it was in the monotonic 19-fold collapse that a second seed does not reproduce.
+
+`tests/test_descriptor_frontier.py` holds it, camera-free on a 1/f synthetic scene, and the fixture's
+limit is stated in the file rather than implied: the synthetic scene reproduces the seed **spread**
+but not the **direction** (ten seeds split 4/6, mean 0.99), so the direction rests on camera frames
+no test here can capture. Three mutants; one survived and was a real gap — a shift that stopped
+scaling with the frame measured a four-times-easier displacement at high resolution and *raised* the
+margin, which is precisely the flattering answer the block would otherwise have reported. A fourth
+test closes it.
+
+**What was not measured.** Whether a *larger crop at the same frame resolution* helps — that is a
+different axis (more scene context per descriptor, not more detail) and it costs the same 16x. And
+the demo was not run at high resolution end to end; the descriptor is the bottleneck measured here,
+not the display.
