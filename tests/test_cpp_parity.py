@@ -554,12 +554,26 @@ def test_the_cpp_unit_tests_pass(tmp_path):
     run = subprocess.run([str(exe)], capture_output=True, text=True)
     assert run.returncode == 0, f"{run.stdout}\n{run.stderr}"
     assert "0 failures" in run.stdout, run.stdout
-    # ...and that the checks did not quietly disappear. The count is quoted in DESIGN.md and
-    # CLAUDE.md, and "0 failures" alone is equally true of a suite that stopped running.
+    # ...and that the checks did not quietly disappear. "0 failures" alone is equally true of
+    # a suite that stopped running.
+    #
+    # **This was a `>= 4580` floor until 2026-08-25, and the floor is why the documented figure
+    # was wrong for a thousand checks.** A floor catches a count falling and is blind to it
+    # rising, so CLAUDE.md and docs/findings/runtime-library-and-cpp.md both went on saying
+    # 4,652 while the suite grew to 5,653. Pinned exactly instead: this number is quoted in
+    # prose, and prose is protected by nothing. Adding C++ checks is *supposed* to fail here
+    # once — update the two documents, then this constant.
+    DOCUMENTED_CHECKS = 5653  # CLAUDE.md "Built and verified"; runtime-library-and-cpp.md
     m = re.search(r"(\d+) checks", run.stdout)
-    assert m and int(m.group(1)) >= 4580, (
-        f"the C++ self-check count fell to {m.group(1) if m else '?'}; the documented "
-        "figure is a claim about this number")
+    assert m, f"the self-check binary printed no count at all: {run.stdout!r}"
+    got = int(m.group(1))
+    assert got == DOCUMENTED_CHECKS, (
+        f"the C++ self-check count is {got}, and CLAUDE.md and "
+        f"docs/findings/runtime-library-and-cpp.md say {DOCUMENTED_CHECKS}. "
+        + ("Checks were removed, which is the case this test was written for."
+           if got < DOCUMENTED_CHECKS else
+           "Checks were added, which is good news: update the claim in both documents and "
+           "then this constant, rather than loosening this assertion back into a floor."))
 
 
 def test_the_core_headers_build_freestanding(tmp_path):

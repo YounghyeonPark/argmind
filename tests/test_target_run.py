@@ -145,8 +145,17 @@ def test_the_self_checks_pass_on_the_target(emulator, tmp_path, label, core_cfla
     assert failures == 0, f"{failures} of {checks} checks failed on ARM:\n{out[-3000:]}"
     # ...and it has to be the whole suite. A harness that silently ran a fraction of it
     # would report "0 failures" just as happily.
-    assert checks >= 4600, (
-        f"only {checks} checks ran on the target; the host runs the same file")
+    #
+    # **This was `>= 4600` until 2026-08-25.** A floor is blind to the count *rising*, which is
+    # how the documented C++ figure sat at 4,652 while the suite grew to 5,653 -- see the same
+    # correction in `tests/test_cpp_parity.py`. Measured that day, both cores run exactly the
+    # host's count, so the real property ("the host runs the same file") is an equality and is
+    # asserted as one.
+    assert checks == 5653, (
+        f"{checks} checks ran on {label}; the host runs the same file and runs 5,653. "
+        "If the C++ suite grew, update this and `tests/test_cpp_parity.py` together; if only "
+        "the target count moved, the two architectures have stopped compiling the same checks, "
+        "which is the interesting case.")
     assert "FAULT" not in out, out[-2000:]
 
 

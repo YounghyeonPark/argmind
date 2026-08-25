@@ -80,9 +80,19 @@ install once per clone with `git config core.hooksPath .githooks`.
 **Built and verified**: `argmind/` (`stream`, `align`, `adapt`, `guard`, `pipeline`, `persist`,
 `bench`, `backbone`) and the whole runtime library across to C++ in `cpp/` — a freestanding core
 with compile-time shapes behind a C ABI, and a hosted tier (`cpp/include/argmind/host/`) whose
-`RuntimeShaped*` classes take their shapes at construction. 1,190 Python tests and 4,652 C++ checks
+`RuntimeShaped*` classes take their shapes at construction. 1,191 Python tests and 5,653 C++ checks
 pass; every suite is mutation-checked. Compilation, linking **and execution** are verified on the
-declared floor — the full C++ self-check suite runs under QEMU on Cortex-M4 and Cortex-M55.
+declared floor — the full C++ self-check suite runs under QEMU on Cortex-M4 and Cortex-M55,
+**re-measured 2026-08-25 at 5,653 on both cores, exactly the host count**.
+
+**The C++ count is pinned by an assertion now, not kept by hand (2026-08-25).** It had drifted
+4,652 → 5,653 unnoticed because both gates — host and target — were `>=` floors, and a floor is
+blind to a count *rising*; adding checks now fails the suite until the documents are updated
+rather than after. The same audit found `ExemplarMemory` documented at 1,056 B in three places
+when its own test asserts 1,120. That is the **fourth** time a count in this repository's prose
+went stale. **The Python figure above is still unpinned and will go stale the same way** — it is
+left that way deliberately, since a suite gains tests constantly and pinning it would fail on
+every commit; treat it as approximate and re-derive it with `python -m pytest`.
 
 **Three adapters**: `RecursiveLeastSquares` (O(n²), covariance), `NormalisedLeastMeanSquares`
 (O(n), none) and `MultilayerPerceptron`. `Guard` **is** an `Adapter`, so "no guard" is not
@@ -195,7 +205,7 @@ against a 0.101 chance rate), a crop descriptor from an **untrained** backbone d
 across unseen positions, a stored exemplar steers attention to the remembered object (1.000, and it
 flips when the memory is swapped), sixteen of 108 dimensions carry all of it, and a distilled map
 proposal reaches its target's own ceiling. `ExemplarMemory` is the bounded store — 8 slots in
-**1,056 B**, one flat block, `Store` unchanged — and `RecognitionLayer` composes them as a *frozen*
+**1,120 B**, one flat block, `Store` unchanged — and `RecognitionLayer` composes them as a *frozen*
 `Stack` layer, which needed the one contract extension `feature_lr=None`.
 
 **It answers the question it was proposed for**: over appear → absent → a different object → the same

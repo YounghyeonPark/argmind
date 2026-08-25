@@ -22,12 +22,16 @@ rollback, explicit recovery), `argmind/pipeline.py` (`FrameMap`, input gate, bou
 pipeline. `argmind/bench.py` has no C++ counterpart and is not getting one: it is a host
 measurement harness, and DESIGN.md already records that Python timings are not a baseline the
 C++ can be compared against.
-1,013 Python tests and 4,652 C++ checks pass; several exist to prove failures are visible
-rather than silent. Every suite is mutation-checked, and surviving mutants are recorded where
-they live rather than tallied here — including the ones that turn out to be **equivalent on a
-64-bit host**, a distinction worth keeping rather than rounding away. Cumulative counts are
+1,013 Python tests and 4,652 C++ checks passed **when this was written**; on 2026-08-25 an
+audit measured **1,191 and 5,653**, so both figures here had gone stale unnoticed — the C++
+gate is a `>=` floor and cannot see a count *grow*. Several checks exist to prove failures
+are visible rather than silent. Every suite is mutation-checked, and surviving mutants are
+recorded where they live rather than tallied here — including the ones that turn out to be
+**equivalent on a 64-bit host**, a distinction worth keeping rather than rounding away. Cumulative counts are
 avoided on purpose: the two that used to sit in this paragraph were both wrong until an audit
-measured them.
+measured them, and the two that replaced them went stale the same way — **four for four**.
+A count in prose is not protected by anything; the assertion in `tests/test_cpp_parity.py`
+is.
 
 **The adapter contract, since everything after it fits into it** (full reasoning in DESIGN.md):
 state is one flat contiguous block so persistence is a copy and the C ABI needs no serialisation;
@@ -519,7 +523,10 @@ bytes for a 2,340-byte image.
 
 **And the code now RUNS on a Cortex-M4 (2026-08-09), which closes the last verification
 limit.** `cpp/tests/test_core.cpp` executes under QEMU's `mps2-an386` — the declared floor —
-and all 4,652 checks pass. QEMU was extracted rather than installed, its NSIS installer being
+and all 4,652 checks pass. **Re-measured 2026-08-25 as the suite has since grown: 5,653
+checks, 0 failures, on `cortex-m4` AND `cortex-m55`, which is exactly the host count** —
+so "the whole suite runs on target" is current and not a claim inherited from 08-09.
+QEMU was extracted rather than installed, its NSIS installer being
 `requireAdministrator`; getting an extractor meant unpacking 7-Zip's own SFX with `7zr.exe`
 first.
 

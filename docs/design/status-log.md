@@ -18,9 +18,11 @@ byte for byte for the record format, and exactly for every decision and counter 
 The runtime library is fully across; `argmind/bench.py` has no C++ counterpart and is not
 getting one, being a host measurement harness rather than part of what ships. (Everything the library does is reachable from C: RLS, the
 guard, the record format, caller-owned rings and the composed pipeline.)
-510 Python tests plus 4,652 C++ checks (re-derive with `python -m pytest`; this
-number has gone stale three times), several of which exist to prove failures are visible
-rather than silent.
+510 Python tests plus 4,652 C++ checks **as of this entry** (on 2026-08-25: 1,191 and
+5,653). That is the fourth time this number has gone stale, and it is now pinned exactly
+rather than re-derived by hand -- `tests/test_cpp_parity.py` asserts the C++ count against
+the documented figure in both directions, so adding checks fails the suite until the prose
+is updated. Several of those checks exist to prove failures are visible rather than silent.
 
 **What the pipeline settled:**
 
@@ -111,7 +113,7 @@ that is already the persistence format, and a benchmark that can report a regres
 
 **STARTED 2026-08-08** — `cpp/`, and RLS is across. `mat.hpp` (fixed-size primitives),
 `rls.hpp` (`Rls<T, N, M>`), `argmind.h` + `src/abi.cpp` (the C ABI), `tools/xcheck.cpp`, `tools/pcheck.cpp`, `tools/scheck.cpp` and
-`tools/pipecheck.cpp` (the four parity tools), `tests/test_core.cpp` (4,652 checks the C++ side can make on its own), and a
+`tools/pipecheck.cpp` (the four parity tools), `tests/test_core.cpp` (the checks the C++ side can make on its own), and a
 `CMakeLists.txt` that knows the cross-compilation recipe.
 
 **The C ABI had one real tension to resolve.** Compile-time dimensions are the reason C++ was

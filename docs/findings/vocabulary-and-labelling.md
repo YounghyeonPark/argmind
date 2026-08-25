@@ -718,7 +718,7 @@ None of it went through a contract. `argmind/memory.py` does.
 
 | requirement | why it is not a formality | measured |
 |---|---|---|
-| one flat contiguous state block | persistence is a copy; the C ABI needs no serialisation | 8 slots × 108 features at k=16 → **1,056 B** |
+| one flat contiguous state block | persistence is a copy; the C ABI needs no serialisation | 8 slots × 108 features at k=16 → **1,120 B** (1,056 B the day this was written; the retention scalars grew it 2026-08-20, below) |
 | fixed capacity | the target tier has no heap, and the demo's `ObjectMemory` grows a Python list | a full memory replaces, never grows |
 | `state`/`load_state`/`n_features`/`n_outputs`/`dtype` | what `persist.pack` reads | goes through `Store` unchanged, and an 8-slot record is **refused** by a 16-slot memory |
 
