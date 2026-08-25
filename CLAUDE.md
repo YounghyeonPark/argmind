@@ -249,6 +249,18 @@ is for ONE reported slot**: 147 crops is one slot, ~995 at the ~20 slots this re
 (10-13× timed, 14× counted). The look-up is not the cause and its "nearly flat" stands. Refinement's
 *benefit* is still unmeasured and nothing was changed on that basis.
 
+**Refinement's benefit was measured 2026-08-25 and is not established.** On the file's own criterion
+with the seed swept (harness agreeing with `drive()` 25/25): **22/25 with refine against 19/25
+without** on a clean scene — the recorded categorical claim is true at the fixture's default seed 23
+and is **+3 of 25, McNemar p=0.375**. With scene clutter the difference vanishes exactly (16 vs 16,
+10 vs 10 at load 8) and at load 24 it inverts (2 vs 4). The reason is geometry: neighbourhoods
+overlap, so refinement's union grows into the step-2 grid it exists to avoid — 6.7% of it at one
+reported slot, **78.5% at the ~20 the demo reaches**, 100% at 33, where 70+925=995 is exactly the
+measured crop count. **The 6.3× saving is a one-slot property** and that docstring now says so.
+Nothing was changed: not-significant is not zero. **And identity retention itself collapses** —
+22/25 clean → 16/25 with clutter → 10/25 at 8 background exemplars → 2–4/25 at 24, which is the
+owner's *"계속 헤맨다"* as a number. The load is constructed, which is the assumption to distrust.
+
 **Open numbers nobody has**: backward-pass throughput on an M55; whether fp32 holds past ten million
 updates on a non-stationary target; and why the map head's two harnesses disagree on free-running
 IoU — **measured 2026-08-17 to be `MAP_DROPOUT = 0.15`**, which costs 0.359 → 0.135 here and

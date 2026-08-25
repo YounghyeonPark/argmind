@@ -170,6 +170,13 @@ def test_local_REFINEMENT_keeps_the_identity_at_a_sixth_of_the_crops():
     | step 12 + refine(12, 2) | 188 | yes |
 
     6.3× fewer crops than the fine grid, for the same answer.
+
+    **That saving is for ONE reported slot, and the demo does not stay there** — measured
+    2026-08-25 and qualified here rather than left standing. Refinement describes a neighbourhood
+    per reported slot and the neighbourhoods overlap, so its union grows into the fine grid it was
+    invented to replace: 7% of the step-2 grid at one slot, 43% at eight, **73% at sixteen**, 100%
+    at the whole coarse grid. At the ~20 slots a 2,005-frame camera run settles on it is ~79%. See
+    `test_REFINEMENT_DEGENERATES_into_the_fine_grid_it_was_invented_to_replace` below.
     """
     L = counted(layer(step=8))
     L.refine = (8, 2)
@@ -816,3 +823,61 @@ def test_REFINEMENT_costs_one_neighbourhood_per_REPORTED_slot():
         f"refinement added {added_many} candidates at {n} reported slots and {added_one} at "
         f"{len(lone.last_present)}; it is documented as one neighbourhood PER REPORTED SLOT and this "
         "says it runs for one seed regardless")
+
+
+def test_REFINEMENT_DEGENERATES_into_the_fine_grid_it_was_invented_to_replace():
+    """**What refinement buys, asked in the regime where it costs 14x — and the answer is nothing.**
+
+    Measured 2026-08-25 on the file's own criterion (`back and back <= first`), 25 seeds, with this
+    harness agreeing with `drive()` on 25/25 seeds so it is the recorded quantity being measured:
+
+    | load | scene | refine on | refine off | disagreements | McNemar |
+    |---|---|---|---|---|---|
+    | 0 | clean | **22/25** | 19/25 | 4 on / 1 off | p = 0.375 |
+    | 0 | clutter | 16/25 | 16/25 | 5 / 5 | p = 1.000 |
+    | 8 | clutter | 10/25 | 10/25 | 4 / 4 | p = 1.000 |
+    | 24 | clutter | 2/25 | 4/25 | 1 on / 3 off | p = 0.625 |
+
+    The recorded categorical claim — plain step 8 loses the identity, refine keeps it — is true at
+    the fixture's default seed 23 and is **+3 of 25 across seeds, not significant**. Add clutter and
+    the difference vanishes exactly; add memory load and it inverts. That is why a mutant refining
+    only the first seed survives: the effect was never large enough for a fixture to pin.
+
+    **And here is the reason, which is geometry and needs no images at all.** Each reported slot gets
+    a neighbourhood, the neighbourhoods overlap, and their union grows into the step-2 grid that
+    refinement exists to avoid. At full coverage `refine=(8, 2)` *is* the plain step-2 configuration,
+    which the table above says also keeps the identity — so the two arms converge, and they do.
+
+    Held as the union, deterministic and free: no backbone, no frames, no clock.
+    """
+    L = _presence_layer(step=8, refine=(8, 2))
+    fine = {(x / W, y / H) for y in range(CROP // 2, H - CROP // 2 + 1, 2)
+            for x in range(CROP // 2, W - CROP // 2 + 1, 2)}
+
+    def covered(n, draws=8):
+        g = np.random.default_rng(0)
+        out = []
+        for _ in range(draws):
+            seeds = [L.centres[i] for i in g.choice(len(L.centres), n, replace=False)]
+            union = set()
+            for sx, sy in seeds:
+                union.update(L._neighbourhood(sx, sy))
+            out.append(len(union) / len(fine))
+        return float(np.mean(out))
+
+    one, eight, sixteen = covered(1), covered(8), covered(16)
+    everything = covered(len(L.centres), draws=1)
+
+    assert one < 0.15, (
+        f"a single reported slot already refines {one:.1%} of the fine grid; the 6.3x saving in "
+        "`test_local_REFINEMENT_keeps_the_identity_at_a_sixth_of_the_crops` depends on this being "
+        "small")
+    assert eight > 3 * one, (
+        f"coverage barely grew with reported slots ({one:.1%} at one, {eight:.1%} at eight), so the "
+        "cost is no longer per-slot and the measured 95 -> 995 crops has another cause")
+    assert sixteen > 0.6, (
+        f"at sixteen reported slots refinement covers only {sixteen:.1%} of the fine grid; the "
+        "measured figure is ~73% and the whole point is that it approaches the grid it replaces")
+    assert everything > 0.99, (
+        f"refining every candidate covers {everything:.1%} of the step-2 grid rather than all of it;"
+        " if that became false the neighbourhoods no longer tile and the argument above is wrong")

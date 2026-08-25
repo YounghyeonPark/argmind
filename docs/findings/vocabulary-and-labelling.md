@@ -1542,3 +1542,61 @@ surviving a `-k` subset is not a gap, and checking that rather than reporting it
 stopped at 48 in 781 s and the growth was still linear, so the answer is probably "more of the same",
 but that is an expectation and not a measurement. And what refinement *buys*, which is the number
 that would justify its price.
+
+### What refinement buys, asked where it costs: nothing measurable — 2026-08-25
+
+The price was measured yesterday — one neighbourhood per reported slot, 95 crops at 2 slots and 995
+at 33, 10–13× in time. The benefit on record came from a different comparison: step 8 + refine
+against a step 2 fine grid, **one object, one seed, descriptor mode**, and it says plain step 8 loses
+the identity while refinement keeps it.
+
+**Asked properly — the file's own criterion, the seed swept.** `back and back <= first`: the slots
+reported while the object is back are a subset of those reported when it first appeared. This harness
+agrees with the file's own `drive()` on **25 of 25 seeds** in both arms, so it is the recorded
+quantity that is being measured and not a new one.
+
+| load | scene | refine on | refine off | disagreements | McNemar |
+|---|---|---|---|---|---|
+| 0 | clean | **22/25** | 19/25 | 4 on / 1 off | p = 0.375 |
+| 0 | clutter | 16/25 | 16/25 | 5 / 5 | p = 1.000 |
+| 8 | clutter | 10/25 | 10/25 | 4 / 4 | p = 1.000 |
+| 24 | clutter | 2/25 | 4/25 | 1 on / 3 off | p = 0.625 |
+
+**The recorded categorical claim is true at seed 23 — the fixture's default, and what it was measured
+on — and is +3 of 25 across seeds, not significant.** Add scene clutter and the difference vanishes
+exactly (16 vs 16, 10 vs 10); add memory load and it inverts. So the 14× is paid precisely where the
+benefit is smallest. This is the same shape as the surviving mutant already recorded in the code:
+*"a mutant refining only the first seed survives: no fixture here shows a benefit."* It survives
+because the effect was never large enough for a fixture to pin.
+
+**And the reason is geometry, which needs no images.** Each reported slot gets a neighbourhood, the
+neighbourhoods overlap, and their union grows into the step-2 grid refinement exists to avoid:
+
+| reported slots | 1 | 2 | 4 | 8 | 16 | 20 | 33 | 50 |
+|---|---|---|---|---|---|---|---|---|
+| % of the full step-2 grid | 6.7 | 13.1 | 25.5 | 45.4 | 72.1 | **78.5** | 95.2 | 99.6 |
+
+At 33 slots the union is **925 candidates — 100% of the fine grid** — and 70 + 925 = 995, exactly the
+crop count measured on camera. **`refine=(8, 2)` under load simply *is* the plain step-2
+configuration**, which the recorded table says also keeps the identity. That is why the two arms
+converge: they become the same thing. The "6.3× fewer crops than the fine grid, for the same answer"
+is a **one-reported-slot** property, and that docstring now says so.
+
+**Nothing was changed.** The measurement says the cost is real and the benefit is not established;
+it does not say refinement should be removed, and a not-significant +3/25 is not a measured zero. It
+is the owner's call, and what it now has is a price and a size.
+
+**A separate and larger result fell out of the same sweep.** Identity retention itself collapses:
+**22/25 clean → 16/25 with scene clutter → 10/25 at 8 background exemplars → 2–4/25 at 24.** Scene
+clutter and memory load each cost about as much as the other. In the regime the demo reaches — 19.6
+of 43.3 slots present every frame — a returning object mostly does **not** get its old slot back, and
+that is the owner's *"계속 헤맨다"* stated as a number rather than an impression.
+
+**The load is constructed, and that is the assumption to distrust.** Background crops are pre-seeded
+with noise to stand in for the camera's own 19.6-of-43.3, because no synthetic scene here grows a
+memory that large — the fixture limit already recorded under *the gate fires on every real frame*. So
+the load *axis* is real and the correspondence to camera load is an argument, not a measurement.
+
+`tests/test_recognise.py` holds the geometry — the part that is deterministic and free. The
+identity/load table is not held: the sweep is 228 s, which is not a per-commit test, and saying so
+is better than a cheaper test that measures something else.
