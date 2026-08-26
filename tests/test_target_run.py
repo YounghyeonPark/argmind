@@ -148,14 +148,24 @@ def test_the_self_checks_pass_on_the_target(emulator, tmp_path, label, core_cfla
     #
     # **This was `>= 4600` until 2026-08-25.** A floor is blind to the count *rising*, which is
     # how the documented C++ figure sat at 4,652 while the suite grew to 5,653 -- see the same
-    # correction in `tests/test_cpp_parity.py`. Measured that day, both cores run exactly the
-    # host's count, so the real property ("the host runs the same file") is an equality and is
-    # asserted as one.
+    # correction in `tests/test_cpp_parity.py`. Both cores run exactly the host's count, so the
+    # real property ("the host runs the same file") is an equality and is asserted as one.
+    #
+    # Two independent reviews established that the equality is STRUCTURAL rather than lucky:
+    # `test_core.cpp` contains no `#if` at all outside include guards, so no preprocessor branch
+    # can add or drop a CHECK site per architecture, and the counters are incremented once per
+    # invocation from an unconditional list of test functions. The two places where host and
+    # target genuinely assert different propositions -- `if (sizeof(size_t) == 4)` at
+    # test_core.cpp:930 and :982 -- are BALANCED, one CHECK in each arm, so the total is
+    # preserved by construction. 5,651 of the 5,653 are literally the same assertion; those two
+    # are the same assertion asked of a 32-bit and a 64-bit `size_t`.
+    #
+    # So an UNBALANCED branch is the thing this equality is really watching for.
     assert checks == 5653, (
         f"{checks} checks ran on {label}; the host runs the same file and runs 5,653. "
-        "If the C++ suite grew, update this and `tests/test_cpp_parity.py` together; if only "
-        "the target count moved, the two architectures have stopped compiling the same checks, "
-        "which is the interesting case.")
+        "If the C++ suite grew, update this and `tests/test_cpp_parity.py` together. If only "
+        "the target moved, look for a NEW architecture-dependent branch with a different "
+        "number of CHECKs in each arm -- the two that exist are balanced on purpose.")
     assert "FAULT" not in out, out[-2000:]
 
 

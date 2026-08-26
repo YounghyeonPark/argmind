@@ -33,7 +33,7 @@ Deviation relative to the *scale of the block* is the honest measure.
 The second correction was that one tolerance does not fit every quantity, and that a
 *relative* tolerance does not fit one of them at all. Measured maxima, in ulp of each
 run's own precision, across n=2/6/12, one and three outputs, runs of 300 to 1600
-steps, and lambda 0.97 and 0.99:
+steps, **at lambda 0.99 on the host**:
 
 | quantity | f64 | f32 |
 |---|---|---|
@@ -45,8 +45,22 @@ steps, and lambda 0.97 and 0.99:
 | gain_norm | 58.0 | 64.6 |
 | residual_post_norm | 597 | 597 |
 
-The first thing to read out of that table is that the two implementations differ by
-**about the same number of ulp whichever precision they run at**. That is what says
+**That caption said "lambda 0.97 and 0.99" until 2026-08-25 and the table is lambda
+0.99 only** -- corrected after an independent parity verification, and reproduced here.
+The file already knew: the `FIELD_ULP` comment below records `p_trace` peaking at 10
+where this table says 1.4, and says outright that the figure it once compared against
+"had been taken at one lambda". Two numbers in one file disagreed and the stale one was
+the one in the docstring, which is the one that gets quoted. Measured across lambda at
+n=12, 300 steps, `gain_norm` in ulp:
+
+| lambda | 0.99 | 0.97 | 0.95 | 0.90 |
+|---|---|---|---|---|
+| host f64 | 58.0 | 110.0 | 188.6 | 77.5 |
+| target f32 | 98.0 | 78.8 | 164.9 | **203.6** |
+
+So the table below is a *best case*, not a maximum, and the widest figures live with
+`FIELD_ULP`. The first thing to read out of that table is that the two implementations
+differ by **about the same number of ulp whichever precision they run at**. That is what says
 the difference is algorithmic rounding rather than a precision-dependent bug, and it
 is the strongest single piece of evidence here that the port is right.
 
@@ -87,6 +101,11 @@ from argmind.guard import Bound, Divergence, Guard
 
 REPO = Path(__file__).resolve().parent.parent
 CPP = REPO / "cpp"
+
+#: The C++ self-check count, quoted in CLAUDE.md and under docs/. Pinned rather than
+#: floored -- see `test_the_cpp_unit_tests_pass` -- and gated in the documents by
+#: `test_every_DOCUMENT_stating_the_check_count_states_the_CURRENT_one` below.
+DOCUMENTED_CHECKS = 5653
 
 # Format v2. Every field sits at its natural alignment and every block is a multiple of
 # eight bytes, so both sides read these with one call and no packing pragmas. The C++ side
@@ -293,6 +312,22 @@ def ulps(dtype, n=200.0) -> float:
 #: they need -- while `gain_norm` peaks at 134 on the target at f32, which is 1.5x. An earlier
 #: version of DESIGN.md described this as "three to eight times the worst measured"; for
 #: `gain_norm` it never was, and the figure it compared against had been taken at one lambda.
+#:
+#: **The 200 is scoped to the lambdas this suite instantiates, and outside them it is
+#: breached (measured 2026-08-25, independently and then reproduced).** At n=12, 300 steps,
+#: f32 on the target, `gain_norm` reads **203.6 ulp at lambda 0.90** and 164.9 at 0.95; on
+#: the host at f64 it reads 188.6 at 0.95. No fixture uses lambda below 0.97, so the suite
+#: passes and nothing here is loosened -- not-tested is not the same as passing. If anyone
+#: widens a fixture's lambda this is the assertion that fails first, and the honest record is
+#: that 200 holds for lambda in [0.97, 0.99] rather than for the whole legal range.
+#:
+#: **And no recorded sweep covers the library's own default.** `RecursiveLeastSquares`
+#: defaults to `forgetting=0.999` and the legal range is `0.0 < forgetting <= 1.0`; the
+#: sweeps here use 0.99, 0.97 and 0.95. An independent verification measured "P alone" at
+#: 376.8 ulp at lambda 0.999 against this docstring's 26.7, with the state block unaffected
+#: (0.1-1.0 ulp) because theta carries the block's scale while P shrinks. No assertion is
+#: threatened -- but "P alone 26.7" is not a figure that holds at the default. Not
+#: re-derived here; recorded as that verification's measurement.
 FIELD_ULP = {
     "residual_norm": 200.0,
     "gain_norm": 200.0,
@@ -563,7 +598,6 @@ def test_the_cpp_unit_tests_pass(tmp_path):
     # 4,652 while the suite grew to 5,653. Pinned exactly instead: this number is quoted in
     # prose, and prose is protected by nothing. Adding C++ checks is *supposed* to fail here
     # once — update the two documents, then this constant.
-    DOCUMENTED_CHECKS = 5653  # CLAUDE.md "Built and verified"; runtime-library-and-cpp.md
     m = re.search(r"(\d+) checks", run.stdout)
     assert m, f"the self-check binary printed no count at all: {run.stdout!r}"
     got = int(m.group(1))
@@ -585,8 +619,23 @@ def test_the_core_headers_build_freestanding(tmp_path):
         pytest.skip("no C++ compiler on PATH")
     # Every core header, not just rls.hpp. An audit found persist.hpp was in neither this
     # gate nor the C99 one, so an accidental <cstring> in it would have gone unnoticed.
-    for header in ("mat.hpp", "rls.hpp", "guard.hpp", "persist.hpp",
-                   "stream.hpp", "align.hpp", "pipeline.hpp"):
+    #
+    # **The list was hand-maintained until 2026-08-25, and it had drifted: nlms.hpp was
+    # missing from it while the comment above said "every core header".** The target gate in
+    # tests/test_target_build.py did list it, but that gate needs the ARM cross toolchain and
+    # skips without it -- so on a clone with only a host compiler, a hosted #include in
+    # nlms.hpp compiled clean. Same shape as the persist.hpp incident this comment records,
+    # one header later. Derived from the directory now, so a NEW core header is gated the day
+    # it appears rather than the day someone remembers. Cross-checked against the target
+    # gate's own tuple so the two cannot drift apart again in either direction.
+    core = sorted(h.name for h in (CPP / "include" / "argmind").glob("*.hpp"))
+    from tests.test_target_build import HEADERS as TARGET_HEADERS
+    assert core, "no core headers found to gate; the glob has stopped matching"
+    assert set(core) == set(TARGET_HEADERS), (
+        f"the host freestanding gate would check {core} and the target gate checks "
+        f"{sorted(TARGET_HEADERS)}; they must cover the same headers or one of them is a "
+        "gate with a hole in it")
+    for header in core:
         obj = tmp_path / (header.replace(".hpp", ".o"))
         done = subprocess.run(
             [cxx, "-std=c++17", "-O2", "-ffreestanding", "-fno-exceptions",
@@ -1431,3 +1480,64 @@ def test_the_parity_tool_refuses_a_guarded_nlms_rather_than_substituting_rls(
                           capture_output=True, text=True)
     assert done.returncode != 0
     assert "guarded cases are Rls only" in done.stderr
+
+
+#: Phrases that mark a check count as a deliberate historical record rather than a live claim.
+#: A dated ledger entry is allowed to keep its own number; an unmarked one is a stale claim.
+_HISTORICAL = ("when this was written", "when this entry was written", "as of this entry",
+               "Re-measured", "re-measured", "passed **when", "of them when")
+
+
+def test_every_DOCUMENT_stating_the_check_count_states_the_CURRENT_one():
+    """**The coupling commit 5e48f9c claimed and did not have.**
+
+    That commit pinned the C++ count in two assertions and then said "adding C++ checks now
+    fails the suite until the documents are updated". It did not: both assertions compare the
+    binary against a literal in a test, and nothing read a document. Update the literal alone
+    and the suite goes green with every document stale -- which is the exact failure the commit
+    set out to close. An independent audit caught it, and also found **three more stale sites at
+    a fourth value (4,650)** that the commit's own sweep had missed, because that sweep grepped
+    for "4,652" and a different stale number was sitting in three other files.
+
+    So the mechanism is here instead of in the prose. Every check count stated in a document
+    must be the current one, unless the sentence marks itself as a historical record -- which is
+    a deliberate act, and the ledger files under `docs/` use it on purpose.
+
+    `tests/test_architecture_doc.py` and `tests/test_design_doc.py` already read documents and
+    check them against the code; this is the same idea applied to the one number that has now
+    gone stale in six places across two values.
+    """
+    files = sorted(set(REPO.glob("*.md")) | set(REPO.glob("docs/**/*.md")))
+    assert len(files) > 5, (
+        f"only {len(files)} documents found to check; the glob has stopped matching")
+
+    pattern = re.compile(r"([\d,]{3,6})\s+(?:C\+\+\s+)?(?:self-)?checks")
+    BLANK, NEWLINE = chr(10) * 2, chr(10)
+    stale = []
+    for path in files:
+        # Paragraph-scoped, not line-scoped: prose wraps, and a marker belongs to the sentence
+        # it is in rather than to the line the wrap happened to put it on. A table's caption is
+        # in the same paragraph as its rows only if no blank line separates them, so a marker
+        # for a historical table goes in the row or the line above it.
+        lineno = 1
+        for para in path.read_text(encoding="utf-8").split(BLANK):
+            for m in pattern.finditer(para):
+                if int(m.group(1).replace(",", "")) == DOCUMENTED_CHECKS:
+                    continue
+                # A WINDOW around this number, not the whole paragraph. Scoping the marker to
+                # the paragraph was the first version and it was useless: CLAUDE.md's live
+                # claim sits in a paragraph that also says "re-measured", so one marker
+                # exempted every count near it -- including the one being claimed.
+                near = para[max(0, m.start() - 120):m.end() + 160]
+                if any(k in near for k in _HISTORICAL):
+                    continue
+                stale.append(f"{path.relative_to(REPO)}:~{lineno}: {m.group(1)} -- "
+                             f"{near.strip()[:100]}")
+            lineno += para.count(NEWLINE) + 2
+
+    assert not stale, (
+        f"{len(stale)} document(s) state a C++ check count that is not the current "
+        f"{DOCUMENTED_CHECKS:,} and do not mark themselves historical:\n  "
+        + "\n  ".join(stale)
+        + "\n\nEither update the figure, or -- if it is a dated ledger entry that should keep "
+          f"its own number -- say so in the same sentence using one of {_HISTORICAL}.")

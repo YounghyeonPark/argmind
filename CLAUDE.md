@@ -80,19 +80,33 @@ install once per clone with `git config core.hooksPath .githooks`.
 **Built and verified**: `argmind/` (`stream`, `align`, `adapt`, `guard`, `pipeline`, `persist`,
 `bench`, `backbone`) and the whole runtime library across to C++ in `cpp/` — a freestanding core
 with compile-time shapes behind a C ABI, and a hosted tier (`cpp/include/argmind/host/`) whose
-`RuntimeShaped*` classes take their shapes at construction. 1,191 Python tests and 5,653 C++ checks
+`RuntimeShaped*` classes take their shapes at construction. 1,195 Python tests and 5,653 C++ checks
 pass; every suite is mutation-checked. Compilation, linking **and execution** are verified on the
 declared floor — the full C++ self-check suite runs under QEMU on Cortex-M4 and Cortex-M55,
 **re-measured 2026-08-25 at 5,653 on both cores, exactly the host count**.
 
-**The C++ count is pinned by an assertion now, not kept by hand (2026-08-25).** It had drifted
-4,652 → 5,653 unnoticed because both gates — host and target — were `>=` floors, and a floor is
-blind to a count *rising*; adding checks now fails the suite until the documents are updated
-rather than after. The same audit found `ExemplarMemory` documented at 1,056 B in three places
-when its own test asserts 1,120. That is the **fourth** time a count in this repository's prose
-went stale. **The Python figure above is still unpinned and will go stale the same way** — it is
-left that way deliberately, since a suite gains tests constantly and pinning it would fail on
-every commit; treat it as approximate and re-derive it with `python -m pytest`.
+**The C++ count is pinned by an assertion AND gated in the documents now (2026-08-25).** It had
+drifted 4,652 → 5,653 unnoticed because both gates — host and target — were `>=` floors, and a
+floor is blind to a count *rising*.
+`test_every_DOCUMENT_stating_the_check_count_states_the_CURRENT_one` reads every `.md` here and
+fails on any check count that is neither the current figure nor marked as a dated record, so the
+prose is now coupled to the number rather than merely describing it.
+
+**Three corrections to that account, from an independent audit of the commit that made it.**
+*"The cause is one mechanism"* is **withdrawn**: only the C++ figure had the floor cause. The
+Python figures had no gate at all, and `ExemplarMemory` had a test asserting the right value and
+prose that never followed. Three unrelated lapses were collapsed into one fixable cause, which is
+the self-flattering shape this project's standards exist to catch. *"Adding checks fails the suite
+until the documents are updated"* was **false when written** — both assertions compared the binary
+to a literal in a test and nothing read a document; it is true now because the gate above was
+added afterwards. And the tally was wrong: the sweep behind it grepped for `4,652` and **missed
+three further sites sitting at 4,650**, so *"four for four"* was an undercount, and it was attached
+to the `ExemplarMemory` sentence when it belongs to the C++ figure's own history.
+
+**The Python figure above is floored, not pinned.** An equality would fail on every commit that
+adds a test, but a floor costs nothing and catches deletion — which the earlier version of this
+paragraph argued against by proving that floors miss *rises*, a different direction. Re-derive the
+exact number with `python -m pytest`.
 
 **Three adapters**: `RecursiveLeastSquares` (O(n²), covariance), `NormalisedLeastMeanSquares`
 (O(n), none) and `MultilayerPerceptron`. `Guard` **is** an `Adapter`, so "no guard" is not

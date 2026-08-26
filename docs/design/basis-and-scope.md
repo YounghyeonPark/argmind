@@ -364,7 +364,8 @@ than on Cortex-M4F at identical static RAM — moving up this way costs nothing 
 The two figures are in [`cpp/target/SIZES.md`](cpp/target/SIZES.md) rather than in this
 sentence, because the pair that used to be here (7,876 / 10,396) went stale within a day and
 no test could see it. And it **runs**: the whole self-check
-suite, all 4,650 checks, executes under QEMU's `mps3-an547` Cortex-M55 board and passes.
+suite executes under QEMU's `mps3-an547` Cortex-M55 board and passes -- all 4,650 checks when
+this was written, **re-measured 2026-08-25 at 5,653**, which is the host count exactly.
 `tests/test_target_run.py` is parametrised over both cores, so this is a test rather than a note;
 two mutants confirm the case is real (breaking the check-count bound fails both cores, and
 pointing the M55 case at the M4 board produces no result line at all).
@@ -502,7 +503,8 @@ assumption and it was wrong.
    library to one vendor, or reimplementing the accelerator path — and reimplementing it means
    running on the CPU, which discards the entire reason for the tier. Hosted sidesteps this:
    the vendor's runtime runs, argmind consumes its output.
-2. **The verification model would break.** This project's claim is 4,650 checks, byte-identical
+2. **The verification model would break.** This project's claim is 5,653 checks (4,650 when this
+   entry was written), byte-identical
    record parity, ~1.5 ulp against a Python oracle, mutation-tested, executing on the declared
    floor. A network runtime cannot be held to that by a few-hundred-line reference. Embedding
    would mean shipping a component whose correctness argument is somebody else's test suite —

@@ -1053,10 +1053,13 @@ product makes the length check *agree* with the real buffer, and repairs the CRC
 is rejected for its length rather than for being corrupt. Measured by removing the guard and
 running both ways:
 
+The suite stood at 4,603 when this was written and is 5,653 now; the totals below are the record
+of that run, not a claim about the current suite.
+
 | | guard present | guard removed |
 |---|---|---|
-| ARM, 32-bit `size_t` | 4,603 checks, 0 failures | **2 failures — caught** |
-| x86-64, 64-bit `size_t` | 4,603 checks, 0 failures | 0 failures — equivalent |
+| ARM, 32-bit `size_t` | 4,603 checks when this was written, 0 failures | **2 failures — caught** |
+| x86-64, 64-bit `size_t` | 4,603 checks when this was written, 0 failures | 0 failures — equivalent |
 
 A guard that could only be argued for is now one that is tested, and the header's claim of
 untestability on the host is itself verified rather than taken on trust.

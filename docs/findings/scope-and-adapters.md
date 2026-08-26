@@ -64,8 +64,9 @@ NPU at 3 TOPS/W, 4.2 MB SRAM and a MIPI CSI-2 camera pipeline
 ([ST](https://www.st.com/en/microcontrollers-microprocessors/stm32n6-series.html)). Measured, no
 source changes: the composed pipeline is **smaller** on M55 than on M4F at identical RAM (the
 two figures are in `cpp/target/SIZES.md`, because the pair quoted here went stale in a day) —
-and **all 4,650 self-checks run and pass
-under QEMU's `mps3-an547` Cortex-M55 board**. `tests/test_target_run.py` is parametrised over
+and **all self-checks run and pass under
+QEMU's `mps3-an547` Cortex-M55 board** -- 4,650 of them when this was written, **re-measured
+2026-08-25 at 5,653**. `tests/test_target_run.py` is parametrised over
 both cores, mutation-checked two ways.
 
 **The fork is what the words mean, not what the silicon can do.** React like an animal (see a
