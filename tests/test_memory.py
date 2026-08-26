@@ -10,7 +10,7 @@ dimensions. None of it went through a contract. This does.
 
 | requirement | why | measured |
 |---|---|---|
-| one flat contiguous state block | persistence is a copy and the C ABI needs no serialisation | 8 slots × 108 features × k=16 → **1,120 B**, asserted below |
+| one flat contiguous state block | persistence is a copy and the C ABI needs no serialisation | 8 slots at k=16 → 2·8·16 + 3·8 = 280 values, **1,120 B**, asserted below. The figure does **not** depend on `n_features`: the store is sparse. This row showed "× 108 features" until an audit pointed out that arithmetic cannot produce 1,120 |
 | fixed capacity | the target tier has no heap; the demo's `ObjectMemory` grows a Python list and is expressible nowhere but a host | a full memory replaces, never grows |
 | `state` / `load_state` / `n_features` / `n_outputs` / `dtype` | what `persist.pack` reads | goes through `Store` unchanged |
 

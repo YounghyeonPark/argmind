@@ -278,12 +278,31 @@ with the seed swept (harness agreeing with `drive()` 25/25): **22/25 with refine
 without** on a clean scene — the recorded categorical claim is true at the fixture's default seed 23
 and is **+3 of 25, McNemar p=0.375**. With scene clutter the difference vanishes exactly (16 vs 16,
 10 vs 10 at load 8) and at load 24 it inverts (2 vs 4). The reason is geometry: neighbourhoods
-overlap, so refinement's union grows into the step-2 grid it exists to avoid — 6.7% of it at one
-reported slot, **78.5% at the ~20 the demo reaches**, 100% at 33, where 70+925=995 is exactly the
-measured crop count. **The 6.3× saving is a one-slot property** and that docstring now says so.
-Nothing was changed: not-significant is not zero. **And identity retention itself collapses** —
-22/25 clean → 16/25 with clutter → 10/25 at 8 background exemplars → 2–4/25 at 24, which is the
-owner's *"계속 헤맨다"* as a number. The load is constructed, which is the assumption to distrust.
+overlap, so refinement's union grows into the step-2 grid it exists to avoid — ~7% of it at one
+reported slot, **~80% at the ~20 the demo reaches**, ~95% at 33. **The 6.3× saving is a one-slot
+property** and that docstring now says so. Those percentages are **computed** for slots placed
+uniformly at random, and real slots cluster; an earlier version of this sentence read "100% at 33,
+where 70+925=995 is exactly the measured crop count" and that is **withdrawn** — the model says
+94.9%, so the measured 995 is a five-point disagreement with it rather than a confirmation of it.
+Nothing was changed: not-significant is not zero — though with 5 discordant pairs **no outcome
+could have reached 0.05**, so that row reports the design's sensitivity, not refinement's effect.
+
+**The retention collapse recorded here (22/25 → 16 → 10 → 2–4) is WITHDRAWN as a measurement of
+retention.** Two independent reconstructions disagree with the loaded rows and one disagrees in
+*sign*; the construction that decides it was never checked in. And the criterion is the deeper
+problem: `back <= first` is silent about *which* slot, and under load the object is **never
+admitted** — a background exemplar already clears the 0.85 threshold, so it is recognised as
+background and the criterion passes because it rides that same slot twice. Separating genuine
+passes from that: **22/25 at load 0 (22 genuine), 15/25 at noise load 8 (5 genuine), and 23/25 at a
+load taken from 900 real camera frames (0 genuine).** The real-camera load makes the recorded
+criterion look *better* while the object is stored zero times out of 25 — more degeneracy, not
+less, and a first reading of it as "the real load is gentler" is withdrawn too.
+
+**The mechanism is the threshold, not the load's source.** The object against itself across the
+absence scores 0.875 against a 0.85 threshold, while arbitrary crops clear the same threshold 49%
+of the time (56.5% noise / 67.0% real at load 8). There is no headroom: 0.85 was viable only
+against a near-empty memory. The owner's *"계속 헤맨다"* is real and **worse** than the withdrawn
+numbers said. `tests/test_recognise.py` holds the noise arm, which needs no camera.
 
 **Open numbers nobody has**: backward-pass throughput on an M55; whether fp32 holds past ten million
 updates on a non-stationary target; and why the map head's two harnesses disagree on free-running

@@ -718,7 +718,7 @@ None of it went through a contract. `argmind/memory.py` does.
 
 | requirement | why it is not a formality | measured |
 |---|---|---|
-| one flat contiguous state block | persistence is a copy; the C ABI needs no serialisation | 8 slots × 108 features at k=16 → **1,120 B** (1,056 B the day this was written; the retention scalars grew it 2026-08-20, below) |
+| one flat contiguous state block | persistence is a copy; the C ABI needs no serialisation | 8 slots at k=16 → 2·8·16 + 3·8 = 280 values, **1,120 B** (1,056 B the day this was written; the retention scalars grew it 2026-08-20, below). **Independent of `n_features`** — the store is sparse, so it holds indices and values, not a dense 108-vector; the "× 108 features" this row used to show could not produce the number |
 | fixed capacity | the target tier has no heap, and the demo's `ObjectMemory` grows a Python list | a full memory replaces, never grows |
 | `state`/`load_state`/`n_features`/`n_outputs`/`dtype` | what `persist.pack` reads | goes through `Store` unchanged, and an 8-slot record is **refused** by a 16-slot memory |
 
@@ -1574,13 +1574,31 @@ neighbourhoods overlap, and their union grows into the step-2 grid refinement ex
 
 | reported slots | 1 | 2 | 4 | 8 | 16 | 20 | 33 | 50 |
 |---|---|---|---|---|---|---|---|---|
-| % of the full step-2 grid | 6.7 | 13.1 | 25.5 | 45.4 | 72.1 | **78.5** | 95.2 | 99.6 |
+| % of the full step-2 grid | 6.9 | 13.4 | 25.4 | 45.2 | 71.5 | **80.0** | 94.9 | 99.7 |
 
-At 33 slots the union is **925 candidates — 100% of the fine grid** — and 70 + 925 = 995, exactly the
-crop count measured on camera. **`refine=(8, 2)` under load simply *is* the plain step-2
-configuration**, which the recorded table says also keeps the identity. That is why the two arms
-converge: they become the same thing. The "6.3× fewer crops than the fine grid, for the same answer"
-is a **one-reported-slot** property, and that docstring now says so.
+**That row is COMPUTED, not measured, and it was wrong in its first form** — corrected 2026-08-25
+after an audit re-derived it. Two things it depends on, neither of which was stated: it is an
+expectation over slot positions drawn **uniformly at random**, and the first version quoted an
+8-draw sample whose per-draw spread is 2–6 points, so its decimals were sampling noise. The figures
+above are the 2,000-draw expectation. **Real reported slots cluster on objects rather than spreading
+uniformly**, and the measured camera crop counts contradict uniformity in both directions (2 slots
+measured 95 crops against ~205 computed; 16 slots measured 935 against ~724), so this row is a
+model of the geometry and not a prediction of the demo.
+
+One entry was not merely noisy but impossible: at a single slot the union can only be 2.7%, 4.9% or
+8.8% of the grid — 4, 26 or 40 of the 70 centres, depending where the slot sits — so the **6.7%**
+first recorded here is attainable by no configuration at all. The closed-form mean is 6.9%.
+
+**And the "100% at 33 slots" claim is withdrawn.** The model puts 33 slots at **94.9%** — about 878
+candidates, so 948 crops rather than 995 — and full coverage needs roughly fifty. The measured 995
+does imply the union was essentially the whole grid; what that is, is a **five-point disagreement
+between this model and the measurement**, not the confirmation it was written up as. `70 + 925 = 995`
+is arithmetic that only closes if 94.9% is read as 100%.
+
+The direction of the argument survives all of that: **under load `refine=(8, 2)` approaches the plain
+step-2 configuration**, which the recorded table says also keeps the identity, so the two arms
+converge. The "6.3× fewer crops than the fine grid, for the same answer" is a **one-reported-slot**
+property, and that docstring now says so.
 
 **Nothing was changed.** The measurement says the cost is real and the benefit is not established;
 it does not say refinement should be removed, and a not-significant +3/25 is not a measured zero. It
@@ -1600,3 +1618,72 @@ the load *axis* is real and the correspondence to camera load is an argument, no
 `tests/test_recognise.py` holds the geometry — the part that is deterministic and free. The
 identity/load table is not held: the sweep is 228 s, which is not a per-commit test, and saying so
 is better than a cheaper test that measures something else.
+
+### The constructed load does not stand in for a real one, and the criterion was measuring the wrong thing — 2026-08-25
+
+The entry above flagged its own weakest point: background exemplars were pre-seeded with noise
+because no synthetic scene here grows a memory the size the camera reaches, so "the load axis is
+real and the correspondence to camera load is an argument, not a measurement." **That was the right
+thing to distrust and the line was drawn in the wrong place. The axis is not real either.**
+
+**900 real camera frames**, captured at the demo's own `IN_SHAPE` through its own conversion
+(`cv2.resize` then `/255.0`, `demo/pointer.py:1440`), 30 fps, mean level 0.672 against the synthetic
+scene's 0.352 — so the real scene is brighter and smoother, which matters below. Both load sources
+then go through **the layer's own descriptor path**, one descriptor per slot from a distinct image,
+admitted with `ExemplarMemory.admit`. The load's *source* is the only difference between arms.
+
+The criterion, the scene and the pass/fail are the repository's own `drive()` and `back <= first`.
+**Load 0 reproduces the recorded row exactly — 22/25 with refinement and 19/25 without** — so this
+is the recorded quantity being measured and not a new one.
+
+| load | source | criterion says kept | of which the object's OWN slot | of which rode a background slot |
+|---|---|---|---|---|
+| 0 | — | 22/25 | **22** | 0 |
+| 8 | noise | 15/25 | 5 | **10** |
+| 8 | 900 real camera frames | 23/25 | **0** | **23** |
+| 24 | noise | 12/25 | 2 | 10 |
+| 24 | 900 real camera frames | 19/25 | **0** | 19 |
+
+**The separation is sound and rests on one checkable fact.** Pre-seeding fills slots `0..load-1`,
+and `ExemplarMemory.admit` takes `empty[0]` — the first free slot — so a slot at or above `load` did
+not exist until the object arrived. Capacity is `load + 8`, so the memory never fills and never
+evicts, which is what makes the boundary meaningful.
+
+**Read the middle column, not the first.** Under a real camera load the object is admitted **zero
+times out of 25**. Every one of those 23 "passes" is the object being recognised *as a background
+exemplar* on both appearances — the criterion is satisfied because the confusion is consistent.
+
+**My first reading of this was "the real load is gentler" and it is withdrawn.** 23/25 against 15/25
+looks like an improvement and is the opposite: more degeneracy, not less. That reading survived about
+as long as it took to ask which slot the object got, which is the question the criterion never asks.
+
+**The mechanism is the threshold, and it is not a property of the load's source.** I predicted real
+crops would sit *further* from the object than noise — one room, tightly clustered, nothing like a
+rendered disc — and **that is refuted**: real crops score 0.888 max / 0.819 mean against the object
+and noise 0.877 / 0.799, i.e. real is marginally *closer*. What decides it is that there is no
+headroom at all. The object against **itself** across the absence scores **0.875** against a 0.85
+threshold, while arbitrary crops clear the same threshold **48.8%** of the time — 56.5% for noise and
+**67.0%** for real crops at load 8. A bank of eight almost certainly contains one that matches the
+object as well as the object does, `look_up` returns it, and admission never happens. **0.85 was
+viable only against a near-empty memory**, which is the regime every earlier measurement was taken
+in.
+
+**So the recorded collapse (22 → 16 → 10 → 2–4) is withdrawn as a measurement of retention.** It
+conflates genuine retention with consistent background-confusion, and an independent audit
+separately found the loaded rows non-reproducible with the *sign* depending on unrecorded
+construction detail. Genuine retention is **22/25 at load 0, 5/25 at noise load 8, 0/25 at real
+load 8** — a sharper collapse than was recorded, and in a different quantity. The owner's *"계속
+헤맨다"* is real and worse than the withdrawn numbers said.
+
+**What is held and what is not.** `tests/test_recognise.py` holds the noise arm and the threshold
+headroom — `test_under_LOAD_the_retention_criterion_PASSES_FOR_THE_WRONG_REASON` (5.1 s) and
+`test_the_0_85_THRESHOLD_HAS_NO_HEADROOM_against_a_populated_memory` (0.1 s), both deterministic and
+needing no camera. The camera arm is **not** held: 900 frames of someone's room are not something to
+commit, and a test that recaptured them would measure a different room. It is recorded here as a
+measurement with its conditions, which is the honest form for a thing a fixture cannot carry.
+
+**What this does not say.** It does not say the threshold should move. Lowering it admits more and
+raising it recognises less, and neither has been measured against this criterion — the descriptor's
+own discrimination margin (0.099 for the 3×3 grid, recorded above) is the constraint that decides
+whether any threshold works, and that number is why "just retune it" is not obviously available.
+Nothing was changed on the strength of this.

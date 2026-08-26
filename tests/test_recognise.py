@@ -174,9 +174,11 @@ def test_local_REFINEMENT_keeps_the_identity_at_a_sixth_of_the_crops():
     **That saving is for ONE reported slot, and the demo does not stay there** — measured
     2026-08-25 and qualified here rather than left standing. Refinement describes a neighbourhood
     per reported slot and the neighbourhoods overlap, so its union grows into the fine grid it was
-    invented to replace: 7% of the step-2 grid at one slot, 43% at eight, **73% at sixteen**, 100%
-    at the whole coarse grid. At the ~20 slots a 2,005-frame camera run settles on it is ~79%. See
-    `test_REFINEMENT_DEGENERATES_into_the_fine_grid_it_was_invented_to_replace` below.
+    invented to replace: **7% of the step-2 grid at one slot, 45% at eight, 72% at sixteen, 95% at
+    thirty-three**, and full coverage needs about fifty. See
+    `test_REFINEMENT_DEGENERATES_into_the_fine_grid_it_was_invented_to_replace` below, whose
+    docstring carries the assumption those percentages depend on — **they are computed for slots
+    placed UNIFORMLY at random, and real reported slots cluster on objects.**
     """
     L = counted(layer(step=8))
     L.refine = (8, 2)
@@ -828,27 +830,43 @@ def test_REFINEMENT_costs_one_neighbourhood_per_REPORTED_slot():
 def test_REFINEMENT_DEGENERATES_into_the_fine_grid_it_was_invented_to_replace():
     """**What refinement buys, asked in the regime where it costs 14x — and the answer is nothing.**
 
-    Measured 2026-08-25 on the file's own criterion (`back and back <= first`), 25 seeds, with this
-    harness agreeing with `drive()` on 25/25 seeds so it is the recorded quantity being measured:
+    Measured 2026-08-25 on the file's own criterion (`back and back <= first`), 25 seeds, with the
+    harness agreeing with `drive()` on 25/25 seeds for the clean row -- the one row anyone else can
+    reproduce, because the harness itself is not in the repository:
 
-    | load | scene | refine on | refine off | disagreements | McNemar |
-    |---|---|---|---|---|---|
-    | 0 | clean | **22/25** | 19/25 | 4 on / 1 off | p = 0.375 |
-    | 0 | clutter | 16/25 | 16/25 | 5 / 5 | p = 1.000 |
-    | 8 | clutter | 10/25 | 10/25 | 4 / 4 | p = 1.000 |
-    | 24 | clutter | 2/25 | 4/25 | 1 on / 3 off | p = 0.625 |
+    | load | scene | refine on | refine off | discordant | McNemar | smallest p reachable |
+    |---|---|---|---|---|---|---|
+    | 0 | clean | **22/25** | 19/25 | 4 on / 1 off | p = 0.375 | 0.0625 |
+    | 0 | clutter | 16/25 | 16/25 | 5 / 5 | p = 1.000 | 0.0625 |
+    | 8 | clutter | 10/25 | 10/25 | 4 / 4 | p = 1.000 | 0.125 |
+    | 24 | clutter | 2/25 | 4/25 | 1 on / 3 off | p = 0.625 | 0.125 |
 
-    The recorded categorical claim — plain step 8 loses the identity, refine keeps it — is true at
-    the fixture's default seed 23 and is **+3 of 25 across seeds, not significant**. Add clutter and
-    the difference vanishes exactly; add memory load and it inverts. That is why a mutant refining
-    only the first seed survives: the effect was never large enough for a fixture to pin.
+    **The last column is the honest reading and it was added after an audit: with 5 discordant
+    pairs no outcome could have reached 0.05, and with 4 none could reach 0.125.** So "not
+    significant" reports this design's sensitivity, not a property of refinement -- 25 seeds is too
+    few to decide it either way, and the recorded categorical claim (plain step 8 loses the
+    identity, refine keeps it) is true at the fixture's default seed 23 and is +3 of 25 across
+    seeds. That is also why a mutant refining only the first seed survives; an independent audit
+    measured that mutant at **22/25, identical to full refinement**, against 19/25 with refinement
+    off -- so the whole per-slot 14x buys nothing over a single neighbourhood on this criterion.
+
+    **THE THREE LOADED ROWS ARE WITHDRAWN AS A MEASUREMENT OF RETENTION.** Two independent
+    reconstructions disagree with them and one disagrees in *sign* (load improving retention), and
+    the construction that decides it -- capacity, what "noise" means, which scene -- was recorded in
+    one clause and the harness was never checked in. Worse, the criterion does not measure retention
+    under load at all: see
+    `test_under_LOAD_the_retention_criterion_PASSES_FOR_THE_WRONG_REASON`, where the object is never
+    admitted and the pass comes from riding a background slot. The rows are kept here as the record
+    of what was claimed, not as evidence. The clean row stands.
 
     **And here is the reason, which is geometry and needs no images at all.** Each reported slot gets
     a neighbourhood, the neighbourhoods overlap, and their union grows into the step-2 grid that
     refinement exists to avoid. At full coverage `refine=(8, 2)` *is* the plain step-2 configuration,
     which the table above says also keeps the identity — so the two arms converge, and they do.
 
-    Held as the union, deterministic and free: no backbone, no frames, no clock.
+    Held as the union: deterministic, and no forward pass, no frames and no clock. (A
+    `Backbone` is constructed, because a `RecognitionLayer` needs one; nothing is run
+    through it. The earlier wording here said "no backbone", which was false as written.)
     """
     L = _presence_layer(step=8, refine=(8, 2))
     fine = {(x / W, y / H) for y in range(CROP // 2, H - CROP // 2 + 1, 2)
@@ -881,3 +899,128 @@ def test_REFINEMENT_DEGENERATES_into_the_fine_grid_it_was_invented_to_replace():
     assert everything > 0.99, (
         f"refining every candidate covers {everything:.1%} of the step-2 grid rather than all of it;"
         " if that became false the neighbourhoods no longer tile and the argument above is wrong")
+
+
+def _loaded(seed, load, refine=None, capacity=None):
+    """A layer whose memory is already holding `load` background exemplars.
+
+    One descriptor per slot, each from a DISTINCT image, admitted through the memory's own
+    `admit` -- so what varies between this and the camera measurement recorded in
+    docs/findings/vocabulary-and-labelling.md is the load's SOURCE and nothing else.
+    """
+    bb = Backbone(PLAN, (CROP, CROP, 3), dtype="f8", seed=seed, pool=POOL)
+    mem = ExemplarMemory(capacity or load + 8, bb.n_outputs, 16, threshold=0.85)
+    L = RecognitionLayer(bb, mem, (H, W, 3), grid(8), admit_margin=0.02, refine=refine)
+    rng = np.random.default_rng(1000 + seed)
+    for _ in range(load):
+        cx, cy = L.centres[int(rng.integers(len(L.centres)))]
+        v = np.asarray(L.backbone.features(L._crop(rng.random((H, W, 3)), cx, cy)),
+                       dtype=np.float64)
+        L.memory.admit(v / float(np.linalg.norm(v)))
+    return L
+
+
+def test_the_0_85_THRESHOLD_HAS_NO_HEADROOM_against_a_populated_memory():
+    """**Why identity fails under load, and it is the threshold rather than the load's source.**
+
+    Measured 2026-08-25, and the figures below are the ones THIS test computes -- 10 backbone
+    seeds, 24 crops each. The object against ITSELF across the absence scores **0.875** against
+    a 0.85 threshold: 0.025 of headroom, and its worst seed is 0.603. Arbitrary crops that have
+    nothing to do with it clear the same threshold **48.8%** of the time. So a memory holding a
+    handful of background exemplars almost always contains one that matches the object as well
+    as the object does: `look_up` returns it, and the object is *recognised as background*
+    instead of being stored.
+
+    That is a property of an untrained backbone's descriptor rather than of the scene. Measured
+    on the sweep's own banks at load 8, the fraction above threshold is **56.5% for synthetic
+    noise and 67.0% for descriptors taken from 900 real camera frames** -- real crops are
+    slightly WORSE here, not better, which is why the camera load admits the object less often
+    rather than more. See `test_under_LOAD_the_retention_criterion_PASSES_FOR_THE_WRONG_REASON`.
+
+    Deterministic and cheap: no drive(), no clock.
+    """
+    above, selfsim = [], []
+    for seed in range(10):
+        L = _loaded(seed, 0, capacity=8)
+        rng = np.random.default_rng(500 + seed)
+
+        def d(img, cx, cy):
+            v = np.asarray(L.backbone.features(L._crop(img, cx, cy)), dtype=np.float64)
+            return v / float(np.linalg.norm(v))
+
+        obj = d(scene("A", 0), 0.30, 0.40)
+        selfsim.append(float(d(scene("again", 0), 0.30, 0.40) @ obj))
+        sims = []
+        for _ in range(24):
+            cx, cy = L.centres[int(rng.integers(len(L.centres)))]
+            sims.append(float(d(rng.random((H, W, 3)), cx, cy) @ obj))
+        above.append(float(np.mean(np.asarray(sims) >= 0.85)))
+
+    mean_self, mean_above = float(np.mean(selfsim)), float(np.mean(above))
+    assert mean_self > 0.85, (
+        f"the object no longer clears its own threshold ({mean_self:.3f}); if that became true "
+        "the failure below is ordinary rejection and not a collision, and the explanation in "
+        "this docstring should be re-derived")
+    assert mean_above > 0.35, (
+        f"only {mean_above:.1%} of arbitrary crops clear the 0.85 threshold against the object, "
+        "against a measured 48.8%. If the descriptor became this discriminative the collision "
+        "explanation is wrong -- and the load results below should have improved with it")
+
+
+def test_under_LOAD_the_retention_criterion_PASSES_FOR_THE_WRONG_REASON():
+    """**The recorded load table does not measure identity retention, and this is the control
+    that shows it.** Measured 2026-08-25.
+
+    `back <= first` is this file's criterion and it is silent about *which* slot. Under load the
+    object is never admitted -- a background exemplar already clears the threshold, so
+    `look_up` matches it -- and the criterion then passes because the object rides that same
+    background slot on both appearances. A pass, for the opposite of the reason intended.
+
+    Background occupies slots 0..load-1 and `ExemplarMemory.admit` takes the first free slot,
+    so a slot >= `load` did not exist until the object arrived. That is the separation:
+
+    | load | source | kept | of which own slot | of which rode background |
+    |---|---|---|---|---|
+    | 0 | -- | 22/25 | **22** | 0 |
+    | 8 | noise | 15/25 | 5 | **10** |
+    | 8 | 900 real camera frames | 23/25 | **0** | **23** |
+    | 24 | noise | 12/25 | 2 | 10 |
+    | 24 | 900 real camera frames | 19/25 | **0** | 19 |
+
+    **The real-camera arm is the finding.** Replacing the constructed load with descriptors from
+    900 frames of an actual scene -- the assumption `docs/findings/vocabulary-and-labelling.md`
+    flagged as the one to distrust -- makes the recorded criterion look BETTER (23/25 against
+    15/25) while the object is admitted **0 times out of 25**. A first reading of that as "the
+    real load is gentler" is withdrawn: it is more degeneracy, not less.
+
+    Genuine retention is therefore **22/25 at load 0, 5/25 at noise load 8, and 0/25 at real
+    load 8** -- a sharper collapse than the recorded 22 -> 16 -> 10 -> 2-4, and it is the
+    owner's *"계속 헤맨다"* with its mechanism attached.
+
+    Only the noise arm is held here: it needs no camera and no stored frames. ~5 s.
+    """
+    kept = own = rode = 0
+    for seed in range(25):
+        L = _loaded(seed, 8)
+        before = L.memory.occupied
+        seq = drive(L)
+        first = {s for p, s, _r in seq if p == "A" and s >= 0}
+        back = {s for p, s, _r in seq if p == "again" and s >= 0}
+        if first and back <= first:
+            kept += 1
+            if any(s >= before for s in first):
+                own += 1
+            else:
+                rode += 1
+
+    assert kept > own, (
+        f"all {kept} passing seeds admitted the object as its own exemplar, so the criterion is "
+        "no longer blind to which slot it got. If that is a real improvement, the load table in "
+        "docs/findings/vocabulary-and-labelling.md should be re-measured and this test retired")
+    assert rode > own, (
+        f"under a load of 8 the criterion passed {kept}/25 times, {own} on the object's own slot "
+        f"and {rode} riding a background slot; the recorded measurement is 5 own against 10 rode "
+        "and the whole point is that the majority of passes are degenerate")
+    assert own < 12, (
+        f"{own}/25 seeds stored the object as its own exemplar under load, against a measured 5. "
+        "Admission under load working would be a real fix and would invalidate the table above")
