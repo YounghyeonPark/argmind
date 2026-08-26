@@ -1687,3 +1687,98 @@ raising it recognises less, and neither has been measured against this criterion
 own discrimination margin (0.099 for the 3×3 grid, recorded above) is the constraint that decides
 whether any threshold works, and that number is why "just retune it" is not obviously available.
 Nothing was changed on the strength of this.
+
+### Retuning the threshold does not recover identity, at any value — 2026-08-25
+
+The entry above ended by saying the threshold has no headroom and that "just retune it" was not
+obviously available. Asked properly: sweep it, 0.60 to 0.98, 25 seeds, and look for a window.
+
+**There is none.** Genuine retention — the object taking its own slot in phase A and coming back
+reported as that slot — under a load drawn from 900 real camera frames:
+
+| path | load 0 | load 8 noise | load 8 real | load 24 real |
+|---|---|---|---|---|
+| `emit="descriptor"`, best over all thresholds | 22/25 (at 0.60–0.70) | 3/25 | **0/25** | **0/25** |
+| `emit="presence"`, best over all thresholds | 11/25 | 6/25 | **0/25** | **0/25** |
+
+Two things fall out of the sweep that are worth as much as the answer.
+
+**0.85 is not the best value even at load 0.** On the descriptor path genuine retention is 22/25 at
+0.60–0.70 and **15/25 at 0.85**, declining monotonically as the threshold rises because the object
+is re-admitted rather than recognised. (This is a stricter criterion than the recorded one — `back
+== {own}` rather than `back <= first` — so the numbers are not comparable to the 22/25 recorded at
+0.85; the *shape* across thresholds is the finding.)
+
+**And the recorded criterion is measuring a path the demo does not run.** `tests/test_recognise.py`'s
+`layer()` and `drive()` use `emit="descriptor"`; `demo/pointer.py:778` builds the recogniser with
+`emit="presence"`. Every retention number in this file is for the descriptor path.
+
+#### The mechanism, and my first statement of it was wrong
+
+I recorded it as the threshold: a background exemplar clears 0.85 against the object, so the object
+is recognised as background. **The sweep refutes that** — at 0.98 the object is still not admitted,
+and no exemplar scores 0.98 against it.
+
+The real reason is structural. In descriptor mode `features()` takes the maximum over **every
+candidate against every slot** and admits only if that maximum matched nothing:
+
+    if best_j >= 0:  recognise      # ANY candidate, ANY slot
+    else:            admit
+
+So one crop anywhere in a 70-candidate frame matching one stored exemplar suppresses admission for
+the whole frame, including for an object nobody has seen. The deciding quantity is the max over
+~70×N pairs, not the object's own score. Taken through `look_up_many`, which is the code's own
+comparison:
+
+| load | source | max over all candidates | the object's candidate |
+|---|---|---|---|
+| 8 | noise | 0.881 | 0.770 |
+| 24 | noise | 0.906 | 0.804 |
+| 8 | 900 real camera frames | **0.998** (worst seed 0.978) | 0.805 |
+| 24 | 900 real camera frames | **0.998** (worst seed 0.978) | 0.822 |
+
+On a real load it saturates at 0.998, so the threshold would have to sit above that — where nothing
+is ever recognised. **No single value both admits a new object and recognises an old one.**
+
+**`emit="presence"` does not have this defect and the comment in `recognise.py` says why**: its
+`claimed`/`free` split admits what the matched slots do not explain, and it records that "admission
+has to be parallel too" after the serial version was measured failing. **That fix never reached the
+descriptor branch.**
+
+#### Two measurements of my own withdrawn along the way
+
+**"The max over all pairs is 0.921 at noise load 8" is withdrawn — it is 0.881.** I computed a dense
+query against the pre-sparsification bank; `look_up` sparsifies the *query* too and dots on the
+shared support. A second attempt (dense query against the stored sparse slots) gave 0.842, a third
+number for one quantity. Calling `look_up_many` settles it, and re-implementing instead of calling
+is the defect this repository already recorded when a harness re-implemented `taught.push`. The
+0.998 for the real arm happens to be unaffected — near-duplicate crops stay near-duplicate under
+sparsification — so that figure was right for the wrong reason.
+
+**"0/25 at every threshold on the presence path" is withdrawn.** `drive()` reads `last_slot`, the
+top of `last_present`, and demanding rank 1 from a recogniser built to report many slots at once is
+a criterion made for the other path. Asked fairly — is the object's own slot reported *at all* while
+it is back:
+
+| path | load 0 | load 8 noise | load 8 real | load 24 real |
+|---|---|---|---|---|
+| descriptor | 22/25 | 5/25 | **0/25** | **0/25** |
+| presence | 24/25 | 10/25 | **10/25** | **2/25** |
+
+So the demo's path does retain, sometimes: **10 of 25 at a load of 8 and 2 of 25 at 24.** The
+descriptor path's zeros are real and total; the presence path's are the criterion's fault. What
+survives is that **the collapse is driven by load, not by the threshold** — across 0.60 to 0.95 the
+presence/real cell moves only 7 → 10 → 10 → 7 — and the demo's own long run sits at ~20 slots
+present per frame, which is the load-24 column.
+
+#### What is held, and what was not changed
+
+`test_the_DESCRIPTOR_path_suppresses_ADMISSION_FRAME_WIDE_on_any_single_match` holds the structure
+and the deciding quantity on the noise arm: deterministic, 0.3 s, no camera. The sweep itself is not
+held — it is ~20 minutes and it needs the camera frames.
+
+Nothing was changed. The obvious repair is to give the descriptor branch the presence branch's
+`claimed`/`free` admission, but that alters what every recorded descriptor-path measurement in this
+file was taken against, and the presence path — which already has it — still reads 2/25 in the
+demo's own regime. So the fix is probably necessary and provably not sufficient, and it is not
+being made on the strength of a sweep whose subject was a threshold.

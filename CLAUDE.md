@@ -80,7 +80,7 @@ install once per clone with `git config core.hooksPath .githooks`.
 **Built and verified**: `argmind/` (`stream`, `align`, `adapt`, `guard`, `pipeline`, `persist`,
 `bench`, `backbone`) and the whole runtime library across to C++ in `cpp/` — a freestanding core
 with compile-time shapes behind a C ABI, and a hosted tier (`cpp/include/argmind/host/`) whose
-`RuntimeShaped*` classes take their shapes at construction. 1,195 Python tests and 5,653 C++ checks
+`RuntimeShaped*` classes take their shapes at construction. 1,196 Python tests and 5,653 C++ checks
 pass; every suite is mutation-checked. Compilation, linking **and execution** are verified on the
 declared floor — the full C++ self-check suite runs under QEMU on Cortex-M4 and Cortex-M55,
 **re-measured 2026-08-25 at 5,653 on both cores, exactly the host count**.
@@ -298,11 +298,25 @@ load taken from 900 real camera frames (0 genuine).** The real-camera load makes
 criterion look *better* while the object is stored zero times out of 25 — more degeneracy, not
 less, and a first reading of it as "the real load is gentler" is withdrawn too.
 
-**The mechanism is the threshold, not the load's source.** The object against itself across the
-absence scores 0.875 against a 0.85 threshold, while arbitrary crops clear the same threshold 49%
-of the time (56.5% noise / 67.0% real at load 8). There is no headroom: 0.85 was viable only
-against a near-empty memory. The owner's *"계속 헤맨다"* is real and **worse** than the withdrawn
-numbers said. `tests/test_recognise.py` holds the noise arm, which needs no camera.
+**"The mechanism is the threshold" is WITHDRAWN — it is structure, and the threshold sweep is what
+refuted it.** Swept 0.60 → 0.98, 25 seeds: genuine retention is **0/25 at every value** under a real
+camera load, on both paths, so no exemplar-vs-object score can be the cause. In descriptor mode
+`features()` takes the max over **every candidate against every slot** and admits only if that
+matched nothing, so one crop anywhere in a 70-candidate frame suppresses admission frame-wide. That
+max saturates at **0.998** on a real load (0.881 at noise load 8, measured through `look_up_many`
+rather than recomputed — an earlier 0.921 of mine is withdrawn), so the threshold would have to sit
+above 0.998, where nothing is recognised at all. `emit="presence"` does **not** have this defect —
+its `claimed`/`free` split is the recorded "admission has to be parallel too" fix, **which never
+reached the descriptor branch**. And **the demo runs presence while every recorded retention number
+here is descriptor**.
+
+Asked fairly of the parallel path — is the object's slot reported *at all* — the demo's path retains
+**10/25 at load 8 and 2/25 at load 24**, so a further claim of mine, "0/25 everywhere on presence",
+is withdrawn as a criterion artefact. The collapse is driven by **load, not threshold**: across
+0.60–0.95 that cell moves only 7 → 10 → 10 → 7, and the long run sits at ~20 slots. The owner's
+*"계속 헤맨다"* is real and worse than the withdrawn numbers said. Nothing was changed: the obvious
+repair is probably necessary and provably not sufficient, since the path that already has it still
+reads 2/25 in the demo's own regime.
 
 **Open numbers nobody has**: backward-pass throughput on an M55; whether fp32 holds past ten million
 updates on a non-stationary target; and why the map head's two harnesses disagree on free-running

@@ -1024,3 +1024,79 @@ def test_under_LOAD_the_retention_criterion_PASSES_FOR_THE_WRONG_REASON():
     assert own < 12, (
         f"{own}/25 seeds stored the object as its own exemplar under load, against a measured 5. "
         "Admission under load working would be a real fix and would invalidate the table above")
+
+
+def test_the_DESCRIPTOR_path_suppresses_ADMISSION_FRAME_WIDE_on_any_single_match():
+    """**Why retuning the threshold cannot rescue identity, and it is structure not tuning.**
+
+    Measured 2026-08-25, after a threshold sweep came back 0/25 at *every* value from 0.60 to
+    0.98 under a real camera load. A threshold explanation cannot survive that: an exemplar
+    scoring 0.88 against the object cannot be what suppresses admission at 0.98.
+
+    `features()` in descriptor mode takes the maximum over **every candidate against every
+    slot**, and admits only if that maximum matched nothing:
+
+        if best_j >= 0:  recognise    # ANY candidate, ANY slot
+        else:            admit
+
+    So one crop somewhere in a 70-candidate frame matching one stored exemplar suppresses
+    admission **for the whole frame**, including for an object nobody has ever seen. The
+    deciding quantity is therefore not "how similar is a stored exemplar to the object" -- the
+    0.80 this file reported first -- but "how similar is the most similar of ~70xN pairs". Taken
+    through `look_up_many` so the sparsification is the code's own: **0.881 at a load of 8 noise
+    crops, 0.906 at 24, and 0.998 (worst seed 0.978) at a load taken from 900 real camera
+    frames.** Above 0.998 nothing is ever recognised, so on a real load no threshold both admits
+    a new object and recognises an old one.
+
+    `emit="presence"` does not have this defect -- its `claimed`/`free` split admits what the
+    matched slots do not explain, and the comment there records that the serial version was
+    fixed. **That fix never reached this branch**, and the demo runs presence while the recorded
+    retention criterion runs descriptor.
+
+    Asserted structurally on the noise arm: deterministic, no camera.
+    """
+    L = _loaded(3, 8)
+    before = L.memory.occupied
+    described = L._describe(scene("A", 0))
+
+    matched = [L.memory.look_up(d) for d in described]
+    best = max((r.score for r in matched if r.matched), default=None)
+    assert best is not None, (
+        "no candidate matched anything in an 8-exemplar memory, so this frame cannot show the "
+        "suppression; the load is no longer representative")
+
+    L.features(scene("A", 0))
+    assert L.memory.occupied == before, (
+        f"the object was admitted ({before} -> {L.memory.occupied}) even though a candidate "
+        f"matched at {best:.4f}. If descriptor mode has gained the presence path's "
+        "`claimed`/`free` admission, this test has served its purpose and the threshold "
+        "conclusion above should be re-measured")
+
+    # ...and the quantity that decides it is the max over ALL pairs, not the object's own score.
+    #
+    # **Averaged over seeds, because 0.921 is a mean.** The first version of this assertion
+    # compared one seed against it and failed at 0.859 -- the single-seed error this repository
+    # has already recorded once, on the full-resolution question, arriving again.
+    # Through `look_up_many`, NOT recomputed. `look_up` sparsifies the query as well as the slot
+    # and dots on the shared support, so a dense-query product is a different number: two earlier
+    # versions of this measurement did exactly that and disagreed with each other (0.842 against a
+    # dense query, 0.921 against the pre-sparsification bank). Calling the code path settles it,
+    # and is the lesson this repository already recorded when a harness re-implemented `taught.push`.
+    pairs, objects = [], []
+    for seed in range(10):
+        Ls = _loaded(seed, 8)
+        D = Ls._describe(scene("A", 0))
+        reports = Ls.memory.look_up_many(D)
+        oi = min(range(len(Ls.centres)),
+                 key=lambda i: (Ls.centres[i][0] - 0.30) ** 2 + (Ls.centres[i][1] - 0.40) ** 2)
+        pairs.append(max(r.score for r in reports))
+        objects.append(reports[oi].score)
+
+    all_pairs, object_only = float(np.mean(pairs)), float(np.mean(objects))
+    assert all_pairs > object_only, (
+        f"the mean max over all candidate-slot pairs ({all_pairs:.4f}) is not above the object's "
+        f"own best match ({object_only:.4f}); the point is that admission is gated on the larger "
+        "of the two, so if they have converged the explanation needs re-deriving")
+    assert all_pairs > 0.85, (
+        f"the deciding maximum averages {all_pairs:.4f}; it is documented at 0.881 for this arm "
+        "and the argument is that it saturates above any usable threshold")
