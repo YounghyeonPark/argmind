@@ -80,7 +80,7 @@ install once per clone with `git config core.hooksPath .githooks`.
 **Built and verified**: `argmind/` (`stream`, `align`, `adapt`, `guard`, `pipeline`, `persist`,
 `bench`, `backbone`) and the whole runtime library across to C++ in `cpp/` — a freestanding core
 with compile-time shapes behind a C ABI, and a hosted tier (`cpp/include/argmind/host/`) whose
-`RuntimeShaped*` classes take their shapes at construction. 1,196 Python tests and 5,653 C++ checks
+`RuntimeShaped*` classes take their shapes at construction. 1,212 Python tests and 5,653 C++ checks
 pass; every suite is mutation-checked. Compilation, linking **and execution** are verified on the
 declared floor — the full C++ self-check suite runs under QEMU on Cortex-M4 and Cortex-M55,
 **re-measured 2026-08-25 at 5,653 on both cores, exactly the host count**.
@@ -318,6 +318,25 @@ is withdrawn as a criterion artefact. The collapse is driven by **load, not thre
 repair is probably necessary and provably not sufficient, since the path that already has it still
 reads 2/25 in the demo's own regime.
 
+**An agent app was asked for and built, 2026-09-08 — `agent/`.** An LLM on the PC, with
+`ExemplarMemory` as a fuzzy-keyed cache so repeated work skips the model. **The key was measured
+before the cache was built**: of real screen captures more than ten seconds apart, **20.4 % score
+≥ 0.995**, and the 0.95→0.995 share barely moves, so the distribution is two-humped and a threshold
+exists. That is the **opposite of the camera**, where the same machinery retains 0/25 under load —
+windows repeat pixel for pixel and a mug on a desk never does. Through the app on a real screen:
+**any hit 95.1 %, recurrent hit 58.3 %**, and the first number flatters (an idle terminal reads
+94.6 % and means nothing), so `--measure` prints both and says which matters. **The webcam is context
+and never a key** — measured, screen 21.0 % recurrent against screen+webcam 17.6 %, while the webcam
+alone hits 92.4 % on **nine** entries, which is the global-pooling failure again: it cannot tell
+situations apart. **My reason for that was wrong and is withdrawn** — I predicted the webcam was too
+unstable to key on; it is *more* stable than the screen, and the criterion was discrimination, not
+stability. Two bugs the tests found, both the same shape: validation lived inside the live branch so
+a dry run cached a malformed action, and the first timing test measured the actuator's rate limiter
+rather than the cache (a hit read **slower**, 100.4 ms against 53.8 ms). Ten mutants, nine caught,
+one equivalent and recorded. **Absent rather than unfinished**: microphone and speaker (no capture
+library here), and `ClaudeBrain` is written against the official SDK and **has never been executed** —
+no package, no key. Actuation is `live=False` by default behind three brakes.
+
 **Open numbers nobody has**: backward-pass throughput on an M55; whether fp32 holds past ten million
 updates on a non-stationary target; and why the map head's two harnesses disagree on free-running
 IoU — **measured 2026-08-17 to be `MAP_DROPOUT = 0.15`**, which costs 0.359 → 0.135 here and
@@ -364,6 +383,7 @@ of these findings are corrections of a plausible first answer, and several are o
 | `DESIGN.md` + `docs/design/` | the design document — what it is, what it is not, the abstractions; the dated log moved to `docs/design/status-log.md` and `basis-and-scope.md` |
 | `docs/ARCHITECTURE.md` | **the block diagrams** — the forward stack layer by layer with every tensor shape and weight count, the backward edge added 2026-08-16 and what it replaced, and the `Stack` that is not built yet. Checked against the running code by `tests/test_architecture_doc.py`, not generated |
 | `docs/findings/runtime-library-and-cpp.md` | the C++ core, the C ABI, parity, target build and sizes, verification limits |
+| `docs/findings/agent-app.md` | the `agent/` app — the cache key measurement, the threshold's asymmetry, key vs context, the two bugs and the equivalent mutant |
 
 
 ## Sub-agent team
