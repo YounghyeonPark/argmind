@@ -12,14 +12,21 @@ raced. A hit costs one matrix product against the memory; a miss costs a model r
 it hit, what it did, and how long the deciding took. `report()` turns that into the two numbers that
 either support the claim or refute it: the hit rate, and the wall-clock the cache skipped.
 
-**A hit is not trusted forever.** `verify` is an optional callable the caller supplies; when it says
-the world did not end up where the entry promised, the entry is invalidated and the next encounter
-is a miss that asks the brain again. Without that, a cache is a bet placed once and never settled.
+**A hit is not trusted forever, and the local check is not optional.** The screen key was measured
+and it **cannot see what a click lands on**: two 200x100 regions can swap places and the key does not
+move at all (1.0000), so a cached click would hit the wrong one. Every hit therefore re-checks the
+full-resolution pixels around each click target before replaying it, and a mismatch drops the entry
+and asks the brain. `agent/local.py` carries that measurement.
+
+`verify` is a *second*, optional check the caller supplies for what happens after the action -- the
+local check is about whether the action still applies, and `verify` is about whether it worked.
 """
 
 from __future__ import annotations
 
 import time
+
+from .local import differs, signatures, unstable
 
 __all__ = ["AgentLoop", "Step"]
 
@@ -74,6 +81,12 @@ class AgentLoop:
         #: `verify(step, frame_after) -> bool`. False invalidates the entry that produced the step.
         self.verify = verify
         self.history: list[Step] = []
+        #: Hits dropped because the click target had changed. Counted because it is the number that
+        #: says whether the global key is doing its job or merely looking like it.
+        self.stale = 0
+        #: Decisions not cached because their target was animating. Also counted: a high number here
+        #: means the cache is not going to help on this screen, and that is worth knowing early.
+        self.unstable = 0
 
     def step(self, goal: str, *, context: str = "") -> Step:
         t0 = time.perf_counter()
@@ -81,6 +94,16 @@ class AgentLoop:
         situation = self.situation.describe(frame, t=t0)
 
         hit = self.cache.lookup(situation.key)
+        if hit is not None and differs(hit.value.get("patches"),
+                                       signatures(frame, hit.value.get("actions", []))):
+            #: **The situation matches globally and the click target does not.** Measured: the key
+            #: is blind to a 100x30 change and to two 200x100 regions swapping, which is exactly the
+            #: case where a stored click lands on the wrong thing. Drop the entry and fall through
+            #: to the brain -- refusing outright would leave the loop stuck on a screen it can see.
+            self.cache.invalidate(hit.slot)
+            self.stale += 1
+            hit = None
+
         frames = {"screen": frame}
         if hit is None:
             #: Read only on a miss. The extra eyes cost a grab each and nothing downstream of a hit
@@ -94,7 +117,8 @@ class AgentLoop:
                            f"{'right ' if state['right'] else ''}"
                            f"{'none' if not (state['left'] or state['right']) else ''}").strip()
         if hit is not None:
-            actions, why, decide_s, slot, score = hit.value, "cached", 0.0, hit.slot, hit.score
+            actions, why, decide_s = hit.value["actions"], "cached", 0.0
+            slot, score = hit.slot, hit.score
             self.cache.note_hit_saved(hit.slot)
         else:
             decision = self.brain.decide(goal, frames, context)
@@ -107,15 +131,27 @@ class AgentLoop:
             #: Stored **before** acting, so an action that changes the screen cannot make the key
             #: it was decided from unrecoverable. The key describes the situation the decision was
             #: FOR, which is the only thing a later look-up can match against.
-            slot = self.cache.store(situation.key, actions, cost_s=decision.seconds)
-            score = 1.0
+            #: **A target that is animating is not cached at all.** Measured: 18 of 40 locations
+            #: on an idle screen move by 0.44 or more between grabs, and an entry keyed on one could
+            #: never pass its own local check -- it would be dropped on every hit, costing a look-up
+            #: on top of the model call it was supposed to replace. Two frames a moment apart is
+            #: what tells them apart, and it is paid only on a miss, which already costs a second.
+            first = signatures(frame, actions)
+            second = signatures(self.screen.read(), actions) if actions else first
+            if actions and unstable(first, second):
+                self.unstable += 1
+                slot, score = -1, 0.0
+            else:
+                slot = self.cache.store(situation.key, {"actions": actions, "patches": second},
+                                        cost_s=decision.seconds)
+                score = 1.0
 
         self.actuator.run(actions)
         step = Step(len(self.history), hit is not None, slot, score, actions, decide_s,
                     time.perf_counter() - t0, why)
         self.history.append(step)
 
-        if self.verify is not None and not self.verify(step, self.screen.read()):
+        if self.verify is not None and step.slot >= 0 and not self.verify(step, self.screen.read()):
             #: The entry promised something the world did not do. Drop the value and leave the key,
             #: so the same situation asks the brain again instead of repeating a mistake fast.
             self.cache.invalidate(step.slot)
@@ -141,6 +177,8 @@ class AgentLoop:
             "hits": len(hits),
             "misses": len(misses),
             "hit_rate": (len(hits) / len(self.history)) if self.history else 0.0,
+            "stale_hits_dropped": self.stale,
+            "not_cached_target_moving": self.unstable,
             "brain_seconds_spent": round(spent, 3),
             "brain_seconds_skipped": self.cache.stats()["brain_seconds_skipped"],
             "mean_step_ms_hit": round(1000 * _mean(s.total_s for s in hits), 1),

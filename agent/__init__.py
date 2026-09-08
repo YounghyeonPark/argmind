@@ -37,6 +37,7 @@ somebody makes on purpose.
 from .act import ActionRefused, Actuator
 from .brain import Brain, ClaudeBrain, Decision, ScriptedBrain
 from .cache import ActionCache, Hit
+from .local import differs, patch_signature, signatures, unstable
 from .loop import AgentLoop, Step
 from .senses import KeyboardMouseSense, MicrophoneSense, ScreenSense, WebcamSense
 from .situation import Situation, SituationSense
@@ -44,5 +45,5 @@ from .situation import Situation, SituationSense
 __all__ = [
     "ActionCache", "ActionRefused", "Actuator", "AgentLoop", "Brain", "ClaudeBrain", "Decision",
     "Hit", "KeyboardMouseSense", "MicrophoneSense", "ScreenSense", "ScriptedBrain", "Situation",
-    "SituationSense", "Step", "WebcamSense",
+    "SituationSense", "Step", "WebcamSense", "differs", "patch_signature", "signatures", "unstable",
 ]
