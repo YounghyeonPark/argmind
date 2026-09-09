@@ -282,13 +282,31 @@ class Agent(threading.Thread):
         proposal = self._pending.pop(token, None)
         if proposal is None:
             return
-        #: **The only call to `perform` in this file.** Everything above proposes; this runs.
-        did, _proposed, refused = self.session.perform(
-            Intent("", [proposal.effect], proposal.effect.because))
+        #: **Step out of the way first.** Measured 2026-09-09: a synthetic click goes to whatever
+        #: window is topmost at that pixel, and this app is always-on-top in the corner of the
+        #: screen — so a widget underneath it was unreachable, and the click landed on argmind. The
+        #: window lowers itself, the click happens, and it comes back. A handshake rather than a
+        #: sleep, because the window is on the other thread and guessing how long it takes to
+        #: repaint is how this kind of fix works everywhere except where it matters.
+        self._stand_aside(True)
+        try:
+            #: **The only call to `perform` in this file.** Everything above proposes; this runs.
+            did, _proposed, refused = self.session.perform(
+                Intent("", [proposal.effect], proposal.effect.because))
+        finally:
+            self._stand_aside(False)
         if refused:
             self._say("gone", (token, proposal.effect.target or proposal.effect.text))
         for done in did:
             self._say("ran", (token, proposal.label, done.confirmed))
+
+    def _stand_aside(self, away: bool) -> None:
+        ready = threading.Event()
+        self._say("aside", (away, ready))
+        #: A second is generous for lowering a window and far short of hanging the agent if the
+        #: interface has gone: the click then happens with the window still in place, which is the
+        #: behaviour before this existed rather than a new failure.
+        ready.wait(1.0)
 
     def _drop(self, token: int) -> None:
         proposal = self._pending.pop(token, None)
@@ -487,6 +505,18 @@ class Window:                                                             # prag
             self._ready(bool(payload))
         elif kind == "warmed":
             self.status.configure(text=f"모델 준비됨 ({payload:.1f}s) · 이제 첫 질문도 빠릅니다")
+        elif kind == "aside":
+            away, ready = payload
+            try:
+                self.root.attributes("-topmost", not away)
+                if away:
+                    self.root.lower()
+                else:
+                    self.root.lift()
+            finally:
+                #: Set even if the window refuses to move, so the agent is never left waiting on a
+                #: cosmetic step.
+                ready.set()
         elif kind == "note":
             self.write(payload, "note")
 

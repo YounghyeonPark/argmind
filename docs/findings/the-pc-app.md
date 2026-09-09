@@ -125,20 +125,62 @@ matches on both, and two tests pin it: one for the two-roles case, and one for t
 exposed, where the chosen thing **moves** and a same-named label of another role ends up nearer to
 where it used to be.
 
-### The control patterns are kept, and have not yet earned their place
+### The app's own window was blocking the clicks, and it now steps aside
 
-`WindowsHands` now operates a control through `Invoke`, `ExpandCollapse`, `Toggle` or `SelectionItem`
-when it can resolve the element, falling back to a synthetic click otherwise, and counts which. That
-is the deterministic side doing the acting — the same argument that put WHERE on the environment.
+`measure/obstruction.py`. A borderless always-on-top window is placed exactly over a check box, and
+the check box is then acted on:
 
-**Measured A/B on the same three goals: 2 of 3 both ways.** Two actions went through `invoke` and
-the rest through clicks; nothing improved and nothing regressed. The case the mechanism was built
-for fell back to a click *because of the role defect above*, so the patterns have not actually been
-tested on it yet. Retained on the strength of one direct probe — calling `ExpandCollapse.Expand()`
-on that combo box opened the font list, gaining `Arial, Arial Black, Arial Narrow, ...` — and
-**unproven in the loop until the next run**.
+    patterns off, covered       via click    did nothing
+    patterns on,  covered       via click    did nothing
+    patterns off, stood aside   via click    WORKED
 
-One thing that measurement did settle: `LegacyIAccessible.DoDefaultAction()` is **not** a universal
+**A synthetic click goes to whatever window is topmost at that pixel.** The app is 430x560,
+always-on-top, in the bottom-right corner — so any widget underneath it was unreachable and the
+click landed on argmind itself. That is not an exotic case; it is a corner of every screen the app
+runs on.
+
+The fix is fifteen lines and no COM: before performing, the agent asks the window to drop `-topmost`
+and lower itself, and to come back afterwards. It is a handshake on a `threading.Event` rather than
+a sleep, because the window lives on the other thread and guessing how long a repaint takes is how
+this kind of fix works everywhere except where it matters. The wait is capped at a second, and
+timing out means the click happens with the window still in place — the behaviour from before this
+existed, not a new failure.
+
+### The control patterns are unearned, measured twice — removal recommended, not yet done
+
+Two independent measurements and no benefit in either:
+
+| | with patterns | without |
+|---|---|---|
+| the three-goal set | 3 of 3 | 3 of 3 |
+| a covered widget | did nothing (fell back to a click) | did nothing |
+
+The obstruction row is the one that settles it. The patterns were kept on the argument that they do
+not aim at a pixel — but **`_element_for` resolves the element *by point*,** so an obstruction hands
+it the obstruction's own element and it falls back to a click anyway. The mechanism inherits the
+exact problem it was supposed to be immune to.
+
+Against zero measured benefit: about ninety lines, a second COM client, an ancestor walk on every
+click, four distinct ways to fall back, and one real crash it introduced — `ElementFromPoint` under a
+cover produced a **NULL COM pointer, which comtypes does not return as `None`**, so `element is None`
+missed it and reading a property raised `ValueError`.
+
+**Recommended for removal and still present**, because it was built to an explicit instruction and
+undoing that is the owner's call rather than mine. If a case ever appears that needs patterns, a
+tree search from the target window rather than a point lookup is where it would start — and `Widget`
+carries a window *title*, not a handle, so that is not a small change.
+
+**What is not established: that patterns are useless.** Three goals on one application is a smoke
+test. A control whose clickable point is not its centre — a very wide list item, a menu that needs a
+hover — was never in the set.
+
+`WindowsHands` operated a control through `Invoke`, `ExpandCollapse`, `Toggle` or `SelectionItem`
+when it could resolve the element, falling back to a synthetic click otherwise, and counted which.
+That is the deterministic side doing the acting — the same argument that put WHERE on the
+environment, and it did not survive being measured. The verdict is in the section above; the code
+is still in place pending a decision.
+
+One thing the work did settle: `LegacyIAccessible.DoDefaultAction()` is **not** a universal
 fallback. Every control in that window advertises `LegacyIAccessible`, and calling it on the combo
 box raised `COMError` while `Expand` succeeded.
 

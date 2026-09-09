@@ -370,7 +370,13 @@ class WindowsHands:
             return None
         walker = uia.RawViewWalker
         for _ in range(5):
-            if element is None:
+            #: **`not element`, not `element is None`.** comtypes hands back a NULL COM pointer
+            #: rather than `None` when a walk runs off the top of the tree, and a NULL pointer is
+            #: not None -- reading a property off it raises `ValueError: NULL COM pointer access`.
+            #: Found by covering the target with another window, which is the case this lookup
+            #: cannot serve anyway: it resolves by POINT, so an obstruction hands it the
+            #: obstruction's own element.
+            if not element:
                 self.why = "walked past the top without a name and role match"
                 return None
             try:
@@ -381,8 +387,8 @@ class WindowsHands:
                         and element.CurrentLocalizedControlType == widget.role):
                     return element
                 element = walker.GetParentElement(element)
-            except COMError:
-                self.why = "the element died while being read"
+            except (COMError, ValueError) as exc:
+                self.why = f"the element could not be read ({type(exc).__name__})"
                 return None
         self.why = "no ancestor within five hops matched the name and role"
         return None
@@ -456,7 +462,12 @@ class WindowsHands:
 
         record = dict(action, live=self.live)
         if action.get("via", "click") == "click":
-            self.by_click += 1
+            #: **Only clicks are counted here.** The first version counted every action, so three
+            #: goals reported "4 through a click" -- the extra being the `escape` presses between
+            #: them. A tally that silently includes keystrokes is a tally that reads as an argument
+            #: for something it never measured.
+            if action["do"] == "click":
+                self.by_click += 1
             if self.live:
                 self._perform(action)
         else:

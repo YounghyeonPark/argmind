@@ -191,12 +191,20 @@ click that missed, which is how the wrong explanation survived a round of work. 
 the role and `find()` matches both; two tests pin it, the second added because a mutation showed the
 first was passing for a different reason.
 
-**`WindowsHands` operates controls through UI Automation's own patterns now** (`Invoke`,
-`ExpandCollapse`, `Toggle`, `SelectionItem`) with a synthetic click as fallback and a count of which
-was used — the deterministic side doing the acting. **A/B on the same goals: 2 of 3 both ways, so it
-has bought nothing measurable yet** and is retained on one direct probe where `Expand()` opened the
-font list. `LegacyIAccessible.DoDefaultAction()` is **not** a universal fallback — every control
-advertises it and it raised `COMError` where `Expand` worked.
+**The app's own window was blocking its clicks, and now steps aside.** A synthetic click goes to
+whatever window is topmost at that pixel and the app is always-on-top in a corner, so a widget
+underneath it was unreachable. Measured: covered → nothing, stood aside → worked. The agent asks the
+window to drop `-topmost` and lower itself before performing, on a `threading.Event` handshake
+capped at a second.
+
+**`WindowsHands` also gained UI Automation's control patterns** (`Invoke`, `ExpandCollapse`,
+`Toggle`, `SelectionItem`) with a click as fallback — **and they are unearned by two measurements:
+3 of 3 both ways on the goal set, and nothing either way on a covered widget**, because
+`_element_for` resolves *by point* and so inherits the obstruction problem it was meant to be immune
+to. Cost: ~90 lines, a second COM client, an ancestor walk per click, and a NULL-COM-pointer crash it
+introduced. **Removal recommended, not done** — it was built to an explicit instruction.
+`LegacyIAccessible.DoDefaultAction()` is **not** a universal fallback: every control advertises it
+and it raised `COMError` where `Expand` worked.
 `Local.release()` exists because a model left resident holds 5–6 GB, and the caller is expected to
 call it.
 

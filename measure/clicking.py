@@ -202,7 +202,8 @@ def main(argv=None) -> int:
     worked = sum(1 for r in rows if r.get("outcome") == "worked")
     moved = sum(1 for r in rows if r.get("changed"))
     print(f"  {worked} of {len(GOALS)} did the expected thing; {moved} changed the window at all")
-    print(f"  {hands.by_pattern} went through a control pattern, {hands.by_click} through a click")
+    print(f"  of {hands.by_pattern + hands.by_click} clicks, {hands.by_pattern} went through a "
+          f"control pattern and {hands.by_click} through a synthetic click")
     session.model.release()
     proc.terminate()
     try:
