@@ -21,10 +21,15 @@ from __future__ import annotations
 import pytest
 
 #: The floor, not the count. Raise it deliberately when the suite has grown enough that the gap
-#: stops meaning anything -- and never lower it to make a deletion pass. 1,191 was the measured
-#: figure on 2026-08-25; this sits below it so that ordinary churn does not trip it while a
-#: whole test module going missing does.
-COLLECTED_FLOOR = 1150
+#: stops meaning anything -- and never lower it to make a deletion pass.
+#:
+#: **Lowered 1150 -> 700 on 2026-09-09, and this is the case the comment above warns about**, so it
+#: says why. The C++ port was removed deliberately -- `cpp/`, the target build, the QEMU runs and
+#: every parity module that existed to compare the two implementations -- as step 5 of `REBUILD.md`,
+#: after step 4 measured the rebuilt core's choosing accuracy. 1,252 collected before; 743 after.
+#: The floor is not being fitted to what remains: 700 sits below 743 by the same kind of margin
+#: 1150 sat below 1191, so a further module vanishing still trips it.
+COLLECTED_FLOOR = 700
 
 
 def test_the_suite_has_not_SHRUNK(request):

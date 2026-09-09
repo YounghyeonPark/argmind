@@ -287,29 +287,3 @@ int main() {
     return 0;
 }
 """
-
-
-def test_the_cpp_pipeline_takes_a_network_unchanged(tmp_path):
-    """The seam on the port side. If `RuntimeShapedPipeline` needed one change for a
-    network, `Pipeline` being a template over `Adapter` would not be a contract."""
-    cxx = shutil.which("g++")
-    if cxx is None:
-        pytest.skip("no host g++")
-    src = tmp_path / "compose.cpp"
-    src.write_text(CPP_COMPOSE, encoding="utf-8")
-    exe = tmp_path / "compose.exe"
-    done = subprocess.run(
-        [cxx, "-std=c++17", "-O2", "-Wall", "-Wextra", "-Wpedantic",
-         "-I", str(CPP / "include"), str(src), "-o", str(exe)],
-        capture_output=True, text=True)
-    assert done.returncode == 0, (
-        "a network does not go through RuntimeShapedPipeline unchanged:\n" + done.stderr)
-
-    run = subprocess.run([str(exe)], capture_output=True, text=True)
-    assert run.returncode == 0, run.stdout + run.stderr
-    got = dict(line.split() for line in run.stdout.splitlines() if line.strip())
-    assert got["configured"] == "1", "the pipeline refused the network's shape"
-    assert int(got["frames"]) > 250, f"only {got['frames']} frames; the fixture is idle"
-    assert got["froze"] == "1", "the guard did not freeze during the injected fault"
-    assert got["state"] == str(4 * 8 + 8 + 8 * 1 + 1)
-    assert got["finite"] == "1"
