@@ -53,9 +53,17 @@ invariance-versus-discrimination frontier. A PC has ground truth and it is free.
 
 ---
 
-## Decision 1 — what happens to the library and the C++ core
+## Decision 1 — what happens to the library and the C++ core — **ANSWERED: remove**
 
-**Three options. Last time I took (a) without asking.**
+**Answered 2026-09-09: *"불필요한 것들은 제거바람"*, scope confirmed as all of it — option (a).**
+Carried out in four commits (`aa9f858`, `0acc6a4`, `b34c9a4`, `4dcac05`), each leaving the suite
+green so each can be reverted on its own, and after `before-removal-2026-09-09` tagged the whole
+tree. About 50,000 lines: the C++ port and its target build, the demo, the agent app, the library's
+eleven modules, forty-three test modules, and the documents that described only those. The suite
+went 1,252 tests to 37 and `tests/test_suite_size.py` carries the staircase with a reason at each
+step.
+
+The three options as they stood, kept because the reasoning is the record:
 
 **(a) Remove from the tree, keep at the tag.** 46 KB of source and 13,005 lines of C++ leave; a
 `git show argmind-v1:cpp/...` brings any of it back. The argument is this project's own, written in
@@ -71,10 +79,18 @@ tests that must keep passing or be marked as not-run.
 "we might want this later" list is a guess, and this project's standard is that a guess is not a
 reason.
 
-**My recommendation is (a)**, and the reason is not tidiness: the 1,217-test suite is the thing that
-made every number in this repository trustworthy, and a suite that covers code nothing uses stops
-being a gate and becomes a cost. But it deletes work that took a month and was done well, so it is
-your call and not mine.
+**My recommendation was (a)**, and the reason was not tidiness: the 1,217-test suite is the thing
+that made every number in this repository trustworthy, and a suite that covers code nothing uses
+stops being a gate and becomes a cost. It deletes work that took a month and was done well, which is
+why it was the owner's call and not mine.
+
+**What was kept.** `docs/findings/what-the-old-tree-measured.md` holds the results that still bear on
+work here — precision floors belonging to the algorithm, a point not standing in for a field, global
+pooling unable to separate shapes, self-training declining monotonically, a criterion passing for the
+wrong reason and looking *better* as conditions worsened — with the `git show` command for each full
+record. The nine ways this local-model harness has produced a confident wrong number moved into
+CLAUDE.md, because they are not history: they are the list to check the next time something here
+reads zero.
 
 ## Decision 2 — three environments, and how far the rule reaches — **ANSWERED**
 
@@ -208,7 +224,7 @@ last time.
 | 2 | `core/` — `Widget`, the two protocols, `converse`, `llm`, `intent`, `loop`, and tests against fakes. **No platform code at all**, so it runs anywhere | `git revert` |
 | 3 | `env/windows.py` — UIA and SendInput behind the protocols, plus the CLI | `git revert` |
 | 4 | measure choosing accuracy on tens of goals — the number that is missing | — |
-| 5 | *only then*, remove the old tree if decision 1 says so | `git revert` |
+| 5 | *only then*, remove the old tree if decision 1 says so — **done, four commits** | `git revert` |
 
 Steps 2 and 3 are **committed** at `1a87686` — 36 core tests, no display, no model, no network.
 **Step 4 is measured**, and it is the number the plan said would decide whether the rebuild is worth
