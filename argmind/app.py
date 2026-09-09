@@ -261,7 +261,7 @@ class Agent(threading.Thread):
     def _propose(self, effect) -> None:
         token, self._next = self._next, self._next + 1
         if effect.kind == "click":
-            found = self.session.find(effect.target)
+            found = self.session.find(effect.target, effect.role)
             if found is None:
                 self._say("gone", (token, effect.target))
                 return

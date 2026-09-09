@@ -73,16 +73,27 @@ def Perceived(what: str) -> Trigger:                                       # noq
 class Effect:
     """One thing to do, and what caused it.
 
-    `target` is a **name**, not a widget and not a rectangle. The thing is looked up again at the
-    moment of acting, because over the second a decision takes, a widget that was there is gone
-    thirteen times in fourteen — the name still refers to the world and the rectangle does not.
+    `target` is a **name and a role**, not a widget and not a rectangle. The thing is looked up
+    again at the moment of acting, because over the second a decision takes, a widget that was there
+    is gone thirteen times in fourteen — the name still refers to the world and the rectangle does
+    not.
+
+    **The role is here because the name alone was not enough, measured 2026-09-09.** Character Map
+    has a `text` label reading `Font :` immediately before a `combo box` also called `Font :`. The
+    model chose the combo box, the name was stored, the name was resolved again, and it came back
+    the **label** — which is first in the list. The click landed on a piece of text and did nothing,
+    which looks exactly like a click that missed.
     """
 
-    __slots__ = ("kind", "target", "text", "because")
+    __slots__ = ("kind", "target", "role", "text", "because")
 
-    def __init__(self, kind: str, *, target: str = "", text: str = "", because=None) -> None:
+    def __init__(self, kind: str, *, target: str = "", role: str = "", text: str = "",
+                 because=None) -> None:
         self.kind = kind
         self.target = target
+        #: Empty means "any role" — for effects that name nothing, and for callers written before
+        #: this existed.
+        self.role = role
         self.text = text
         self.because = because
 

@@ -179,14 +179,24 @@ No microphone, no speaker, no phone environment, no robot environment.
 
 **A confirmed click was measured for the first time on 2026-09-09 and it found a defect in the
 core.** Three goals on a window the harness launched: two did the expected thing and the agent chose
-the right widget three times of three. The failure was **`Widget.centre` landing on the inert part of
-the right control** — a combo box's rectangle is centred on its text field, and the arrow that opens
-the list is at the edge, so the click was exact and did nothing. That is sharper than the 73%
-hit-test figure, which counts centres landing on a *different* element; here the element was right.
-**The repair that follows is UI Automation's own control patterns** (`Invoke`, `ExpandCollapse`,
-`Toggle`) with a synthetic click as fallback and a count of which was used — the deterministic side
-doing the acting, which is the same argument that put WHERE on the environment. **Not built, and it
-must be measured rather than assumed better**: an invoke may not set focus where a click does.
+the right widget three times of three.
+
+**My first diagnosis of the third was wrong and is withdrawn.** I wrote that `Widget.centre` had
+landed on the inert part of the right control — a combo box being centred on its text field with the
+arrow at the edge. Plausible and false. What happened is that **the name lost its role on the way
+back**: Character Map has a `text` label reading `Font :` immediately before a `combo box` of the
+same name, the model chose the combo box, and `Session.find()` returned the label because the label
+comes first. The click landed on a piece of text, which does nothing — indistinguishable from a
+click that missed, which is how the wrong explanation survived a round of work. `Effect` now carries
+the role and `find()` matches both; two tests pin it, the second added because a mutation showed the
+first was passing for a different reason.
+
+**`WindowsHands` operates controls through UI Automation's own patterns now** (`Invoke`,
+`ExpandCollapse`, `Toggle`, `SelectionItem`) with a synthetic click as fallback and a count of which
+was used — the deterministic side doing the acting. **A/B on the same goals: 2 of 3 both ways, so it
+has bought nothing measurable yet** and is retained on one direct probe where `Expand()` opened the
+font list. `LegacyIAccessible.DoDefaultAction()` is **not** a universal fallback — every control
+advertises it and it raised `COMError` where `Expand` worked.
 `Local.release()` exists because a model left resident holds 5–6 GB, and the caller is expected to
 call it.
 

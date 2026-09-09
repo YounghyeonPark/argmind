@@ -110,9 +110,12 @@ def _effect(item, listed, trigger) -> Effect | None:
             return None
         if not 0 <= index < len(listed):
             return None
-        #: The number becomes a NAME here and never travels further as an index. This one line is
-        #: the staleness fix: what gets acted on is looked up again in the world as it is then.
-        return Effect("click", target=listed[index].name, because=trigger)
+        #: The number becomes a NAME AND A ROLE here and never travels further as an index. This
+        #: one line is the staleness fix: what gets acted on is looked up again in the world as it
+        #: is then. **The role is half of the key, and leaving it out was a real defect** — a window
+        #: with a label and a combo box both called `Font :` resolved to the label and the click did
+        #: nothing.
+        return Effect("click", target=listed[index].name, role=listed[index].role, because=trigger)
     if "type" in item:
         text = item["type"]
         return Effect("type", text=str(text), because=trigger) if isinstance(text, str) and text \

@@ -269,13 +269,34 @@ class WindowsHands:
     """`Hands` for Windows. `done` is the log in a dry run and a live run alike, so the two are
     compared by diffing the same list rather than by trusting they did the same thing."""
 
-    def __init__(self, *, live: bool = False, max_per_second: float = 4.0, guard=None) -> None:
+    def __init__(self, *, live: bool = False, max_per_second: float = 4.0, guard=None,
+                 patterns: bool = True) -> None:
         self.live = bool(live)
         self.max_per_second = float(max_per_second)
         self.guard = guard
         self.done: list[dict] = []
         self._user32 = ctypes.windll.user32
         self._last = 0.0
+        #: **Operate a control the way the environment knows how, before resorting to a pixel.**
+        #: Measured 2026-09-09: asked to open a font list, the agent chose the right combo box, and
+        #: the click landed exactly on it and did nothing -- a combo box is centred on its text
+        #: field and the arrow that opens the list is at the edge. UI Automation exposes `Invoke`,
+        #: `ExpandCollapse`, `Toggle` and `SelectionItem` for exactly this, and using them is the
+        #: deterministic side doing the acting, which is the same argument that put WHERE on the
+        #: environment. Not every control has a pattern, so the click stays as the fallback and
+        #: `done` records which was used -- assuming the new path is better is how a regression
+        #: gets shipped.
+        self.patterns = bool(patterns)
+        self._uia = None
+        self._uia_mod = None
+        #: How many actions went each way. The number that says whether this was worth adding.
+        self.by_pattern = 0
+        self.by_click = 0
+        #: **Why the last action fell back.** `_pattern_for` returned `None` for four different
+        #: reasons and nothing recorded which -- so a run that fell back to a click on a control
+        #: that provably supports `ExpandCollapse` could not be diagnosed at all. Same mistake as a
+        #: measurement that keeps a boolean where it needed the delta, made twice in one day.
+        self.why = ""
 
     def pointing_is_exact(self, points=((300, 300), (900, 500))) -> bool:
         """Does the cursor go where it is sent? Checked once, before anything is clicked.
@@ -306,8 +327,110 @@ class WindowsHands:
         if button not in _BUTTON:
             raise Refused(f"unknown button {button!r}; known: {', '.join(_BUTTON)}")
         x, y = widget.centre
-        return self._do({"do": "click", "button": button, "x": x, "y": y,
-                         "on": widget.name, "role": widget.role})
+        action = {"do": "click", "button": button, "x": x, "y": y,
+                  "on": widget.name, "role": widget.role}
+        #: A right or middle click asks for a context menu, which no pattern expresses.
+        if self.patterns and button == "left":
+            action["via"] = self._pattern_for(widget) or "click"
+            if action["via"] == "click" and self.why:
+                action["why"] = self.why
+        else:
+            action["via"] = "click"
+        return self._do(action)
+
+    # ---- operating a control rather than aiming at it --------------------------------------------
+
+    def _automation(self):
+        """The UIA client, made once and only if a pattern is ever wanted."""
+        if self._uia is None:
+            from comtypes.client import CreateObject, GetModule           # noqa: PLC0415
+
+            GetModule("UIAutomationCore.dll")
+            from comtypes.gen import UIAutomationClient as UIA            # noqa: PLC0415
+
+            self._uia_mod = UIA
+            self._uia = CreateObject(UIA.CUIAutomation, interface=UIA.IUIAutomation)
+        return self._uia
+
+    def _element_for(self, widget: Widget):
+        """The element this widget names, found from its own centre and then upwards.
+
+        **Upwards is the point.** The centre of a combo box sits on the edit control inside it, so
+        `ElementFromPoint` answers with the child and the thing that expands is its parent. Walking
+        up a few levels looking for the name is cheap and exact, and where the name is not found the
+        answer is `None` rather than a guess -- a caption button whose centre resolves straight to
+        the application is the measured case where that happens, and a synthetic click is right
+        there anyway.
+        """
+        uia = self._automation()
+        try:
+            element = uia.ElementFromPoint(wintypes.POINT(*widget.centre))
+        except (COMError, ValueError, OSError) as exc:
+            self.why = f"nothing at the centre ({type(exc).__name__})"
+            return None
+        walker = uia.RawViewWalker
+        for _ in range(5):
+            if element is None:
+                self.why = "walked past the top without a name and role match"
+                return None
+            try:
+                #: Name AND role. Walking up on the name alone matched an ancestor that happened
+                #: to share it -- a tab item named 'Claude Code' sitting inside a group of the same
+                #: name resolved to the group, and operating the group is not what was asked for.
+                if (element.CurrentName == widget.name
+                        and element.CurrentLocalizedControlType == widget.role):
+                    return element
+                element = walker.GetParentElement(element)
+            except COMError:
+                self.why = "the element died while being read"
+                return None
+        self.why = "no ancestor within five hops matched the name and role"
+        return None
+
+    def _pattern_for(self, widget: Widget):
+        """The pattern that operates this control, applied when live. `None` means click instead.
+
+        Tried in a fixed order. `Invoke` first because a control that has it means "press me"; a
+        combo box does not have it and falls through to `ExpandCollapse`, which is the measured
+        failure. Putting expand first would make a split button drop its menu instead of doing its
+        job.
+        """
+        self.why = ""
+        element = self._element_for(widget)
+        if element is None:
+            return None
+        uia = self._uia_mod
+        wanted = (
+            ("invoke", uia.UIA_InvokePatternId, uia.IUIAutomationInvokePattern, "Invoke"),
+            ("expand", uia.UIA_ExpandCollapsePatternId,
+             uia.IUIAutomationExpandCollapsePattern, "Expand"),
+            ("toggle", uia.UIA_TogglePatternId, uia.IUIAutomationTogglePattern, "Toggle"),
+            ("select", uia.UIA_SelectionItemPatternId,
+             uia.IUIAutomationSelectionItemPattern, "Select"),
+        )
+        offered: list[str] = []
+        for name, ident, interface, method in wanted:
+            try:
+                raw = element.GetCurrentPattern(ident)
+                if not raw:
+                    continue
+                pattern = raw.QueryInterface(interface)
+            except (COMError, ValueError, AttributeError, OSError) as exc:
+                offered.append(f"{name} unavailable ({type(exc).__name__})")
+                continue
+            #: A dry run resolves the pattern and stops there, so `done` says what *would* have
+            #: happened rather than leaving the two paths indistinguishable until something runs.
+            if not self.live:
+                return name
+            try:
+                getattr(pattern, method)()
+            except COMError as exc:
+                self.why = f"{name} was offered and raised {exc.args[0]:#010x}"
+                return None
+            return name
+        self.why = ("the element offers none of invoke, expand, toggle or select"
+                    + (f" [{'; '.join(offered)}]" if offered else ""))
+        return None
 
     def type_text(self, text: str) -> dict:
         if not isinstance(text, str) or not text:
@@ -332,8 +455,15 @@ class WindowsHands:
         self._last = time.perf_counter()
 
         record = dict(action, live=self.live)
-        if self.live:
-            self._perform(action)
+        if action.get("via", "click") == "click":
+            self.by_click += 1
+            if self.live:
+                self._perform(action)
+        else:
+            #: The pattern was already applied while it was being chosen -- deciding which one
+            #: applies and applying it are one COM round trip, and splitting them would mean
+            #: finding the element twice on a screen that moves 13 times in 14.
+            self.by_pattern += 1
         self.done.append(record)
         return record
 

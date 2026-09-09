@@ -194,7 +194,7 @@ class Session:
                 proposed.append(effect)
                 continue
             if effect.kind == "click":
-                target = self.find(effect.target)
+                target = self.find(effect.target, effect.role)
                 if target is None:
                     #: It was there when the question was asked and it is not there now. Refusing is
                     #: the only honest option: whatever occupies that rectangle now was never chosen.
@@ -248,8 +248,8 @@ class Session:
 
     # ---- resolving against the world as it is ---------------------------------------------------
 
-    def find(self, name: str):
-        """The thing with this name, in the world as it is now — or `None` if it has gone.
+    def find(self, name: str, role: str = ""):
+        """The thing with this name and role, in the world as it is now — or `None` if it has gone.
 
         Public because an interface that shows a person what an action would touch has to resolve
         it too, and resolving it a second way would be a second answer.
@@ -262,14 +262,23 @@ class Session:
         Matched on the name because **the rectangle is exactly what moves** — a list that scrolled, a
         window that resized. Among duplicates the one nearest to where a same-named thing was last
         seen wins, which assumes a thing moves rather than teleporting past its own copies.
+
+        **The role is the other half of the key and it was missing.** Measured 2026-09-09 on
+        Character Map: a `text` label reading `Font :` sits immediately before a `combo box` of the
+        same name, the model chose the combo box, and this returned the label because the label
+        comes first. The click landed on a piece of text and did nothing — which is indistinguishable
+        from a click that missed, and cost a wrong diagnosis before it was found.
+
+        An empty `role` still matches anything, so a caller that has only a name is not refused.
         """
         fresh = self.eyes.foreground()
-        same = [w for w in fresh if w.name == name]
+        same = [w for w in fresh if w.name == name and (not role or w.role == role)]
         if not same:
             return None
         if len(same) == 1:
             return same[0]
-        was = next((w.centre for w in self.seen if w.name == name), same[0].centre)
+        was = next((w.centre for w in self.seen
+                    if w.name == name and (not role or w.role == role)), same[0].centre)
         return min(same, key=lambda w: (w.centre[0] - was[0]) ** 2 + (w.centre[1] - was[1]) ** 2)
 
     def _confirm(self, widget) -> bool | None:

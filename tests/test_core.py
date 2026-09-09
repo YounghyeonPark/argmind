@@ -379,6 +379,60 @@ def test_a_target_that_VANISHED_before_the_click_is_refused():
     assert s.report()["gone_before_click"] == 1
 
 
+def test_a_name_shared_by_TWO_ROLES_resolves_to_the_one_that_was_chosen():
+    """**Measured on a real window, and it cost a wrong diagnosis before it was found.**
+
+    Character Map lays out a `text` label reading `Font :` immediately before a `combo box` also
+    called `Font :`. The model chose the combo box, the effect stored the name, the name was
+    resolved again at the moment of acting, and it came back the **label** — because the label is
+    first in the list. The click landed on a piece of text and did nothing, which is
+    indistinguishable from a click that missed, and was written up as a different defect entirely.
+
+    A name is the right key against a screen that moves; a name **alone** is not a key at all.
+    """
+    screen = [w("Font :", role="text", rect=(34, 107, 53, 20)),
+              w("Font :", role="combo box", rect=(86, 106, 321, 30))]
+    s = session(FakeModel(says("열게요", {"click": 1})), screen, screen, screen, live=True)
+    ex = s.exchange("글꼴 목록 열어줘")
+    assert ex.did, "it refused a target that was there"
+    assert ex.did[0].target.role == "combo box", (
+        "it resolved the label rather than the thing the model chose")
+    assert s.hands.done[0][2] == (246, 121), "it clicked the label's centre"
+
+
+def test_the_role_survives_the_chosen_thing_MOVING_past_its_namesake():
+    """The role has to filter the candidates, not merely pick between equals.
+
+    **A mutation found this gap.** With the role dropped from the candidate list, the case above
+    still passed, because the tiebreak asks where a thing of *that role* was last seen and the right
+    answer was nearest to it. Only when the chosen thing **moves** — a list that scrolled, which the
+    design says happens constantly — does a same-named label of another role end up nearer to where
+    it used to be, and win.
+
+    Here the label never moves and the list item scrolls 120 px away; the label is then 100 px from
+    where the item was and the item is 120 px. Without the role in the filter, the label wins.
+    """
+    label = w("Item", role="text", rect=(0, 100, 40, 20))
+    seen = [label, w("Item", role="list item", rect=(0, 200, 40, 20))]
+    scrolled = [label, w("Item", role="list item", rect=(0, 320, 40, 20))]
+    s = session(FakeModel(says("열게요", {"click": 1})), seen, scrolled, scrolled, live=True)
+    ex = s.exchange("그거 눌러줘")
+    assert ex.did and ex.did[0].target.role == "list item", (
+        "it followed the nearest namesake instead of the thing that was chosen")
+    assert s.hands.done[0][2] == (20, 330)
+
+
+def test_an_effect_that_names_NO_role_still_resolves():
+    """The role is half of a key, not a requirement. An effect built without one — by an older
+    caller, or by a test — must not start refusing everything."""
+    from argmind.core.intent import Effect                                # noqa: PLC0415
+
+    s = session(FakeModel(), SCREEN, SCREEN, SCREEN, live=True)
+    s.observe()
+    assert s.find("닫기") is not None
+    assert Effect("click", target="닫기").role == ""
+
+
 def test_a_target_that_MOVED_is_clicked_where_it_is_now():
     """The other half, and the reason the match is on the name rather than the rectangle: a list that
     scrolled or a window that resized moves everything, and the thing the person asked for is still

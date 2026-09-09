@@ -98,6 +98,10 @@ def main(argv=None) -> int:
     p = argparse.ArgumentParser(prog="python -m measure.clicking", description=__doc__)
     p.add_argument("--model", default="qwen2.5:7b")
     p.add_argument("--app", default="charmap.exe")
+    p.add_argument("--no-patterns", action="store_true",
+                   help="aim a synthetic click at the widget's centre, the way it worked before "
+                        "UI Automation's control patterns were used. The comparison, not a switch "
+                        "to leave off")
     args = p.parse_args(argv)
 
     from argmind.env.windows import WindowsEyes, WindowsHands              # noqa: PLC0415
@@ -111,7 +115,7 @@ def main(argv=None) -> int:
         return 2
 
     eyes = WindowsEyes()
-    hands = WindowsHands(live=True, max_per_second=4.0)
+    hands = WindowsHands(live=True, max_per_second=4.0, patterns=not args.no_patterns)
     if not hands.pointing_is_exact():
         print("  the cursor does not go where it is sent on this display — refusing to click")
         proc.kill()
@@ -130,7 +134,8 @@ def main(argv=None) -> int:
     for _ in range(2):
         session.model.ask("Reply with the single word: ready")
 
-    print(f"  {args.app} (pid {proc.pid}) | {args.model} | live, and only this window\n")
+    how = "centre click only" if args.no_patterns else "control patterns, click as fallback"
+    print(f"  {args.app} (pid {proc.pid}) | {args.model} | live, only this window | {how}\n")
     rows = []
     for goal, (expectation, holds) in GOALS:
         user32.SetForegroundWindow(mine[0])
@@ -152,13 +157,16 @@ def main(argv=None) -> int:
             rows.append({"goal": goal, "outcome": "declined", "said": intent.say})
             continue
 
-        target = session.find(clicks[0].target)
+        target = session.find(clicks[0].target, clicks[0].role)
         if target is None or not ours():
             print(f"  GONE      {goal[:22]:<22} {clicks[0].target[:24]!r} was not there to click")
             rows.append({"goal": goal, "outcome": "gone"})
             continue
 
+        before_pattern, before_click = hands.by_pattern, hands.by_click
         session.perform(Intent("", [clicks[0]], clicks[0].because))
+        via = hands.done[-1].get("via", "?") if hands.done else "?"
+        del before_pattern, before_click
         time.sleep(0.9)
         #: **Every window this process owns, not just the one that was launched.** A combo box's
         #: drop-down is its own top-level window, so reading only the main one reports "nothing
@@ -171,11 +179,14 @@ def main(argv=None) -> int:
         gained = sorted(after - before)[:4]
         lost = sorted(before - after)[:4]
         rows.append({"goal": goal, "chose": target.name, "changed": changed, "expected": met,
-                     "gained": gained, "lost": lost,
+                     "gained": gained, "lost": lost, "via": via,
                      "outcome": "worked" if met else ("changed only" if changed else "nothing")})
         mark = "WORKED" if met else ("CHANGED" if changed else "NOTHING")
-        print(f"  {mark:<9} {goal[:22]:<22} clicked {target.name[:20]!r:<22} "
+        print(f"  {mark:<9} {goal[:22]:<22} {via:<7} {target.name[:20]!r:<22} "
               f"| {expectation}: {met}")
+        why = hands.done[-1].get("why") if hands.done else None
+        if why:
+            print(f"            fell back because: {why}")
         #: **The delta, always.** A boolean cannot be diagnosed after the fact; the first run left
         #: two different causes indistinguishable because only the boolean was kept.
         if gained or lost:
@@ -191,6 +202,7 @@ def main(argv=None) -> int:
     worked = sum(1 for r in rows if r.get("outcome") == "worked")
     moved = sum(1 for r in rows if r.get("changed"))
     print(f"  {worked} of {len(GOALS)} did the expected thing; {moved} changed the window at all")
+    print(f"  {hands.by_pattern} went through a control pattern, {hands.by_click} through a click")
     session.model.release()
     proc.terminate()
     try:

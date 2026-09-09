@@ -100,24 +100,57 @@ receive it.
 three.** So the chain completes: a person confirms, the click lands, the thing they wanted happens.
 That had never once been observed before this.
 
-### `Widget.centre` clicked the inert part of the right control
+### WITHDRAWN: "`Widget.centre` clicked the inert part of the right control"
 
-The failure is not the agent's. A combo box's bounding rectangle is centred on its **text field**;
-the part that opens the list is the arrow at the right edge. The click landed exactly where it was
-aimed, on exactly the widget the model chose, and did nothing.
+That was written here, put in CLAUDE.md and committed in `00979fd`, and it is **wrong**. The
+reasoning was that a combo box's rectangle is centred on its text field while the arrow that opens
+the list is at the edge, so an exact click on the right control could still be inert. Plausible,
+consistent with every number in hand, and not what happened.
 
-**This is sharper than the 73% figure from `pointing.py`.** That measured how often a centre resolves
-to a *different element*. Here the centre was on the correct element and the click was still
-inert — so "the centre is on the widget" is not sufficient, and `contract.py` calls `centre` "the one
-place a name becomes a coordinate".
+### What actually happened: the name lost its role on the way back
 
-The repair that follows from the project's own rule: **UI Automation knows how to operate its own
-controls.** `InvokePattern`, `ExpandCollapsePattern` and `TogglePattern` activate a control without
-anybody guessing a pixel — which is the deterministic side doing the acting, the same argument that
-put WHERE on the environment in the first place. Not all controls expose a pattern, so a synthetic
-click has to stay as the fallback, and **which one was used has to be counted** rather than assumed.
-Unmeasured as of this writing: whether invoking differs from clicking in ways that matter (focus, for
-one, which a real click sets and an invoke may not).
+Character Map lays out a **`text` label reading `Font :` immediately before a `combo box` also called
+`Font :`**. The model chose the combo box. The effect stored the name. `Session.find()` resolved the
+name again at the moment of acting — and returned **the label**, because the label comes first.
+
+The click landed on a piece of text, which does nothing when clicked. That is indistinguishable from
+a click that missed, and it is why the first explanation survived a whole round of work.
+
+    index 8   text        'Font :'   rect (34, 107, 53, 20)     <- what find() returned
+    index 9   combo box   'Font :'   rect (86, 106, 321, 30)    <- what the model chose
+
+**The decision to store a name rather than a rectangle is still right** — a rectangle goes stale
+thirteen times in fourteen. The key was simply incomplete. `Effect` now carries the role, `find()`
+matches on both, and two tests pin it: one for the two-roles case, and one for the case a mutation
+exposed, where the chosen thing **moves** and a same-named label of another role ends up nearer to
+where it used to be.
+
+### The control patterns are kept, and have not yet earned their place
+
+`WindowsHands` now operates a control through `Invoke`, `ExpandCollapse`, `Toggle` or `SelectionItem`
+when it can resolve the element, falling back to a synthetic click otherwise, and counts which. That
+is the deterministic side doing the acting — the same argument that put WHERE on the environment.
+
+**Measured A/B on the same three goals: 2 of 3 both ways.** Two actions went through `invoke` and
+the rest through clicks; nothing improved and nothing regressed. The case the mechanism was built
+for fell back to a click *because of the role defect above*, so the patterns have not actually been
+tested on it yet. Retained on the strength of one direct probe — calling `ExpandCollapse.Expand()`
+on that combo box opened the font list, gaining `Arial, Arial Black, Arial Narrow, ...` — and
+**unproven in the loop until the next run**.
+
+One thing that measurement did settle: `LegacyIAccessible.DoDefaultAction()` is **not** a universal
+fallback. Every control in that window advertises `LegacyIAccessible`, and calling it on the combo
+box raised `COMError` while `Expand` succeeded.
+
+### Four ways to fall back and no record of which
+
+`_pattern_for` returned `None` for four different reasons — no element at the point, no ancestor
+matching within five hops, the element died, or no pattern offered — and recorded none of them. A
+run that fell back to a click on a control that provably supports `ExpandCollapse` could not be
+diagnosed at all. **The same mistake as keeping a boolean where the delta was needed, made twice in
+one day.** The reason is now carried in the action record, and it is what identified the real defect:
+*"the element offers none of invoke, expand, toggle or select"* on a combo box that offers
+`ExpandCollapse` could only mean the element was not the combo box.
 
 ### Two faults in the measurement, both mine, both found by running it twice
 
