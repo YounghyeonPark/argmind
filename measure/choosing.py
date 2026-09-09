@@ -115,8 +115,19 @@ def outcome(chosen, accept) -> str:
 
 
 def run(model_name: str, repeat: int, only: str | None, *,
-        named: bool = False, shuffle: int | None = None) -> int:
+        named: bool = False, shuffle: int | None = None, drop=()) -> int:
     screens = {name: widgets for name, _window, widgets in load()}
+    if drop:
+        #: **Leaving something out of the list is a change to what the model can see**, not a
+        #: cleanup. A `text` widget cannot usefully be clicked — one of the recorded wrong answers
+        #: clicked `\\Device\\HarddiskVolume1`, and a `text` label named `Font :` sitting in front
+        #: of a combo box of the same name caused a defect that took a whole round of work to find.
+        #: But the same widgets are what the model reads when it is asked *what is on screen*, so
+        #: this has to be measured rather than assumed to be free.
+        before = sum(len(v) for v in screens.values())
+        screens = {k: [w for w in v if w.role not in drop] for k, v in screens.items()}
+        after = sum(len(v) for v in screens.values())
+        print(f"  dropped {before - after} of {before} widgets with role in {drop}")
     goals = json.loads((HERE / "goals.json").read_text(encoding="utf-8"))["goals"]
     if only:
         goals = [g for g in goals if only in g["screen"]]
@@ -127,7 +138,8 @@ def run(model_name: str, repeat: int, only: str | None, *,
     model = Local(model_name)
     rows, tally = [], collections.Counter()
     how = ("by NAME" if named else "by number") + (
-        "" if shuffle is None else f", shuffled {shuffle}")
+        "" if shuffle is None else f", shuffled {shuffle}") + (
+        "" if not drop else f", without {'/'.join(drop)}")
     print(f"  {model_name} | {len(goals)} goals x {repeat} | {how} | "
           f"{len(screens)} screens, {sum(len(w) for w in screens.values())} widgets\n")
     print(f"  {'outcome':<9} {'screen':<14} {'goal':<28} chose")
@@ -191,7 +203,8 @@ def run(model_name: str, repeat: int, only: str | None, *,
     print(f"    disagreed  {len(disagreed):>3}   across {repeat} runs at temperature 0"
           f"{' — so a single run is not this number' if disagreed else ''}")
 
-    tag = ("name" if named else "index") + ("" if shuffle is None else f"-shuffled{shuffle}")
+    tag = (("name" if named else "index") + ("" if shuffle is None else f"-shuffled{shuffle}")
+           + ("" if not drop else "-without-" + "-".join(drop)))
     out = HERE / f"choosing-{tag}.json"
     out.write_text(json.dumps({
         "model": model_name, "repeat": repeat, "seconds": round(took, 1),
@@ -213,8 +226,12 @@ def main(argv=None) -> int:
                    help="ask for the exact name instead of a list index")
     p.add_argument("--shuffle", type=int, default=None, metavar="SEED",
                    help="shuffle each screen's order — separates an index error from a meaning one")
+    p.add_argument("--drop", default=None, metavar="ROLES",
+                   help="comma-separated roles to leave out of the list, e.g. 'text'. Order is "
+                        "preserved, because shuffling was measured to cost accuracy")
     a = p.parse_args(argv)
-    return run(a.model, a.repeat, a.only, named=a.by_name, shuffle=a.shuffle)
+    return run(a.model, a.repeat, a.only, named=a.by_name, shuffle=a.shuffle,
+               drop=tuple(r.strip() for r in a.drop.split(",")) if a.drop else ())
 
 
 if __name__ == "__main__":

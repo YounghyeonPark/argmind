@@ -140,6 +140,29 @@ something else, n=304). That is an **upper bound on missed clicks, not the miss 
 buttons resolve to `application` and the pixel is still correct — so it is shown as a note beside
 the button and never used to refuse.
 
+### Three interventions, none better than 26 of 37 correct decisions
+
+**Every change that moved `right` up by one moved refusals down**, and none beat the baseline on
+correct decisions (right + correct declines, out of 37):
+
+| | right / 28 | declined / 9 | correct |
+|---|---|---|---|
+| as it stands | 18 | 8 | **26** |
+| a stronger language rule in `SYSTEM`'s first paragraph | 19 | 3 | 22 |
+| the same rule as a separate line after the refusal | 17 | 8 | 25 |
+| dropping `text` widgets from the list (308 -> 217) | 19 | 7 | 26 |
+
+Two were prompt edits in different places and one changed what the model can see, so this is not one
+mechanism. The model sits on a trade between acting and refusing and these nudges slide along it.
+Dropping `text` was the best-motivated of the three — a `text` value was one of the wrong clicks,
+and a `text` label named `Font :` in front of a combo box of the same name caused a whole defect —
+and it is a wash: identical correct decisions, two more harmful outcomes for two fewer harmless
+ones, and a regression on a goal that worked. **Not adopted.** It also weakens the density
+direction: a third off the list moves nothing.
+
+**Unmeasured, and the likely way past 26**: a larger model. Nothing suitable is installed and
+pulling one costs ~9 GB on a machine that ran out of memory.
+
 ### The system prompt is at a local optimum, and edits must be re-measured
 
 The agent sometimes answers a Korean question in English. **Two attempts to fix that in `SYSTEM`

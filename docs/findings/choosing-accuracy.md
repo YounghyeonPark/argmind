@@ -153,6 +153,55 @@ recorded rather than traded for a worse click. The operational rule this leaves:
 a change to a measured system and has to be re-measured** — `python -m measure.choosing` takes 50
 seconds, and both of these looked obviously harmless.
 
+## Leaving the un-clickable widgets out changes nothing, and three interventions now say the same
+
+`text` widgets are the obvious thing to drop from the list. They cannot usefully be clicked; one of
+the eight recorded wrong answers clicked `\Device\HarddiskVolume1`, a `text` value in System
+Information; and a `text` label named `Font :` sitting in front of a `combo box` of the same name
+caused a defect that took a whole round of work to find. Three independent reasons, all pointing the
+same way.
+
+**Measured, and it is a wash.** 308 widgets to 217 — a 30% smaller list — over the same 37 goals:
+
+| | right / 28 | wrong | *on a screen with no right answer* | missed | declined / 9 | correct decisions |
+|---|---|---|---|---|---|---|
+| every widget | 18 | 8 | 1 | 3 | 8 | **26 of 37** |
+| without `text` | 19 | 10 | 2 | 1 | 7 | **26 of 37** |
+
+Five goals moved, two better and three worse:
+
+    지우개로 바꿔줘             wrong    -> right    Eraser
+    카테고리 이름만 검색하게 해줘   missed   -> right
+    복사                     right    -> wrong    Select
+    램 좀 늘려줘               declined -> wrong    Installed Physical Memory (RAM)
+    닫아                     missed   -> wrong    QVB-FLFM-DEV1
+
+Identical on correct decisions, and **slightly worse where it counts**: two more harmful outcomes
+(a click on the wrong thing) in exchange for two fewer harmless ones (doing nothing). `복사` is a
+regression on a goal that worked, and `램 좀 늘려줘` went from correctly declining to clicking a row
+of hardware information. Not adopted.
+
+It also weakens the density direction further. A third off the list, and the total does not move.
+
+### The same shape three times: anything that raises "right" by one costs a refusal
+
+| intervention | right | declined / 9 | correct decisions |
+|---|---|---|---|
+| as it stands | 18 | 8 | 26 |
+| a stronger language rule in the first paragraph | 19 | 3 | 22 |
+| the same rule as a separate line | 17 | 8 | 25 |
+| dropping `text` from the list | 19 | 7 | 26 |
+
+**Every intervention that moved `right` up by one moved refusals down.** Two were prompt edits in
+different places and one was a change to what the model can see, so this is not one mechanism —
+and none of them beat 26. The model appears to sit on a trade between acting and refusing, and
+these nudges slide along it rather than move it.
+
+What that suggests, and what has *not* been measured: the way past 26 is probably not persuading
+this model to be more willing, but changing what it chooses **with** — a larger model is the obvious
+candidate and nothing suitable is installed — or changing the cost of being wrong, which the app
+already does by making a person press the button.
+
 ## Two harness faults found while measuring, both of the familiar shape
 
 **The name protocol scored 0 of 5 while the model was answering correctly.** The prompt said "the
