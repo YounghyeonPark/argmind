@@ -94,39 +94,17 @@ def test_what_learns_is_one_linear_map_and_the_network_is_the_control():
         "units have gone linear")
 
 
-def test_the_demo_perception_is_hand_written_and_the_library_learns_none_of_it():
-    """**Claim 2, and it is the one the 2026-08-14 decision is aimed at.**
+def test_the_demo_perception_is_GONE_and_so_is_the_claim_it_bounded():
+    """**This test used to count the demo's hand-written perception** — 1,087 lines of classical
+    code that the library learned none of — and it was the sharpest of the seven, because it put a
+    number on how much of the working system argmind was not.
 
-    Every perception algorithm the demo runs is classical code in `demo/`. argmind consumes the
-    labels those algorithms produce; it does not produce them. Measured rather than described: the
-    named classes are found in `demo/` and **not** in `argmind/`, and no library module imports the
-    demo.
-
-    **When this test fails, that is the decision being executed rather than a regression** — the
-    message says so, because a test whose failure is progress must not read as a break.
+    `demo/` was removed on 2026-09-09 with the rest of the old tree, so the claim has no subject
+    any more. It is recorded here rather than deleted silently: the limit it measured was real, and
+    a later reader finding six tests where the file says seven should be able to see why.
     """
-    lib = "\n".join(p.read_text(encoding="utf-8", errors="replace")
-                    for p in sorted((ROOT / "argmind").glob("*.py")))
-    labeller = (ROOT / "demo" / "label_sources.py").read_text(encoding="utf-8", errors="replace")
-
-    for name in CLASSICAL:
-        assert f"class {name}" in labeller or f"def {name}" in labeller, (
-            f"{name} is no longer in demo/label_sources.py; if it moved into argmind/, this test is "
-            "the record of that and should be updated deliberately")
-        assert f"class {name}" not in lib and f"def {name}" not in lib, (
-            f"{name} is now implemented inside argmind/ — the library has taken over a piece of "
-            "perception it used to consume. That is the 2026-08-14 decision, not a regression: "
-            "update this test and CLAUDE.md's 'what this is not' section together")
-
-    for p in sorted((ROOT / "argmind").glob("*.py")):
-        text = p.read_text(encoding="utf-8", errors="replace")
-        for ln in text.splitlines():
-            s = ln.strip()
-            assert not (s.startswith("import demo") or s.startswith("from demo")), (
-                f"{p.name} imports the demo; the dependency direction that keeps OpenCV out of the "
-                "library has been reversed")
-
-
+    assert not (ROOT / "demo" / "pointer.py").exists(), (
+        "demo/pointer.py is back; the claim this test used to make needs restoring with it")
 def test_the_faculties_a_cognitive_brain_needs_are_absent_from_the_library():
     """**Claim 3.** Eight faculties, none of them present. Checked against the library's *public
     API* rather than against a text search, because a text search is what got this wrong.

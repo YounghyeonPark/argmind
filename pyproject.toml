@@ -19,11 +19,11 @@ dev = ["pytest>=8", "ruff>=0.6"]
 # accelerator/ is parked and its 429 tests do not gate work on this project.
 # Run them explicitly with: python -m pytest accelerator/tests
 #
-# `demo` is here because it was not, and `demo/test_pointer.py` had therefore never run
-# under `python -m pytest` since the demo landed. Same shape as `select_newest`: present,
-# compiled, and reached by nothing. The demo's tests import no OpenCV — `pointer.py` takes
-# `import cv2` inside `main()` — so collecting them costs a clone without it nothing.
-testpaths = ["tests", "demo"]
+# `demo` used to be listed here, because it had never run under `python -m pytest` since the
+# demo landed — present, compiled and reached by nothing, the `select_newest` shape. The demo
+# was removed with the rest of the old tree on 2026-09-09 (REBUILD.md step 5) and the entry
+# went with it rather than being left pointing at nothing.
+testpaths = ["tests"]
 addopts = "-q --strict-markers --strict-config"
 
 [tool.ruff]

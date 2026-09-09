@@ -23,13 +23,17 @@ import pytest
 #: The floor, not the count. Raise it deliberately when the suite has grown enough that the gap
 #: stops meaning anything -- and never lower it to make a deletion pass.
 #:
-#: **Lowered 1150 -> 700 on 2026-09-09, and this is the case the comment above warns about**, so it
-#: says why. The C++ port was removed deliberately -- `cpp/`, the target build, the QEMU runs and
-#: every parity module that existed to compare the two implementations -- as step 5 of `REBUILD.md`,
-#: after step 4 measured the rebuilt core's choosing accuracy. 1,252 collected before; 743 after.
-#: The floor is not being fitted to what remains: 700 sits below 743 by the same kind of margin
-#: 1150 sat below 1191, so a further module vanishing still trips it.
-COLLECTED_FLOOR = 700
+#: **Lowered twice on 2026-09-09, and this is the case the comment above warns about**, so it says
+#: why rather than merely doing it. Step 5 of `REBUILD.md` removes the old tree, after step 4
+#: measured the rebuilt core's choosing accuracy, and it goes in stages:
+#:
+#:     1,252  before                    the whole tree
+#:       743  1150 -> 700   the C++ port, the target build, the QEMU runs, every parity module
+#:       499   700 -> 460   demo/, agent/, and the architecture document they were checked against
+#:
+#: The floor is not being fitted to what is left. Each value sits ~40 below the count that follows
+#: it, which is the margin 1150 held against 1191, so an unplanned module vanishing still trips it.
+COLLECTED_FLOOR = 460
 
 
 def test_the_suite_has_not_SHRUNK(request):
