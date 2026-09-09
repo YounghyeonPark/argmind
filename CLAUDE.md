@@ -160,8 +160,27 @@ and it is a wash: identical correct decisions, two more harmful outcomes for two
 ones, and a regression on a goal that worked. **Not adopted.** It also weakens the density
 direction: a third off the list moves nothing.
 
-**Unmeasured, and the likely way past 26**: a larger model. Nothing suitable is installed and
-pulling one costs ~9 GB on a machine that ran out of memory.
+### The larger model moved the line, and broke the latency clause
+
+**`qwen2.5:14b` is the default now.** Same 37 goals, same prompt, three repeats, **run twice and
+identical both times**:
+
+| | right / 28 | wrong *(no-answer)* | missed | declined / 9 | correct | a call |
+|---|---|---|---|---|---|---|
+| `qwen2.5:7b` | 18 | 8 *(1)* | 3 | 8 | 26 of 37 | **0.44 s** |
+| `qwen2.5:14b` | **25** | 5 *(2)* | **0** | 7 | **32 of 37** | 2.38 s |
+
+Thirteen goals moved, eleven for the better, and every goal the 7b missed entirely is gone. It is
+still on the same trade — bad clicks went 1 → 2 — but it gains far more than it gives up, which is
+what the three nudges never did.
+
+**It fails one clause of this project's own criterion.** `REBUILD.md` says the design has failed *"if
+a reply routinely takes more than a second"*, and 2.38 s is not close. The model is 10.4 GB and sits
+**entirely in this machine's 16 GB of VRAM**, so that is what a 14B costs here, not a spill to tune
+away. On the accuracy clause it is much better placed: 25 of 28 is 89% against a required nine in
+ten. Adopted with the conflict recorded rather than resolved; `--model qwen2.5:7b` is one flag back.
+
+**Not tried**: a newer model at the 7b's size, which would test whether the gain needs the latency.
 
 ### The system prompt is at a local optimum, and edits must be re-measured
 

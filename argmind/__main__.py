@@ -36,9 +36,16 @@ for _stream in (sys.stdout, sys.stderr):
     except (AttributeError, OSError):                      # a pipe that will not be reconfigured
         pass
 
-#: A small text model. It is asked a text question and never for a coordinate, which is why the fast
-#: one is the right one here: measured 67-85 ms to first token against 2.7 s for the vision model.
-DEFAULT_MODEL = "qwen2.5:7b"
+#: **qwen2.5:14b, and it fails one clause of this project's own criterion.** Measured over the same
+#: 37 goals, three repeats, reproduced twice: 25 of 28 answerable right against the 7b's 18, and 32
+#: of 37 correct decisions against 26 — the first intervention that moved the line rather than
+#: sliding along the trade between acting and refusing, which three prompt and list edits all did.
+#:
+#: The cost is latency. **2.38 s a call against the 7b's 0.44 s**, and `REBUILD.md` says the design
+#: has failed "if a reply routinely takes more than a second". It is 10.4 GB and sits entirely in
+#: this machine's 16 GB of VRAM, so that figure is what a 14B costs here and not a spill to be
+#: tuned away. `--model qwen2.5:7b` is one flag back to the fast, less accurate side.
+DEFAULT_MODEL = "qwen2.5:14b"
 
 
 def parser() -> argparse.ArgumentParser:

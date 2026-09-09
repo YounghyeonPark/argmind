@@ -203,8 +203,13 @@ def run(model_name: str, repeat: int, only: str | None, *,
     print(f"    disagreed  {len(disagreed):>3}   across {repeat} runs at temperature 0"
           f"{' — so a single run is not this number' if disagreed else ''}")
 
+    #: **The model is part of the filename.** It was not, and a 14b run silently overwrote the 7b
+    #: baseline this whole document compares against — a measurement that destroys the thing it is
+    #: being compared to.
+    stem = model_name.replace(":", "-").replace("/", "-")
     tag = (("name" if named else "index") + ("" if shuffle is None else f"-shuffled{shuffle}")
            + ("" if not drop else "-without-" + "-".join(drop)))
+    tag = f"{tag}-{stem}" if stem != "qwen2.5-7b" else tag
     out = HERE / f"choosing-{tag}.json"
     out.write_text(json.dumps({
         "model": model_name, "repeat": repeat, "seconds": round(took, 1),
@@ -219,7 +224,8 @@ def run(model_name: str, repeat: int, only: str | None, *,
 
 def main(argv=None) -> int:
     p = argparse.ArgumentParser(prog="python -m measure.choosing", description=__doc__)
-    p.add_argument("--model", default="qwen2.5:7b")
+    p.add_argument("--model", default="qwen2.5:14b",
+                   help="the 7b baseline every table in docs/findings is against is qwen2.5:7b")
     p.add_argument("--repeat", type=int, default=3)
     p.add_argument("--only", default=None, metavar="SCREEN", help="substring of a screen name")
     p.add_argument("--by-name", action="store_true",

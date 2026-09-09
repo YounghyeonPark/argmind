@@ -183,6 +183,39 @@ of hardware information. Not adopted.
 
 It also weakens the density direction further. A third off the list, and the total does not move.
 
+### A bigger model is the first thing that moved the line — and it breaks the latency clause
+
+`qwen2.5:14b`, same 37 goals, same prompt, same three repeats, **run twice and identical both
+times** (25/5/0/7, 262 s and 265 s).
+
+| | right / 28 | wrong | *no-answer screens* | missed | declined / 9 | correct | a call |
+|---|---|---|---|---|---|---|---|
+| `qwen2.5:7b` | 18 | 8 | 1 | 3 | 8 | 26 of 37 | **0.44 s** |
+| `qwen2.5:14b` | **25** | 5 | 2 | **0** | 7 | **32 of 37** | 2.38 s |
+
+**Thirteen goals moved, eleven of them for the better.** Everything the 7b missed entirely is gone
+(3 → 0), and the errors that remain are a different kind:
+
+    동그라미 그리고 싶어    run 1 Oval (right), runs 2 and 3 Rectangle   — it disagrees with itself
+    빨간색 골라줘         Orange x3                                  — a plain error, Red is there
+    이 그림을 메일로 보내줘   Share x3                                   — should have declined
+    이 문자를 파일로 저장해줘  Copy x3                                    — should have declined
+    보기 메뉴 열어         Application x3                             — the menu BAR, not the menu item
+
+It is still on the same trade — bad clicks on screens with no right answer went 1 → 2 — but it gains
+far more than it gives up, which is what "moving the line" means and what the prompt and list edits
+never did.
+
+**The cost is the criterion.** `REBUILD.md` says the design has failed *"if a reply routinely takes
+more than a second"*, and 2.38 s is not close. The model is 10.4 GB and sits **entirely in this
+machine's 16 GB of VRAM**, so that is what a 14B costs here rather than a spill that could be tuned
+away. On the other clause it is much better placed: 25 of 28 is 89%, against a required nine in ten.
+
+**Adopted as the default with the conflict written next to it**, because the accuracy clause is the
+one the project said would decide whether the rebuild was worth doing, and `--model qwen2.5:7b` is
+one flag back. What has *not* been tried: a newer model of the 7b's size, which would test whether
+the gain needs the latency at all.
+
 ### The same shape three times: anything that raises "right" by one costs a refusal
 
 | intervention | right | declined / 9 | correct decisions |
