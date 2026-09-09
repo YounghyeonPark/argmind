@@ -194,7 +194,7 @@ class Session:
                 proposed.append(effect)
                 continue
             if effect.kind == "click":
-                target = self._refind(effect.target)
+                target = self.find(effect.target)
                 if target is None:
                     #: It was there when the question was asked and it is not there now. Refusing is
                     #: the only honest option: whatever occupies that rectangle now was never chosen.
@@ -248,8 +248,11 @@ class Session:
 
     # ---- resolving against the world as it is ---------------------------------------------------
 
-    def _refind(self, name: str):
+    def find(self, name: str):
         """The thing with this name, in the world as it is now — or `None` if it has gone.
+
+        Public because an interface that shows a person what an action would touch has to resolve
+        it too, and resolving it a second way would be a second answer.
 
         **The measurement that forces this**: over the second a model call takes, thirteen times in
         fourteen a widget present when the question was asked is absent when the answer arrives. A

@@ -121,6 +121,38 @@ default was chosen because an agent acting unwatched has no undo, and this measu
 choosing is not accurate enough to justify relaxing it. **The safety argument and the accuracy
 measurement agree**, which is worth noting precisely because they could have disagreed.
 
+## The prompt is at a local optimum, and two attempts to improve it were withdrawn (2026-09-09)
+
+Building the PC app exposed a real defect: the agent sometimes answers a Korean question in English
+— *"Sure."* — even though `SYSTEM` already says to reply "in the language they used". Two fixes were
+tried and **both were withdrawn, because both cost accuracy.**
+
+|  | right / 28 | wrong | *on a screen with no right answer* | missed | declined / 9 |
+|---|---|---|---|---|---|
+| as it stands | **18** | 8 | 1 | 3 | **8** |
+| a stronger rule in the first paragraph | 19 | 15 | **6** | 0 | **3** |
+| the same rule as a separate line after the refusal | 17 | 12 | 1 | 0 | 8 |
+
+**The first attempt looked like an improvement and was the worse of the two.** Right went *up* by
+one, which is the only column a careless reading checks — and declines collapsed from 8 of 9 to 3 of
+9, with wrong clicks on screens that had no right answer going from 1 to 6. Emphasising a rule about
+language in the paragraph that also carries *"a wrong click is worse than an honest I can't see that
+here"* diluted the refusal.
+
+**The second attempt kept the refusals and converted every miss into a wrong answer.** Declines held
+at 8 of 9, but `missed` went 3 → 0 and `wrong` went 8 → 12: on screens where an answer existed the
+model stopped declining and started guessing.
+
+So **any imperative added to the system prompt pushed the model toward acting**, in both placements
+and in both directions of emphasis. The cause is not established — what is established is the
+effect, three times over, since the baseline was re-measured after each revert and reproduced
+exactly (18 / 8 / 1 / 3 / 8-of-9 each time).
+
+**Nothing was changed.** The agent still occasionally replies in English and that is a real defect,
+recorded rather than traded for a worse click. The operational rule this leaves: **a prompt edit is
+a change to a measured system and has to be re-measured** — `python -m measure.choosing` takes 50
+seconds, and both of these looked obviously harmless.
+
 ## Two harness faults found while measuring, both of the familiar shape
 
 **The name protocol scored 0 of 5 while the model was answering correctly.** The prompt said "the

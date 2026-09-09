@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """`python -m argmind` — look at what the environment sees, talk to it, or let it notice.
 
+    python -m argmind app               the window. Leave it running while you work
     python -m argmind look              what is on screen right now, and how long reading it took
     python -m argmind talk              a conversation. It answers; it clicks only with --live
     python -m argmind say "닫아줘"       one exchange and exit
@@ -42,7 +43,8 @@ DEFAULT_MODEL = "qwen2.5:7b"
 
 def parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="python -m argmind", description=__doc__)
-    p.add_argument("mode", nargs="?", default="look", choices=("look", "talk", "say", "watch"))
+    p.add_argument("mode", nargs="?", default="look",
+                   choices=("app", "look", "talk", "say", "watch"))
     p.add_argument("text", nargs="?", default=None, help="what to say, for `say`")
     p.add_argument("--live", action="store_true",
                    help="actually click. Off by default: this drives whatever window has focus and "
@@ -58,6 +60,14 @@ def parser() -> argparse.ArgumentParser:
     p.add_argument("--for", dest="needle", default=None, metavar="TEXT",
                    help="for `watch`: notice things whose name contains TEXT. Without it, notice "
                         "the foreground window changing")
+    p.add_argument("--dry", action="store_true",
+                   help="for `app`: propose and confirm as usual, but touch nothing")
+    p.add_argument("--cold", action="store_true",
+                   help="for `app`: do not load the model until the first question. Saves 5-6 GB "
+                        "until you use it and costs about 10 s when you do")
+    p.add_argument("--notice", action="store_true",
+                   help="for `app`: also speak when the window you are in changes. Off by "
+                        "default — it costs a model call every time it fires")
     p.add_argument("--every", type=float, default=1.0, metavar="S",
                    help="for `watch`: how often to look (default 1 s). Each watch has its own "
                         "floor on how often it may start a thought")
@@ -146,6 +156,15 @@ def say(args) -> int:
     return _released(session, 0)
 
 
+def app(args) -> int:
+    """The window. Everything else here is a CLI over the same session; this is the thing you leave
+    running."""
+    from .app import launch                                              # noqa: PLC0415
+
+    return launch(model=args.model, limit=args.limit, rate=args.rate,
+                  dry=args.dry, notice=args.notice, warm=not args.cold)
+
+
 def watch(args) -> int:
     """Let it notice. **The half that can act while nobody is looking**, which is why it prints its
     poll rate and its permission before it starts."""
@@ -173,7 +192,8 @@ def watch(args) -> int:
 
 def main(argv=None) -> int:
     args = parser().parse_args(argv)
-    return {"look": look, "talk": talk, "say": say, "watch": watch}[args.mode](args)
+    return {"app": app, "look": look, "talk": talk, "say": say,
+            "watch": watch}[args.mode](args)
 
 
 def _released(session, code: int) -> int:

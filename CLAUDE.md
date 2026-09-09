@@ -63,10 +63,11 @@ Needs [Ollama](https://ollama.com) running with a small text model, and `comtype
                      converse.py  one call: what to say, and what if anything to do
                      loop.py      observe / poll / decide / perform, separately
     argmind/env/     windows.py   UI Automation for eyes, SendInput for hands
-    argmind/__main__.py           look / talk / say / watch
+    argmind/app.py                the PC app — a window you leave running while you work
+    argmind/__main__.py           app / look / talk / say / watch
     measure/                      the goal set, the captured screens, every answer behind the numbers
 
-**37 tests, and none of them needs a display, a model or a network.** Re-derive with
+**48 tests, and none of them needs a display, a model or a network.** Re-derive with
 `python -m pytest`; `tests/test_suite_size.py` floors it and records the staircase down from 1,252.
 
 **Four separable pieces, because acting is not a stage that always runs — it is something decided**,
@@ -109,6 +110,46 @@ Density is a **direction, not a rate**: 8 of 9 on the two small screens against 
 large ones is one-sided Fisher p = 0.070, n = 28, and the small screens are also the simpler
 applications. Full conditions in `docs/findings/choosing-accuracy.md`.
 
+### The PC app — `python -m argmind app`
+
+A small always-on-top window: a transcript, an input box, and **a row with a button for every action
+it wants to take**. Three measurements shaped it, and `docs/findings/the-pc-app.md` has them.
+
+**The agent's window is on the screen it reads.** Once you click into the input box the foreground
+window is the agent, so the eyes take `ignore_pid` and answer about the last window that was in
+front and was somebody else's — and the header names it, always. The first version of that fix
+seeded the remembered window during setup and **lost the race**: the app answered "I can't see any
+windows here" twice while a 141-widget browser sat behind it, with no way to recover because it kept
+focus. `attending()` now walks top-level windows in z-order when it has nothing remembered.
+
+**Every action is proposed and a person presses the button.** `Session.perform` is called from
+exactly one place in `app.py` and a test walks the AST to keep it that way. That is also why the app
+builds its session with `may_act_unprompted=True`, which is **stronger than the library default, not
+weaker**: per-action human confirmation beats a session-wide flag.
+
+**The first two questions cost 4,715 ms and 5,940 ms; the third onwards cost 331, 329, 608.** Two
+calls to warm, not one. The app warms at startup and shows a running counter while thinking; `--cold`
+skips it and saves the 5-6 GB until first use.
+
+**Clicking is switched off if the coordinates disagree.** `pointing_is_exact()` runs once: this
+process is DPI-unaware and UI Automation reports physical pixels, so on a scaled display every click
+would be offset. Measured 40 of 40 exact here, which is one desk and not a guarantee.
+
+**A widget's centre resolves back to that widget 73% of the time** (14% a related name, 12.8%
+something else, n=304). That is an **upper bound on missed clicks, not the miss rate** — caption
+buttons resolve to `application` and the pixel is still correct — so it is shown as a note beside
+the button and never used to refuse.
+
+### The system prompt is at a local optimum, and edits must be re-measured
+
+The agent sometimes answers a Korean question in English. **Two attempts to fix that in `SYSTEM`
+were withdrawn because both cost accuracy**, in different ways: a stronger rule in the first
+paragraph raised right 18 → 19 while collapsing declines 8 → 3 of 9 and wrong-on-no-answer-screens
+1 → 6; the same rule as a separate line held the declines but turned every miss into a wrong answer
+(right 18 → 17, wrong 8 → 12). **Any imperative added pushed the model toward acting.** The baseline
+reproduced exactly after each revert, three times. `python -m measure.choosing` is 50 seconds — run
+it after touching a prompt.
+
 ### Nine ways this local-model harness has produced a confident wrong number
 
 Every one was invisible from outside — the agent simply did nothing, or did something plausible.
@@ -134,8 +175,9 @@ Every one was invisible from outside — the agent simply did nothing, or did so
 
 ## What is NOT built, so it is not mistaken for deferred work
 
-No microphone, no speaker, no phone environment, no robot environment. The click half of end-to-end
-accuracy is **unmeasured**, so "18 of 28" is a claim about choosing and not about the whole loop.
+No microphone, no speaker, no phone environment, no robot environment. **Whether a confirmed click
+achieves what the person wanted is still unmeasured** — the coordinate chain is measured (above) and
+the outcome is not, so "18 of 28" remains a claim about choosing.
 `Local.release()` exists because a model left resident holds 5–6 GB, and the caller is expected to
 call it.
 
@@ -148,6 +190,7 @@ call it.
 |---|---|
 | `REBUILD.md` | the rebuild plan — what was decided, why, and the staged path that was followed |
 | `docs/findings/choosing-accuracy.md` | step 4: 18/28, the refuted index hypothesis, the shuffle control, name vs number, and the two harness faults found while measuring |
+| `docs/findings/the-pc-app.md` | the window: self-blindness, the pointing measurement, the cold start, and what the accuracy number forces the interface to be |
 | `docs/findings/what-the-old-tree-measured.md` | the removed library's transferable results, and the `git show` commands for the full record |
 
 ## Sub-agent team

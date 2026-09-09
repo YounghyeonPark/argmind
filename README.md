@@ -3,6 +3,7 @@
 **A local-model agent you talk to while you work at your PC.** Open-source model, on your machine,
 no cloud call. It answers, and it acts only when acting is what you asked for.
 
+    python -m argmind app                   the window. Leave it running while you work
     python -m argmind look                  what is on screen right now, and how long reading it took
     python -m argmind talk                  a conversation. It clicks only with --live
     python -m argmind say "이 창 닫아줘"       one exchange and exit
@@ -28,6 +29,7 @@ So the OS supplies the names and the rectangles, and the model only ever picks a
 
     argmind/core/    Widget, Eyes, Hands, the model, and the loop. No platform anywhere in it
     argmind/env/     one environment: UI Automation for eyes, SendInput for hands
+    argmind/app.py   the window — a transcript, a box to type in, and a button per action
     measure/         the goal set, the captured screens, and every answer behind the numbers below
 
 Four separable pieces, because **acting is not a stage that always runs, it is something decided**,
@@ -48,9 +50,13 @@ rectangle is clicking where something used to be.
 12 to 152 widgets, labelled before anything ran, three repeats, the worst counted. Nine goals have
 no right answer so the measurement can fail.
 
-**Not good enough to click unsupervised; good enough to propose.** An effect the agent decided on its
-own, without standing permission, is **downgraded to speech** rather than refused — it says *"the
-build finished, want me to open it?"*. `--allow-unprompted` is a separate word from `--live`.
+**Not good enough to click unsupervised; good enough to propose.** So the app never clicks by
+itself: every action appears as a row saying what it would do, with a button. In the CLI, an effect
+the agent decided on its own is **downgraded to speech** rather than refused — it says *"the build
+finished, want me to open it?"* — and `--allow-unprompted` is a separate word from `--live`.
+
+The window always names the window it is answering about, because once you click into its input box
+the foreground window is the agent, and it is answering about the one you came from.
 
 `docs/findings/choosing-accuracy.md` has the conditions, the failures one by one, and the
 hypothesis of mine that the shuffle control refuted.

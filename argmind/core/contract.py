@@ -97,6 +97,22 @@ class Eyes(Protocol):
 
 
 @runtime_checkable
+#: **What an interactive interface wants beyond `Eyes`, and why it is not in the protocol.**
+#:
+#: An app that runs in a window on the screen it reads needs three things the core never asks for,
+#: and each is optional because a core that only answers questions works without any of them:
+#:
+#:     attending_title() -> str        the window the person is working in, named cheaply (0.04 ms)
+#:     at(x, y) -> (name, role)        what the environment thinks is at a point — a second opinion
+#:     pointing_is_exact() -> bool     do the coordinates written match the coordinates read
+#:
+#: They are on `WindowsEyes` and `WindowsHands` and absent from the protocols on purpose. Putting
+#: them here would make every future environment implement three methods to satisfy a caller that
+#: may not exist on that platform — a phone has no "window the person is in" and no cursor at all.
+#: `argmind/app.py` resolves them once with `getattr` and falls back to answers that are honest
+#: rather than invented: no title, nothing known at that point, and pointing assumed exact.
+
+
 class Hands(Protocol):
     """Doing things. A click takes a `Widget`, never a coordinate — the rectangle came from `Eyes`,
     so the click lands where the environment says the thing is."""

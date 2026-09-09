@@ -39,11 +39,16 @@ live branch, so a dry run accepted `{"key": "f4"}` silently, and anything accept
 from __future__ import annotations
 
 import ctypes
+import ctypes.wintypes as wintypes
 import time
 
 from _ctypes import COMError
 
 from ..core.contract import Widget
+
+#: `EnumWindows` needs its callback kept alive for the duration of the call; building
+#: the functype once here is both cheaper and safer than per-call.
+_ENUM_WINDOWS = ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND, wintypes.LPARAM)
 
 __all__ = ["WindowsEyes", "WindowsHands", "Refused", "KEYS", "UIA_UNAVAILABLE"]
 
@@ -70,7 +75,18 @@ class WindowsEyes:
     """`Eyes` for Windows. Build once and reuse — creating the automation object costs more than a
     query does, so a caller that makes a new one per turn pays for nothing."""
 
-    def __init__(self) -> None:
+    def __init__(self, *, ignore_pid: int | None = None) -> None:
+        #: **The agent's own window is on the screen it reads.** With `ignore_pid` set to the app's
+        #: process, `foreground()` never returns the agent itself: it returns the last window that
+        #: was in front and was somebody else's. Without this an agent app answers questions about
+        #: its own text box, which is not a corner case — it is what happens every time the person
+        #: types.
+        self.ignore_pid = ignore_pid
+        self._theirs = 0
+        #: How often the person was looking at the agent and the remembered window stood in. Counted
+        #: because the substitution is a **guess about what "this window" means**, and a guess that
+        #: nobody counts is a guess nobody can check.
+        self.looked_at_itself = 0
         try:
             from comtypes.client import CreateObject, GetModule           # noqa: PLC0415
 
@@ -90,7 +106,54 @@ class WindowsEyes:
         self.vanished = 0
 
     def foreground(self) -> list[Widget]:
-        return self.read(self._user32.GetForegroundWindow())
+        return self.read(self.attending())
+
+    def attending(self) -> int:
+        """The window the person is working in — **not necessarily the one with focus.**
+
+        When the foreground window belongs to `ignore_pid` the answer is the last one that did not,
+        because the alternative is an agent that reads its own input box the moment you click on it.
+
+        This is a **substitution and it can be wrong**: alt-tab twice quickly and the remembered
+        window is the one before last. It is right often enough to be the only workable rule — a
+        person asking an agent about "this window" has just come from it — and `looked_at_itself`
+        counts how often the substitution was used at all, so the frequency is a measurement rather
+        than an impression.
+        """
+        handle = self._user32.GetForegroundWindow()
+        if handle and not self._is_ours(handle):
+            self._theirs = handle
+            return handle
+        self.looked_at_itself += 1
+        if self._theirs and self._user32.IsWindow(self._theirs):
+            return self._theirs
+        #: **Nothing remembered, so go and look.** An app that opens with focus has never seen
+        #: anybody else's window, and without this it stays blind until the person alt-tabs —
+        #: measured by watching it answer "I can't see any windows here" twice in a row while a
+        #: browser with 141 widgets sat behind it. `EnumWindows` walks top-level windows in z-order,
+        #: so the first visible titled window that is not ours is the one underneath.
+        self._theirs = self._topmost_of_theirs()
+        return self._theirs
+
+    def _topmost_of_theirs(self) -> int:
+        found = []
+
+        def visit(handle, _param):
+            if (self._user32.IsWindowVisible(handle) and not self._is_ours(handle)
+                    and self._user32.GetWindowTextLengthW(handle) > 0):
+                found.append(handle)
+                return False
+            return True
+
+        self._user32.EnumWindows(_ENUM_WINDOWS(visit), 0)
+        return found[0] if found else 0
+
+    def _is_ours(self, handle) -> bool:
+        if self.ignore_pid is None:
+            return False
+        pid = ctypes.c_ulong()
+        self._user32.GetWindowThreadProcessId(handle, ctypes.byref(pid))
+        return pid.value == self.ignore_pid
 
     def read(self, handle) -> list[Widget]:
         """The named things in one window, given its handle.
@@ -130,6 +193,41 @@ class WindowsEyes:
             if name and w > 0 and h > 0:
                 out.append(Widget(name, role, (r.left, r.top, w, h), window))
         return out
+
+    def attending_title(self) -> str:
+        """The title of the window `attending()` picked, without reading its whole tree.
+
+        A full read is 41-266 ms and an agent app wants to say which window it is looking at several
+        times a second. This is the cheap half of that question.
+        """
+        handle = self.attending()
+        if not handle:
+            return ""
+        length = self._user32.GetWindowTextLengthW(handle)
+        buffer = ctypes.create_unicode_buffer(length + 1)
+        self._user32.GetWindowTextW(handle, buffer, length + 1)
+        return buffer.value
+
+    def at(self, x: int, y: int) -> tuple[str, str]:
+        """What UI Automation says is at a screen point: `(name, role)`, or `("", "")`.
+
+        **A second opinion on a coordinate, used as a hint and not as a gate.** Measured on a real
+        window: a widget's own rectangle centre resolves back to that widget **73% of the time**,
+        to a name containing or contained by it 14%, and to something else 12.8%.
+
+        That last figure is an **upper bound on how often a click misses, not the miss rate.** A
+        click lands on a pixel, and a parent element answering the hit test does not mean the pixel
+        belongs to something else — window caption buttons are the clear case, where `Close`
+        resolves to `application` and the pixel is nonetheless exactly the close button. So this
+        informs the person before they confirm; it must not silently refuse, or it would block
+        closing a window, which is the most common thing anybody asks for.
+        """
+        point = wintypes.POINT(int(x), int(y))
+        try:
+            element = self._uia.ElementFromPoint(point)
+            return (element.CurrentName or "", element.CurrentLocalizedControlType or "")
+        except (COMError, ValueError, OSError):
+            return ("", "")
 
     def timed_foreground(self) -> tuple[list[Widget], float]:
         t0 = time.perf_counter()
@@ -178,6 +276,31 @@ class WindowsHands:
         self.done: list[dict] = []
         self._user32 = ctypes.windll.user32
         self._last = 0.0
+
+    def pointing_is_exact(self, points=((300, 300), (900, 500))) -> bool:
+        """Does the cursor go where it is sent? Checked once, before anything is clicked.
+
+        **UIA reports physical pixels and a DPI-unaware process can have its cursor calls
+        virtualised**, in which case every click is offset by the scaling factor and lands on
+        whatever happens to be there. Measured on this machine: 40 of 40 points came back exactly,
+        because the display is at 96 DPI — which is a property of one desk, not a guarantee. On a
+        scaled display the two spaces disagree and an agent that clicks anyway is worse than one
+        that does not.
+
+        Moves the pointer and puts it back. Presses nothing.
+        """
+        keep = wintypes.POINT()
+        self._user32.GetCursorPos(ctypes.byref(keep))
+        try:
+            for x, y in points:
+                self._user32.SetCursorPos(int(x), int(y))
+                got = wintypes.POINT()
+                self._user32.GetCursorPos(ctypes.byref(got))
+                if (got.x, got.y) != (int(x), int(y)):
+                    return False
+        finally:
+            self._user32.SetCursorPos(keep.x, keep.y)
+        return True
 
     def click(self, widget: Widget, button: str = "left") -> dict:
         if button not in _BUTTON:
