@@ -1,0 +1,1525 @@
+{
+ "window": "System Information",
+ "widgets": [
+  {
+   "name": "System Summary",
+   "role": "tree item",
+   "rect": [
+    66,
+    107,
+    103,
+    20
+   ]
+  },
+  {
+   "name": "Hardware Resources",
+   "role": "tree item",
+   "rect": [
+    85,
+    127,
+    125,
+    20
+   ]
+  },
+  {
+   "name": "Components",
+   "role": "tree item",
+   "rect": [
+    85,
+    147,
+    78,
+    20
+   ]
+  },
+  {
+   "name": "Software Environment",
+   "role": "tree item",
+   "rect": [
+    85,
+    167,
+    131,
+    20
+   ]
+  },
+  {
+   "name": "System Summary",
+   "role": "list",
+   "rect": [
+    867,
+    105,
+    1632,
+    1160
+   ]
+  },
+  {
+   "name": "System Summary",
+   "role": "header",
+   "rect": [
+    869,
+    107,
+    1628,
+    24
+   ]
+  },
+  {
+   "name": "Item",
+   "role": "header item",
+   "rect": [
+    869,
+    107,
+    200,
+    24
+   ]
+  },
+  {
+   "name": "Value",
+   "role": "header item",
+   "rect": [
+    1069,
+    107,
+    475,
+    24
+   ]
+  },
+  {
+   "name": "OS Name",
+   "role": "list item",
+   "rect": [
+    869,
+    131,
+    675,
+    21
+   ]
+  },
+  {
+   "name": "OS Name",
+   "role": "text",
+   "rect": [
+    869,
+    131,
+    675,
+    21
+   ]
+  },
+  {
+   "name": "Microsoft Windows 11 Home",
+   "role": "text",
+   "rect": [
+    1069,
+    131,
+    475,
+    21
+   ]
+  },
+  {
+   "name": "Version",
+   "role": "list item",
+   "rect": [
+    869,
+    152,
+    675,
+    21
+   ]
+  },
+  {
+   "name": "Version",
+   "role": "text",
+   "rect": [
+    869,
+    152,
+    675,
+    21
+   ]
+  },
+  {
+   "name": "10.0.26200 Build 26200",
+   "role": "text",
+   "rect": [
+    1069,
+    152,
+    475,
+    21
+   ]
+  },
+  {
+   "name": "Other OS Description ",
+   "role": "list item",
+   "rect": [
+    869,
+    173,
+    675,
+    21
+   ]
+  },
+  {
+   "name": "Other OS Description ",
+   "role": "text",
+   "rect": [
+    869,
+    173,
+    675,
+    21
+   ]
+  },
+  {
+   "name": "Not Available",
+   "role": "text",
+   "rect": [
+    1069,
+    173,
+    475,
+    21
+   ]
+  },
+  {
+   "name": "OS Manufacturer",
+   "role": "list item",
+   "rect": [
+    869,
+    194,
+    675,
+    21
+   ]
+  },
+  {
+   "name": "OS Manufacturer",
+   "role": "text",
+   "rect": [
+    869,
+    194,
+    675,
+    21
+   ]
+  },
+  {
+   "name": "Microsoft Corporation",
+   "role": "text",
+   "rect": [
+    1069,
+    194,
+    475,
+    21
+   ]
+  },
+  {
+   "name": "System Name",
+   "role": "list item",
+   "rect": [
+    869,
+    215,
+    675,
+    21
+   ]
+  },
+  {
+   "name": "System Name",
+   "role": "text",
+   "rect": [
+    869,
+    215,
+    675,
+    21
+   ]
+  },
+  {
+   "name": "LAPTOP-SLKUM90R",
+   "role": "text",
+   "rect": [
+    1069,
+    215,
+    475,
+    21
+   ]
+  },
+  {
+   "name": "System Manufacturer",
+   "role": "list item",
+   "rect": [
+    869,
+    236,
+    675,
+    21
+   ]
+  },
+  {
+   "name": "System Manufacturer",
+   "role": "text",
+   "rect": [
+    869,
+    236,
+    675,
+    21
+   ]
+  },
+  {
+   "name": "LENOVO",
+   "role": "text",
+   "rect": [
+    1069,
+    236,
+    475,
+    21
+   ]
+  },
+  {
+   "name": "System Model",
+   "role": "list item",
+   "rect": [
+    869,
+    257,
+    675,
+    21
+   ]
+  },
+  {
+   "name": "System Model",
+   "role": "text",
+   "rect": [
+    869,
+    257,
+    675,
+    21
+   ]
+  },
+  {
+   "name": "82WQ",
+   "role": "text",
+   "rect": [
+    1069,
+    257,
+    475,
+    21
+   ]
+  },
+  {
+   "name": "System Type",
+   "role": "list item",
+   "rect": [
+    869,
+    278,
+    675,
+    21
+   ]
+  },
+  {
+   "name": "System Type",
+   "role": "text",
+   "rect": [
+    869,
+    278,
+    675,
+    21
+   ]
+  },
+  {
+   "name": "x64-based PC",
+   "role": "text",
+   "rect": [
+    1069,
+    278,
+    475,
+    21
+   ]
+  },
+  {
+   "name": "System SKU",
+   "role": "list item",
+   "rect": [
+    869,
+    299,
+    675,
+    21
+   ]
+  },
+  {
+   "name": "System SKU",
+   "role": "text",
+   "rect": [
+    869,
+    299,
+    675,
+    21
+   ]
+  },
+  {
+   "name": "LENOVO_MT_82WQ_BU_idea_FM_Legion Pro 7 16IRX8H",
+   "role": "text",
+   "rect": [
+    1069,
+    299,
+    475,
+    21
+   ]
+  },
+  {
+   "name": "Processor",
+   "role": "list item",
+   "rect": [
+    869,
+    320,
+    675,
+    21
+   ]
+  },
+  {
+   "name": "Processor",
+   "role": "text",
+   "rect": [
+    869,
+    320,
+    675,
+    21
+   ]
+  },
+  {
+   "name": "13th Gen Intel(R) Core(TM) i9-13900HX, 2200 Mhz, 24 Core(s), 32 Logical Processor(s)",
+   "role": "text",
+   "rect": [
+    1069,
+    320,
+    475,
+    21
+   ]
+  },
+  {
+   "name": "BIOS Version/Date",
+   "role": "list item",
+   "rect": [
+    869,
+    341,
+    675,
+    21
+   ]
+  },
+  {
+   "name": "BIOS Version/Date",
+   "role": "text",
+   "rect": [
+    869,
+    341,
+    675,
+    21
+   ]
+  },
+  {
+   "name": "LENOVO KWCN54WW, 10/22/2025",
+   "role": "text",
+   "rect": [
+    1069,
+    341,
+    475,
+    21
+   ]
+  },
+  {
+   "name": "SMBIOS Version",
+   "role": "list item",
+   "rect": [
+    869,
+    362,
+    675,
+    21
+   ]
+  },
+  {
+   "name": "SMBIOS Version",
+   "role": "text",
+   "rect": [
+    869,
+    362,
+    675,
+    21
+   ]
+  },
+  {
+   "name": "3.4",
+   "role": "text",
+   "rect": [
+    1069,
+    362,
+    475,
+    21
+   ]
+  },
+  {
+   "name": "Embedded Controller Version",
+   "role": "list item",
+   "rect": [
+    869,
+    383,
+    675,
+    21
+   ]
+  },
+  {
+   "name": "Embedded Controller Version",
+   "role": "text",
+   "rect": [
+    869,
+    383,
+    675,
+    21
+   ]
+  },
+  {
+   "name": "1.51",
+   "role": "text",
+   "rect": [
+    1069,
+    383,
+    475,
+    21
+   ]
+  },
+  {
+   "name": "BIOS Mode",
+   "role": "list item",
+   "rect": [
+    869,
+    404,
+    675,
+    21
+   ]
+  },
+  {
+   "name": "BIOS Mode",
+   "role": "text",
+   "rect": [
+    869,
+    404,
+    675,
+    21
+   ]
+  },
+  {
+   "name": "UEFI",
+   "role": "text",
+   "rect": [
+    1069,
+    404,
+    475,
+    21
+   ]
+  },
+  {
+   "name": "BaseBoard Manufacturer",
+   "role": "list item",
+   "rect": [
+    869,
+    425,
+    675,
+    21
+   ]
+  },
+  {
+   "name": "BaseBoard Manufacturer",
+   "role": "text",
+   "rect": [
+    869,
+    425,
+    675,
+    21
+   ]
+  },
+  {
+   "name": "LENOVO",
+   "role": "text",
+   "rect": [
+    1069,
+    425,
+    475,
+    21
+   ]
+  },
+  {
+   "name": "BaseBoard Product",
+   "role": "list item",
+   "rect": [
+    869,
+    446,
+    675,
+    21
+   ]
+  },
+  {
+   "name": "BaseBoard Product",
+   "role": "text",
+   "rect": [
+    869,
+    446,
+    675,
+    21
+   ]
+  },
+  {
+   "name": "LNVNB161216",
+   "role": "text",
+   "rect": [
+    1069,
+    446,
+    475,
+    21
+   ]
+  },
+  {
+   "name": "BaseBoard Version",
+   "role": "list item",
+   "rect": [
+    869,
+    467,
+    675,
+    21
+   ]
+  },
+  {
+   "name": "BaseBoard Version",
+   "role": "text",
+   "rect": [
+    869,
+    467,
+    675,
+    21
+   ]
+  },
+  {
+   "name": "SDK0T76461 WIN",
+   "role": "text",
+   "rect": [
+    1069,
+    467,
+    475,
+    21
+   ]
+  },
+  {
+   "name": "Platform Role",
+   "role": "list item",
+   "rect": [
+    869,
+    488,
+    675,
+    21
+   ]
+  },
+  {
+   "name": "Platform Role",
+   "role": "text",
+   "rect": [
+    869,
+    488,
+    675,
+    21
+   ]
+  },
+  {
+   "name": "Mobile",
+   "role": "text",
+   "rect": [
+    1069,
+    488,
+    475,
+    21
+   ]
+  },
+  {
+   "name": "Secure Boot State",
+   "role": "list item",
+   "rect": [
+    869,
+    509,
+    675,
+    21
+   ]
+  },
+  {
+   "name": "Secure Boot State",
+   "role": "text",
+   "rect": [
+    869,
+    509,
+    675,
+    21
+   ]
+  },
+  {
+   "name": "On",
+   "role": "text",
+   "rect": [
+    1069,
+    509,
+    475,
+    21
+   ]
+  },
+  {
+   "name": "PCR7 Configuration",
+   "role": "list item",
+   "rect": [
+    869,
+    530,
+    675,
+    21
+   ]
+  },
+  {
+   "name": "PCR7 Configuration",
+   "role": "text",
+   "rect": [
+    869,
+    530,
+    675,
+    21
+   ]
+  },
+  {
+   "name": "Elevation Required to View",
+   "role": "text",
+   "rect": [
+    1069,
+    530,
+    475,
+    21
+   ]
+  },
+  {
+   "name": "Windows Directory",
+   "role": "list item",
+   "rect": [
+    869,
+    551,
+    675,
+    21
+   ]
+  },
+  {
+   "name": "Windows Directory",
+   "role": "text",
+   "rect": [
+    869,
+    551,
+    675,
+    21
+   ]
+  },
+  {
+   "name": "C:\\WINDOWS",
+   "role": "text",
+   "rect": [
+    1069,
+    551,
+    475,
+    21
+   ]
+  },
+  {
+   "name": "System Directory",
+   "role": "list item",
+   "rect": [
+    869,
+    572,
+    675,
+    21
+   ]
+  },
+  {
+   "name": "System Directory",
+   "role": "text",
+   "rect": [
+    869,
+    572,
+    675,
+    21
+   ]
+  },
+  {
+   "name": "C:\\WINDOWS\\system32",
+   "role": "text",
+   "rect": [
+    1069,
+    572,
+    475,
+    21
+   ]
+  },
+  {
+   "name": "Boot Device",
+   "role": "list item",
+   "rect": [
+    869,
+    593,
+    675,
+    21
+   ]
+  },
+  {
+   "name": "Boot Device",
+   "role": "text",
+   "rect": [
+    869,
+    593,
+    675,
+    21
+   ]
+  },
+  {
+   "name": "\\Device\\HarddiskVolume1",
+   "role": "text",
+   "rect": [
+    1069,
+    593,
+    475,
+    21
+   ]
+  },
+  {
+   "name": "Locale",
+   "role": "list item",
+   "rect": [
+    869,
+    614,
+    675,
+    21
+   ]
+  },
+  {
+   "name": "Locale",
+   "role": "text",
+   "rect": [
+    869,
+    614,
+    675,
+    21
+   ]
+  },
+  {
+   "name": "United States",
+   "role": "text",
+   "rect": [
+    1069,
+    614,
+    475,
+    21
+   ]
+  },
+  {
+   "name": "Hardware Abstraction Layer",
+   "role": "list item",
+   "rect": [
+    869,
+    635,
+    675,
+    21
+   ]
+  },
+  {
+   "name": "Hardware Abstraction Layer",
+   "role": "text",
+   "rect": [
+    869,
+    635,
+    675,
+    21
+   ]
+  },
+  {
+   "name": "Version = \"10.0.26100.1\"",
+   "role": "text",
+   "rect": [
+    1069,
+    635,
+    475,
+    21
+   ]
+  },
+  {
+   "name": "User Name",
+   "role": "list item",
+   "rect": [
+    869,
+    656,
+    675,
+    21
+   ]
+  },
+  {
+   "name": "User Name",
+   "role": "text",
+   "rect": [
+    869,
+    656,
+    675,
+    21
+   ]
+  },
+  {
+   "name": "LAPTOP-SLKUM90R\\curibio",
+   "role": "text",
+   "rect": [
+    1069,
+    656,
+    475,
+    21
+   ]
+  },
+  {
+   "name": "Time Zone",
+   "role": "list item",
+   "rect": [
+    869,
+    677,
+    675,
+    21
+   ]
+  },
+  {
+   "name": "Time Zone",
+   "role": "text",
+   "rect": [
+    869,
+    677,
+    675,
+    21
+   ]
+  },
+  {
+   "name": "Korea Standard Time",
+   "role": "text",
+   "rect": [
+    1069,
+    677,
+    475,
+    21
+   ]
+  },
+  {
+   "name": "Installed Physical Memory (RAM)",
+   "role": "list item",
+   "rect": [
+    869,
+    698,
+    675,
+    21
+   ]
+  },
+  {
+   "name": "Installed Physical Memory (RAM)",
+   "role": "text",
+   "rect": [
+    869,
+    698,
+    675,
+    21
+   ]
+  },
+  {
+   "name": "32.0 GB",
+   "role": "text",
+   "rect": [
+    1069,
+    698,
+    475,
+    21
+   ]
+  },
+  {
+   "name": "Total Physical Memory",
+   "role": "list item",
+   "rect": [
+    869,
+    719,
+    675,
+    21
+   ]
+  },
+  {
+   "name": "Total Physical Memory",
+   "role": "text",
+   "rect": [
+    869,
+    719,
+    675,
+    21
+   ]
+  },
+  {
+   "name": "31.7 GB",
+   "role": "text",
+   "rect": [
+    1069,
+    719,
+    475,
+    21
+   ]
+  },
+  {
+   "name": "Available Physical Memory",
+   "role": "list item",
+   "rect": [
+    869,
+    740,
+    675,
+    21
+   ]
+  },
+  {
+   "name": "Available Physical Memory",
+   "role": "text",
+   "rect": [
+    869,
+    740,
+    675,
+    21
+   ]
+  },
+  {
+   "name": "12.6 GB",
+   "role": "text",
+   "rect": [
+    1069,
+    740,
+    475,
+    21
+   ]
+  },
+  {
+   "name": "Total Virtual Memory",
+   "role": "list item",
+   "rect": [
+    869,
+    761,
+    675,
+    21
+   ]
+  },
+  {
+   "name": "Total Virtual Memory",
+   "role": "text",
+   "rect": [
+    869,
+    761,
+    675,
+    21
+   ]
+  },
+  {
+   "name": "63.7 GB",
+   "role": "text",
+   "rect": [
+    1069,
+    761,
+    475,
+    21
+   ]
+  },
+  {
+   "name": "Available Virtual Memory",
+   "role": "list item",
+   "rect": [
+    869,
+    782,
+    675,
+    21
+   ]
+  },
+  {
+   "name": "Available Virtual Memory",
+   "role": "text",
+   "rect": [
+    869,
+    782,
+    675,
+    21
+   ]
+  },
+  {
+   "name": "34.1 GB",
+   "role": "text",
+   "rect": [
+    1069,
+    782,
+    475,
+    21
+   ]
+  },
+  {
+   "name": "Page File Space",
+   "role": "list item",
+   "rect": [
+    869,
+    803,
+    675,
+    21
+   ]
+  },
+  {
+   "name": "Page File Space",
+   "role": "text",
+   "rect": [
+    869,
+    803,
+    675,
+    21
+   ]
+  },
+  {
+   "name": "32.0 GB",
+   "role": "text",
+   "rect": [
+    1069,
+    803,
+    475,
+    21
+   ]
+  },
+  {
+   "name": "Page File",
+   "role": "list item",
+   "rect": [
+    869,
+    824,
+    675,
+    21
+   ]
+  },
+  {
+   "name": "Page File",
+   "role": "text",
+   "rect": [
+    869,
+    824,
+    675,
+    21
+   ]
+  },
+  {
+   "name": "C:\\pagefile.sys",
+   "role": "text",
+   "rect": [
+    1069,
+    824,
+    475,
+    21
+   ]
+  },
+  {
+   "name": "Kernel DMA Protection",
+   "role": "list item",
+   "rect": [
+    869,
+    845,
+    675,
+    21
+   ]
+  },
+  {
+   "name": "Kernel DMA Protection",
+   "role": "text",
+   "rect": [
+    869,
+    845,
+    675,
+    21
+   ]
+  },
+  {
+   "name": "On",
+   "role": "text",
+   "rect": [
+    1069,
+    845,
+    475,
+    21
+   ]
+  },
+  {
+   "name": "Virtualization-based security",
+   "role": "list item",
+   "rect": [
+    869,
+    866,
+    675,
+    21
+   ]
+  },
+  {
+   "name": "Virtualization-based security",
+   "role": "text",
+   "rect": [
+    869,
+    866,
+    675,
+    21
+   ]
+  },
+  {
+   "name": "Running",
+   "role": "text",
+   "rect": [
+    1069,
+    866,
+    475,
+    21
+   ]
+  },
+  {
+   "name": "Virtualization-based security Required Security Properties",
+   "role": "list item",
+   "rect": [
+    869,
+    887,
+    675,
+    21
+   ]
+  },
+  {
+   "name": "Virtualization-based security Required Security Properties",
+   "role": "text",
+   "rect": [
+    869,
+    887,
+    675,
+    21
+   ]
+  },
+  {
+   "name": "Virtualization-based security Available Security Properties",
+   "role": "list item",
+   "rect": [
+    869,
+    908,
+    675,
+    21
+   ]
+  },
+  {
+   "name": "Virtualization-based security Available Security Properties",
+   "role": "text",
+   "rect": [
+    869,
+    908,
+    675,
+    21
+   ]
+  },
+  {
+   "name": "Base Virtualization Support, Secure Boot, DMA Protection, UEFI Code Readonly, SMM Security Mitigations 1.0, Mode Based Execution Control, APIC Virtualization",
+   "role": "text",
+   "rect": [
+    1069,
+    908,
+    475,
+    21
+   ]
+  },
+  {
+   "name": "Virtualization-based security Services Configured",
+   "role": "list item",
+   "rect": [
+    869,
+    929,
+    675,
+    21
+   ]
+  },
+  {
+   "name": "Virtualization-based security Services Configured",
+   "role": "text",
+   "rect": [
+    869,
+    929,
+    675,
+    21
+   ]
+  },
+  {
+   "name": "Virtualization-based security Services Running",
+   "role": "list item",
+   "rect": [
+    869,
+    950,
+    675,
+    21
+   ]
+  },
+  {
+   "name": "Virtualization-based security Services Running",
+   "role": "text",
+   "rect": [
+    869,
+    950,
+    675,
+    21
+   ]
+  },
+  {
+   "name": "App Control for Business policy",
+   "role": "list item",
+   "rect": [
+    869,
+    971,
+    675,
+    21
+   ]
+  },
+  {
+   "name": "App Control for Business policy",
+   "role": "text",
+   "rect": [
+    869,
+    971,
+    675,
+    21
+   ]
+  },
+  {
+   "name": "Enforced",
+   "role": "text",
+   "rect": [
+    1069,
+    971,
+    475,
+    21
+   ]
+  },
+  {
+   "name": "App Control for Business user mode policy",
+   "role": "list item",
+   "rect": [
+    869,
+    992,
+    675,
+    21
+   ]
+  },
+  {
+   "name": "App Control for Business user mode policy",
+   "role": "text",
+   "rect": [
+    869,
+    992,
+    675,
+    21
+   ]
+  },
+  {
+   "name": "Off",
+   "role": "text",
+   "rect": [
+    1069,
+    992,
+    475,
+    21
+   ]
+  },
+  {
+   "name": "Automatic Device Encryption Support",
+   "role": "list item",
+   "rect": [
+    869,
+    1013,
+    675,
+    21
+   ]
+  },
+  {
+   "name": "Automatic Device Encryption Support",
+   "role": "text",
+   "rect": [
+    869,
+    1013,
+    675,
+    21
+   ]
+  },
+  {
+   "name": "Elevation Required to View",
+   "role": "text",
+   "rect": [
+    1069,
+    1013,
+    475,
+    21
+   ]
+  },
+  {
+   "name": "A hypervisor has been detected. Features required for Hyper-V will not be displayed.",
+   "role": "list item",
+   "rect": [
+    869,
+    1034,
+    675,
+    21
+   ]
+  },
+  {
+   "name": "A hypervisor has been detected. Features required for Hyper-V will not be displayed.",
+   "role": "text",
+   "rect": [
+    869,
+    1034,
+    675,
+    21
+   ]
+  },
+  {
+   "name": "Find what:",
+   "role": "text",
+   "rect": [
+    785,
+    1272,
+    90,
+    25
+   ]
+  },
+  {
+   "name": "Find what:",
+   "role": "edit",
+   "rect": [
+    880,
+    1270,
+    635,
+    29
+   ]
+  },
+  {
+   "name": "Find",
+   "role": "button",
+   "rect": [
+    1520,
+    1270,
+    125,
+    25
+   ]
+  },
+  {
+   "name": "Close Find",
+   "role": "button",
+   "rect": [
+    1650,
+    1270,
+    125,
+    25
+   ]
+  },
+  {
+   "name": "Search selected category only",
+   "role": "check box",
+   "rect": [
+    785,
+    1304,
+    312,
+    25
+   ]
+  },
+  {
+   "name": "Search category names only",
+   "role": "check box",
+   "rect": [
+    1102,
+    1304,
+    312,
+    25
+   ]
+  },
+  {
+   "name": "System",
+   "role": "menu bar",
+   "rect": [
+    58,
+    58,
+    22,
+    22
+   ]
+  },
+  {
+   "name": "System",
+   "role": "menu item",
+   "rect": [
+    58,
+    58,
+    22,
+    22
+   ]
+  },
+  {
+   "name": "Minimize",
+   "role": "button",
+   "rect": [
+    2363,
+    51,
+    47,
+    30
+   ]
+  },
+  {
+   "name": "Maximize",
+   "role": "button",
+   "rect": [
+    2410,
+    51,
+    46,
+    30
+   ]
+  },
+  {
+   "name": "Close",
+   "role": "button",
+   "rect": [
+    2456,
+    51,
+    47,
+    30
+   ]
+  },
+  {
+   "name": "Application",
+   "role": "menu bar",
+   "rect": [
+    58,
+    81,
+    2444,
+    19
+   ]
+  },
+  {
+   "name": "File",
+   "role": "menu item",
+   "rect": [
+    58,
+    81,
+    32,
+    19
+   ]
+  },
+  {
+   "name": "Edit",
+   "role": "menu item",
+   "rect": [
+    90,
+    81,
+    34,
+    19
+   ]
+  },
+  {
+   "name": "View",
+   "role": "menu item",
+   "rect": [
+    124,
+    81,
+    39,
+    19
+   ]
+  },
+  {
+   "name": "Help",
+   "role": "menu item",
+   "rect": [
+    163,
+    81,
+    39,
+    19
+   ]
+  }
+ ]
+}

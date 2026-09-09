@@ -1,0 +1,215 @@
+{
+ "window": "Character Map",
+ "widgets": [
+  {
+   "name": "Character Grid",
+   "role": "pane",
+   "rect": [
+    46,
+    145,
+    423,
+    253
+   ]
+  },
+  {
+   "name": "Characters to copy :",
+   "role": "text",
+   "rect": [
+    34,
+    405,
+    120,
+    39
+   ]
+  },
+  {
+   "name": "Characters to copy :",
+   "role": "edit",
+   "rect": [
+    158,
+    405,
+    165,
+    26
+   ]
+  },
+  {
+   "name": "Select",
+   "role": "button",
+   "rect": [
+    329,
+    405,
+    75,
+    23
+   ]
+  },
+  {
+   "name": "Copy",
+   "role": "button",
+   "rect": [
+    410,
+    405,
+    75,
+    23
+   ]
+  },
+  {
+   "name": "Advanced view",
+   "role": "check box",
+   "rect": [
+    34,
+    449,
+    192,
+    20
+   ]
+  },
+  {
+   "name": "Selected Character :",
+   "role": "text",
+   "rect": [
+    34,
+    588,
+    125,
+    39
+   ]
+  },
+  {
+   "name": "U+0021: Exclamation Mark",
+   "role": "text",
+   "rect": [
+    158,
+    585,
+    203,
+    39
+   ]
+  },
+  {
+   "name": "Font :",
+   "role": "text",
+   "rect": [
+    34,
+    107,
+    53,
+    20
+   ]
+  },
+  {
+   "name": "Font :",
+   "role": "combo box",
+   "rect": [
+    86,
+    106,
+    321,
+    30
+   ]
+  },
+  {
+   "name": "Open",
+   "role": "button",
+   "rect": [
+    391,
+    107,
+    15,
+    28
+   ]
+  },
+  {
+   "name": "Help",
+   "role": "link",
+   "rect": [
+    413,
+    106,
+    75,
+    23
+   ]
+  },
+  {
+   "name": "Line up",
+   "role": "button",
+   "rect": [
+    470,
+    146,
+    21,
+    17
+   ]
+  },
+  {
+   "name": "Position",
+   "role": "thumb",
+   "rect": [
+    470,
+    163,
+    21,
+    17
+   ]
+  },
+  {
+   "name": "Page down",
+   "role": "button",
+   "rect": [
+    470,
+    180,
+    21,
+    200
+   ]
+  },
+  {
+   "name": "Line down",
+   "role": "button",
+   "rect": [
+    470,
+    380,
+    21,
+    17
+   ]
+  },
+  {
+   "name": "System",
+   "role": "menu bar",
+   "rect": [
+    23,
+    73,
+    22,
+    22
+   ]
+  },
+  {
+   "name": "System",
+   "role": "menu item",
+   "rect": [
+    23,
+    73,
+    22,
+    22
+   ]
+  },
+  {
+   "name": "Minimize",
+   "role": "button",
+   "rect": [
+    359,
+    66,
+    47,
+    30
+   ]
+  },
+  {
+   "name": "Maximize",
+   "role": "button",
+   "rect": [
+    406,
+    66,
+    46,
+    30
+   ]
+  },
+  {
+   "name": "Close",
+   "role": "button",
+   "rect": [
+    452,
+    66,
+    47,
+    30
+   ]
+  }
+ ]
+}

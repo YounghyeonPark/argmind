@@ -1,0 +1,147 @@
+# Does it pick the right thing? — step 4, measured 2026-09-09
+
+Everything else about this design is measured. The environment answers in 41–266 ms, the model
+answers in well under a second, a name survives a screen that moves under it. **None of that matters
+if the thing it picks is the wrong thing**, and until today the only evidence was casual: two live
+attempts, one right and one wrong — *"open the file menu"* selected the document.
+
+This is the number that gates deleting anything (`REBUILD.md`, step 5).
+
+## Conditions
+
+| | |
+|---|---|
+| model | `qwen2.5:7b` via Ollama, `temperature 0`, `num_ctx 8192` |
+| screens | 4 real windows captured from this desktop: 12, 21, 123 and 152 named widgets (308 total) |
+| goals | 37, written and labelled **before anything ran**; 9 of them have no right answer |
+| repeats | 3 per goal; the **worst** of the three is what is counted |
+| what is measured | choosing, and only choosing — the screens are fixtures, so nothing here can fail because a window was not in front or a click missed |
+
+`measure/goals.json` holds the goals and their accepted answers, `measure/screens/` the captured
+windows, `measure/choosing*.json` every individual answer. The Chrome captures that came with the
+first sweep were **deleted rather than checked in**: they contained the owner's search history and
+email address. `system-information.json` still carries the machine name and user name, which is the
+one privacy cost of keeping a real fixture, and it can be dropped without changing the shape of the
+result.
+
+**Four outcomes, not two.**
+
+|  | it clicked something | it clicked nothing |
+|---|---|---|
+| a right answer exists | RIGHT or WRONG | MISSED |
+| no right answer exists | **WRONG** — the bad one | DECLINED — correct |
+
+Nine goals with no right answer are there so the measurement can produce a negative result. Without
+them an agent that clicks something every time scores the same as one that chooses well.
+
+## The result
+
+**18 of 28 answerable goals right (64%), and 8 of 9 correct declines.** Per-run, scored separately:
+19 / 18 / 18 right — one goal out of 37 disagreed across the three passes, so this is not a
+single-draw number.
+
+| protocol | right / 28 | wrong | *of those, on a screen with no right answer* | missed | declined / 9 |
+|---|---|---|---|---|---|
+| **index, interface order** (what is built) | **18** | 8 | 1 | 3 | 8 |
+| index, order shuffled (seed 7) | 15 | 13 | 2 | 2 | 7 |
+| name instead of number | 15 | 3 | 2 | 12 | 7 |
+
+Every wrong answer, in the shipped protocol:
+
+    지우개로 바꿔줘            -> Fill                     (Eraser)
+    확대해줘                -> Fit to window            (Zoom in)
+    배경 지워줘              -> Share                    (Remove background)
+    이미지 크기 바꿔줘          -> Crop                    (Resize and skew)
+    창 닫아                -> Maximize                 (Close)
+    make the brush bigger -> Vertical Small Increase  (Size)
+    찾기 눌러줘              -> \Device\HarddiskVolume1  (Find)
+    이 그림을 메일로 보내줘       -> Share                    (nothing — it should have declined)
+
+## The hypothesis I had, and the measurement that refuted it
+
+Six of the seven wrong answers with a right answer available sat **1–10 places** from a correct one
+and five within four: *"창 닫아"* chose index 121 where `Close` is 122. That looked exactly like the
+vision model's failure in a new guise — it can see the answer and cannot compute the number for it —
+and it pointed at a fix I would have liked, since asking for a name instead of an index is a small
+change.
+
+**Shuffling each screen's order refutes it.**
+
+| | median gap to the nearest right answer | as a fraction of the list | within 5 places |
+|---|---|---|---|
+| interface order | 4 | 0.033 | 15 of 21 |
+| shuffled | 33 | 0.268 | 3 of 28 |
+
+If the cause were arithmetic, the errors would still land near the target's *new* position. They do
+not — the gaps expand to roughly what picking at random gives. **The small gaps in interface order
+are semantic proximity, not counting error**: a toolbar puts `Fill` next to `Eraser` and `Maximize`
+next to `Close`, so an error onto a related control is also an error onto a neighbouring index. The
+two were confounded and the shuffle separated them.
+
+That correction favoured me and it does not survive. Recorded because it is the fourth time on this
+project that an appealing mechanism explained a pattern that a control refuted.
+
+## Two things the shuffle established that were not the question
+
+**The interface's own order carries information.** Shuffling costs 18 → 15 right and drives wrong
+from 8 to 13. So the widget list must be presented in the order the environment gives it —
+re-sorting it alphabetically, or by size, or by anything else, is not a neutral change.
+
+**Asking for a name instead of a number is safer and less capable.** Wrong falls 8 → 3; missed rises
+3 → 12; right falls 18 → 15. Of the misses, most are genuine `null` answers rather than a broken
+match — only three distinct goals produced a name that was not in the list, and one of those was
+`Find what` for a widget called `Find what:`, which is exact matching being brittle about a colon.
+Nothing was changed on this basis: it is a real trade, not an improvement, and which side is right
+depends on whether the agent is about to click.
+
+## Density: a direction, not a rate
+
+| widgets | screen | right | wrong | missed | declined |
+|---|---|---|---|---|---|
+| 12 | Chrome Remote Desktop | 3 / 4 | 0 | 1 | 2 / 2 |
+| 21 | Character Map | 5 / 5 | 0 | 0 | 2 / 2 |
+| 123 | Paint | 7 / 13 | 7 | 0 | 2 / 3 |
+| 152 | System Information | 3 / 6 | 1 | 2 | 2 / 2 |
+
+Small screens 8 of 9, large screens 10 of 19 — **one-sided Fisher exact p = 0.070, n = 28.** That is
+not significant, and the two small screens are also the two *simpler applications*, so density and
+complexity are confounded here. The direction is worth acting on only to the extent of not claiming
+the 64% transfers to a dense professional interface; establishing it needs more screens at each size.
+
+## What this means for the design
+
+**It is not good enough to click unsupervised, and it is good enough to propose.** Eight wrong
+answers in 37 goals, one of them on a screen where the right response was to do nothing, is a rate
+that would produce a bad click most working hours. It is also plainly not random — 18 right and 8 of
+9 correct declines is a long way from chance on lists of 12 to 152.
+
+That is the same conclusion the permission design reached for a different reason. `Session` refuses
+to act on its own judgement by default and turns an unprompted effect into a sentence instead; that
+default was chosen because an agent acting unwatched has no undo, and this measurement says the
+choosing is not accurate enough to justify relaxing it. **The safety argument and the accuracy
+measurement agree**, which is worth noting precisely because they could have disagreed.
+
+## Two harness faults found while measuring, both of the familiar shape
+
+**The name protocol scored 0 of 5 while the model was answering correctly.** The prompt said "the
+exact name of one thing above" and listed things as `- button "Copy"`, so the model replied
+`button "Copy"` — a literal reading of the instruction. Every answer was right and every answer was
+scored zero. Fixed in the prompt, not by matching leniently: a lenient match would also let a genuine
+invention through.
+
+**The shuffle seed used `hash()` on the goal string**, which Python randomises per process, so the
+order could not be reconstructed afterwards — and the first analysis of the gaps silently scored
+against an order the model was never shown, reporting a median gap of 27 that meant nothing. Now
+`crc32`, and the positions are recorded at run time rather than reconstructed. A measurement whose
+conditions cannot be rebuilt is not a measurement.
+
+These bring the running count of ways this local-model harness has produced a confident wrong number
+to nine. Every one so far has been invisible from the outside: the agent simply did nothing, or did
+something plausible.
+
+## Not measured
+
+Perception and actuation, deliberately — they are separated so a bad number points at one part.
+End-to-end accuracy on a live desktop is therefore **not** 64%; it is 64% times whatever the other
+two contribute, and the click half is unmeasured. The goals are also mine, which is the honest limit
+of this set: someone else's thirty-seven would not be these thirty-seven.

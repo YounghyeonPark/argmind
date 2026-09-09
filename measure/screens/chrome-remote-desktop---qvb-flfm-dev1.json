@@ -1,0 +1,125 @@
+{
+ "window": "Chrome Remote Desktop - QVB-FLFM-DEV1",
+ "widgets": [
+  {
+   "name": "QVB-FLFM-DEV1 - Y",
+   "role": "region",
+   "rect": [
+    0,
+    0,
+    2560,
+    1392
+   ]
+  },
+  {
+   "name": "최소화",
+   "role": "button",
+   "rect": [
+    2423,
+    0,
+    45,
+    26
+   ]
+  },
+  {
+   "name": "복구",
+   "role": "button",
+   "rect": [
+    2468,
+    0,
+    46,
+    26
+   ]
+  },
+  {
+   "name": "닫기",
+   "role": "button",
+   "rect": [
+    2514,
+    0,
+    46,
+    26
+   ]
+  },
+  {
+   "name": "QVB-FLFM-DEV1",
+   "role": "document",
+   "rect": [
+    0,
+    26,
+    2560,
+    1366
+   ]
+  },
+  {
+   "name": "Desktop",
+   "role": "edit",
+   "rect": [
+    65,
+    26,
+    2430,
+    1366
+   ]
+  },
+  {
+   "name": "Connected",
+   "role": "edit",
+   "rect": [
+    65,
+    26,
+    2430,
+    1366
+   ]
+  },
+  {
+   "name": "이 사이트는 클립보드에 복사된 텍스트와 이미지에 액세스할 수 있습니다.",
+   "role": "button",
+   "rect": [
+    2259,
+    -1,
+    28,
+    28
+   ]
+  },
+  {
+   "name": "비밀번호 저장",
+   "role": "button",
+   "rect": [
+    2303,
+    1,
+    24,
+    24
+   ]
+  },
+  {
+   "name": "확장 프로그램",
+   "role": "button",
+   "rect": [
+    2343,
+    1,
+    24,
+    24
+   ]
+  },
+  {
+   "name": "Chrome Remote Desktop 맞춤설정 및 제어",
+   "role": "button",
+   "rect": [
+    2383,
+    1,
+    24,
+    24
+   ]
+  },
+  {
+   "name": "Chrome Remote Desktop - QVB-FLFM-DEV1",
+   "role": "text",
+   "rect": [
+    27,
+    0,
+    2216,
+    26
+   ]
+  }
+ ]
+}

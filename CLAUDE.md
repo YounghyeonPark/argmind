@@ -337,6 +337,42 @@ one equivalent and recorded. **Absent rather than unfinished**: microphone and s
 library here), and `ClaudeBrain` is written against the official SDK and **has never been executed** —
 no package, no key. Actuation is `live=False` by default behind three brakes.
 
+**argmind is being rebuilt around a conversational core, 2026-09-09 — `argmind/core/` and
+`argmind/env/`.** Not a new project: the same repository, the same name, a different shape. The rule
+it is arranged around was measured before a line of it was written — **the deterministic side says
+WHERE, the probabilistic side says WHAT, and a model never emits a coordinate.** Asking a vision
+model for a pixel took 24–82 s and on a dense screen never answered; Windows UI Automation answers
+exactly in 41–266 ms; a text model chooses among named things in well under a second. The core is
+four separable pieces — `observe`, `poll`, `decide`, `perform` — because **acting is not a stage
+that always runs, it is something decided**, and a thought can start from a `Watch` noticing
+something rather than from being spoken to. A watch carries a floor, since perception changes in 13
+seconds of 14 while a model call costs 0.3–2 s. An effect stores a **name**, never a rectangle, and
+is re-resolved immediately before acting: over the second a call takes, a listed widget is gone 13
+times in 14. Nothing in `core/` names a platform, and an AST-walking test holds that.
+
+**An unprompted effect without standing permission is downgraded to speech, not refused.** Every
+brake built for "you asked, it does one thing" — `live`, a rate limit, a guard — fails to cover "it
+decided, repeatedly, while you were reading something else", so the agent says *"the build finished
+— want me to open it?"* instead of clicking. Off by default; `--allow-unprompted` is a separate CLI
+word from `--live`.
+
+**Choosing accuracy is measured and it is 18 of 28 answerable goals, with 8 of 9 correct declines**
+(37 goals, 4 real captured screens of 12–152 widgets, labelled before running, 3 repeats, worst
+counted; per-run 19/18/18). **Not good enough to click unsupervised, good enough to propose** —
+which is where the permission default already sat for safety reasons. **My explanation of the errors
+was refuted by its own control**: they sat 1–10 places from a correct answer, which looked like the
+vision model's arithmetic failure, and shuffling the order expanded the median gap from 4 places to
+33 — the neighbours were *semantic*, because toolbars group related controls. Shuffling also costs
+accuracy (18 → 15 right, 8 → 13 wrong), so the interface's own order carries information and the
+list must not be re-sorted. Asking for a name instead of an index is safer and less capable (wrong
+8 → 3, missed 3 → 12); nothing was changed on it. Two more harness faults were found on the way,
+both invisible from outside: a prompt that scored five correct answers as zero, and a shuffle seeded
+with `hash()`, which Python randomises per process, so the first gap analysis scored against an order
+the model was never shown. **`docs/findings/choosing-accuracy.md`.**
+
+**Nothing of the old tree is deleted and that is deliberate** — `REBUILD.md` step 5, gated on this
+number, is still open, and `argmind-v1` stands at `5e52f61`.
+
 **Open numbers nobody has**: backward-pass throughput on an M55; whether fp32 holds past ten million
 updates on a non-stationary target; and why the map head's two harnesses disagree on free-running
 IoU — **measured 2026-08-17 to be `MAP_DROPOUT = 0.15`**, which costs 0.359 → 0.135 here and
@@ -384,6 +420,8 @@ of these findings are corrections of a plausible first answer, and several are o
 | `docs/ARCHITECTURE.md` | **the block diagrams** — the forward stack layer by layer with every tensor shape and weight count, the backward edge added 2026-08-16 and what it replaced, and the `Stack` that is not built yet. Checked against the running code by `tests/test_architecture_doc.py`, not generated |
 | `docs/findings/runtime-library-and-cpp.md` | the C++ core, the C ABI, parity, target build and sizes, verification limits |
 | `docs/findings/agent-app.md` | the `agent/` app — the cache key measurement, the threshold's asymmetry, key vs context, the two bugs and the equivalent mutant |
+| `docs/findings/choosing-accuracy.md` | the rebuilt core's step 4 — 18/28, the refuted index hypothesis, the shuffle control, name vs number, and the two harness faults found measuring it |
+| `REBUILD.md` | the rebuild plan itself — what is decided, what is still open (the old library's disposition), and the staged path |
 
 
 ## Sub-agent team

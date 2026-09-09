@@ -210,8 +210,32 @@ last time.
 | 4 | measure choosing accuracy on tens of goals — the number that is missing | — |
 | 5 | *only then*, remove the old tree if decision 1 says so | `git revert` |
 
-Steps 2 and 3 are **written and passing (35 core tests, no display, no model, no network)**, and not
-yet committed.
+Steps 2 and 3 are **committed** at `1a87686` — 36 core tests, no display, no model, no network.
+**Step 4 is measured**, and it is the number the plan said would decide whether the rebuild is worth
+doing.
+
+### Step 4: 18 of 28 answerable goals right, 8 of 9 correct declines
+
+37 goals against 4 real captured screens (12, 21, 123 and 152 widgets), labelled before anything ran,
+3 repeats each, the worst counted. Per-run 19 / 18 / 18, so it is not a single draw. Nine goals have
+no right answer, so the measurement can fail. `docs/findings/choosing-accuracy.md` carries the whole
+thing; the short version:
+
+**It is not good enough to click unsupervised, and it is good enough to propose.** Eight wrong
+answers in 37 goals, one of them where the right response was to do nothing, is a bad click most
+working hours — and 18 right with 8 of 9 declines is a long way from chance on lists of 12 to 152.
+That is the same place the permission default landed for safety reasons, which is worth noting
+because the two could have disagreed.
+
+**A hypothesis of mine was refuted by its own control.** Six of seven wrong answers sat 1–10 places
+from a correct one, which looked like the vision model's arithmetic failure in a new guise and
+pointed at a fix I liked. Shuffling each screen's order expands the median gap from 4 places (3.3% of
+the list) to 33 (26.8%): the errors were **semantic** neighbours, and a toolbar puts related controls
+next to each other, so the two were confounded. Shuffling also costs accuracy — 18 → 15 right, 8 → 13
+wrong — which says the interface's own order carries information and the list must not be re-sorted.
+
+**Asking for a name instead of an index is safer and less capable**: wrong 8 → 3, missed 3 → 12,
+right 18 → 15. A real trade, not an improvement; nothing was changed on it.
 
 ### What step 2 turned out to be, once "sequential" was refused
 

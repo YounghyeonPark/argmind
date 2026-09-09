@@ -1,0 +1,1235 @@
+{
+ "window": "Untitled - Paint",
+ "widgets": [
+  {
+   "name": "File",
+   "role": "menu item",
+   "rect": [
+    267,
+    178,
+    41,
+    32
+   ]
+  },
+  {
+   "name": "Edit",
+   "role": "menu item",
+   "rect": [
+    316,
+    178,
+    44,
+    32
+   ]
+  },
+  {
+   "name": "View",
+   "role": "menu item",
+   "rect": [
+    368,
+    178,
+    50,
+    32
+   ]
+  },
+  {
+   "name": "Save",
+   "role": "app bar button",
+   "rect": [
+    431,
+    178,
+    32,
+    32
+   ]
+  },
+  {
+   "name": "Share",
+   "role": "app bar button",
+   "rect": [
+    476,
+    178,
+    32,
+    32
+   ]
+  },
+  {
+   "name": "Undo",
+   "role": "app bar button",
+   "rect": [
+    521,
+    178,
+    32,
+    32
+   ]
+  },
+  {
+   "name": "Redo",
+   "role": "app bar button",
+   "rect": [
+    561,
+    178,
+    32,
+    32
+   ]
+  },
+  {
+   "name": "What's new",
+   "role": "app bar button",
+   "rect": [
+    2191,
+    178,
+    32,
+    32
+   ]
+  },
+  {
+   "name": "Sign in",
+   "role": "app bar button",
+   "rect": [
+    2227,
+    178,
+    32,
+    32
+   ]
+  },
+  {
+   "name": "Open settings",
+   "role": "app bar button",
+   "rect": [
+    2259,
+    178,
+    32,
+    32
+   ]
+  },
+  {
+   "name": "Selection",
+   "role": "group",
+   "rect": [
+    263,
+    219,
+    75,
+    100
+   ]
+  },
+  {
+   "name": "Select",
+   "role": "Selectable Split Button",
+   "rect": [
+    280,
+    232,
+    40,
+    54
+   ]
+  },
+  {
+   "name": "Image",
+   "role": "group",
+   "rect": [
+    338,
+    219,
+    159,
+    100
+   ]
+  },
+  {
+   "name": "Crop",
+   "role": "button",
+   "rect": [
+    350,
+    223,
+    32,
+    32
+   ]
+  },
+  {
+   "name": "Remove background",
+   "role": "button",
+   "rect": [
+    350,
+    263,
+    32,
+    32
+   ]
+  },
+  {
+   "name": "Rotate",
+   "role": "button",
+   "rect": [
+    390,
+    223,
+    54,
+    32
+   ]
+  },
+  {
+   "name": "Flip",
+   "role": "button",
+   "rect": [
+    390,
+    263,
+    54,
+    32
+   ]
+  },
+  {
+   "name": "Resize and skew",
+   "role": "button",
+   "rect": [
+    452,
+    243,
+    32,
+    32
+   ]
+  },
+  {
+   "name": "Tools",
+   "role": "group",
+   "rect": [
+    497,
+    219,
+    137,
+    100
+   ]
+  },
+  {
+   "name": "Pencil",
+   "role": "button",
+   "rect": [
+    509,
+    223,
+    32,
+    32
+   ]
+  },
+  {
+   "name": "Fill",
+   "role": "button",
+   "rect": [
+    549,
+    223,
+    32,
+    32
+   ]
+  },
+  {
+   "name": "Text",
+   "role": "button",
+   "rect": [
+    589,
+    223,
+    32,
+    32
+   ]
+  },
+  {
+   "name": "Eraser",
+   "role": "button",
+   "rect": [
+    509,
+    263,
+    32,
+    32
+   ]
+  },
+  {
+   "name": "Color picker",
+   "role": "button",
+   "rect": [
+    549,
+    263,
+    32,
+    32
+   ]
+  },
+  {
+   "name": "Magnifier",
+   "role": "button",
+   "rect": [
+    589,
+    263,
+    32,
+    32
+   ]
+  },
+  {
+   "name": "Brushes",
+   "role": "group",
+   "rect": [
+    634,
+    219,
+    68,
+    100
+   ]
+  },
+  {
+   "name": "Brushes",
+   "role": "Selectable Split Button",
+   "rect": [
+    648,
+    232,
+    40,
+    54
+   ]
+  },
+  {
+   "name": "Shapes",
+   "role": "group",
+   "rect": [
+    702,
+    219,
+    289,
+    100
+   ]
+  },
+  {
+   "name": "Line",
+   "role": "list item",
+   "rect": [
+    715,
+    224,
+    22,
+    22
+   ]
+  },
+  {
+   "name": "Line",
+   "role": "button",
+   "rect": [
+    716,
+    225,
+    20,
+    20
+   ]
+  },
+  {
+   "name": "Curve",
+   "role": "list item",
+   "rect": [
+    737,
+    224,
+    22,
+    22
+   ]
+  },
+  {
+   "name": "Curve",
+   "role": "button",
+   "rect": [
+    738,
+    225,
+    20,
+    20
+   ]
+  },
+  {
+   "name": "Oval",
+   "role": "list item",
+   "rect": [
+    759,
+    224,
+    22,
+    22
+   ]
+  },
+  {
+   "name": "Oval",
+   "role": "button",
+   "rect": [
+    760,
+    225,
+    20,
+    20
+   ]
+  },
+  {
+   "name": "Rectangle",
+   "role": "list item",
+   "rect": [
+    781,
+    224,
+    22,
+    22
+   ]
+  },
+  {
+   "name": "Rectangle",
+   "role": "button",
+   "rect": [
+    782,
+    225,
+    20,
+    20
+   ]
+  },
+  {
+   "name": "Rounded rectangle",
+   "role": "list item",
+   "rect": [
+    803,
+    224,
+    22,
+    22
+   ]
+  },
+  {
+   "name": "Rounded rectangle",
+   "role": "button",
+   "rect": [
+    804,
+    225,
+    20,
+    20
+   ]
+  },
+  {
+   "name": "Polygon",
+   "role": "list item",
+   "rect": [
+    825,
+    224,
+    22,
+    22
+   ]
+  },
+  {
+   "name": "Polygon",
+   "role": "button",
+   "rect": [
+    826,
+    225,
+    20,
+    20
+   ]
+  },
+  {
+   "name": "Triangle",
+   "role": "list item",
+   "rect": [
+    847,
+    224,
+    22,
+    22
+   ]
+  },
+  {
+   "name": "Triangle",
+   "role": "button",
+   "rect": [
+    848,
+    225,
+    20,
+    20
+   ]
+  },
+  {
+   "name": "Right triangle",
+   "role": "list item",
+   "rect": [
+    715,
+    246,
+    22,
+    22
+   ]
+  },
+  {
+   "name": "Right triangle",
+   "role": "button",
+   "rect": [
+    716,
+    247,
+    20,
+    20
+   ]
+  },
+  {
+   "name": "Diamond",
+   "role": "list item",
+   "rect": [
+    737,
+    246,
+    22,
+    22
+   ]
+  },
+  {
+   "name": "Diamond",
+   "role": "button",
+   "rect": [
+    738,
+    247,
+    20,
+    20
+   ]
+  },
+  {
+   "name": "Pentagon",
+   "role": "list item",
+   "rect": [
+    759,
+    246,
+    22,
+    22
+   ]
+  },
+  {
+   "name": "Pentagon",
+   "role": "button",
+   "rect": [
+    760,
+    247,
+    20,
+    20
+   ]
+  },
+  {
+   "name": "Hexagon",
+   "role": "list item",
+   "rect": [
+    781,
+    246,
+    22,
+    22
+   ]
+  },
+  {
+   "name": "Hexagon",
+   "role": "button",
+   "rect": [
+    782,
+    247,
+    20,
+    20
+   ]
+  },
+  {
+   "name": "Right arrow",
+   "role": "list item",
+   "rect": [
+    803,
+    246,
+    22,
+    22
+   ]
+  },
+  {
+   "name": "Right arrow",
+   "role": "button",
+   "rect": [
+    804,
+    247,
+    20,
+    20
+   ]
+  },
+  {
+   "name": "Left arrow",
+   "role": "list item",
+   "rect": [
+    825,
+    246,
+    22,
+    22
+   ]
+  },
+  {
+   "name": "Left arrow",
+   "role": "button",
+   "rect": [
+    826,
+    247,
+    20,
+    20
+   ]
+  },
+  {
+   "name": "Up arrow",
+   "role": "list item",
+   "rect": [
+    847,
+    246,
+    22,
+    22
+   ]
+  },
+  {
+   "name": "Up arrow",
+   "role": "button",
+   "rect": [
+    848,
+    247,
+    20,
+    20
+   ]
+  },
+  {
+   "name": "Down arrow",
+   "role": "list item",
+   "rect": [
+    715,
+    268,
+    22,
+    22
+   ]
+  },
+  {
+   "name": "Down arrow",
+   "role": "button",
+   "rect": [
+    716,
+    269,
+    20,
+    20
+   ]
+  },
+  {
+   "name": "Four-point star",
+   "role": "list item",
+   "rect": [
+    737,
+    268,
+    22,
+    22
+   ]
+  },
+  {
+   "name": "Four-point star",
+   "role": "button",
+   "rect": [
+    738,
+    269,
+    20,
+    20
+   ]
+  },
+  {
+   "name": "Five-point star",
+   "role": "list item",
+   "rect": [
+    759,
+    268,
+    22,
+    22
+   ]
+  },
+  {
+   "name": "Five-point star",
+   "role": "button",
+   "rect": [
+    760,
+    269,
+    20,
+    20
+   ]
+  },
+  {
+   "name": "Six-point star",
+   "role": "list item",
+   "rect": [
+    781,
+    268,
+    22,
+    22
+   ]
+  },
+  {
+   "name": "Six-point star",
+   "role": "button",
+   "rect": [
+    782,
+    269,
+    20,
+    20
+   ]
+  },
+  {
+   "name": "Rounded rectangular callout",
+   "role": "list item",
+   "rect": [
+    803,
+    268,
+    22,
+    22
+   ]
+  },
+  {
+   "name": "Rounded rectangular callout",
+   "role": "button",
+   "rect": [
+    804,
+    269,
+    20,
+    20
+   ]
+  },
+  {
+   "name": "Oval callout",
+   "role": "list item",
+   "rect": [
+    825,
+    268,
+    22,
+    22
+   ]
+  },
+  {
+   "name": "Oval callout",
+   "role": "button",
+   "rect": [
+    826,
+    269,
+    20,
+    20
+   ]
+  },
+  {
+   "name": "Cloud callout",
+   "role": "list item",
+   "rect": [
+    847,
+    268,
+    22,
+    22
+   ]
+  },
+  {
+   "name": "Cloud callout",
+   "role": "button",
+   "rect": [
+    848,
+    269,
+    20,
+    20
+   ]
+  },
+  {
+   "name": "Heart",
+   "role": "list item",
+   "rect": [
+    715,
+    290,
+    22,
+    8
+   ]
+  },
+  {
+   "name": "Heart",
+   "role": "button",
+   "rect": [
+    716,
+    291,
+    20,
+    7
+   ]
+  },
+  {
+   "name": "Lightning",
+   "role": "list item",
+   "rect": [
+    737,
+    290,
+    22,
+    8
+   ]
+  },
+  {
+   "name": "Lightning",
+   "role": "button",
+   "rect": [
+    738,
+    291,
+    20,
+    7
+   ]
+  },
+  {
+   "name": "Shape outline",
+   "role": "button",
+   "rect": [
+    886,
+    223,
+    54,
+    32
+   ]
+  },
+  {
+   "name": "Shape fill",
+   "role": "button",
+   "rect": [
+    886,
+    263,
+    54,
+    32
+   ]
+  },
+  {
+   "name": "Size",
+   "role": "button",
+   "rect": [
+    940,
+    234,
+    38,
+    50
+   ]
+  },
+  {
+   "name": "Colors",
+   "role": "group",
+   "rect": [
+    1001,
+    222,
+    330,
+    93
+   ]
+  },
+  {
+   "name": "Color 1: Black",
+   "role": "radio button",
+   "rect": [
+    1001,
+    222,
+    36,
+    36
+   ]
+  },
+  {
+   "name": "Color 2: White",
+   "role": "radio button",
+   "rect": [
+    1001,
+    260,
+    36,
+    36
+   ]
+  },
+  {
+   "name": "Black",
+   "role": "list item",
+   "rect": [
+    1043,
+    223,
+    24,
+    24
+   ]
+  },
+  {
+   "name": "Gray",
+   "role": "list item",
+   "rect": [
+    1067,
+    223,
+    24,
+    24
+   ]
+  },
+  {
+   "name": "Dark red",
+   "role": "list item",
+   "rect": [
+    1091,
+    223,
+    24,
+    24
+   ]
+  },
+  {
+   "name": "Red",
+   "role": "list item",
+   "rect": [
+    1115,
+    223,
+    24,
+    24
+   ]
+  },
+  {
+   "name": "Orange",
+   "role": "list item",
+   "rect": [
+    1139,
+    223,
+    24,
+    24
+   ]
+  },
+  {
+   "name": "Yellow",
+   "role": "list item",
+   "rect": [
+    1163,
+    223,
+    24,
+    24
+   ]
+  },
+  {
+   "name": "Green",
+   "role": "list item",
+   "rect": [
+    1187,
+    223,
+    24,
+    24
+   ]
+  },
+  {
+   "name": "Turquoise",
+   "role": "list item",
+   "rect": [
+    1211,
+    223,
+    24,
+    24
+   ]
+  },
+  {
+   "name": "Indigo",
+   "role": "list item",
+   "rect": [
+    1235,
+    223,
+    24,
+    24
+   ]
+  },
+  {
+   "name": "Purple",
+   "role": "list item",
+   "rect": [
+    1259,
+    223,
+    24,
+    24
+   ]
+  },
+  {
+   "name": "White",
+   "role": "list item",
+   "rect": [
+    1043,
+    247,
+    24,
+    24
+   ]
+  },
+  {
+   "name": "Light gray",
+   "role": "list item",
+   "rect": [
+    1067,
+    247,
+    24,
+    24
+   ]
+  },
+  {
+   "name": "Brown",
+   "role": "list item",
+   "rect": [
+    1091,
+    247,
+    24,
+    24
+   ]
+  },
+  {
+   "name": "Rose",
+   "role": "list item",
+   "rect": [
+    1115,
+    247,
+    24,
+    24
+   ]
+  },
+  {
+   "name": "Gold",
+   "role": "list item",
+   "rect": [
+    1139,
+    247,
+    24,
+    24
+   ]
+  },
+  {
+   "name": "Light yellow",
+   "role": "list item",
+   "rect": [
+    1163,
+    247,
+    24,
+    24
+   ]
+  },
+  {
+   "name": "Lime",
+   "role": "list item",
+   "rect": [
+    1187,
+    247,
+    24,
+    24
+   ]
+  },
+  {
+   "name": "Light turquoise",
+   "role": "list item",
+   "rect": [
+    1211,
+    247,
+    24,
+    24
+   ]
+  },
+  {
+   "name": "Blue-gray",
+   "role": "list item",
+   "rect": [
+    1235,
+    247,
+    24,
+    24
+   ]
+  },
+  {
+   "name": "Lavender",
+   "role": "list item",
+   "rect": [
+    1259,
+    247,
+    24,
+    24
+   ]
+  },
+  {
+   "name": "Edit colors",
+   "role": "button",
+   "rect": [
+    1291,
+    239,
+    40,
+    40
+   ]
+  },
+  {
+   "name": "Copilot",
+   "role": "group",
+   "rect": [
+    1343,
+    219,
+    65,
+    100
+   ]
+  },
+  {
+   "name": "Copilot",
+   "role": "button",
+   "rect": [
+    1359,
+    236,
+    34,
+    46
+   ]
+  },
+  {
+   "name": "Layers",
+   "role": "group",
+   "rect": [
+    1408,
+    219,
+    65,
+    100
+   ]
+  },
+  {
+   "name": "Toolbar options",
+   "role": "button",
+   "rect": [
+    2269,
+    297,
+    22,
+    22
+   ]
+  },
+  {
+   "name": "Using Brush tool on Canvas",
+   "role": "group",
+   "rect": [
+    511,
+    353,
+    1536,
+    864
+   ]
+  },
+  {
+   "name": "Vertical",
+   "role": "scroll bar",
+   "rect": [
+    2283,
+    324,
+    12,
+    925
+   ]
+  },
+  {
+   "name": "Vertical Small Decrease",
+   "role": "button",
+   "rect": [
+    2283,
+    324,
+    12,
+    12
+   ]
+  },
+  {
+   "name": "Vertical Large Decrease",
+   "role": "button",
+   "rect": [
+    2283,
+    336,
+    12,
+    3
+   ]
+  },
+  {
+   "name": "Vertical Small Increase",
+   "role": "button",
+   "rect": [
+    2283,
+    1237,
+    12,
+    12
+   ]
+  },
+  {
+   "name": "Size",
+   "role": "slider",
+   "rect": [
+    279,
+    464,
+    32,
+    306
+   ]
+  },
+  {
+   "name": "Opacity",
+   "role": "slider",
+   "rect": [
+    279,
+    830,
+    32,
+    308
+   ]
+  },
+  {
+   "name": "1536 × 864px",
+   "role": "text",
+   "rect": [
+    559,
+    1261,
+    92,
+    16
+   ]
+  },
+  {
+   "name": "Fit to window",
+   "role": "button",
+   "rect": [
+    1943,
+    1256,
+    38,
+    26
+   ]
+  },
+  {
+   "name": "Zoom",
+   "role": "combo box",
+   "rect": [
+    1985,
+    1250,
+    100,
+    37
+   ]
+  },
+  {
+   "name": "Zoom out",
+   "role": "button",
+   "rect": [
+    2089,
+    1259,
+    32,
+    20
+   ]
+  },
+  {
+   "name": "Zoom",
+   "role": "slider",
+   "rect": [
+    2125,
+    1253,
+    130,
+    32
+   ]
+  },
+  {
+   "name": "Zoom in",
+   "role": "button",
+   "rect": [
+    2259,
+    1259,
+    32,
+    20
+   ]
+  },
+  {
+   "name": "System",
+   "role": "menu bar",
+   "rect": [
+    263,
+    151,
+    22,
+    22
+   ]
+  },
+  {
+   "name": "System",
+   "role": "menu item",
+   "rect": [
+    263,
+    151,
+    22,
+    22
+   ]
+  },
+  {
+   "name": "Minimize",
+   "role": "button",
+   "rect": [
+    2156,
+    144,
+    47,
+    30
+   ]
+  },
+  {
+   "name": "Maximize",
+   "role": "button",
+   "rect": [
+    2203,
+    144,
+    46,
+    30
+   ]
+  },
+  {
+   "name": "Close",
+   "role": "button",
+   "rect": [
+    2249,
+    144,
+    47,
+    30
+   ]
+  }
+ ]
+}
