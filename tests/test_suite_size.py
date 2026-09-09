@@ -30,10 +30,13 @@ import pytest
 #:     1,252  before                    the whole tree
 #:       743  1150 -> 700   the C++ port, the target build, the QEMU runs, every parity module
 #:       499   700 -> 460   demo/, agent/, and the architecture document they were checked against
+#:        37   460 ->  30   the library itself and the twenty-three modules that tested it
 #:
-#: The floor is not being fitted to what is left. Each value sits ~40 below the count that follows
-#: it, which is the margin 1150 held against 1191, so an unplanned module vanishing still trips it.
-COLLECTED_FLOOR = 460
+#: **The last step changes what this test can catch, and saying so is the point of a comment.** At
+#: 1,252 a floor forty below caught a module vanishing among forty-five. At 37 there is one test
+#: module left, so a floor of 30 catches only that module going -- which is now the whole suite.
+#: It is not fitted to what remains either way: nothing between 30 and 37 passes by accident.
+COLLECTED_FLOOR = 30
 
 
 def test_the_suite_has_not_SHRUNK(request):
