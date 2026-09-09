@@ -146,9 +146,28 @@ this kind of fix works everywhere except where it matters. The wait is capped at
 timing out means the click happens with the window still in place — the behaviour from before this
 existed, not a new failure.
 
-### The control patterns are unearned, measured twice — removal recommended, not yet done
+### The control patterns: what they are for, after I measured the wrong axis
 
-Two independent measurements and no benefit in either:
+**Recommendation withdrawn.** I measured task success, found none, and recommended removal — and
+task success is not what this mechanism does.
+
+A synthetic click moves the operating system's cursor to the widget and presses the physical button;
+a control pattern calls a method on the control and never touches the pointer. `measure/pointer_theft.py`,
+with the pointer parked at (700, 400) first:
+
+    patterns on   via invoke   WORKED   pointer (700, 400) -> (700, 400)  unmoved
+    patterns off  via click    WORKED   pointer (700, 400) -> (130, 459)  MOVED
+
+**That is the use.** On a machine somebody is working at — and this one is driven over a remote
+desktop while the agent runs — an agent that yanks the cursor out from under you on every action is
+a different thing from one you can leave running.
+
+**Coverage, measured on a live 207-widget window: 108 of 207 (52%) resolve to a pattern**, so those
+actions leave the pointer alone; 99 fall back to a click. Forty-seven of the fallbacks are `text`
+widgets, which are rarely a target at all — excluding them, 68%. `invoke` 55, `expand` 47, `toggle`
+5, `select` 1.
+
+The two axes it does **not** help, both measured:
 
 | | with patterns | without |
 |---|---|---|
@@ -165,14 +184,19 @@ click, four distinct ways to fall back, and one real crash it introduced — `El
 cover produced a **NULL COM pointer, which comtypes does not return as `None`**, so `element is None`
 missed it and reading a property raised `ValueError`.
 
-**Recommended for removal and still present**, because it was built to an explicit instruction and
-undoing that is the owner's call rather than mine. If a case ever appears that needs patterns, a
-tree search from the target window rather than a point lookup is where it would start — and `Widget`
-carries a window *title*, not a handle, so that is not a small change.
+**Kept.** Not for the reason it was built — the obstruction immunity it was supposed to have is
+thrown away by the point lookup — but for the one it turned out to have, which is measured above.
+Making it obstruction-proof as well would mean a tree search from the target window instead of a
+point lookup, and `Widget` carries a window *title* and not a handle, so that is not a small change.
 
-**What is not established: that patterns are useless.** Three goals on one application is a smoke
-test. A control whose clickable point is not its centre — a very wide list item, a menu that needs a
-hover — was never in the set.
+**And the cost is still real**: about ninety lines, a second COM client, an ancestor walk on every
+click, four ways to fall back, and one crash it introduced. That is the price of 52% of actions not
+stealing the pointer. Recorded so the trade is visible rather than assumed settled.
+
+**What is still not established**: whether a pattern and a click differ in *effect* anywhere. An
+`Invoke` may not set focus where a click does, and three goals on one application is a smoke test.
+A control whose clickable point is not its centre — a very wide list item, a menu that wants a hover
+— was never in the set.
 
 `WindowsHands` operated a control through `Invoke`, `ExpandCollapse`, `Toggle` or `SelectionItem`
 when it could resolve the element, falling back to a synthetic click otherwise, and counted which.

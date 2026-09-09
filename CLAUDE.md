@@ -198,13 +198,16 @@ window to drop `-topmost` and lower itself before performing, on a `threading.Ev
 capped at a second.
 
 **`WindowsHands` also gained UI Automation's control patterns** (`Invoke`, `ExpandCollapse`,
-`Toggle`, `SelectionItem`) with a click as fallback — **and they are unearned by two measurements:
-3 of 3 both ways on the goal set, and nothing either way on a covered widget**, because
-`_element_for` resolves *by point* and so inherits the obstruction problem it was meant to be immune
-to. Cost: ~90 lines, a second COM client, an ancestor walk per click, and a NULL-COM-pointer crash it
-introduced. **Removal recommended, not done** — it was built to an explicit instruction.
-`LegacyIAccessible.DoDefaultAction()` is **not** a universal fallback: every control advertises it
-and it raised `COMError` where `Expand` worked.
+`Toggle`, `SelectionItem`) with a click as fallback. **What they are for is not task success** — 3
+of 3 both ways on the goal set, and nothing either way on a covered widget, because `_element_for`
+resolves *by point* and so inherits the obstruction problem it was meant to be immune to. **They are
+for not stealing the mouse**: measured with the pointer parked, a pattern leaves it at (700, 400)
+and a click drags it to the widget. **108 of 207 widgets on a live window resolve to a pattern
+(52%; 68% excluding `text`)**, so that share of actions never touches the cursor — which on a
+machine somebody is working at is the difference between an agent you leave running and one that
+fights you for the pointer. **I recommended removing this after measuring only task success; that
+recommendation is withdrawn.** `LegacyIAccessible.DoDefaultAction()` is **not** a universal
+fallback: every control advertises it and it raised `COMError` where `Expand` worked.
 `Local.release()` exists because a model left resident holds 5–6 GB, and the caller is expected to
 call it.
 
