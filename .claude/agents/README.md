@@ -1,18 +1,21 @@
 # Sub-agent team
 
-Five agents, each covering a task this project has actually had to do repeatedly, with the
+Three agents, each covering a task this project has actually had to do repeatedly, with the
 mistakes it actually made encoded in them. They are checked into the repository for the same
 reason `.githooks/` is: the discipline is part of the project, not part of one machine.
 
+**There were five.** `parity-verifier` compared Python against a C++ core and `embedded-reviewer`
+reviewed changes against a Cortex-M target contract; both were removed on 2026-09-09 with the port
+they existed to check. What they found is kept below, because the argument for having a team at all
+is what they caught.
+
 | agent | when | model | writes? |
 |---|---|---|---|
-| `evidence-auditor` | before a commit stating a number; after editing DESIGN.md, CLAUDE.md or docs/findings/; when a result looks good | opus | no |
+| `evidence-auditor` | before a commit stating a number; after editing CLAUDE.md, REBUILD.md or docs/findings/; when a result looks good | opus | no |
 | `numerics-reviewer` | before declaring a precision floor or tolerance; when an estimator misbehaves | opus | scratchpad only |
 | `mutation-tester` | after writing a module and its tests; before claiming a suite protects something | sonnet | restores what it edits |
-| `parity-verifier` | after any change to `cpp/` or the Python adapters; when a tolerance is under pressure | opus | yes |
-| `embedded-reviewer` | after any change under `cpp/`; before adding an ABI entry point | sonnet | no |
 
-## Why these five
+## Why these three
 
 Each one exists because the work was done by hand at least twice and the second time was
 not easier than the first:
@@ -28,31 +31,22 @@ not easier than the first:
 - **mutation-tester** — done five times, mechanically identical each time, seventy-five
   mutants. Four survivors across those runs, each of which exposed a real gap in a suite that
   looked complete.
-- **parity-verifier** — the Python-to-C++ axis is now the main verification axis, and the
-  metric alone took two corrections before it measured the right thing.
-- **embedded-reviewer** — the target contract is easy to violate invisibly on a host, where
-  everything compiles and nothing is measured on the device.
 
 ## Deliberately not included
 
-A **doc-keeper**. Keeping DESIGN.md and CLAUDE.md true is real recurring work, but it is
+A **doc-keeper**. Keeping CLAUDE.md true is real recurring work, but it is
 `evidence-auditor`'s skill applied to prose — "does this claim match the repository" is the
 same question as "does this comment match the code". Two agents with the same job means one
 gets ignored.
 
-A **benchmark runner**. `argmind/bench.py` already is one: `--record` and `--compare` with
-measured noise, exiting non-zero. An agent wrapping a CLI that already reports honestly adds
-a layer without adding judgement.
+A **benchmark runner**. There is no longer a benchmark harness to wrap — and when there was, the
+reason still applies: an agent wrapping a CLI that already reports honestly adds a layer without
+adding judgement.
 
 A **general code reviewer**. `/code-review` and `/simplify` cover that, and a project-specific
 agent competing with them would fragment where findings come from.
 
 ## Using them
-
-The agents overlap by design at one point only: after a change under `cpp/`, run
-`embedded-reviewer` and `parity-verifier` together — one asks whether it still fits the
-target, the other whether it still computes the right thing, and those are independent
-questions.
 
 Their reports are not shown to the user directly, so relay what matters. And treat their
 findings the way this project treats any other claim: a sub-agent's conclusion is a claim
@@ -68,7 +62,10 @@ say it again in the prompt when a task involves editing sources.
 
 ## What the first run found
 
-Worth recording, because it is the argument for the team existing:
+Worth recording, because it is the argument for the team existing. The first two entries are from
+the agents that were removed with the C++ port; they are kept because **what they caught is the
+reason the remaining three are checked in**, and neither finding depends on the code still being
+here.
 
 - `embedded-reviewer` found a comment that misdescribed the very layout it existed to
   justify, and a 32-bit overflow that **cannot be reproduced on the 64-bit host** — the
@@ -77,9 +74,11 @@ Worth recording, because it is the argument for the team existing:
   a reboot the first write landed on the record it had just loaded, destroying the newest
   copy rather than the spare — the exact failure two slots exist to prevent. Its sweep
   figures were later withdrawn from DESIGN.md and re-derived as checked-in tests
-  (`tests/test_cpp_persist_parity.py`: 840 configurations, 624 bit flips, 78 truncation
-  lengths, 400 fuzz blobs), because a number from a harness that no longer exists is not
-  evidence. **If an agent's figures are worth quoting, check the harness in.**
+  (840 configurations, 624 bit flips, 78 truncation lengths, 400 fuzz blobs), because a
+  number from a harness that no longer exists is not evidence. **If an agent's figures are
+  worth quoting, check the harness in** — and note that those checked-in tests have since
+  been removed too, so the sentence now applies to itself: the record is at
+  `before-removal-2026-09-09`.
 - `mutation-tester` found that `select_newest` was compiled but never called by any binary
   the suite built, and that a defensive clamp added to the harness had made the library's
   own clamp unreachable.
