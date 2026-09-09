@@ -175,9 +175,18 @@ Every one was invisible from outside — the agent simply did nothing, or did so
 
 ## What is NOT built, so it is not mistaken for deferred work
 
-No microphone, no speaker, no phone environment, no robot environment. **Whether a confirmed click
-achieves what the person wanted is still unmeasured** — the coordinate chain is measured (above) and
-the outcome is not, so "18 of 28" remains a claim about choosing.
+No microphone, no speaker, no phone environment, no robot environment.
+
+**A confirmed click was measured for the first time on 2026-09-09 and it found a defect in the
+core.** Three goals on a window the harness launched: two did the expected thing and the agent chose
+the right widget three times of three. The failure was **`Widget.centre` landing on the inert part of
+the right control** — a combo box's rectangle is centred on its text field, and the arrow that opens
+the list is at the edge, so the click was exact and did nothing. That is sharper than the 73%
+hit-test figure, which counts centres landing on a *different* element; here the element was right.
+**The repair that follows is UI Automation's own control patterns** (`Invoke`, `ExpandCollapse`,
+`Toggle`) with a synthetic click as fallback and a count of which was used — the deterministic side
+doing the acting, which is the same argument that put WHERE on the environment. **Not built, and it
+must be measured rather than assumed better**: an invoke may not set focus where a click does.
 `Local.release()` exists because a model left resident holds 5–6 GB, and the caller is expected to
 call it.
 

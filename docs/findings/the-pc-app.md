@@ -83,6 +83,55 @@ Between proposing and confirming, the screen moves: 13 times in 14 over the seco
 the row carries a name, the name is resolved when the button is pressed, and if the thing has gone
 by then the row says so instead of clicking where it used to be.
 
+## The click was measured at last, and it found a defect in the core (2026-09-09)
+
+`measure/clicking.py`. Character Map, launched and closed by the script, three goals with outcomes
+written before running, live clicks. The foreground window's process id is checked immediately
+before every click, because a click goes to a pixel and anything that came to the front would
+receive it.
+
+| goal | chose | result |
+|---|---|---|
+| 고급 옵션 켜줘 | `Advanced view` | **worked** — `+ Character set :, Go to Unicode :, Group by :, Search` |
+| 글꼴 목록 열어줘 | `Font :` | **nothing** — not one name appeared or disappeared |
+| 이 창 최소화해 | `Minimize` | **worked** — `IsIconic` true, `- Close, Maximize, Minimize, System` |
+
+**Two of three did the expected thing, and the agent chose the right widget three times out of
+three.** So the chain completes: a person confirms, the click lands, the thing they wanted happens.
+That had never once been observed before this.
+
+### `Widget.centre` clicked the inert part of the right control
+
+The failure is not the agent's. A combo box's bounding rectangle is centred on its **text field**;
+the part that opens the list is the arrow at the right edge. The click landed exactly where it was
+aimed, on exactly the widget the model chose, and did nothing.
+
+**This is sharper than the 73% figure from `pointing.py`.** That measured how often a centre resolves
+to a *different element*. Here the centre was on the correct element and the click was still
+inert — so "the centre is on the widget" is not sufficient, and `contract.py` calls `centre` "the one
+place a name becomes a coordinate".
+
+The repair that follows from the project's own rule: **UI Automation knows how to operate its own
+controls.** `InvokePattern`, `ExpandCollapsePattern` and `TogglePattern` activate a control without
+anybody guessing a pixel — which is the deterministic side doing the acting, the same argument that
+put WHERE on the environment in the first place. Not all controls expose a pattern, so a synthetic
+click has to stay as the fallback, and **which one was used has to be counted** rather than assumed.
+Unmeasured as of this writing: whether invoking differs from clicking in ways that matter (focus, for
+one, which a real click sets and an invoke may not).
+
+### Two faults in the measurement, both mine, both found by running it twice
+
+**The minimise expectation was wrong about Windows, not about the agent.** It read the window
+afterwards and expected no widgets; a minimised window still answers UI Automation with part of its
+tree. The click had worked the whole time and the first run scored it a failure. Now it asks
+`IsIconic`.
+
+**It read one window before and every window after.** A combo box's drop-down is its own top-level
+window, so reading only the launched one reports "nothing happened" for a list that did open — and
+the first run could not tell that apart from a click that landed on an inert area, which is the real
+defect. The comparison is now symmetric, and **the delta is printed every time**: a boolean cannot be
+diagnosed after the fact, and that is what made the first run's second row unreadable.
+
 ## What is not here
 
 The window itself has no tests, on purpose rather than by neglect: it draws what arrives on a queue
