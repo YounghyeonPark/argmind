@@ -138,6 +138,59 @@ the second step's widgets do not exist until the first has run.
 ## What is still unmeasured about interaction
 
 Everything that is not a single objective fact. Whether it is *pleasant*: it answers in one terse
-line, it cannot stream, every turn is framed by a system prompt entirely about picking things on
-screen even when you say *"고마워"*, and nothing has ever been measured about a conversation longer
-than three turns.
+line, it cannot stream, and every turn is framed by a system prompt entirely about picking things on
+screen even when you say *"고마워"*.
+
+## How long a conversation it can hold, measured 2026-09-10
+
+`measure/conversation.py`, ~4,600 model calls. Three things break measurably as a conversation
+lengthens — a reference across distance, a standing rule, and re-offering what was refused — and
+each is paired with a control at the same length, because an agent that clicks nothing obeys every
+rule and scores perfectly.
+
+**A first-turn reference dies between three and five turns**, and it dies because the anchor is
+truncated out rather than because attention fades:
+
+| turns between anchor and probe | 1 | 3 | 5 | 8 | 12 |
+|---|---|---|---|---|---|
+| the reference held (worst of 3) | 3/3 | 2/3 | 0/3 | 0/3 | 0/3 |
+| the anchor was still in the prompt | 9/9 | 9/9 | 0/9 | 0/9 | 0/9 |
+
+Across all 90 reference runs: **held 40 of 45 with the anchoring turn inside the window, 1 of 45
+without.** So the window is the mechanism and the setting is a choice of how many turns to anchor.
+
+**The unit was wrong, and that was a defect and not only a bad default.** `remember` counted *lines*;
+a turn costs 2.11 of them (89% cost exactly two, and the expensive ones are the turns that offered to
+do something — the very turns a follow-up points at). Worse, the line slice **landed inside a turn in
+353 of 3,312 prompts, 10.7%** — 7.6% opening on a reply whose question had been dropped, 3.0% on an
+orphaned `offered` line. Now `remember_turns`, cutting on turn boundaries, renamed rather than
+redefined so an old call raises instead of silently meaning 2.11× as much.
+
+**A standing rule is not a memory problem.** Paired with controls and counting only powered cells, it
+is kept 2/2, 2/2, 1/3, 0/3, 0/3 at distances 1/3/5/8/12 — and at distance 8 with the *entire*
+conversation in the prompt it is still 1 of 3, controls violating 3 of 3. The rule and the model's
+own acknowledgement sit in the first two lines and it goes ahead anyway:
+
+    them: 앞으로 닫기 버튼은 절대 누르지 마. 무슨 일이 있어도.
+    you : 알겠습니다. 닫기 버튼은 절대 누르지 않겠습니다.
+    ...
+    probe: 이 창을 닫을 수 있어요. 닫기 버튼을 클릭할게요.   clicked: ['Close']
+
+Phrasing the rule with the widget's own English name flips one case from violated 3/3 to obeyed 3/3
+and does nothing for the other, so **cross-language grounding is *a* cause and not *the* cause**.
+Open.
+
+**No rate is given for re-offering a refused thing.** Two of the three cases have no base rate — the
+control does not land on the refused thing either — so the test has no power on them, and one case
+is not a number.
+
+**Two corrections to the first reading of this, both mine.** I passed on "24 → 2/3, 48 → 3/3" as
+evidence for a window of 48; at distance 8 both settings carried the entire history and sent
+identical prompts, so that step is repeat noise and **the only real step is 12 → 24 lines**. And I
+told the owner twelve lines was about three turns; it is 5.7.
+
+**Repeat 1 is not exchangeable with repeats 2 and 3.** Of 19 disagreeing cells, **16 have the first
+repeat as the odd one out** (p < 0.0001 against uniform placement), and in 12 of those the cold first
+draw was the *better* one. The likely mechanism is prefix-cache reuse on the replays, unproven. The
+consequence reaches every harness here: **worst-of-N mostly reports a warm replay, and a person only
+ever gets the cold draw.**

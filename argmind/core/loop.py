@@ -52,6 +52,65 @@ question with an answer: is the thing I clicked still exactly where it was?
 **No caching.** The previous attempt made one the centrepiece; the call it would skip costs 0.16 s.
 `Session.blind` counts the thoughts where widgets were listed and nothing was chosen, because that
 count — not an intuition — is what would justify anything slower and cleverer.
+
+## How much of the conversation is carried, and in what unit — measured 2026-09-10
+
+`measure/conversation.py`, ~4,600 model calls on `qwen3:8b` with thinking off, against four captured
+screens of 12-152 widgets, 3 repeats, worst counted.
+
+**The window is the mechanism, not the model's attention.** Over 90 probes that referred with a bare
+pronoun to something established earlier: with the anchoring turn inside the window the reference
+held **40 of 45**; with it truncated out, **1 of 45**. Nothing else in the sweep comes close to
+explaining the verdicts, so the setting below is a choice of *how many turns to anchor* and not a
+tuning of how well the model attends.
+
+**The old setting forgot in five turns.** `remember = 12` was a line count nobody had measured; a
+turn costs 2.11 lines (median, n=405 conversations), so twelve lines was a **5.7-turn** window, not
+the three turns this docstring used to claim. A first-turn reference held 3/3 at distance 1, 2/3 at
+3, and **0/3 at 5, 8 and 12** — and at distance 12 two of three cases clicked something **wrong**
+rather than nothing, which is the failure mode that matters: forgetting does not go quiet, it
+proposes the wrong widget.
+
+**Turns, not lines, and the unit change is half the finding.** A line is nobody's unit — the person
+counts turns and the context counts tokens. Over the 3,312 turns that had a conversation behind them
+a turn cost exactly two lines 88.9% of the time and three to five in the rest; the expensive ones
+are the turns that *offered to do something*, which are exactly the turns a follow-up refers to, so
+the old unit shrank the memory precisely where there was most to remember. The same 3,312 prompts —
+the same set, since a turn with a history behind it is a prompt with a window in it — opened
+**mid-turn 353 times (10.7%)**: 7.6% on a reply whose question had already been dropped, 3.0% on an
+orphaned "offered". `recent()` cuts on turn boundaries, so that cannot happen.
+
+**Twelve turns, derived.** It is the deepest thread the measurement reached with the reference still
+holding: 7 of 9 runs and 2 of 3 cases at distance 12 with the whole conversation in the window, and
+9 of 9 runs on all three cases at distance 8. Twelve is therefore the last measured point rather
+than a margin above one, and a thirteenth turn is a guess in the same direction. It costs ~25 lines
+at 2.11 lines a turn — about **400 prompt tokens** at the 13.5-16.6 tokens a line measured across
+the three screens — against
+a largest prompt observed anywhere of **2,293 in a context of 8,192**. The worst turn seen was 5
+lines, so even a pathological twelve turns is ~960 tokens and still fits. **There is no second cap
+on the block**, and the trigger for adding one is a measured prompt above ~4,000 tokens or a raised
+`MAX_LISTED`, not a feeling that it is unbounded.
+
+**Where the history block sits, and why it stays there.** It is pasted in *before* the widget list,
+so every new line shifts every widget line after it and a server's prompt-prefix cache has nothing
+to reuse past the system block. Putting the list first would make it a reusable prefix — but only
+while the list is byte-identical between calls, and the measurement at the top of this file says a
+listed widget is **gone 13 times in 14** over the second a call takes, so the prize is much smaller
+than it looks. It is also a change to the prompt, which this project is 0 for 5 on, and it moves the
+list away from the question it answers, which is where 18-of-28 choosing accuracy was measured.
+Refuted by two measurements in this order: prefill shown to dominate a call, then
+`measure/choosing.py` unmoved after the reorder. **This paragraph is here and not in `converse.py`
+because `measure/choosing.py`'s `prompt_print()` hashes that whole file** — a comment in it forks
+the fingerprint every recorded run carries, so the one file that most deserves a written rationale
+is the one where writing it costs comparability.
+
+**What is not claimed.** 24 lines and 48 lines were *the same prompt* at distance 8 — the whole
+conversation was 18-24 lines, so both windows held all of it — and the 2/3-against-3/3 between them
+is repeat noise, not evidence that more is better. Nothing is measured beyond 12 turns in either
+direction. A bigger window did not make the agent chattier (21/30/27/27 spurious effects over 45
+filler conversations each at 6/12/24/48 lines) and no rise in call time was measurable behind the
+noise: the medians run 0.57-1.09 s across all four arms and the *largest* windows produced the
+fastest rows, which is another process on the same card rather than an effect of memory.
 """
 
 from __future__ import annotations
@@ -61,7 +120,49 @@ import time
 from .converse import converse
 from .intent import Said
 
-__all__ = ["Session", "Exchange", "Done"]
+__all__ = ["Session", "Exchange", "Done", "recent", "REMEMBER_TURNS"]
+
+#: A turn opens when somebody speaks or a watch notices something. **Every other kind of line — what
+#: was said back, what was offered, done, refused or turned down — belongs to the turn already in
+#: progress**, so these two names are where a turn boundary is, for the writer and the reader alike.
+#: Defined once because `think()` writes them and `recent()` cuts on them, and two spellings of the
+#: same rule is two chances for it to drift.
+SPOKE, NOTICED = "them", "noticed"
+TURN_OPENS = (SPOKE, NOTICED)
+
+#: How many turns of the conversation the next question carries. **Twelve turns, derived from the
+#: sweep** — see the module docstring for the whole of it, and for why this is a count of turns and
+#: not of lines. The short version: the reference held 40 of 45 times with its anchor inside the
+#: window and 1 of 45 with it truncated out, so this number decides how far back a *"그거"* can point
+#: and nothing else in the measurement does.
+REMEMBER_TURNS = 12
+
+
+def recent(history, turns):
+    """The last `turns` turns of a history, cut where a turn begins and never inside one.
+
+    `turns=None` is the whole conversation and `turns=0` is none of it. **The second one is a bug
+    fixed rather than a choice**: this was `history[-remember:]`, and `history[-0:]` is the *entire*
+    list, so the one setting a person reaches for to turn memory off turned it all the way up.
+    Anybody tuning the number downward met it. `None` now names the unbounded case, which the sweep
+    needed and previously had to fake with a number larger than the conversation — a fake that stops
+    being unbounded the moment the conversation grows, which is the same blindness as a floor that
+    cannot see a count rise.
+
+    **Cutting on turn boundaries is the other half of the unit change.** Measured over 3,312 prompts
+    built by the line-slicing version, 353 (10.7%) opened mid-turn: 7.6% began with a reply whose
+    question had already been dropped and 3.0% with an orphaned "offered". A model shown an answer
+    with no question is being handed a puzzle nobody meant to set.
+    """
+    if turns is None:
+        return list(history)
+    turns = int(turns)
+    if turns <= 0:
+        return []
+    opens = [i for i, (who, _text) in enumerate(history) if who in TURN_OPENS]
+    #: Fewer openings than the window means the whole thing fits — including any lines written
+    #: before the first turn opened, which `remember_doing()` can legitimately produce.
+    return list(history if len(opens) <= turns else history[opens[-turns]:])
 
 
 class Done:
@@ -124,17 +225,23 @@ class Exchange:
 class Session:
     """A conversation with an environment attached. Knows nothing about any platform."""
 
-    def __init__(self, *, eyes, model, hands, limit: int = 200, remember: int = 12,
+    def __init__(self, *, eyes, model, hands, limit: int = 200,
+                 remember_turns: int | None = REMEMBER_TURNS,
                  watches=None, may_act_unprompted: bool = False) -> None:
         self.eyes = eyes
         self.model = model
         self.hands = hands
         self.limit = int(limit)
-        #: How many lines of back-and-forth to carry. **Lines, not turns** — a turn is now two to
-        #: four of them, because what was done is recorded beside what was said. Twelve is about
-        #: three turns. Still short on purpose: the widget list is the bulk of the prompt at ~1,600
-        #: tokens for 142 widgets, and these lines are a handful of words each.
-        self.remember = int(remember)
+        #: How many turns of back-and-forth to carry. **Turns, and the name says so because it used
+        #: to be `remember` and used to mean lines** — a silent redefinition of a number would be
+        #: the exact defect this project keeps catching, so the old spelling raises `TypeError`
+        #: instead of quietly meaning 2.11 times as much.
+        #:
+        #: `None` carries the whole conversation; `0` carries none of it. Measured: at 12 lines
+        #: (5.7 turns) a first-turn reference was gone by turn five and by turn twelve two cases in
+        #: three clicked the *wrong* thing. The cost of twelve turns is ~400 prompt tokens beside a
+        #: widget list that is ~1,600 for 142 widgets.
+        self.remember_turns = remember_turns if remember_turns is None else int(remember_turns)
         #: What the agent may notice on its own. Empty means it only ever answers, which is the
         #: default because noticing is the half that can act while nobody is watching.
         self.watches = list(watches or [])
@@ -179,7 +286,21 @@ class Session:
         if not self.seen:
             self.observe()
         return converse(self.model, self.seen, trigger,
-                        history=self.history[-self.remember:], limit=self.limit)
+                        history=self.recent(), limit=self.limit)
+
+    def recent(self):
+        """Exactly what the next question will carry of the past.
+
+        Public because it is the answer to *"what does it still remember?"*, and an interface or a
+        harness that reconstructed it from `history` and `remember_turns` would be a second
+        implementation of the thing under test — `measure/conversation.py` reads the real prompt for
+        that reason and this is the cheaper way to the same honesty.
+
+        The call below is the *module* function of the same name, not this method: a method body
+        resolves globals, never the class it sits in. Same name because it is the same idea with the
+        setting already applied, and a second name would invite a second answer.
+        """
+        return recent(self.history, self.remember_turns)
 
     def perform(self, intent):
         """Run what may be run. Returns `(did, proposed, refused)`.
@@ -236,7 +357,7 @@ class Session:
         #: An unprompted thought goes into the history under a different name, so the next reply can
         #: tell "you said" from "I noticed" — which is the difference between answering and
         #: interrupting.
-        self.history.append(("them" if trigger.asked else "noticed", trigger.text))
+        self.history.append((SPOKE if trigger.asked else NOTICED, trigger.text))
         if intent.say:
             self.history.append(("you", intent.say))
         self.remember_doing(did, refused)

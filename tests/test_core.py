@@ -252,16 +252,68 @@ def test_a_surface_with_NO_widgets_is_told_apart_from_a_failure():
     assert s.blind == 0, "an empty surface is not the model failing to find something"
 
 
-def test_the_conversation_is_CARRIED_and_bounded():
+def test_the_conversation_is_CARRIED_and_bounded_IN_TURNS():
     """A reply that ignores what was just said is not a conversation; a prompt that carries all of it
-    pushes the widget list out of a context that has to stay small to stay fast."""
-    s = session(FakeModel(*[says(f"r{i}") for i in range(6)]))
-    s.remember = 2
+    pushes the widget list out of a context that has to stay small to stay fast.
+
+    **The bound is turns, and it used to be lines.** Measured 2026-09-10 over 3,312 prompts built by
+    the line-slicing version: a turn costs 2.11 lines, so the shipped twelve was a 5.7-turn window
+    and not the three turns the docstring claimed — and 10.7% of windows opened *inside* a turn, on
+    a reply whose question had already been dropped. Both are asserted below, because the count
+    alone would pass for a slice that landed one line early.
+    """
+    s = session(FakeModel(*[says(f"r{i}") for i in range(6)]), remember_turns=2)
     for i in range(6):
         s.exchange(f"line {i}")
-    last = s.model.prompts[-1]
-    assert "Recently:" in last and "line 5" not in last.split("They said:")[0]
-    assert last.count("them:") + last.count("you:") == 2, "history is bounded by `remember`"
+    #: **Two different moments, and they are one apart on purpose.** The sixth prompt is built
+    #: before the sixth turn is recorded, so it carries turns four and five; `recent()` afterwards
+    #: carries five and six. Both are asserted by their contents rather than their length, since an
+    #: off-by-one passes a count and the finding this test exists for is an off-by-several.
+    assert "Recently:" in s.model.prompts[-1]
+    block = s.model.prompts[-1].split("Recently:")[1].split("On screen now:")[0]
+    shown = [x.strip() for x in block.splitlines() if x.strip()]
+    assert shown == ["them: line 3", "you: r3", "them: line 4", "you: r4"], shown
+    assert ["line 4", "line 5"] == [t for _who, t in s.recent() if t.startswith("line")]
+
+
+def test_a_turn_is_MORE_THAN_ITS_TWO_LINES_and_the_window_still_counts_turns():
+    """The reason the unit changed. A turn that offers to do something writes what it offered beside
+    what it said — measured at 3 to 5 lines against a plain turn's 2 — so a line window shrank
+    exactly where a follow-up has most to point at. Here two turns are eight lines and both survive.
+    """
+    from argmind.core.loop import recent                                  # noqa: PLC0415
+
+    s = session(FakeModel(says("하나", {"click": 0}), says("둘", {"click": 1}),
+                          says("셋", {"click": 2})), remember_turns=2)
+    for i in range(3):
+        s.exchange(f"line {i}")
+    kept = s.recent()
+    assert [who for who, _t in kept].count("them") == 2
+    assert len(kept) == 6, f"whole turns, not a line count: {kept}"
+    #: The mid-turn cut, which is what a line window does here: `history[-2:]` is a reply and the
+    #: record of a click, with the question that caused them dropped.
+    assert kept[0][0] == "them", f"the window opens inside a turn: {kept[0]}"
+    assert recent(s.history, None) == s.history, "None is the whole conversation"
+    #: Lines written before any turn opened — `remember_doing()` on a fresh session produces them —
+    #: are carried while they are all there is, and dropped once real turns fill the window rather
+    #: than being counted as a turn of their own.
+    orphan = [("offered", 'clicked the button "x"'), *s.history]
+    assert recent(orphan, 99)[0][0] == "offered" and recent(orphan, 2) == kept
+
+
+def test_REMEMBER_NOTHING_is_not_remember_everything():
+    """**A real defect, found by the sweep that tuned this number.** The window was
+    `history[-remember:]`, and `history[-0:]` is the entire list — so the one value a person reaches
+    for to turn memory off turned it all the way up, silently, for anyone tuning downward.
+    """
+    from argmind.core.loop import recent                                  # noqa: PLC0415
+
+    s = session(FakeModel(*[says(f"r{i}") for i in range(3)]), remember_turns=0)
+    for i in range(3):
+        s.exchange(f"line {i}")
+    assert s.recent() == [] and "Recently:" not in s.model.prompts[-1]
+    assert len(s.history) >= 4, "the history is still kept; only the window is empty"
+    assert recent(s.history, 0) == []
 
 
 def test_the_widget_list_keeps_the_INTERFACE_S_OWN_WORDS():

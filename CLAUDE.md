@@ -67,6 +67,11 @@ name took the click and did nothing.
 **A watch carries a floor** (`MIN_GAP = 3.0`). Perception changes 13 seconds in 14; a call costs
 0.3–2 s.
 
+**History is bounded in TURNS, not lines** (`remember_turns = 12`). A turn costs 2.11 lines and the
+old line-based slice landed **inside a turn in 10.7% of prompts** — 7.6% opening on a reply whose
+question had been dropped. `remember_turns=0` means none and `None` means all; the old `remember=0`
+silently meant *everything*.
+
 **`MOST_AT_ONCE = 3`, derived.** 27 of 28 real requests want one effect or two; spurious ones come
 in threes, fours and an eight. Three is the documented sequence — click, type, enter.
 
@@ -83,6 +88,7 @@ flag deliberately and that is *stronger* — a person confirms each action, and 
 | | |
 |---|---|
 | choosing | **23 of 28** answerable right, 7 of 9 correct declines — **30 of 37** correct decisions |
+| memory | a first-turn reference holds to 3 turns and dies by 5 at the old window; it is truncation, not attention — **40 of 45 held with the anchor in the window, 1 of 45 without** |
 | talking | **29 of 34** conversational turns produce no action (85%) |
 | repair | 3 of 4 corrections land; memory of its own actions 0 of 1; Korean in, Korean out 5 of 6 |
 | a call | **0.48 s** warm. `--think` reaches 34 of 37 and 94%, at 3.75 s |
@@ -102,9 +108,14 @@ cannot be repaired is not.
 
 No microphone, no speaker, no phone environment, no robot environment. Whether a confirmed click
 achieves what the person *wanted* is unmeasured beyond n=3. The agent still answers some Korean in
-English. A question about the past makes it propose the action again. No streaming; every turn is
-framed by a prompt about picking widgets even when the person says *"고마워"*; nothing is measured
-about a conversation longer than three turns.
+English. A question about the past makes it propose the action again. Internal widget indices leak
+into the speech — *"3, 122"*, *"지우개는 22번 버튼입니다"* — and nothing measures whether a reply is
+a sentence. Every turn is framed by a prompt about picking widgets even when the person says
+*"고마워"*. **A standing rule is broken while it is visible in the prompt**, so that one is not a
+memory problem.
+
+**Streaming was measured and declined**: warm, the first token lands at 36 ms and `say` completes at
+232 ms of a 478 ms reply, so it buys ~250 ms at the cost of extracting a string from partial JSON.
 
 **The open architectural question**: a robot has no deterministic source of WHERE. Anything filling
 that slot is a *detector*, and the core would then receive probabilistic output through an interface
@@ -117,7 +128,7 @@ whose contract is that it is exact — the rule inverted at the seam. A phone fi
 |---|---|
 | `REBUILD.md` | the rebuild plan, the decisions and the staged path that was followed |
 | `docs/findings/choosing-accuracy.md` | every choosing measurement: models, prompts, the shuffle control, the refuted hypotheses |
-| `docs/findings/interaction.md` | the priority, and repair / memory / language / spurious action |
+| `docs/findings/interaction.md` | the priority, and repair / memory / language / spurious action / the history window |
 | `docs/findings/the-pc-app.md` | the window: self-blindness, pointing, cold start, the withdrawn diagnosis |
 | `docs/findings/harness-pitfalls.md` | **ten ways the model harness lied and seven ways the measuring code did** — the list to check when a measurement reads zero |
 | `docs/findings/what-the-old-tree-measured.md` | the removed library's transferable results, and how to reach the rest |

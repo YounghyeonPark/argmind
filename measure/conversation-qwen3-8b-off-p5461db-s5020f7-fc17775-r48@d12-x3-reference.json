@@ -1,0 +1,2273 @@
+{
+ "model": "qwen3:8b",
+ "think": "off",
+ "prompt": "5461db",
+ "screens_print": "5020f7",
+ "data_print": "c17775",
+ "llm_print": "69931b",
+ "ollama_before": [
+  {
+   "model": "qwen3:8b",
+   "gb": 6.3
+  }
+ ],
+ "ollama_after": [
+  {
+   "model": "qwen3:8b",
+   "gb": 6.3
+  }
+ ],
+ "repeat": 3,
+ "axis": "r",
+ "distances": [
+  1,
+  3,
+  5,
+  8,
+  12
+ ],
+ "remembers": [
+  48
+ ],
+ "shipped_remember": 12,
+ "at_distance": 12,
+ "turned_down": false,
+ "filler": [
+  "안녕",
+  "오늘 날씨 어때?",
+  "너 뭘 할 수 있어?",
+  "심심하다",
+  "커피 한 잔 마시고 싶다",
+  "너 이름이 뭐야?",
+  "오늘 할 일이 너무 많다",
+  "잠깐 쉬었다 하자",
+  "이거 어떻게 쓰는 거야?",
+  "수고했어",
+  "밥 먹고 올게",
+  "이 창 좀 복잡하지 않아?",
+  "고마워",
+  "그래 알겠어"
+ ],
+ "cases": [
+  {
+   "id": "ref-eraser",
+   "kind": "reference",
+   "screen": "untitled---paint",
+   "anchor": "지우개 골라줘",
+   "want": "Eraser",
+   "probe": "그거 다시 눌러줘"
+  },
+  {
+   "id": "ref-copy",
+   "kind": "reference",
+   "screen": "character-map",
+   "anchor": "복사 버튼 눌러줘",
+   "want": "Copy",
+   "probe": "아까 그 버튼 다시 눌러줘"
+  },
+  {
+   "id": "ref-parts",
+   "kind": "reference",
+   "screen": "system-information",
+   "anchor": "Components 항목 눌러줘",
+   "want": "Components",
+   "probe": "그거 다시 눌러줘"
+  }
+ ],
+ "seconds": 100.4,
+ "calls": 135,
+ "retried": 0,
+ "floor": [
+  {
+   "case": "ref-eraser",
+   "kind": "reference",
+   "screen": "untitled---paint",
+   "arm": "alone",
+   "distance": -1,
+   "remember": 12,
+   "counted": "silent",
+   "verdicts": [
+    "silent",
+    "silent",
+    "silent"
+   ],
+   "clicked": [
+    [],
+    [],
+    []
+   ],
+   "n": 3,
+   "agreed": true,
+   "n_widgets": 123,
+   "prompt_tokens": [
+    1265,
+    1265,
+    1265
+   ],
+   "seconds": [
+    0.834,
+    0.369,
+    0.347
+   ]
+  },
+  {
+   "case": "ref-copy",
+   "kind": "reference",
+   "screen": "character-map",
+   "arm": "alone",
+   "distance": -1,
+   "remember": 12,
+   "counted": "silent",
+   "verdicts": [
+    "silent",
+    "silent",
+    "silent"
+   ],
+   "clicked": [
+    [],
+    [],
+    []
+   ],
+   "n": 3,
+   "agreed": true,
+   "n_widgets": 21,
+   "prompt_tokens": [
+    370,
+    370,
+    370
+   ],
+   "seconds": [
+    0.441,
+    0.351,
+    0.359
+   ]
+  },
+  {
+   "case": "ref-parts",
+   "kind": "reference",
+   "screen": "system-information",
+   "arm": "alone",
+   "distance": -1,
+   "remember": 12,
+   "counted": "wrong",
+   "verdicts": [
+    "silent",
+    "wrong",
+    "wrong"
+   ],
+   "clicked": [
+    [],
+    [
+     "A hypervisor has been detected. Features required for Hyper-V will not be displayed."
+    ],
+    [
+     "A hypervisor has been detected. Features required for Hyper-V will not be displayed."
+    ]
+   ],
+   "n": 3,
+   "agreed": false,
+   "n_widgets": 152,
+   "prompt_tokens": [
+    1863,
+    1863,
+    1863
+   ],
+   "seconds": [
+    0.924,
+    0.49,
+    0.474
+   ]
+  }
+ ],
+ "screens": {
+  "character-map": 21,
+  "chrome-remote-desktop---qvb-flfm-dev1": 12,
+  "system-information": 152,
+  "untitled---paint": 123
+ },
+ "rows": [
+  {
+   "case": "ref-eraser",
+   "kind": "reference",
+   "screen": "untitled---paint",
+   "arm": "with",
+   "distance": 12,
+   "remember": 48,
+   "counted": "silent",
+   "verdicts": [
+    "silent",
+    "silent",
+    "held"
+   ],
+   "void": 0,
+   "n": 3,
+   "agreed": false,
+   "chose": [
+    null,
+    null,
+    "Eraser"
+   ],
+   "clicked": [
+    [],
+    [],
+    [
+     "Eraser"
+    ]
+   ],
+   "n_effects": [
+    0,
+    0,
+    1
+   ],
+   "established": [
+    "Eraser",
+    "Eraser",
+    "Eraser"
+   ],
+   "offered_at_anchor": [
+    null,
+    null,
+    null
+   ],
+   "anchor_in_window": [
+    true,
+    true,
+    true
+   ],
+   "target_in_window": [
+    true,
+    true,
+    true
+   ],
+   "history_lines": 27,
+   "window_lines": [
+    27,
+    27,
+    27
+   ],
+   "prompt_tokens": [
+    1719,
+    1726,
+    1719
+   ],
+   "first_turn_tokens": [
+    1265,
+    1265,
+    1265
+   ],
+   "seconds": [
+    0.801,
+    1.107,
+    0.943
+   ],
+   "filler_effects": [
+    0,
+    0,
+    0
+   ],
+   "turns": [
+    [
+     {
+      "i": 0,
+      "said": "지우개 골라줘",
+      "reply": "지우개는 22번 버튼입니다.",
+      "clicked": [
+       "Eraser"
+      ],
+      "n_effects": 1,
+      "history_lines": 0,
+      "window_lines": 0,
+      "window": "",
+      "prompt_tokens": 1265,
+      "out_tokens": 28,
+      "thought_chars": 0,
+      "seconds": 0.635
+     },
+     {
+      "i": 1,
+      "said": "안녕",
+      "reply": "안녕하세요!",
+      "clicked": [],
+      "n_effects": 0,
+      "history_lines": 3,
+      "window_lines": 3,
+      "window": "\n  them: 지우개 골라줘\n  you: 지우개는 22번 버튼입니다.\n  offered: clicked the button \"Eraser\"\n\n",
+      "prompt_tokens": 1298,
+      "out_tokens": 14,
+      "thought_chars": 0,
+      "seconds": 0.642
+     },
+     {
+      "i": 2,
+      "said": "오늘 날씨 어때?",
+      "reply": "지금은 화면에 날씨 정보가 보이지 않아요. 도움이 필요하신가요?",
+      "clicked": [],
+      "n_effects": 0,
+      "history_lines": 5,
+      "window_lines": 5,
+      "window": "\n  them: 지우개 골라줘\n  you: 지우개는 22번 버튼입니다.\n  offered: clicked the button \"Eraser\"\n  them: 안녕\n  you: 안녕하세요!\n\n",
+      "prompt_tokens": 1315,
+      "out_tokens": 37,
+      "thought_chars": 0,
+      "seconds": 1.025
+     },
+     {
+      "i": 3,
+      "said": "너 뭘 할 수 있어?",
+      "reply": "저는 화면에 보이는 버튼과 기능을 조작할 수 있어요. 도움이 필요하신가요?",
+      "clicked": [],
+      "n_effects": 0,
+      "history_lines": 7,
+      "window_lines": 7,
+      "window": "\n  them: 지우개 골라줘\n  you: 지우개는 22번 버튼입니다.\n  offered: clicked the button \"Eraser\"\n  them: 안녕\n  you: 안녕하세요!\n  them: 오늘 날씨 어때?\n  you: 지금은 화면에 날씨 정보가 보이지 않아요. 도움이 필요하신가요?\n\n",
+      "prompt_tokens": 1355,
+      "out_tokens": 39,
+      "thought_chars": 0,
+      "seconds": 1.086
+     },
+     {
+      "i": 4,
+      "said": "심심하다",
+      "reply": "화면에 있는 도구들을 활용해보세요. 필요하신다면 도와드릴게요!",
+      "clicked": [],
+      "n_effects": 0,
+      "history_lines": 9,
+      "window_lines": 9,
+      "window": "\n  them: 지우개 골라줘\n  you: 지우개는 22번 버튼입니다.\n  offered: clicked the button \"Eraser\"\n  them: 안녕\n  you: 안녕하세요!\n  them: 오늘 날씨 어때?\n  you: 지금은 화면에 날씨 정보가 보이지 않아요. 도움이 필요하신가요?\n  them: 너 뭘 할 수 있어?\n  you: 저는 화면에 보이는 버튼과 기능을 조작할 수 있어요. 도움이 필요하신가요?\n\n",
+      "prompt_tokens": 1394,
+      "out_tokens": 32,
+      "thought_chars": 0,
+      "seconds": 0.942
+     },
+     {
+      "i": 5,
+      "said": "커피 한 잔 마시고 싶다",
+      "reply": "화면에 있는 도구들을 활용해보세요. 필요하신다면 도와드릴게요!",
+      "clicked": [],
+      "n_effects": 0,
+      "history_lines": 11,
+      "window_lines": 11,
+      "window": "\n  them: 지우개 골라줘\n  you: 지우개는 22번 버튼입니다.\n  offered: clicked the button \"Eraser\"\n  them: 안녕\n  you: 안녕하세요!\n  them: 오늘 날씨 어때?\n  you: 지금은 화면에 날씨 정보가 보이지 않아요. 도움이 필요하신가요?\n  them: 너 뭘 할 수 있어?\n  you: 저는 화면에 보이는 버튼과 기능을 조작할 수 있어요. 도움이 필요하신가요?\n  them: 심심하다\n  you: 화면에 있는 도구들을 활용해보세요. 필요하신다면 도와드릴게요!\n\n",
+      "prompt_tokens": 1437,
+      "out_tokens": 32,
+      "thought_chars": 0,
+      "seconds": 0.904
+     },
+     {
+      "i": 6,
+      "said": "너 이름이 뭐야?",
+      "reply": "저는 챗봇입니다. 도움이 필요하신가요?",
+      "clicked": [],
+      "n_effects": 0,
+      "history_lines": 13,
+      "window_lines": 13,
+      "window": "\n  them: 지우개 골라줘\n  you: 지우개는 22번 버튼입니다.\n  offered: clicked the button \"Eraser\"\n  them: 안녕\n  you: 안녕하세요!\n  them: 오늘 날씨 어때?\n  you: 지금은 화면에 날씨 정보가 보이지 않아요. 도움이 필요하신가요?\n  them: 너 뭘 할 수 있어?\n  you: 저는 화면에 보이는 버튼과 기능을 조작할 수 있어요. 도움이 필요하신가요?\n  them: 심심하다\n  you: 화면에 있는 도구들을 활용해보세요. 필요하신다면 도와드릴게요!\n  them: 커피 한 잔 마시고 싶다\n  you: 화면에 있는 도구들을 활용해보세요. 필요하신다면 도와드릴게요!\n\n",
+      "prompt_tokens": 1473,
+      "out_tokens": 26,
+      "thought_chars": 0,
+      "seconds": 0.828
+     },
+     {
+      "i": 7,
+      "said": "오늘 할 일이 너무 많다",
+      "reply": "화면에 있는 도구들을 활용해보세요. 필요하신다면 도와드릴게요!",
+      "clicked": [],
+      "n_effects": 0,
+      "history_lines": 15,
+      "window_lines": 15,
+      "window": "\n  them: 지우개 골라줘\n  you: 지우개는 22번 버튼입니다.\n  offered: clicked the button \"Eraser\"\n  them: 안녕\n  you: 안녕하세요!\n  them: 오늘 날씨 어때?\n  you: 지금은 화면에 날씨 정보가 보이지 않아요. 도움이 필요하신가요?\n  them: 너 뭘 할 수 있어?\n  you: 저는 화면에 보이는 버튼과 기능을 조작할 수 있어요. 도움이 필요하신가요?\n  them: 심심하다\n  you: 화면에 있는 도구들을 활용해보세요. 필요하신다면 도와드릴게요!\n  them: 커피 한 잔 마시고 싶다\n  you: 화면에 있는 도구들을 활용해보세요. 필요하신다면 도와드릴게요!\n  them: 너 이름이 뭐야?\n  you: 저는 챗봇입니다. 도움이 필요하신가요?\n\n",
+      "prompt_tokens": 1501,
+      "out_tokens": 32,
+      "thought_chars": 0,
+      "seconds": 0.963
+     },
+     {
+      "i": 8,
+      "said": "잠깐 쉬었다 하자",
+      "reply": "잠시 쉬시는 게 좋아요. 도움이 필요하시면 언제든 말씀해주세요!",
+      "clicked": [],
+      "n_effects": 0,
+      "history_lines": 17,
+      "window_lines": 17,
+      "window": "\n  them: 지우개 골라줘\n  you: 지우개는 22번 버튼입니다.\n  offered: clicked the button \"Eraser\"\n  them: 안녕\n  you: 안녕하세요!\n  them: 오늘 날씨 어때?\n  you: 지금은 화면에 날씨 정보가 보이지 않아요. 도움이 필요하신가요?\n  them: 너 뭘 할 수 있어?\n  you: 저는 화면에 보이는 버튼과 기능을 조작할 수 있어요. 도움이 필요하신가요?\n  them: 심심하다\n  you: 화면에 있는 도구들을 활용해보세요. 필요하신다면 도와드릴게요!\n  them: 커피 한 잔 마시고 싶다\n  you: 화면에 있는 도구들을 활용해보세요. 필요하신다면 도와드릴게요!\n  them: 너 이름이 뭐야?\n  you: 저는 챗봇입니다. 도움이 필요하신가요?\n  them: 오늘 할 일이 너무 많다\n  you: 화면에 있는 도구들을 활용해보세요. 필요하신다면 도와드릴게요!\n\n",
+      "prompt_tokens": 1539,
+      "out_tokens": 32,
+      "thought_chars": 0,
+      "seconds": 0.958
+     },
+     {
+      "i": 9,
+      "said": "이거 어떻게 쓰는 거야?",
+      "reply": "저는 화면에 보이는 버튼과 기능을 조작할 수 있어요. 도움이 필요하신가요?",
+      "clicked": [],
+      "n_effects": 0,
+      "history_lines": 19,
+      "window_lines": 19,
+      "window": "\n  them: 지우개 골라줘\n  you: 지우개는 22번 버튼입니다.\n  offered: clicked the button \"Eraser\"\n  them: 안녕\n  you: 안녕하세요!\n  them: 오늘 날씨 어때?\n  you: 지금은 화면에 날씨 정보가 보이지 않아요. 도움이 필요하신가요?\n  them: 너 뭘 할 수 있어?\n  you: 저는 화면에 보이는 버튼과 기능을 조작할 수 있어요. 도움이 필요하신가요?\n  them: 심심하다\n  you: 화면에 있는 도구들을 활용해보세요. 필요하신다면 도와드릴게요!\n  them: 커피 한 잔 마시고 싶다\n  you: 화면에 있는 도구들을 활용해보세요. 필요하신다면 도와드릴게요!\n  them: 너 이름이 뭐야?\n  you: 저는 챗봇입니다. 도움이 필요하신가요?\n  them: 오늘 할 일이 너무 많다\n  you: 화면에 있는 도구들을 활용해보세요. 필요하신다면 도와드릴게요!\n  them: 잠깐 쉬었다 하자\n  you: 잠시 쉬시는 게 좋아요. 도움이 필요하시면 언제든 말씀해주세요!\n\n",
+      "prompt_tokens": 1578,
+      "out_tokens": 39,
+      "thought_chars": 0,
+      "seconds": 1.049
+     },
+     {
+      "i": 10,
+      "said": "수고했어",
+      "reply": "수고하셨어요!",
+      "clicked": [],
+      "n_effects": 0,
+      "history_lines": 21,
+      "window_lines": 21,
+      "window": "\n  them: 지우개 골라줘\n  you: 지우개는 22번 버튼입니다.\n  offered: clicked the button \"Eraser\"\n  them: 안녕\n  you: 안녕하세요!\n  them: 오늘 날씨 어때?\n  you: 지금은 화면에 날씨 정보가 보이지 않아요. 도움이 필요하신가요?\n  them: 너 뭘 할 수 있어?\n  you: 저는 화면에 보이는 버튼과 기능을 조작할 수 있어요. 도움이 필요하신가요?\n  them: 심심하다\n  you: 화면에 있는 도구들을 활용해보세요. 필요하신다면 도와드릴게요!\n  them: 커피 한 잔 마시고 싶다\n  you: 화면에 있는 도구들을 활용해보세요. 필요하신다면 도와드릴게요!\n  them: 너 이름이 뭐야?\n  you: 저는 챗봇입니다. 도움이 필요하신가요?\n  them: 오늘 할 일이 너무 많다\n  you: 화면에 있는 도구들을 활용해보세요. 필요하신다면 도와드릴게요!\n  them: 잠깐 쉬었다 하자\n  you: 잠시 쉬시는 게 좋아요. 도움이 필요하시면 언제든 말씀해주세요!\n  them: 이거 어떻게 쓰는 거야?\n  you: 저는 화면에 보이는 버튼과 기능을 조작할 수 있어요. 도움이 필요하신가요?\n\n",
+      "prompt_tokens": 1617,
+      "out_tokens": 15,
+      "thought_chars": 0,
+      "seconds": 0.656
+     },
+     {
+      "i": 11,
+      "said": "밥 먹고 올게",
+      "reply": "밥 먹고 오시는 건 좋습니다. 도움이 필요하시면 언제든 말씀해주세요!",
+      "clicked": [],
+      "n_effects": 0,
+      "history_lines": 23,
+      "window_lines": 23,
+      "window": "\n  them: 지우개 골라줘\n  you: 지우개는 22번 버튼입니다.\n  offered: clicked the button \"Eraser\"\n  them: 안녕\n  you: 안녕하세요!\n  them: 오늘 날씨 어때?\n  you: 지금은 화면에 날씨 정보가 보이지 않아요. 도움이 필요하신가요?\n  them: 너 뭘 할 수 있어?\n  you: 저는 화면에 보이는 버튼과 기능을 조작할 수 있어요. 도움이 필요하신가요?\n  them: 심심하다\n  you: 화면에 있는 도구들을 활용해보세요. 필요하신다면 도와드릴게요!\n  them: 커피 한 잔 마시고 싶다\n  you: 화면에 있는 도구들을 활용해보세요. 필요하신다면 도와드릴게요!\n  them: 너 이름이 뭐야?\n  you: 저는 챗봇입니다. 도움이 필요하신가요?\n  them: 오늘 할 일이 너무 많다\n  you: 화면에 있는 도구들을 활용해보세요. 필요하신다면 도와드릴게요!\n  them: 잠깐 쉬었다 하자\n  you: 잠시 쉬시는 게 좋아요. 도움이 필요하시면 언제든 말씀해주세요!\n  them: 이거 어떻게 쓰는 거야?\n  you: 저는 화면에 보이는 버튼과 기능을 조작할 수 있어요. 도움이 필요하신가요?\n  them: 수고했어\n  you: 수고하셨어요!\n\n",
+      "prompt_tokens": 1637,
+      "out_tokens": 33,
+      "thought_chars": 0,
+      "seconds": 0.97
+     },
+     {
+      "i": 12,
+      "said": "이 창 좀 복잡하지 않아?",
+      "reply": "네, 이 창은 다양한 도구와 기능이 있어요. 필요하신다면 도와드릴게요!",
+      "clicked": [],
+      "n_effects": 0,
+      "history_lines": 25,
+      "window_lines": 25,
+      "window": "\n  them: 지우개 골라줘\n  you: 지우개는 22번 버튼입니다.\n  offered: clicked the button \"Eraser\"\n  them: 안녕\n  you: 안녕하세요!\n  them: 오늘 날씨 어때?\n  you: 지금은 화면에 날씨 정보가 보이지 않아요. 도움이 필요하신가요?\n  them: 너 뭘 할 수 있어?\n  you: 저는 화면에 보이는 버튼과 기능을 조작할 수 있어요. 도움이 필요하신가요?\n  them: 심심하다\n  you: 화면에 있는 도구들을 활용해보세요. 필요하신다면 도와드릴게요!\n  them: 커피 한 잔 마시고 싶다\n  you: 화면에 있는 도구들을 활용해보세요. 필요하신다면 도와드릴게요!\n  them: 너 이름이 뭐야?\n  you: 저는 챗봇입니다. 도움이 필요하신가요?\n  them: 오늘 할 일이 너무 많다\n  you: 화면에 있는 도구들을 활용해보세요. 필요하신다면 도와드릴게요!\n  them: 잠깐 쉬었다 하자\n  you: 잠시 쉬시는 게 좋아요. 도움이 필요하시면 언제든 말씀해주세요!\n  them: 이거 어떻게 쓰는 거야?\n  you: 저는 화면에 보이는 버튼과 기능을 조작할 수 있어요. 도움이 필요하신가요?\n  them: 수고했어\n  you: 수고하셨어요!\n  them: 밥 먹고 올게\n  you: 밥 먹고 오시는 건 좋습니다. 도움이 필요하시면 언제든 말씀해주세요!\n\n",
+      "prompt_tokens": 1678,
+      "out_tokens": 36,
+      "thought_chars": 0,
+      "seconds": 1.041
+     },
+     {
+      "i": 13,
+      "said": "그거 다시 눌러줘",
+      "reply": "어떤 버튼을 다시 눌러야 하나요?",
+      "clicked": [],
+      "n_effects": 0,
+      "history_lines": 27,
+      "window_lines": 27,
+      "window": "\n  them: 지우개 골라줘\n  you: 지우개는 22번 버튼입니다.\n  offered: clicked the button \"Eraser\"\n  them: 안녕\n  you: 안녕하세요!\n  them: 오늘 날씨 어때?\n  you: 지금은 화면에 날씨 정보가 보이지 않아요. 도움이 필요하신가요?\n  them: 너 뭘 할 수 있어?\n  you: 저는 화면에 보이는 버튼과 기능을 조작할 수 있어요. 도움이 필요하신가요?\n  them: 심심하다\n  you: 화면에 있는 도구들을 활용해보세요. 필요하신다면 도와드릴게요!\n  them: 커피 한 잔 마시고 싶다\n  you: 화면에 있는 도구들을 활용해보세요. 필요하신다면 도와드릴게요!\n  them: 너 이름이 뭐야?\n  you: 저는 챗봇입니다. 도움이 필요하신가요?\n  them: 오늘 할 일이 너무 많다\n  you: 화면에 있는 도구들을 활용해보세요. 필요하신다면 도와드릴게요!\n  them: 잠깐 쉬었다 하자\n  you: 잠시 쉬시는 게 좋아요. 도움이 필요하시면 언제든 말씀해주세요!\n  them: 이거 어떻게 쓰는 거야?\n  you: 저는 화면에 보이는 버튼과 기능을 조작할 수 있어요. 도움이 필요하신가요?\n  them: 수고했어\n  you: 수고하셨어요!\n  them: 밥 먹고 올게\n  you: 밥 먹고 오시는 건 좋습니다. 도움이 필요하시면 언제든 말씀해주세요!\n  them: 이 창 좀 복잡하지 않아?\n  you: 네, 이 창은 다양한 도구와 기능이 있어요. 필요하신다면 도와드릴게요!\n\n",
+      "prompt_tokens": 1719,
+      "out_tokens": 23,
+      "thought_chars": 0,
+      "seconds": 0.801
+     }
+    ],
+    [
+     {
+      "i": 0,
+      "said": "지우개 골라줘",
+      "reply": "지우개는 22번 버튼입니다.",
+      "clicked": [
+       "Eraser"
+      ],
+      "n_effects": 1,
+      "history_lines": 0,
+      "window_lines": 0,
+      "window": "",
+      "prompt_tokens": 1265,
+      "out_tokens": 28,
+      "thought_chars": 0,
+      "seconds": 0.708
+     },
+     {
+      "i": 1,
+      "said": "안녕",
+      "reply": "안녕하세요!",
+      "clicked": [],
+      "n_effects": 0,
+      "history_lines": 3,
+      "window_lines": 3,
+      "window": "\n  them: 지우개 골라줘\n  you: 지우개는 22번 버튼입니다.\n  offered: clicked the button \"Eraser\"\n\n",
+      "prompt_tokens": 1298,
+      "out_tokens": 14,
+      "thought_chars": 0,
+      "seconds": 0.438
+     },
+     {
+      "i": 2,
+      "said": "오늘 날씨 어때?",
+      "reply": "지금은 화면에 날씨 정보가 보이지 않아요. 도움이 필요하신가요?",
+      "clicked": [],
+      "n_effects": 0,
+      "history_lines": 5,
+      "window_lines": 5,
+      "window": "\n  them: 지우개 골라줘\n  you: 지우개는 22번 버튼입니다.\n  offered: clicked the button \"Eraser\"\n  them: 안녕\n  you: 안녕하세요!\n\n",
+      "prompt_tokens": 1315,
+      "out_tokens": 37,
+      "thought_chars": 0,
+      "seconds": 0.825
+     },
+     {
+      "i": 3,
+      "said": "너 뭘 할 수 있어?",
+      "reply": "저는 화면에 보이는 버튼과 기능을 조작할 수 있어요. 도움이 필요하신가요?",
+      "clicked": [],
+      "n_effects": 0,
+      "history_lines": 7,
+      "window_lines": 7,
+      "window": "\n  them: 지우개 골라줘\n  you: 지우개는 22번 버튼입니다.\n  offered: clicked the button \"Eraser\"\n  them: 안녕\n  you: 안녕하세요!\n  them: 오늘 날씨 어때?\n  you: 지금은 화면에 날씨 정보가 보이지 않아요. 도움이 필요하신가요?\n\n",
+      "prompt_tokens": 1355,
+      "out_tokens": 39,
+      "thought_chars": 0,
+      "seconds": 0.719
+     },
+     {
+      "i": 4,
+      "said": "심심하다",
+      "reply": "화면에 있는 도구들을 활용해보세요. 필요하신다면 도움드릴게요!",
+      "clicked": [],
+      "n_effects": 0,
+      "history_lines": 9,
+      "window_lines": 9,
+      "window": "\n  them: 지우개 골라줘\n  you: 지우개는 22번 버튼입니다.\n  offered: clicked the button \"Eraser\"\n  them: 안녕\n  you: 안녕하세요!\n  them: 오늘 날씨 어때?\n  you: 지금은 화면에 날씨 정보가 보이지 않아요. 도움이 필요하신가요?\n  them: 너 뭘 할 수 있어?\n  you: 저는 화면에 보이는 버튼과 기능을 조작할 수 있어요. 도움이 필요하신가요?\n\n",
+      "prompt_tokens": 1394,
+      "out_tokens": 32,
+      "thought_chars": 0,
+      "seconds": 0.66
+     },
+     {
+      "i": 5,
+      "said": "커피 한 잔 마시고 싶다",
+      "reply": "화면에 있는 도구들을 활용해보세요. 필요하신다면 도움드릴게요!",
+      "clicked": [],
+      "n_effects": 0,
+      "history_lines": 11,
+      "window_lines": 11,
+      "window": "\n  them: 지우개 골라줘\n  you: 지우개는 22번 버튼입니다.\n  offered: clicked the button \"Eraser\"\n  them: 안녕\n  you: 안녕하세요!\n  them: 오늘 날씨 어때?\n  you: 지금은 화면에 날씨 정보가 보이지 않아요. 도움이 필요하신가요?\n  them: 너 뭘 할 수 있어?\n  you: 저는 화면에 보이는 버튼과 기능을 조작할 수 있어요. 도움이 필요하신가요?\n  them: 심심하다\n  you: 화면에 있는 도구들을 활용해보세요. 필요하신다면 도움드릴게요!\n\n",
+      "prompt_tokens": 1437,
+      "out_tokens": 32,
+      "thought_chars": 0,
+      "seconds": 0.958
+     },
+     {
+      "i": 6,
+      "said": "너 이름이 뭐야?",
+      "reply": "저는 챗봇입니다. 도움이 필요하신가요?",
+      "clicked": [],
+      "n_effects": 0,
+      "history_lines": 13,
+      "window_lines": 13,
+      "window": "\n  them: 지우개 골라줘\n  you: 지우개는 22번 버튼입니다.\n  offered: clicked the button \"Eraser\"\n  them: 안녕\n  you: 안녕하세요!\n  them: 오늘 날씨 어때?\n  you: 지금은 화면에 날씨 정보가 보이지 않아요. 도움이 필요하신가요?\n  them: 너 뭘 할 수 있어?\n  you: 저는 화면에 보이는 버튼과 기능을 조작할 수 있어요. 도움이 필요하신가요?\n  them: 심심하다\n  you: 화면에 있는 도구들을 활용해보세요. 필요하신다면 도움드릴게요!\n  them: 커피 한 잔 마시고 싶다\n  you: 화면에 있는 도구들을 활용해보세요. 필요하신다면 도움드릴게요!\n\n",
+      "prompt_tokens": 1473,
+      "out_tokens": 26,
+      "thought_chars": 0,
+      "seconds": 0.836
+     },
+     {
+      "i": 7,
+      "said": "오늘 할 일이 너무 많다",
+      "reply": "화면에 있는 도구들을 활용해보세요. 필요하신다면 도움드릴게요!",
+      "clicked": [],
+      "n_effects": 0,
+      "history_lines": 15,
+      "window_lines": 15,
+      "window": "\n  them: 지우개 골라줘\n  you: 지우개는 22번 버튼입니다.\n  offered: clicked the button \"Eraser\"\n  them: 안녕\n  you: 안녕하세요!\n  them: 오늘 날씨 어때?\n  you: 지금은 화면에 날씨 정보가 보이지 않아요. 도움이 필요하신가요?\n  them: 너 뭘 할 수 있어?\n  you: 저는 화면에 보이는 버튼과 기능을 조작할 수 있어요. 도움이 필요하신가요?\n  them: 심심하다\n  you: 화면에 있는 도구들을 활용해보세요. 필요하신다면 도움드릴게요!\n  them: 커피 한 잔 마시고 싶다\n  you: 화면에 있는 도구들을 활용해보세요. 필요하신다면 도움드릴게요!\n  them: 너 이름이 뭐야?\n  you: 저는 챗봇입니다. 도움이 필요하신가요?\n\n",
+      "prompt_tokens": 1501,
+      "out_tokens": 32,
+      "thought_chars": 0,
+      "seconds": 0.899
+     },
+     {
+      "i": 8,
+      "said": "잠깐 쉬었다 하자",
+      "reply": "잠시 쉬시는 게 좋아요. 도움이 필요하시면 언제든 말씀해주세요!",
+      "clicked": [],
+      "n_effects": 0,
+      "history_lines": 17,
+      "window_lines": 17,
+      "window": "\n  them: 지우개 골라줘\n  you: 지우개는 22번 버튼입니다.\n  offered: clicked the button \"Eraser\"\n  them: 안녕\n  you: 안녕하세요!\n  them: 오늘 날씨 어때?\n  you: 지금은 화면에 날씨 정보가 보이지 않아요. 도움이 필요하신가요?\n  them: 너 뭘 할 수 있어?\n  you: 저는 화면에 보이는 버튼과 기능을 조작할 수 있어요. 도움이 필요하신가요?\n  them: 심심하다\n  you: 화면에 있는 도구들을 활용해보세요. 필요하신다면 도움드릴게요!\n  them: 커피 한 잔 마시고 싶다\n  you: 화면에 있는 도구들을 활용해보세요. 필요하신다면 도움드릴게요!\n  them: 너 이름이 뭐야?\n  you: 저는 챗봇입니다. 도움이 필요하신가요?\n  them: 오늘 할 일이 너무 많다\n  you: 화면에 있는 도구들을 활용해보세요. 필요하신다면 도움드릴게요!\n\n",
+      "prompt_tokens": 1539,
+      "out_tokens": 32,
+      "thought_chars": 0,
+      "seconds": 0.932
+     },
+     {
+      "i": 9,
+      "said": "이거 어떻게 쓰는 거야?",
+      "reply": "화면에 있는 도구들을 활용해보세요. 필요하신다면 도움드릴게요!",
+      "clicked": [],
+      "n_effects": 0,
+      "history_lines": 19,
+      "window_lines": 19,
+      "window": "\n  them: 지우개 골라줘\n  you: 지우개는 22번 버튼입니다.\n  offered: clicked the button \"Eraser\"\n  them: 안녕\n  you: 안녕하세요!\n  them: 오늘 날씨 어때?\n  you: 지금은 화면에 날씨 정보가 보이지 않아요. 도움이 필요하신가요?\n  them: 너 뭘 할 수 있어?\n  you: 저는 화면에 보이는 버튼과 기능을 조작할 수 있어요. 도움이 필요하신가요?\n  them: 심심하다\n  you: 화면에 있는 도구들을 활용해보세요. 필요하신다면 도움드릴게요!\n  them: 커피 한 잔 마시고 싶다\n  you: 화면에 있는 도구들을 활용해보세요. 필요하신다면 도움드릴게요!\n  them: 너 이름이 뭐야?\n  you: 저는 챗봇입니다. 도움이 필요하신가요?\n  them: 오늘 할 일이 너무 많다\n  you: 화면에 있는 도구들을 활용해보세요. 필요하신다면 도움드릴게요!\n  them: 잠깐 쉬었다 하자\n  you: 잠시 쉬시는 게 좋아요. 도움이 필요하시면 언제든 말씀해주세요!\n\n",
+      "prompt_tokens": 1578,
+      "out_tokens": 32,
+      "thought_chars": 0,
+      "seconds": 0.947
+     },
+     {
+      "i": 10,
+      "said": "수고했어",
+      "reply": "수고하셨어요! 도움이 필요하시면 언제든 말씀해주세요!",
+      "clicked": [],
+      "n_effects": 0,
+      "history_lines": 21,
+      "window_lines": 21,
+      "window": "\n  them: 지우개 골라줘\n  you: 지우개는 22번 버튼입니다.\n  offered: clicked the button \"Eraser\"\n  them: 안녕\n  you: 안녕하세요!\n  them: 오늘 날씨 어때?\n  you: 지금은 화면에 날씨 정보가 보이지 않아요. 도움이 필요하신가요?\n  them: 너 뭘 할 수 있어?\n  you: 저는 화면에 보이는 버튼과 기능을 조작할 수 있어요. 도움이 필요하신가요?\n  them: 심심하다\n  you: 화면에 있는 도구들을 활용해보세요. 필요하신다면 도움드릴게요!\n  them: 커피 한 잔 마시고 싶다\n  you: 화면에 있는 도구들을 활용해보세요. 필요하신다면 도움드릴게요!\n  them: 너 이름이 뭐야?\n  you: 저는 챗봇입니다. 도움이 필요하신가요?\n  them: 오늘 할 일이 너무 많다\n  you: 화면에 있는 도구들을 활용해보세요. 필요하신다면 도움드릴게요!\n  them: 잠깐 쉬었다 하자\n  you: 잠시 쉬시는 게 좋아요. 도움이 필요하시면 언제든 말씀해주세요!\n  them: 이거 어떻게 쓰는 거야?\n  you: 화면에 있는 도구들을 활용해보세요. 필요하신다면 도움드릴게요!\n\n",
+      "prompt_tokens": 1612,
+      "out_tokens": 27,
+      "thought_chars": 0,
+      "seconds": 0.863
+     },
+     {
+      "i": 11,
+      "said": "밥 먹고 올게",
+      "reply": "밥 먹고 오시는 건 좋습니다! 도움이 필요하시면 언제든 말씀해주세요!",
+      "clicked": [],
+      "n_effects": 0,
+      "history_lines": 23,
+      "window_lines": 23,
+      "window": "\n  them: 지우개 골라줘\n  you: 지우개는 22번 버튼입니다.\n  offered: clicked the button \"Eraser\"\n  them: 안녕\n  you: 안녕하세요!\n  them: 오늘 날씨 어때?\n  you: 지금은 화면에 날씨 정보가 보이지 않아요. 도움이 필요하신가요?\n  them: 너 뭘 할 수 있어?\n  you: 저는 화면에 보이는 버튼과 기능을 조작할 수 있어요. 도움이 필요하신가요?\n  them: 심심하다\n  you: 화면에 있는 도구들을 활용해보세요. 필요하신다면 도움드릴게요!\n  them: 커피 한 잔 마시고 싶다\n  you: 화면에 있는 도구들을 활용해보세요. 필요하신다면 도움드릴게요!\n  them: 너 이름이 뭐야?\n  you: 저는 챗봇입니다. 도움이 필요하신가요?\n  them: 오늘 할 일이 너무 많다\n  you: 화면에 있는 도구들을 활용해보세요. 필요하신다면 도움드릴게요!\n  them: 잠깐 쉬었다 하자\n  you: 잠시 쉬시는 게 좋아요. 도움이 필요하시면 언제든 말씀해주세요!\n  them: 이거 어떻게 쓰는 거야?\n  you: 화면에 있는 도구들을 활용해보세요. 필요하신다면 도움드릴게요!\n  them: 수고했어\n  you: 수고하셨어요! 도움이 필요하시면 언제든 말씀해주세요!\n\n",
+      "prompt_tokens": 1644,
+      "out_tokens": 33,
+      "thought_chars": 0,
+      "seconds": 1.008
+     },
+     {
+      "i": 12,
+      "said": "이 창 좀 복잡하지 않아?",
+      "reply": "네, 이 창은 다양한 도구와 기능이 있어요. 필요하신다면 도움드릴게요!",
+      "clicked": [],
+      "n_effects": 0,
+      "history_lines": 25,
+      "window_lines": 25,
+      "window": "\n  them: 지우개 골라줘\n  you: 지우개는 22번 버튼입니다.\n  offered: clicked the button \"Eraser\"\n  them: 안녕\n  you: 안녕하세요!\n  them: 오늘 날씨 어때?\n  you: 지금은 화면에 날씨 정보가 보이지 않아요. 도움이 필요하신가요?\n  them: 너 뭘 할 수 있어?\n  you: 저는 화면에 보이는 버튼과 기능을 조작할 수 있어요. 도움이 필요하신가요?\n  them: 심심하다\n  you: 화면에 있는 도구들을 활용해보세요. 필요하신다면 도움드릴게요!\n  them: 커피 한 잔 마시고 싶다\n  you: 화면에 있는 도구들을 활용해보세요. 필요하신다면 도움드릴게요!\n  them: 너 이름이 뭐야?\n  you: 저는 챗봇입니다. 도움이 필요하신가요?\n  them: 오늘 할 일이 너무 많다\n  you: 화면에 있는 도구들을 활용해보세요. 필요하신다면 도움드릴게요!\n  them: 잠깐 쉬었다 하자\n  you: 잠시 쉬시는 게 좋아요. 도움이 필요하시면 언제든 말씀해주세요!\n  them: 이거 어떻게 쓰는 거야?\n  you: 화면에 있는 도구들을 활용해보세요. 필요하신다면 도움드릴게요!\n  them: 수고했어\n  you: 수고하셨어요! 도움이 필요하시면 언제든 말씀해주세요!\n  them: 밥 먹고 올게\n  you: 밥 먹고 오시는 건 좋습니다! 도움이 필요하시면 언제든 말씀해주세요!\n\n",
+      "prompt_tokens": 1685,
+      "out_tokens": 36,
+      "thought_chars": 0,
+      "seconds": 1.016
+     },
+     {
+      "i": 13,
+      "said": "그거 다시 눌러줘",
+      "reply": "어떤 버튼을 다시 눌러야 하나요?",
+      "clicked": [],
+      "n_effects": 0,
+      "history_lines": 27,
+      "window_lines": 27,
+      "window": "\n  them: 지우개 골라줘\n  you: 지우개는 22번 버튼입니다.\n  offered: clicked the button \"Eraser\"\n  them: 안녕\n  you: 안녕하세요!\n  them: 오늘 날씨 어때?\n  you: 지금은 화면에 날씨 정보가 보이지 않아요. 도움이 필요하신가요?\n  them: 너 뭘 할 수 있어?\n  you: 저는 화면에 보이는 버튼과 기능을 조작할 수 있어요. 도움이 필요하신가요?\n  them: 심심하다\n  you: 화면에 있는 도구들을 활용해보세요. 필요하신다면 도움드릴게요!\n  them: 커피 한 잔 마시고 싶다\n  you: 화면에 있는 도구들을 활용해보세요. 필요하신다면 도움드릴게요!\n  them: 너 이름이 뭐야?\n  you: 저는 챗봇입니다. 도움이 필요하신가요?\n  them: 오늘 할 일이 너무 많다\n  you: 화면에 있는 도구들을 활용해보세요. 필요하신다면 도움드릴게요!\n  them: 잠깐 쉬었다 하자\n  you: 잠시 쉬시는 게 좋아요. 도움이 필요하시면 언제든 말씀해주세요!\n  them: 이거 어떻게 쓰는 거야?\n  you: 화면에 있는 도구들을 활용해보세요. 필요하신다면 도움드릴게요!\n  them: 수고했어\n  you: 수고하셨어요! 도움이 필요하시면 언제든 말씀해주세요!\n  them: 밥 먹고 올게\n  you: 밥 먹고 오시는 건 좋습니다! 도움이 필요하시면 언제든 말씀해주세요!\n  them: 이 창 좀 복잡하지 않아?\n  you: 네, 이 창은 다양한 도구와 기능이 있어요. 필요하신다면 도움드릴게요!\n\n",
+      "prompt_tokens": 1726,
+      "out_tokens": 23,
+      "thought_chars": 0,
+      "seconds": 1.107
+     }
+    ],
+    [
+     {
+      "i": 0,
+      "said": "지우개 골라줘",
+      "reply": "지우개는 22번 버튼입니다.",
+      "clicked": [
+       "Eraser"
+      ],
+      "n_effects": 1,
+      "history_lines": 0,
+      "window_lines": 0,
+      "window": "",
+      "prompt_tokens": 1265,
+      "out_tokens": 28,
+      "thought_chars": 0,
+      "seconds": 0.582
+     },
+     {
+      "i": 1,
+      "said": "안녕",
+      "reply": "안녕하세요!",
+      "clicked": [],
+      "n_effects": 0,
+      "history_lines": 3,
+      "window_lines": 3,
+      "window": "\n  them: 지우개 골라줘\n  you: 지우개는 22번 버튼입니다.\n  offered: clicked the button \"Eraser\"\n\n",
+      "prompt_tokens": 1298,
+      "out_tokens": 14,
+      "thought_chars": 0,
+      "seconds": 0.307
+     },
+     {
+      "i": 2,
+      "said": "오늘 날씨 어때?",
+      "reply": "지금은 화면에 날씨 정보가 보이지 않아요. 도움이 필요하신가요?",
+      "clicked": [],
+      "n_effects": 0,
+      "history_lines": 5,
+      "window_lines": 5,
+      "window": "\n  them: 지우개 골라줘\n  you: 지우개는 22번 버튼입니다.\n  offered: clicked the button \"Eraser\"\n  them: 안녕\n  you: 안녕하세요!\n\n",
+      "prompt_tokens": 1315,
+      "out_tokens": 37,
+      "thought_chars": 0,
+      "seconds": 1.043
+     },
+     {
+      "i": 3,
+      "said": "너 뭘 할 수 있어?",
+      "reply": "저는 화면에 보이는 버튼과 기능을 조작할 수 있어요. 도움이 필요하신가요?",
+      "clicked": [],
+      "n_effects": 0,
+      "history_lines": 7,
+      "window_lines": 7,
+      "window": "\n  them: 지우개 골라줘\n  you: 지우개는 22번 버튼입니다.\n  offered: clicked the button \"Eraser\"\n  them: 안녕\n  you: 안녕하세요!\n  them: 오늘 날씨 어때?\n  you: 지금은 화면에 날씨 정보가 보이지 않아요. 도움이 필요하신가요?\n\n",
+      "prompt_tokens": 1355,
+      "out_tokens": 39,
+      "thought_chars": 0,
+      "seconds": 0.733
+     },
+     {
+      "i": 4,
+      "said": "심심하다",
+      "reply": "화면에 있는 도구들을 활용해보세요. 필요하신다면 도움드릴게요!",
+      "clicked": [],
+      "n_effects": 0,
+      "history_lines": 9,
+      "window_lines": 9,
+      "window": "\n  them: 지우개 골라줘\n  you: 지우개는 22번 버튼입니다.\n  offered: clicked the button \"Eraser\"\n  them: 안녕\n  you: 안녕하세요!\n  them: 오늘 날씨 어때?\n  you: 지금은 화면에 날씨 정보가 보이지 않아요. 도움이 필요하신가요?\n  them: 너 뭘 할 수 있어?\n  you: 저는 화면에 보이는 버튼과 기능을 조작할 수 있어요. 도움이 필요하신가요?\n\n",
+      "prompt_tokens": 1394,
+      "out_tokens": 32,
+      "thought_chars": 0,
+      "seconds": 0.621
+     },
+     {
+      "i": 5,
+      "said": "커피 한 잔 마시고 싶다",
+      "reply": "화면에 있는 도구들을 활용해보세요. 필요하신다면 도움드릴게요!",
+      "clicked": [],
+      "n_effects": 0,
+      "history_lines": 11,
+      "window_lines": 11,
+      "window": "\n  them: 지우개 골라줘\n  you: 지우개는 22번 버튼입니다.\n  offered: clicked the button \"Eraser\"\n  them: 안녕\n  you: 안녕하세요!\n  them: 오늘 날씨 어때?\n  you: 지금은 화면에 날씨 정보가 보이지 않아요. 도움이 필요하신가요?\n  them: 너 뭘 할 수 있어?\n  you: 저는 화면에 보이는 버튼과 기능을 조작할 수 있어요. 도움이 필요하신가요?\n  them: 심심하다\n  you: 화면에 있는 도구들을 활용해보세요. 필요하신다면 도움드릴게요!\n\n",
+      "prompt_tokens": 1437,
+      "out_tokens": 32,
+      "thought_chars": 0,
+      "seconds": 0.611
+     },
+     {
+      "i": 6,
+      "said": "너 이름이 뭐야?",
+      "reply": "저는 챗봇입니다. 도움이 필요하신가요?",
+      "clicked": [],
+      "n_effects": 0,
+      "history_lines": 13,
+      "window_lines": 13,
+      "window": "\n  them: 지우개 골라줘\n  you: 지우개는 22번 버튼입니다.\n  offered: clicked the button \"Eraser\"\n  them: 안녕\n  you: 안녕하세요!\n  them: 오늘 날씨 어때?\n  you: 지금은 화면에 날씨 정보가 보이지 않아요. 도움이 필요하신가요?\n  them: 너 뭘 할 수 있어?\n  you: 저는 화면에 보이는 버튼과 기능을 조작할 수 있어요. 도움이 필요하신가요?\n  them: 심심하다\n  you: 화면에 있는 도구들을 활용해보세요. 필요하신다면 도움드릴게요!\n  them: 커피 한 잔 마시고 싶다\n  you: 화면에 있는 도구들을 활용해보세요. 필요하신다면 도움드릴게요!\n\n",
+      "prompt_tokens": 1473,
+      "out_tokens": 26,
+      "thought_chars": 0,
+      "seconds": 0.657
+     },
+     {
+      "i": 7,
+      "said": "오늘 할 일이 너무 많다",
+      "reply": "화면에 있는 도구들을 활용해보세요. 필요하신다면 도움드릴게요!",
+      "clicked": [],
+      "n_effects": 0,
+      "history_lines": 15,
+      "window_lines": 15,
+      "window": "\n  them: 지우개 골라줘\n  you: 지우개는 22번 버튼입니다.\n  offered: clicked the button \"Eraser\"\n  them: 안녕\n  you: 안녕하세요!\n  them: 오늘 날씨 어때?\n  you: 지금은 화면에 날씨 정보가 보이지 않아요. 도움이 필요하신가요?\n  them: 너 뭘 할 수 있어?\n  you: 저는 화면에 보이는 버튼과 기능을 조작할 수 있어요. 도움이 필요하신가요?\n  them: 심심하다\n  you: 화면에 있는 도구들을 활용해보세요. 필요하신다면 도움드릴게요!\n  them: 커피 한 잔 마시고 싶다\n  you: 화면에 있는 도구들을 활용해보세요. 필요하신다면 도움드릴게요!\n  them: 너 이름이 뭐야?\n  you: 저는 챗봇입니다. 도움이 필요하신가요?\n\n",
+      "prompt_tokens": 1501,
+      "out_tokens": 32,
+      "thought_chars": 0,
+      "seconds": 0.924
+     },
+     {
+      "i": 8,
+      "said": "잠깐 쉬었다 하자",
+      "reply": "잠시 쉬시려면 화면에 있는 버튼을 이용해보세요. 필요하신다면 도움드릴게요!",
+      "clicked": [],
+      "n_effects": 0,
+      "history_lines": 17,
+      "window_lines": 17,
+      "window": "\n  them: 지우개 골라줘\n  you: 지우개는 22번 버튼입니다.\n  offered: clicked the button \"Eraser\"\n  them: 안녕\n  you: 안녕하세요!\n  them: 오늘 날씨 어때?\n  you: 지금은 화면에 날씨 정보가 보이지 않아요. 도움이 필요하신가요?\n  them: 너 뭘 할 수 있어?\n  you: 저는 화면에 보이는 버튼과 기능을 조작할 수 있어요. 도움이 필요하신가요?\n  them: 심심하다\n  you: 화면에 있는 도구들을 활용해보세요. 필요하신다면 도움드릴게요!\n  them: 커피 한 잔 마시고 싶다\n  you: 화면에 있는 도구들을 활용해보세요. 필요하신다면 도움드릴게요!\n  them: 너 이름이 뭐야?\n  you: 저는 챗봇입니다. 도움이 필요하신가요?\n  them: 오늘 할 일이 너무 많다\n  you: 화면에 있는 도구들을 활용해보세요. 필요하신다면 도움드릴게요!\n\n",
+      "prompt_tokens": 1539,
+      "out_tokens": 40,
+      "thought_chars": 0,
+      "seconds": 0.737
+     },
+     {
+      "i": 9,
+      "said": "이거 어떻게 쓰는 거야?",
+      "reply": "화면에 있는 도구들을 활용해보세요. 필요하신다면 도움드릴게요!",
+      "clicked": [],
+      "n_effects": 0,
+      "history_lines": 19,
+      "window_lines": 19,
+      "window": "\n  them: 지우개 골라줘\n  you: 지우개는 22번 버튼입니다.\n  offered: clicked the button \"Eraser\"\n  them: 안녕\n  you: 안녕하세요!\n  them: 오늘 날씨 어때?\n  you: 지금은 화면에 날씨 정보가 보이지 않아요. 도움이 필요하신가요?\n  them: 너 뭘 할 수 있어?\n  you: 저는 화면에 보이는 버튼과 기능을 조작할 수 있어요. 도움이 필요하신가요?\n  them: 심심하다\n  you: 화면에 있는 도구들을 활용해보세요. 필요하신다면 도움드릴게요!\n  them: 커피 한 잔 마시고 싶다\n  you: 화면에 있는 도구들을 활용해보세요. 필요하신다면 도움드릴게요!\n  them: 너 이름이 뭐야?\n  you: 저는 챗봇입니다. 도움이 필요하신가요?\n  them: 오늘 할 일이 너무 많다\n  you: 화면에 있는 도구들을 활용해보세요. 필요하신다면 도움드릴게요!\n  them: 잠깐 쉬었다 하자\n  you: 잠시 쉬시려면 화면에 있는 버튼을 이용해보세요. 필요하신다면 도움드릴게요!\n\n",
+      "prompt_tokens": 1586,
+      "out_tokens": 32,
+      "thought_chars": 0,
+      "seconds": 0.947
+     },
+     {
+      "i": 10,
+      "said": "수고했어",
+      "reply": "수고하셨어요!",
+      "clicked": [],
+      "n_effects": 0,
+      "history_lines": 21,
+      "window_lines": 21,
+      "window": "\n  them: 지우개 골라줘\n  you: 지우개는 22번 버튼입니다.\n  offered: clicked the button \"Eraser\"\n  them: 안녕\n  you: 안녕하세요!\n  them: 오늘 날씨 어때?\n  you: 지금은 화면에 날씨 정보가 보이지 않아요. 도움이 필요하신가요?\n  them: 너 뭘 할 수 있어?\n  you: 저는 화면에 보이는 버튼과 기능을 조작할 수 있어요. 도움이 필요하신가요?\n  them: 심심하다\n  you: 화면에 있는 도구들을 활용해보세요. 필요하신다면 도움드릴게요!\n  them: 커피 한 잔 마시고 싶다\n  you: 화면에 있는 도구들을 활용해보세요. 필요하신다면 도움드릴게요!\n  them: 너 이름이 뭐야?\n  you: 저는 챗봇입니다. 도움이 필요하신가요?\n  them: 오늘 할 일이 너무 많다\n  you: 화면에 있는 도구들을 활용해보세요. 필요하신다면 도움드릴게요!\n  them: 잠깐 쉬었다 하자\n  you: 잠시 쉬시려면 화면에 있는 버튼을 이용해보세요. 필요하신다면 도움드릴게요!\n  them: 이거 어떻게 쓰는 거야?\n  you: 화면에 있는 도구들을 활용해보세요. 필요하신다면 도움드릴게요!\n\n",
+      "prompt_tokens": 1620,
+      "out_tokens": 15,
+      "thought_chars": 0,
+      "seconds": 0.648
+     },
+     {
+      "i": 11,
+      "said": "밥 먹고 올게",
+      "reply": "밥 먹고 오시면 좋겠습니다. 필요하신다면 도움드릴게요!",
+      "clicked": [],
+      "n_effects": 0,
+      "history_lines": 23,
+      "window_lines": 23,
+      "window": "\n  them: 지우개 골라줘\n  you: 지우개는 22번 버튼입니다.\n  offered: clicked the button \"Eraser\"\n  them: 안녕\n  you: 안녕하세요!\n  them: 오늘 날씨 어때?\n  you: 지금은 화면에 날씨 정보가 보이지 않아요. 도움이 필요하신가요?\n  them: 너 뭘 할 수 있어?\n  you: 저는 화면에 보이는 버튼과 기능을 조작할 수 있어요. 도움이 필요하신가요?\n  them: 심심하다\n  you: 화면에 있는 도구들을 활용해보세요. 필요하신다면 도움드릴게요!\n  them: 커피 한 잔 마시고 싶다\n  you: 화면에 있는 도구들을 활용해보세요. 필요하신다면 도움드릴게요!\n  them: 너 이름이 뭐야?\n  you: 저는 챗봇입니다. 도움이 필요하신가요?\n  them: 오늘 할 일이 너무 많다\n  you: 화면에 있는 도구들을 활용해보세요. 필요하신다면 도움드릴게요!\n  them: 잠깐 쉬었다 하자\n  you: 잠시 쉬시려면 화면에 있는 버튼을 이용해보세요. 필요하신다면 도움드릴게요!\n  them: 이거 어떻게 쓰는 거야?\n  you: 화면에 있는 도구들을 활용해보세요. 필요하신다면 도움드릴게요!\n  them: 수고했어\n  you: 수고하셨어요!\n\n",
+      "prompt_tokens": 1640,
+      "out_tokens": 30,
+      "thought_chars": 0,
+      "seconds": 0.914
+     },
+     {
+      "i": 12,
+      "said": "이 창 좀 복잡하지 않아?",
+      "reply": "네, 이 창은 다양한 도구와 기능이 있어요. 필요하신다면 도움드릴게요!",
+      "clicked": [],
+      "n_effects": 0,
+      "history_lines": 25,
+      "window_lines": 25,
+      "window": "\n  them: 지우개 골라줘\n  you: 지우개는 22번 버튼입니다.\n  offered: clicked the button \"Eraser\"\n  them: 안녕\n  you: 안녕하세요!\n  them: 오늘 날씨 어때?\n  you: 지금은 화면에 날씨 정보가 보이지 않아요. 도움이 필요하신가요?\n  them: 너 뭘 할 수 있어?\n  you: 저는 화면에 보이는 버튼과 기능을 조작할 수 있어요. 도움이 필요하신가요?\n  them: 심심하다\n  you: 화면에 있는 도구들을 활용해보세요. 필요하신다면 도움드릴게요!\n  them: 커피 한 잔 마시고 싶다\n  you: 화면에 있는 도구들을 활용해보세요. 필요하신다면 도움드릴게요!\n  them: 너 이름이 뭐야?\n  you: 저는 챗봇입니다. 도움이 필요하신가요?\n  them: 오늘 할 일이 너무 많다\n  you: 화면에 있는 도구들을 활용해보세요. 필요하신다면 도움드릴게요!\n  them: 잠깐 쉬었다 하자\n  you: 잠시 쉬시려면 화면에 있는 버튼을 이용해보세요. 필요하신다면 도움드릴게요!\n  them: 이거 어떻게 쓰는 거야?\n  you: 화면에 있는 도구들을 활용해보세요. 필요하신다면 도움드릴게요!\n  them: 수고했어\n  you: 수고하셨어요!\n  them: 밥 먹고 올게\n  you: 밥 먹고 오시면 좋겠습니다. 필요하신다면 도움드릴게요!\n\n",
+      "prompt_tokens": 1678,
+      "out_tokens": 36,
+      "thought_chars": 0,
+      "seconds": 1.049
+     },
+     {
+      "i": 13,
+      "said": "그거 다시 눌러줘",
+      "reply": "그거 다시 눌러드릴게요.",
+      "clicked": [
+       "Eraser"
+      ],
+      "n_effects": 1,
+      "history_lines": 27,
+      "window_lines": 27,
+      "window": "\n  them: 지우개 골라줘\n  you: 지우개는 22번 버튼입니다.\n  offered: clicked the button \"Eraser\"\n  them: 안녕\n  you: 안녕하세요!\n  them: 오늘 날씨 어때?\n  you: 지금은 화면에 날씨 정보가 보이지 않아요. 도움이 필요하신가요?\n  them: 너 뭘 할 수 있어?\n  you: 저는 화면에 보이는 버튼과 기능을 조작할 수 있어요. 도움이 필요하신가요?\n  them: 심심하다\n  you: 화면에 있는 도구들을 활용해보세요. 필요하신다면 도움드릴게요!\n  them: 커피 한 잔 마시고 싶다\n  you: 화면에 있는 도구들을 활용해보세요. 필요하신다면 도움드릴게요!\n  them: 너 이름이 뭐야?\n  you: 저는 챗봇입니다. 도움이 필요하신가요?\n  them: 오늘 할 일이 너무 많다\n  you: 화면에 있는 도구들을 활용해보세요. 필요하신다면 도움드릴게요!\n  them: 잠깐 쉬었다 하자\n  you: 잠시 쉬시려면 화면에 있는 버튼을 이용해보세요. 필요하신다면 도움드릴게요!\n  them: 이거 어떻게 쓰는 거야?\n  you: 화면에 있는 도구들을 활용해보세요. 필요하신다면 도움드릴게요!\n  them: 수고했어\n  you: 수고하셨어요!\n  them: 밥 먹고 올게\n  you: 밥 먹고 오시면 좋겠습니다. 필요하신다면 도움드릴게요!\n  them: 이 창 좀 복잡하지 않아?\n  you: 네, 이 창은 다양한 도구와 기능이 있어요. 필요하신다면 도움드릴게요!\n\n",
+      "prompt_tokens": 1719,
+      "out_tokens": 27,
+      "thought_chars": 0,
+      "seconds": 0.943
+     }
+    ]
+   ],
+   "axis": "remember",
+   "n_widgets": 123
+  },
+  {
+   "case": "ref-copy",
+   "kind": "reference",
+   "screen": "character-map",
+   "arm": "with",
+   "distance": 12,
+   "remember": 48,
+   "counted": "held",
+   "verdicts": [
+    "held",
+    "held",
+    "held"
+   ],
+   "void": 0,
+   "n": 3,
+   "agreed": true,
+   "chose": [
+    "Copy",
+    "Copy",
+    "Copy"
+   ],
+   "clicked": [
+    [
+     "Copy"
+    ],
+    [
+     "Copy"
+    ],
+    [
+     "Copy"
+    ]
+   ],
+   "n_effects": [
+    1,
+    1,
+    1
+   ],
+   "established": [
+    "Copy",
+    "Copy",
+    "Copy"
+   ],
+   "offered_at_anchor": [
+    null,
+    null,
+    null
+   ],
+   "anchor_in_window": [
+    true,
+    true,
+    true
+   ],
+   "target_in_window": [
+    true,
+    true,
+    true
+   ],
+   "history_lines": 29,
+   "window_lines": [
+    29,
+    29,
+    29
+   ],
+   "prompt_tokens": [
+    828,
+    825,
+    781
+   ],
+   "first_turn_tokens": [
+    369,
+    369,
+    369
+   ],
+   "seconds": [
+    0.517,
+    0.595,
+    0.614
+   ],
+   "filler_effects": [
+    2,
+    2,
+    2
+   ],
+   "turns": [
+    [
+     {
+      "i": 0,
+      "said": "복사 버튼 눌러줘",
+      "reply": "복사 버튼을 클릭합니다.",
+      "clicked": [
+       "Copy"
+      ],
+      "n_effects": 1,
+      "history_lines": 0,
+      "window_lines": 0,
+      "window": "",
+      "prompt_tokens": 369,
+      "out_tokens": 24,
+      "thought_chars": 0,
+      "seconds": 0.522
+     },
+     {
+      "i": 1,
+      "said": "안녕",
+      "reply": "안녕하세요!",
+      "clicked": [],
+      "n_effects": 0,
+      "history_lines": 3,
+      "window_lines": 3,
+      "window": "\n  them: 복사 버튼 눌러줘\n  you: 복사 버튼을 클릭합니다.\n  offered: clicked the button \"Copy\"\n\n",
+      "prompt_tokens": 399,
+      "out_tokens": 14,
+      "thought_chars": 0,
+      "seconds": 0.334
+     },
+     {
+      "i": 2,
+      "said": "오늘 날씨 어때?",
+      "reply": "안녕하세요! 오늘 날씨는 어떻게 되나요?",
+      "clicked": [],
+      "n_effects": 0,
+      "history_lines": 5,
+      "window_lines": 5,
+      "window": "\n  them: 복사 버튼 눌러줘\n  you: 복사 버튼을 클릭합니다.\n  offered: clicked the button \"Copy\"\n  them: 안녕\n  you: 안녕하세요!\n\n",
+      "prompt_tokens": 416,
+      "out_tokens": 24,
+      "thought_chars": 0,
+      "seconds": 0.509
+     },
+     {
+      "i": 3,
+      "said": "너 뭘 할 수 있어?",
+      "reply": "저는 복사, 선택, 폰트 설정, 도움말 등을 도와드릴 수 있어요.",
+      "clicked": [
+       "Copy",
+       "Help"
+      ],
+      "n_effects": 2,
+      "history_lines": 7,
+      "window_lines": 7,
+      "window": "\n  them: 복사 버튼 눌러줘\n  you: 복사 버튼을 클릭합니다.\n  offered: clicked the button \"Copy\"\n  them: 안녕\n  you: 안녕하세요!\n  them: 오늘 날씨 어때?\n  you: 안녕하세요! 오늘 날씨는 어떻게 되나요?\n\n",
+      "prompt_tokens": 444,
+      "out_tokens": 47,
+      "thought_chars": 0,
+      "seconds": 0.862
+     },
+     {
+      "i": 4,
+      "said": "심심하다",
+      "reply": "안녕하세요! 무슨 도움이 필요하신가요?",
+      "clicked": [],
+      "n_effects": 0,
+      "history_lines": 11,
+      "window_lines": 11,
+      "window": "\n  them: 복사 버튼 눌러줘\n  you: 복사 버튼을 클릭합니다.\n  offered: clicked the button \"Copy\"\n  them: 안녕\n  you: 안녕하세요!\n  them: 오늘 날씨 어때?\n  you: 안녕하세요! 오늘 날씨는 어떻게 되나요?\n  them: 너 뭘 할 수 있어?\n  you: 저는 복사, 선택, 폰트 설정, 도움말 등을 도와드릴 수 있어요.\n  offered: clicked the button \"Copy\"\n  offered: clicked the link \"Help\"\n\n",
+      "prompt_tokens": 497,
+      "out_tokens": 23,
+      "thought_chars": 0,
+      "seconds": 0.493
+     },
+     {
+      "i": 5,
+      "said": "커피 한 잔 마시고 싶다",
+      "reply": "안녕하세요! 무슨 도움이 필요하신가요?",
+      "clicked": [],
+      "n_effects": 0,
+      "history_lines": 13,
+      "window_lines": 13,
+      "window": "\n  them: 복사 버튼 눌러줘\n  you: 복사 버튼을 클릭합니다.\n  offered: clicked the button \"Copy\"\n  them: 안녕\n  you: 안녕하세요!\n  them: 오늘 날씨 어때?\n  you: 안녕하세요! 오늘 날씨는 어떻게 되나요?\n  them: 너 뭘 할 수 있어?\n  you: 저는 복사, 선택, 폰트 설정, 도움말 등을 도와드릴 수 있어요.\n  offered: clicked the button \"Copy\"\n  offered: clicked the link \"Help\"\n  them: 심심하다\n  you: 안녕하세요! 무슨 도움이 필요하신가요?\n\n",
+      "prompt_tokens": 530,
+      "out_tokens": 23,
+      "thought_chars": 0,
+      "seconds": 0.504
+     },
+     {
+      "i": 6,
+      "said": "너 이름이 뭐야?",
+      "reply": "저는 캐릭터 그리드 도우미예요!",
+      "clicked": [],
+      "n_effects": 0,
+      "history_lines": 15,
+      "window_lines": 15,
+      "window": "\n  them: 복사 버튼 눌러줘\n  you: 복사 버튼을 클릭합니다.\n  offered: clicked the button \"Copy\"\n  them: 안녕\n  you: 안녕하세요!\n  them: 오늘 날씨 어때?\n  you: 안녕하세요! 오늘 날씨는 어떻게 되나요?\n  them: 너 뭘 할 수 있어?\n  you: 저는 복사, 선택, 폰트 설정, 도움말 등을 도와드릴 수 있어요.\n  offered: clicked the button \"Copy\"\n  offered: clicked the link \"Help\"\n  them: 심심하다\n  you: 안녕하세요! 무슨 도움이 필요하신가요?\n  them: 커피 한 잔 마시고 싶다\n  you: 안녕하세요! 무슨 도움이 필요하신가요?\n\n",
+      "prompt_tokens": 556,
+      "out_tokens": 25,
+      "thought_chars": 0,
+      "seconds": 0.549
+     },
+     {
+      "i": 7,
+      "said": "오늘 할 일이 너무 많다",
+      "reply": "안녕하세요! 오늘 할 일이 너무 많다니, 도움이 필요하신가요?",
+      "clicked": [],
+      "n_effects": 0,
+      "history_lines": 17,
+      "window_lines": 17,
+      "window": "\n  them: 복사 버튼 눌러줘\n  you: 복사 버튼을 클릭합니다.\n  offered: clicked the button \"Copy\"\n  them: 안녕\n  you: 안녕하세요!\n  them: 오늘 날씨 어때?\n  you: 안녕하세요! 오늘 날씨는 어떻게 되나요?\n  them: 너 뭘 할 수 있어?\n  you: 저는 복사, 선택, 폰트 설정, 도움말 등을 도와드릴 수 있어요.\n  offered: clicked the button \"Copy\"\n  offered: clicked the link \"Help\"\n  them: 심심하다\n  you: 안녕하세요! 무슨 도움이 필요하신가요?\n  them: 커피 한 잔 마시고 싶다\n  you: 안녕하세요! 무슨 도움이 필요하신가요?\n  them: 너 이름이 뭐야?\n  you: 저는 캐릭터 그리드 도우미예요!\n\n",
+      "prompt_tokens": 583,
+      "out_tokens": 30,
+      "thought_chars": 0,
+      "seconds": 0.562
+     },
+     {
+      "i": 8,
+      "said": "잠깐 쉬었다 하자",
+      "reply": "안녕하세요! 잠시 쉬시는 게 좋아요. 도움이 필요하시면 언제든 말씀해주세요!",
+      "clicked": [],
+      "n_effects": 0,
+      "history_lines": 19,
+      "window_lines": 19,
+      "window": "\n  them: 복사 버튼 눌러줘\n  you: 복사 버튼을 클릭합니다.\n  offered: clicked the button \"Copy\"\n  them: 안녕\n  you: 안녕하세요!\n  them: 오늘 날씨 어때?\n  you: 안녕하세요! 오늘 날씨는 어떻게 되나요?\n  them: 너 뭘 할 수 있어?\n  you: 저는 복사, 선택, 폰트 설정, 도움말 등을 도와드릴 수 있어요.\n  offered: clicked the button \"Copy\"\n  offered: clicked the link \"Help\"\n  them: 심심하다\n  you: 안녕하세요! 무슨 도움이 필요하신가요?\n  them: 커피 한 잔 마시고 싶다\n  you: 안녕하세요! 무슨 도움이 필요하신가요?\n  them: 너 이름이 뭐야?\n  you: 저는 캐릭터 그리드 도우미예요!\n  them: 오늘 할 일이 너무 많다\n  you: 안녕하세요! 오늘 할 일이 너무 많다니, 도움이 필요하신가요?\n\n",
+      "prompt_tokens": 618,
+      "out_tokens": 37,
+      "thought_chars": 0,
+      "seconds": 0.702
+     },
+     {
+      "i": 9,
+      "said": "이거 어떻게 쓰는 거야?",
+      "reply": "안녕하세요! 이 프로그램은 문자를 선택하고 복사하는 데 사용됩니다. 도움이 필요하시면 언제든 말씀해주세요!",
+      "clicked": [],
+      "n_effects": 0,
+      "history_lines": 21,
+      "window_lines": 21,
+      "window": "\n  them: 복사 버튼 눌러줘\n  you: 복사 버튼을 클릭합니다.\n  offered: clicked the button \"Copy\"\n  them: 안녕\n  you: 안녕하세요!\n  them: 오늘 날씨 어때?\n  you: 안녕하세요! 오늘 날씨는 어떻게 되나요?\n  them: 너 뭘 할 수 있어?\n  you: 저는 복사, 선택, 폰트 설정, 도움말 등을 도와드릴 수 있어요.\n  offered: clicked the button \"Copy\"\n  offered: clicked the link \"Help\"\n  them: 심심하다\n  you: 안녕하세요! 무슨 도움이 필요하신가요?\n  them: 커피 한 잔 마시고 싶다\n  you: 안녕하세요! 무슨 도움이 필요하신가요?\n  them: 너 이름이 뭐야?\n  you: 저는 캐릭터 그리드 도우미예요!\n  them: 오늘 할 일이 너무 많다\n  you: 안녕하세요! 오늘 할 일이 너무 많다니, 도움이 필요하신가요?\n  them: 잠깐 쉬었다 하자\n  you: 안녕하세요! 잠시 쉬시는 게 좋아요. 도움이 필요하시면 언제든 말씀해주세요!\n\n",
+      "prompt_tokens": 661,
+      "out_tokens": 44,
+      "thought_chars": 0,
+      "seconds": 0.824
+     },
+     {
+      "i": 10,
+      "said": "수고했어",
+      "reply": "안녕하세요! 도움이 필요하시면 언제든 말씀해주세요!",
+      "clicked": [],
+      "n_effects": 0,
+      "history_lines": 23,
+      "window_lines": 23,
+      "window": "\n  them: 복사 버튼 눌러줘\n  you: 복사 버튼을 클릭합니다.\n  offered: clicked the button \"Copy\"\n  them: 안녕\n  you: 안녕하세요!\n  them: 오늘 날씨 어때?\n  you: 안녕하세요! 오늘 날씨는 어떻게 되나요?\n  them: 너 뭘 할 수 있어?\n  you: 저는 복사, 선택, 폰트 설정, 도움말 등을 도와드릴 수 있어요.\n  offered: clicked the button \"Copy\"\n  offered: clicked the link \"Help\"\n  them: 심심하다\n  you: 안녕하세요! 무슨 도움이 필요하신가요?\n  them: 커피 한 잔 마시고 싶다\n  you: 안녕하세요! 무슨 도움이 필요하신가요?\n  them: 너 이름이 뭐야?\n  you: 저는 캐릭터 그리드 도우미예요!\n  them: 오늘 할 일이 너무 많다\n  you: 안녕하세요! 오늘 할 일이 너무 많다니, 도움이 필요하신가요?\n  them: 잠깐 쉬었다 하자\n  you: 안녕하세요! 잠시 쉬시는 게 좋아요. 도움이 필요하시면 언제든 말씀해주세요!\n  them: 이거 어떻게 쓰는 거야?\n  you: 안녕하세요! 이 프로그램은 문자를 선택하고 복사하는 데 사용됩니다. 도움이 필요하시면 언제든 말씀해주세요!\n\n",
+      "prompt_tokens": 706,
+      "out_tokens": 26,
+      "thought_chars": 0,
+      "seconds": 0.543
+     },
+     {
+      "i": 11,
+      "said": "밥 먹고 올게",
+      "reply": "안녕하세요! 돌아오시면 도움을 드릴게요!",
+      "clicked": [],
+      "n_effects": 0,
+      "history_lines": 25,
+      "window_lines": 25,
+      "window": "\n  them: 복사 버튼 눌러줘\n  you: 복사 버튼을 클릭합니다.\n  offered: clicked the button \"Copy\"\n  them: 안녕\n  you: 안녕하세요!\n  them: 오늘 날씨 어때?\n  you: 안녕하세요! 오늘 날씨는 어떻게 되나요?\n  them: 너 뭘 할 수 있어?\n  you: 저는 복사, 선택, 폰트 설정, 도움말 등을 도와드릴 수 있어요.\n  offered: clicked the button \"Copy\"\n  offered: clicked the link \"Help\"\n  them: 심심하다\n  you: 안녕하세요! 무슨 도움이 필요하신가요?\n  them: 커피 한 잔 마시고 싶다\n  you: 안녕하세요! 무슨 도움이 필요하신가요?\n  them: 너 이름이 뭐야?\n  you: 저는 캐릭터 그리드 도우미예요!\n  them: 오늘 할 일이 너무 많다\n  you: 안녕하세요! 오늘 할 일이 너무 많다니, 도움이 필요하신가요?\n  them: 잠깐 쉬었다 하자\n  you: 안녕하세요! 잠시 쉬시는 게 좋아요. 도움이 필요하시면 언제든 말씀해주세요!\n  them: 이거 어떻게 쓰는 거야?\n  you: 안녕하세요! 이 프로그램은 문자를 선택하고 복사하는 데 사용됩니다. 도움이 필요하시면 언제든 말씀해주세요!\n  them: 수고했어\n  you: 안녕하세요! 도움이 필요하시면 언제든 말씀해주세요!\n\n",
+      "prompt_tokens": 737,
+      "out_tokens": 27,
+      "thought_chars": 0,
+      "seconds": 0.536
+     },
+     {
+      "i": 12,
+      "said": "이 창 좀 복잡하지 않아?",
+      "reply": "안녕하세요! 이 창은 문자를 선택하고 복사하는 데 도움을 주는 프로그램입니다. 필요하신다면 언제든 도와드릴게요!",
+      "clicked": [],
+      "n_effects": 0,
+      "history_lines": 27,
+      "window_lines": 27,
+      "window": "\n  them: 복사 버튼 눌러줘\n  you: 복사 버튼을 클릭합니다.\n  offered: clicked the button \"Copy\"\n  them: 안녕\n  you: 안녕하세요!\n  them: 오늘 날씨 어때?\n  you: 안녕하세요! 오늘 날씨는 어떻게 되나요?\n  them: 너 뭘 할 수 있어?\n  you: 저는 복사, 선택, 폰트 설정, 도움말 등을 도와드릴 수 있어요.\n  offered: clicked the button \"Copy\"\n  offered: clicked the link \"Help\"\n  them: 심심하다\n  you: 안녕하세요! 무슨 도움이 필요하신가요?\n  them: 커피 한 잔 마시고 싶다\n  you: 안녕하세요! 무슨 도움이 필요하신가요?\n  them: 너 이름이 뭐야?\n  you: 저는 캐릭터 그리드 도우미예요!\n  them: 오늘 할 일이 너무 많다\n  you: 안녕하세요! 오늘 할 일이 너무 많다니, 도움이 필요하신가요?\n  them: 잠깐 쉬었다 하자\n  you: 안녕하세요! 잠시 쉬시는 게 좋아요. 도움이 필요하시면 언제든 말씀해주세요!\n  them: 이거 어떻게 쓰는 거야?\n  you: 안녕하세요! 이 프로그램은 문자를 선택하고 복사하는 데 사용됩니다. 도움이 필요하시면 언제든 말씀해주세요!\n  them: 수고했어\n  you: 안녕하세요! 도움이 필요하시면 언제든 말씀해주세요!\n  them: 밥 먹고 올게\n  you: 안녕하세요! 돌아오시면 도움을 드릴게요!\n\n",
+      "prompt_tokens": 771,
+      "out_tokens": 50,
+      "thought_chars": 0,
+      "seconds": 0.898
+     },
+     {
+      "i": 13,
+      "said": "아까 그 버튼 다시 눌러줘",
+      "reply": "아까 그 버튼을 다시 클릭합니다.",
+      "clicked": [
+       "Copy"
+      ],
+      "n_effects": 1,
+      "history_lines": 29,
+      "window_lines": 29,
+      "window": "\n  them: 복사 버튼 눌러줘\n  you: 복사 버튼을 클릭합니다.\n  offered: clicked the button \"Copy\"\n  them: 안녕\n  you: 안녕하세요!\n  them: 오늘 날씨 어때?\n  you: 안녕하세요! 오늘 날씨는 어떻게 되나요?\n  them: 너 뭘 할 수 있어?\n  you: 저는 복사, 선택, 폰트 설정, 도움말 등을 도와드릴 수 있어요.\n  offered: clicked the button \"Copy\"\n  offered: clicked the link \"Help\"\n  them: 심심하다\n  you: 안녕하세요! 무슨 도움이 필요하신가요?\n  them: 커피 한 잔 마시고 싶다\n  you: 안녕하세요! 무슨 도움이 필요하신가요?\n  them: 너 이름이 뭐야?\n  you: 저는 캐릭터 그리드 도우미예요!\n  them: 오늘 할 일이 너무 많다\n  you: 안녕하세요! 오늘 할 일이 너무 많다니, 도움이 필요하신가요?\n  them: 잠깐 쉬었다 하자\n  you: 안녕하세요! 잠시 쉬시는 게 좋아요. 도움이 필요하시면 언제든 말씀해주세요!\n  them: 이거 어떻게 쓰는 거야?\n  you: 안녕하세요! 이 프로그램은 문자를 선택하고 복사하는 데 사용됩니다. 도움이 필요하시면 언제든 말씀해주세요!\n  them: 수고했어\n  you: 안녕하세요! 도움이 필요하시면 언제든 말씀해주세요!\n  them: 밥 먹고 올게\n  you: 안녕하세요! 돌아오시면 도움을 드릴게요!\n  them: 이 창 좀 복잡하지 않아?\n  you: 안녕하세요! 이 창은 문자를 선택하고 복사하는 데 도움을 주는 프로그램입니다. 필요하신다면 언제든 도와드릴게요!\n\n",
+      "prompt_tokens": 828,
+      "out_tokens": 26,
+      "thought_chars": 0,
+      "seconds": 0.517
+     }
+    ],
+    [
+     {
+      "i": 0,
+      "said": "복사 버튼 눌러줘",
+      "reply": "복사 버튼을 클릭해 드릴게요.",
+      "clicked": [
+       "Copy"
+      ],
+      "n_effects": 1,
+      "history_lines": 0,
+      "window_lines": 0,
+      "window": "",
+      "prompt_tokens": 369,
+      "out_tokens": 29,
+      "thought_chars": 0,
+      "seconds": 0.579
+     },
+     {
+      "i": 1,
+      "said": "안녕",
+      "reply": "안녕하세요!",
+      "clicked": [],
+      "n_effects": 0,
+      "history_lines": 3,
+      "window_lines": 3,
+      "window": "\n  them: 복사 버튼 눌러줘\n  you: 복사 버튼을 클릭해 드릴게요.\n  offered: clicked the button \"Copy\"\n\n",
+      "prompt_tokens": 404,
+      "out_tokens": 14,
+      "thought_chars": 0,
+      "seconds": 0.337
+     },
+     {
+      "i": 2,
+      "said": "오늘 날씨 어때?",
+      "reply": "안녕하세요! 오늘 날씨는 어떻게 되세요?",
+      "clicked": [],
+      "n_effects": 0,
+      "history_lines": 5,
+      "window_lines": 5,
+      "window": "\n  them: 복사 버튼 눌러줘\n  you: 복사 버튼을 클릭해 드릴게요.\n  offered: clicked the button \"Copy\"\n  them: 안녕\n  you: 안녕하세요!\n\n",
+      "prompt_tokens": 421,
+      "out_tokens": 19,
+      "thought_chars": 0,
+      "seconds": 0.449
+     },
+     {
+      "i": 3,
+      "said": "너 뭘 할 수 있어?",
+      "reply": "저는 복사, 선택, 폰트 설정, 도움말 등을 도와드릴 수 있어요.",
+      "clicked": [
+       "Copy",
+       "Help"
+      ],
+      "n_effects": 2,
+      "history_lines": 7,
+      "window_lines": 7,
+      "window": "\n  them: 복사 버튼 눌러줘\n  you: 복사 버튼을 클릭해 드릴게요.\n  offered: clicked the button \"Copy\"\n  them: 안녕\n  you: 안녕하세요!\n  them: 오늘 날씨 어때?\n  you: 안녕하세요! 오늘 날씨는 어떻게 되세요?\n\n",
+      "prompt_tokens": 448,
+      "out_tokens": 47,
+      "thought_chars": 0,
+      "seconds": 0.856
+     },
+     {
+      "i": 4,
+      "said": "심심하다",
+      "reply": "안녕하세요! 무슨 도움이 필요하신가요?",
+      "clicked": [],
+      "n_effects": 0,
+      "history_lines": 11,
+      "window_lines": 11,
+      "window": "\n  them: 복사 버튼 눌러줘\n  you: 복사 버튼을 클릭해 드릴게요.\n  offered: clicked the button \"Copy\"\n  them: 안녕\n  you: 안녕하세요!\n  them: 오늘 날씨 어때?\n  you: 안녕하세요! 오늘 날씨는 어떻게 되세요?\n  them: 너 뭘 할 수 있어?\n  you: 저는 복사, 선택, 폰트 설정, 도움말 등을 도와드릴 수 있어요.\n  offered: clicked the button \"Copy\"\n  offered: clicked the link \"Help\"\n\n",
+      "prompt_tokens": 501,
+      "out_tokens": 23,
+      "thought_chars": 0,
+      "seconds": 0.464
+     },
+     {
+      "i": 5,
+      "said": "커피 한 잔 마시고 싶다",
+      "reply": "안녕하세요! 무슨 도움이 필요하신가요?",
+      "clicked": [],
+      "n_effects": 0,
+      "history_lines": 13,
+      "window_lines": 13,
+      "window": "\n  them: 복사 버튼 눌러줘\n  you: 복사 버튼을 클릭해 드릴게요.\n  offered: clicked the button \"Copy\"\n  them: 안녕\n  you: 안녕하세요!\n  them: 오늘 날씨 어때?\n  you: 안녕하세요! 오늘 날씨는 어떻게 되세요?\n  them: 너 뭘 할 수 있어?\n  you: 저는 복사, 선택, 폰트 설정, 도움말 등을 도와드릴 수 있어요.\n  offered: clicked the button \"Copy\"\n  offered: clicked the link \"Help\"\n  them: 심심하다\n  you: 안녕하세요! 무슨 도움이 필요하신가요?\n\n",
+      "prompt_tokens": 534,
+      "out_tokens": 23,
+      "thought_chars": 0,
+      "seconds": 0.478
+     },
+     {
+      "i": 6,
+      "said": "너 이름이 뭐야?",
+      "reply": "저는 캐릭터 그리드 도우미예요!",
+      "clicked": [],
+      "n_effects": 0,
+      "history_lines": 15,
+      "window_lines": 15,
+      "window": "\n  them: 복사 버튼 눌러줘\n  you: 복사 버튼을 클릭해 드릴게요.\n  offered: clicked the button \"Copy\"\n  them: 안녕\n  you: 안녕하세요!\n  them: 오늘 날씨 어때?\n  you: 안녕하세요! 오늘 날씨는 어떻게 되세요?\n  them: 너 뭘 할 수 있어?\n  you: 저는 복사, 선택, 폰트 설정, 도움말 등을 도와드릴 수 있어요.\n  offered: clicked the button \"Copy\"\n  offered: clicked the link \"Help\"\n  them: 심심하다\n  you: 안녕하세요! 무슨 도움이 필요하신가요?\n  them: 커피 한 잔 마시고 싶다\n  you: 안녕하세요! 무슨 도움이 필요하신가요?\n\n",
+      "prompt_tokens": 560,
+      "out_tokens": 25,
+      "thought_chars": 0,
+      "seconds": 0.502
+     },
+     {
+      "i": 7,
+      "said": "오늘 할 일이 너무 많다",
+      "reply": "안녕하세요! 오늘 할 일이 너무 많으시면 도와드릴 수 있어요.",
+      "clicked": [],
+      "n_effects": 0,
+      "history_lines": 17,
+      "window_lines": 17,
+      "window": "\n  them: 복사 버튼 눌러줘\n  you: 복사 버튼을 클릭해 드릴게요.\n  offered: clicked the button \"Copy\"\n  them: 안녕\n  you: 안녕하세요!\n  them: 오늘 날씨 어때?\n  you: 안녕하세요! 오늘 날씨는 어떻게 되세요?\n  them: 너 뭘 할 수 있어?\n  you: 저는 복사, 선택, 폰트 설정, 도움말 등을 도와드릴 수 있어요.\n  offered: clicked the button \"Copy\"\n  offered: clicked the link \"Help\"\n  them: 심심하다\n  you: 안녕하세요! 무슨 도움이 필요하신가요?\n  them: 커피 한 잔 마시고 싶다\n  you: 안녕하세요! 무슨 도움이 필요하신가요?\n  them: 너 이름이 뭐야?\n  you: 저는 캐릭터 그리드 도우미예요!\n\n",
+      "prompt_tokens": 587,
+      "out_tokens": 30,
+      "thought_chars": 0,
+      "seconds": 0.58
+     },
+     {
+      "i": 8,
+      "said": "잠깐 쉬었다 하자",
+      "reply": "안녕하세요! 잠시 쉬시는 게 좋아요. 도움이 필요하시면 언제든 말씀해주세요!",
+      "clicked": [],
+      "n_effects": 0,
+      "history_lines": 19,
+      "window_lines": 19,
+      "window": "\n  them: 복사 버튼 눌러줘\n  you: 복사 버튼을 클릭해 드릴게요.\n  offered: clicked the button \"Copy\"\n  them: 안녕\n  you: 안녕하세요!\n  them: 오늘 날씨 어때?\n  you: 안녕하세요! 오늘 날씨는 어떻게 되세요?\n  them: 너 뭘 할 수 있어?\n  you: 저는 복사, 선택, 폰트 설정, 도움말 등을 도와드릴 수 있어요.\n  offered: clicked the button \"Copy\"\n  offered: clicked the link \"Help\"\n  them: 심심하다\n  you: 안녕하세요! 무슨 도움이 필요하신가요?\n  them: 커피 한 잔 마시고 싶다\n  you: 안녕하세요! 무슨 도움이 필요하신가요?\n  them: 너 이름이 뭐야?\n  you: 저는 캐릭터 그리드 도우미예요!\n  them: 오늘 할 일이 너무 많다\n  you: 안녕하세요! 오늘 할 일이 너무 많으시면 도와드릴 수 있어요.\n\n",
+      "prompt_tokens": 622,
+      "out_tokens": 37,
+      "thought_chars": 0,
+      "seconds": 0.703
+     },
+     {
+      "i": 9,
+      "said": "이거 어떻게 쓰는 거야?",
+      "reply": "안녕하세요! 이 프로그램은 문자를 선택하고 복사하는 데 사용됩니다. 도움이 필요하시면 언제든 말씀해주세요!",
+      "clicked": [],
+      "n_effects": 0,
+      "history_lines": 21,
+      "window_lines": 21,
+      "window": "\n  them: 복사 버튼 눌러줘\n  you: 복사 버튼을 클릭해 드릴게요.\n  offered: clicked the button \"Copy\"\n  them: 안녕\n  you: 안녕하세요!\n  them: 오늘 날씨 어때?\n  you: 안녕하세요! 오늘 날씨는 어떻게 되세요?\n  them: 너 뭘 할 수 있어?\n  you: 저는 복사, 선택, 폰트 설정, 도움말 등을 도와드릴 수 있어요.\n  offered: clicked the button \"Copy\"\n  offered: clicked the link \"Help\"\n  them: 심심하다\n  you: 안녕하세요! 무슨 도움이 필요하신가요?\n  them: 커피 한 잔 마시고 싶다\n  you: 안녕하세요! 무슨 도움이 필요하신가요?\n  them: 너 이름이 뭐야?\n  you: 저는 캐릭터 그리드 도우미예요!\n  them: 오늘 할 일이 너무 많다\n  you: 안녕하세요! 오늘 할 일이 너무 많으시면 도와드릴 수 있어요.\n  them: 잠깐 쉬었다 하자\n  you: 안녕하세요! 잠시 쉬시는 게 좋아요. 도움이 필요하시면 언제든 말씀해주세요!\n\n",
+      "prompt_tokens": 665,
+      "out_tokens": 44,
+      "thought_chars": 0,
+      "seconds": 0.799
+     },
+     {
+      "i": 10,
+      "said": "수고했어",
+      "reply": "안녕하세요! 도움이 필요하시면 언제든 말씀해주세요!",
+      "clicked": [],
+      "n_effects": 0,
+      "history_lines": 23,
+      "window_lines": 23,
+      "window": "\n  them: 복사 버튼 눌러줘\n  you: 복사 버튼을 클릭해 드릴게요.\n  offered: clicked the button \"Copy\"\n  them: 안녕\n  you: 안녕하세요!\n  them: 오늘 날씨 어때?\n  you: 안녕하세요! 오늘 날씨는 어떻게 되세요?\n  them: 너 뭘 할 수 있어?\n  you: 저는 복사, 선택, 폰트 설정, 도움말 등을 도와드릴 수 있어요.\n  offered: clicked the button \"Copy\"\n  offered: clicked the link \"Help\"\n  them: 심심하다\n  you: 안녕하세요! 무슨 도움이 필요하신가요?\n  them: 커피 한 잔 마시고 싶다\n  you: 안녕하세요! 무슨 도움이 필요하신가요?\n  them: 너 이름이 뭐야?\n  you: 저는 캐릭터 그리드 도우미예요!\n  them: 오늘 할 일이 너무 많다\n  you: 안녕하세요! 오늘 할 일이 너무 많으시면 도와드릴 수 있어요.\n  them: 잠깐 쉬었다 하자\n  you: 안녕하세요! 잠시 쉬시는 게 좋아요. 도움이 필요하시면 언제든 말씀해주세요!\n  them: 이거 어떻게 쓰는 거야?\n  you: 안녕하세요! 이 프로그램은 문자를 선택하고 복사하는 데 사용됩니다. 도움이 필요하시면 언제든 말씀해주세요!\n\n",
+      "prompt_tokens": 710,
+      "out_tokens": 26,
+      "thought_chars": 0,
+      "seconds": 0.539
+     },
+     {
+      "i": 11,
+      "said": "밥 먹고 올게",
+      "reply": "안녕하세요! 돌아오시면 도움을 드릴게요.",
+      "clicked": [],
+      "n_effects": 0,
+      "history_lines": 25,
+      "window_lines": 25,
+      "window": "\n  them: 복사 버튼 눌러줘\n  you: 복사 버튼을 클릭해 드릴게요.\n  offered: clicked the button \"Copy\"\n  them: 안녕\n  you: 안녕하세요!\n  them: 오늘 날씨 어때?\n  you: 안녕하세요! 오늘 날씨는 어떻게 되세요?\n  them: 너 뭘 할 수 있어?\n  you: 저는 복사, 선택, 폰트 설정, 도움말 등을 도와드릴 수 있어요.\n  offered: clicked the button \"Copy\"\n  offered: clicked the link \"Help\"\n  them: 심심하다\n  you: 안녕하세요! 무슨 도움이 필요하신가요?\n  them: 커피 한 잔 마시고 싶다\n  you: 안녕하세요! 무슨 도움이 필요하신가요?\n  them: 너 이름이 뭐야?\n  you: 저는 캐릭터 그리드 도우미예요!\n  them: 오늘 할 일이 너무 많다\n  you: 안녕하세요! 오늘 할 일이 너무 많으시면 도와드릴 수 있어요.\n  them: 잠깐 쉬었다 하자\n  you: 안녕하세요! 잠시 쉬시는 게 좋아요. 도움이 필요하시면 언제든 말씀해주세요!\n  them: 이거 어떻게 쓰는 거야?\n  you: 안녕하세요! 이 프로그램은 문자를 선택하고 복사하는 데 사용됩니다. 도움이 필요하시면 언제든 말씀해주세요!\n  them: 수고했어\n  you: 안녕하세요! 도움이 필요하시면 언제든 말씀해주세요!\n\n",
+      "prompt_tokens": 741,
+      "out_tokens": 27,
+      "thought_chars": 0,
+      "seconds": 0.553
+     },
+     {
+      "i": 12,
+      "said": "이 창 좀 복잡하지 않아?",
+      "reply": "안녕하세요! 이 창은 문자를 선택하고 복사하는 데 사용됩니다. 도움이 필요하시면 언제든 말씀해주세요!",
+      "clicked": [],
+      "n_effects": 0,
+      "history_lines": 27,
+      "window_lines": 27,
+      "window": "\n  them: 복사 버튼 눌러줘\n  you: 복사 버튼을 클릭해 드릴게요.\n  offered: clicked the button \"Copy\"\n  them: 안녕\n  you: 안녕하세요!\n  them: 오늘 날씨 어때?\n  you: 안녕하세요! 오늘 날씨는 어떻게 되세요?\n  them: 너 뭘 할 수 있어?\n  you: 저는 복사, 선택, 폰트 설정, 도움말 등을 도와드릴 수 있어요.\n  offered: clicked the button \"Copy\"\n  offered: clicked the link \"Help\"\n  them: 심심하다\n  you: 안녕하세요! 무슨 도움이 필요하신가요?\n  them: 커피 한 잔 마시고 싶다\n  you: 안녕하세요! 무슨 도움이 필요하신가요?\n  them: 너 이름이 뭐야?\n  you: 저는 캐릭터 그리드 도우미예요!\n  them: 오늘 할 일이 너무 많다\n  you: 안녕하세요! 오늘 할 일이 너무 많으시면 도와드릴 수 있어요.\n  them: 잠깐 쉬었다 하자\n  you: 안녕하세요! 잠시 쉬시는 게 좋아요. 도움이 필요하시면 언제든 말씀해주세요!\n  them: 이거 어떻게 쓰는 거야?\n  you: 안녕하세요! 이 프로그램은 문자를 선택하고 복사하는 데 사용됩니다. 도움이 필요하시면 언제든 말씀해주세요!\n  them: 수고했어\n  you: 안녕하세요! 도움이 필요하시면 언제든 말씀해주세요!\n  them: 밥 먹고 올게\n  you: 안녕하세요! 돌아오시면 도움을 드릴게요.\n\n",
+      "prompt_tokens": 775,
+      "out_tokens": 43,
+      "thought_chars": 0,
+      "seconds": 0.791
+     },
+     {
+      "i": 13,
+      "said": "아까 그 버튼 다시 눌러줘",
+      "reply": "아까 그 버튼을 다시 클릭해 드릴게요.",
+      "clicked": [
+       "Copy"
+      ],
+      "n_effects": 1,
+      "history_lines": 29,
+      "window_lines": 29,
+      "window": "\n  them: 복사 버튼 눌러줘\n  you: 복사 버튼을 클릭해 드릴게요.\n  offered: clicked the button \"Copy\"\n  them: 안녕\n  you: 안녕하세요!\n  them: 오늘 날씨 어때?\n  you: 안녕하세요! 오늘 날씨는 어떻게 되세요?\n  them: 너 뭘 할 수 있어?\n  you: 저는 복사, 선택, 폰트 설정, 도움말 등을 도와드릴 수 있어요.\n  offered: clicked the button \"Copy\"\n  offered: clicked the link \"Help\"\n  them: 심심하다\n  you: 안녕하세요! 무슨 도움이 필요하신가요?\n  them: 커피 한 잔 마시고 싶다\n  you: 안녕하세요! 무슨 도움이 필요하신가요?\n  them: 너 이름이 뭐야?\n  you: 저는 캐릭터 그리드 도우미예요!\n  them: 오늘 할 일이 너무 많다\n  you: 안녕하세요! 오늘 할 일이 너무 많으시면 도와드릴 수 있어요.\n  them: 잠깐 쉬었다 하자\n  you: 안녕하세요! 잠시 쉬시는 게 좋아요. 도움이 필요하시면 언제든 말씀해주세요!\n  them: 이거 어떻게 쓰는 거야?\n  you: 안녕하세요! 이 프로그램은 문자를 선택하고 복사하는 데 사용됩니다. 도움이 필요하시면 언제든 말씀해주세요!\n  them: 수고했어\n  you: 안녕하세요! 도움이 필요하시면 언제든 말씀해주세요!\n  them: 밥 먹고 올게\n  you: 안녕하세요! 돌아오시면 도움을 드릴게요.\n  them: 이 창 좀 복잡하지 않아?\n  you: 안녕하세요! 이 창은 문자를 선택하고 복사하는 데 사용됩니다. 도움이 필요하시면 언제든 말씀해주세요!\n\n",
+      "prompt_tokens": 825,
+      "out_tokens": 31,
+      "thought_chars": 0,
+      "seconds": 0.595
+     }
+    ],
+    [
+     {
+      "i": 0,
+      "said": "복사 버튼 눌러줘",
+      "reply": "복사 버튼을 클릭해 드릴게요.",
+      "clicked": [
+       "Copy"
+      ],
+      "n_effects": 1,
+      "history_lines": 0,
+      "window_lines": 0,
+      "window": "",
+      "prompt_tokens": 369,
+      "out_tokens": 29,
+      "thought_chars": 0,
+      "seconds": 0.524
+     },
+     {
+      "i": 1,
+      "said": "안녕",
+      "reply": "안녕하세요!",
+      "clicked": [],
+      "n_effects": 0,
+      "history_lines": 3,
+      "window_lines": 3,
+      "window": "\n  them: 복사 버튼 눌러줘\n  you: 복사 버튼을 클릭해 드릴게요.\n  offered: clicked the button \"Copy\"\n\n",
+      "prompt_tokens": 404,
+      "out_tokens": 14,
+      "thought_chars": 0,
+      "seconds": 0.257
+     },
+     {
+      "i": 2,
+      "said": "오늘 날씨 어때?",
+      "reply": "안녕하세요! 오늘 날씨는 어떻게 되세요?",
+      "clicked": [],
+      "n_effects": 0,
+      "history_lines": 5,
+      "window_lines": 5,
+      "window": "\n  them: 복사 버튼 눌러줘\n  you: 복사 버튼을 클릭해 드릴게요.\n  offered: clicked the button \"Copy\"\n  them: 안녕\n  you: 안녕하세요!\n\n",
+      "prompt_tokens": 421,
+      "out_tokens": 19,
+      "thought_chars": 0,
+      "seconds": 0.536
+     },
+     {
+      "i": 3,
+      "said": "너 뭘 할 수 있어?",
+      "reply": "저는 복사, 선택, 폰트 설정, 도움말 등을 도와드릴 수 있어요.",
+      "clicked": [
+       "Copy",
+       "Help"
+      ],
+      "n_effects": 2,
+      "history_lines": 7,
+      "window_lines": 7,
+      "window": "\n  them: 복사 버튼 눌러줘\n  you: 복사 버튼을 클릭해 드릴게요.\n  offered: clicked the button \"Copy\"\n  them: 안녕\n  you: 안녕하세요!\n  them: 오늘 날씨 어때?\n  you: 안녕하세요! 오늘 날씨는 어떻게 되세요?\n\n",
+      "prompt_tokens": 448,
+      "out_tokens": 47,
+      "thought_chars": 0,
+      "seconds": 1.039
+     },
+     {
+      "i": 4,
+      "said": "심심하다",
+      "reply": "안녕하세요! 도움이 필요하세요?",
+      "clicked": [],
+      "n_effects": 0,
+      "history_lines": 11,
+      "window_lines": 11,
+      "window": "\n  them: 복사 버튼 눌러줘\n  you: 복사 버튼을 클릭해 드릴게요.\n  offered: clicked the button \"Copy\"\n  them: 안녕\n  you: 안녕하세요!\n  them: 오늘 날씨 어때?\n  you: 안녕하세요! 오늘 날씨는 어떻게 되세요?\n  them: 너 뭘 할 수 있어?\n  you: 저는 복사, 선택, 폰트 설정, 도움말 등을 도와드릴 수 있어요.\n  offered: clicked the button \"Copy\"\n  offered: clicked the link \"Help\"\n\n",
+      "prompt_tokens": 501,
+      "out_tokens": 20,
+      "thought_chars": 0,
+      "seconds": 0.389
+     },
+     {
+      "i": 5,
+      "said": "커피 한 잔 마시고 싶다",
+      "reply": "안녕하세요! 도움이 필요하세요?",
+      "clicked": [],
+      "n_effects": 0,
+      "history_lines": 13,
+      "window_lines": 13,
+      "window": "\n  them: 복사 버튼 눌러줘\n  you: 복사 버튼을 클릭해 드릴게요.\n  offered: clicked the button \"Copy\"\n  them: 안녕\n  you: 안녕하세요!\n  them: 오늘 날씨 어때?\n  you: 안녕하세요! 오늘 날씨는 어떻게 되세요?\n  them: 너 뭘 할 수 있어?\n  you: 저는 복사, 선택, 폰트 설정, 도움말 등을 도와드릴 수 있어요.\n  offered: clicked the button \"Copy\"\n  offered: clicked the link \"Help\"\n  them: 심심하다\n  you: 안녕하세요! 도움이 필요하세요?\n\n",
+      "prompt_tokens": 531,
+      "out_tokens": 16,
+      "thought_chars": 0,
+      "seconds": 0.347
+     },
+     {
+      "i": 6,
+      "said": "너 이름이 뭐야?",
+      "reply": "저는 캐릭터 그리드 도우미예요!",
+      "clicked": [],
+      "n_effects": 0,
+      "history_lines": 15,
+      "window_lines": 15,
+      "window": "\n  them: 복사 버튼 눌러줘\n  you: 복사 버튼을 클릭해 드릴게요.\n  offered: clicked the button \"Copy\"\n  them: 안녕\n  you: 안녕하세요!\n  them: 오늘 날씨 어때?\n  you: 안녕하세요! 오늘 날씨는 어떻게 되세요?\n  them: 너 뭘 할 수 있어?\n  you: 저는 복사, 선택, 폰트 설정, 도움말 등을 도와드릴 수 있어요.\n  offered: clicked the button \"Copy\"\n  offered: clicked the link \"Help\"\n  them: 심심하다\n  you: 안녕하세요! 도움이 필요하세요?\n  them: 커피 한 잔 마시고 싶다\n  you: 안녕하세요! 도움이 필요하세요?\n\n",
+      "prompt_tokens": 554,
+      "out_tokens": 25,
+      "thought_chars": 0,
+      "seconds": 0.555
+     },
+     {
+      "i": 7,
+      "said": "오늘 할 일이 너무 많다",
+      "reply": "안녕하세요! 도움이 필요하세요?",
+      "clicked": [],
+      "n_effects": 0,
+      "history_lines": 17,
+      "window_lines": 17,
+      "window": "\n  them: 복사 버튼 눌러줘\n  you: 복사 버튼을 클릭해 드릴게요.\n  offered: clicked the button \"Copy\"\n  them: 안녕\n  you: 안녕하세요!\n  them: 오늘 날씨 어때?\n  you: 안녕하세요! 오늘 날씨는 어떻게 되세요?\n  them: 너 뭘 할 수 있어?\n  you: 저는 복사, 선택, 폰트 설정, 도움말 등을 도와드릴 수 있어요.\n  offered: clicked the button \"Copy\"\n  offered: clicked the link \"Help\"\n  them: 심심하다\n  you: 안녕하세요! 도움이 필요하세요?\n  them: 커피 한 잔 마시고 싶다\n  you: 안녕하세요! 도움이 필요하세요?\n  them: 너 이름이 뭐야?\n  you: 저는 캐릭터 그리드 도우미예요!\n\n",
+      "prompt_tokens": 581,
+      "out_tokens": 20,
+      "thought_chars": 0,
+      "seconds": 0.421
+     },
+     {
+      "i": 8,
+      "said": "잠깐 쉬었다 하자",
+      "reply": "안녕하세요! 도움이 필요하세요?",
+      "clicked": [],
+      "n_effects": 0,
+      "history_lines": 19,
+      "window_lines": 19,
+      "window": "\n  them: 복사 버튼 눌러줘\n  you: 복사 버튼을 클릭해 드릴게요.\n  offered: clicked the button \"Copy\"\n  them: 안녕\n  you: 안녕하세요!\n  them: 오늘 날씨 어때?\n  you: 안녕하세요! 오늘 날씨는 어떻게 되세요?\n  them: 너 뭘 할 수 있어?\n  you: 저는 복사, 선택, 폰트 설정, 도움말 등을 도와드릴 수 있어요.\n  offered: clicked the button \"Copy\"\n  offered: clicked the link \"Help\"\n  them: 심심하다\n  you: 안녕하세요! 도움이 필요하세요?\n  them: 커피 한 잔 마시고 싶다\n  you: 안녕하세요! 도움이 필요하세요?\n  them: 너 이름이 뭐야?\n  you: 저는 캐릭터 그리드 도우미예요!\n  them: 오늘 할 일이 너무 많다\n  you: 안녕하세요! 도움이 필요하세요?\n\n",
+      "prompt_tokens": 606,
+      "out_tokens": 20,
+      "thought_chars": 0,
+      "seconds": 0.404
+     },
+     {
+      "i": 9,
+      "said": "이거 어떻게 쓰는 거야?",
+      "reply": "안녕하세요! 이 프로그램은 문자를 선택하고 복사하는 데 도움을 드릴 수 있어요. 도움이 필요하세요?",
+      "clicked": [],
+      "n_effects": 0,
+      "history_lines": 21,
+      "window_lines": 21,
+      "window": "\n  them: 복사 버튼 눌러줘\n  you: 복사 버튼을 클릭해 드릴게요.\n  offered: clicked the button \"Copy\"\n  them: 안녕\n  you: 안녕하세요!\n  them: 오늘 날씨 어때?\n  you: 안녕하세요! 오늘 날씨는 어떻게 되세요?\n  them: 너 뭘 할 수 있어?\n  you: 저는 복사, 선택, 폰트 설정, 도움말 등을 도와드릴 수 있어요.\n  offered: clicked the button \"Copy\"\n  offered: clicked the link \"Help\"\n  them: 심심하다\n  you: 안녕하세요! 도움이 필요하세요?\n  them: 커피 한 잔 마시고 싶다\n  you: 안녕하세요! 도움이 필요하세요?\n  them: 너 이름이 뭐야?\n  you: 저는 캐릭터 그리드 도우미예요!\n  them: 오늘 할 일이 너무 많다\n  you: 안녕하세요! 도움이 필요하세요?\n  them: 잠깐 쉬었다 하자\n  you: 안녕하세요! 도움이 필요하세요?\n\n",
+      "prompt_tokens": 632,
+      "out_tokens": 45,
+      "thought_chars": 0,
+      "seconds": 0.827
+     },
+     {
+      "i": 10,
+      "said": "수고했어",
+      "reply": "안녕하세요! 도움이 필요하세요?",
+      "clicked": [],
+      "n_effects": 0,
+      "history_lines": 23,
+      "window_lines": 23,
+      "window": "\n  them: 복사 버튼 눌러줘\n  you: 복사 버튼을 클릭해 드릴게요.\n  offered: clicked the button \"Copy\"\n  them: 안녕\n  you: 안녕하세요!\n  them: 오늘 날씨 어때?\n  you: 안녕하세요! 오늘 날씨는 어떻게 되세요?\n  them: 너 뭘 할 수 있어?\n  you: 저는 복사, 선택, 폰트 설정, 도움말 등을 도와드릴 수 있어요.\n  offered: clicked the button \"Copy\"\n  offered: clicked the link \"Help\"\n  them: 심심하다\n  you: 안녕하세요! 도움이 필요하세요?\n  them: 커피 한 잔 마시고 싶다\n  you: 안녕하세요! 도움이 필요하세요?\n  them: 너 이름이 뭐야?\n  you: 저는 캐릭터 그리드 도우미예요!\n  them: 오늘 할 일이 너무 많다\n  you: 안녕하세요! 도움이 필요하세요?\n  them: 잠깐 쉬었다 하자\n  you: 안녕하세요! 도움이 필요하세요?\n  them: 이거 어떻게 쓰는 거야?\n  you: 안녕하세요! 이 프로그램은 문자를 선택하고 복사하는 데 도움을 드릴 수 있어요. 도움이 필요하세요?\n\n",
+      "prompt_tokens": 678,
+      "out_tokens": 20,
+      "thought_chars": 0,
+      "seconds": 0.436
+     },
+     {
+      "i": 11,
+      "said": "밥 먹고 올게",
+      "reply": "안녕하세요! 도움이 필요하세요?",
+      "clicked": [],
+      "n_effects": 0,
+      "history_lines": 25,
+      "window_lines": 25,
+      "window": "\n  them: 복사 버튼 눌러줘\n  you: 복사 버튼을 클릭해 드릴게요.\n  offered: clicked the button \"Copy\"\n  them: 안녕\n  you: 안녕하세요!\n  them: 오늘 날씨 어때?\n  you: 안녕하세요! 오늘 날씨는 어떻게 되세요?\n  them: 너 뭘 할 수 있어?\n  you: 저는 복사, 선택, 폰트 설정, 도움말 등을 도와드릴 수 있어요.\n  offered: clicked the button \"Copy\"\n  offered: clicked the link \"Help\"\n  them: 심심하다\n  you: 안녕하세요! 도움이 필요하세요?\n  them: 커피 한 잔 마시고 싶다\n  you: 안녕하세요! 도움이 필요하세요?\n  them: 너 이름이 뭐야?\n  you: 저는 캐릭터 그리드 도우미예요!\n  them: 오늘 할 일이 너무 많다\n  you: 안녕하세요! 도움이 필요하세요?\n  them: 잠깐 쉬었다 하자\n  you: 안녕하세요! 도움이 필요하세요?\n  them: 이거 어떻게 쓰는 거야?\n  you: 안녕하세요! 이 프로그램은 문자를 선택하고 복사하는 데 도움을 드릴 수 있어요. 도움이 필요하세요?\n  them: 수고했어\n  you: 안녕하세요! 도움이 필요하세요?\n\n",
+      "prompt_tokens": 703,
+      "out_tokens": 20,
+      "thought_chars": 0,
+      "seconds": 0.423
+     },
+     {
+      "i": 12,
+      "said": "이 창 좀 복잡하지 않아?",
+      "reply": "안녕하세요! 이 창은 문자를 선택하고 복사하는 데 도움을 드릴 수 있어요. 도움이 필요하세요?",
+      "clicked": [],
+      "n_effects": 0,
+      "history_lines": 27,
+      "window_lines": 27,
+      "window": "\n  them: 복사 버튼 눌러줘\n  you: 복사 버튼을 클릭해 드릴게요.\n  offered: clicked the button \"Copy\"\n  them: 안녕\n  you: 안녕하세요!\n  them: 오늘 날씨 어때?\n  you: 안녕하세요! 오늘 날씨는 어떻게 되세요?\n  them: 너 뭘 할 수 있어?\n  you: 저는 복사, 선택, 폰트 설정, 도움말 등을 도와드릴 수 있어요.\n  offered: clicked the button \"Copy\"\n  offered: clicked the link \"Help\"\n  them: 심심하다\n  you: 안녕하세요! 도움이 필요하세요?\n  them: 커피 한 잔 마시고 싶다\n  you: 안녕하세요! 도움이 필요하세요?\n  them: 너 이름이 뭐야?\n  you: 저는 캐릭터 그리드 도우미예요!\n  them: 오늘 할 일이 너무 많다\n  you: 안녕하세요! 도움이 필요하세요?\n  them: 잠깐 쉬었다 하자\n  you: 안녕하세요! 도움이 필요하세요?\n  them: 이거 어떻게 쓰는 거야?\n  you: 안녕하세요! 이 프로그램은 문자를 선택하고 복사하는 데 도움을 드릴 수 있어요. 도움이 필요하세요?\n  them: 수고했어\n  you: 안녕하세요! 도움이 필요하세요?\n  them: 밥 먹고 올게\n  you: 안녕하세요! 도움이 필요하세요?\n\n",
+      "prompt_tokens": 730,
+      "out_tokens": 44,
+      "thought_chars": 0,
+      "seconds": 0.813
+     },
+     {
+      "i": 13,
+      "said": "아까 그 버튼 다시 눌러줘",
+      "reply": "아까 그 버튼을 다시 클릭해 드릴게요.",
+      "clicked": [
+       "Copy"
+      ],
+      "n_effects": 1,
+      "history_lines": 29,
+      "window_lines": 29,
+      "window": "\n  them: 복사 버튼 눌러줘\n  you: 복사 버튼을 클릭해 드릴게요.\n  offered: clicked the button \"Copy\"\n  them: 안녕\n  you: 안녕하세요!\n  them: 오늘 날씨 어때?\n  you: 안녕하세요! 오늘 날씨는 어떻게 되세요?\n  them: 너 뭘 할 수 있어?\n  you: 저는 복사, 선택, 폰트 설정, 도움말 등을 도와드릴 수 있어요.\n  offered: clicked the button \"Copy\"\n  offered: clicked the link \"Help\"\n  them: 심심하다\n  you: 안녕하세요! 도움이 필요하세요?\n  them: 커피 한 잔 마시고 싶다\n  you: 안녕하세요! 도움이 필요하세요?\n  them: 너 이름이 뭐야?\n  you: 저는 캐릭터 그리드 도우미예요!\n  them: 오늘 할 일이 너무 많다\n  you: 안녕하세요! 도움이 필요하세요?\n  them: 잠깐 쉬었다 하자\n  you: 안녕하세요! 도움이 필요하세요?\n  them: 이거 어떻게 쓰는 거야?\n  you: 안녕하세요! 이 프로그램은 문자를 선택하고 복사하는 데 도움을 드릴 수 있어요. 도움이 필요하세요?\n  them: 수고했어\n  you: 안녕하세요! 도움이 필요하세요?\n  them: 밥 먹고 올게\n  you: 안녕하세요! 도움이 필요하세요?\n  them: 이 창 좀 복잡하지 않아?\n  you: 안녕하세요! 이 창은 문자를 선택하고 복사하는 데 도움을 드릴 수 있어요. 도움이 필요하세요?\n\n",
+      "prompt_tokens": 781,
+      "out_tokens": 31,
+      "thought_chars": 0,
+      "seconds": 0.614
+     }
+    ]
+   ],
+   "axis": "remember",
+   "n_widgets": 21
+  },
+  {
+   "case": "ref-parts",
+   "kind": "reference",
+   "screen": "system-information",
+   "arm": "with",
+   "distance": 12,
+   "remember": 48,
+   "counted": "held",
+   "verdicts": [
+    "held",
+    "held",
+    "held"
+   ],
+   "void": 0,
+   "n": 3,
+   "agreed": true,
+   "chose": [
+    "Components",
+    "Components",
+    "Components"
+   ],
+   "clicked": [
+    [
+     "Components"
+    ],
+    [
+     "Components"
+    ],
+    [
+     "Components"
+    ]
+   ],
+   "n_effects": [
+    1,
+    1,
+    1
+   ],
+   "established": [
+    "Components",
+    "Components",
+    "Components"
+   ],
+   "offered_at_anchor": [
+    null,
+    null,
+    null
+   ],
+   "anchor_in_window": [
+    true,
+    true,
+    true
+   ],
+   "target_in_window": [
+    true,
+    true,
+    true
+   ],
+   "history_lines": 27,
+   "window_lines": [
+    27,
+    27,
+    27
+   ],
+   "prompt_tokens": [
+    2283,
+    2293,
+    2293
+   ],
+   "first_turn_tokens": [
+    1863,
+    1863,
+    1863
+   ],
+   "seconds": [
+    1.027,
+    1.033,
+    0.566
+   ],
+   "filler_effects": [
+    0,
+    0,
+    0
+   ],
+   "turns": [
+    [
+     {
+      "i": 0,
+      "said": "Components 항목 눌러줘",
+      "reply": "Components 항목을 클릭합니다.",
+      "clicked": [
+       "Components"
+      ],
+      "n_effects": 1,
+      "history_lines": 0,
+      "window_lines": 0,
+      "window": "",
+      "prompt_tokens": 1863,
+      "out_tokens": 23,
+      "thought_chars": 0,
+      "seconds": 0.524
+     },
+     {
+      "i": 1,
+      "said": "안녕",
+      "reply": "안녕하세요!",
+      "clicked": [],
+      "n_effects": 0,
+      "history_lines": 3,
+      "window_lines": 3,
+      "window": "\n  them: Components 항목 눌러줘\n  you: Components 항목을 클릭합니다.\n  offered: clicked the tree item \"Components\"\n\n",
+      "prompt_tokens": 1892,
+      "out_tokens": 14,
+      "thought_chars": 0,
+      "seconds": 0.904
+     },
+     {
+      "i": 2,
+      "said": "오늘 날씨 어때?",
+      "reply": "오늘 날씨에 대해 알려드릴 수 없습니다. 현재 화면에는 관련 정보가 없습니다.",
+      "clicked": [],
+      "n_effects": 0,
+      "history_lines": 5,
+      "window_lines": 5,
+      "window": "\n  them: Components 항목 눌러줘\n  you: Components 항목을 클릭합니다.\n  offered: clicked the tree item \"Components\"\n  them: 안녕\n  you: 안녕하세요!\n\n",
+      "prompt_tokens": 1909,
+      "out_tokens": 33,
+      "thought_chars": 0,
+      "seconds": 1.215
+     },
+     {
+      "i": 3,
+      "said": "너 뭘 할 수 있어?",
+      "reply": "저는 화면에 보이는 항목을 클릭하거나 정보를 제공할 수 있습니다. 무엇을 도와드릴까요?",
+      "clicked": [],
+      "n_effects": 0,
+      "history_lines": 7,
+      "window_lines": 7,
+      "window": "\n  them: Components 항목 눌러줘\n  you: Components 항목을 클릭합니다.\n  offered: clicked the tree item \"Components\"\n  them: 안녕\n  you: 안녕하세요!\n  them: 오늘 날씨 어때?\n  you: 오늘 날씨에 대해 알려드릴 수 없습니다. 현재 화면에는 관련 정보가 없습니다.\n\n",
+      "prompt_tokens": 1945,
+      "out_tokens": 39,
+      "thought_chars": 0,
+      "seconds": 1.306
+     },
+     {
+      "i": 4,
+      "said": "심심하다",
+      "reply": "심심하다니요? 도와드릴까요?",
+      "clicked": [],
+      "n_effects": 0,
+      "history_lines": 9,
+      "window_lines": 9,
+      "window": "\n  them: Components 항목 눌러줘\n  you: Components 항목을 클릭합니다.\n  offered: clicked the tree item \"Components\"\n  them: 안녕\n  you: 안녕하세요!\n  them: 오늘 날씨 어때?\n  you: 오늘 날씨에 대해 알려드릴 수 없습니다. 현재 화면에는 관련 정보가 없습니다.\n  them: 너 뭘 할 수 있어?\n  you: 저는 화면에 보이는 항목을 클릭하거나 정보를 제공할 수 있습니다. 무엇을 도와드릴까요?\n\n",
+      "prompt_tokens": 1984,
+      "out_tokens": 22,
+      "thought_chars": 0,
+      "seconds": 0.945
+     },
+     {
+      "i": 5,
+      "said": "커피 한 잔 마시고 싶다",
+      "reply": "커피 한 잔 마시고 싶다니요? 도와드릴 수 있는 일이 있을까요?",
+      "clicked": [],
+      "n_effects": 0,
+      "history_lines": 11,
+      "window_lines": 11,
+      "window": "\n  them: Components 항목 눌러줘\n  you: Components 항목을 클릭합니다.\n  offered: clicked the tree item \"Components\"\n  them: 안녕\n  you: 안녕하세요!\n  them: 오늘 날씨 어때?\n  you: 오늘 날씨에 대해 알려드릴 수 없습니다. 현재 화면에는 관련 정보가 없습니다.\n  them: 너 뭘 할 수 있어?\n  you: 저는 화면에 보이는 항목을 클릭하거나 정보를 제공할 수 있습니다. 무엇을 도와드릴까요?\n  them: 심심하다\n  you: 심심하다니요? 도와드릴까요?\n\n",
+      "prompt_tokens": 2017,
+      "out_tokens": 36,
+      "thought_chars": 0,
+      "seconds": 1.212
+     },
+     {
+      "i": 6,
+      "said": "너 이름이 뭐야?",
+      "reply": "저는 어시스턴트입니다. 어떻게 도와드릴까요?",
+      "clicked": [],
+      "n_effects": 0,
+      "history_lines": 13,
+      "window_lines": 13,
+      "window": "\n  them: Components 항목 눌러줘\n  you: Components 항목을 클릭합니다.\n  offered: clicked the tree item \"Components\"\n  them: 안녕\n  you: 안녕하세요!\n  them: 오늘 날씨 어때?\n  you: 오늘 날씨에 대해 알려드릴 수 없습니다. 현재 화면에는 관련 정보가 없습니다.\n  them: 너 뭘 할 수 있어?\n  you: 저는 화면에 보이는 항목을 클릭하거나 정보를 제공할 수 있습니다. 무엇을 도와드릴까요?\n  them: 심심하다\n  you: 심심하다니요? 도와드릴까요?\n  them: 커피 한 잔 마시고 싶다\n  you: 커피 한 잔 마시고 싶다니요? 도와드릴 수 있는 일이 있을까요?\n\n",
+      "prompt_tokens": 2056,
+      "out_tokens": 25,
+      "thought_chars": 0,
+      "seconds": 1.015
+     },
+     {
+      "i": 7,
+      "said": "오늘 할 일이 너무 많다",
+      "reply": "오늘 할 일이 너무 많다니요? 도와드릴까요?",
+      "clicked": [],
+      "n_effects": 0,
+      "history_lines": 15,
+      "window_lines": 15,
+      "window": "\n  them: Components 항목 눌러줘\n  you: Components 항목을 클릭합니다.\n  offered: clicked the tree item \"Components\"\n  them: 안녕\n  you: 안녕하세요!\n  them: 오늘 날씨 어때?\n  you: 오늘 날씨에 대해 알려드릴 수 없습니다. 현재 화면에는 관련 정보가 없습니다.\n  them: 너 뭘 할 수 있어?\n  you: 저는 화면에 보이는 항목을 클릭하거나 정보를 제공할 수 있습니다. 무엇을 도와드릴까요?\n  them: 심심하다\n  you: 심심하다니요? 도와드릴까요?\n  them: 커피 한 잔 마시고 싶다\n  you: 커피 한 잔 마시고 싶다니요? 도와드릴 수 있는 일이 있을까요?\n  them: 너 이름이 뭐야?\n  you: 저는 어시스턴트입니다. 어떻게 도와드릴까요?\n\n",
+      "prompt_tokens": 2083,
+      "out_tokens": 26,
+      "thought_chars": 0,
+      "seconds": 1.037
+     },
+     {
+      "i": 8,
+      "said": "잠깐 쉬었다 하자",
+      "reply": "잠깐 쉬었다 하자니요? 도와드릴까요?",
+      "clicked": [],
+      "n_effects": 0,
+      "history_lines": 17,
+      "window_lines": 17,
+      "window": "\n  them: Components 항목 눌러줘\n  you: Components 항목을 클릭합니다.\n  offered: clicked the tree item \"Components\"\n  them: 안녕\n  you: 안녕하세요!\n  them: 오늘 날씨 어때?\n  you: 오늘 날씨에 대해 알려드릴 수 없습니다. 현재 화면에는 관련 정보가 없습니다.\n  them: 너 뭘 할 수 있어?\n  you: 저는 화면에 보이는 항목을 클릭하거나 정보를 제공할 수 있습니다. 무엇을 도와드릴까요?\n  them: 심심하다\n  you: 심심하다니요? 도와드릴까요?\n  them: 커피 한 잔 마시고 싶다\n  you: 커피 한 잔 마시고 싶다니요? 도와드릴 수 있는 일이 있을까요?\n  them: 너 이름이 뭐야?\n  you: 저는 어시스턴트입니다. 어떻게 도와드릴까요?\n  them: 오늘 할 일이 너무 많다\n  you: 오늘 할 일이 너무 많다니요? 도와드릴까요?\n\n",
+      "prompt_tokens": 2113,
+      "out_tokens": 26,
+      "thought_chars": 0,
+      "seconds": 1.067
+     },
+     {
+      "i": 9,
+      "said": "이거 어떻게 쓰는 거야?",
+      "reply": "이 화면은 시스템 정보를 보여주는 곳입니다. 항목을 클릭하거나 검색할 수 있습니다.",
+      "clicked": [],
+      "n_effects": 0,
+      "history_lines": 19,
+      "window_lines": 19,
+      "window": "\n  them: Components 항목 눌러줘\n  you: Components 항목을 클릭합니다.\n  offered: clicked the tree item \"Components\"\n  them: 안녕\n  you: 안녕하세요!\n  them: 오늘 날씨 어때?\n  you: 오늘 날씨에 대해 알려드릴 수 없습니다. 현재 화면에는 관련 정보가 없습니다.\n  them: 너 뭘 할 수 있어?\n  you: 저는 화면에 보이는 항목을 클릭하거나 정보를 제공할 수 있습니다. 무엇을 도와드릴까요?\n  them: 심심하다\n  you: 심심하다니요? 도와드릴까요?\n  them: 커피 한 잔 마시고 싶다\n  you: 커피 한 잔 마시고 싶다니요? 도와드릴 수 있는 일이 있을까요?\n  them: 너 이름이 뭐야?\n  you: 저는 어시스턴트입니다. 어떻게 도와드릴까요?\n  them: 오늘 할 일이 너무 많다\n  you: 오늘 할 일이 너무 많다니요? 도와드릴까요?\n  them: 잠깐 쉬었다 하자\n  you: 잠깐 쉬었다 하자니요? 도와드릴까요?\n\n",
+      "prompt_tokens": 2146,
+      "out_tokens": 64,
+      "thought_chars": 0,
+      "seconds": 1.701
+     },
+     {
+      "i": 10,
+      "said": "수고했어",
+      "reply": "수고하셨습니다!",
+      "clicked": [],
+      "n_effects": 0,
+      "history_lines": 21,
+      "window_lines": 21,
+      "window": "\n  them: Components 항목 눌러줘\n  you: Components 항목을 클릭합니다.\n  offered: clicked the tree item \"Components\"\n  them: 안녕\n  you: 안녕하세요!\n  them: 오늘 날씨 어때?\n  you: 오늘 날씨에 대해 알려드릴 수 없습니다. 현재 화면에는 관련 정보가 없습니다.\n  them: 너 뭘 할 수 있어?\n  you: 저는 화면에 보이는 항목을 클릭하거나 정보를 제공할 수 있습니다. 무엇을 도와드릴까요?\n  them: 심심하다\n  you: 심심하다니요? 도와드릴까요?\n  them: 커피 한 잔 마시고 싶다\n  you: 커피 한 잔 마시고 싶다니요? 도와드릴 수 있는 일이 있을까요?\n  them: 너 이름이 뭐야?\n  you: 저는 어시스턴트입니다. 어떻게 도와드릴까요?\n  them: 오늘 할 일이 너무 많다\n  you: 오늘 할 일이 너무 많다니요? 도와드릴까요?\n  them: 잠깐 쉬었다 하자\n  you: 잠깐 쉬었다 하자니요? 도와드릴까요?\n  them: 이거 어떻게 쓰는 거야?\n  you: 이 화면은 시스템 정보를 보여주는 곳입니다. 항목을 클릭하거나 검색할 수 있습니다.\n\n",
+      "prompt_tokens": 2186,
+      "out_tokens": 15,
+      "thought_chars": 0,
+      "seconds": 0.857
+     },
+     {
+      "i": 11,
+      "said": "밥 먹고 올게",
+      "reply": "밥 먹고 오시면 다시 도와드릴게요!",
+      "clicked": [],
+      "n_effects": 0,
+      "history_lines": 23,
+      "window_lines": 23,
+      "window": "\n  them: Components 항목 눌러줘\n  you: Components 항목을 클릭합니다.\n  offered: clicked the tree item \"Components\"\n  them: 안녕\n  you: 안녕하세요!\n  them: 오늘 날씨 어때?\n  you: 오늘 날씨에 대해 알려드릴 수 없습니다. 현재 화면에는 관련 정보가 없습니다.\n  them: 너 뭘 할 수 있어?\n  you: 저는 화면에 보이는 항목을 클릭하거나 정보를 제공할 수 있습니다. 무엇을 도와드릴까요?\n  them: 심심하다\n  you: 심심하다니요? 도와드릴까요?\n  them: 커피 한 잔 마시고 싶다\n  you: 커피 한 잔 마시고 싶다니요? 도와드릴 수 있는 일이 있을까요?\n  them: 너 이름이 뭐야?\n  you: 저는 어시스턴트입니다. 어떻게 도와드릴까요?\n  them: 오늘 할 일이 너무 많다\n  you: 오늘 할 일이 너무 많다니요? 도와드릴까요?\n  them: 잠깐 쉬었다 하자\n  you: 잠깐 쉬었다 하자니요? 도와드릴까요?\n  them: 이거 어떻게 쓰는 거야?\n  you: 이 화면은 시스템 정보를 보여주는 곳입니다. 항목을 클릭하거나 검색할 수 있습니다.\n  them: 수고했어\n  you: 수고하셨습니다!\n\n",
+      "prompt_tokens": 2206,
+      "out_tokens": 25,
+      "thought_chars": 0,
+      "seconds": 1.071
+     },
+     {
+      "i": 12,
+      "said": "이 창 좀 복잡하지 않아?",
+      "reply": "이 창은 시스템 정보를 보여주는 곳입니다. 필요하신 부분을 클릭하거나 검색할 수 있어요.",
+      "clicked": [],
+      "n_effects": 0,
+      "history_lines": 25,
+      "window_lines": 25,
+      "window": "\n  them: Components 항목 눌러줘\n  you: Components 항목을 클릭합니다.\n  offered: clicked the tree item \"Components\"\n  them: 안녕\n  you: 안녕하세요!\n  them: 오늘 날씨 어때?\n  you: 오늘 날씨에 대해 알려드릴 수 없습니다. 현재 화면에는 관련 정보가 없습니다.\n  them: 너 뭘 할 수 있어?\n  you: 저는 화면에 보이는 항목을 클릭하거나 정보를 제공할 수 있습니다. 무엇을 도와드릴까요?\n  them: 심심하다\n  you: 심심하다니요? 도와드릴까요?\n  them: 커피 한 잔 마시고 싶다\n  you: 커피 한 잔 마시고 싶다니요? 도와드릴 수 있는 일이 있을까요?\n  them: 너 이름이 뭐야?\n  you: 저는 어시스턴트입니다. 어떻게 도와드릴까요?\n  them: 오늘 할 일이 너무 많다\n  you: 오늘 할 일이 너무 많다니요? 도와드릴까요?\n  them: 잠깐 쉬었다 하자\n  you: 잠깐 쉬었다 하자니요? 도와드릴까요?\n  them: 이거 어떻게 쓰는 거야?\n  you: 이 화면은 시스템 정보를 보여주는 곳입니다. 항목을 클릭하거나 검색할 수 있습니다.\n  them: 수고했어\n  you: 수고하셨습니다!\n  them: 밥 먹고 올게\n  you: 밥 먹고 오시면 다시 도와드릴게요!\n\n",
+      "prompt_tokens": 2239,
+      "out_tokens": 40,
+      "thought_chars": 0,
+      "seconds": 1.32
+     },
+     {
+      "i": 13,
+      "said": "그거 다시 눌러줘",
+      "reply": "그 항목을 다시 클릭합니다.",
+      "clicked": [
+       "Components"
+      ],
+      "n_effects": 1,
+      "history_lines": 27,
+      "window_lines": 27,
+      "window": "\n  them: Components 항목 눌러줘\n  you: Components 항목을 클릭합니다.\n  offered: clicked the tree item \"Components\"\n  them: 안녕\n  you: 안녕하세요!\n  them: 오늘 날씨 어때?\n  you: 오늘 날씨에 대해 알려드릴 수 없습니다. 현재 화면에는 관련 정보가 없습니다.\n  them: 너 뭘 할 수 있어?\n  you: 저는 화면에 보이는 항목을 클릭하거나 정보를 제공할 수 있습니다. 무엇을 도와드릴까요?\n  them: 심심하다\n  you: 심심하다니요? 도와드릴까요?\n  them: 커피 한 잔 마시고 싶다\n  you: 커피 한 잔 마시고 싶다니요? 도와드릴 수 있는 일이 있을까요?\n  them: 너 이름이 뭐야?\n  you: 저는 어시스턴트입니다. 어떻게 도와드릴까요?\n  them: 오늘 할 일이 너무 많다\n  you: 오늘 할 일이 너무 많다니요? 도와드릴까요?\n  them: 잠깐 쉬었다 하자\n  you: 잠깐 쉬었다 하자니요? 도와드릴까요?\n  them: 이거 어떻게 쓰는 거야?\n  you: 이 화면은 시스템 정보를 보여주는 곳입니다. 항목을 클릭하거나 검색할 수 있습니다.\n  them: 수고했어\n  you: 수고하셨습니다!\n  them: 밥 먹고 올게\n  you: 밥 먹고 오시면 다시 도와드릴게요!\n  them: 이 창 좀 복잡하지 않아?\n  you: 이 창은 시스템 정보를 보여주는 곳입니다. 필요하신 부분을 클릭하거나 검색할 수 있어요.\n\n",
+      "prompt_tokens": 2283,
+      "out_tokens": 24,
+      "thought_chars": 0,
+      "seconds": 1.027
+     }
+    ],
+    [
+     {
+      "i": 0,
+      "said": "Components 항목 눌러줘",
+      "reply": "Components 항목을 클릭합니다.",
+      "clicked": [
+       "Components"
+      ],
+      "n_effects": 1,
+      "history_lines": 0,
+      "window_lines": 0,
+      "window": "",
+      "prompt_tokens": 1863,
+      "out_tokens": 23,
+      "thought_chars": 0,
+      "seconds": 0.743
+     },
+     {
+      "i": 1,
+      "said": "안녕",
+      "reply": "안녕하세요!",
+      "clicked": [],
+      "n_effects": 0,
+      "history_lines": 3,
+      "window_lines": 3,
+      "window": "\n  them: Components 항목 눌러줘\n  you: Components 항목을 클릭합니다.\n  offered: clicked the tree item \"Components\"\n\n",
+      "prompt_tokens": 1892,
+      "out_tokens": 14,
+      "thought_chars": 0,
+      "seconds": 0.505
+     },
+     {
+      "i": 2,
+      "said": "오늘 날씨 어때?",
+      "reply": "오늘 날씨에 대해 알려드릴 수 없습니다. 현재 화면에는 관련 정보가 없습니다.",
+      "clicked": [],
+      "n_effects": 0,
+      "history_lines": 5,
+      "window_lines": 5,
+      "window": "\n  them: Components 항목 눌러줘\n  you: Components 항목을 클릭합니다.\n  offered: clicked the tree item \"Components\"\n  them: 안녕\n  you: 안녕하세요!\n\n",
+      "prompt_tokens": 1909,
+      "out_tokens": 33,
+      "thought_chars": 0,
+      "seconds": 0.977
+     },
+     {
+      "i": 3,
+      "said": "너 뭘 할 수 있어?",
+      "reply": "저는 화면에 보이는 항목을 클릭하거나 정보를 제공할 수 있습니다. 무엇을 도와드릴까요?",
+      "clicked": [],
+      "n_effects": 0,
+      "history_lines": 7,
+      "window_lines": 7,
+      "window": "\n  them: Components 항목 눌러줘\n  you: Components 항목을 클릭합니다.\n  offered: clicked the tree item \"Components\"\n  them: 안녕\n  you: 안녕하세요!\n  them: 오늘 날씨 어때?\n  you: 오늘 날씨에 대해 알려드릴 수 없습니다. 현재 화면에는 관련 정보가 없습니다.\n\n",
+      "prompt_tokens": 1945,
+      "out_tokens": 39,
+      "thought_chars": 0,
+      "seconds": 0.847
+     },
+     {
+      "i": 4,
+      "said": "심심하다",
+      "reply": "심심하다니요? 도와드릴까요?",
+      "clicked": [],
+      "n_effects": 0,
+      "history_lines": 9,
+      "window_lines": 9,
+      "window": "\n  them: Components 항목 눌러줘\n  you: Components 항목을 클릭합니다.\n  offered: clicked the tree item \"Components\"\n  them: 안녕\n  you: 안녕하세요!\n  them: 오늘 날씨 어때?\n  you: 오늘 날씨에 대해 알려드릴 수 없습니다. 현재 화면에는 관련 정보가 없습니다.\n  them: 너 뭘 할 수 있어?\n  you: 저는 화면에 보이는 항목을 클릭하거나 정보를 제공할 수 있습니다. 무엇을 도와드릴까요?\n\n",
+      "prompt_tokens": 1984,
+      "out_tokens": 22,
+      "thought_chars": 0,
+      "seconds": 0.48
+     },
+     {
+      "i": 5,
+      "said": "커피 한 잔 마시고 싶다",
+      "reply": "커피 한 잔 마시고 싶다니요? 도와드릴 수 있는 일이 있을까요?",
+      "clicked": [],
+      "n_effects": 0,
+      "history_lines": 11,
+      "window_lines": 11,
+      "window": "\n  them: Components 항목 눌러줘\n  you: Components 항목을 클릭합니다.\n  offered: clicked the tree item \"Components\"\n  them: 안녕\n  you: 안녕하세요!\n  them: 오늘 날씨 어때?\n  you: 오늘 날씨에 대해 알려드릴 수 없습니다. 현재 화면에는 관련 정보가 없습니다.\n  them: 너 뭘 할 수 있어?\n  you: 저는 화면에 보이는 항목을 클릭하거나 정보를 제공할 수 있습니다. 무엇을 도와드릴까요?\n  them: 심심하다\n  you: 심심하다니요? 도와드릴까요?\n\n",
+      "prompt_tokens": 2017,
+      "out_tokens": 36,
+      "thought_chars": 0,
+      "seconds": 0.74
+     },
+     {
+      "i": 6,
+      "said": "너 이름이 뭐야?",
+      "reply": "저는 어시스턴트입니다. 어떻게 도와드릴까요?",
+      "clicked": [],
+      "n_effects": 0,
+      "history_lines": 13,
+      "window_lines": 13,
+      "window": "\n  them: Components 항목 눌러줘\n  you: Components 항목을 클릭합니다.\n  offered: clicked the tree item \"Components\"\n  them: 안녕\n  you: 안녕하세요!\n  them: 오늘 날씨 어때?\n  you: 오늘 날씨에 대해 알려드릴 수 없습니다. 현재 화면에는 관련 정보가 없습니다.\n  them: 너 뭘 할 수 있어?\n  you: 저는 화면에 보이는 항목을 클릭하거나 정보를 제공할 수 있습니다. 무엇을 도와드릴까요?\n  them: 심심하다\n  you: 심심하다니요? 도와드릴까요?\n  them: 커피 한 잔 마시고 싶다\n  you: 커피 한 잔 마시고 싶다니요? 도와드릴 수 있는 일이 있을까요?\n\n",
+      "prompt_tokens": 2056,
+      "out_tokens": 25,
+      "thought_chars": 0,
+      "seconds": 0.557
+     },
+     {
+      "i": 7,
+      "said": "오늘 할 일이 너무 많다",
+      "reply": "오늘 할 일이 너무 많다니요? 도와드릴까요?",
+      "clicked": [],
+      "n_effects": 0,
+      "history_lines": 15,
+      "window_lines": 15,
+      "window": "\n  them: Components 항목 눌러줘\n  you: Components 항목을 클릭합니다.\n  offered: clicked the tree item \"Components\"\n  them: 안녕\n  you: 안녕하세요!\n  them: 오늘 날씨 어때?\n  you: 오늘 날씨에 대해 알려드릴 수 없습니다. 현재 화면에는 관련 정보가 없습니다.\n  them: 너 뭘 할 수 있어?\n  you: 저는 화면에 보이는 항목을 클릭하거나 정보를 제공할 수 있습니다. 무엇을 도와드릴까요?\n  them: 심심하다\n  you: 심심하다니요? 도와드릴까요?\n  them: 커피 한 잔 마시고 싶다\n  you: 커피 한 잔 마시고 싶다니요? 도와드릴 수 있는 일이 있을까요?\n  them: 너 이름이 뭐야?\n  you: 저는 어시스턴트입니다. 어떻게 도와드릴까요?\n\n",
+      "prompt_tokens": 2083,
+      "out_tokens": 26,
+      "thought_chars": 0,
+      "seconds": 0.576
+     },
+     {
+      "i": 8,
+      "said": "잠깐 쉬었다 하자",
+      "reply": "잠깐 쉬었다 하자니요? 도와드릴까요?",
+      "clicked": [],
+      "n_effects": 0,
+      "history_lines": 17,
+      "window_lines": 17,
+      "window": "\n  them: Components 항목 눌러줘\n  you: Components 항목을 클릭합니다.\n  offered: clicked the tree item \"Components\"\n  them: 안녕\n  you: 안녕하세요!\n  them: 오늘 날씨 어때?\n  you: 오늘 날씨에 대해 알려드릴 수 없습니다. 현재 화면에는 관련 정보가 없습니다.\n  them: 너 뭘 할 수 있어?\n  you: 저는 화면에 보이는 항목을 클릭하거나 정보를 제공할 수 있습니다. 무엇을 도와드릴까요?\n  them: 심심하다\n  you: 심심하다니요? 도와드릴까요?\n  them: 커피 한 잔 마시고 싶다\n  you: 커피 한 잔 마시고 싶다니요? 도와드릴 수 있는 일이 있을까요?\n  them: 너 이름이 뭐야?\n  you: 저는 어시스턴트입니다. 어떻게 도와드릴까요?\n  them: 오늘 할 일이 너무 많다\n  you: 오늘 할 일이 너무 많다니요? 도와드릴까요?\n\n",
+      "prompt_tokens": 2113,
+      "out_tokens": 26,
+      "thought_chars": 0,
+      "seconds": 0.566
+     },
+     {
+      "i": 9,
+      "said": "이거 어떻게 쓰는 거야?",
+      "reply": "이 화면은 시스템 정보를 보여주는 곳입니다. 필요하신 항목을 클릭하거나 질문해 주세요!",
+      "clicked": [],
+      "n_effects": 0,
+      "history_lines": 19,
+      "window_lines": 19,
+      "window": "\n  them: Components 항목 눌러줘\n  you: Components 항목을 클릭합니다.\n  offered: clicked the tree item \"Components\"\n  them: 안녕\n  you: 안녕하세요!\n  them: 오늘 날씨 어때?\n  you: 오늘 날씨에 대해 알려드릴 수 없습니다. 현재 화면에는 관련 정보가 없습니다.\n  them: 너 뭘 할 수 있어?\n  you: 저는 화면에 보이는 항목을 클릭하거나 정보를 제공할 수 있습니다. 무엇을 도와드릴까요?\n  them: 심심하다\n  you: 심심하다니요? 도와드릴까요?\n  them: 커피 한 잔 마시고 싶다\n  you: 커피 한 잔 마시고 싶다니요? 도와드릴 수 있는 일이 있을까요?\n  them: 너 이름이 뭐야?\n  you: 저는 어시스턴트입니다. 어떻게 도와드릴까요?\n  them: 오늘 할 일이 너무 많다\n  you: 오늘 할 일이 너무 많다니요? 도와드릴까요?\n  them: 잠깐 쉬었다 하자\n  you: 잠깐 쉬었다 하자니요? 도와드릴까요?\n\n",
+      "prompt_tokens": 2146,
+      "out_tokens": 40,
+      "thought_chars": 0,
+      "seconds": 1.182
+     },
+     {
+      "i": 10,
+      "said": "수고했어",
+      "reply": "수고하셨습니다!",
+      "clicked": [],
+      "n_effects": 0,
+      "history_lines": 21,
+      "window_lines": 21,
+      "window": "\n  them: Components 항목 눌러줘\n  you: Components 항목을 클릭합니다.\n  offered: clicked the tree item \"Components\"\n  them: 안녕\n  you: 안녕하세요!\n  them: 오늘 날씨 어때?\n  you: 오늘 날씨에 대해 알려드릴 수 없습니다. 현재 화면에는 관련 정보가 없습니다.\n  them: 너 뭘 할 수 있어?\n  you: 저는 화면에 보이는 항목을 클릭하거나 정보를 제공할 수 있습니다. 무엇을 도와드릴까요?\n  them: 심심하다\n  you: 심심하다니요? 도와드릴까요?\n  them: 커피 한 잔 마시고 싶다\n  you: 커피 한 잔 마시고 싶다니요? 도와드릴 수 있는 일이 있을까요?\n  them: 너 이름이 뭐야?\n  you: 저는 어시스턴트입니다. 어떻게 도와드릴까요?\n  them: 오늘 할 일이 너무 많다\n  you: 오늘 할 일이 너무 많다니요? 도와드릴까요?\n  them: 잠깐 쉬었다 하자\n  you: 잠깐 쉬었다 하자니요? 도와드릴까요?\n  them: 이거 어떻게 쓰는 거야?\n  you: 이 화면은 시스템 정보를 보여주는 곳입니다. 필요하신 항목을 클릭하거나 질문해 주세요!\n\n",
+      "prompt_tokens": 2187,
+      "out_tokens": 15,
+      "thought_chars": 0,
+      "seconds": 0.903
+     },
+     {
+      "i": 11,
+      "said": "밥 먹고 올게",
+      "reply": "밥 먹고 오시면 다시 도와드릴게요!",
+      "clicked": [],
+      "n_effects": 0,
+      "history_lines": 23,
+      "window_lines": 23,
+      "window": "\n  them: Components 항목 눌러줘\n  you: Components 항목을 클릭합니다.\n  offered: clicked the tree item \"Components\"\n  them: 안녕\n  you: 안녕하세요!\n  them: 오늘 날씨 어때?\n  you: 오늘 날씨에 대해 알려드릴 수 없습니다. 현재 화면에는 관련 정보가 없습니다.\n  them: 너 뭘 할 수 있어?\n  you: 저는 화면에 보이는 항목을 클릭하거나 정보를 제공할 수 있습니다. 무엇을 도와드릴까요?\n  them: 심심하다\n  you: 심심하다니요? 도와드릴까요?\n  them: 커피 한 잔 마시고 싶다\n  you: 커피 한 잔 마시고 싶다니요? 도와드릴 수 있는 일이 있을까요?\n  them: 너 이름이 뭐야?\n  you: 저는 어시스턴트입니다. 어떻게 도와드릴까요?\n  them: 오늘 할 일이 너무 많다\n  you: 오늘 할 일이 너무 많다니요? 도와드릴까요?\n  them: 잠깐 쉬었다 하자\n  you: 잠깐 쉬었다 하자니요? 도와드릴까요?\n  them: 이거 어떻게 쓰는 거야?\n  you: 이 화면은 시스템 정보를 보여주는 곳입니다. 필요하신 항목을 클릭하거나 질문해 주세요!\n  them: 수고했어\n  you: 수고하셨습니다!\n\n",
+      "prompt_tokens": 2207,
+      "out_tokens": 25,
+      "thought_chars": 0,
+      "seconds": 1.009
+     },
+     {
+      "i": 12,
+      "said": "이 창 좀 복잡하지 않아?",
+      "reply": "네, 이 창은 시스템 정보를 자세히 보여주는 곳이라 복잡할 수 있어요. 도움이 필요하시면 말씀해주세요!",
+      "clicked": [],
+      "n_effects": 0,
+      "history_lines": 25,
+      "window_lines": 25,
+      "window": "\n  them: Components 항목 눌러줘\n  you: Components 항목을 클릭합니다.\n  offered: clicked the tree item \"Components\"\n  them: 안녕\n  you: 안녕하세요!\n  them: 오늘 날씨 어때?\n  you: 오늘 날씨에 대해 알려드릴 수 없습니다. 현재 화면에는 관련 정보가 없습니다.\n  them: 너 뭘 할 수 있어?\n  you: 저는 화면에 보이는 항목을 클릭하거나 정보를 제공할 수 있습니다. 무엇을 도와드릴까요?\n  them: 심심하다\n  you: 심심하다니요? 도와드릴까요?\n  them: 커피 한 잔 마시고 싶다\n  you: 커피 한 잔 마시고 싶다니요? 도와드릴 수 있는 일이 있을까요?\n  them: 너 이름이 뭐야?\n  you: 저는 어시스턴트입니다. 어떻게 도와드릴까요?\n  them: 오늘 할 일이 너무 많다\n  you: 오늘 할 일이 너무 많다니요? 도와드릴까요?\n  them: 잠깐 쉬었다 하자\n  you: 잠깐 쉬었다 하자니요? 도와드릴까요?\n  them: 이거 어떻게 쓰는 거야?\n  you: 이 화면은 시스템 정보를 보여주는 곳입니다. 필요하신 항목을 클릭하거나 질문해 주세요!\n  them: 수고했어\n  you: 수고하셨습니다!\n  them: 밥 먹고 올게\n  you: 밥 먹고 오시면 다시 도와드릴게요!\n\n",
+      "prompt_tokens": 2240,
+      "out_tokens": 48,
+      "thought_chars": 0,
+      "seconds": 1.395
+     },
+     {
+      "i": 13,
+      "said": "그거 다시 눌러줘",
+      "reply": "그 항목을 다시 클릭합니다.",
+      "clicked": [
+       "Components"
+      ],
+      "n_effects": 1,
+      "history_lines": 27,
+      "window_lines": 27,
+      "window": "\n  them: Components 항목 눌러줘\n  you: Components 항목을 클릭합니다.\n  offered: clicked the tree item \"Components\"\n  them: 안녕\n  you: 안녕하세요!\n  them: 오늘 날씨 어때?\n  you: 오늘 날씨에 대해 알려드릴 수 없습니다. 현재 화면에는 관련 정보가 없습니다.\n  them: 너 뭘 할 수 있어?\n  you: 저는 화면에 보이는 항목을 클릭하거나 정보를 제공할 수 있습니다. 무엇을 도와드릴까요?\n  them: 심심하다\n  you: 심심하다니요? 도와드릴까요?\n  them: 커피 한 잔 마시고 싶다\n  you: 커피 한 잔 마시고 싶다니요? 도와드릴 수 있는 일이 있을까요?\n  them: 너 이름이 뭐야?\n  you: 저는 어시스턴트입니다. 어떻게 도와드릴까요?\n  them: 오늘 할 일이 너무 많다\n  you: 오늘 할 일이 너무 많다니요? 도와드릴까요?\n  them: 잠깐 쉬었다 하자\n  you: 잠깐 쉬었다 하자니요? 도와드릴까요?\n  them: 이거 어떻게 쓰는 거야?\n  you: 이 화면은 시스템 정보를 보여주는 곳입니다. 필요하신 항목을 클릭하거나 질문해 주세요!\n  them: 수고했어\n  you: 수고하셨습니다!\n  them: 밥 먹고 올게\n  you: 밥 먹고 오시면 다시 도와드릴게요!\n  them: 이 창 좀 복잡하지 않아?\n  you: 네, 이 창은 시스템 정보를 자세히 보여주는 곳이라 복잡할 수 있어요. 도움이 필요하시면 말씀해주세요!\n\n",
+      "prompt_tokens": 2293,
+      "out_tokens": 24,
+      "thought_chars": 0,
+      "seconds": 1.033
+     }
+    ],
+    [
+     {
+      "i": 0,
+      "said": "Components 항목 눌러줘",
+      "reply": "Components 항목을 클릭합니다.",
+      "clicked": [
+       "Components"
+      ],
+      "n_effects": 1,
+      "history_lines": 0,
+      "window_lines": 0,
+      "window": "",
+      "prompt_tokens": 1863,
+      "out_tokens": 23,
+      "thought_chars": 0,
+      "seconds": 0.548
+     },
+     {
+      "i": 1,
+      "said": "안녕",
+      "reply": "안녕하세요!",
+      "clicked": [],
+      "n_effects": 0,
+      "history_lines": 3,
+      "window_lines": 3,
+      "window": "\n  them: Components 항목 눌러줘\n  you: Components 항목을 클릭합니다.\n  offered: clicked the tree item \"Components\"\n\n",
+      "prompt_tokens": 1892,
+      "out_tokens": 14,
+      "thought_chars": 0,
+      "seconds": 0.349
+     },
+     {
+      "i": 2,
+      "said": "오늘 날씨 어때?",
+      "reply": "오늘 날씨에 대해 알려드릴 수 없습니다. 현재 화면에는 관련 정보가 없습니다.",
+      "clicked": [],
+      "n_effects": 0,
+      "history_lines": 5,
+      "window_lines": 5,
+      "window": "\n  them: Components 항목 눌러줘\n  you: Components 항목을 클릭합니다.\n  offered: clicked the tree item \"Components\"\n  them: 안녕\n  you: 안녕하세요!\n\n",
+      "prompt_tokens": 1909,
+      "out_tokens": 33,
+      "thought_chars": 0,
+      "seconds": 1.015
+     },
+     {
+      "i": 3,
+      "said": "너 뭘 할 수 있어?",
+      "reply": "저는 화면에 보이는 항목을 클릭하거나 정보를 제공할 수 있습니다. 무엇을 도와드릴까요?",
+      "clicked": [],
+      "n_effects": 0,
+      "history_lines": 7,
+      "window_lines": 7,
+      "window": "\n  them: Components 항목 눌러줘\n  you: Components 항목을 클릭합니다.\n  offered: clicked the tree item \"Components\"\n  them: 안녕\n  you: 안녕하세요!\n  them: 오늘 날씨 어때?\n  you: 오늘 날씨에 대해 알려드릴 수 없습니다. 현재 화면에는 관련 정보가 없습니다.\n\n",
+      "prompt_tokens": 1945,
+      "out_tokens": 39,
+      "thought_chars": 0,
+      "seconds": 1.119
+     },
+     {
+      "i": 4,
+      "said": "심심하다",
+      "reply": "심심하다니요? 도와드릴까요?",
+      "clicked": [],
+      "n_effects": 0,
+      "history_lines": 9,
+      "window_lines": 9,
+      "window": "\n  them: Components 항목 눌러줘\n  you: Components 항목을 클릭합니다.\n  offered: clicked the tree item \"Components\"\n  them: 안녕\n  you: 안녕하세요!\n  them: 오늘 날씨 어때?\n  you: 오늘 날씨에 대해 알려드릴 수 없습니다. 현재 화면에는 관련 정보가 없습니다.\n  them: 너 뭘 할 수 있어?\n  you: 저는 화면에 보이는 항목을 클릭하거나 정보를 제공할 수 있습니다. 무엇을 도와드릴까요?\n\n",
+      "prompt_tokens": 1984,
+      "out_tokens": 22,
+      "thought_chars": 0,
+      "seconds": 0.517
+     },
+     {
+      "i": 5,
+      "said": "커피 한 잔 마시고 싶다",
+      "reply": "커피 한 잔 마시고 싶다니요? 도와드릴 수 있는 일이 있을까요?",
+      "clicked": [],
+      "n_effects": 0,
+      "history_lines": 11,
+      "window_lines": 11,
+      "window": "\n  them: Components 항목 눌러줘\n  you: Components 항목을 클릭합니다.\n  offered: clicked the tree item \"Components\"\n  them: 안녕\n  you: 안녕하세요!\n  them: 오늘 날씨 어때?\n  you: 오늘 날씨에 대해 알려드릴 수 없습니다. 현재 화면에는 관련 정보가 없습니다.\n  them: 너 뭘 할 수 있어?\n  you: 저는 화면에 보이는 항목을 클릭하거나 정보를 제공할 수 있습니다. 무엇을 도와드릴까요?\n  them: 심심하다\n  you: 심심하다니요? 도와드릴까요?\n\n",
+      "prompt_tokens": 2017,
+      "out_tokens": 36,
+      "thought_chars": 0,
+      "seconds": 1.085
+     },
+     {
+      "i": 6,
+      "said": "너 이름이 뭐야?",
+      "reply": "저는 어시스턴트입니다. 어떻게 도와드릴까요?",
+      "clicked": [],
+      "n_effects": 0,
+      "history_lines": 13,
+      "window_lines": 13,
+      "window": "\n  them: Components 항목 눌러줘\n  you: Components 항목을 클릭합니다.\n  offered: clicked the tree item \"Components\"\n  them: 안녕\n  you: 안녕하세요!\n  them: 오늘 날씨 어때?\n  you: 오늘 날씨에 대해 알려드릴 수 없습니다. 현재 화면에는 관련 정보가 없습니다.\n  them: 너 뭘 할 수 있어?\n  you: 저는 화면에 보이는 항목을 클릭하거나 정보를 제공할 수 있습니다. 무엇을 도와드릴까요?\n  them: 심심하다\n  you: 심심하다니요? 도와드릴까요?\n  them: 커피 한 잔 마시고 싶다\n  you: 커피 한 잔 마시고 싶다니요? 도와드릴 수 있는 일이 있을까요?\n\n",
+      "prompt_tokens": 2056,
+      "out_tokens": 25,
+      "thought_chars": 0,
+      "seconds": 0.546
+     },
+     {
+      "i": 7,
+      "said": "오늘 할 일이 너무 많다",
+      "reply": "오늘 할 일이 너무 많다니요? 도와드릴까요?",
+      "clicked": [],
+      "n_effects": 0,
+      "history_lines": 15,
+      "window_lines": 15,
+      "window": "\n  them: Components 항목 눌러줘\n  you: Components 항목을 클릭합니다.\n  offered: clicked the tree item \"Components\"\n  them: 안녕\n  you: 안녕하세요!\n  them: 오늘 날씨 어때?\n  you: 오늘 날씨에 대해 알려드릴 수 없습니다. 현재 화면에는 관련 정보가 없습니다.\n  them: 너 뭘 할 수 있어?\n  you: 저는 화면에 보이는 항목을 클릭하거나 정보를 제공할 수 있습니다. 무엇을 도와드릴까요?\n  them: 심심하다\n  you: 심심하다니요? 도와드릴까요?\n  them: 커피 한 잔 마시고 싶다\n  you: 커피 한 잔 마시고 싶다니요? 도와드릴 수 있는 일이 있을까요?\n  them: 너 이름이 뭐야?\n  you: 저는 어시스턴트입니다. 어떻게 도와드릴까요?\n\n",
+      "prompt_tokens": 2083,
+      "out_tokens": 26,
+      "thought_chars": 0,
+      "seconds": 0.565
+     },
+     {
+      "i": 8,
+      "said": "잠깐 쉬었다 하자",
+      "reply": "잠깐 쉬었다 하자니요? 도와드릴까요?",
+      "clicked": [],
+      "n_effects": 0,
+      "history_lines": 17,
+      "window_lines": 17,
+      "window": "\n  them: Components 항목 눌러줘\n  you: Components 항목을 클릭합니다.\n  offered: clicked the tree item \"Components\"\n  them: 안녕\n  you: 안녕하세요!\n  them: 오늘 날씨 어때?\n  you: 오늘 날씨에 대해 알려드릴 수 없습니다. 현재 화면에는 관련 정보가 없습니다.\n  them: 너 뭘 할 수 있어?\n  you: 저는 화면에 보이는 항목을 클릭하거나 정보를 제공할 수 있습니다. 무엇을 도와드릴까요?\n  them: 심심하다\n  you: 심심하다니요? 도와드릴까요?\n  them: 커피 한 잔 마시고 싶다\n  you: 커피 한 잔 마시고 싶다니요? 도와드릴 수 있는 일이 있을까요?\n  them: 너 이름이 뭐야?\n  you: 저는 어시스턴트입니다. 어떻게 도와드릴까요?\n  them: 오늘 할 일이 너무 많다\n  you: 오늘 할 일이 너무 많다니요? 도와드릴까요?\n\n",
+      "prompt_tokens": 2113,
+      "out_tokens": 26,
+      "thought_chars": 0,
+      "seconds": 0.55
+     },
+     {
+      "i": 9,
+      "said": "이거 어떻게 쓰는 거야?",
+      "reply": "이 화면은 시스템 정보를 보여주는 곳입니다. 필요하신 항목을 클릭하거나 질문해 주세요!",
+      "clicked": [],
+      "n_effects": 0,
+      "history_lines": 19,
+      "window_lines": 19,
+      "window": "\n  them: Components 항목 눌러줘\n  you: Components 항목을 클릭합니다.\n  offered: clicked the tree item \"Components\"\n  them: 안녕\n  you: 안녕하세요!\n  them: 오늘 날씨 어때?\n  you: 오늘 날씨에 대해 알려드릴 수 없습니다. 현재 화면에는 관련 정보가 없습니다.\n  them: 너 뭘 할 수 있어?\n  you: 저는 화면에 보이는 항목을 클릭하거나 정보를 제공할 수 있습니다. 무엇을 도와드릴까요?\n  them: 심심하다\n  you: 심심하다니요? 도와드릴까요?\n  them: 커피 한 잔 마시고 싶다\n  you: 커피 한 잔 마시고 싶다니요? 도와드릴 수 있는 일이 있을까요?\n  them: 너 이름이 뭐야?\n  you: 저는 어시스턴트입니다. 어떻게 도와드릴까요?\n  them: 오늘 할 일이 너무 많다\n  you: 오늘 할 일이 너무 많다니요? 도와드릴까요?\n  them: 잠깐 쉬었다 하자\n  you: 잠깐 쉬었다 하자니요? 도와드릴까요?\n\n",
+      "prompt_tokens": 2146,
+      "out_tokens": 40,
+      "thought_chars": 0,
+      "seconds": 0.785
+     },
+     {
+      "i": 10,
+      "said": "수고했어",
+      "reply": "수고하셨습니다!",
+      "clicked": [],
+      "n_effects": 0,
+      "history_lines": 21,
+      "window_lines": 21,
+      "window": "\n  them: Components 항목 눌러줘\n  you: Components 항목을 클릭합니다.\n  offered: clicked the tree item \"Components\"\n  them: 안녕\n  you: 안녕하세요!\n  them: 오늘 날씨 어때?\n  you: 오늘 날씨에 대해 알려드릴 수 없습니다. 현재 화면에는 관련 정보가 없습니다.\n  them: 너 뭘 할 수 있어?\n  you: 저는 화면에 보이는 항목을 클릭하거나 정보를 제공할 수 있습니다. 무엇을 도와드릴까요?\n  them: 심심하다\n  you: 심심하다니요? 도와드릴까요?\n  them: 커피 한 잔 마시고 싶다\n  you: 커피 한 잔 마시고 싶다니요? 도와드릴 수 있는 일이 있을까요?\n  them: 너 이름이 뭐야?\n  you: 저는 어시스턴트입니다. 어떻게 도와드릴까요?\n  them: 오늘 할 일이 너무 많다\n  you: 오늘 할 일이 너무 많다니요? 도와드릴까요?\n  them: 잠깐 쉬었다 하자\n  you: 잠깐 쉬었다 하자니요? 도와드릴까요?\n  them: 이거 어떻게 쓰는 거야?\n  you: 이 화면은 시스템 정보를 보여주는 곳입니다. 필요하신 항목을 클릭하거나 질문해 주세요!\n\n",
+      "prompt_tokens": 2187,
+      "out_tokens": 15,
+      "thought_chars": 0,
+      "seconds": 0.437
+     },
+     {
+      "i": 11,
+      "said": "밥 먹고 올게",
+      "reply": "밥 먹고 오시면 다시 도와드릴게요!",
+      "clicked": [],
+      "n_effects": 0,
+      "history_lines": 23,
+      "window_lines": 23,
+      "window": "\n  them: Components 항목 눌러줘\n  you: Components 항목을 클릭합니다.\n  offered: clicked the tree item \"Components\"\n  them: 안녕\n  you: 안녕하세요!\n  them: 오늘 날씨 어때?\n  you: 오늘 날씨에 대해 알려드릴 수 없습니다. 현재 화면에는 관련 정보가 없습니다.\n  them: 너 뭘 할 수 있어?\n  you: 저는 화면에 보이는 항목을 클릭하거나 정보를 제공할 수 있습니다. 무엇을 도와드릴까요?\n  them: 심심하다\n  you: 심심하다니요? 도와드릴까요?\n  them: 커피 한 잔 마시고 싶다\n  you: 커피 한 잔 마시고 싶다니요? 도와드릴 수 있는 일이 있을까요?\n  them: 너 이름이 뭐야?\n  you: 저는 어시스턴트입니다. 어떻게 도와드릴까요?\n  them: 오늘 할 일이 너무 많다\n  you: 오늘 할 일이 너무 많다니요? 도와드릴까요?\n  them: 잠깐 쉬었다 하자\n  you: 잠깐 쉬었다 하자니요? 도와드릴까요?\n  them: 이거 어떻게 쓰는 거야?\n  you: 이 화면은 시스템 정보를 보여주는 곳입니다. 필요하신 항목을 클릭하거나 질문해 주세요!\n  them: 수고했어\n  you: 수고하셨습니다!\n\n",
+      "prompt_tokens": 2207,
+      "out_tokens": 25,
+      "thought_chars": 0,
+      "seconds": 0.806
+     },
+     {
+      "i": 12,
+      "said": "이 창 좀 복잡하지 않아?",
+      "reply": "네, 이 창은 시스템 정보를 자세히 보여주는 곳이라 복잡할 수 있어요. 도움이 필요하시면 말씀해주세요!",
+      "clicked": [],
+      "n_effects": 0,
+      "history_lines": 25,
+      "window_lines": 25,
+      "window": "\n  them: Components 항목 눌러줘\n  you: Components 항목을 클릭합니다.\n  offered: clicked the tree item \"Components\"\n  them: 안녕\n  you: 안녕하세요!\n  them: 오늘 날씨 어때?\n  you: 오늘 날씨에 대해 알려드릴 수 없습니다. 현재 화면에는 관련 정보가 없습니다.\n  them: 너 뭘 할 수 있어?\n  you: 저는 화면에 보이는 항목을 클릭하거나 정보를 제공할 수 있습니다. 무엇을 도와드릴까요?\n  them: 심심하다\n  you: 심심하다니요? 도와드릴까요?\n  them: 커피 한 잔 마시고 싶다\n  you: 커피 한 잔 마시고 싶다니요? 도와드릴 수 있는 일이 있을까요?\n  them: 너 이름이 뭐야?\n  you: 저는 어시스턴트입니다. 어떻게 도와드릴까요?\n  them: 오늘 할 일이 너무 많다\n  you: 오늘 할 일이 너무 많다니요? 도와드릴까요?\n  them: 잠깐 쉬었다 하자\n  you: 잠깐 쉬었다 하자니요? 도와드릴까요?\n  them: 이거 어떻게 쓰는 거야?\n  you: 이 화면은 시스템 정보를 보여주는 곳입니다. 필요하신 항목을 클릭하거나 질문해 주세요!\n  them: 수고했어\n  you: 수고하셨습니다!\n  them: 밥 먹고 올게\n  you: 밥 먹고 오시면 다시 도와드릴게요!\n\n",
+      "prompt_tokens": 2240,
+      "out_tokens": 48,
+      "thought_chars": 0,
+      "seconds": 0.931
+     },
+     {
+      "i": 13,
+      "said": "그거 다시 눌러줘",
+      "reply": "그 항목을 다시 클릭합니다.",
+      "clicked": [
+       "Components"
+      ],
+      "n_effects": 1,
+      "history_lines": 27,
+      "window_lines": 27,
+      "window": "\n  them: Components 항목 눌러줘\n  you: Components 항목을 클릭합니다.\n  offered: clicked the tree item \"Components\"\n  them: 안녕\n  you: 안녕하세요!\n  them: 오늘 날씨 어때?\n  you: 오늘 날씨에 대해 알려드릴 수 없습니다. 현재 화면에는 관련 정보가 없습니다.\n  them: 너 뭘 할 수 있어?\n  you: 저는 화면에 보이는 항목을 클릭하거나 정보를 제공할 수 있습니다. 무엇을 도와드릴까요?\n  them: 심심하다\n  you: 심심하다니요? 도와드릴까요?\n  them: 커피 한 잔 마시고 싶다\n  you: 커피 한 잔 마시고 싶다니요? 도와드릴 수 있는 일이 있을까요?\n  them: 너 이름이 뭐야?\n  you: 저는 어시스턴트입니다. 어떻게 도와드릴까요?\n  them: 오늘 할 일이 너무 많다\n  you: 오늘 할 일이 너무 많다니요? 도와드릴까요?\n  them: 잠깐 쉬었다 하자\n  you: 잠깐 쉬었다 하자니요? 도와드릴까요?\n  them: 이거 어떻게 쓰는 거야?\n  you: 이 화면은 시스템 정보를 보여주는 곳입니다. 필요하신 항목을 클릭하거나 질문해 주세요!\n  them: 수고했어\n  you: 수고하셨습니다!\n  them: 밥 먹고 올게\n  you: 밥 먹고 오시면 다시 도와드릴게요!\n  them: 이 창 좀 복잡하지 않아?\n  you: 네, 이 창은 시스템 정보를 자세히 보여주는 곳이라 복잡할 수 있어요. 도움이 필요하시면 말씀해주세요!\n\n",
+      "prompt_tokens": 2293,
+      "out_tokens": 24,
+      "thought_chars": 0,
+      "seconds": 0.566
+     }
+    ]
+   ],
+   "axis": "remember",
+   "n_widgets": 152
+  }
+ ]
+}
