@@ -99,9 +99,10 @@ def says(text, *actions):
     return json.dumps({"say": text, "do": list(actions)}, ensure_ascii=False)
 
 
-def session(model, *screens, live=False, **kw):
+def session(model, *screens, live=False, hands=None, **kw):
     """`session(model)` shows `SCREEN` on every read; extra positional lists are the later reads."""
-    return Session(eyes=FakeEyes(*(screens or (SCREEN,))), model=model, hands=FakeHands(live), **kw)
+    return Session(eyes=FakeEyes(*(screens or (SCREEN,))), model=model,
+                   hands=hands if hands is not None else FakeHands(live), **kw)
 
 
 # ---- the rule -------------------------------------------------------------------------------
@@ -582,3 +583,116 @@ def test_converse_returns_an_INTENT_even_when_there_is_nothing_to_say():
     intent = converse(FakeModel(''), SCREEN, Perceived("something"))
     assert intent is not None and not intent
     assert intent.trigger is not None, "an intent without its cause cannot be permission-checked"
+
+
+# ---- what a key is, and which side of the boundary knows ----------------------------------------
+
+class KnownHands(FakeHands):
+    """`FakeHands` plus the optional extra an environment declares: the names `press` accepts.
+
+    **`press` refuses here too, and that is the point of the fixture.** An environment that quietly
+    accepted anything would let a broken filter pass — the core would press an invented key and the
+    test would read as green. This raises exactly as the real one does, so a regression in
+    `knows_key` fails on the press rather than on an assertion nobody wrote.
+    """
+
+    def __init__(self, *names, live=False) -> None:
+        super().__init__(live)
+        self.names = tuple(names)
+
+    def keys(self):
+        return self.names
+
+    def press(self, key):
+        if key not in self.names:
+            raise AssertionError(f"the core pressed {key!r}, which this environment refuses")
+        return super().press(key)
+
+
+def test_a_key_the_ENVIRONMENT_DOES_NOT_HAVE_is_dropped_and_the_reply_survives():
+    """The measured failure this exists for: the model has emitted `{"key": "zoom in"}`, which is not
+    a key anywhere. `press` raises on it and nothing between there and `think()` catches, so one
+    invented keystroke used to cost the **whole turn** — including the sentence already composed,
+    which is the same outcome as the degenerate reply the key list was closed to avoid."""
+    s = session(FakeModel(says("확대할게요", {"key": "zoom in"})),
+                hands=KnownHands("enter", "tab", "escape"))
+    ex = s.exchange("확대해줘")
+    assert ex.said == "확대할게요", "the speech was lost with the effect"
+    assert s.hands.done == [], "an invented key reached the environment"
+    assert ex.did == [] and ex.refused == []
+
+
+def test_a_dropped_key_is_COUNTED_because_the_narrowing_S_COST_IS_UNKNOWN():
+    """**The instrument, and the reason it is not merely a filter.** Nothing measures what the
+    three advertised keys cost: no goal here needs one beyond enter or tab, so a request that wanted
+    `pagedown` has never been recorded. A rising count is the first evidence either that the list is
+    too narrow or that the model is inventing keystrokes — the same number from two sides, which is
+    why it is reported rather than swallowed."""
+    s = session(FakeModel(says("네", {"key": "zoom in"})), hands=KnownHands("enter"))
+    s.exchange("확대해줘")
+    assert s.unknown_keys == 1
+    assert s.report()["unknown_keys"] == 1
+
+
+def test_a_dropped_key_does_NOT_enter_the_conversation_as_something_that_WENT_AWAY():
+    """**Why the drop is in `decide` and not in `perform`.** `perform`'s refused bucket means *it
+    had gone by then*, and `remember_doing` writes that phrase into the history the next call reads.
+    An invented key did not go anywhere; filing it there would put a false sentence into the core's
+    own context, where it would then be evidence for the next answer."""
+    s = session(FakeModel(says("확대할게요", {"key": "zoom in"})), hands=KnownHands("enter"))
+    s.exchange("확대해줘")
+    assert not any("gone" in text or "could not" in who for who, text in s.history), s.history
+
+
+def test_an_environment_that_DECLARES_NOTHING_keeps_every_key():
+    """The honest fallback, and it is deliberately the permissive one. `contract.py`: an environment
+    that cannot answer is still a complete environment, and its own `press` remains the real guard —
+    so the cost of over-advertising a key is a refusal, never a keystroke landing somewhere nobody
+    chose. This is also exactly the behaviour before `knows_key` existed."""
+    s = session(FakeModel(says("ok", {"key": "pagedown"})), hands=FakeHands())
+    s.exchange("아래로")
+    assert s.hands.done == [("key", "pagedown")]
+    assert s.unknown_keys == 0
+
+
+def test_a_key_the_environment_DOES_have_is_pressed():
+    """The other half of the same rule. A filter that dropped everything would pass every test
+    above, which is the mutant this catches."""
+    s = session(FakeModel(says("ok", {"key": "enter"})), hands=KnownHands("enter", "tab"))
+    ex = s.exchange("확인해줘")
+    assert s.hands.done == [("key", "enter")] and len(ex.did) == 1
+
+
+def test_a_CLICK_and_a_TYPE_pass_an_environment_that_declares_KEYS():
+    """**The gap a mutant found**, and it would have been silent everywhere else. Every other test
+    here that clicks or types uses an environment declaring nothing, so a filter that asked
+    `knows_key` of *every* effect rather than only of key effects passed the whole suite — and on
+    the real environment, which does declare, it would drop every click and every piece of text
+    whose words happen not to be key names. The vocabulary answers one question about one kind of
+    effect."""
+    s = session(FakeModel(says("됐어요", {"click": 1}, {"type": "hello"}, {"key": "enter"})),
+                hands=KnownHands("enter", "tab", "escape"))
+    ex = s.exchange("공유 누르고 hello 치고 엔터")
+    assert [d.effect.kind for d in ex.did] == ["click", "type", "key"]
+    assert s.unknown_keys == 0
+
+
+def test_the_environment_S_VOCABULARY_IS_NOT_RENDERED_INTO_THE_PROMPT():
+    """**Asking the environment what a key is and telling the model about it are two changes, and
+    only the first one is free.** An open key list is measured at 22-71 s and a turn that produced
+    nothing; a closed list of fifteen is unmeasured and nearer to that than to the three that
+    behaved. So the environment declaring more must not silently widen the prompt — this fails the
+    moment somebody wires the vocabulary through without measuring `saying`, `choosing` and
+    `talking` first."""
+    wide = session(FakeModel(says("ok")),
+                   hands=KnownHands("enter", "tab", "escape", "esc", "pagedown", "pageup",
+                                    "home", "end", "up", "down", "left", "right", "space",
+                                    "backspace", "delete"))
+    narrow = session(FakeModel(says("ok")), hands=KnownHands("enter"))
+    wide.exchange("뭐가 보여?")
+    narrow.exchange("뭐가 보여?")
+    assert wide.model.prompts == narrow.model.prompts, (
+        "what the model is shown moved with the environment's vocabulary; that is a prompt change "
+        "and it has to be measured on saying, choosing and talking together")
+    for name in ("pagedown", "pageup", "backspace"):
+        assert name not in wide.model.prompts[0]

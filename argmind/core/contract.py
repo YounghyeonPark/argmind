@@ -111,6 +111,26 @@ class Eyes(Protocol):
 #: may not exist on that platform — a phone has no "window the person is in" and no cursor at all.
 #: `argmind/app.py` resolves them once with `getattr` and falls back to answers that are honest
 #: rather than invented: no title, nothing known at that point, and pointing assumed exact.
+#:
+#: **A fourth joined them on 2026-09-10, and it is the case that tests the pattern rather than
+#: repeating it**, because the caller is the *core* and not an interface:
+#:
+#:     keys() -> (name, ...)           every name `Hands.press` accepts on this platform
+#:
+#: The argument above does not transfer as written — anything implementing `press` has *some*
+#: vocabulary, so "the platform may not have this at all" is not the objection. The objection that
+#: does hold is the other one, and it is stronger here: **the whole vocabulary is the wrong quantity
+#: for the caller.** Android publishes some 280 `KEYCODE_*` names; a protocol member would oblige
+#: every environment to hand over all of them so that `Session.knows_key()` could consult a handful,
+#: and a core that rendered what it was handed would be back at the open key list measured at
+#: **22-71 s and a turn that produced nothing**. So the protocol stays at three methods, `Hands` is
+#: untouched, and the fallback is that an environment declaring nothing keeps every key — safe in a
+#: way the `Eyes` fallbacks are not required to be, since over-advertising a key costs a refusal
+#: from `press` while over-advertising a coordinate would cost a click on something never chosen.
+#:
+#: **What a model is TOLD about is a different question and gets a different answer.** It is a
+#: budget the core sets against a measured degeneration hazard, not a capability the environment
+#: reports, and the two disagree today on purpose: fifteen names accepted, three advertised.
 
 
 class Hands(Protocol):

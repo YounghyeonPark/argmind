@@ -443,6 +443,30 @@ class WindowsHands:
             raise Refused(f"type needs a non-empty string, got {text!r}")
         return self._do({"do": "type", "text": text})
 
+    def keys(self) -> tuple[str, ...]:
+        """Every name `press` accepts — **the vocabulary, declared instead of guessed at.**
+
+        **Optional, and off `Hands` on purpose.** `contract.py` records the argument for
+        `attending_title()` and `at()`, and it applies here with the emphasis moved. Its weak half
+        does not transfer: anything implementing `press` has *some* vocabulary, so "a phone may not
+        have one" is not the objection. Its strong half is stronger. **The full vocabulary is the
+        wrong quantity for the caller that wants it** — Android exposes some 280 `KEYCODE_*` names,
+        and a protocol member would oblige every environment to publish all of them so that the core
+        could discard nearly all of them. A core that then rendered what it was handed would be back
+        at the open key list measured at 22-71 s and a turn that produced nothing.
+
+        So this answers one question and not two: **is this name a key here**, which is what the core
+        needs in order to drop an invented one. It does *not* answer "what should a model be told
+        about" — that is a budget the core sets and measures, and the two questions have different
+        answers on this platform today: fifteen names against three advertised.
+
+        `KEYS` and nothing else. `press` refuses against `KEYS`, so a hand-written list beside it
+        would be a second spelling of one rule and a second chance for it to drift. Fifteen names
+        over fourteen keystrokes — `esc` and `escape` are the same virtual key — and both spellings
+        are here because the question is about names.
+        """
+        return tuple(sorted(KEYS))
+
     def press(self, key: str) -> dict:
         name = str(key).lower()
         if name not in KEYS:

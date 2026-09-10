@@ -53,6 +53,31 @@ question with an answer: is the thing I clicked still exactly where it was?
 `Session.blind` counts the thoughts where widgets were listed and nothing was chosen, because that
 count — not an intuition — is what would justify anything slower and cleverer.
 
+## What a key is, and who is allowed to know — decided 2026-09-10
+
+The reply-shape literal in `converse.py` names three keys; `env`'s `Hands` accepts fifteen names over
+fourteen keystrokes. Two separable defects sat in that gap and they get separate answers.
+
+**The core guessing the vocabulary is a defect and it is fixed here.** `knows_key()` asks the
+environment, through `getattr` and an honest fallback, exactly as `app.py` resolves `at()` and
+`pointing_is_exact()` — and for the reason `contract.py` gives, sharpened: the objection to a
+protocol member is not that an environment might lack a vocabulary (anything with `press` has one)
+but that **the whole vocabulary is the wrong quantity for the caller**, since a phone publishes
+hundreds of key names to be consulted by one line here.
+
+**The prompt staying narrow is a decision, not the same defect.** The cost of the narrowing today is
+**unknown and plausibly zero**: no goal in `measure/goals.json` needs a key beyond enter or tab, and
+across the recorded reply and conversation runs the model has emitted `enter`, `tab` and `zoom in` —
+the third being an invented keystroke rather than a key the narrow list denied it. Against that, the
+*open* list is measured at 22-71 s and a turn that produced nothing, and fifteen names rendered into
+a prompt is nearer to that than to the three that behaved. So the environment now declares and the
+core now checks, and **what the model is shown does not move until something measures a request that
+the three keys cannot serve.** `Session.unknown_keys` is that instrument.
+
+**This paragraph is here rather than in `converse.py` for the reason the one below it gives** —
+`prompt_print()` hashes that whole file, so writing the rationale where it belongs would fork the
+fingerprint of three recorded baselines without a byte of the prompt changing.
+
 ## How much of the conversation is carried, and in what unit — measured 2026-09-10
 
 `measure/conversation.py`, ~4,600 model calls on `qwen3:8b` with thinking off, against four captured
@@ -258,6 +283,12 @@ class Session:
         #: Effects refused because the target had gone by the time it was to be touched. Counted
         #: because it is the size of the staleness problem in real use.
         self.vanished = 0
+        #: Key effects dropped because the environment has no key by that name. **The size of the
+        #: gap between what the prompt advertises and what the environment has**, which is the only
+        #: honest way to find out whether the narrow advertised list is costing anything: nothing in
+        #: `measure/goals.json` needs a key beyond enter or tab, so a request that wanted one has
+        #: never been recorded and this is what would record it. See `decide`.
+        self.unknown_keys = 0
 
     # ---- the pieces, each usable on its own -----------------------------------------------------
 
@@ -282,11 +313,43 @@ class Session:
         return [t for t in (watch.fired(before, after) for watch in self.watches) if t is not None]
 
     def decide(self, trigger):
-        """One model call against the world as last observed. Returns an `Intent`."""
+        """One model call against the world as last observed. Returns an `Intent`.
+
+        **An effect naming a key this environment does not have is dropped here.** That is what
+        `converse._effect` already says happens to "a key that is not a key" and cannot do:
+        `converse()` is handed a model and a list of widgets and never the environment, so the core's
+        only notion of what a key is was the three names in the reply-shape literal. Recorded across
+        the reply and conversation harnesses, the model has emitted `enter`, `tab` — and `zoom in`,
+        which is not a key on any platform.
+
+        **Dropped, and dropped here rather than in `perform`,** for three separate reasons:
+
+        * `press` raises on an unknown name and nothing between it and `think()` catches, so one
+          invented key costs the **whole turn** — including the sentence the model had already
+          composed. That is the same outcome as the degenerate reply the key list was closed to
+          avoid, reached by another road;
+        * `perform`'s `refused` bucket means *it had gone by then*, and `remember_doing` writes that
+          phrase into the conversation the next call reads. An invented key did not go anywhere, and
+          filing it there would put a false sentence in the core's own context;
+        * an interface proposes from this intent **before** `perform` is reached, so a filter in
+          `perform` would still offer a person a button reading `키 zoom in` that cannot work.
+
+        The residual is recorded rather than repaired: the model may still *say* it zoomed. That is
+        the claim-without-action shape `measure/saying.py` already counts, and it is strictly better
+        than pressing something invented.
+
+        **This does not widen what the model is shown, and that is a decision.** The environment
+        declaring its vocabulary and the prompt rendering it are two changes, not one; only the
+        first is free. See `contract.py` and `env`'s `keys()`.
+        """
         if not self.seen:
             self.observe()
-        return converse(self.model, self.seen, trigger,
-                        history=self.recent(), limit=self.limit)
+        intent = converse(self.model, self.seen, trigger,
+                          history=self.recent(), limit=self.limit)
+        usable = [e for e in intent.effects if e.kind != "key" or self.knows_key(e.text)]
+        self.unknown_keys += len(intent.effects) - len(usable)
+        intent.effects = usable
+        return intent
 
     def recent(self):
         """Exactly what the next question will carry of the past.
@@ -426,6 +489,32 @@ class Session:
                     if w.name == name and (not role or w.role == role)), same[0].centre)
         return min(same, key=lambda w: (w.centre[0] - was[0]) ** 2 + (w.centre[1] - was[1]) ** 2)
 
+    def knows_key(self, name: str) -> bool:
+        """Whether this environment has a key by that name.
+
+        **The sibling of `find`, and public for the same reason**: an interface that shows a person
+        what an action would do has to answer this too, and answering it a second way would be a
+        second answer. `find` resolves a click's target against the world as it is; this resolves a
+        key's name against the world as it is, and it is the *only* check a key gets — a key names
+        nothing on screen, so there is no rectangle to look up and nothing to re-resolve.
+
+        **Read with `getattr` and an honest fallback, not from a protocol member.** The reasoning is
+        `contract.py`'s, applied to a case where its weak half does not hold: anything implementing
+        `press` has some vocabulary, so this is not a capability that might be missing. It is off the
+        protocol because **the whole vocabulary is the wrong quantity for the caller** — a phone
+        exposes hundreds of key names, and obliging every environment to publish all of them so that
+        this can consult a handful is a contract paid for by everyone and used by one line.
+
+        An environment that declares nothing keeps every key, which is exactly the behaviour before
+        this existed. The fallback is safe in a way the corresponding fallback for a *click* would
+        not be: it can only over-advertise, and an over-advertised key costs a refusal from `press`,
+        never a press landing on something that was not chosen.
+        """
+        vocabulary = getattr(self.hands, "keys", None)
+        if vocabulary is None:
+            return True
+        return str(name).lower() in set(vocabulary())
+
     def _confirm(self, widget) -> bool | None:
         """Did the world move? Asked of the widget layer, not of pixels.
 
@@ -457,6 +546,11 @@ class Session:
             "proposed_only": sum(len(e.proposed) for e in self.exchanges),
             "nothing_matched": self.blind,
             "gone_before_click": self.vanished,
+            #: Key effects the environment has no name for. Zero is the expected reading and a
+            #: rising one is the first evidence that the three advertised keys are too few — or
+            #: that the model is inventing keystrokes, which is the same number seen from the
+            #: other side and is why it is reported rather than merely counted.
+            "unknown_keys": self.unknown_keys,
             "median_look_ms": round(1000 * _median(e.look_s for e in self.exchanges)),
             "median_think_ms": round(1000 * _median(e.think_s for e in self.exchanges)),
             "median_total_ms": round(1000 * _median(e.total_s for e in self.exchanges)),
