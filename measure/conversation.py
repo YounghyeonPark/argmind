@@ -95,7 +95,7 @@ sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))
 from argmind.core import Said, Session                                    # noqa: E402
 from argmind.core.llm import OLLAMA, Local                                # noqa: E402
 from measure.capture import load                                          # noqa: E402
-from measure.choosing import prompt_print                                 # noqa: E402
+from measure.choosing import prompt_fields, prompt_tag                    # noqa: E402
 from measure.repair import Fixed, Nothing                                 # noqa: E402
 
 HERE = pathlib.Path(__file__).resolve().parent
@@ -104,7 +104,7 @@ HERE = pathlib.Path(__file__).resolve().parent
 def screen_print() -> str:
     """Six characters that change when a fixture does.
 
-    **`prompt_print()` covers the prompt and nothing covers the screens.** Every harness here
+    **`prompt_tag()` covers the prompt and nothing covers the screens.** Every harness here
     records `{name: widget count}`, and a re-capture of the same window with the same number of
     widgets is invisible to that — the goals, the anchors and the forbidden names are all matched
     against text that would have moved silently. The same gap is in `choosing.py`, `talking.py` and
@@ -317,6 +317,11 @@ def drive(model, widgets, lines, remember, *, turn_down_after=None):
             "window_lines": len([x for x in block.splitlines() if x.strip()]),
             "window": block,
             "prompt_tokens": intent.reply.prompt_tokens, "out_tokens": intent.reply.out_tokens,
+            #: **Why the model stopped.** `out_tokens` was here and `reason` was not, so a turn that
+            #: ran to the token ceiling — `length`, an unparseable reply, no effects and nothing
+            #: said — was stored as an ordinary quiet turn with a large token count that nothing
+            #: read. One line, and the difference between "it declined" and "it never finished".
+            "reason": intent.reply.reason, "truncated": intent.reply.truncated,
             "thought_chars": intent.reply.thought, "seconds": round(took, 3),
         })
         session.history.append(("them", line))
@@ -687,7 +692,7 @@ def main(argv=None) -> int:
         inner.ask("Reply with the single word: ready")
     model = Recorder(inner)
 
-    print(f"  {a.model} | thinking {a.think} | prompt {prompt_print()} | {repeat} repeats, "
+    print(f"  {a.model} | thinking {a.think} | prompt {prompt_tag()} | {repeat} repeats, "
           f"worst counted")
     print(f"  {len(CASES)} cases | filler is ordinary conversation, {len(FILLER)} lines available"
           f"{' | turned_down recorded' if a.turned_down else ''}\n")
@@ -752,7 +757,11 @@ def main(argv=None) -> int:
     #: sweep are different runs, and a window sweep at distance 5 and one at distance 8 are two
     #: different measurements with the same shape — so the fixed value goes in as well as the swept
     #: one.
-    parts = [a.model.replace(":", "-"), a.think, f"p{prompt_print()}",
+    #: **`q`, not `p`, from 2026-09-10.** `p` was a hash of `converse.py`; `q` is a hash of the
+    #: prompt that file renders. Every conversation baseline on disk carries `p5461db` and is not
+    #: comparable to a `q` run by fingerprint — the letter says so at a glance, and
+    #: `converse_file_print` in the JSON is what relates the two.
+    parts = [a.model.replace(":", "-"), a.think, prompt_tag(),
              f"s{screen_print()}", f"f{data_print()}"]
     if a.axis in ("d", "both"):
         parts.append("d" + ".".join(str(d) for d in distances) + f"@r{a.shipped}")
@@ -770,7 +779,7 @@ def main(argv=None) -> int:
     tag = "-".join(parts)
     out = HERE / f"conversation-{tag}.json"
     out.write_text(json.dumps({
-        "model": a.model, "think": a.think, "prompt": prompt_print(),
+        "model": a.model, "think": a.think, **prompt_fields(),
         "screens_print": screen_print(), "data_print": data_print(),
         #: The model wrapper is a condition too — `num_ctx`, `temperature` and `num_predict` live in
         #: `llm.py` and none of them is visible from here. **Resolved through the imported module,
@@ -779,7 +788,7 @@ def main(argv=None) -> int:
         #: but the repository root, which is the shape of defect this file exists to catch.
         "llm_print": file_print(Local.__module__),
         #: **The windowing itself is a condition and nothing recorded it.** `llm_print` covered the
-        #: model wrapper and `prompt_print` the prompt; the file that decides how much of the
+        #: model wrapper and `prompt_tag` the prompt; the file that decides how much of the
         #: conversation reaches that prompt was invisible, which is precisely the axis this harness
         #: sweeps. Found on 2026-09-10 when the unit changed under the recorded runs.
         "loop_print": file_print(Session.__module__), "remember_unit": "turns",

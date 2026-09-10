@@ -38,6 +38,11 @@ sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))
 from argmind.core import Said, converse                                   # noqa: E402
 from argmind.core.llm import Local                                        # noqa: E402
 from measure.capture import load                                          # noqa: E402
+#: Imported at the top now, not inside `main()`. The lazy import dated from when only the filename
+#: needed it; four of these fields belong in the JSON of every harness here and one of them is the
+#: prompt itself, which is too important to reach for at the last moment.
+from measure.choosing import (prompt_fields, prompt_tag, print_spend,     # noqa: E402
+                             spend, spend_summary)
 
 HERE = pathlib.Path(__file__).resolve().parent
 
@@ -85,14 +90,20 @@ def main(argv=None) -> int:
           f"on {where[0][0]} ({len(where[0][1])} widgets) and {where[1][0]} "
           f"({len(where[1][1])} widgets)\n")
 
-    rows, tally = [], collections.Counter()
+    rows, tally, spends = [], collections.Counter(), []
     for name, widgets in where:
         print(f"  {name} — {len(widgets)} widgets")
         for kind, line in TALK:
-            acted = []
+            acted, costs = [], []
             for _ in range(args.repeat):
                 intent = converse(model, widgets, Said(line))
                 acted.append([f"{e.kind}:{e.target or e.text}" for e in intent.effects])
+                #: **What the call cost.** `quiet` is this harness's whole verdict, and a turn that
+                #: ran to the token ceiling is quiet: `done_reason: length` means `Reply.json()`
+                #: returned `None`, so there were no effects to find and nothing was said either.
+                #: A perfect score built out of empty replies would read exactly like a good one.
+                costs.append(spend(intent.reply))
+            spends += [(f"{name} / {line}", c) for c in costs]
             worst = max(acted, key=len)
             #: The worst of the repeats, as everywhere else here: an agent you use once gets one
             #: draw, and taking the best would score its luckiest.
@@ -101,7 +112,7 @@ def main(argv=None) -> int:
             if not quiet:
                 print(f"    ACTED  {line[:20]:<20} {worst}   said {intent.say[:40]!r}")
             rows.append({"screen": name, "kind": kind, "said": line,
-                         "acted": acted, "quiet": quiet})
+                         "acted": acted, "quiet": quiet, "spend": costs})
         n = sum(v for (_k, _q), v in tally.items())
         print()
 
@@ -118,15 +129,22 @@ def main(argv=None) -> int:
           f"({100 * total_quiet / total:.0f}%)")
     print("  the other half of this pair is measure/choosing.py, where 28 of 37 goals want one")
 
+    cost = spend_summary(spends, ceiling=model.max_tokens)
+    print_spend(cost)
+
     #: **Model, thinking AND prompt in the name.** This harness had the defect that had already
     #: destroyed two baselines in `choosing.py`, and it destroyed a third: a run under a changed
     #: reply shape overwrote the run it was meant to be compared against.
-    from measure.choosing import prompt_print                            # noqa: PLC0415
-
+    #:
+    #: The prompt segment reads `q<hex>` from 2026-09-10. Files here named `p<hex>` were fingerprinted
+    #: under the previous scheme — a hash of `converse.py`, which moved when a comment did and never
+    #: contained the reply-shape line — and are **not** comparable to a `q` file by that value.
+    #: `converse_file_print` inside the JSON is the only bridge between the two.
     out = (HERE / f"talking-{args.model.replace(':', '-')}-{args.think}"
-                  f"-p{prompt_print()}.json")
+                  f"-{prompt_tag()}.json")
     out.write_text(json.dumps({"model": args.model, "think": args.think,
-                               "prompt": prompt_print(),
+                               **prompt_fields(),
+                               "max_tokens": model.max_tokens, "spend": cost,
                                "quiet": total_quiet, "of": total, "rows": rows},
                               ensure_ascii=False, indent=1), encoding="utf-8")
     print(f"\n  every turn -> {out}")

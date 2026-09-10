@@ -1,0 +1,928 @@
+{
+ "model": "qwen3:8b",
+ "think": "off",
+ "prompt_scheme": "q = sha256(prompt_record())[:6] — the prompt as converse() actually renders it, over three probes, plus MAX_LISTED and MOST_AT_ONCE. Superseded p = sha256(converse.py)[:6] on 2026-09-10. A p-named file and a q-named file are NOT comparable by fingerprint; compare converse_file_print instead.",
+ "prompt": "1ec131",
+ "prompt_record": "MAX_LISTED = 200\nMOST_AT_ONCE = 3\n\n--- asked, with history, widgets listed ---\nYou are a helper the person talks to while they work at their PC.\n\nYou are shown the things currently on their screen, each with a number. Reply as a person would —\nbriefly, in the language they used.\n\nIf they asked you to do something and the listed things can do it, name the numbers. If they were\njust talking, or the thing they want is not listed, say so and do nothing: a wrong click is worse\nthan an honest \"I can't see that here\".\n\nRecently:\n  them: a\n  you: b\n\nOn screen now:\n0: button \"one\"\n1: combo box \"two\"\n\nThey said: probe\n\nReply with only JSON: {\"do\": [ ... ], \"say\": \"<what you say back>\"} where each entry of\n\"do\" is {\"click\": <number>}, {\"type\": \"<text to type>\"} or {\"key\": \"<enter|tab|escape>\"}.\nLeave \"do\" empty if nothing should happen.\n\n--- unprompted, no history, widgets listed ---\nYou are a helper the person talks to while they work at their PC.\n\nYou are shown the things currently on their screen, each with a number. Reply as a person would —\nbriefly, in the language they used.\n\nIf they asked you to do something and the listed things can do it, name the numbers. If they were\njust talking, or the thing they want is not listed, say so and do nothing: a wrong click is worse\nthan an honest \"I can't see that here\".\nNobody asked you anything — you noticed this yourself. Mentioning it is usually\nenough. Only propose doing something if it is clearly wanted, and expect to be asked first.\n\nOn screen now:\n0: button \"one\"\n1: combo box \"two\"\n\nYou noticed: probe\n\nReply with only JSON: {\"do\": [ ... ], \"say\": \"<what you say back>\"} where each entry of\n\"do\" is {\"click\": <number>}, {\"type\": \"<text to type>\"} or {\"key\": \"<enter|tab|escape>\"}.\nLeave \"do\" empty if nothing should happen.\n\n--- asked, no history, nothing on screen ---\nYou are a helper the person talks to while they work at their PC.\n\nYou are shown the things currently on their screen, each with a number. Reply as a person would —\nbriefly, in the language they used.\n\nIf they asked you to do something and the listed things can do it, name the numbers. If they were\njust talking, or the thing they want is not listed, say so and do nothing: a wrong click is worse\nthan an honest \"I can't see that here\".\n\nOn screen now:\n  (nothing named — this surface exposes no widgets)\n\nThey said: probe\n\nReply with only JSON: {\"do\": [ ... ], \"say\": \"<what you say back>\"} where each entry of\n\"do\" is {\"click\": <number>}, {\"type\": \"<text to type>\"} or {\"key\": \"<enter|tab|escape>\"}.\nLeave \"do\" empty if nothing should happen.\n",
+ "converse_file_print": "bcfe81",
+ "max_tokens": 4096,
+ "spend": {
+  "calls": 68,
+  "with_counts": 68,
+  "max_tokens_setting": 4096,
+  "out_tokens_max": 222,
+  "out_tokens_max_on": "chrome-remote-desktop---qvb-flfm-dev1 / 지금 화면 설명해줘",
+  "truncated": 0,
+  "truncated_on": [],
+  "reasons": {
+   "stop": 68
+  },
+  "seconds_max": 3.634,
+  "seconds_max_on": "chrome-remote-desktop---qvb-flfm-dev1 / 지금 화면 설명해줘",
+  "thought_chars_max": 0,
+  "thought_chars_max_on": null,
+  "thought_chars_total": 0
+ },
+ "quiet": 31,
+ "of": 34,
+ "rows": [
+  {
+   "screen": "chrome-remote-desktop---qvb-flfm-dev1",
+   "kind": "greeting",
+   "said": "안녕",
+   "acted": [
+    [],
+    []
+   ],
+   "quiet": true,
+   "spend": [
+    {
+     "seconds": 0.948,
+     "out_tokens": 30,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    },
+    {
+     "seconds": 0.808,
+     "out_tokens": 32,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    }
+   ]
+  },
+  {
+   "screen": "chrome-remote-desktop---qvb-flfm-dev1",
+   "kind": "greeting",
+   "said": "고마워",
+   "acted": [
+    [],
+    []
+   ],
+   "quiet": true,
+   "spend": [
+    {
+     "seconds": 0.334,
+     "out_tokens": 19,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    },
+    {
+     "seconds": 0.31,
+     "out_tokens": 19,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    }
+   ]
+  },
+  {
+   "screen": "chrome-remote-desktop---qvb-flfm-dev1",
+   "kind": "greeting",
+   "said": "수고했어",
+   "acted": [
+    [],
+    []
+   ],
+   "quiet": true,
+   "spend": [
+    {
+     "seconds": 0.281,
+     "out_tokens": 15,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    },
+    {
+     "seconds": 0.263,
+     "out_tokens": 15,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    }
+   ]
+  },
+  {
+   "screen": "chrome-remote-desktop---qvb-flfm-dev1",
+   "kind": "greeting",
+   "said": "잘했어",
+   "acted": [
+    [],
+    []
+   ],
+   "quiet": true,
+   "spend": [
+    {
+     "seconds": 0.298,
+     "out_tokens": 16,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    },
+    {
+     "seconds": 0.266,
+     "out_tokens": 16,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    }
+   ]
+  },
+  {
+   "screen": "chrome-remote-desktop---qvb-flfm-dev1",
+   "kind": "about the screen",
+   "said": "뭐가 열려 있어?",
+   "acted": [
+    [],
+    []
+   ],
+   "quiet": true,
+   "spend": [
+    {
+     "seconds": 0.49,
+     "out_tokens": 30,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    },
+    {
+     "seconds": 0.955,
+     "out_tokens": 58,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    }
+   ]
+  },
+  {
+   "screen": "chrome-remote-desktop---qvb-flfm-dev1",
+   "kind": "about the screen",
+   "said": "지금 화면 설명해줘",
+   "acted": [
+    [],
+    []
+   ],
+   "quiet": true,
+   "spend": [
+    {
+     "seconds": 3.634,
+     "out_tokens": 222,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    },
+    {
+     "seconds": 2.888,
+     "out_tokens": 176,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    }
+   ]
+  },
+  {
+   "screen": "chrome-remote-desktop---qvb-flfm-dev1",
+   "kind": "about the screen",
+   "said": "여기 버튼이 몇 개야?",
+   "acted": [
+    [],
+    []
+   ],
+   "quiet": true,
+   "spend": [
+    {
+     "seconds": 0.364,
+     "out_tokens": 17,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    },
+    {
+     "seconds": 0.287,
+     "out_tokens": 17,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    }
+   ]
+  },
+  {
+   "screen": "chrome-remote-desktop---qvb-flfm-dev1",
+   "kind": "about the screen",
+   "said": "복사 버튼이 어디 있어?",
+   "acted": [
+    [
+     "click:이 사이트는 클립보드에 복사된 텍스트와 이미지에 액세스할 수 있습니다."
+    ],
+    [
+     "click:이 사이트는 클립보드에 복사된 텍스트와 이미지에 액세스할 수 있습니다."
+    ]
+   ],
+   "quiet": false,
+   "spend": [
+    {
+     "seconds": 0.462,
+     "out_tokens": 27,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    },
+    {
+     "seconds": 0.44,
+     "out_tokens": 27,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    }
+   ]
+  },
+  {
+   "screen": "chrome-remote-desktop---qvb-flfm-dev1",
+   "kind": "about the past",
+   "said": "방금 뭘 했어?",
+   "acted": [
+    [],
+    []
+   ],
+   "quiet": true,
+   "spend": [
+    {
+     "seconds": 0.61,
+     "out_tokens": 35,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    },
+    {
+     "seconds": 0.593,
+     "out_tokens": 35,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    }
+   ]
+  },
+  {
+   "screen": "chrome-remote-desktop---qvb-flfm-dev1",
+   "kind": "about the past",
+   "said": "아까 뭐 눌렀지?",
+   "acted": [
+    [],
+    []
+   ],
+   "quiet": true,
+   "spend": [
+    {
+     "seconds": 0.35,
+     "out_tokens": 19,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    },
+    {
+     "seconds": 0.325,
+     "out_tokens": 19,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    }
+   ]
+  },
+  {
+   "screen": "chrome-remote-desktop---qvb-flfm-dev1",
+   "kind": "about itself",
+   "said": "너 뭘 할 수 있어?",
+   "acted": [
+    [],
+    []
+   ],
+   "quiet": true,
+   "spend": [
+    {
+     "seconds": 0.666,
+     "out_tokens": 38,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    },
+    {
+     "seconds": 0.613,
+     "out_tokens": 37,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    }
+   ]
+  },
+  {
+   "screen": "chrome-remote-desktop---qvb-flfm-dev1",
+   "kind": "about itself",
+   "said": "너 이름이 뭐야?",
+   "acted": [
+    [],
+    []
+   ],
+   "quiet": true,
+   "spend": [
+    {
+     "seconds": 0.407,
+     "out_tokens": 22,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    },
+    {
+     "seconds": 0.292,
+     "out_tokens": 17,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    }
+   ]
+  },
+  {
+   "screen": "chrome-remote-desktop---qvb-flfm-dev1",
+   "kind": "about itself",
+   "said": "클릭도 할 수 있어?",
+   "acted": [
+    [
+     "click:Chrome Remote Desktop - QVB-FLFM-DEV1"
+    ],
+    [
+     "click:Chrome Remote Desktop - QVB-FLFM-DEV1"
+    ]
+   ],
+   "quiet": false,
+   "spend": [
+    {
+     "seconds": 0.586,
+     "out_tokens": 33,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    },
+    {
+     "seconds": 0.558,
+     "out_tokens": 33,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    }
+   ]
+  },
+  {
+   "screen": "chrome-remote-desktop---qvb-flfm-dev1",
+   "kind": "chit-chat",
+   "said": "오늘 날씨 어때?",
+   "acted": [
+    [],
+    []
+   ],
+   "quiet": true,
+   "spend": [
+    {
+     "seconds": 0.503,
+     "out_tokens": 28,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    },
+    {
+     "seconds": 0.532,
+     "out_tokens": 32,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    }
+   ]
+  },
+  {
+   "screen": "chrome-remote-desktop---qvb-flfm-dev1",
+   "kind": "chit-chat",
+   "said": "심심하다",
+   "acted": [
+    [],
+    []
+   ],
+   "quiet": true,
+   "spend": [
+    {
+     "seconds": 0.406,
+     "out_tokens": 23,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    },
+    {
+     "seconds": 0.395,
+     "out_tokens": 23,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    }
+   ]
+  },
+  {
+   "screen": "chrome-remote-desktop---qvb-flfm-dev1",
+   "kind": "opinion",
+   "said": "이 창 좀 복잡하지 않아?",
+   "acted": [
+    [],
+    []
+   ],
+   "quiet": true,
+   "spend": [
+    {
+     "seconds": 0.697,
+     "out_tokens": 40,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    },
+    {
+     "seconds": 0.681,
+     "out_tokens": 40,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    }
+   ]
+  },
+  {
+   "screen": "chrome-remote-desktop---qvb-flfm-dev1",
+   "kind": "opinion",
+   "said": "이거 어떻게 쓰는 거야?",
+   "acted": [
+    [],
+    []
+   ],
+   "quiet": true,
+   "spend": [
+    {
+     "seconds": 0.617,
+     "out_tokens": 36,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    },
+    {
+     "seconds": 0.611,
+     "out_tokens": 36,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    }
+   ]
+  },
+  {
+   "screen": "system-information",
+   "kind": "greeting",
+   "said": "안녕",
+   "acted": [
+    [],
+    []
+   ],
+   "quiet": true,
+   "spend": [
+    {
+     "seconds": 0.812,
+     "out_tokens": 18,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    },
+    {
+     "seconds": 0.335,
+     "out_tokens": 17,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    }
+   ]
+  },
+  {
+   "screen": "system-information",
+   "kind": "greeting",
+   "said": "고마워",
+   "acted": [
+    [],
+    []
+   ],
+   "quiet": true,
+   "spend": [
+    {
+     "seconds": 0.199,
+     "out_tokens": 10,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    },
+    {
+     "seconds": 0.187,
+     "out_tokens": 10,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    }
+   ]
+  },
+  {
+   "screen": "system-information",
+   "kind": "greeting",
+   "said": "수고했어",
+   "acted": [
+    [],
+    []
+   ],
+   "quiet": true,
+   "spend": [
+    {
+     "seconds": 0.246,
+     "out_tokens": 11,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    },
+    {
+     "seconds": 0.22,
+     "out_tokens": 11,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    }
+   ]
+  },
+  {
+   "screen": "system-information",
+   "kind": "greeting",
+   "said": "잘했어",
+   "acted": [
+    [],
+    []
+   ],
+   "quiet": true,
+   "spend": [
+    {
+     "seconds": 0.189,
+     "out_tokens": 9,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    },
+    {
+     "seconds": 0.184,
+     "out_tokens": 9,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    }
+   ]
+  },
+  {
+   "screen": "system-information",
+   "kind": "about the screen",
+   "said": "뭐가 열려 있어?",
+   "acted": [
+    [],
+    []
+   ],
+   "quiet": true,
+   "spend": [
+    {
+     "seconds": 0.295,
+     "out_tokens": 15,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    },
+    {
+     "seconds": 0.262,
+     "out_tokens": 15,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    }
+   ]
+  },
+  {
+   "screen": "system-information",
+   "kind": "about the screen",
+   "said": "지금 화면 설명해줘",
+   "acted": [
+    [],
+    []
+   ],
+   "quiet": true,
+   "spend": [
+    {
+     "seconds": 1.006,
+     "out_tokens": 56,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    },
+    {
+     "seconds": 0.979,
+     "out_tokens": 56,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    }
+   ]
+  },
+  {
+   "screen": "system-information",
+   "kind": "about the screen",
+   "said": "여기 버튼이 몇 개야?",
+   "acted": [
+    [],
+    []
+   ],
+   "quiet": true,
+   "spend": [
+    {
+     "seconds": 0.501,
+     "out_tokens": 27,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    },
+    {
+     "seconds": 0.481,
+     "out_tokens": 27,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    }
+   ]
+  },
+  {
+   "screen": "system-information",
+   "kind": "about the screen",
+   "said": "복사 버튼이 어디 있어?",
+   "acted": [
+    [],
+    []
+   ],
+   "quiet": true,
+   "spend": [
+    {
+     "seconds": 0.437,
+     "out_tokens": 23,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    },
+    {
+     "seconds": 0.423,
+     "out_tokens": 23,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    }
+   ]
+  },
+  {
+   "screen": "system-information",
+   "kind": "about the past",
+   "said": "방금 뭘 했어?",
+   "acted": [
+    [],
+    []
+   ],
+   "quiet": true,
+   "spend": [
+    {
+     "seconds": 0.495,
+     "out_tokens": 26,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    },
+    {
+     "seconds": 0.474,
+     "out_tokens": 26,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    }
+   ]
+  },
+  {
+   "screen": "system-information",
+   "kind": "about the past",
+   "said": "아까 뭐 눌렀지?",
+   "acted": [
+    [],
+    []
+   ],
+   "quiet": true,
+   "spend": [
+    {
+     "seconds": 0.375,
+     "out_tokens": 19,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    },
+    {
+     "seconds": 0.373,
+     "out_tokens": 19,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    }
+   ]
+  },
+  {
+   "screen": "system-information",
+   "kind": "about itself",
+   "said": "너 뭘 할 수 있어?",
+   "acted": [
+    [],
+    []
+   ],
+   "quiet": true,
+   "spend": [
+    {
+     "seconds": 0.636,
+     "out_tokens": 35,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    },
+    {
+     "seconds": 0.631,
+     "out_tokens": 35,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    }
+   ]
+  },
+  {
+   "screen": "system-information",
+   "kind": "about itself",
+   "said": "너 이름이 뭐야?",
+   "acted": [
+    [],
+    []
+   ],
+   "quiet": true,
+   "spend": [
+    {
+     "seconds": 0.419,
+     "out_tokens": 22,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    },
+    {
+     "seconds": 0.411,
+     "out_tokens": 22,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    }
+   ]
+  },
+  {
+   "screen": "system-information",
+   "kind": "about itself",
+   "said": "클릭도 할 수 있어?",
+   "acted": [
+    [
+     "key:tab",
+     "key:enter"
+    ],
+    [
+     "key:tab",
+     "key:enter"
+    ]
+   ],
+   "quiet": false,
+   "spend": [
+    {
+     "seconds": 0.639,
+     "out_tokens": 36,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    },
+    {
+     "seconds": 0.637,
+     "out_tokens": 36,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    }
+   ]
+  },
+  {
+   "screen": "system-information",
+   "kind": "chit-chat",
+   "said": "오늘 날씨 어때?",
+   "acted": [
+    [],
+    []
+   ],
+   "quiet": true,
+   "spend": [
+    {
+     "seconds": 0.25,
+     "out_tokens": 13,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    },
+    {
+     "seconds": 0.236,
+     "out_tokens": 13,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    }
+   ]
+  },
+  {
+   "screen": "system-information",
+   "kind": "chit-chat",
+   "said": "심심하다",
+   "acted": [
+    [],
+    []
+   ],
+   "quiet": true,
+   "spend": [
+    {
+     "seconds": 0.517,
+     "out_tokens": 27,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    },
+    {
+     "seconds": 0.384,
+     "out_tokens": 20,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    }
+   ]
+  },
+  {
+   "screen": "system-information",
+   "kind": "opinion",
+   "said": "이 창 좀 복잡하지 않아?",
+   "acted": [
+    [],
+    []
+   ],
+   "quiet": true,
+   "spend": [
+    {
+     "seconds": 0.575,
+     "out_tokens": 31,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    },
+    {
+     "seconds": 0.556,
+     "out_tokens": 31,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    }
+   ]
+  },
+  {
+   "screen": "system-information",
+   "kind": "opinion",
+   "said": "이거 어떻게 쓰는 거야?",
+   "acted": [
+    [],
+    []
+   ],
+   "quiet": true,
+   "spend": [
+    {
+     "seconds": 0.628,
+     "out_tokens": 34,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    },
+    {
+     "seconds": 0.583,
+     "out_tokens": 34,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    }
+   ]
+  }
+ ]
+}

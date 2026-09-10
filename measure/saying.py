@@ -135,16 +135,27 @@ expect the wording to differ and the verdicts not to.
 
 ## What this number is a function of
 
-The model, the thinking flag, `converse.py` (system prompt and reply shape), the fixture screens,
-the case text, **and the classifier in this file** — all six are in the filename: `p`/`s`/`f` as in
-`measure/conversation.py`, and `h` over this file itself, because the rule that turns a reply into a
-verdict is as much a condition of the number as the prompt is. It is **not** a function of a live
-desktop: fixtures, nothing clicked, no window touched.
+The model, the thinking flag, **the prompt as it is actually sent**, the fixture screens, the case
+text, and the classifier in this file — all six are in the filename: `q` over the rendered prompt,
+`s`/`f` as in `measure/conversation.py`, and `h` over this file itself, because the rule that turns
+a reply into a verdict is as much a condition of the number as the prompt is. It is **not** a
+function of a live desktop: fixtures, nothing clicked, no window touched.
 
-Two conditions it would fail to notice changing: the **language** of the reply (a leak in English
+**`q` replaced `p` on 2026-09-10 and the letter is the migration.** `p` was a hash of `converse.py`,
+which moved when a comment moved and — the part that mattered — never carried the reply-shape line.
+The two files `saying-…-p5461db-…` and `saying-…-pbcfe81-…` are this harness's 6-of-32 and 0-of-32
+leak baselines, they differ by exactly that line, and their stored `prompt_text` fields are
+byte-identical. `q` hashes what `converse()` renders and `prompt_record` stores it verbatim, so the
+difference is now in the file rather than absent from it. A `p`-named file and a `q`-named file
+cannot be compared by fingerprint at all; `converse_file_print` inside the JSON says which
+`converse.py` a `q` run was made at, and that is the only bridge.
+
+Three conditions it would fail to notice changing: the **language** of the reply (a leak in English
 counts the same as one in Korean, and every case here is Korean, so an English-language leak rate is
-unmeasured — `measure/repair.py` owns that question), and **whether the widget the number points at
-was the right one** (`choosing.py` owns that; a reply may be clean and wrong).
+unmeasured — `measure/repair.py` owns that question), **whether the widget the number points at was
+the right one** (`choosing.py` owns that; a reply may be clean and wrong), and what `converse()`
+does to a reply **after** it arrives — `_said()`'s de-misfiling and `_effect()`'s validation are not
+sent to the model, so `q` cannot see them move.
 
 One condition it *does* check rather than assume: that the model was shown `0:`-based numbering at
 all. `describe()`'s output is asserted to be a substring of the prompt actually sent, so a change to
@@ -172,10 +183,11 @@ for _stream in (sys.stdout, sys.stderr):
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))
 
 from argmind.core import Said, converse                                   # noqa: E402
-from argmind.core.converse import MAX_LISTED, SYSTEM, describe            # noqa: E402
+from argmind.core.converse import MAX_LISTED, describe                    # noqa: E402
 from argmind.core.llm import Local                                        # noqa: E402
 from measure.capture import load                                          # noqa: E402
-from measure.choosing import prompt_print                                 # noqa: E402
+from measure.choosing import (prompt_fields, prompt_tag, print_spend,     # noqa: E402
+                              spend, spend_summary)
 #: Reused rather than copied — `screen_print` and `residency` exist once, in the file that first
 #: needed them, for the same reason `Fixed` and `Nothing` live in `measure/repair.py`.
 from measure.conversation import Recorder, file_print, residency, screen_print   # noqa: E402
@@ -591,7 +603,7 @@ def run(args) -> int:
 
     n_leak = sum(1 for c in cases if c[0] == "leak")
     n_num = sum(1 for c in cases if c[0] == "number")
-    print(f"\n  {args.model} | thinking {args.think} | prompt {prompt_print()} | "
+    print(f"\n  {args.model} | thinking {args.think} | prompt {prompt_tag()} | "
           f"screens {screen_print()} | cases {data_print()}")
     print(f"  {n_leak} leak-set + {n_num} control-set cases x {args.repeat} repeats, "
           f"worst counted | {len(screens)} fixture screens, nothing clicked\n")
@@ -628,11 +640,13 @@ def run(args) -> int:
                 "clicked_at": sorted(clicked_at),
                 "leak": leak, "numbers": details,
                 "answer": answer, "has_number": present, "found_by": how,
-                #: Latency and thinking characters, because a `--think` flag left unset once turned
-                #: a measurement of a prompt into a measurement of the prompt *and* the reasoning,
-                #: and only the latency told on it.
-                "seconds": round(intent.reply.total, 3) if intent.reply else None,
-                "thought_chars": intent.reply.thought if intent.reply else None,
+                #: Latency, **generated length** and thinking characters, because a `--think` flag
+                #: left unset once turned a measurement of a prompt into a measurement of the prompt
+                #: *and* the reasoning, and only the latency told on it — and because latency alone
+                #: cannot tell a busy machine from a degeneration. This harness's `empty` verdict is
+                #: exactly what a reply that ran to the 4,096-token ceiling produces, and until now
+                #: nothing here could say which of the two it had counted.
+                **spend(intent.reply),
             })
 
         leaks = [r["leak"] for r in repeats]
@@ -658,7 +672,14 @@ def run(args) -> int:
 
     took = time.perf_counter() - t_start
     summarise(rows, args.repeat, took)
-    write(rows, args, took, screens, model)
+    #: Rebuilt out of the rows rather than accumulated alongside them, so the printed cost and the
+    #: stored cost cannot come from two different lists — a verdict printed beside a number taken
+    #: from somewhere else is a defect this directory has shipped twice.
+    cost = spend_summary(((f"{r['screen']} / {r['said']}", rep)
+                          for r in rows for rep in r["repeats"]),
+                         ceiling=model.inner.max_tokens)
+    print_spend(cost)
+    write(rows, args, took, screens, model, cost)
     model.inner.release()
     return 0
 
@@ -816,7 +837,7 @@ def summarise(rows, repeat: int, took: float) -> None:
     print(f"    disagreed across repeats: {len(dis)} of {n}")
 
 
-def write(rows, args, took: float, screens, model) -> None:
+def write(rows, args, took: float, screens, model, cost) -> None:
     """Everything, including every reply verbatim, under a name that carries the conditions.
 
     **Model, thinking, prompt, screens and case list are all in the filename.** Three baselines in
@@ -825,7 +846,7 @@ def write(rows, args, took: float, screens, model) -> None:
     cannot overwrite a full run.
     """
     parts = [args.model.replace(":", "-").replace("/", "-"), args.think,
-             f"p{prompt_print()}", f"s{screen_print()}", f"f{data_print()}",
+             prompt_tag(), f"s{screen_print()}", f"f{data_print()}",
              f"h{harness_print()}", f"x{args.repeat}" + ("-reload" if args.reload else "")]
     if args.only:
         #: Hashed, not stripped. `--only 지우개` and `--only 저장` both reduce to nothing under an
@@ -841,10 +862,19 @@ def write(rows, args, took: float, screens, model) -> None:
         #: are identical because they shared a warm server reads exactly like one whose three
         #: replies are identical because the model is stable, and those are different claims.
         "reload_between_repeats": args.reload,
-        "prompt": prompt_print(), "prompt_text": SYSTEM,
+        #: **The prompt, verbatim, and not just a hash of it.** Its predecessor stored `SYSTEM`
+        #: alone; the reply-shape line that took this harness's own headline from 6 of 32 to 0 of 32
+        #: appears in no file written before today. A reader can now diff two runs instead of
+        #: trusting six hex characters to have meant the same thing twice.
+        **prompt_fields(),
         "screens_print": screen_print(), "data_print": data_print(),
         "harness_print": harness_print(),
         "llm_print": file_print(Local.__module__),
+        #: The classifier is `h`, but the *fingerprints themselves* live in `measure/choosing.py`
+        #: now, along with the probe that defines what "the prompt" means here. A change to that
+        #: file is a change to the conditions of this one and nothing recorded it.
+        "choosing_print": file_print("measure.choosing"),
+        "max_tokens": model.inner.max_tokens, "spend": cost,
         "screens": {k: len(v) for k, v in screens.items()},
         "max_listed": MAX_LISTED,
         "seconds": round(took, 1), "retried": model.retried,

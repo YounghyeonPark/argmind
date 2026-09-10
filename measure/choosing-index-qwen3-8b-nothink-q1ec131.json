@@ -1,0 +1,2125 @@
+{
+ "model": "qwen3:8b",
+ "repeat": 3,
+ "seconds": 53.6,
+ "how": "by number, thinking off",
+ "named": false,
+ "shuffle": null,
+ "think": false,
+ "only": null,
+ "prompt_scheme": "q = sha256(prompt_record())[:6] — the prompt as converse() actually renders it, over three probes, plus MAX_LISTED and MOST_AT_ONCE. Superseded p = sha256(converse.py)[:6] on 2026-09-10. A p-named file and a q-named file are NOT comparable by fingerprint; compare converse_file_print instead.",
+ "prompt": "1ec131",
+ "prompt_record": "MAX_LISTED = 200\nMOST_AT_ONCE = 3\n\n--- asked, with history, widgets listed ---\nYou are a helper the person talks to while they work at their PC.\n\nYou are shown the things currently on their screen, each with a number. Reply as a person would —\nbriefly, in the language they used.\n\nIf they asked you to do something and the listed things can do it, name the numbers. If they were\njust talking, or the thing they want is not listed, say so and do nothing: a wrong click is worse\nthan an honest \"I can't see that here\".\n\nRecently:\n  them: a\n  you: b\n\nOn screen now:\n0: button \"one\"\n1: combo box \"two\"\n\nThey said: probe\n\nReply with only JSON: {\"do\": [ ... ], \"say\": \"<what you say back>\"} where each entry of\n\"do\" is {\"click\": <number>}, {\"type\": \"<text to type>\"} or {\"key\": \"<enter|tab|escape>\"}.\nLeave \"do\" empty if nothing should happen.\n\n--- unprompted, no history, widgets listed ---\nYou are a helper the person talks to while they work at their PC.\n\nYou are shown the things currently on their screen, each with a number. Reply as a person would —\nbriefly, in the language they used.\n\nIf they asked you to do something and the listed things can do it, name the numbers. If they were\njust talking, or the thing they want is not listed, say so and do nothing: a wrong click is worse\nthan an honest \"I can't see that here\".\nNobody asked you anything — you noticed this yourself. Mentioning it is usually\nenough. Only propose doing something if it is clearly wanted, and expect to be asked first.\n\nOn screen now:\n0: button \"one\"\n1: combo box \"two\"\n\nYou noticed: probe\n\nReply with only JSON: {\"do\": [ ... ], \"say\": \"<what you say back>\"} where each entry of\n\"do\" is {\"click\": <number>}, {\"type\": \"<text to type>\"} or {\"key\": \"<enter|tab|escape>\"}.\nLeave \"do\" empty if nothing should happen.\n\n--- asked, no history, nothing on screen ---\nYou are a helper the person talks to while they work at their PC.\n\nYou are shown the things currently on their screen, each with a number. Reply as a person would —\nbriefly, in the language they used.\n\nIf they asked you to do something and the listed things can do it, name the numbers. If they were\njust talking, or the thing they want is not listed, say so and do nothing: a wrong click is worse\nthan an honest \"I can't see that here\".\n\nOn screen now:\n  (nothing named — this surface exposes no widgets)\n\nThey said: probe\n\nReply with only JSON: {\"do\": [ ... ], \"say\": \"<what you say back>\"} where each entry of\n\"do\" is {\"click\": <number>}, {\"type\": \"<text to type>\"} or {\"key\": \"<enter|tab|escape>\"}.\nLeave \"do\" empty if nothing should happen.\n",
+ "converse_file_print": "bcfe81",
+ "max_tokens": 4096,
+ "spend": {
+  "calls": 111,
+  "with_counts": 111,
+  "max_tokens_setting": 4096,
+  "out_tokens_max": 39,
+  "out_tokens_max_on": "untitled---paint / 이 그림을 메일로 보내줘",
+  "truncated": 0,
+  "truncated_on": [],
+  "reasons": {
+   "stop": 111
+  },
+  "seconds_max": 5.008,
+  "seconds_max_on": "untitled---paint / 지우개로 바꿔줘",
+  "thought_chars_max": 0,
+  "thought_chars_max_on": null,
+  "thought_chars_total": 0
+ },
+ "screens": {
+  "character-map": 21,
+  "chrome-remote-desktop---qvb-flfm-dev1": 12,
+  "system-information": 152,
+  "untitled---paint": 123
+ },
+ "tally": {
+  "right": 24,
+  "wrong": 4,
+  "missed": 1,
+  "declined": 8
+ },
+ "rows": [
+  {
+   "screen": "untitled---paint",
+   "goal": "지우개로 바꿔줘",
+   "accept": [
+    "Eraser"
+   ],
+   "chose": [
+    "Eraser",
+    "Eraser",
+    "Eraser"
+   ],
+   "results": [
+    "right",
+    "right",
+    "right"
+   ],
+   "counted": "right",
+   "agreed": true,
+   "chose_at": [
+    22,
+    22,
+    22
+   ],
+   "right_at": [
+    22
+   ],
+   "n_listed": 123,
+   "rejected": [],
+   "effects": [
+    1,
+    1,
+    1
+   ],
+   "spend": [
+    {
+     "seconds": 5.008,
+     "out_tokens": 24,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    },
+    {
+     "seconds": 0.396,
+     "out_tokens": 24,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    },
+    {
+     "seconds": 0.387,
+     "out_tokens": 24,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    }
+   ]
+  },
+  {
+   "screen": "untitled---paint",
+   "goal": "동그라미 그리고 싶어",
+   "accept": [
+    "Oval"
+   ],
+   "chose": [
+    "Shapes",
+    "Shapes",
+    "Shapes"
+   ],
+   "results": [
+    "wrong",
+    "wrong",
+    "wrong"
+   ],
+   "counted": "wrong",
+   "agreed": true,
+   "chose_at": [
+    27,
+    27,
+    27
+   ],
+   "right_at": [
+    32,
+    33
+   ],
+   "n_listed": 123,
+   "rejected": [],
+   "effects": [
+    2,
+    2,
+    2
+   ],
+   "spend": [
+    {
+     "seconds": 0.512,
+     "out_tokens": 28,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    },
+    {
+     "seconds": 0.478,
+     "out_tokens": 28,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    },
+    {
+     "seconds": 0.469,
+     "out_tokens": 28,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    }
+   ]
+  },
+  {
+   "screen": "untitled---paint",
+   "goal": "빨간색 골라줘",
+   "accept": [
+    "Red",
+    "Dark red"
+   ],
+   "chose": [
+    "Red",
+    "Red",
+    "Red"
+   ],
+   "results": [
+    "right",
+    "right",
+    "right"
+   ],
+   "counted": "right",
+   "agreed": true,
+   "chose_at": [
+    83,
+    83,
+    83
+   ],
+   "right_at": [
+    82,
+    83
+   ],
+   "n_listed": 123,
+   "rejected": [],
+   "effects": [
+    1,
+    1,
+    1
+   ],
+   "spend": [
+    {
+     "seconds": 0.431,
+     "out_tokens": 23,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    },
+    {
+     "seconds": 0.403,
+     "out_tokens": 23,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    },
+    {
+     "seconds": 0.411,
+     "out_tokens": 23,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    }
+   ]
+  },
+  {
+   "screen": "untitled---paint",
+   "goal": "저장해",
+   "accept": [
+    "Save"
+   ],
+   "chose": [
+    "Save",
+    "Save",
+    "Save"
+   ],
+   "results": [
+    "right",
+    "right",
+    "right"
+   ],
+   "counted": "right",
+   "agreed": true,
+   "chose_at": [
+    3,
+    3,
+    3
+   ],
+   "right_at": [
+    3
+   ],
+   "n_listed": 123,
+   "rejected": [],
+   "effects": [
+    1,
+    1,
+    1
+   ],
+   "spend": [
+    {
+     "seconds": 0.327,
+     "out_tokens": 17,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    },
+    {
+     "seconds": 0.302,
+     "out_tokens": 17,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    },
+    {
+     "seconds": 0.316,
+     "out_tokens": 17,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    }
+   ]
+  },
+  {
+   "screen": "untitled---paint",
+   "goal": "방금 한 거 되돌려",
+   "accept": [
+    "Undo"
+   ],
+   "chose": [
+    "Undo",
+    "Undo",
+    "Undo"
+   ],
+   "results": [
+    "right",
+    "right",
+    "right"
+   ],
+   "counted": "right",
+   "agreed": true,
+   "chose_at": [
+    5,
+    5,
+    5
+   ],
+   "right_at": [
+    5
+   ],
+   "n_listed": 123,
+   "rejected": [],
+   "effects": [
+    1,
+    1,
+    1
+   ],
+   "spend": [
+    {
+     "seconds": 0.358,
+     "out_tokens": 20,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    },
+    {
+     "seconds": 0.335,
+     "out_tokens": 20,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    },
+    {
+     "seconds": 0.366,
+     "out_tokens": 20,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    }
+   ]
+  },
+  {
+   "screen": "untitled---paint",
+   "goal": "확대해줘",
+   "accept": [
+    "Zoom in"
+   ],
+   "chose": [
+    null,
+    null,
+    null
+   ],
+   "results": [
+    "missed",
+    "missed",
+    "missed"
+   ],
+   "counted": "missed",
+   "agreed": true,
+   "chose_at": [
+    null,
+    null,
+    null
+   ],
+   "right_at": [
+    117
+   ],
+   "n_listed": 123,
+   "rejected": [],
+   "effects": [
+    1,
+    1,
+    1
+   ],
+   "spend": [
+    {
+     "seconds": 0.395,
+     "out_tokens": 22,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    },
+    {
+     "seconds": 0.391,
+     "out_tokens": 22,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    },
+    {
+     "seconds": 0.394,
+     "out_tokens": 22,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    }
+   ]
+  },
+  {
+   "screen": "untitled---paint",
+   "goal": "배경 지워줘",
+   "accept": [
+    "Remove background"
+   ],
+   "chose": [
+    "Remove background",
+    "Remove background",
+    "Remove background"
+   ],
+   "results": [
+    "right",
+    "right",
+    "right"
+   ],
+   "counted": "right",
+   "agreed": true,
+   "chose_at": [
+    14,
+    14,
+    14
+   ],
+   "right_at": [
+    14
+   ],
+   "n_listed": 123,
+   "rejected": [],
+   "effects": [
+    1,
+    1,
+    1
+   ],
+   "spend": [
+    {
+     "seconds": 0.429,
+     "out_tokens": 23,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    },
+    {
+     "seconds": 0.409,
+     "out_tokens": 23,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    },
+    {
+     "seconds": 0.392,
+     "out_tokens": 23,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    }
+   ]
+  },
+  {
+   "screen": "untitled---paint",
+   "goal": "글씨 쓰고 싶어",
+   "accept": [
+    "Text"
+   ],
+   "chose": [
+    "Text",
+    "Text",
+    "Text"
+   ],
+   "results": [
+    "right",
+    "right",
+    "right"
+   ],
+   "counted": "right",
+   "agreed": true,
+   "chose_at": [
+    21,
+    21,
+    21
+   ],
+   "right_at": [
+    21
+   ],
+   "n_listed": 123,
+   "rejected": [],
+   "effects": [
+    1,
+    1,
+    1
+   ],
+   "spend": [
+    {
+     "seconds": 0.654,
+     "out_tokens": 36,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    },
+    {
+     "seconds": 0.644,
+     "out_tokens": 38,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    },
+    {
+     "seconds": 0.634,
+     "out_tokens": 38,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    }
+   ]
+  },
+  {
+   "screen": "untitled---paint",
+   "goal": "파일 메뉴 열어줘",
+   "accept": [
+    "File"
+   ],
+   "chose": [
+    "File",
+    "File",
+    "File"
+   ],
+   "results": [
+    "right",
+    "right",
+    "right"
+   ],
+   "counted": "right",
+   "agreed": true,
+   "chose_at": [
+    0,
+    0,
+    0
+   ],
+   "right_at": [
+    0
+   ],
+   "n_listed": 123,
+   "rejected": [],
+   "effects": [
+    1,
+    1,
+    1
+   ],
+   "spend": [
+    {
+     "seconds": 0.42,
+     "out_tokens": 23,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    },
+    {
+     "seconds": 0.381,
+     "out_tokens": 23,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    },
+    {
+     "seconds": 0.41,
+     "out_tokens": 23,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    }
+   ]
+  },
+  {
+   "screen": "untitled---paint",
+   "goal": "이미지 크기 바꿔줘",
+   "accept": [
+    "Resize and skew"
+   ],
+   "chose": [
+    "Rotate",
+    "Rotate",
+    "Rotate"
+   ],
+   "results": [
+    "wrong",
+    "wrong",
+    "wrong"
+   ],
+   "counted": "wrong",
+   "agreed": true,
+   "chose_at": [
+    15,
+    15,
+    15
+   ],
+   "right_at": [
+    17
+   ],
+   "n_listed": 123,
+   "rejected": [],
+   "effects": [
+    1,
+    1,
+    1
+   ],
+   "spend": [
+    {
+     "seconds": 0.597,
+     "out_tokens": 31,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    },
+    {
+     "seconds": 0.542,
+     "out_tokens": 31,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    },
+    {
+     "seconds": 0.541,
+     "out_tokens": 31,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    }
+   ]
+  },
+  {
+   "screen": "untitled---paint",
+   "goal": "이 그림 공유할래",
+   "accept": [
+    "Share"
+   ],
+   "chose": [
+    "Share",
+    "Share",
+    "Share"
+   ],
+   "results": [
+    "right",
+    "right",
+    "right"
+   ],
+   "counted": "right",
+   "agreed": true,
+   "chose_at": [
+    4,
+    4,
+    4
+   ],
+   "right_at": [
+    4
+   ],
+   "n_listed": 123,
+   "rejected": [],
+   "effects": [
+    1,
+    1,
+    1
+   ],
+   "spend": [
+    {
+     "seconds": 0.4,
+     "out_tokens": 21,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    },
+    {
+     "seconds": 0.378,
+     "out_tokens": 21,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    },
+    {
+     "seconds": 0.38,
+     "out_tokens": 21,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    }
+   ]
+  },
+  {
+   "screen": "untitled---paint",
+   "goal": "창 닫아",
+   "accept": [
+    "Close"
+   ],
+   "chose": [
+    "Close",
+    "Close",
+    "Close"
+   ],
+   "results": [
+    "right",
+    "right",
+    "right"
+   ],
+   "counted": "right",
+   "agreed": true,
+   "chose_at": [
+    122,
+    122,
+    122
+   ],
+   "right_at": [
+    122
+   ],
+   "n_listed": 123,
+   "rejected": [],
+   "effects": [
+    1,
+    1,
+    1
+   ],
+   "spend": [
+    {
+     "seconds": 0.408,
+     "out_tokens": 23,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    },
+    {
+     "seconds": 0.386,
+     "out_tokens": 23,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    },
+    {
+     "seconds": 0.403,
+     "out_tokens": 23,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    }
+   ]
+  },
+  {
+   "screen": "untitled---paint",
+   "goal": "make the brush bigger",
+   "accept": [
+    "Size"
+   ],
+   "chose": [
+    "Size",
+    "Size",
+    "Size"
+   ],
+   "results": [
+    "right",
+    "right",
+    "right"
+   ],
+   "counted": "right",
+   "agreed": true,
+   "chose_at": [
+    76,
+    76,
+    76
+   ],
+   "right_at": [
+    76,
+    110
+   ],
+   "n_listed": 123,
+   "rejected": [],
+   "effects": [
+    1,
+    1,
+    1
+   ],
+   "spend": [
+    {
+     "seconds": 0.384,
+     "out_tokens": 21,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    },
+    {
+     "seconds": 0.374,
+     "out_tokens": 21,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    },
+    {
+     "seconds": 0.381,
+     "out_tokens": 21,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    }
+   ]
+  },
+  {
+   "screen": "untitled---paint",
+   "goal": "볼륨 좀 줄여줘",
+   "accept": null,
+   "chose": [
+    null,
+    null,
+    null
+   ],
+   "results": [
+    "declined",
+    "declined",
+    "declined"
+   ],
+   "counted": "declined",
+   "agreed": true,
+   "chose_at": [
+    null,
+    null,
+    null
+   ],
+   "right_at": [],
+   "n_listed": 123,
+   "rejected": [],
+   "effects": [
+    0,
+    0,
+    0
+   ],
+   "spend": [
+    {
+     "seconds": 0.48,
+     "out_tokens": 26,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    },
+    {
+     "seconds": 0.471,
+     "out_tokens": 26,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    },
+    {
+     "seconds": 0.462,
+     "out_tokens": 26,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    }
+   ]
+  },
+  {
+   "screen": "untitled---paint",
+   "goal": "크롬 열어줘",
+   "accept": null,
+   "chose": [
+    null,
+    null,
+    null
+   ],
+   "results": [
+    "declined",
+    "declined",
+    "declined"
+   ],
+   "counted": "declined",
+   "agreed": true,
+   "chose_at": [
+    null,
+    null,
+    null
+   ],
+   "right_at": [],
+   "n_listed": 123,
+   "rejected": [],
+   "effects": [
+    0,
+    0,
+    0
+   ],
+   "spend": [
+    {
+     "seconds": 0.355,
+     "out_tokens": 17,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    },
+    {
+     "seconds": 0.35,
+     "out_tokens": 17,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    },
+    {
+     "seconds": 0.334,
+     "out_tokens": 17,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    }
+   ]
+  },
+  {
+   "screen": "untitled---paint",
+   "goal": "이 그림을 메일로 보내줘",
+   "accept": null,
+   "chose": [
+    "Share",
+    "Share",
+    "Share"
+   ],
+   "results": [
+    "wrong",
+    "wrong",
+    "wrong"
+   ],
+   "counted": "wrong",
+   "agreed": true,
+   "chose_at": [
+    4,
+    4,
+    4
+   ],
+   "right_at": [],
+   "n_listed": 123,
+   "rejected": [],
+   "effects": [
+    1,
+    1,
+    1
+   ],
+   "spend": [
+    {
+     "seconds": 0.464,
+     "out_tokens": 27,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    },
+    {
+     "seconds": 0.669,
+     "out_tokens": 39,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    },
+    {
+     "seconds": 0.649,
+     "out_tokens": 39,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    }
+   ]
+  },
+  {
+   "screen": "character-map",
+   "goal": "글꼴 바꿔줘",
+   "accept": [
+    "Font :"
+   ],
+   "chose": [
+    "Font :",
+    "Font :",
+    "Font :"
+   ],
+   "results": [
+    "right",
+    "right",
+    "right"
+   ],
+   "counted": "right",
+   "agreed": true,
+   "chose_at": [
+    8,
+    8,
+    8
+   ],
+   "right_at": [
+    8,
+    9
+   ],
+   "n_listed": 21,
+   "rejected": [],
+   "effects": [
+    1,
+    1,
+    1
+   ],
+   "spend": [
+    {
+     "seconds": 0.555,
+     "out_tokens": 25,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    },
+    {
+     "seconds": 0.399,
+     "out_tokens": 25,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    },
+    {
+     "seconds": 0.414,
+     "out_tokens": 25,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    }
+   ]
+  },
+  {
+   "screen": "character-map",
+   "goal": "복사",
+   "accept": [
+    "Copy"
+   ],
+   "chose": [
+    "Copy",
+    "Copy",
+    "Copy"
+   ],
+   "results": [
+    "right",
+    "right",
+    "right"
+   ],
+   "counted": "right",
+   "agreed": true,
+   "chose_at": [
+    4,
+    4,
+    4
+   ],
+   "right_at": [
+    4
+   ],
+   "n_listed": 21,
+   "rejected": [],
+   "effects": [
+    1,
+    1,
+    1
+   ],
+   "spend": [
+    {
+     "seconds": 0.343,
+     "out_tokens": 18,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    },
+    {
+     "seconds": 0.331,
+     "out_tokens": 18,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    },
+    {
+     "seconds": 0.319,
+     "out_tokens": 18,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    }
+   ]
+  },
+  {
+   "screen": "character-map",
+   "goal": "고급 옵션 켜줘",
+   "accept": [
+    "Advanced view"
+   ],
+   "chose": [
+    "Advanced view",
+    "Advanced view",
+    "Advanced view"
+   ],
+   "results": [
+    "right",
+    "right",
+    "right"
+   ],
+   "counted": "right",
+   "agreed": true,
+   "chose_at": [
+    5,
+    5,
+    5
+   ],
+   "right_at": [
+    5
+   ],
+   "n_listed": 21,
+   "rejected": [],
+   "effects": [
+    1,
+    1,
+    1
+   ],
+   "spend": [
+    {
+     "seconds": 0.447,
+     "out_tokens": 26,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    },
+    {
+     "seconds": 0.388,
+     "out_tokens": 23,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    },
+    {
+     "seconds": 0.383,
+     "out_tokens": 23,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    }
+   ]
+  },
+  {
+   "screen": "character-map",
+   "goal": "도움말 보여줘",
+   "accept": [
+    "Help"
+   ],
+   "chose": [
+    "Help",
+    "Help",
+    "Help"
+   ],
+   "results": [
+    "right",
+    "right",
+    "right"
+   ],
+   "counted": "right",
+   "agreed": true,
+   "chose_at": [
+    11,
+    11,
+    11
+   ],
+   "right_at": [
+    11
+   ],
+   "n_listed": 21,
+   "rejected": [],
+   "effects": [
+    1,
+    1,
+    1
+   ],
+   "spend": [
+    {
+     "seconds": 0.481,
+     "out_tokens": 27,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    },
+    {
+     "seconds": 0.451,
+     "out_tokens": 27,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    },
+    {
+     "seconds": 0.458,
+     "out_tokens": 27,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    }
+   ]
+  },
+  {
+   "screen": "character-map",
+   "goal": "이 창 최소화해",
+   "accept": [
+    "Minimize"
+   ],
+   "chose": [
+    "Minimize",
+    "Minimize",
+    "Minimize"
+   ],
+   "results": [
+    "right",
+    "right",
+    "right"
+   ],
+   "counted": "right",
+   "agreed": true,
+   "chose_at": [
+    18,
+    18,
+    18
+   ],
+   "right_at": [
+    18
+   ],
+   "n_listed": 21,
+   "rejected": [],
+   "effects": [
+    1,
+    1,
+    1
+   ],
+   "spend": [
+    {
+     "seconds": 0.433,
+     "out_tokens": 23,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    },
+    {
+     "seconds": 0.388,
+     "out_tokens": 23,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    },
+    {
+     "seconds": 0.387,
+     "out_tokens": 23,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    }
+   ]
+  },
+  {
+   "screen": "character-map",
+   "goal": "이 문자를 파일로 저장해줘",
+   "accept": null,
+   "chose": [
+    null,
+    null,
+    null
+   ],
+   "results": [
+    "declined",
+    "declined",
+    "declined"
+   ],
+   "counted": "declined",
+   "agreed": true,
+   "chose_at": [
+    null,
+    null,
+    null
+   ],
+   "right_at": [],
+   "n_listed": 21,
+   "rejected": [],
+   "effects": [
+    1,
+    1,
+    1
+   ],
+   "spend": [
+    {
+     "seconds": 0.417,
+     "out_tokens": 23,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    },
+    {
+     "seconds": 0.583,
+     "out_tokens": 35,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    },
+    {
+     "seconds": 0.595,
+     "out_tokens": 35,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    }
+   ]
+  },
+  {
+   "screen": "character-map",
+   "goal": "글자 크기 키워줘",
+   "accept": null,
+   "chose": [
+    null,
+    null,
+    null
+   ],
+   "results": [
+    "declined",
+    "declined",
+    "declined"
+   ],
+   "counted": "declined",
+   "agreed": true,
+   "chose_at": [
+    null,
+    null,
+    null
+   ],
+   "right_at": [],
+   "n_listed": 21,
+   "rejected": [],
+   "effects": [
+    0,
+    0,
+    0
+   ],
+   "spend": [
+    {
+     "seconds": 0.456,
+     "out_tokens": 24,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    },
+    {
+     "seconds": 0.42,
+     "out_tokens": 24,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    },
+    {
+     "seconds": 0.435,
+     "out_tokens": 24,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    }
+   ]
+  },
+  {
+   "screen": "system-information",
+   "goal": "하드웨어 리소스 보여줘",
+   "accept": [
+    "Hardware Resources"
+   ],
+   "chose": [
+    "Hardware Resources",
+    "Hardware Resources",
+    "Hardware Resources"
+   ],
+   "results": [
+    "right",
+    "right",
+    "right"
+   ],
+   "counted": "right",
+   "agreed": true,
+   "chose_at": [
+    1,
+    1,
+    1
+   ],
+   "right_at": [
+    1
+   ],
+   "n_listed": 152,
+   "rejected": [],
+   "effects": [
+    1,
+    1,
+    1
+   ],
+   "spend": [
+    {
+     "seconds": 1.016,
+     "out_tokens": 30,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    },
+    {
+     "seconds": 0.532,
+     "out_tokens": 30,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    },
+    {
+     "seconds": 0.527,
+     "out_tokens": 30,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    }
+   ]
+  },
+  {
+   "screen": "system-information",
+   "goal": "소프트웨어 환경 열어",
+   "accept": [
+    "Software Environment"
+   ],
+   "chose": [
+    "Software Environment",
+    "Software Environment",
+    "Software Environment"
+   ],
+   "results": [
+    "right",
+    "right",
+    "right"
+   ],
+   "counted": "right",
+   "agreed": true,
+   "chose_at": [
+    3,
+    3,
+    3
+   ],
+   "right_at": [
+    3
+   ],
+   "n_listed": 152,
+   "rejected": [],
+   "effects": [
+    1,
+    1,
+    1
+   ],
+   "spend": [
+    {
+     "seconds": 0.515,
+     "out_tokens": 27,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    },
+    {
+     "seconds": 0.494,
+     "out_tokens": 27,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    },
+    {
+     "seconds": 0.468,
+     "out_tokens": 27,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    }
+   ]
+  },
+  {
+   "screen": "system-information",
+   "goal": "찾기 눌러줘",
+   "accept": [
+    "Find"
+   ],
+   "chose": [
+    "Find",
+    "Find",
+    "Find"
+   ],
+   "results": [
+    "right",
+    "right",
+    "right"
+   ],
+   "counted": "right",
+   "agreed": true,
+   "chose_at": [
+    138,
+    138,
+    138
+   ],
+   "right_at": [
+    138
+   ],
+   "n_listed": 152,
+   "rejected": [],
+   "effects": [
+    1,
+    1,
+    1
+   ],
+   "spend": [
+    {
+     "seconds": 0.413,
+     "out_tokens": 21,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    },
+    {
+     "seconds": 0.397,
+     "out_tokens": 21,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    },
+    {
+     "seconds": 0.375,
+     "out_tokens": 21,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    }
+   ]
+  },
+  {
+   "screen": "system-information",
+   "goal": "검색어 입력하는 데 클릭해",
+   "accept": [
+    "Find what:"
+   ],
+   "chose": [
+    "Find what:",
+    "Find what:",
+    "Find what:"
+   ],
+   "results": [
+    "right",
+    "right",
+    "right"
+   ],
+   "counted": "right",
+   "agreed": true,
+   "chose_at": [
+    136,
+    136,
+    136
+   ],
+   "right_at": [
+    136,
+    137
+   ],
+   "n_listed": 152,
+   "rejected": [],
+   "effects": [
+    1,
+    1,
+    1
+   ],
+   "spend": [
+    {
+     "seconds": 0.561,
+     "out_tokens": 30,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    },
+    {
+     "seconds": 0.548,
+     "out_tokens": 30,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    },
+    {
+     "seconds": 0.514,
+     "out_tokens": 30,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    }
+   ]
+  },
+  {
+   "screen": "system-information",
+   "goal": "카테고리 이름만 검색하게 해줘",
+   "accept": [
+    "Search category names only"
+   ],
+   "chose": [
+    "Search category names only",
+    "Search category names only",
+    "Search category names only"
+   ],
+   "results": [
+    "right",
+    "right",
+    "right"
+   ],
+   "counted": "right",
+   "agreed": true,
+   "chose_at": [
+    141,
+    141,
+    141
+   ],
+   "right_at": [
+    141
+   ],
+   "n_listed": 152,
+   "rejected": [],
+   "effects": [
+    1,
+    1,
+    1
+   ],
+   "spend": [
+    {
+     "seconds": 0.445,
+     "out_tokens": 24,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    },
+    {
+     "seconds": 0.435,
+     "out_tokens": 24,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    },
+    {
+     "seconds": 0.436,
+     "out_tokens": 24,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    }
+   ]
+  },
+  {
+   "screen": "system-information",
+   "goal": "보기 메뉴 열어",
+   "accept": [
+    "View"
+   ],
+   "chose": [
+    "System",
+    "System",
+    "System"
+   ],
+   "results": [
+    "wrong",
+    "wrong",
+    "wrong"
+   ],
+   "counted": "wrong",
+   "agreed": true,
+   "chose_at": [
+    142,
+    142,
+    142
+   ],
+   "right_at": [
+    150
+   ],
+   "n_listed": 152,
+   "rejected": [],
+   "effects": [
+    2,
+    2,
+    2
+   ],
+   "spend": [
+    {
+     "seconds": 0.524,
+     "out_tokens": 29,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    },
+    {
+     "seconds": 0.512,
+     "out_tokens": 29,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    },
+    {
+     "seconds": 0.529,
+     "out_tokens": 29,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    }
+   ]
+  },
+  {
+   "screen": "system-information",
+   "goal": "램 좀 늘려줘",
+   "accept": null,
+   "chose": [
+    null,
+    null,
+    null
+   ],
+   "results": [
+    "declined",
+    "declined",
+    "declined"
+   ],
+   "counted": "declined",
+   "agreed": true,
+   "chose_at": [
+    null,
+    null,
+    null
+   ],
+   "right_at": [],
+   "n_listed": 152,
+   "rejected": [],
+   "effects": [
+    0,
+    0,
+    0
+   ],
+   "spend": [
+    {
+     "seconds": 0.341,
+     "out_tokens": 17,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    },
+    {
+     "seconds": 0.325,
+     "out_tokens": 17,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    },
+    {
+     "seconds": 0.298,
+     "out_tokens": 17,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    }
+   ]
+  },
+  {
+   "screen": "system-information",
+   "goal": "와이파이 켜줘",
+   "accept": null,
+   "chose": [
+    null,
+    null,
+    null
+   ],
+   "results": [
+    "declined",
+    "declined",
+    "declined"
+   ],
+   "counted": "declined",
+   "agreed": true,
+   "chose_at": [
+    null,
+    null,
+    null
+   ],
+   "right_at": [],
+   "n_listed": 152,
+   "rejected": [],
+   "effects": [
+    0,
+    0,
+    0
+   ],
+   "spend": [
+    {
+     "seconds": 0.381,
+     "out_tokens": 19,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    },
+    {
+     "seconds": 0.334,
+     "out_tokens": 19,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    },
+    {
+     "seconds": 0.347,
+     "out_tokens": 19,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    }
+   ]
+  },
+  {
+   "screen": "chrome-remote-desktop---qvb-flfm-dev1",
+   "goal": "최소화해줘",
+   "accept": [
+    "최소화"
+   ],
+   "chose": [
+    "최소화",
+    "최소화",
+    "최소화"
+   ],
+   "results": [
+    "right",
+    "right",
+    "right"
+   ],
+   "counted": "right",
+   "agreed": true,
+   "chose_at": [
+    1,
+    1,
+    1
+   ],
+   "right_at": [
+    1
+   ],
+   "n_listed": 12,
+   "rejected": [],
+   "effects": [
+    1,
+    1,
+    1
+   ],
+   "spend": [
+    {
+     "seconds": 0.462,
+     "out_tokens": 20,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    },
+    {
+     "seconds": 0.342,
+     "out_tokens": 20,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    },
+    {
+     "seconds": 0.353,
+     "out_tokens": 20,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    }
+   ]
+  },
+  {
+   "screen": "chrome-remote-desktop---qvb-flfm-dev1",
+   "goal": "닫아",
+   "accept": [
+    "닫기"
+   ],
+   "chose": [
+    "닫기",
+    "닫기",
+    "닫기"
+   ],
+   "results": [
+    "right",
+    "right",
+    "right"
+   ],
+   "counted": "right",
+   "agreed": true,
+   "chose_at": [
+    3,
+    3,
+    3
+   ],
+   "right_at": [
+    3
+   ],
+   "n_listed": 12,
+   "rejected": [],
+   "effects": [
+    1,
+    1,
+    1
+   ],
+   "spend": [
+    {
+     "seconds": 0.419,
+     "out_tokens": 24,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    },
+    {
+     "seconds": 0.348,
+     "out_tokens": 21,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    },
+    {
+     "seconds": 0.352,
+     "out_tokens": 21,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    }
+   ]
+  },
+  {
+   "screen": "chrome-remote-desktop---qvb-flfm-dev1",
+   "goal": "비밀번호 저장해",
+   "accept": [
+    "비밀번호 저장"
+   ],
+   "chose": [
+    "비밀번호 저장",
+    "비밀번호 저장",
+    "비밀번호 저장"
+   ],
+   "results": [
+    "right",
+    "right",
+    "right"
+   ],
+   "counted": "right",
+   "agreed": true,
+   "chose_at": [
+    8,
+    8,
+    8
+   ],
+   "right_at": [
+    8
+   ],
+   "n_listed": 12,
+   "rejected": [],
+   "effects": [
+    1,
+    1,
+    1
+   ],
+   "spend": [
+    {
+     "seconds": 0.459,
+     "out_tokens": 26,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    },
+    {
+     "seconds": 0.369,
+     "out_tokens": 22,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    },
+    {
+     "seconds": 0.363,
+     "out_tokens": 22,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    }
+   ]
+  },
+  {
+   "screen": "chrome-remote-desktop---qvb-flfm-dev1",
+   "goal": "extensions 보여줘",
+   "accept": [
+    "확장 프로그램"
+   ],
+   "chose": [
+    "확장 프로그램",
+    "확장 프로그램",
+    "확장 프로그램"
+   ],
+   "results": [
+    "right",
+    "right",
+    "right"
+   ],
+   "counted": "right",
+   "agreed": true,
+   "chose_at": [
+    9,
+    9,
+    9
+   ],
+   "right_at": [
+    9
+   ],
+   "n_listed": 12,
+   "rejected": [],
+   "effects": [
+    1,
+    1,
+    1
+   ],
+   "spend": [
+    {
+     "seconds": 0.511,
+     "out_tokens": 30,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    },
+    {
+     "seconds": 0.511,
+     "out_tokens": 30,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    },
+    {
+     "seconds": 0.524,
+     "out_tokens": 30,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    }
+   ]
+  },
+  {
+   "screen": "chrome-remote-desktop---qvb-flfm-dev1",
+   "goal": "새 탭 열어줘",
+   "accept": null,
+   "chose": [
+    null,
+    null,
+    null
+   ],
+   "results": [
+    "declined",
+    "declined",
+    "declined"
+   ],
+   "counted": "declined",
+   "agreed": true,
+   "chose_at": [
+    null,
+    null,
+    null
+   ],
+   "right_at": [],
+   "n_listed": 12,
+   "rejected": [],
+   "effects": [
+    0,
+    0,
+    0
+   ],
+   "spend": [
+    {
+     "seconds": 0.543,
+     "out_tokens": 30,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    },
+    {
+     "seconds": 0.512,
+     "out_tokens": 30,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    },
+    {
+     "seconds": 0.511,
+     "out_tokens": 30,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    }
+   ]
+  },
+  {
+   "screen": "chrome-remote-desktop---qvb-flfm-dev1",
+   "goal": "음량 키워줘",
+   "accept": null,
+   "chose": [
+    null,
+    null,
+    null
+   ],
+   "results": [
+    "declined",
+    "declined",
+    "declined"
+   ],
+   "counted": "declined",
+   "agreed": true,
+   "chose_at": [
+    null,
+    null,
+    null
+   ],
+   "right_at": [],
+   "n_listed": 12,
+   "rejected": [],
+   "effects": [
+    0,
+    0,
+    0
+   ],
+   "spend": [
+    {
+     "seconds": 0.392,
+     "out_tokens": 22,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    },
+    {
+     "seconds": 0.395,
+     "out_tokens": 22,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    },
+    {
+     "seconds": 0.374,
+     "out_tokens": 22,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    }
+   ]
+  }
+ ]
+}
