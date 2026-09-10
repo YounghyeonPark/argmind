@@ -1,0 +1,1253 @@
+{
+ "model": "qwen3:8b",
+ "repeat": 3,
+ "seconds": 52.4,
+ "how": "by number, thinking off",
+ "named": false,
+ "shuffle": null,
+ "think": false,
+ "prompt": "bcfe81",
+ "prompt_text": "You are a helper the person talks to while they work at their PC.\n\nYou are shown the things currently on their screen, each with a number. Reply as a person would —\nbriefly, in the language they used.\n\nIf they asked you to do something and the listed things can do it, name the numbers. If they were\njust talking, or the thing they want is not listed, say so and do nothing: a wrong click is worse\nthan an honest \"I can't see that here\".",
+ "screens": {
+  "character-map": 21,
+  "chrome-remote-desktop---qvb-flfm-dev1": 12,
+  "system-information": 152,
+  "untitled---paint": 123
+ },
+ "tally": {
+  "right": 24,
+  "wrong": 4,
+  "missed": 1,
+  "declined": 8
+ },
+ "rows": [
+  {
+   "screen": "untitled---paint",
+   "goal": "지우개로 바꿔줘",
+   "accept": [
+    "Eraser"
+   ],
+   "chose": [
+    "Eraser",
+    "Eraser",
+    "Eraser"
+   ],
+   "results": [
+    "right",
+    "right",
+    "right"
+   ],
+   "counted": "right",
+   "agreed": true,
+   "chose_at": [
+    22,
+    22,
+    22
+   ],
+   "right_at": [
+    22
+   ],
+   "n_listed": 123,
+   "rejected": [],
+   "effects": [
+    1,
+    1,
+    1
+   ]
+  },
+  {
+   "screen": "untitled---paint",
+   "goal": "동그라미 그리고 싶어",
+   "accept": [
+    "Oval"
+   ],
+   "chose": [
+    "Shapes",
+    "Shapes",
+    "Shapes"
+   ],
+   "results": [
+    "wrong",
+    "wrong",
+    "wrong"
+   ],
+   "counted": "wrong",
+   "agreed": true,
+   "chose_at": [
+    27,
+    27,
+    27
+   ],
+   "right_at": [
+    32,
+    33
+   ],
+   "n_listed": 123,
+   "rejected": [],
+   "effects": [
+    2,
+    2,
+    2
+   ]
+  },
+  {
+   "screen": "untitled---paint",
+   "goal": "빨간색 골라줘",
+   "accept": [
+    "Red",
+    "Dark red"
+   ],
+   "chose": [
+    "Red",
+    "Red",
+    "Red"
+   ],
+   "results": [
+    "right",
+    "right",
+    "right"
+   ],
+   "counted": "right",
+   "agreed": true,
+   "chose_at": [
+    83,
+    83,
+    83
+   ],
+   "right_at": [
+    82,
+    83
+   ],
+   "n_listed": 123,
+   "rejected": [],
+   "effects": [
+    1,
+    1,
+    1
+   ]
+  },
+  {
+   "screen": "untitled---paint",
+   "goal": "저장해",
+   "accept": [
+    "Save"
+   ],
+   "chose": [
+    "Save",
+    "Save",
+    "Save"
+   ],
+   "results": [
+    "right",
+    "right",
+    "right"
+   ],
+   "counted": "right",
+   "agreed": true,
+   "chose_at": [
+    3,
+    3,
+    3
+   ],
+   "right_at": [
+    3
+   ],
+   "n_listed": 123,
+   "rejected": [],
+   "effects": [
+    1,
+    1,
+    1
+   ]
+  },
+  {
+   "screen": "untitled---paint",
+   "goal": "방금 한 거 되돌려",
+   "accept": [
+    "Undo"
+   ],
+   "chose": [
+    "Undo",
+    "Undo",
+    "Undo"
+   ],
+   "results": [
+    "right",
+    "right",
+    "right"
+   ],
+   "counted": "right",
+   "agreed": true,
+   "chose_at": [
+    5,
+    5,
+    5
+   ],
+   "right_at": [
+    5
+   ],
+   "n_listed": 123,
+   "rejected": [],
+   "effects": [
+    1,
+    1,
+    1
+   ]
+  },
+  {
+   "screen": "untitled---paint",
+   "goal": "확대해줘",
+   "accept": [
+    "Zoom in"
+   ],
+   "chose": [
+    null,
+    null,
+    null
+   ],
+   "results": [
+    "missed",
+    "missed",
+    "missed"
+   ],
+   "counted": "missed",
+   "agreed": true,
+   "chose_at": [
+    null,
+    null,
+    null
+   ],
+   "right_at": [
+    117
+   ],
+   "n_listed": 123,
+   "rejected": [],
+   "effects": [
+    1,
+    1,
+    1
+   ]
+  },
+  {
+   "screen": "untitled---paint",
+   "goal": "배경 지워줘",
+   "accept": [
+    "Remove background"
+   ],
+   "chose": [
+    "Remove background",
+    "Remove background",
+    "Remove background"
+   ],
+   "results": [
+    "right",
+    "right",
+    "right"
+   ],
+   "counted": "right",
+   "agreed": true,
+   "chose_at": [
+    14,
+    14,
+    14
+   ],
+   "right_at": [
+    14
+   ],
+   "n_listed": 123,
+   "rejected": [],
+   "effects": [
+    1,
+    1,
+    1
+   ]
+  },
+  {
+   "screen": "untitled---paint",
+   "goal": "글씨 쓰고 싶어",
+   "accept": [
+    "Text"
+   ],
+   "chose": [
+    "Text",
+    "Text",
+    "Text"
+   ],
+   "results": [
+    "right",
+    "right",
+    "right"
+   ],
+   "counted": "right",
+   "agreed": true,
+   "chose_at": [
+    21,
+    21,
+    21
+   ],
+   "right_at": [
+    21
+   ],
+   "n_listed": 123,
+   "rejected": [],
+   "effects": [
+    1,
+    1,
+    1
+   ]
+  },
+  {
+   "screen": "untitled---paint",
+   "goal": "파일 메뉴 열어줘",
+   "accept": [
+    "File"
+   ],
+   "chose": [
+    "File",
+    "File",
+    "File"
+   ],
+   "results": [
+    "right",
+    "right",
+    "right"
+   ],
+   "counted": "right",
+   "agreed": true,
+   "chose_at": [
+    0,
+    0,
+    0
+   ],
+   "right_at": [
+    0
+   ],
+   "n_listed": 123,
+   "rejected": [],
+   "effects": [
+    1,
+    1,
+    1
+   ]
+  },
+  {
+   "screen": "untitled---paint",
+   "goal": "이미지 크기 바꿔줘",
+   "accept": [
+    "Resize and skew"
+   ],
+   "chose": [
+    "Rotate",
+    "Rotate",
+    "Rotate"
+   ],
+   "results": [
+    "wrong",
+    "wrong",
+    "wrong"
+   ],
+   "counted": "wrong",
+   "agreed": true,
+   "chose_at": [
+    15,
+    15,
+    15
+   ],
+   "right_at": [
+    17
+   ],
+   "n_listed": 123,
+   "rejected": [],
+   "effects": [
+    1,
+    1,
+    1
+   ]
+  },
+  {
+   "screen": "untitled---paint",
+   "goal": "이 그림 공유할래",
+   "accept": [
+    "Share"
+   ],
+   "chose": [
+    "Share",
+    "Share",
+    "Share"
+   ],
+   "results": [
+    "right",
+    "right",
+    "right"
+   ],
+   "counted": "right",
+   "agreed": true,
+   "chose_at": [
+    4,
+    4,
+    4
+   ],
+   "right_at": [
+    4
+   ],
+   "n_listed": 123,
+   "rejected": [],
+   "effects": [
+    1,
+    1,
+    1
+   ]
+  },
+  {
+   "screen": "untitled---paint",
+   "goal": "창 닫아",
+   "accept": [
+    "Close"
+   ],
+   "chose": [
+    "Close",
+    "Close",
+    "Close"
+   ],
+   "results": [
+    "right",
+    "right",
+    "right"
+   ],
+   "counted": "right",
+   "agreed": true,
+   "chose_at": [
+    122,
+    122,
+    122
+   ],
+   "right_at": [
+    122
+   ],
+   "n_listed": 123,
+   "rejected": [],
+   "effects": [
+    1,
+    1,
+    1
+   ]
+  },
+  {
+   "screen": "untitled---paint",
+   "goal": "make the brush bigger",
+   "accept": [
+    "Size"
+   ],
+   "chose": [
+    "Size",
+    "Size",
+    "Size"
+   ],
+   "results": [
+    "right",
+    "right",
+    "right"
+   ],
+   "counted": "right",
+   "agreed": true,
+   "chose_at": [
+    76,
+    76,
+    76
+   ],
+   "right_at": [
+    76,
+    110
+   ],
+   "n_listed": 123,
+   "rejected": [],
+   "effects": [
+    1,
+    1,
+    1
+   ]
+  },
+  {
+   "screen": "untitled---paint",
+   "goal": "볼륨 좀 줄여줘",
+   "accept": null,
+   "chose": [
+    null,
+    null,
+    null
+   ],
+   "results": [
+    "declined",
+    "declined",
+    "declined"
+   ],
+   "counted": "declined",
+   "agreed": true,
+   "chose_at": [
+    null,
+    null,
+    null
+   ],
+   "right_at": [],
+   "n_listed": 123,
+   "rejected": [],
+   "effects": [
+    0,
+    0,
+    0
+   ]
+  },
+  {
+   "screen": "untitled---paint",
+   "goal": "크롬 열어줘",
+   "accept": null,
+   "chose": [
+    null,
+    null,
+    null
+   ],
+   "results": [
+    "declined",
+    "declined",
+    "declined"
+   ],
+   "counted": "declined",
+   "agreed": true,
+   "chose_at": [
+    null,
+    null,
+    null
+   ],
+   "right_at": [],
+   "n_listed": 123,
+   "rejected": [],
+   "effects": [
+    0,
+    0,
+    0
+   ]
+  },
+  {
+   "screen": "untitled---paint",
+   "goal": "이 그림을 메일로 보내줘",
+   "accept": null,
+   "chose": [
+    "Share",
+    "Share",
+    "Share"
+   ],
+   "results": [
+    "wrong",
+    "wrong",
+    "wrong"
+   ],
+   "counted": "wrong",
+   "agreed": true,
+   "chose_at": [
+    4,
+    4,
+    4
+   ],
+   "right_at": [],
+   "n_listed": 123,
+   "rejected": [],
+   "effects": [
+    1,
+    1,
+    1
+   ]
+  },
+  {
+   "screen": "character-map",
+   "goal": "글꼴 바꿔줘",
+   "accept": [
+    "Font :"
+   ],
+   "chose": [
+    "Font :",
+    "Font :",
+    "Font :"
+   ],
+   "results": [
+    "right",
+    "right",
+    "right"
+   ],
+   "counted": "right",
+   "agreed": true,
+   "chose_at": [
+    8,
+    8,
+    8
+   ],
+   "right_at": [
+    8,
+    9
+   ],
+   "n_listed": 21,
+   "rejected": [],
+   "effects": [
+    1,
+    1,
+    1
+   ]
+  },
+  {
+   "screen": "character-map",
+   "goal": "복사",
+   "accept": [
+    "Copy"
+   ],
+   "chose": [
+    "Copy",
+    "Copy",
+    "Copy"
+   ],
+   "results": [
+    "right",
+    "right",
+    "right"
+   ],
+   "counted": "right",
+   "agreed": true,
+   "chose_at": [
+    4,
+    4,
+    4
+   ],
+   "right_at": [
+    4
+   ],
+   "n_listed": 21,
+   "rejected": [],
+   "effects": [
+    1,
+    1,
+    1
+   ]
+  },
+  {
+   "screen": "character-map",
+   "goal": "고급 옵션 켜줘",
+   "accept": [
+    "Advanced view"
+   ],
+   "chose": [
+    "Advanced view",
+    "Advanced view",
+    "Advanced view"
+   ],
+   "results": [
+    "right",
+    "right",
+    "right"
+   ],
+   "counted": "right",
+   "agreed": true,
+   "chose_at": [
+    5,
+    5,
+    5
+   ],
+   "right_at": [
+    5
+   ],
+   "n_listed": 21,
+   "rejected": [],
+   "effects": [
+    1,
+    1,
+    1
+   ]
+  },
+  {
+   "screen": "character-map",
+   "goal": "도움말 보여줘",
+   "accept": [
+    "Help"
+   ],
+   "chose": [
+    "Help",
+    "Help",
+    "Help"
+   ],
+   "results": [
+    "right",
+    "right",
+    "right"
+   ],
+   "counted": "right",
+   "agreed": true,
+   "chose_at": [
+    11,
+    11,
+    11
+   ],
+   "right_at": [
+    11
+   ],
+   "n_listed": 21,
+   "rejected": [],
+   "effects": [
+    1,
+    1,
+    1
+   ]
+  },
+  {
+   "screen": "character-map",
+   "goal": "이 창 최소화해",
+   "accept": [
+    "Minimize"
+   ],
+   "chose": [
+    "Minimize",
+    "Minimize",
+    "Minimize"
+   ],
+   "results": [
+    "right",
+    "right",
+    "right"
+   ],
+   "counted": "right",
+   "agreed": true,
+   "chose_at": [
+    18,
+    18,
+    18
+   ],
+   "right_at": [
+    18
+   ],
+   "n_listed": 21,
+   "rejected": [],
+   "effects": [
+    1,
+    1,
+    1
+   ]
+  },
+  {
+   "screen": "character-map",
+   "goal": "이 문자를 파일로 저장해줘",
+   "accept": null,
+   "chose": [
+    null,
+    null,
+    null
+   ],
+   "results": [
+    "declined",
+    "declined",
+    "declined"
+   ],
+   "counted": "declined",
+   "agreed": true,
+   "chose_at": [
+    null,
+    null,
+    null
+   ],
+   "right_at": [],
+   "n_listed": 21,
+   "rejected": [],
+   "effects": [
+    1,
+    1,
+    1
+   ]
+  },
+  {
+   "screen": "character-map",
+   "goal": "글자 크기 키워줘",
+   "accept": null,
+   "chose": [
+    null,
+    null,
+    null
+   ],
+   "results": [
+    "declined",
+    "declined",
+    "declined"
+   ],
+   "counted": "declined",
+   "agreed": true,
+   "chose_at": [
+    null,
+    null,
+    null
+   ],
+   "right_at": [],
+   "n_listed": 21,
+   "rejected": [],
+   "effects": [
+    0,
+    0,
+    0
+   ]
+  },
+  {
+   "screen": "system-information",
+   "goal": "하드웨어 리소스 보여줘",
+   "accept": [
+    "Hardware Resources"
+   ],
+   "chose": [
+    "Hardware Resources",
+    "Hardware Resources",
+    "Hardware Resources"
+   ],
+   "results": [
+    "right",
+    "right",
+    "right"
+   ],
+   "counted": "right",
+   "agreed": true,
+   "chose_at": [
+    1,
+    1,
+    1
+   ],
+   "right_at": [
+    1
+   ],
+   "n_listed": 152,
+   "rejected": [],
+   "effects": [
+    1,
+    1,
+    1
+   ]
+  },
+  {
+   "screen": "system-information",
+   "goal": "소프트웨어 환경 열어",
+   "accept": [
+    "Software Environment"
+   ],
+   "chose": [
+    "Software Environment",
+    "Software Environment",
+    "Software Environment"
+   ],
+   "results": [
+    "right",
+    "right",
+    "right"
+   ],
+   "counted": "right",
+   "agreed": true,
+   "chose_at": [
+    3,
+    3,
+    3
+   ],
+   "right_at": [
+    3
+   ],
+   "n_listed": 152,
+   "rejected": [],
+   "effects": [
+    1,
+    1,
+    1
+   ]
+  },
+  {
+   "screen": "system-information",
+   "goal": "찾기 눌러줘",
+   "accept": [
+    "Find"
+   ],
+   "chose": [
+    "Find",
+    "Find",
+    "Find"
+   ],
+   "results": [
+    "right",
+    "right",
+    "right"
+   ],
+   "counted": "right",
+   "agreed": true,
+   "chose_at": [
+    138,
+    138,
+    138
+   ],
+   "right_at": [
+    138
+   ],
+   "n_listed": 152,
+   "rejected": [],
+   "effects": [
+    1,
+    1,
+    1
+   ]
+  },
+  {
+   "screen": "system-information",
+   "goal": "검색어 입력하는 데 클릭해",
+   "accept": [
+    "Find what:"
+   ],
+   "chose": [
+    "Find what:",
+    "Find what:",
+    "Find what:"
+   ],
+   "results": [
+    "right",
+    "right",
+    "right"
+   ],
+   "counted": "right",
+   "agreed": true,
+   "chose_at": [
+    136,
+    136,
+    136
+   ],
+   "right_at": [
+    136,
+    137
+   ],
+   "n_listed": 152,
+   "rejected": [],
+   "effects": [
+    1,
+    1,
+    1
+   ]
+  },
+  {
+   "screen": "system-information",
+   "goal": "카테고리 이름만 검색하게 해줘",
+   "accept": [
+    "Search category names only"
+   ],
+   "chose": [
+    "Search category names only",
+    "Search category names only",
+    "Search category names only"
+   ],
+   "results": [
+    "right",
+    "right",
+    "right"
+   ],
+   "counted": "right",
+   "agreed": true,
+   "chose_at": [
+    141,
+    141,
+    141
+   ],
+   "right_at": [
+    141
+   ],
+   "n_listed": 152,
+   "rejected": [],
+   "effects": [
+    1,
+    1,
+    1
+   ]
+  },
+  {
+   "screen": "system-information",
+   "goal": "보기 메뉴 열어",
+   "accept": [
+    "View"
+   ],
+   "chose": [
+    "System",
+    "System",
+    "System"
+   ],
+   "results": [
+    "wrong",
+    "wrong",
+    "wrong"
+   ],
+   "counted": "wrong",
+   "agreed": true,
+   "chose_at": [
+    142,
+    142,
+    142
+   ],
+   "right_at": [
+    150
+   ],
+   "n_listed": 152,
+   "rejected": [],
+   "effects": [
+    2,
+    2,
+    2
+   ]
+  },
+  {
+   "screen": "system-information",
+   "goal": "램 좀 늘려줘",
+   "accept": null,
+   "chose": [
+    null,
+    null,
+    null
+   ],
+   "results": [
+    "declined",
+    "declined",
+    "declined"
+   ],
+   "counted": "declined",
+   "agreed": true,
+   "chose_at": [
+    null,
+    null,
+    null
+   ],
+   "right_at": [],
+   "n_listed": 152,
+   "rejected": [],
+   "effects": [
+    0,
+    0,
+    0
+   ]
+  },
+  {
+   "screen": "system-information",
+   "goal": "와이파이 켜줘",
+   "accept": null,
+   "chose": [
+    null,
+    null,
+    null
+   ],
+   "results": [
+    "declined",
+    "declined",
+    "declined"
+   ],
+   "counted": "declined",
+   "agreed": true,
+   "chose_at": [
+    null,
+    null,
+    null
+   ],
+   "right_at": [],
+   "n_listed": 152,
+   "rejected": [],
+   "effects": [
+    0,
+    0,
+    0
+   ]
+  },
+  {
+   "screen": "chrome-remote-desktop---qvb-flfm-dev1",
+   "goal": "최소화해줘",
+   "accept": [
+    "최소화"
+   ],
+   "chose": [
+    "최소화",
+    "최소화",
+    "최소화"
+   ],
+   "results": [
+    "right",
+    "right",
+    "right"
+   ],
+   "counted": "right",
+   "agreed": true,
+   "chose_at": [
+    1,
+    1,
+    1
+   ],
+   "right_at": [
+    1
+   ],
+   "n_listed": 12,
+   "rejected": [],
+   "effects": [
+    1,
+    1,
+    1
+   ]
+  },
+  {
+   "screen": "chrome-remote-desktop---qvb-flfm-dev1",
+   "goal": "닫아",
+   "accept": [
+    "닫기"
+   ],
+   "chose": [
+    "닫기",
+    "닫기",
+    "닫기"
+   ],
+   "results": [
+    "right",
+    "right",
+    "right"
+   ],
+   "counted": "right",
+   "agreed": true,
+   "chose_at": [
+    3,
+    3,
+    3
+   ],
+   "right_at": [
+    3
+   ],
+   "n_listed": 12,
+   "rejected": [],
+   "effects": [
+    1,
+    1,
+    1
+   ]
+  },
+  {
+   "screen": "chrome-remote-desktop---qvb-flfm-dev1",
+   "goal": "비밀번호 저장해",
+   "accept": [
+    "비밀번호 저장"
+   ],
+   "chose": [
+    "비밀번호 저장",
+    "비밀번호 저장",
+    "비밀번호 저장"
+   ],
+   "results": [
+    "right",
+    "right",
+    "right"
+   ],
+   "counted": "right",
+   "agreed": true,
+   "chose_at": [
+    8,
+    8,
+    8
+   ],
+   "right_at": [
+    8
+   ],
+   "n_listed": 12,
+   "rejected": [],
+   "effects": [
+    1,
+    1,
+    1
+   ]
+  },
+  {
+   "screen": "chrome-remote-desktop---qvb-flfm-dev1",
+   "goal": "extensions 보여줘",
+   "accept": [
+    "확장 프로그램"
+   ],
+   "chose": [
+    "확장 프로그램",
+    "확장 프로그램",
+    "확장 프로그램"
+   ],
+   "results": [
+    "right",
+    "right",
+    "right"
+   ],
+   "counted": "right",
+   "agreed": true,
+   "chose_at": [
+    9,
+    9,
+    9
+   ],
+   "right_at": [
+    9
+   ],
+   "n_listed": 12,
+   "rejected": [],
+   "effects": [
+    1,
+    1,
+    1
+   ]
+  },
+  {
+   "screen": "chrome-remote-desktop---qvb-flfm-dev1",
+   "goal": "새 탭 열어줘",
+   "accept": null,
+   "chose": [
+    null,
+    null,
+    null
+   ],
+   "results": [
+    "declined",
+    "declined",
+    "declined"
+   ],
+   "counted": "declined",
+   "agreed": true,
+   "chose_at": [
+    null,
+    null,
+    null
+   ],
+   "right_at": [],
+   "n_listed": 12,
+   "rejected": [],
+   "effects": [
+    0,
+    0,
+    0
+   ]
+  },
+  {
+   "screen": "chrome-remote-desktop---qvb-flfm-dev1",
+   "goal": "음량 키워줘",
+   "accept": null,
+   "chose": [
+    null,
+    null,
+    null
+   ],
+   "results": [
+    "declined",
+    "declined",
+    "declined"
+   ],
+   "counted": "declined",
+   "agreed": true,
+   "chose_at": [
+    null,
+    null,
+    null
+   ],
+   "right_at": [],
+   "n_listed": 12,
+   "rejected": [],
+   "effects": [
+    0,
+    0,
+    0
+   ]
+  }
+ ]
+}
