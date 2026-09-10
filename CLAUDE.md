@@ -89,6 +89,29 @@ decided, repeatedly, while you were reading something else". So the agent says *
 — want me to open it?"* instead of clicking. `may_act_unprompted` is off by default and
 `--allow-unprompted` is a separate CLI word from `--live`.
 
+### The priority, stated by the owner 2026-09-10
+
+> **약간의 실수는 괜찮음. 계속 고쳐나가게 하면 됨. 중요한건 상호작용 및 의사소통임.**
+> *A few mistakes are fine. Just let it keep correcting them. What matters is interaction and
+> communication.*
+
+**This moves the centre of gravity off the accuracy numbers below.** They are still the record of
+what works, and they are not the thing to optimise. `measure/repair.py` is the first measurement on
+this project that asks whether you can talk to it: **repair 3 of 4, memory of its own actions 0 of
+1, Korean answered in Korean 5 of 6.**
+
+**Repair works, and it was working by luck** — the model narrates its intent, so the sentence it
+spoke is what a later *"not that one"* points at. `Session.remember_doing()` now records offers,
+actions, refusals and "they said no" in the conversation beside the speech, and the app calls it
+when it proposes, runs, or you press 아니오. It changed none of the four outcomes: not an
+improvement, the removal of a dependence on the model having good manners.
+
+**A question about the past makes it act again** (0 of 1) and that is being left alone. A prompt
+line aimed at it did not fix it and broke a language case, taking Korean from 5 of 6 to 4 of 6 —
+**the fourth prompt edit here to make something worse, 0 for 4**. In the app the effect is a
+proposal with a button, so the cost is a row you ignore, which is the "a few mistakes are fine"
+case exactly. `docs/findings/interaction.md`.
+
 ### Choosing accuracy — the number that gated the removal
 
 **18 of 28 answerable goals right, 8 of 9 correct declines.** 37 goals against 4 real captured
@@ -288,6 +311,7 @@ call it.
 |---|---|
 | `REBUILD.md` | the rebuild plan — what was decided, why, and the staged path that was followed |
 | `docs/findings/choosing-accuracy.md` | step 4: 18/28, the refuted index hypothesis, the shuffle control, name vs number, and the two harness faults found while measuring |
+| `docs/findings/interaction.md` | the owner's priority, and the first measurements of repair, memory and language |
 | `docs/findings/the-pc-app.md` | the window: self-blindness, the pointing measurement, the cold start, and what the accuracy number forces the interface to be |
 | `docs/findings/what-the-old-tree-measured.md` | the removed library's transferable results, and the `git show` commands for the full record |
 

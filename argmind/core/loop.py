@@ -124,15 +124,16 @@ class Exchange:
 class Session:
     """A conversation with an environment attached. Knows nothing about any platform."""
 
-    def __init__(self, *, eyes, model, hands, limit: int = 200, remember: int = 6,
+    def __init__(self, *, eyes, model, hands, limit: int = 200, remember: int = 12,
                  watches=None, may_act_unprompted: bool = False) -> None:
         self.eyes = eyes
         self.model = model
         self.hands = hands
         self.limit = int(limit)
-        #: How many lines of back-and-forth to carry. Short on purpose: the widget list is the bulk
-        #: of the prompt and a long history pushes it out of a context that has to stay small to
-        #: stay fast.
+        #: How many lines of back-and-forth to carry. **Lines, not turns** — a turn is now two to
+        #: four of them, because what was done is recorded beside what was said. Twelve is about
+        #: three turns. Still short on purpose: the widget list is the bulk of the prompt at ~1,600
+        #: tokens for 142 widgets, and these lines are a handful of words each.
         self.remember = int(remember)
         #: What the agent may notice on its own. Empty means it only ever answers, which is the
         #: default because noticing is the half that can act while nobody is watching.
@@ -238,6 +239,7 @@ class Session:
         self.history.append(("them" if trigger.asked else "noticed", trigger.text))
         if intent.say:
             self.history.append(("you", intent.say))
+        self.remember_doing(did, refused)
         if self.seen and not intent.effects:
             self.blind += 1
 
@@ -245,6 +247,28 @@ class Session:
                       len(self.seen), look_s, think_s, act_s)
         self.exchanges.append(ex)
         return ex
+
+    def remember_doing(self, did=(), refused=(), offered=(), turned_down=()) -> None:
+        """Put what happened into the conversation, beside what was said.
+
+        **Repair was working by luck and this makes it deliberate.** Measured: told to pick red, it
+        picks orange and says *"빨간색을 선택할 수 있어요"*; told *"not that one, press Red"*, it
+        gets it right — because the sentence it spoke is in the history and the word *that* has
+        something to point at. When it says something vague instead, or says nothing, the reference
+        dissolves and the correction has nowhere to land.
+
+        So the record does not depend on the model having narrated itself. It also gives an answer
+        to *"what did you just do?"* that is not an invention — the measured failure being that the
+        question made it do the thing a second time.
+        """
+        for effect in offered:
+            self.history.append(("offered", _describe(effect)))
+        for done in did:
+            self.history.append(("did", _describe(done.effect, done.target)))
+        for effect in refused:
+            self.history.append(("could not", f"{_describe(effect)} — it had gone by then"))
+        for effect in turned_down:
+            self.history.append(("they said no to", _describe(effect)))
 
     # ---- resolving against the world as it is ---------------------------------------------------
 
@@ -318,6 +342,16 @@ class Session:
             "confirmed": sum(1 for d in clicks if d.confirmed is True),
             "unconfirmed": sum(1 for d in clicks if d.confirmed is False),
         }
+
+
+def _describe(effect, widget=None) -> str:
+    """One short phrase for an effect, in the words the person would recognise."""
+    if effect.kind == "click":
+        role = widget.role if widget is not None else (effect.role or "thing")
+        return f'clicked the {role} "{effect.target}"'
+    if effect.kind == "type":
+        return f'typed "{effect.text}"'
+    return f"pressed {effect.text}"
 
 
 def _median(xs) -> float:

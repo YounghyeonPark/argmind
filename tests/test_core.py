@@ -250,6 +250,38 @@ def test_the_widget_list_keeps_the_INTERFACE_S_OWN_WORDS():
     assert listed.splitlines()[3] == '3: menu item "File"'
 
 
+def test_the_conversation_RECORDS_WHAT_HAPPENED_and_not_only_what_was_said():
+    """**Correcting it is the point, and a correction needs something to point at.**
+
+    Measured: told to pick red it picks orange and says *"빨간색을 선택할 수 있어요"*, and *"not that
+    one, press Red"* then lands — because the sentence it spoke is in the history. That is the
+    model's manners doing the work. When it answers vaguely there is nothing to attach to, so what
+    was offered, done, refused and turned down goes in beside the speech.
+    """
+    s = session(FakeModel(says("닫을게요", {"click": 0})))
+    s.exchange("닫아줘")
+    kinds = [who for who, _text in s.history]
+    assert "did" in kinds, f"the conversation does not record acting: {s.history}"
+    said = dict((who, text) for who, text in s.history)
+    assert "닫기" in said["did"] and "button" in said["did"]
+
+
+def test_a_refusal_and_a_no_are_both_things_the_conversation_carries():
+    """Pressing "no" was said to the screen and not to the agent, and a target that had gone was
+    reported to nobody. The next turn needs both."""
+    from argmind.core.intent import Effect                                # noqa: PLC0415
+
+    s = session(FakeModel())
+    s.observe()
+    s.remember_doing(refused=[Effect("click", target="닫기", role="button")],
+                     turned_down=[Effect("click", target="Share", role="button")],
+                     offered=[Effect("key", text="enter")])
+    text = dict(s.history)
+    assert "gone" in text["could not"] and "닫기" in text["could not"]
+    assert "Share" in text["they said no to"]
+    assert "enter" in text["offered"]
+
+
 # ---- noticing, and the permission that goes with it -------------------------------------------
 
 def test_the_model_is_TOLD_when_nobody_asked():

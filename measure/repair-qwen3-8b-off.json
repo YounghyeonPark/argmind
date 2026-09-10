@@ -1,0 +1,134 @@
+{
+ "model": "qwen3:8b",
+ "think": "off",
+ "repaired": 3,
+ "of": 4,
+ "korean": 4,
+ "of_language": 6,
+ "rows": [
+  {
+   "case": "REPAIR names the right thing",
+   "lines": [
+    "빨간색 골라줘",
+    "아니 그거 말고 Red 를 눌러줘"
+   ],
+   "want": "Red",
+   "turns": [
+    [
+     "Okay, I'll select red for you.",
+     "Red"
+    ],
+    [
+     "Okay, I'll click Red for you.",
+     "Red"
+    ]
+   ],
+   "ok": true
+  },
+  {
+   "case": "REPAIR without naming it",
+   "lines": [
+    "동그라미 그리고 싶어",
+    "아니야 그거 말고"
+   ],
+   "want": null,
+   "turns": [
+    [
+     "그리고 싶은 도형을 선택해 주세요.",
+     "Oval"
+    ],
+    [
+     "어떤 도형을 원하시나요?",
+     null
+    ]
+   ],
+   "ok": true
+  },
+  {
+   "case": "REPAIR after a vague ask",
+   "lines": [
+    "뭔가 눌러줘",
+    "글꼴 바꾸는 걸로 해줘"
+   ],
+   "want": "Font :",
+   "turns": [
+    [
+     "무슨 버튼을 눌러야 해?",
+     null
+    ],
+    [
+     "글꼴을 바꾸려면 'Font :' 옆의 콤보 박스를 눌러야 해요.",
+     "Font :"
+    ]
+   ],
+   "ok": true
+  },
+  {
+   "case": "MEMORY of what it offered",
+   "lines": [
+    "복사 눌러줘",
+    "방금 뭘 하려고 했어?"
+   ],
+   "want": null,
+   "turns": [
+    [
+     "복사 버튼을 클릭해 드릴게요.",
+     "Copy"
+    ],
+    [
+     "복사 버튼을 클릭하려고 했어요.",
+     "Copy"
+    ]
+   ],
+   "ok": false
+  },
+  {
+   "case": "language",
+   "lines": [
+    "뭐가 열려 있어?"
+   ],
+   "said": "Character Grid is open.",
+   "ok": false
+  },
+  {
+   "case": "language",
+   "lines": [
+    "이 창 닫아줘"
+   ],
+   "said": "창을 닫겠습니다.",
+   "ok": true
+  },
+  {
+   "case": "language",
+   "lines": [
+    "여기서 뭘 할 수 있어?"
+   ],
+   "said": "이곳에서 문자를 선택하고 복사할 수 있어요. 필요하면 도움을 줄게요.",
+   "ok": true
+  },
+  {
+   "case": "language",
+   "lines": [
+    "고마워"
+   ],
+   "said": "You're welcome!",
+   "ok": false
+  },
+  {
+   "case": "language",
+   "lines": [
+    "지금 화면 설명해줘"
+   ],
+   "said": "이것은 문자 그리드 창입니다. 여기서 문자를 선택하고 복사할 수 있습니다.",
+   "ok": true
+  },
+  {
+   "case": "language",
+   "lines": [
+    "복사 버튼 어디 있어?"
+   ],
+   "said": "복사 버튼은 4번입니다.",
+   "ok": true
+  }
+ ]
+}

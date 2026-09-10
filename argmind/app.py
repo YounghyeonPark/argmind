@@ -295,6 +295,9 @@ class Agent(threading.Thread):
             label, hint = f"키  {effect.text}", ""
         proposal = Proposal(token, effect, label, hint)
         self._pending[token] = proposal
+        #: **In the conversation, not only on the screen.** An offer the person then argues with —
+        #: "not that one" — needs to be something the next turn can see.
+        self.session.remember_doing(offered=[effect])
         self._say("propose", proposal)
 
     def _run(self, token: int) -> None:
@@ -314,6 +317,7 @@ class Agent(threading.Thread):
                 Intent("", [proposal.effect], proposal.effect.because))
         finally:
             self._stand_aside(False)
+        self.session.remember_doing(did=did, refused=refused)
         if refused:
             self._say("gone", (token, proposal.effect.target or proposal.effect.text))
         for done in did:
@@ -330,6 +334,9 @@ class Agent(threading.Thread):
     def _drop(self, token: int) -> None:
         proposal = self._pending.pop(token, None)
         if proposal is not None:
+            #: Pressing "no" is a thing the person said, and until now it was said to the screen
+            #: and not to the agent — the next turn had no idea it had just been turned down.
+            self.session.remember_doing(turned_down=[proposal.effect])
             self._say("dropped", proposal.token)
 
     def _say(self, kind: str, payload=None) -> None:
