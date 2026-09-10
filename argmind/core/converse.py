@@ -35,14 +35,25 @@ alternatives closed the same call is 0.4-0.6 s and 22 output tokens, and no repl
 sweep exceeds 40. **The quantity to watch is generated LENGTH, not seconds** — a sweep run while
 this machine was busy shows 6-14 s stalls at 17-39 output tokens on the **baseline** as well, so
 wall-clock tails here are prefill and belong to the machine, while 1,338 and 4,096 do not.
-**The trade is real and it was checked rather than assumed**: the environment supports
-fourteen named keys and this advertises three, but over 8 recorded runs of the reply harness and 6
-of the conversation harness the model has ever emitted `enter` (41), `tab` (24) and `zoom in` (3) —
-and `zoom in` is not a key at all. The open list has never once produced a valid key it would
-otherwise have missed; it produced an invented keystroke, which is the exact thing
-`env/windows.py`'s own key table exists to prevent. **The proper fix is not this**: the environment
-should declare its key vocabulary to the core instead of the core guessing at it in a string
-literal, and that is a contract question rather than a wording one.
+**The trade is real**: the environment declares **fifteen key names over fourteen distinct virtual
+keys** (`esc` and `escape` are both `0x1B`) and this advertises three. Whether that costs anything
+is **unknown, not zero** — no goal in `measure/goals.json` needs a key beyond `enter` or `tab`, and
+`session.report()["unknown_keys"]` rising in real use is what would say otherwise.
+
+**Two tallies of what the model has actually emitted were withdrawn from this docstring on
+2026-09-10.** They read `enter` (41), `tab` (24) and `zoom in` (3), and **nothing in this repository
+can re-derive them**: every harness stores aggregates and no per-effect record survives. A number
+that cannot be re-derived is exactly what this project's standards forbid, and it sat here for a day
+because correcting a comment in this file used to fork the measurement fingerprint. It no longer
+does — `measure/choosing.py` hashes the prompt as rendered, and `--prompt-check` asserts that this
+very edit does not fork it.
+
+What survives the withdrawal is the shape of the argument, which does not depend on the counts: the
+open list never produced a valid key that the closed one misses, and it did produce an invented
+keystroke — the exact thing `env/windows.py`'s key table exists to refuse. **The contract question it
+raised has been answered elsewhere**: `WindowsHands.keys()` declares the vocabulary, `Session`
+consults it and drops a key the environment has no name for, so an invented keystroke no longer
+costs the turn. What the model is *shown* is still this literal, and still a decision.
 
 **Nothing to do is the common case and the important one.** A model pushed to always act will act,
 and on a screen that does not contain what was asked for, whatever it picks gets clicked. The prompt
