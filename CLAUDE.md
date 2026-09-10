@@ -337,35 +337,39 @@ call it.
 
 ## Sub-agent team
 
-Five project-scoped agents in `.claude/agents/`, checked in for the same reason `.githooks/` is —
-the discipline belongs to the project, not to one machine. **Rebuilt 2026-09-10 for the project this
-became**; `.claude/agents/README.md` has the tally that chose them.
+**Five agents in `.claude/agents/`, all of them build.** Each owns a part of the tree, with no gaps
+and no overlaps, and **architecture leads** — `architect` drew the boundaries the other four work
+inside and is the only one that may change a contract.
 
-| agent | when to reach for it | builds? |
-|---|---|---|
-| `measurement` | to get a number nobody has; before believing one | writes `measure/` |
-| `environment` | to give the agent something it cannot see or do; after any change under `argmind/env/` | writes `argmind/env/` |
-| `prompt-referee` | after **any** edit to `converse.py`, the widget list, the model or its options | runs measurements |
-| `evidence-auditor` | before a commit stating a number; after editing this file; when a result looks good | no |
-| `mutation-tester` | after writing a module and its tests; before claiming a suite protects something | restores what it edits |
+| agent | owns |
+|---|---|
+| `architect` | the shape — `contract.py`, `loop.py`, `llm.py`, the AST rules, where a new thing goes |
+| `conversation` | `converse.py`, `intent.py` — what it says, how it reads a turn, repair |
+| `environment` | `argmind/env/` — capabilities behind Eyes and Hands |
+| `app` | `argmind/app.py` and its tests — the window a person touches |
+| `measurement` | `measure/` — the instruments every decision here rests on |
 
-**The first version of this list was five checkers and no builders**, because it inherited the
-previous team's silhouette and because "work done by hand twice" was tallied from a session where
-one hand did all the building. Counted properly the construction recurred too — seven measurement
-harnesses and five environment capabilities in two days — so the two agents that own an area now
-write as well as review. Checkers still outnumber builders on purpose: four conclusions were
-withdrawn in two days, three of them flattering, and the typing was never the bottleneck.
+**Two earlier versions of this list were wrong and the record is in the team's README.** The first
+was the deleted library's team with the dead entries removed; the second replaced the contents and
+kept the silhouette — five agents that all verified and none that built. Organised now by what each
+**owns**, at the owner's direction: *"테스트는 나중에 해도 되니 개발위주의 에이전트 구성을 할것.
+아키텍쳐 디자인이 매우 중요함."*
 
-**`numerics-reviewer` is gone**: it answered precision, conditioning and estimator questions, and
-there is no estimator here any more. Over the two days that rebuilt this project, measurements
-destroyed their own baseline or lost their conditions **7 times**, prompt changes were judged on one
-of their two harnesses **5 times**, Windows/COM/DPI/z-order defects appeared **6 times**, and
-precision questions **0 times**.
+**The checking moved inside rather than away.** `conversation` runs both harnesses on every change
+it makes, because prompt edits here are 0 for 5. `environment` owes every capability the measurement
+that justified it. `measurement` knows the seven ways these harnesses have lied. `architect` must
+find the reading where the contract does not change before changing it. **Mutation testing is
+deferred, not judged** — recoverable with `git show` at any commit before 2026-09-10.
+
+**The cost of having no dedicated auditor is real.** Four conclusions were withdrawn in two days and
+three of them flattered me; a standard carried by the person doing the work is weaker than one
+carried by somebody else. The mitigation is that every brief names the specific mistakes its own
+area has produced, rather than the standards in the abstract — which is the part that gets skipped
+under momentum.
 
 A sub-agent's conclusion is a claim about the repository, and claims get verified. **They are also a
 dependency**: two were once launched, both terminated on a spend limit before reporting, and the
-figures were measured by the same hand that wrote the code and presented as if reviewed. The numbers
-were real; the independence was not.
+figures were measured by the same hand that wrote the code and presented as if reviewed.
 
 ## Working state
 

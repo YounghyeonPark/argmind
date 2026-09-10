@@ -1,95 +1,73 @@
 # Sub-agent team
 
-Five agents, each covering work this project has actually had to do repeatedly, with the mistakes it
-actually made encoded in them. Checked into the repository for the same reason `.githooks/` is: the
-discipline is part of the project, not part of one machine.
+**Five agents, all of them build.** Each owns a part of the tree, and between them they cover it
+with no gaps and no overlaps.
 
-| agent | when | builds? | model |
-|---|---|---|---|
-| `measurement` | to get a number nobody has; before believing one | writes `measure/` | opus |
-| `environment` | to give the agent something it cannot see or do; after any change under `argmind/env/` | writes `argmind/env/` | opus |
-| `prompt-referee` | after **any** edit to `converse.py`, the widget list, the model or its options | runs measurements | opus |
-| `evidence-auditor` | before a commit stating a number; after editing CLAUDE.md or `docs/findings/` | no | opus |
-| `mutation-tester` | after writing a module and its tests; before claiming a suite protects something | restores what it edits | sonnet |
+| agent | owns | model |
+|---|---|---|
+| `architect` | the shape — `contract.py`, `loop.py`, `llm.py`, the AST rules, where a new thing goes | opus |
+| `conversation` | `converse.py`, `intent.py` — what it says, how it reads a turn, repair | opus |
+| `environment` | `argmind/env/` — capabilities behind Eyes and Hands | opus |
+| `app` | `argmind/app.py`, `tests/test_app.py` — the window a person touches | opus |
+| `measurement` | `measure/` — the instruments every decision here rests on | opus |
 
-## Two build, three check — and the first attempt at this list had five checkers
+**Architecture leads.** `architect` drew the boundaries the other four work inside, and it is the
+only one that may change a contract. When something does not obviously belong anywhere, that is an
+architecture question and not a coding one.
 
-**Worth recording because the mistake is instructive.** The team was rebuilt on 2026-09-10 for the
-project this became, and the first version was `harness-auditor`, `prompt-referee`,
-`windows-reviewer`, `evidence-auditor`, `mutation-tester`. **All five verified. None built
-anything.** The owner said so in five words and was right.
+## How this list was arrived at, including two wrong versions
 
-The cause was inheriting the previous team's silhouette. Those five were also all reviewers, and
-changing the contents without questioning the shape is the same error as leaving the old team in
-place — which is what the rebuild was for.
+**Version one** was the previous project's team with the dead entries removed: `evidence-auditor`,
+`numerics-reviewer`, `mutation-tester`. `numerics-reviewer` answered precision and conditioning
+questions for a recursive-least-squares library that had been deleted the day before.
 
-There was a bias in the counting too. "Work done by hand at least twice" was tallied from a session
-where the building was all done by one hand, so only the *checking* looked delegable. Counted
-properly, the construction recurred as much:
+**Version two** replaced the contents and kept the silhouette: `harness-auditor`, `prompt-referee`,
+`windows-reviewer`, `evidence-auditor`, `mutation-tester`. All five verified and **none built
+anything**. The owner said so in five words. Two causes, both mine: the previous team was also all
+reviewers and I did not question the shape, and "work done by hand at least twice" was tallied from
+a session where one hand did all the building, so only the checking looked delegable.
 
-| built by hand | times |
-|---|---|
-| a measurement harness — `pointing`, `clicking`, `ancestry`, `obstruction`, `pointer_theft`, `talking`, `repair` | **7** |
-| a capability in `argmind/env/` — `read`, `at`, `attending_title`, `pointing_is_exact`, control patterns | **5** |
-| the app and its window | 1 — not yet earned by the rule |
+**Version three** — this one. The owner: *"테스트는 나중에 해도 되니 개발위주의 에이전트 구성을
+할것. 아키텍쳐 디자인이 매우 중요함."* The rule that chose the earlier lists is set aside
+deliberately; the team is organised by **what it owns**, not by how often the work has recurred.
 
-So the two agents that own an area own it **fully**: `measurement` writes harnesses and audits them,
-`environment` adds capabilities and reviews them. Reviewing without building is half a job, and the
-rules that make a harness trustworthy are the same rules you would check it against.
+## The checking did not disappear, it moved inside
 
-**The checkers still outnumber the builders, and that is chosen rather than left over.** Four
-conclusions were withdrawn in two days and three of them were flattering; the typing was never the
-bottleneck. If the balance is wrong, the honest candidate for a third builder is the app and its
-conversation — built once so far, which the rule this file uses does not yet justify.
+`prompt-referee`, `evidence-auditor` and `mutation-tester` are gone from the roster. Two of their
+three jobs are now clauses in the builders' own briefs, because on this project measuring is part of
+building rather than a review that follows it:
 
-## Why these five
+- **`conversation` runs both harnesses on every change it makes.** Prompt edits here are 0 for 5 and
+  three were nearly recorded as improvements; that gate could not be optional.
+- **`environment` owes every capability a docstring with the measurement that justified it.** A
+  capability without one is a guess with a docstring.
+- **`measurement` builds the instruments and knows the seven ways they have lied here** — three
+  destroyed baselines, two confounded runs, two displays that disagreed with the verdict beside
+  them.
+- **`architect` must find the reading where the contract does not change**, before changing it.
 
-- **measurement** — seven harnesses in two days, mechanically the same job each time. Three of them
-  destroyed a baseline, two produced a confounded result, and two printed a display that disagreed
-  with the verdict beside it. Every one caught by luck: a latency figure that looked wrong, a goal
-  showing "wrong" beside the answer that was right.
-- **environment** — five capabilities in two days, and eight distinct platform failures behind them:
-  elements dying mid-read, a NULL COM pointer that is not `None`, a DPI space that agrees only on
-  this desk, an always-on-top window eating its own clicks.
-- **prompt-referee** — prompt edits here are **0 for 5**, and three were nearly recorded as
-  improvements because only the flattering half was measured. Choosing and talking are one
-  measurement in two halves; this refuses to report half of it.
-- **evidence-auditor** — the standards are this project's distinguishing feature and the thing most
-  easily skipped under momentum.
-- **mutation-tester** — the only remit that did not change. "Can this suite fail" is not a question
-  about which code is here.
+**Mutation testing is deferred, not judged.** "Can this suite fail" is a real question and the last
+run of it caught a test passing for a reason nobody had chosen. `git show` at any commit before
+2026-09-10 brings the agent back when tests come round again.
 
-**`numerics-reviewer` is gone.** It answered precision, conditioning and cancellation questions, and
-there is no estimator in this repository any more — the library it served was removed on 2026-09-09.
-A good agent for a project that no longer exists. Over the two days that rebuilt this, precision
-questions came up **zero** times.
+**The cost of dropping a dedicated auditor is real and stated rather than waved at.** Four
+conclusions were withdrawn in two days and **three of them flattered me**. A standard carried by the
+person doing the work is weaker than one carried by somebody else, and this project's own history
+says so. The mitigation is that every brief above names the specific mistakes that agent's area has
+produced — not the standards in the abstract, which is what gets skipped under momentum.
 
-## Deliberately not included
+## Boundaries, because the split is the point
 
-A **conversation reviewer**, for whether the agent is pleasant to talk to. It is the owner's stated
-priority — *"중요한건 상호작용 및 의사소통"* — and the one thing here with no objective handle.
-`measure/talking.py` and `measure/repair.py` cover what can be counted; the rest would be an agent
-with an opinion, and this project has enough of those.
+    architect      argmind/core/contract.py, loop.py, llm.py, tests/test_core.py
+    conversation   argmind/core/converse.py, intent.py
+    environment    argmind/env/
+    app            argmind/app.py, tests/test_app.py
+    measurement    measure/, the scratchpad
 
-A **doc-keeper**. Keeping CLAUDE.md true is real recurring work, but it is `evidence-auditor`'s skill
-applied to prose. Two agents with the same job means one gets ignored.
-
-A **general code reviewer**. `/code-review` covers it, and a project-specific rival would fragment
-where findings come from.
-
-## Using them
-
-`measurement` and `prompt-referee` overlap at one point on purpose: the first owns the harness, the
-second owns the *verdict* when a change touches what the model sees. After editing `converse.py`,
-the second. When a question has no number yet, the first.
-
-`environment` and `measurement` hand work to each other: a harness that needs a capability the
-library lacks says which and stops, and a capability with no measurement behind it is a guess with a
-docstring.
-
-Their reports are not shown to the user directly, so relay what matters. And treat their findings
-the way this project treats any other claim: a sub-agent's conclusion is a claim about the
-repository, and claims get verified.
+Each brief says what its agent may **not** touch. `environment` and `app` never edit `core/`;
+`measurement` never edits `argmind/`; `conversation` hands anything about `loop.py`'s shape to
+`architect`. **An agent that finds it needs something outside its area names it and stops** — that
+hand-off is the design working, not a failure.
 
 **Never let an agent run a git command that writes to the working tree.** `checkout`, `restore`,
 `stash` and `reset` all discard uncommitted work, and this repository usually has some. One run
@@ -100,24 +78,25 @@ the file first.
 with `SendInput`, Windows refused the foreground change, and a line of Korean went into somebody's
 remote desktop session.
 
-## What the removed agents found, kept because it is the argument for having a team
+Their reports are not shown to the user directly, so relay what matters. A sub-agent's conclusion is
+a claim about the repository, and claims get verified.
+
+## What the removed agents found, kept because it is the argument for having a team at all
 
 - `embedded-reviewer` found a comment that misdescribed the very layout it existed to justify, and a
-  32-bit overflow that **could not be reproduced on the 64-bit host** — the rule that host figures
-  are not target figures, applied to behaviour.
+  32-bit overflow that **could not be reproduced on the 64-bit host** — host figures are not target
+  figures, applied to behaviour.
 - `parity-verifier` confirmed byte identity and found a real bug in the *reference*: after a reboot
   the first write landed on the record it had just loaded, destroying the newest copy rather than
-  the spare — the exact failure two slots exist to prevent. Its sweep figures were later withdrawn
-  and re-derived as checked-in tests, because a number from a harness that no longer exists is not
-  evidence. **If an agent's figures are worth quoting, check the harness in** — and those tests have
-  since been removed too, so the sentence applies to itself: the record is at
-  `before-removal-2026-09-09`.
+  the spare — the exact failure two slots exist to prevent. Its figures were later withdrawn and
+  re-derived as checked-in tests, because a number from a harness that no longer exists is not
+  evidence. **If an agent's figures are worth quoting, check the harness in.**
 - `mutation-tester` found that `select_newest` was compiled but never called by any binary the suite
-  built, and that a defensive clamp in the harness had made the library's own clamp unreachable.
+  built, and — on 2026-09-10 — that a test pinning role-aware lookup passed because a *second* role
+  check in a tiebreak was quietly carrying the case alone.
 - `evidence-auditor`, run on the prose describing all of the above, **falsified the summary of it**.
-  Run twice, it then found that the fix the first run asked for had no test of its own. **It is the
-  agent to run before a commit that states a number, not after.**
+  Run twice, it found that the fix the first run asked for had no test of its own.
 
 **They are also a dependency.** Two were once launched, both terminated on a spend limit before
-reporting, and the figures were measured by the same hand that wrote the code and presented as if
-reviewed. The numbers were real; the independence was not.
+reporting, and the figures were then measured by the same hand that wrote the code and presented as
+if reviewed. The numbers were real; the independence was not.
