@@ -87,15 +87,29 @@ flag deliberately and that is *stronger* — a person confirms each action, and 
 
 | | |
 |---|---|
-| choosing | **23 of 28** answerable right, 7 of 9 correct declines — **30 of 37** correct decisions |
-| memory | a first-turn reference holds to 3 turns and dies by 5 at the old window; it is truncation, not attention — **40 of 45 held with the anchor in the window, 1 of 45 without** |
-| talking | **29 of 34** conversational turns produce no action (85%) |
+| choosing | **21 of 28** answerable right, 7 of 9 declines — **28 of 37** correct decisions. The noisiest row here: 21, 23 and 24 across three runs of the same configuration |
+| talking | **31 of 34** conversational turns produce no action (91%) |
+| saying | an index leaks into the speech in **5 of 32**; the control set keeps its legitimate numbers |
+| rule-following | a stated rule is obeyed in **36 of 36** probes at distance ≤ 8 |
+| memory | a first-turn reference is truncation, not attention — **40 of 45 held with the anchor in the window, 1 of 45 without** |
 | repair | 3 of 4 corrections land; memory of its own actions 0 of 1; Korean in, Korean out 5 of 6 |
-| a call | **0.48 s** warm. `--think` reaches 34 of 37 and 94%, at 3.75 s |
+| a call | **0.61 s** median. The mean is 1.43 s and the gap is one tail: **18 of 1,845 turns run to the 4,096-token ceiling**, 69–71 s each, 47% of the model time in 1% of the turns, and the person hears nothing back |
 | clicking | 3 of 3 end to end on a launched window, n=3 |
 
-**Prompt edits here are 0 for 5** — each raised a number and lowered another, and three were nearly
-recorded as improvements. The one change that moved the line was a derived limit, not a sentence.
+**Prompt edits here have never been free.** Each raised a number and lowered another, and three were
+nearly recorded as improvements. The one change that moved a line was a derived limit, not a
+sentence: `MOST_AT_ONCE = 3`.
+
+**The reply-shape order is a measured trade, not a default.** *Whichever field is written first is
+written without the other.* `say` first carries the freshest thing the model has — the index — into
+the speech; `do` first commits the action before anything is considered, and a rule lives in
+language rather than in the action slot. Shipped is **`say` first**, the owner's choice: it costs the
+leak (0 → 5 of 32) and choosing (32 → 28 of 37) and buys rule-following (14 → 36 of 36 probes).
+
+**Three of the four harnesses send no history** — `saying`, `choosing` and `talking` all call
+`converse()` without it. They reproduced their baselines digit for digit under a change that made the
+agent click the eraser when greeted. **"No slide on those three" is vacuous for anything touching the
+conversation**, and only `measure/conversation.py` can see it.
 
 ## The owner's priority, 2026-09-10
 
