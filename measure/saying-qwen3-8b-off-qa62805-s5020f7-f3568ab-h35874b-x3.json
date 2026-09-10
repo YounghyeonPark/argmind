@@ -1,0 +1,4937 @@
+{
+ "model": "qwen3:8b",
+ "think": "off",
+ "repeat": 3,
+ "reload_between_repeats": false,
+ "prompt_scheme": "q = sha256(prompt_record())[:6] — the prompt as converse() actually renders it, over three probes, plus MAX_LISTED and MOST_AT_ONCE. Superseded p = sha256(converse.py)[:6] on 2026-09-10. A p-named file and a q-named file are NOT comparable by fingerprint; compare converse_file_print instead.",
+ "prompt": "a62805",
+ "prompt_record": "MAX_LISTED = 200\nMOST_AT_ONCE = 3\n\n--- asked, with history, widgets listed ---\nYou are a helper the person talks to while they work at their PC.\n\nYou are shown the things currently on their screen, each with a number. Reply as a person would —\nbriefly, in the language they used.\n\nIf they asked you to do something and the listed things can do it, name the numbers. If they were\njust talking, or the thing they want is not listed, say so and do nothing: a wrong click is worse\nthan an honest \"I can't see that here\".\n\nRecently:\n  them: a\n  you: b\n\nOn screen now:\n0: button \"one\"\n1: combo box \"two\"\n\nThey said: probe\n\nReply with only JSON: {\"say\": \"<what you say back>\", \"do\": [ ... ]} where each entry of\n\"do\" is {\"click\": <number>}, {\"type\": \"<text to type>\"} or {\"key\": \"<enter|tab|escape>\"}.\nLeave \"do\" empty if nothing should happen.\n\n--- unprompted, no history, widgets listed ---\nYou are a helper the person talks to while they work at their PC.\n\nYou are shown the things currently on their screen, each with a number. Reply as a person would —\nbriefly, in the language they used.\n\nIf they asked you to do something and the listed things can do it, name the numbers. If they were\njust talking, or the thing they want is not listed, say so and do nothing: a wrong click is worse\nthan an honest \"I can't see that here\".\nNobody asked you anything — you noticed this yourself. Mentioning it is usually\nenough. Only propose doing something if it is clearly wanted, and expect to be asked first.\n\nOn screen now:\n0: button \"one\"\n1: combo box \"two\"\n\nYou noticed: probe\n\nReply with only JSON: {\"say\": \"<what you say back>\", \"do\": [ ... ]} where each entry of\n\"do\" is {\"click\": <number>}, {\"type\": \"<text to type>\"} or {\"key\": \"<enter|tab|escape>\"}.\nLeave \"do\" empty if nothing should happen.\n\n--- asked, no history, nothing on screen ---\nYou are a helper the person talks to while they work at their PC.\n\nYou are shown the things currently on their screen, each with a number. Reply as a person would —\nbriefly, in the language they used.\n\nIf they asked you to do something and the listed things can do it, name the numbers. If they were\njust talking, or the thing they want is not listed, say so and do nothing: a wrong click is worse\nthan an honest \"I can't see that here\".\n\nOn screen now:\n  (nothing named — this surface exposes no widgets)\n\nThey said: probe\n\nReply with only JSON: {\"say\": \"<what you say back>\", \"do\": [ ... ]} where each entry of\n\"do\" is {\"click\": <number>}, {\"type\": \"<text to type>\"} or {\"key\": \"<enter|tab|escape>\"}.\nLeave \"do\" empty if nothing should happen.\n",
+ "converse_file_print": "e0f9d4",
+ "history": {
+  "axis": "the conversation - a 'Recently:' block in the prompt",
+  "sent_by_this_run": false,
+  "covered_by": {
+   "conversation.py": "python -m measure.conversation --axis d   1,872 calls, ~24 min",
+   "repair.py": "python -m measure.repair                  one conversation, no distance axis"
+  },
+  "prompt": "qa62805",
+  "runs_at_this_prompt": [
+   "conversation-qwen3-8b-off-qa62805-s5020f7-f041650-d1.3.5.8.12@r12-x3.json"
+  ],
+  "newest_run_at": "qa62805",
+  "newest_run": "conversation-qwen3-8b-off-qa62805-s5020f7-f041650-d1.3.5.8.12@r12-x3.json",
+  "exercised_at_this_prompt": true,
+  "turns": {
+   "with": 0,
+   "without": 132
+  },
+  "printed": true
+ },
+ "screens_print": "5020f7",
+ "data_print": "3568ab",
+ "harness_print": "35874b",
+ "sending_print": "048fbd",
+ "llm_print": "69931b",
+ "choosing_print": "c162c9",
+ "max_tokens": 4096,
+ "spend": {
+  "calls": 132,
+  "with_counts": 132,
+  "max_tokens_setting": 4096,
+  "out_tokens_max": 52,
+  "out_tokens_max_on": "system-information / 소프트웨어 환경 열고 창 최대화해줘",
+  "truncated": 0,
+  "truncated_on": [],
+  "reasons": {
+   "stop": 132
+  },
+  "seconds_max": 1.088,
+  "seconds_max_on": "untitled---paint / 지우개로 바꿔줘",
+  "thought_chars_max": 0,
+  "thought_chars_max_on": null,
+  "thought_chars_total": 0
+ },
+ "screens": {
+  "character-map": 21,
+  "chrome-remote-desktop---qvb-flfm-dev1": 12,
+  "system-information": 152,
+  "untitled---paint": 123
+ },
+ "max_listed": 200,
+ "seconds": 67.1,
+ "retried": 0,
+ "model_calls_including_warmup": 134,
+ "residency": [
+  {
+   "model": "qwen2.5:7b",
+   "gb": 4.7
+  },
+  {
+   "model": "qwen3:8b",
+   "gb": 6.3
+  }
+ ],
+ "leak_set": {
+  "n": 32,
+  "leaked": 5,
+  "index": 4,
+  "stray": 1,
+  "off_list": 0,
+  "quoted": 0,
+  "clean": 27
+ },
+ "control_set": {
+  "n": 10,
+  "number_present": 10,
+  "unscored": 2
+ },
+ "answer": {
+  "n": 44,
+  "answered": 39,
+  "bare-name": 3,
+  "bare-ack": 0,
+  "echo": 0,
+  "numeric": 2,
+  "empty": 0
+ },
+ "acks": [
+  "alright",
+  "done",
+  "got it",
+  "gotit",
+  "ok",
+  "okay",
+  "sure",
+  "yeah",
+  "yes",
+  "네",
+  "네알겠습니다",
+  "네알겠어",
+  "네알겠어요",
+  "넵",
+  "넵알겠습니다",
+  "알겠습니다",
+  "알겠어",
+  "알겠어요",
+  "알았어",
+  "알았어요",
+  "예",
+  "예알겠습니다",
+  "응",
+  "확인"
+ ],
+ "number_words": [
+  "하나",
+  "다섯",
+  "여섯",
+  "일곱",
+  "여덟",
+  "아홉",
+  "스물",
+  "서른",
+  "마흔",
+  "한 개",
+  "두 개",
+  "세 개",
+  "네 개",
+  "one",
+  "two",
+  "three",
+  "four",
+  "five",
+  "six",
+  "seven",
+  "eight",
+  "nine",
+  "ten",
+  "eleven",
+  "twelve",
+  "twenty",
+  "thirty",
+  "forty",
+  "fifty",
+  "hundred",
+  "dozen"
+ ],
+ "rows": [
+  {
+   "set": "leak",
+   "group": "one action",
+   "screen": "untitled---paint",
+   "said": "지우개로 바꿔줘",
+   "n_listed": 123,
+   "leak_counted": "index",
+   "leak_from_repeat": 0,
+   "answer_counted": "answered",
+   "answer_from_repeat": 0,
+   "leak_agreed": true,
+   "answer_agreed": true,
+   "repeats": [
+    {
+     "say": "지우개는 22번 버튼입니다.",
+     "raw": "{\"say\": \"지우개는 22번 버튼입니다.\", \"do\": [{\"click\": 22}]}",
+     "effects": [
+      {
+       "kind": "click",
+       "target": "Eraser",
+       "role": "button",
+       "text": ""
+      }
+     ],
+     "clicked_at": [
+      22
+     ],
+     "leak": "index",
+     "numbers": [
+      {
+       "run": "22",
+       "token": "22",
+       "kind": "index",
+       "in_range": true,
+       "at_index": "Eraser",
+       "role_at_index": "button",
+       "clicked": true,
+       "equals_effect_count": false,
+       "inside_name": null,
+       "context": "지우개는 22번 버튼입니다."
+      }
+     ],
+     "answer": "answered",
+     "has_number": true,
+     "found_by": "digit",
+     "seconds": 1.088,
+     "out_tokens": 28,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    },
+    {
+     "say": "지우개는 22번 버튼입니다.",
+     "raw": "{\"say\": \"지우개는 22번 버튼입니다.\", \"do\": [{\"click\": 22}]}",
+     "effects": [
+      {
+       "kind": "click",
+       "target": "Eraser",
+       "role": "button",
+       "text": ""
+      }
+     ],
+     "clicked_at": [
+      22
+     ],
+     "leak": "index",
+     "numbers": [
+      {
+       "run": "22",
+       "token": "22",
+       "kind": "index",
+       "in_range": true,
+       "at_index": "Eraser",
+       "role_at_index": "button",
+       "clicked": true,
+       "equals_effect_count": false,
+       "inside_name": null,
+       "context": "지우개는 22번 버튼입니다."
+      }
+     ],
+     "answer": "answered",
+     "has_number": true,
+     "found_by": "digit",
+     "seconds": 0.45,
+     "out_tokens": 28,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    },
+    {
+     "say": "지우개는 22번 버튼입니다.",
+     "raw": "{\"say\": \"지우개는 22번 버튼입니다.\", \"do\": [{\"click\": 22}]}",
+     "effects": [
+      {
+       "kind": "click",
+       "target": "Eraser",
+       "role": "button",
+       "text": ""
+      }
+     ],
+     "clicked_at": [
+      22
+     ],
+     "leak": "index",
+     "numbers": [
+      {
+       "run": "22",
+       "token": "22",
+       "kind": "index",
+       "in_range": true,
+       "at_index": "Eraser",
+       "role_at_index": "button",
+       "clicked": true,
+       "equals_effect_count": false,
+       "inside_name": null,
+       "context": "지우개는 22번 버튼입니다."
+      }
+     ],
+     "answer": "answered",
+     "has_number": true,
+     "found_by": "digit",
+     "seconds": 0.461,
+     "out_tokens": 28,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    }
+   ]
+  },
+  {
+   "set": "leak",
+   "group": "one action",
+   "screen": "untitled---paint",
+   "said": "빨간색으로 바꿔줘",
+   "n_listed": 123,
+   "leak_counted": "clean",
+   "leak_from_repeat": 0,
+   "answer_counted": "answered",
+   "answer_from_repeat": 0,
+   "leak_agreed": true,
+   "answer_agreed": true,
+   "repeats": [
+    {
+     "say": "색상 선택을 위해 색상 그룹으로 이동합니다.",
+     "raw": "{\"say\": \"색상 선택을 위해 색상 그룹으로 이동합니다.\", \"do\": [{\"click\": 77}]}",
+     "effects": [
+      {
+       "kind": "click",
+       "target": "Colors",
+       "role": "group",
+       "text": ""
+      }
+     ],
+     "clicked_at": [
+      77
+     ],
+     "leak": "clean",
+     "numbers": [],
+     "answer": "answered",
+     "has_number": false,
+     "found_by": "",
+     "seconds": 0.556,
+     "out_tokens": 31,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    },
+    {
+     "say": "색상 선택을 위해 색상 그룹으로 이동합니다.",
+     "raw": "{\"say\": \"색상 선택을 위해 색상 그룹으로 이동합니다.\", \"do\": [{\"click\": 77}]}",
+     "effects": [
+      {
+       "kind": "click",
+       "target": "Colors",
+       "role": "group",
+       "text": ""
+      }
+     ],
+     "clicked_at": [
+      77
+     ],
+     "leak": "clean",
+     "numbers": [],
+     "answer": "answered",
+     "has_number": false,
+     "found_by": "",
+     "seconds": 0.514,
+     "out_tokens": 31,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    },
+    {
+     "say": "색상 선택을 위해 색상 그룹으로 이동합니다.",
+     "raw": "{\"say\": \"색상 선택을 위해 색상 그룹으로 이동합니다.\", \"do\": [{\"click\": 77}]}",
+     "effects": [
+      {
+       "kind": "click",
+       "target": "Colors",
+       "role": "group",
+       "text": ""
+      }
+     ],
+     "clicked_at": [
+      77
+     ],
+     "leak": "clean",
+     "numbers": [],
+     "answer": "answered",
+     "has_number": false,
+     "found_by": "",
+     "seconds": 0.518,
+     "out_tokens": 31,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    }
+   ]
+  },
+  {
+   "set": "leak",
+   "group": "one action",
+   "screen": "untitled---paint",
+   "said": "확대해줘",
+   "n_listed": 123,
+   "leak_counted": "clean",
+   "leak_from_repeat": 0,
+   "answer_counted": "bare-name",
+   "answer_from_repeat": 0,
+   "leak_agreed": true,
+   "answer_agreed": true,
+   "repeats": [
+    {
+     "say": "Zoom in",
+     "raw": "{\"say\": \"Zoom in\", \"do\": [{\"key\": \"tab\"}, {\"key\": \"enter\"}]}",
+     "effects": [
+      {
+       "kind": "key",
+       "target": "",
+       "role": "",
+       "text": "tab"
+      },
+      {
+       "kind": "key",
+       "target": "",
+       "role": "",
+       "text": "enter"
+      }
+     ],
+     "clicked_at": [],
+     "leak": "clean",
+     "numbers": [],
+     "answer": "bare-name",
+     "has_number": false,
+     "found_by": "",
+     "seconds": 0.446,
+     "out_tokens": 24,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    },
+    {
+     "say": "Zoom in",
+     "raw": "{\"say\": \"Zoom in\", \"do\": [{\"key\": \"tab\"}, {\"key\": \"enter\"}]}",
+     "effects": [
+      {
+       "kind": "key",
+       "target": "",
+       "role": "",
+       "text": "tab"
+      },
+      {
+       "kind": "key",
+       "target": "",
+       "role": "",
+       "text": "enter"
+      }
+     ],
+     "clicked_at": [],
+     "leak": "clean",
+     "numbers": [],
+     "answer": "bare-name",
+     "has_number": false,
+     "found_by": "",
+     "seconds": 0.398,
+     "out_tokens": 24,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    },
+    {
+     "say": "Zoom in",
+     "raw": "{\"say\": \"Zoom in\", \"do\": [{\"key\": \"tab\"}, {\"key\": \"enter\"}]}",
+     "effects": [
+      {
+       "kind": "key",
+       "target": "",
+       "role": "",
+       "text": "tab"
+      },
+      {
+       "kind": "key",
+       "target": "",
+       "role": "",
+       "text": "enter"
+      }
+     ],
+     "clicked_at": [],
+     "leak": "clean",
+     "numbers": [],
+     "answer": "bare-name",
+     "has_number": false,
+     "found_by": "",
+     "seconds": 0.412,
+     "out_tokens": 24,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    }
+   ]
+  },
+  {
+   "set": "leak",
+   "group": "two actions",
+   "screen": "untitled---paint",
+   "said": "이 그림 저장하고 창 닫아줘",
+   "n_listed": 123,
+   "leak_counted": "clean",
+   "leak_from_repeat": 0,
+   "answer_counted": "answered",
+   "answer_from_repeat": 0,
+   "leak_agreed": true,
+   "answer_agreed": true,
+   "repeats": [
+    {
+     "say": "Okay, I'll save the image and close the window.",
+     "raw": "{\"say\": \"Okay, I'll save the image and close the window.\", \"do\": [{\"click\": 3}, {\"click\": 122}]}",
+     "effects": [
+      {
+       "kind": "click",
+       "target": "Save",
+       "role": "app bar button",
+       "text": ""
+      },
+      {
+       "kind": "click",
+       "target": "Close",
+       "role": "button",
+       "text": ""
+      }
+     ],
+     "clicked_at": [
+      3,
+      122
+     ],
+     "leak": "clean",
+     "numbers": [],
+     "answer": "answered",
+     "has_number": false,
+     "found_by": "",
+     "seconds": 0.635,
+     "out_tokens": 35,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    },
+    {
+     "say": "Okay, I'll save the image and close the window.",
+     "raw": "{\"say\": \"Okay, I'll save the image and close the window.\", \"do\": [{\"click\": 3}, {\"click\": 122}]}",
+     "effects": [
+      {
+       "kind": "click",
+       "target": "Save",
+       "role": "app bar button",
+       "text": ""
+      },
+      {
+       "kind": "click",
+       "target": "Close",
+       "role": "button",
+       "text": ""
+      }
+     ],
+     "clicked_at": [
+      3,
+      122
+     ],
+     "leak": "clean",
+     "numbers": [],
+     "answer": "answered",
+     "has_number": false,
+     "found_by": "",
+     "seconds": 0.609,
+     "out_tokens": 35,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    },
+    {
+     "say": "Okay, I'll save the image and close the window.",
+     "raw": "{\"say\": \"Okay, I'll save the image and close the window.\", \"do\": [{\"click\": 3}, {\"click\": 122}]}",
+     "effects": [
+      {
+       "kind": "click",
+       "target": "Save",
+       "role": "app bar button",
+       "text": ""
+      },
+      {
+       "kind": "click",
+       "target": "Close",
+       "role": "button",
+       "text": ""
+      }
+     ],
+     "clicked_at": [
+      3,
+      122
+     ],
+     "leak": "clean",
+     "numbers": [],
+     "answer": "answered",
+     "has_number": false,
+     "found_by": "",
+     "seconds": 0.605,
+     "out_tokens": 35,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    }
+   ]
+  },
+  {
+   "set": "leak",
+   "group": "two actions",
+   "screen": "untitled---paint",
+   "said": "최소화하고 닫아줘",
+   "n_listed": 123,
+   "leak_counted": "clean",
+   "leak_from_repeat": 0,
+   "answer_counted": "answered",
+   "answer_from_repeat": 0,
+   "leak_agreed": true,
+   "answer_agreed": true,
+   "repeats": [
+    {
+     "say": "최소화하고 닫겠습니다.",
+     "raw": "{\"say\": \"최소화하고 닫겠습니다.\", \"do\": [{\"click\": 121}, {\"click\": 122}]}",
+     "effects": [
+      {
+       "kind": "click",
+       "target": "Maximize",
+       "role": "button",
+       "text": ""
+      },
+      {
+       "kind": "click",
+       "target": "Close",
+       "role": "button",
+       "text": ""
+      }
+     ],
+     "clicked_at": [
+      121,
+      122
+     ],
+     "leak": "clean",
+     "numbers": [],
+     "answer": "answered",
+     "has_number": false,
+     "found_by": "",
+     "seconds": 0.606,
+     "out_tokens": 33,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    },
+    {
+     "say": "최소화하고 닫겠습니다.",
+     "raw": "{\"say\": \"최소화하고 닫겠습니다.\", \"do\": [{\"click\": 121}, {\"click\": 122}]}",
+     "effects": [
+      {
+       "kind": "click",
+       "target": "Maximize",
+       "role": "button",
+       "text": ""
+      },
+      {
+       "kind": "click",
+       "target": "Close",
+       "role": "button",
+       "text": ""
+      }
+     ],
+     "clicked_at": [
+      121,
+      122
+     ],
+     "leak": "clean",
+     "numbers": [],
+     "answer": "answered",
+     "has_number": false,
+     "found_by": "",
+     "seconds": 0.594,
+     "out_tokens": 33,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    },
+    {
+     "say": "최소화하고 닫겠습니다.",
+     "raw": "{\"say\": \"최소화하고 닫겠습니다.\", \"do\": [{\"click\": 121}, {\"click\": 122}]}",
+     "effects": [
+      {
+       "kind": "click",
+       "target": "Maximize",
+       "role": "button",
+       "text": ""
+      },
+      {
+       "kind": "click",
+       "target": "Close",
+       "role": "button",
+       "text": ""
+      }
+     ],
+     "clicked_at": [
+      121,
+      122
+     ],
+     "leak": "clean",
+     "numbers": [],
+     "answer": "answered",
+     "has_number": false,
+     "found_by": "",
+     "seconds": 0.603,
+     "out_tokens": 33,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    }
+   ]
+  },
+  {
+   "set": "leak",
+   "group": "nothing there",
+   "screen": "untitled---paint",
+   "said": "크롬 열어줘",
+   "n_listed": 123,
+   "leak_counted": "clean",
+   "leak_from_repeat": 0,
+   "answer_counted": "answered",
+   "answer_from_repeat": 0,
+   "leak_agreed": true,
+   "answer_agreed": true,
+   "repeats": [
+    {
+     "say": "I can't see that here.",
+     "raw": "{\"say\": \"I can't see that here.\", \"do\": []}",
+     "effects": [],
+     "clicked_at": [],
+     "leak": "clean",
+     "numbers": [],
+     "answer": "answered",
+     "has_number": false,
+     "found_by": "",
+     "seconds": 0.325,
+     "out_tokens": 17,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    },
+    {
+     "say": "크롬을 열 수 없습니다. 여기서는 이미 애플리케이션이 실행 중입니다.",
+     "raw": "{\"say\": \"크롬을 열 수 없습니다. 여기서는 이미 애플리케이션이 실행 중입니다.\", \"do\": []}",
+     "effects": [],
+     "clicked_at": [],
+     "leak": "clean",
+     "numbers": [],
+     "answer": "answered",
+     "has_number": false,
+     "found_by": "",
+     "seconds": 0.551,
+     "out_tokens": 34,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    },
+    {
+     "say": "크롬을 열 수 없습니다. 여기서는 이미 애플리케이션이 실행 중입니다.",
+     "raw": "{\"say\": \"크롬을 열 수 없습니다. 여기서는 이미 애플리케이션이 실행 중입니다.\", \"do\": []}",
+     "effects": [],
+     "clicked_at": [],
+     "leak": "clean",
+     "numbers": [],
+     "answer": "answered",
+     "has_number": false,
+     "found_by": "",
+     "seconds": 0.572,
+     "out_tokens": 34,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    }
+   ]
+  },
+  {
+   "set": "leak",
+   "group": "one action",
+   "screen": "character-map",
+   "said": "복사 눌러줘",
+   "n_listed": 21,
+   "leak_counted": "clean",
+   "leak_from_repeat": 0,
+   "answer_counted": "answered",
+   "answer_from_repeat": 0,
+   "leak_agreed": true,
+   "answer_agreed": true,
+   "repeats": [
+    {
+     "say": "복사 버튼을 클릭해 드릴게요.",
+     "raw": "{\"say\": \"복사 버튼을 클릭해 드릴게요.\", \"do\": [{\"click\": 4}]}",
+     "effects": [
+      {
+       "kind": "click",
+       "target": "Copy",
+       "role": "button",
+       "text": ""
+      }
+     ],
+     "clicked_at": [
+      4
+     ],
+     "leak": "clean",
+     "numbers": [],
+     "answer": "answered",
+     "has_number": false,
+     "found_by": "",
+     "seconds": 0.589,
+     "out_tokens": 29,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    },
+    {
+     "say": "복사 버튼을 클릭해 드릴게요.",
+     "raw": "{\"say\": \"복사 버튼을 클릭해 드릴게요.\", \"do\": [{\"click\": 4}]}",
+     "effects": [
+      {
+       "kind": "click",
+       "target": "Copy",
+       "role": "button",
+       "text": ""
+      }
+     ],
+     "clicked_at": [
+      4
+     ],
+     "leak": "clean",
+     "numbers": [],
+     "answer": "answered",
+     "has_number": false,
+     "found_by": "",
+     "seconds": 0.467,
+     "out_tokens": 29,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    },
+    {
+     "say": "복사 버튼을 클릭해 드릴게요.",
+     "raw": "{\"say\": \"복사 버튼을 클릭해 드릴게요.\", \"do\": [{\"click\": 4}]}",
+     "effects": [
+      {
+       "kind": "click",
+       "target": "Copy",
+       "role": "button",
+       "text": ""
+      }
+     ],
+     "clicked_at": [
+      4
+     ],
+     "leak": "clean",
+     "numbers": [],
+     "answer": "answered",
+     "has_number": false,
+     "found_by": "",
+     "seconds": 0.482,
+     "out_tokens": 29,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    }
+   ]
+  },
+  {
+   "set": "leak",
+   "group": "one action",
+   "screen": "character-map",
+   "said": "글꼴 바꿔줘",
+   "n_listed": 21,
+   "leak_counted": "clean",
+   "leak_from_repeat": 0,
+   "answer_counted": "answered",
+   "answer_from_repeat": 0,
+   "leak_agreed": true,
+   "answer_agreed": true,
+   "repeats": [
+    {
+     "say": "Okay, I'll change the font for you.",
+     "raw": "{\"say\": \"Okay, I'll change the font for you.\", \"do\": [{\"click\": 9}]}",
+     "effects": [
+      {
+       "kind": "click",
+       "target": "Font :",
+       "role": "combo box",
+       "text": ""
+      }
+     ],
+     "clicked_at": [
+      9
+     ],
+     "leak": "clean",
+     "numbers": [],
+     "answer": "answered",
+     "has_number": false,
+     "found_by": "",
+     "seconds": 0.44,
+     "out_tokens": 25,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    },
+    {
+     "say": "Okay, I'll change the font for you.",
+     "raw": "{\"say\": \"Okay, I'll change the font for you.\", \"do\": [{\"click\": 9}]}",
+     "effects": [
+      {
+       "kind": "click",
+       "target": "Font :",
+       "role": "combo box",
+       "text": ""
+      }
+     ],
+     "clicked_at": [
+      9
+     ],
+     "leak": "clean",
+     "numbers": [],
+     "answer": "answered",
+     "has_number": false,
+     "found_by": "",
+     "seconds": 0.456,
+     "out_tokens": 25,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    },
+    {
+     "say": "Okay, I'll change the font for you.",
+     "raw": "{\"say\": \"Okay, I'll change the font for you.\", \"do\": [{\"click\": 9}]}",
+     "effects": [
+      {
+       "kind": "click",
+       "target": "Font :",
+       "role": "combo box",
+       "text": ""
+      }
+     ],
+     "clicked_at": [
+      9
+     ],
+     "leak": "clean",
+     "numbers": [],
+     "answer": "answered",
+     "has_number": false,
+     "found_by": "",
+     "seconds": 0.456,
+     "out_tokens": 25,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    }
+   ]
+  },
+  {
+   "set": "leak",
+   "group": "nothing there",
+   "screen": "character-map",
+   "said": "볼륨 좀 줄여줘",
+   "n_listed": 21,
+   "leak_counted": "clean",
+   "leak_from_repeat": 0,
+   "answer_counted": "answered",
+   "answer_from_repeat": 0,
+   "leak_agreed": true,
+   "answer_agreed": true,
+   "repeats": [
+    {
+     "say": "I can't see a volume control here.",
+     "raw": "{\"say\": \"I can't see a volume control here.\", \"do\": []}",
+     "effects": [],
+     "clicked_at": [],
+     "leak": "clean",
+     "numbers": [],
+     "answer": "answered",
+     "has_number": false,
+     "found_by": "",
+     "seconds": 0.375,
+     "out_tokens": 19,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    },
+    {
+     "say": "I can't see a volume control here.",
+     "raw": "{\"say\": \"I can't see a volume control here.\", \"do\": []}",
+     "effects": [],
+     "clicked_at": [],
+     "leak": "clean",
+     "numbers": [],
+     "answer": "answered",
+     "has_number": false,
+     "found_by": "",
+     "seconds": 0.366,
+     "out_tokens": 19,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    },
+    {
+     "say": "I can't see a volume control here.",
+     "raw": "{\"say\": \"I can't see a volume control here.\", \"do\": []}",
+     "effects": [],
+     "clicked_at": [],
+     "leak": "clean",
+     "numbers": [],
+     "answer": "answered",
+     "has_number": false,
+     "found_by": "",
+     "seconds": 0.345,
+     "out_tokens": 19,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    }
+   ]
+  },
+  {
+   "set": "leak",
+   "group": "one action",
+   "screen": "system-information",
+   "said": "하드웨어 리소스 열어줘",
+   "n_listed": 152,
+   "leak_counted": "stray",
+   "leak_from_repeat": 0,
+   "answer_counted": "numeric",
+   "answer_from_repeat": 0,
+   "leak_agreed": true,
+   "answer_agreed": true,
+   "repeats": [
+    {
+     "say": "0",
+     "raw": "{\"say\": \"0\", \"do\": [{\"click\": 1}]}",
+     "effects": [
+      {
+       "kind": "click",
+       "target": "Hardware Resources",
+       "role": "tree item",
+       "text": ""
+      }
+     ],
+     "clicked_at": [
+      1
+     ],
+     "leak": "stray",
+     "numbers": [
+      {
+       "run": "0",
+       "token": "0",
+       "kind": "stray",
+       "in_range": true,
+       "at_index": "System Summary",
+       "role_at_index": "tree item",
+       "clicked": false,
+       "equals_effect_count": false,
+       "inside_name": null,
+       "context": "0"
+      }
+     ],
+     "answer": "numeric",
+     "has_number": true,
+     "found_by": "digit",
+     "seconds": 0.846,
+     "out_tokens": 17,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    },
+    {
+     "say": "0",
+     "raw": "{\"say\": \"0\", \"do\": [{\"click\": 1}]}",
+     "effects": [
+      {
+       "kind": "click",
+       "target": "Hardware Resources",
+       "role": "tree item",
+       "text": ""
+      }
+     ],
+     "clicked_at": [
+      1
+     ],
+     "leak": "stray",
+     "numbers": [
+      {
+       "run": "0",
+       "token": "0",
+       "kind": "stray",
+       "in_range": true,
+       "at_index": "System Summary",
+       "role_at_index": "tree item",
+       "clicked": false,
+       "equals_effect_count": false,
+       "inside_name": null,
+       "context": "0"
+      }
+     ],
+     "answer": "numeric",
+     "has_number": true,
+     "found_by": "digit",
+     "seconds": 0.333,
+     "out_tokens": 17,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    },
+    {
+     "say": "0",
+     "raw": "{\"say\": \"0\", \"do\": [{\"click\": 1}]}",
+     "effects": [
+      {
+       "kind": "click",
+       "target": "Hardware Resources",
+       "role": "tree item",
+       "text": ""
+      }
+     ],
+     "clicked_at": [
+      1
+     ],
+     "leak": "stray",
+     "numbers": [
+      {
+       "run": "0",
+       "token": "0",
+       "kind": "stray",
+       "in_range": true,
+       "at_index": "System Summary",
+       "role_at_index": "tree item",
+       "clicked": false,
+       "equals_effect_count": false,
+       "inside_name": null,
+       "context": "0"
+      }
+     ],
+     "answer": "numeric",
+     "has_number": true,
+     "found_by": "digit",
+     "seconds": 0.322,
+     "out_tokens": 17,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    }
+   ]
+  },
+  {
+   "set": "leak",
+   "group": "one action",
+   "screen": "system-information",
+   "said": "찾기 눌러줘",
+   "n_listed": 152,
+   "leak_counted": "clean",
+   "leak_from_repeat": 0,
+   "answer_counted": "answered",
+   "answer_from_repeat": 0,
+   "leak_agreed": true,
+   "answer_agreed": true,
+   "repeats": [
+    {
+     "say": "Find button clicked.",
+     "raw": "{\"say\": \"Find button clicked.\", \"do\": [{\"click\": 138}]}",
+     "effects": [
+      {
+       "kind": "click",
+       "target": "Find",
+       "role": "button",
+       "text": ""
+      }
+     ],
+     "clicked_at": [
+      138
+     ],
+     "leak": "clean",
+     "numbers": [],
+     "answer": "answered",
+     "has_number": false,
+     "found_by": "",
+     "seconds": 0.38,
+     "out_tokens": 21,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    },
+    {
+     "say": "Find button clicked.",
+     "raw": "{\"say\": \"Find button clicked.\", \"do\": [{\"click\": 138}]}",
+     "effects": [
+      {
+       "kind": "click",
+       "target": "Find",
+       "role": "button",
+       "text": ""
+      }
+     ],
+     "clicked_at": [
+      138
+     ],
+     "leak": "clean",
+     "numbers": [],
+     "answer": "answered",
+     "has_number": false,
+     "found_by": "",
+     "seconds": 0.379,
+     "out_tokens": 21,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    },
+    {
+     "say": "Find button clicked.",
+     "raw": "{\"say\": \"Find button clicked.\", \"do\": [{\"click\": 138}]}",
+     "effects": [
+      {
+       "kind": "click",
+       "target": "Find",
+       "role": "button",
+       "text": ""
+      }
+     ],
+     "clicked_at": [
+      138
+     ],
+     "leak": "clean",
+     "numbers": [],
+     "answer": "answered",
+     "has_number": false,
+     "found_by": "",
+     "seconds": 0.36,
+     "out_tokens": 21,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    }
+   ]
+  },
+  {
+   "set": "leak",
+   "group": "two actions",
+   "screen": "system-information",
+   "said": "소프트웨어 환경 열고 창 최대화해줘",
+   "n_listed": 152,
+   "leak_counted": "clean",
+   "leak_from_repeat": 0,
+   "answer_counted": "answered",
+   "answer_from_repeat": 0,
+   "leak_agreed": true,
+   "answer_agreed": true,
+   "repeats": [
+    {
+     "say": "소프트웨어 환경을 열고 창을 최대화합니다.",
+     "raw": "{\"say\": \"소프트웨어 환경을 열고 창을 최대화합니다.\", \"do\": [{\"click\": 3}, {\"key\": \"enter\"}, {\"key\": \"tab\"}, {\"key\": \"enter\"}]}",
+     "effects": [],
+     "clicked_at": [],
+     "leak": "clean",
+     "numbers": [],
+     "answer": "answered",
+     "has_number": false,
+     "found_by": "",
+     "seconds": 0.934,
+     "out_tokens": 52,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    },
+    {
+     "say": "소프트웨어 환경을 열고 창을 최대화합니다.",
+     "raw": "{\"say\": \"소프트웨어 환경을 열고 창을 최대화합니다.\", \"do\": [{\"click\": 3}, {\"key\": \"enter\"}, {\"key\": \"tab\"}, {\"key\": \"enter\"}]}",
+     "effects": [],
+     "clicked_at": [],
+     "leak": "clean",
+     "numbers": [],
+     "answer": "answered",
+     "has_number": false,
+     "found_by": "",
+     "seconds": 0.938,
+     "out_tokens": 52,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    },
+    {
+     "say": "소프트웨어 환경을 열고 창을 최대화합니다.",
+     "raw": "{\"say\": \"소프트웨어 환경을 열고 창을 최대화합니다.\", \"do\": [{\"click\": 3}, {\"key\": \"enter\"}, {\"key\": \"tab\"}, {\"key\": \"enter\"}]}",
+     "effects": [],
+     "clicked_at": [],
+     "leak": "clean",
+     "numbers": [],
+     "answer": "answered",
+     "has_number": false,
+     "found_by": "",
+     "seconds": 0.935,
+     "out_tokens": 52,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    }
+   ]
+  },
+  {
+   "set": "leak",
+   "group": "one action",
+   "screen": "chrome-remote-desktop---qvb-flfm-dev1",
+   "said": "이 창 닫아줘",
+   "n_listed": 12,
+   "leak_counted": "clean",
+   "leak_from_repeat": 0,
+   "answer_counted": "answered",
+   "answer_from_repeat": 0,
+   "leak_agreed": true,
+   "answer_agreed": true,
+   "repeats": [
+    {
+     "say": "창을 닫겠습니다.",
+     "raw": "{\"say\": \"창을 닫겠습니다.\", \"do\": [{\"click\": 3}]}",
+     "effects": [
+      {
+       "kind": "click",
+       "target": "닫기",
+       "role": "button",
+       "text": ""
+      }
+     ],
+     "clicked_at": [
+      3
+     ],
+     "leak": "clean",
+     "numbers": [],
+     "answer": "answered",
+     "has_number": false,
+     "found_by": "",
+     "seconds": 0.56,
+     "out_tokens": 21,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    },
+    {
+     "say": "창을 닫겠습니다.",
+     "raw": "{\"say\": \"창을 닫겠습니다.\", \"do\": [{\"click\": 3}]}",
+     "effects": [
+      {
+       "kind": "click",
+       "target": "닫기",
+       "role": "button",
+       "text": ""
+      }
+     ],
+     "clicked_at": [
+      3
+     ],
+     "leak": "clean",
+     "numbers": [],
+     "answer": "answered",
+     "has_number": false,
+     "found_by": "",
+     "seconds": 0.375,
+     "out_tokens": 21,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    },
+    {
+     "say": "창을 닫겠습니다.",
+     "raw": "{\"say\": \"창을 닫겠습니다.\", \"do\": [{\"click\": 3}]}",
+     "effects": [
+      {
+       "kind": "click",
+       "target": "닫기",
+       "role": "button",
+       "text": ""
+      }
+     ],
+     "clicked_at": [
+      3
+     ],
+     "leak": "clean",
+     "numbers": [],
+     "answer": "answered",
+     "has_number": false,
+     "found_by": "",
+     "seconds": 0.354,
+     "out_tokens": 21,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    }
+   ]
+  },
+  {
+   "set": "leak",
+   "group": "one action",
+   "screen": "chrome-remote-desktop---qvb-flfm-dev1",
+   "said": "비밀번호 저장 눌러줘",
+   "n_listed": 12,
+   "leak_counted": "clean",
+   "leak_from_repeat": 0,
+   "answer_counted": "answered",
+   "answer_from_repeat": 0,
+   "leak_agreed": true,
+   "answer_agreed": true,
+   "repeats": [
+    {
+     "say": "비밀번호 저장 버튼을 클릭합니다.",
+     "raw": "{\"say\": \"비밀번호 저장 버튼을 클릭합니다.\", \"do\": [{\"click\": 8}]}",
+     "effects": [
+      {
+       "kind": "click",
+       "target": "비밀번호 저장",
+       "role": "button",
+       "text": ""
+      }
+     ],
+     "clicked_at": [
+      8
+     ],
+     "leak": "clean",
+     "numbers": [],
+     "answer": "answered",
+     "has_number": false,
+     "found_by": "",
+     "seconds": 0.456,
+     "out_tokens": 26,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    },
+    {
+     "say": "비밀번호 저장 버튼을 클릭합니다.",
+     "raw": "{\"say\": \"비밀번호 저장 버튼을 클릭합니다.\", \"do\": [{\"click\": 8}]}",
+     "effects": [
+      {
+       "kind": "click",
+       "target": "비밀번호 저장",
+       "role": "button",
+       "text": ""
+      }
+     ],
+     "clicked_at": [
+      8
+     ],
+     "leak": "clean",
+     "numbers": [],
+     "answer": "answered",
+     "has_number": false,
+     "found_by": "",
+     "seconds": 0.431,
+     "out_tokens": 26,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    },
+    {
+     "say": "비밀번호 저장 버튼을 클릭합니다.",
+     "raw": "{\"say\": \"비밀번호 저장 버튼을 클릭합니다.\", \"do\": [{\"click\": 8}]}",
+     "effects": [
+      {
+       "kind": "click",
+       "target": "비밀번호 저장",
+       "role": "button",
+       "text": ""
+      }
+     ],
+     "clicked_at": [
+      8
+     ],
+     "leak": "clean",
+     "numbers": [],
+     "answer": "answered",
+     "has_number": false,
+     "found_by": "",
+     "seconds": 0.418,
+     "out_tokens": 26,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    }
+   ]
+  },
+  {
+   "set": "leak",
+   "group": "one action",
+   "screen": "untitled---paint",
+   "said": "자르기 해줘",
+   "n_listed": 123,
+   "leak_counted": "index",
+   "leak_from_repeat": 0,
+   "answer_counted": "answered",
+   "answer_from_repeat": 0,
+   "leak_agreed": true,
+   "answer_agreed": true,
+   "repeats": [
+    {
+     "say": "3을 클릭해요.",
+     "raw": "{\"say\": \"3을 클릭해요.\", \"do\": [{\"click\": 3}]}",
+     "effects": [
+      {
+       "kind": "click",
+       "target": "Save",
+       "role": "app bar button",
+       "text": ""
+      }
+     ],
+     "clicked_at": [
+      3
+     ],
+     "leak": "index",
+     "numbers": [
+      {
+       "run": "3",
+       "token": "3",
+       "kind": "index",
+       "in_range": true,
+       "at_index": "Save",
+       "role_at_index": "app bar button",
+       "clicked": true,
+       "equals_effect_count": false,
+       "inside_name": null,
+       "context": "3을 클릭해요."
+      }
+     ],
+     "answer": "answered",
+     "has_number": true,
+     "found_by": "digit",
+     "seconds": 0.441,
+     "out_tokens": 22,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    },
+    {
+     "say": "3을 클릭해요.",
+     "raw": "{\"say\": \"3을 클릭해요.\", \"do\": [{\"click\": 3}]}",
+     "effects": [
+      {
+       "kind": "click",
+       "target": "Save",
+       "role": "app bar button",
+       "text": ""
+      }
+     ],
+     "clicked_at": [
+      3
+     ],
+     "leak": "index",
+     "numbers": [
+      {
+       "run": "3",
+       "token": "3",
+       "kind": "index",
+       "in_range": true,
+       "at_index": "Save",
+       "role_at_index": "app bar button",
+       "clicked": true,
+       "equals_effect_count": false,
+       "inside_name": null,
+       "context": "3을 클릭해요."
+      }
+     ],
+     "answer": "answered",
+     "has_number": true,
+     "found_by": "digit",
+     "seconds": 0.363,
+     "out_tokens": 22,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    },
+    {
+     "say": "3을 클릭해요.",
+     "raw": "{\"say\": \"3을 클릭해요.\", \"do\": [{\"click\": 3}]}",
+     "effects": [
+      {
+       "kind": "click",
+       "target": "Save",
+       "role": "app bar button",
+       "text": ""
+      }
+     ],
+     "clicked_at": [
+      3
+     ],
+     "leak": "index",
+     "numbers": [
+      {
+       "run": "3",
+       "token": "3",
+       "kind": "index",
+       "in_range": true,
+       "at_index": "Save",
+       "role_at_index": "app bar button",
+       "clicked": true,
+       "equals_effect_count": false,
+       "inside_name": null,
+       "context": "3을 클릭해요."
+      }
+     ],
+     "answer": "answered",
+     "has_number": true,
+     "found_by": "digit",
+     "seconds": 0.387,
+     "out_tokens": 22,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    }
+   ]
+  },
+  {
+   "set": "leak",
+   "group": "one action",
+   "screen": "untitled---paint",
+   "said": "글씨 넣고 싶어",
+   "n_listed": 123,
+   "leak_counted": "clean",
+   "leak_from_repeat": 0,
+   "answer_counted": "answered",
+   "answer_from_repeat": 0,
+   "leak_agreed": true,
+   "answer_agreed": true,
+   "repeats": [
+    {
+     "say": "텍스트를 입력하려면 'Text' 버튼을 클릭하세요.",
+     "raw": "{\"say\": \"텍스트를 입력하려면 'Text' 버튼을 클릭하세요.\", \"do\": [{\"click\": 21}]}",
+     "effects": [
+      {
+       "kind": "click",
+       "target": "Text",
+       "role": "button",
+       "text": ""
+      }
+     ],
+     "clicked_at": [
+      21
+     ],
+     "leak": "clean",
+     "numbers": [],
+     "answer": "answered",
+     "has_number": false,
+     "found_by": "",
+     "seconds": 0.591,
+     "out_tokens": 33,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    },
+    {
+     "say": "텍스트를 입력하려면 'Text' 버튼을 클릭하세요.",
+     "raw": "{\"say\": \"텍스트를 입력하려면 'Text' 버튼을 클릭하세요.\", \"do\": [{\"click\": 21}]}",
+     "effects": [
+      {
+       "kind": "click",
+       "target": "Text",
+       "role": "button",
+       "text": ""
+      }
+     ],
+     "clicked_at": [
+      21
+     ],
+     "leak": "clean",
+     "numbers": [],
+     "answer": "answered",
+     "has_number": false,
+     "found_by": "",
+     "seconds": 0.588,
+     "out_tokens": 33,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    },
+    {
+     "say": "텍스트를 입력하려면 'Text' 버튼을 클릭하세요.",
+     "raw": "{\"say\": \"텍스트를 입력하려면 'Text' 버튼을 클릭하세요.\", \"do\": [{\"click\": 21}]}",
+     "effects": [
+      {
+       "kind": "click",
+       "target": "Text",
+       "role": "button",
+       "text": ""
+      }
+     ],
+     "clicked_at": [
+      21
+     ],
+     "leak": "clean",
+     "numbers": [],
+     "answer": "answered",
+     "has_number": false,
+     "found_by": "",
+     "seconds": 0.55,
+     "out_tokens": 33,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    }
+   ]
+  },
+  {
+   "set": "leak",
+   "group": "one action",
+   "screen": "untitled---paint",
+   "said": "회전시켜줘",
+   "n_listed": 123,
+   "leak_counted": "index",
+   "leak_from_repeat": 0,
+   "answer_counted": "numeric",
+   "answer_from_repeat": 0,
+   "leak_agreed": true,
+   "answer_agreed": true,
+   "repeats": [
+    {
+     "say": "15",
+     "raw": "{\"say\": \"15\", \"do\": [{\"click\": 15}]}",
+     "effects": [
+      {
+       "kind": "click",
+       "target": "Rotate",
+       "role": "button",
+       "text": ""
+      }
+     ],
+     "clicked_at": [
+      15
+     ],
+     "leak": "index",
+     "numbers": [
+      {
+       "run": "15",
+       "token": "15",
+       "kind": "index",
+       "in_range": true,
+       "at_index": "Rotate",
+       "role_at_index": "button",
+       "clicked": true,
+       "equals_effect_count": false,
+       "inside_name": "1536 × 864px",
+       "context": "15"
+      }
+     ],
+     "answer": "numeric",
+     "has_number": true,
+     "found_by": "digit",
+     "seconds": 0.34,
+     "out_tokens": 19,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    },
+    {
+     "say": "15",
+     "raw": "{\"say\": \"15\", \"do\": [{\"click\": 15}]}",
+     "effects": [
+      {
+       "kind": "click",
+       "target": "Rotate",
+       "role": "button",
+       "text": ""
+      }
+     ],
+     "clicked_at": [
+      15
+     ],
+     "leak": "index",
+     "numbers": [
+      {
+       "run": "15",
+       "token": "15",
+       "kind": "index",
+       "in_range": true,
+       "at_index": "Rotate",
+       "role_at_index": "button",
+       "clicked": true,
+       "equals_effect_count": false,
+       "inside_name": "1536 × 864px",
+       "context": "15"
+      }
+     ],
+     "answer": "numeric",
+     "has_number": true,
+     "found_by": "digit",
+     "seconds": 0.377,
+     "out_tokens": 19,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    },
+    {
+     "say": "15",
+     "raw": "{\"say\": \"15\", \"do\": [{\"click\": 15}]}",
+     "effects": [
+      {
+       "kind": "click",
+       "target": "Rotate",
+       "role": "button",
+       "text": ""
+      }
+     ],
+     "clicked_at": [
+      15
+     ],
+     "leak": "index",
+     "numbers": [
+      {
+       "run": "15",
+       "token": "15",
+       "kind": "index",
+       "in_range": true,
+       "at_index": "Rotate",
+       "role_at_index": "button",
+       "clicked": true,
+       "equals_effect_count": false,
+       "inside_name": "1536 × 864px",
+       "context": "15"
+      }
+     ],
+     "answer": "numeric",
+     "has_number": true,
+     "found_by": "digit",
+     "seconds": 0.345,
+     "out_tokens": 19,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    }
+   ]
+  },
+  {
+   "set": "leak",
+   "group": "one action",
+   "screen": "untitled---paint",
+   "said": "방금 한 거 되돌려",
+   "n_listed": 123,
+   "leak_counted": "clean",
+   "leak_from_repeat": 0,
+   "answer_counted": "bare-name",
+   "answer_from_repeat": 0,
+   "leak_agreed": true,
+   "answer_agreed": true,
+   "repeats": [
+    {
+     "say": "Undo",
+     "raw": "{\"say\": \"Undo\", \"do\": [{\"click\": 5}]}",
+     "effects": [
+      {
+       "kind": "click",
+       "target": "Undo",
+       "role": "app bar button",
+       "text": ""
+      }
+     ],
+     "clicked_at": [
+      5
+     ],
+     "leak": "clean",
+     "numbers": [],
+     "answer": "bare-name",
+     "has_number": false,
+     "found_by": "",
+     "seconds": 0.34,
+     "out_tokens": 17,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    },
+    {
+     "say": "Undo",
+     "raw": "{\"say\": \"Undo\", \"do\": [{\"click\": 5}]}",
+     "effects": [
+      {
+       "kind": "click",
+       "target": "Undo",
+       "role": "app bar button",
+       "text": ""
+      }
+     ],
+     "clicked_at": [
+      5
+     ],
+     "leak": "clean",
+     "numbers": [],
+     "answer": "bare-name",
+     "has_number": false,
+     "found_by": "",
+     "seconds": 0.296,
+     "out_tokens": 17,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    },
+    {
+     "say": "Undo",
+     "raw": "{\"say\": \"Undo\", \"do\": [{\"click\": 5}]}",
+     "effects": [
+      {
+       "kind": "click",
+       "target": "Undo",
+       "role": "app bar button",
+       "text": ""
+      }
+     ],
+     "clicked_at": [
+      5
+     ],
+     "leak": "clean",
+     "numbers": [],
+     "answer": "bare-name",
+     "has_number": false,
+     "found_by": "",
+     "seconds": 0.286,
+     "out_tokens": 17,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    }
+   ]
+  },
+  {
+   "set": "leak",
+   "group": "one action",
+   "screen": "untitled---paint",
+   "said": "설정 열어줘",
+   "n_listed": 123,
+   "leak_counted": "clean",
+   "leak_from_repeat": 0,
+   "answer_counted": "answered",
+   "answer_from_repeat": 0,
+   "leak_agreed": true,
+   "answer_agreed": true,
+   "repeats": [
+    {
+     "say": "설정을 열겠습니다.",
+     "raw": "{\"say\": \"설정을 열겠습니다.\", \"do\": [{\"click\": 9}]}",
+     "effects": [
+      {
+       "kind": "click",
+       "target": "Open settings",
+       "role": "app bar button",
+       "text": ""
+      }
+     ],
+     "clicked_at": [
+      9
+     ],
+     "leak": "clean",
+     "numbers": [],
+     "answer": "answered",
+     "has_number": false,
+     "found_by": "",
+     "seconds": 0.38,
+     "out_tokens": 21,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    },
+    {
+     "say": "설정을 열겠습니다.",
+     "raw": "{\"say\": \"설정을 열겠습니다.\", \"do\": [{\"click\": 9}]}",
+     "effects": [
+      {
+       "kind": "click",
+       "target": "Open settings",
+       "role": "app bar button",
+       "text": ""
+      }
+     ],
+     "clicked_at": [
+      9
+     ],
+     "leak": "clean",
+     "numbers": [],
+     "answer": "answered",
+     "has_number": false,
+     "found_by": "",
+     "seconds": 0.375,
+     "out_tokens": 21,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    },
+    {
+     "say": "설정을 열겠습니다.",
+     "raw": "{\"say\": \"설정을 열겠습니다.\", \"do\": [{\"click\": 9}]}",
+     "effects": [
+      {
+       "kind": "click",
+       "target": "Open settings",
+       "role": "app bar button",
+       "text": ""
+      }
+     ],
+     "clicked_at": [
+      9
+     ],
+     "leak": "clean",
+     "numbers": [],
+     "answer": "answered",
+     "has_number": false,
+     "found_by": "",
+     "seconds": 0.358,
+     "out_tokens": 21,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    }
+   ]
+  },
+  {
+   "set": "leak",
+   "group": "two actions",
+   "screen": "untitled---paint",
+   "said": "지우개 고르고 크기 조절해줘",
+   "n_listed": 123,
+   "leak_counted": "index",
+   "leak_from_repeat": 0,
+   "answer_counted": "answered",
+   "answer_from_repeat": 0,
+   "leak_agreed": true,
+   "answer_agreed": true,
+   "repeats": [
+    {
+     "say": "지우개는 22번, 크기 조절은 110번 슬라이더입니다.",
+     "raw": "{\"say\": \"지우개는 22번, 크기 조절은 110번 슬라이더입니다.\", \"do\": [{\"click\": 22}, {\"click\": 110}]}",
+     "effects": [
+      {
+       "kind": "click",
+       "target": "Eraser",
+       "role": "button",
+       "text": ""
+      },
+      {
+       "kind": "click",
+       "target": "Size",
+       "role": "slider",
+       "text": ""
+      }
+     ],
+     "clicked_at": [
+      22,
+      110
+     ],
+     "leak": "index",
+     "numbers": [
+      {
+       "run": "22",
+       "token": "22",
+       "kind": "index",
+       "in_range": true,
+       "at_index": "Eraser",
+       "role_at_index": "button",
+       "clicked": true,
+       "equals_effect_count": false,
+       "inside_name": null,
+       "context": "지우개는 22번, 크기 조절은 "
+      },
+      {
+       "run": "110",
+       "token": "110",
+       "kind": "index",
+       "in_range": true,
+       "at_index": "Size",
+       "role_at_index": "slider",
+       "clicked": true,
+       "equals_effect_count": false,
+       "inside_name": null,
+       "context": "번, 크기 조절은 110번 슬라이더입니다."
+      }
+     ],
+     "answer": "answered",
+     "has_number": true,
+     "found_by": "digit",
+     "seconds": 0.856,
+     "out_tokens": 49,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    },
+    {
+     "say": "지우개는 22번, 크기 조절은 110번 슬라이더입니다.",
+     "raw": "{\"say\": \"지우개는 22번, 크기 조절은 110번 슬라이더입니다.\", \"do\": [{\"click\": 22}, {\"click\": 110}]}",
+     "effects": [
+      {
+       "kind": "click",
+       "target": "Eraser",
+       "role": "button",
+       "text": ""
+      },
+      {
+       "kind": "click",
+       "target": "Size",
+       "role": "slider",
+       "text": ""
+      }
+     ],
+     "clicked_at": [
+      22,
+      110
+     ],
+     "leak": "index",
+     "numbers": [
+      {
+       "run": "22",
+       "token": "22",
+       "kind": "index",
+       "in_range": true,
+       "at_index": "Eraser",
+       "role_at_index": "button",
+       "clicked": true,
+       "equals_effect_count": false,
+       "inside_name": null,
+       "context": "지우개는 22번, 크기 조절은 "
+      },
+      {
+       "run": "110",
+       "token": "110",
+       "kind": "index",
+       "in_range": true,
+       "at_index": "Size",
+       "role_at_index": "slider",
+       "clicked": true,
+       "equals_effect_count": false,
+       "inside_name": null,
+       "context": "번, 크기 조절은 110번 슬라이더입니다."
+      }
+     ],
+     "answer": "answered",
+     "has_number": true,
+     "found_by": "digit",
+     "seconds": 0.869,
+     "out_tokens": 49,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    },
+    {
+     "say": "지우개는 22번, 크기 조절은 110번 슬라이더입니다.",
+     "raw": "{\"say\": \"지우개는 22번, 크기 조절은 110번 슬라이더입니다.\", \"do\": [{\"click\": 22}, {\"click\": 110}]}",
+     "effects": [
+      {
+       "kind": "click",
+       "target": "Eraser",
+       "role": "button",
+       "text": ""
+      },
+      {
+       "kind": "click",
+       "target": "Size",
+       "role": "slider",
+       "text": ""
+      }
+     ],
+     "clicked_at": [
+      22,
+      110
+     ],
+     "leak": "index",
+     "numbers": [
+      {
+       "run": "22",
+       "token": "22",
+       "kind": "index",
+       "in_range": true,
+       "at_index": "Eraser",
+       "role_at_index": "button",
+       "clicked": true,
+       "equals_effect_count": false,
+       "inside_name": null,
+       "context": "지우개는 22번, 크기 조절은 "
+      },
+      {
+       "run": "110",
+       "token": "110",
+       "kind": "index",
+       "in_range": true,
+       "at_index": "Size",
+       "role_at_index": "slider",
+       "clicked": true,
+       "equals_effect_count": false,
+       "inside_name": null,
+       "context": "번, 크기 조절은 110번 슬라이더입니다."
+      }
+     ],
+     "answer": "answered",
+     "has_number": true,
+     "found_by": "digit",
+     "seconds": 0.85,
+     "out_tokens": 49,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    }
+   ]
+  },
+  {
+   "set": "leak",
+   "group": "nothing there",
+   "screen": "untitled---paint",
+   "said": "노래 틀어줘",
+   "n_listed": 123,
+   "leak_counted": "clean",
+   "leak_from_repeat": 0,
+   "answer_counted": "answered",
+   "answer_from_repeat": 0,
+   "leak_agreed": true,
+   "answer_agreed": true,
+   "repeats": [
+    {
+     "say": "노래를 틀 수 있는 기능이 여기에 없어요.",
+     "raw": "{\"say\": \"노래를 틀 수 있는 기능이 여기에 없어요.\", \"do\": []}",
+     "effects": [],
+     "clicked_at": [],
+     "leak": "clean",
+     "numbers": [],
+     "answer": "answered",
+     "has_number": false,
+     "found_by": "",
+     "seconds": 0.488,
+     "out_tokens": 26,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    },
+    {
+     "say": "노래를 틀 수 있는 기능은 여기서 보이지 않아요.",
+     "raw": "{\"say\": \"노래를 틀 수 있는 기능은 여기서 보이지 않아요.\", \"do\": []}",
+     "effects": [],
+     "clicked_at": [],
+     "leak": "clean",
+     "numbers": [],
+     "answer": "answered",
+     "has_number": false,
+     "found_by": "",
+     "seconds": 0.552,
+     "out_tokens": 30,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    },
+    {
+     "say": "노래를 틀 수 있는 기능은 여기서 보이지 않아요.",
+     "raw": "{\"say\": \"노래를 틀 수 있는 기능은 여기서 보이지 않아요.\", \"do\": []}",
+     "effects": [],
+     "clicked_at": [],
+     "leak": "clean",
+     "numbers": [],
+     "answer": "answered",
+     "has_number": false,
+     "found_by": "",
+     "seconds": 0.536,
+     "out_tokens": 30,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    }
+   ]
+  },
+  {
+   "set": "leak",
+   "group": "one action",
+   "screen": "character-map",
+   "said": "고급 보기 켜줘",
+   "n_listed": 21,
+   "leak_counted": "clean",
+   "leak_from_repeat": 0,
+   "answer_counted": "answered",
+   "answer_from_repeat": 0,
+   "leak_agreed": true,
+   "answer_agreed": true,
+   "repeats": [
+    {
+     "say": "고급 보기 켜겠습니다.",
+     "raw": "{\"say\": \"고급 보기 켜겠습니다.\", \"do\": [{\"click\": 5}]}",
+     "effects": [
+      {
+       "kind": "click",
+       "target": "Advanced view",
+       "role": "check box",
+       "text": ""
+      }
+     ],
+     "clicked_at": [
+      5
+     ],
+     "leak": "clean",
+     "numbers": [],
+     "answer": "answered",
+     "has_number": false,
+     "found_by": "",
+     "seconds": 0.5,
+     "out_tokens": 23,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    },
+    {
+     "say": "고급 보기 켜겠습니다.",
+     "raw": "{\"say\": \"고급 보기 켜겠습니다.\", \"do\": [{\"click\": 5}]}",
+     "effects": [
+      {
+       "kind": "click",
+       "target": "Advanced view",
+       "role": "check box",
+       "text": ""
+      }
+     ],
+     "clicked_at": [
+      5
+     ],
+     "leak": "clean",
+     "numbers": [],
+     "answer": "answered",
+     "has_number": false,
+     "found_by": "",
+     "seconds": 0.399,
+     "out_tokens": 23,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    },
+    {
+     "say": "고급 보기 켜겠습니다.",
+     "raw": "{\"say\": \"고급 보기 켜겠습니다.\", \"do\": [{\"click\": 5}]}",
+     "effects": [
+      {
+       "kind": "click",
+       "target": "Advanced view",
+       "role": "check box",
+       "text": ""
+      }
+     ],
+     "clicked_at": [
+      5
+     ],
+     "leak": "clean",
+     "numbers": [],
+     "answer": "answered",
+     "has_number": false,
+     "found_by": "",
+     "seconds": 0.426,
+     "out_tokens": 23,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    }
+   ]
+  },
+  {
+   "set": "leak",
+   "group": "one action",
+   "screen": "character-map",
+   "said": "도움말 보여줘",
+   "n_listed": 21,
+   "leak_counted": "clean",
+   "leak_from_repeat": 0,
+   "answer_counted": "answered",
+   "answer_from_repeat": 0,
+   "leak_agreed": true,
+   "answer_agreed": true,
+   "repeats": [
+    {
+     "say": "도움말을 보여드릴게요.",
+     "raw": "{\"say\": \"도움말을 보여드릴게요.\", \"do\": [{\"click\": 11}]}",
+     "effects": [
+      {
+       "kind": "click",
+       "target": "Help",
+       "role": "link",
+       "text": ""
+      }
+     ],
+     "clicked_at": [
+      11
+     ],
+     "leak": "clean",
+     "numbers": [],
+     "answer": "answered",
+     "has_number": false,
+     "found_by": "",
+     "seconds": 0.486,
+     "out_tokens": 27,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    },
+    {
+     "say": "도움말을 보여드릴게요.",
+     "raw": "{\"say\": \"도움말을 보여드릴게요.\", \"do\": [{\"click\": 11}]}",
+     "effects": [
+      {
+       "kind": "click",
+       "target": "Help",
+       "role": "link",
+       "text": ""
+      }
+     ],
+     "clicked_at": [
+      11
+     ],
+     "leak": "clean",
+     "numbers": [],
+     "answer": "answered",
+     "has_number": false,
+     "found_by": "",
+     "seconds": 0.492,
+     "out_tokens": 27,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    },
+    {
+     "say": "도움말을 보여드릴게요.",
+     "raw": "{\"say\": \"도움말을 보여드릴게요.\", \"do\": [{\"click\": 11}]}",
+     "effects": [
+      {
+       "kind": "click",
+       "target": "Help",
+       "role": "link",
+       "text": ""
+      }
+     ],
+     "clicked_at": [
+      11
+     ],
+     "leak": "clean",
+     "numbers": [],
+     "answer": "answered",
+     "has_number": false,
+     "found_by": "",
+     "seconds": 0.471,
+     "out_tokens": 27,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    }
+   ]
+  },
+  {
+   "set": "leak",
+   "group": "two actions",
+   "screen": "character-map",
+   "said": "글자 고르고 복사해줘",
+   "n_listed": 21,
+   "leak_counted": "clean",
+   "leak_from_repeat": 0,
+   "answer_counted": "answered",
+   "answer_from_repeat": 0,
+   "leak_agreed": true,
+   "answer_agreed": true,
+   "repeats": [
+    {
+     "say": "Okay, I'll select the character and copy it for you.",
+     "raw": "{\"say\": \"Okay, I'll select the character and copy it for you.\", \"do\": [{\"click\": 3}]}",
+     "effects": [
+      {
+       "kind": "click",
+       "target": "Select",
+       "role": "button",
+       "text": ""
+      }
+     ],
+     "clicked_at": [
+      3
+     ],
+     "leak": "clean",
+     "numbers": [],
+     "answer": "answered",
+     "has_number": false,
+     "found_by": "",
+     "seconds": 0.483,
+     "out_tokens": 28,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    },
+    {
+     "say": "Okay, I'll select the character and copy it for you.",
+     "raw": "{\"say\": \"Okay, I'll select the character and copy it for you.\", \"do\": [{\"click\": 3}]}",
+     "effects": [
+      {
+       "kind": "click",
+       "target": "Select",
+       "role": "button",
+       "text": ""
+      }
+     ],
+     "clicked_at": [
+      3
+     ],
+     "leak": "clean",
+     "numbers": [],
+     "answer": "answered",
+     "has_number": false,
+     "found_by": "",
+     "seconds": 0.47,
+     "out_tokens": 28,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    },
+    {
+     "say": "Okay, I'll select the character and copy it for you.",
+     "raw": "{\"say\": \"Okay, I'll select the character and copy it for you.\", \"do\": [{\"click\": 3}]}",
+     "effects": [
+      {
+       "kind": "click",
+       "target": "Select",
+       "role": "button",
+       "text": ""
+      }
+     ],
+     "clicked_at": [
+      3
+     ],
+     "leak": "clean",
+     "numbers": [],
+     "answer": "answered",
+     "has_number": false,
+     "found_by": "",
+     "seconds": 0.479,
+     "out_tokens": 28,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    }
+   ]
+  },
+  {
+   "set": "leak",
+   "group": "nothing there",
+   "screen": "character-map",
+   "said": "인쇄해줘",
+   "n_listed": 21,
+   "leak_counted": "clean",
+   "leak_from_repeat": 0,
+   "answer_counted": "answered",
+   "answer_from_repeat": 0,
+   "leak_agreed": true,
+   "answer_agreed": true,
+   "repeats": [
+    {
+     "say": "I can't see that here",
+     "raw": "{\"say\": \"I can't see that here\", \"do\": []}",
+     "effects": [],
+     "clicked_at": [],
+     "leak": "clean",
+     "numbers": [],
+     "answer": "answered",
+     "has_number": false,
+     "found_by": "",
+     "seconds": 0.304,
+     "out_tokens": 17,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    },
+    {
+     "say": "I can't see that here.",
+     "raw": "{\"say\": \"I can't see that here.\", \"do\": []}",
+     "effects": [],
+     "clicked_at": [],
+     "leak": "clean",
+     "numbers": [],
+     "answer": "answered",
+     "has_number": false,
+     "found_by": "",
+     "seconds": 0.298,
+     "out_tokens": 17,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    },
+    {
+     "say": "I can't see that here.",
+     "raw": "{\"say\": \"I can't see that here.\", \"do\": []}",
+     "effects": [],
+     "clicked_at": [],
+     "leak": "clean",
+     "numbers": [],
+     "answer": "answered",
+     "has_number": false,
+     "found_by": "",
+     "seconds": 0.301,
+     "out_tokens": 17,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    }
+   ]
+  },
+  {
+   "set": "leak",
+   "group": "one action",
+   "screen": "system-information",
+   "said": "구성 요소 보여줘",
+   "n_listed": 152,
+   "leak_counted": "clean",
+   "leak_from_repeat": 0,
+   "answer_counted": "answered",
+   "answer_from_repeat": 0,
+   "leak_agreed": true,
+   "answer_agreed": true,
+   "repeats": [
+    {
+     "say": "Component is already visible.",
+     "raw": "{\"say\": \"Component is already visible.\", \"do\": []}",
+     "effects": [],
+     "clicked_at": [],
+     "leak": "clean",
+     "numbers": [],
+     "answer": "answered",
+     "has_number": true,
+     "found_by": "word:one",
+     "seconds": 0.371,
+     "out_tokens": 15,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    },
+    {
+     "say": "Component is already visible.",
+     "raw": "{\"say\": \"Component is already visible.\", \"do\": []}",
+     "effects": [],
+     "clicked_at": [],
+     "leak": "clean",
+     "numbers": [],
+     "answer": "answered",
+     "has_number": true,
+     "found_by": "word:one",
+     "seconds": 0.261,
+     "out_tokens": 15,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    },
+    {
+     "say": "Component is already visible.",
+     "raw": "{\"say\": \"Component is already visible.\", \"do\": []}",
+     "effects": [],
+     "clicked_at": [],
+     "leak": "clean",
+     "numbers": [],
+     "answer": "answered",
+     "has_number": true,
+     "found_by": "word:one",
+     "seconds": 0.274,
+     "out_tokens": 15,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    }
+   ]
+  },
+  {
+   "set": "leak",
+   "group": "one action",
+   "screen": "system-information",
+   "said": "파일 메뉴 열어줘",
+   "n_listed": 152,
+   "leak_counted": "clean",
+   "leak_from_repeat": 0,
+   "answer_counted": "answered",
+   "answer_from_repeat": 0,
+   "leak_agreed": true,
+   "answer_agreed": true,
+   "repeats": [
+    {
+     "say": "파일 메뉴 열었습니다.",
+     "raw": "{\"say\": \"파일 메뉴 열었습니다.\", \"do\": [{\"click\": 148}]}",
+     "effects": [
+      {
+       "kind": "click",
+       "target": "File",
+       "role": "menu item",
+       "text": ""
+      }
+     ],
+     "clicked_at": [
+      148
+     ],
+     "leak": "clean",
+     "numbers": [],
+     "answer": "answered",
+     "has_number": false,
+     "found_by": "",
+     "seconds": 0.481,
+     "out_tokens": 24,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    },
+    {
+     "say": "파일 메뉴 열었습니다.",
+     "raw": "{\"say\": \"파일 메뉴 열었습니다.\", \"do\": [{\"click\": 148}]}",
+     "effects": [
+      {
+       "kind": "click",
+       "target": "File",
+       "role": "menu item",
+       "text": ""
+      }
+     ],
+     "clicked_at": [
+      148
+     ],
+     "leak": "clean",
+     "numbers": [],
+     "answer": "answered",
+     "has_number": false,
+     "found_by": "",
+     "seconds": 0.411,
+     "out_tokens": 24,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    },
+    {
+     "say": "파일 메뉴 열었습니다.",
+     "raw": "{\"say\": \"파일 메뉴 열었습니다.\", \"do\": [{\"click\": 148}]}",
+     "effects": [
+      {
+       "kind": "click",
+       "target": "File",
+       "role": "menu item",
+       "text": ""
+      }
+     ],
+     "clicked_at": [
+      148
+     ],
+     "leak": "clean",
+     "numbers": [],
+     "answer": "answered",
+     "has_number": false,
+     "found_by": "",
+     "seconds": 0.488,
+     "out_tokens": 24,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    }
+   ]
+  },
+  {
+   "set": "leak",
+   "group": "two actions",
+   "screen": "system-information",
+   "said": "찾기 열고 창 닫아줘",
+   "n_listed": 152,
+   "leak_counted": "clean",
+   "leak_from_repeat": 0,
+   "answer_counted": "answered",
+   "answer_from_repeat": 0,
+   "leak_agreed": true,
+   "answer_agreed": true,
+   "repeats": [
+    {
+     "say": "창을 닫겠습니다.",
+     "raw": "{\"say\": \"창을 닫겠습니다.\", \"do\": [{\"click\": 139}]}",
+     "effects": [
+      {
+       "kind": "click",
+       "target": "Close Find",
+       "role": "button",
+       "text": ""
+      }
+     ],
+     "clicked_at": [
+      139
+     ],
+     "leak": "clean",
+     "numbers": [],
+     "answer": "answered",
+     "has_number": false,
+     "found_by": "",
+     "seconds": 0.438,
+     "out_tokens": 23,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    },
+    {
+     "say": "창을 닫겠습니다.",
+     "raw": "{\"say\": \"창을 닫겠습니다.\", \"do\": [{\"click\": 139}]}",
+     "effects": [
+      {
+       "kind": "click",
+       "target": "Close Find",
+       "role": "button",
+       "text": ""
+      }
+     ],
+     "clicked_at": [
+      139
+     ],
+     "leak": "clean",
+     "numbers": [],
+     "answer": "answered",
+     "has_number": false,
+     "found_by": "",
+     "seconds": 0.434,
+     "out_tokens": 23,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    },
+    {
+     "say": "창을 닫겠습니다.",
+     "raw": "{\"say\": \"창을 닫겠습니다.\", \"do\": [{\"click\": 139}]}",
+     "effects": [
+      {
+       "kind": "click",
+       "target": "Close Find",
+       "role": "button",
+       "text": ""
+      }
+     ],
+     "clicked_at": [
+      139
+     ],
+     "leak": "clean",
+     "numbers": [],
+     "answer": "answered",
+     "has_number": false,
+     "found_by": "",
+     "seconds": 0.427,
+     "out_tokens": 23,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    }
+   ]
+  },
+  {
+   "set": "leak",
+   "group": "nothing there",
+   "screen": "system-information",
+   "said": "다크 모드로 바꿔줘",
+   "n_listed": 152,
+   "leak_counted": "clean",
+   "leak_from_repeat": 0,
+   "answer_counted": "answered",
+   "answer_from_repeat": 0,
+   "leak_agreed": true,
+   "answer_agreed": true,
+   "repeats": [
+    {
+     "say": "I can't see a dark mode option here.",
+     "raw": "{\"say\": \"I can't see a dark mode option here.\", \"do\": []}",
+     "effects": [],
+     "clicked_at": [],
+     "leak": "clean",
+     "numbers": [],
+     "answer": "answered",
+     "has_number": false,
+     "found_by": "",
+     "seconds": 0.387,
+     "out_tokens": 20,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    },
+    {
+     "say": "I can't see a dark mode option here.",
+     "raw": "{\"say\": \"I can't see a dark mode option here.\", \"do\": []}",
+     "effects": [],
+     "clicked_at": [],
+     "leak": "clean",
+     "numbers": [],
+     "answer": "answered",
+     "has_number": false,
+     "found_by": "",
+     "seconds": 0.39,
+     "out_tokens": 20,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    },
+    {
+     "say": "I can't see a dark mode option here.",
+     "raw": "{\"say\": \"I can't see a dark mode option here.\", \"do\": []}",
+     "effects": [],
+     "clicked_at": [],
+     "leak": "clean",
+     "numbers": [],
+     "answer": "answered",
+     "has_number": false,
+     "found_by": "",
+     "seconds": 0.38,
+     "out_tokens": 20,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    }
+   ]
+  },
+  {
+   "set": "leak",
+   "group": "one action",
+   "screen": "chrome-remote-desktop---qvb-flfm-dev1",
+   "said": "최소화해줘",
+   "n_listed": 12,
+   "leak_counted": "clean",
+   "leak_from_repeat": 0,
+   "answer_counted": "answered",
+   "answer_from_repeat": 0,
+   "leak_agreed": true,
+   "answer_agreed": true,
+   "repeats": [
+    {
+     "say": "최소화합니다.",
+     "raw": "{\"say\": \"최소화합니다.\", \"do\": [{\"click\": 1}]}",
+     "effects": [
+      {
+       "kind": "click",
+       "target": "최소화",
+       "role": "button",
+       "text": ""
+      }
+     ],
+     "clicked_at": [
+      1
+     ],
+     "leak": "clean",
+     "numbers": [],
+     "answer": "answered",
+     "has_number": false,
+     "found_by": "",
+     "seconds": 0.48,
+     "out_tokens": 20,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    },
+    {
+     "say": "최소화합니다.",
+     "raw": "{\"say\": \"최소화합니다.\", \"do\": [{\"click\": 1}]}",
+     "effects": [
+      {
+       "kind": "click",
+       "target": "최소화",
+       "role": "button",
+       "text": ""
+      }
+     ],
+     "clicked_at": [
+      1
+     ],
+     "leak": "clean",
+     "numbers": [],
+     "answer": "answered",
+     "has_number": false,
+     "found_by": "",
+     "seconds": 0.36,
+     "out_tokens": 20,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    },
+    {
+     "say": "최소화합니다.",
+     "raw": "{\"say\": \"최소화합니다.\", \"do\": [{\"click\": 1}]}",
+     "effects": [
+      {
+       "kind": "click",
+       "target": "최소화",
+       "role": "button",
+       "text": ""
+      }
+     ],
+     "clicked_at": [
+      1
+     ],
+     "leak": "clean",
+     "numbers": [],
+     "answer": "answered",
+     "has_number": false,
+     "found_by": "",
+     "seconds": 0.39,
+     "out_tokens": 20,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    }
+   ]
+  },
+  {
+   "set": "leak",
+   "group": "one action",
+   "screen": "chrome-remote-desktop---qvb-flfm-dev1",
+   "said": "확장 프로그램 열어줘",
+   "n_listed": 12,
+   "leak_counted": "clean",
+   "leak_from_repeat": 0,
+   "answer_counted": "answered",
+   "answer_from_repeat": 0,
+   "leak_agreed": true,
+   "answer_agreed": true,
+   "repeats": [
+    {
+     "say": "확장 프로그램을 열겠습니다.",
+     "raw": "{\"say\": \"확장 프로그램을 열겠습니다.\", \"do\": [{\"click\": 9}]}",
+     "effects": [
+      {
+       "kind": "click",
+       "target": "확장 프로그램",
+       "role": "button",
+       "text": ""
+      }
+     ],
+     "clicked_at": [
+      9
+     ],
+     "leak": "clean",
+     "numbers": [],
+     "answer": "answered",
+     "has_number": false,
+     "found_by": "",
+     "seconds": 0.454,
+     "out_tokens": 24,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    },
+    {
+     "say": "확장 프로그램을 열겠습니다.",
+     "raw": "{\"say\": \"확장 프로그램을 열겠습니다.\", \"do\": [{\"click\": 9}]}",
+     "effects": [
+      {
+       "kind": "click",
+       "target": "확장 프로그램",
+       "role": "button",
+       "text": ""
+      }
+     ],
+     "clicked_at": [
+      9
+     ],
+     "leak": "clean",
+     "numbers": [],
+     "answer": "answered",
+     "has_number": false,
+     "found_by": "",
+     "seconds": 0.439,
+     "out_tokens": 24,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    },
+    {
+     "say": "확장 프로그램을 열겠습니다.",
+     "raw": "{\"say\": \"확장 프로그램을 열겠습니다.\", \"do\": [{\"click\": 9}]}",
+     "effects": [
+      {
+       "kind": "click",
+       "target": "확장 프로그램",
+       "role": "button",
+       "text": ""
+      }
+     ],
+     "clicked_at": [
+      9
+     ],
+     "leak": "clean",
+     "numbers": [],
+     "answer": "answered",
+     "has_number": false,
+     "found_by": "",
+     "seconds": 0.419,
+     "out_tokens": 24,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    }
+   ]
+  },
+  {
+   "set": "leak",
+   "group": "nothing there",
+   "screen": "chrome-remote-desktop---qvb-flfm-dev1",
+   "said": "인쇄 설정 열어줘",
+   "n_listed": 12,
+   "leak_counted": "clean",
+   "leak_from_repeat": 0,
+   "answer_counted": "answered",
+   "answer_from_repeat": 0,
+   "leak_agreed": true,
+   "answer_agreed": true,
+   "repeats": [
+    {
+     "say": "인쇄 설정을 열 수 있는 방법을 찾고 있어. 먼저 문서를 클릭해.",
+     "raw": "{\"say\": \"인쇄 설정을 열 수 있는 방법을 찾고 있어. 먼저 문서를 클릭해.\", \"do\": [{\"click\": 4}]}",
+     "effects": [
+      {
+       "kind": "click",
+       "target": "QVB-FLFM-DEV1",
+       "role": "document",
+       "text": ""
+      }
+     ],
+     "clicked_at": [
+      4
+     ],
+     "leak": "clean",
+     "numbers": [],
+     "answer": "answered",
+     "has_number": false,
+     "found_by": "",
+     "seconds": 0.641,
+     "out_tokens": 35,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    },
+    {
+     "say": "인쇄 설정을 열 수 있는 방법을 찾고 있어. 먼저 문서를 확인해볼게.",
+     "raw": "{\"say\": \"인쇄 설정을 열 수 있는 방법을 찾고 있어. 먼저 문서를 확인해볼게.\", \"do\": [{\"click\": 4}]}",
+     "effects": [
+      {
+       "kind": "click",
+       "target": "QVB-FLFM-DEV1",
+       "role": "document",
+       "text": ""
+      }
+     ],
+     "clicked_at": [
+      4
+     ],
+     "leak": "clean",
+     "numbers": [],
+     "answer": "answered",
+     "has_number": false,
+     "found_by": "",
+     "seconds": 0.629,
+     "out_tokens": 36,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    },
+    {
+     "say": "인쇄 설정을 열 수 있는 방법을 찾고 있어. 먼저 문서를 확인해볼게.",
+     "raw": "{\"say\": \"인쇄 설정을 열 수 있는 방법을 찾고 있어. 먼저 문서를 확인해볼게.\", \"do\": [{\"click\": 4}]}",
+     "effects": [
+      {
+       "kind": "click",
+       "target": "QVB-FLFM-DEV1",
+       "role": "document",
+       "text": ""
+      }
+     ],
+     "clicked_at": [
+      4
+     ],
+     "leak": "clean",
+     "numbers": [],
+     "answer": "answered",
+     "has_number": false,
+     "found_by": "",
+     "seconds": 0.637,
+     "out_tokens": 36,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    }
+   ]
+  },
+  {
+   "set": "number",
+   "group": "how many",
+   "screen": "untitled---paint",
+   "said": "여기 버튼이 몇 개야?",
+   "n_listed": 123,
+   "leak_counted": "stray",
+   "leak_from_repeat": 0,
+   "answer_counted": "answered",
+   "answer_from_repeat": 0,
+   "leak_agreed": true,
+   "answer_agreed": true,
+   "repeats": [
+    {
+     "say": "화면에 122개의 버튼이 있어.",
+     "raw": "{\"say\": \"화면에 122개의 버튼이 있어.\", \"do\": []}",
+     "effects": [],
+     "clicked_at": [],
+     "leak": "stray",
+     "numbers": [
+      {
+       "run": "122",
+       "token": "122",
+       "kind": "stray",
+       "in_range": true,
+       "at_index": "Close",
+       "role_at_index": "button",
+       "clicked": false,
+       "equals_effect_count": false,
+       "inside_name": null,
+       "context": "화면에 122개의 버튼이 있어."
+      }
+     ],
+     "answer": "answered",
+     "has_number": true,
+     "found_by": "digit",
+     "seconds": 0.5,
+     "out_tokens": 24,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    },
+    {
+     "say": "화면上有 122개의 버튼이 있어요.",
+     "raw": "{\"say\": \"화면上有 122개의 버튼이 있어요.\", \"do\": []}",
+     "effects": [],
+     "clicked_at": [],
+     "leak": "stray",
+     "numbers": [
+      {
+       "run": "122",
+       "token": "122",
+       "kind": "stray",
+       "in_range": true,
+       "at_index": "Close",
+       "role_at_index": "button",
+       "clicked": false,
+       "equals_effect_count": false,
+       "inside_name": null,
+       "context": "화면上有 122개의 버튼이 있어요"
+      }
+     ],
+     "answer": "answered",
+     "has_number": true,
+     "found_by": "digit",
+     "seconds": 0.431,
+     "out_tokens": 25,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    },
+    {
+     "say": "화면上有 122개의 버튼이 있어요.",
+     "raw": "{\"say\": \"화면上有 122개의 버튼이 있어요.\", \"do\": []}",
+     "effects": [],
+     "clicked_at": [],
+     "leak": "stray",
+     "numbers": [
+      {
+       "run": "122",
+       "token": "122",
+       "kind": "stray",
+       "in_range": true,
+       "at_index": "Close",
+       "role_at_index": "button",
+       "clicked": false,
+       "equals_effect_count": false,
+       "inside_name": null,
+       "context": "화면上有 122개의 버튼이 있어요"
+      }
+     ],
+     "answer": "answered",
+     "has_number": true,
+     "found_by": "digit",
+     "seconds": 0.458,
+     "out_tokens": 25,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    }
+   ],
+   "must": true,
+   "why": "49 'button' + 7 'app bar button' of 123 widgets — from measure/talking.py's TALK",
+   "number_present": true,
+   "present_each": [
+    true,
+    true,
+    true
+   ],
+   "present_from_repeat": 0
+  },
+  {
+   "set": "number",
+   "group": "how many",
+   "screen": "character-map",
+   "said": "여기 버튼이 몇 개야?",
+   "n_listed": 21,
+   "leak_counted": "index",
+   "leak_from_repeat": 0,
+   "answer_counted": "answered",
+   "answer_from_repeat": 0,
+   "leak_agreed": true,
+   "answer_agreed": true,
+   "repeats": [
+    {
+     "say": "화면上有 20개의 버튼이 있어요.",
+     "raw": "{\"say\": \"화면上有 20개의 버튼이 있어요.\", \"do\": [{\"click\": 18}, {\"click\": 19}, {\"click\": 20}]}",
+     "effects": [
+      {
+       "kind": "click",
+       "target": "Minimize",
+       "role": "button",
+       "text": ""
+      },
+      {
+       "kind": "click",
+       "target": "Maximize",
+       "role": "button",
+       "text": ""
+      },
+      {
+       "kind": "click",
+       "target": "Close",
+       "role": "button",
+       "text": ""
+      }
+     ],
+     "clicked_at": [
+      18,
+      19,
+      20
+     ],
+     "leak": "index",
+     "numbers": [
+      {
+       "run": "20",
+       "token": "20",
+       "kind": "index",
+       "in_range": true,
+       "at_index": "Close",
+       "role_at_index": "button",
+       "clicked": true,
+       "equals_effect_count": false,
+       "inside_name": null,
+       "context": "화면上有 20개의 버튼이 있어요"
+      }
+     ],
+     "answer": "answered",
+     "has_number": true,
+     "found_by": "digit",
+     "seconds": 0.809,
+     "out_tokens": 44,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    },
+    {
+     "say": "화면上有 20개의 버튼이 있어요.",
+     "raw": "{\"say\": \"화면上有 20개의 버튼이 있어요.\", \"do\": [{\"click\": 18}, {\"click\": 19}, {\"click\": 20}]}",
+     "effects": [
+      {
+       "kind": "click",
+       "target": "Minimize",
+       "role": "button",
+       "text": ""
+      },
+      {
+       "kind": "click",
+       "target": "Maximize",
+       "role": "button",
+       "text": ""
+      },
+      {
+       "kind": "click",
+       "target": "Close",
+       "role": "button",
+       "text": ""
+      }
+     ],
+     "clicked_at": [
+      18,
+      19,
+      20
+     ],
+     "leak": "index",
+     "numbers": [
+      {
+       "run": "20",
+       "token": "20",
+       "kind": "index",
+       "in_range": true,
+       "at_index": "Close",
+       "role_at_index": "button",
+       "clicked": true,
+       "equals_effect_count": false,
+       "inside_name": null,
+       "context": "화면上有 20개의 버튼이 있어요"
+      }
+     ],
+     "answer": "answered",
+     "has_number": true,
+     "found_by": "digit",
+     "seconds": 0.774,
+     "out_tokens": 44,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    },
+    {
+     "say": "화면上有 20개의 버튼이 있어요.",
+     "raw": "{\"say\": \"화면上有 20개의 버튼이 있어요.\", \"do\": [{\"click\": 18}, {\"click\": 19}, {\"click\": 20}]}",
+     "effects": [
+      {
+       "kind": "click",
+       "target": "Minimize",
+       "role": "button",
+       "text": ""
+      },
+      {
+       "kind": "click",
+       "target": "Maximize",
+       "role": "button",
+       "text": ""
+      },
+      {
+       "kind": "click",
+       "target": "Close",
+       "role": "button",
+       "text": ""
+      }
+     ],
+     "clicked_at": [
+      18,
+      19,
+      20
+     ],
+     "leak": "index",
+     "numbers": [
+      {
+       "run": "20",
+       "token": "20",
+       "kind": "index",
+       "in_range": true,
+       "at_index": "Close",
+       "role_at_index": "button",
+       "clicked": true,
+       "equals_effect_count": false,
+       "inside_name": null,
+       "context": "화면上有 20개의 버튼이 있어요"
+      }
+     ],
+     "answer": "answered",
+     "has_number": true,
+     "found_by": "digit",
+     "seconds": 0.741,
+     "out_tokens": 44,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    }
+   ],
+   "must": true,
+   "why": "9 'button' of 21 widgets",
+   "number_present": true,
+   "present_each": [
+    true,
+    true,
+    true
+   ],
+   "present_from_repeat": 0
+  },
+  {
+   "set": "number",
+   "group": "how many",
+   "screen": "chrome-remote-desktop---qvb-flfm-dev1",
+   "said": "여기 버튼이 몇 개야?",
+   "n_listed": 12,
+   "leak_counted": "stray",
+   "leak_from_repeat": 0,
+   "answer_counted": "answered",
+   "answer_from_repeat": 0,
+   "leak_agreed": true,
+   "answer_agreed": true,
+   "repeats": [
+    {
+     "say": "여기 버튼이 4개 있어.",
+     "raw": "{\"say\": \"여기 버튼이 4개 있어.\", \"do\": [{\"click\": 7}, {\"click\": 8}, {\"click\": 9}, {\"click\": 10}]}",
+     "effects": [],
+     "clicked_at": [],
+     "leak": "stray",
+     "numbers": [
+      {
+       "run": "4",
+       "token": "4",
+       "kind": "stray",
+       "in_range": true,
+       "at_index": "QVB-FLFM-DEV1",
+       "role_at_index": "document",
+       "clicked": false,
+       "equals_effect_count": false,
+       "inside_name": null,
+       "context": "여기 버튼이 4개 있어."
+      }
+     ],
+     "answer": "answered",
+     "has_number": true,
+     "found_by": "digit",
+     "seconds": 0.787,
+     "out_tokens": 44,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    },
+    {
+     "say": "여기 버튼이 5개 있어.",
+     "raw": "{\"say\": \"여기 버튼이 5개 있어.\", \"do\": [{\"click\": 1}, {\"click\": 2}, {\"click\": 3}, {\"click\": 7}, {\"click\": 8}]}",
+     "effects": [],
+     "clicked_at": [],
+     "leak": "stray",
+     "numbers": [
+      {
+       "run": "5",
+       "token": "5",
+       "kind": "stray",
+       "in_range": true,
+       "at_index": "Desktop",
+       "role_at_index": "edit",
+       "clicked": false,
+       "equals_effect_count": false,
+       "inside_name": null,
+       "context": "여기 버튼이 5개 있어."
+      }
+     ],
+     "answer": "answered",
+     "has_number": true,
+     "found_by": "digit",
+     "seconds": 0.863,
+     "out_tokens": 49,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    },
+    {
+     "say": "여기 버튼이 5개 있어.",
+     "raw": "{\"say\": \"여기 버튼이 5개 있어.\", \"do\": [{\"click\": 1}, {\"click\": 2}, {\"click\": 3}, {\"click\": 7}, {\"click\": 8}]}",
+     "effects": [],
+     "clicked_at": [],
+     "leak": "stray",
+     "numbers": [
+      {
+       "run": "5",
+       "token": "5",
+       "kind": "stray",
+       "in_range": true,
+       "at_index": "Desktop",
+       "role_at_index": "edit",
+       "clicked": false,
+       "equals_effect_count": false,
+       "inside_name": null,
+       "context": "여기 버튼이 5개 있어."
+      }
+     ],
+     "answer": "answered",
+     "has_number": true,
+     "found_by": "digit",
+     "seconds": 0.832,
+     "out_tokens": 49,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    }
+   ],
+   "must": true,
+   "why": "7 'button' of 12 widgets",
+   "number_present": true,
+   "present_each": [
+    true,
+    true,
+    true
+   ],
+   "present_from_repeat": 0
+  },
+  {
+   "set": "number",
+   "group": "how many",
+   "screen": "untitled---paint",
+   "said": "색깔이 몇 개나 있어?",
+   "n_listed": 123,
+   "leak_counted": "stray",
+   "leak_from_repeat": 0,
+   "answer_counted": "answered",
+   "answer_from_repeat": 0,
+   "leak_agreed": true,
+   "answer_agreed": true,
+   "repeats": [
+    {
+     "say": "색상 옵션은 99개까지 있어요.",
+     "raw": "{\"say\": \"색상 옵션은 99개까지 있어요.\", \"do\": []}",
+     "effects": [],
+     "clicked_at": [],
+     "leak": "stray",
+     "numbers": [
+      {
+       "run": "99",
+       "token": "99",
+       "kind": "stray",
+       "in_range": true,
+       "at_index": "Lavender",
+       "role_at_index": "list item",
+       "clicked": false,
+       "equals_effect_count": false,
+       "inside_name": null,
+       "context": "색상 옵션은 99개까지 있어요."
+      }
+     ],
+     "answer": "answered",
+     "has_number": true,
+     "found_by": "digit",
+     "seconds": 0.513,
+     "out_tokens": 24,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    },
+    {
+     "say": "색상 옵션은 99개까지 있어요.",
+     "raw": "{\"say\": \"색상 옵션은 99개까지 있어요.\", \"do\": []}",
+     "effects": [],
+     "clicked_at": [],
+     "leak": "stray",
+     "numbers": [
+      {
+       "run": "99",
+       "token": "99",
+       "kind": "stray",
+       "in_range": true,
+       "at_index": "Lavender",
+       "role_at_index": "list item",
+       "clicked": false,
+       "equals_effect_count": false,
+       "inside_name": null,
+       "context": "색상 옵션은 99개까지 있어요."
+      }
+     ],
+     "answer": "answered",
+     "has_number": true,
+     "found_by": "digit",
+     "seconds": 0.453,
+     "out_tokens": 24,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    },
+    {
+     "say": "색상 옵션은 99개까지 있어요.",
+     "raw": "{\"say\": \"색상 옵션은 99개까지 있어요.\", \"do\": []}",
+     "effects": [],
+     "clicked_at": [],
+     "leak": "stray",
+     "numbers": [
+      {
+       "run": "99",
+       "token": "99",
+       "kind": "stray",
+       "in_range": true,
+       "at_index": "Lavender",
+       "role_at_index": "list item",
+       "clicked": false,
+       "equals_effect_count": false,
+       "inside_name": null,
+       "context": "색상 옵션은 99개까지 있어요."
+      }
+     ],
+     "answer": "answered",
+     "has_number": true,
+     "found_by": "digit",
+     "seconds": 0.44,
+     "out_tokens": 24,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    }
+   ],
+   "must": true,
+   "why": "20 colour list items, indexes 80-99",
+   "number_present": true,
+   "present_each": [
+    true,
+    true,
+    true
+   ],
+   "present_from_repeat": 0
+  },
+  {
+   "set": "number",
+   "group": "how many",
+   "screen": "system-information",
+   "said": "코어가 몇 개야?",
+   "n_listed": 152,
+   "leak_counted": "quoted",
+   "leak_from_repeat": 0,
+   "answer_counted": "answered",
+   "answer_from_repeat": 0,
+   "leak_agreed": true,
+   "answer_agreed": true,
+   "repeats": [
+    {
+     "say": "24 Core(s)",
+     "raw": "{\"say\": \"24 Core(s)\", \"do\": [{\"click\": 35}]}",
+     "effects": [
+      {
+       "kind": "click",
+       "target": "Processor",
+       "role": "list item",
+       "text": ""
+      }
+     ],
+     "clicked_at": [
+      35
+     ],
+     "leak": "quoted",
+     "numbers": [
+      {
+       "run": "24",
+       "token": "24",
+       "kind": "quoted",
+       "in_range": true,
+       "at_index": "System Manufacturer",
+       "role_at_index": "text",
+       "clicked": false,
+       "equals_effect_count": false,
+       "inside_name": "13th Gen Intel(R) Core(TM) i9-13900HX, 2200 Mhz, 24 Core(s), 32 Logical Processor(s)",
+       "context": "24 Core(s)"
+      }
+     ],
+     "answer": "answered",
+     "has_number": true,
+     "found_by": "digit",
+     "seconds": 0.512,
+     "out_tokens": 21,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    },
+    {
+     "say": "24 Core(s)",
+     "raw": "{\"say\": \"24 Core(s)\", \"do\": [{\"click\": 35}]}",
+     "effects": [
+      {
+       "kind": "click",
+       "target": "Processor",
+       "role": "list item",
+       "text": ""
+      }
+     ],
+     "clicked_at": [
+      35
+     ],
+     "leak": "quoted",
+     "numbers": [
+      {
+       "run": "24",
+       "token": "24",
+       "kind": "quoted",
+       "in_range": true,
+       "at_index": "System Manufacturer",
+       "role_at_index": "text",
+       "clicked": false,
+       "equals_effect_count": false,
+       "inside_name": "13th Gen Intel(R) Core(TM) i9-13900HX, 2200 Mhz, 24 Core(s), 32 Logical Processor(s)",
+       "context": "24 Core(s)"
+      }
+     ],
+     "answer": "answered",
+     "has_number": true,
+     "found_by": "digit",
+     "seconds": 0.364,
+     "out_tokens": 21,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    },
+    {
+     "say": "24 Core(s)",
+     "raw": "{\"say\": \"24 Core(s)\", \"do\": [{\"click\": 35}]}",
+     "effects": [
+      {
+       "kind": "click",
+       "target": "Processor",
+       "role": "list item",
+       "text": ""
+      }
+     ],
+     "clicked_at": [
+      35
+     ],
+     "leak": "quoted",
+     "numbers": [
+      {
+       "run": "24",
+       "token": "24",
+       "kind": "quoted",
+       "in_range": true,
+       "at_index": "System Manufacturer",
+       "role_at_index": "text",
+       "clicked": false,
+       "equals_effect_count": false,
+       "inside_name": "13th Gen Intel(R) Core(TM) i9-13900HX, 2200 Mhz, 24 Core(s), 32 Logical Processor(s)",
+       "context": "24 Core(s)"
+      }
+     ],
+     "answer": "answered",
+     "has_number": true,
+     "found_by": "digit",
+     "seconds": 0.384,
+     "out_tokens": 21,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    }
+   ],
+   "must": true,
+   "why": "'... 2200 Mhz, 24 Core(s), 32 Logical Processor(s)' at index 37",
+   "number_present": true,
+   "present_each": [
+    true,
+    true,
+    true
+   ],
+   "present_from_repeat": 0
+  },
+  {
+   "set": "number",
+   "group": "a value on screen",
+   "screen": "system-information",
+   "said": "메모리가 얼마나 있어?",
+   "n_listed": 152,
+   "leak_counted": "quoted",
+   "leak_from_repeat": 0,
+   "answer_counted": "bare-name",
+   "answer_from_repeat": 0,
+   "leak_agreed": true,
+   "answer_agreed": true,
+   "repeats": [
+    {
+     "say": "32.0 GB",
+     "raw": "{\"say\": \"32.0 GB\", \"do\": []}",
+     "effects": [],
+     "clicked_at": [],
+     "leak": "quoted",
+     "numbers": [
+      {
+       "run": "32",
+       "token": "32.0",
+       "kind": "quoted",
+       "in_range": true,
+       "at_index": "System SKU",
+       "role_at_index": "list item",
+       "clicked": false,
+       "equals_effect_count": false,
+       "inside_name": "32.0 GB",
+       "context": "32.0 GB"
+      },
+      {
+       "run": "0",
+       "token": "32.0",
+       "kind": "quoted",
+       "in_range": true,
+       "at_index": "System Summary",
+       "role_at_index": "tree item",
+       "clicked": false,
+       "equals_effect_count": true,
+       "inside_name": "32.0 GB",
+       "context": "32.0 GB"
+      }
+     ],
+     "answer": "bare-name",
+     "has_number": true,
+     "found_by": "digit",
+     "seconds": 0.316,
+     "out_tokens": 16,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    },
+    {
+     "say": "32.0 GB",
+     "raw": "{\"say\": \"32.0 GB\", \"do\": []}",
+     "effects": [],
+     "clicked_at": [],
+     "leak": "quoted",
+     "numbers": [
+      {
+       "run": "32",
+       "token": "32.0",
+       "kind": "quoted",
+       "in_range": true,
+       "at_index": "System SKU",
+       "role_at_index": "list item",
+       "clicked": false,
+       "equals_effect_count": false,
+       "inside_name": "32.0 GB",
+       "context": "32.0 GB"
+      },
+      {
+       "run": "0",
+       "token": "32.0",
+       "kind": "quoted",
+       "in_range": true,
+       "at_index": "System Summary",
+       "role_at_index": "tree item",
+       "clicked": false,
+       "equals_effect_count": true,
+       "inside_name": "32.0 GB",
+       "context": "32.0 GB"
+      }
+     ],
+     "answer": "bare-name",
+     "has_number": true,
+     "found_by": "digit",
+     "seconds": 0.283,
+     "out_tokens": 16,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    },
+    {
+     "say": "32.0 GB",
+     "raw": "{\"say\": \"32.0 GB\", \"do\": []}",
+     "effects": [],
+     "clicked_at": [],
+     "leak": "quoted",
+     "numbers": [
+      {
+       "run": "32",
+       "token": "32.0",
+       "kind": "quoted",
+       "in_range": true,
+       "at_index": "System SKU",
+       "role_at_index": "list item",
+       "clicked": false,
+       "equals_effect_count": false,
+       "inside_name": "32.0 GB",
+       "context": "32.0 GB"
+      },
+      {
+       "run": "0",
+       "token": "32.0",
+       "kind": "quoted",
+       "in_range": true,
+       "at_index": "System Summary",
+       "role_at_index": "tree item",
+       "clicked": false,
+       "equals_effect_count": true,
+       "inside_name": "32.0 GB",
+       "context": "32.0 GB"
+      }
+     ],
+     "answer": "bare-name",
+     "has_number": true,
+     "found_by": "digit",
+     "seconds": 0.273,
+     "out_tokens": 16,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    }
+   ],
+   "must": true,
+   "why": "'32.0 GB' installed at 91, '31.7 GB' total at 94",
+   "number_present": true,
+   "present_each": [
+    true,
+    true,
+    true
+   ],
+   "present_from_repeat": 0
+  },
+  {
+   "set": "number",
+   "group": "a value on screen",
+   "screen": "system-information",
+   "said": "사용 가능한 메모리가 얼마야?",
+   "n_listed": 152,
+   "leak_counted": "quoted",
+   "leak_from_repeat": 0,
+   "answer_counted": "answered",
+   "answer_from_repeat": 0,
+   "leak_agreed": true,
+   "answer_agreed": true,
+   "repeats": [
+    {
+     "say": "사용 가능한 메모리가 12.6 GB입니다.",
+     "raw": "{\"say\": \"사용 가능한 메모리가 12.6 GB입니다.\", \"do\": []}",
+     "effects": [],
+     "clicked_at": [],
+     "leak": "quoted",
+     "numbers": [
+      {
+       "run": "12",
+       "token": "12.6",
+       "kind": "quoted",
+       "in_range": true,
+       "at_index": "Version",
+       "role_at_index": "text",
+       "clicked": false,
+       "equals_effect_count": false,
+       "inside_name": "12.6 GB",
+       "context": " 가능한 메모리가 12.6 GB입니다."
+      },
+      {
+       "run": "6",
+       "token": "12.6",
+       "kind": "quoted",
+       "in_range": true,
+       "at_index": "Item",
+       "role_at_index": "header item",
+       "clicked": false,
+       "equals_effect_count": false,
+       "inside_name": "12.6 GB",
+       "context": "한 메모리가 12.6 GB입니다."
+      }
+     ],
+     "answer": "answered",
+     "has_number": true,
+     "found_by": "digit",
+     "seconds": 0.485,
+     "out_tokens": 25,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    },
+    {
+     "say": "사용 가능한 메모리 12.6 GB입니다.",
+     "raw": "{\"say\": \"사용 가능한 메모리 12.6 GB입니다.\", \"do\": []}",
+     "effects": [],
+     "clicked_at": [],
+     "leak": "quoted",
+     "numbers": [
+      {
+       "run": "12",
+       "token": "12.6",
+       "kind": "quoted",
+       "in_range": true,
+       "at_index": "Version",
+       "role_at_index": "text",
+       "clicked": false,
+       "equals_effect_count": false,
+       "inside_name": "12.6 GB",
+       "context": "용 가능한 메모리 12.6 GB입니다."
+      },
+      {
+       "run": "6",
+       "token": "12.6",
+       "kind": "quoted",
+       "in_range": true,
+       "at_index": "Item",
+       "role_at_index": "header item",
+       "clicked": false,
+       "equals_effect_count": false,
+       "inside_name": "12.6 GB",
+       "context": "능한 메모리 12.6 GB입니다."
+      }
+     ],
+     "answer": "answered",
+     "has_number": true,
+     "found_by": "digit",
+     "seconds": 0.434,
+     "out_tokens": 24,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    },
+    {
+     "say": "사용 가능한 메모리 12.6 GB입니다.",
+     "raw": "{\"say\": \"사용 가능한 메모리 12.6 GB입니다.\", \"do\": []}",
+     "effects": [],
+     "clicked_at": [],
+     "leak": "quoted",
+     "numbers": [
+      {
+       "run": "12",
+       "token": "12.6",
+       "kind": "quoted",
+       "in_range": true,
+       "at_index": "Version",
+       "role_at_index": "text",
+       "clicked": false,
+       "equals_effect_count": false,
+       "inside_name": "12.6 GB",
+       "context": "용 가능한 메모리 12.6 GB입니다."
+      },
+      {
+       "run": "6",
+       "token": "12.6",
+       "kind": "quoted",
+       "in_range": true,
+       "at_index": "Item",
+       "role_at_index": "header item",
+       "clicked": false,
+       "equals_effect_count": false,
+       "inside_name": "12.6 GB",
+       "context": "능한 메모리 12.6 GB입니다."
+      }
+     ],
+     "answer": "answered",
+     "has_number": true,
+     "found_by": "digit",
+     "seconds": 0.437,
+     "out_tokens": 24,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    }
+   ],
+   "must": true,
+   "why": "'12.6 GB' at index 97",
+   "number_present": true,
+   "present_each": [
+    true,
+    true,
+    true
+   ],
+   "present_from_repeat": 0
+  },
+  {
+   "set": "number",
+   "group": "a value on screen",
+   "screen": "system-information",
+   "said": "바이오스 날짜가 언제야?",
+   "n_listed": 152,
+   "leak_counted": "quoted",
+   "leak_from_repeat": 0,
+   "answer_counted": "answered",
+   "answer_from_repeat": 0,
+   "leak_agreed": true,
+   "answer_agreed": true,
+   "repeats": [
+    {
+     "say": "BIOS Version/Date is 10/22/2025",
+     "raw": "{\"say\": \"BIOS Version/Date is 10/22/2025\", \"do\": [{\"click\": 39}]}",
+     "effects": [
+      {
+       "kind": "click",
+       "target": "BIOS Version/Date",
+       "role": "text",
+       "text": ""
+      }
+     ],
+     "clicked_at": [
+      39
+     ],
+     "leak": "quoted",
+     "numbers": [
+      {
+       "run": "10",
+       "token": "10/22/2025",
+       "kind": "quoted",
+       "in_range": true,
+       "at_index": "Microsoft Windows 11 Home",
+       "role_at_index": "text",
+       "clicked": false,
+       "equals_effect_count": false,
+       "inside_name": "LENOVO KWCN54WW, 10/22/2025",
+       "context": "n/Date is 10/22/2025"
+      },
+      {
+       "run": "22",
+       "token": "10/22/2025",
+       "kind": "quoted",
+       "in_range": true,
+       "at_index": "LAPTOP-SLKUM90R",
+       "role_at_index": "text",
+       "clicked": false,
+       "equals_effect_count": false,
+       "inside_name": "LENOVO KWCN54WW, 10/22/2025",
+       "context": "ate is 10/22/2025"
+      },
+      {
+       "run": "2025",
+       "token": "10/22/2025",
+       "kind": "quoted",
+       "in_range": false,
+       "at_index": null,
+       "role_at_index": null,
+       "clicked": false,
+       "equals_effect_count": false,
+       "inside_name": "LENOVO KWCN54WW, 10/22/2025",
+       "context": " is 10/22/2025"
+      }
+     ],
+     "answer": "answered",
+     "has_number": true,
+     "found_by": "digit",
+     "seconds": 0.655,
+     "out_tokens": 34,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    },
+    {
+     "say": "BIOS Version/Date is 10/22/2025",
+     "raw": "{\"say\": \"BIOS Version/Date is 10/22/2025\", \"do\": [{\"click\": 39}]}",
+     "effects": [
+      {
+       "kind": "click",
+       "target": "BIOS Version/Date",
+       "role": "text",
+       "text": ""
+      }
+     ],
+     "clicked_at": [
+      39
+     ],
+     "leak": "quoted",
+     "numbers": [
+      {
+       "run": "10",
+       "token": "10/22/2025",
+       "kind": "quoted",
+       "in_range": true,
+       "at_index": "Microsoft Windows 11 Home",
+       "role_at_index": "text",
+       "clicked": false,
+       "equals_effect_count": false,
+       "inside_name": "LENOVO KWCN54WW, 10/22/2025",
+       "context": "n/Date is 10/22/2025"
+      },
+      {
+       "run": "22",
+       "token": "10/22/2025",
+       "kind": "quoted",
+       "in_range": true,
+       "at_index": "LAPTOP-SLKUM90R",
+       "role_at_index": "text",
+       "clicked": false,
+       "equals_effect_count": false,
+       "inside_name": "LENOVO KWCN54WW, 10/22/2025",
+       "context": "ate is 10/22/2025"
+      },
+      {
+       "run": "2025",
+       "token": "10/22/2025",
+       "kind": "quoted",
+       "in_range": false,
+       "at_index": null,
+       "role_at_index": null,
+       "clicked": false,
+       "equals_effect_count": false,
+       "inside_name": "LENOVO KWCN54WW, 10/22/2025",
+       "context": " is 10/22/2025"
+      }
+     ],
+     "answer": "answered",
+     "has_number": true,
+     "found_by": "digit",
+     "seconds": 0.652,
+     "out_tokens": 34,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    },
+    {
+     "say": "BIOS Version/Date is 10/22/2025",
+     "raw": "{\"say\": \"BIOS Version/Date is 10/22/2025\", \"do\": [{\"click\": 39}]}",
+     "effects": [
+      {
+       "kind": "click",
+       "target": "BIOS Version/Date",
+       "role": "text",
+       "text": ""
+      }
+     ],
+     "clicked_at": [
+      39
+     ],
+     "leak": "quoted",
+     "numbers": [
+      {
+       "run": "10",
+       "token": "10/22/2025",
+       "kind": "quoted",
+       "in_range": true,
+       "at_index": "Microsoft Windows 11 Home",
+       "role_at_index": "text",
+       "clicked": false,
+       "equals_effect_count": false,
+       "inside_name": "LENOVO KWCN54WW, 10/22/2025",
+       "context": "n/Date is 10/22/2025"
+      },
+      {
+       "run": "22",
+       "token": "10/22/2025",
+       "kind": "quoted",
+       "in_range": true,
+       "at_index": "LAPTOP-SLKUM90R",
+       "role_at_index": "text",
+       "clicked": false,
+       "equals_effect_count": false,
+       "inside_name": "LENOVO KWCN54WW, 10/22/2025",
+       "context": "ate is 10/22/2025"
+      },
+      {
+       "run": "2025",
+       "token": "10/22/2025",
+       "kind": "quoted",
+       "in_range": false,
+       "at_index": null,
+       "role_at_index": null,
+       "clicked": false,
+       "equals_effect_count": false,
+       "inside_name": "LENOVO KWCN54WW, 10/22/2025",
+       "context": " is 10/22/2025"
+      }
+     ],
+     "answer": "answered",
+     "has_number": true,
+     "found_by": "digit",
+     "seconds": 0.631,
+     "out_tokens": 34,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    }
+   ],
+   "must": true,
+   "why": "'LENOVO KWCN54WW, 10/22/2025' at index 40",
+   "number_present": true,
+   "present_each": [
+    true,
+    true,
+    true
+   ],
+   "present_from_repeat": 0
+  },
+  {
+   "set": "number",
+   "group": "a value on screen",
+   "screen": "untitled---paint",
+   "said": "캔버스 크기가 얼마야?",
+   "n_listed": 123,
+   "leak_counted": "quoted",
+   "leak_from_repeat": 0,
+   "answer_counted": "answered",
+   "answer_from_repeat": 0,
+   "leak_agreed": true,
+   "answer_agreed": true,
+   "repeats": [
+    {
+     "say": "캔버스 크기는 1536 × 864px입니다.",
+     "raw": "{\"say\": \"캔버스 크기는 1536 × 864px입니다.\", \"do\": []}",
+     "effects": [],
+     "clicked_at": [],
+     "leak": "quoted",
+     "numbers": [
+      {
+       "run": "1536",
+       "token": "1536",
+       "kind": "quoted",
+       "in_range": false,
+       "at_index": null,
+       "role_at_index": null,
+       "clicked": false,
+       "equals_effect_count": false,
+       "inside_name": "1536 × 864px",
+       "context": "캔버스 크기는 1536 × 864px입니"
+      },
+      {
+       "run": "864",
+       "token": "864px",
+       "kind": "quoted",
+       "in_range": false,
+       "at_index": null,
+       "role_at_index": null,
+       "clicked": false,
+       "equals_effect_count": false,
+       "inside_name": "1536 × 864px",
+       "context": "기는 1536 × 864px입니다."
+      }
+     ],
+     "answer": "answered",
+     "has_number": true,
+     "found_by": "digit",
+     "seconds": 0.605,
+     "out_tokens": 28,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    },
+    {
+     "say": "캔버스 크기는 1536 × 864px입니다.",
+     "raw": "{\"say\": \"캔버스 크기는 1536 × 864px입니다.\", \"do\": []}",
+     "effects": [],
+     "clicked_at": [],
+     "leak": "quoted",
+     "numbers": [
+      {
+       "run": "1536",
+       "token": "1536",
+       "kind": "quoted",
+       "in_range": false,
+       "at_index": null,
+       "role_at_index": null,
+       "clicked": false,
+       "equals_effect_count": false,
+       "inside_name": "1536 × 864px",
+       "context": "캔버스 크기는 1536 × 864px입니"
+      },
+      {
+       "run": "864",
+       "token": "864px",
+       "kind": "quoted",
+       "in_range": false,
+       "at_index": null,
+       "role_at_index": null,
+       "clicked": false,
+       "equals_effect_count": false,
+       "inside_name": "1536 × 864px",
+       "context": "기는 1536 × 864px입니다."
+      }
+     ],
+     "answer": "answered",
+     "has_number": true,
+     "found_by": "digit",
+     "seconds": 0.474,
+     "out_tokens": 28,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    },
+    {
+     "say": "캔버스 크기는 1536 × 864px입니다.",
+     "raw": "{\"say\": \"캔버스 크기는 1536 × 864px입니다.\", \"do\": []}",
+     "effects": [],
+     "clicked_at": [],
+     "leak": "quoted",
+     "numbers": [
+      {
+       "run": "1536",
+       "token": "1536",
+       "kind": "quoted",
+       "in_range": false,
+       "at_index": null,
+       "role_at_index": null,
+       "clicked": false,
+       "equals_effect_count": false,
+       "inside_name": "1536 × 864px",
+       "context": "캔버스 크기는 1536 × 864px입니"
+      },
+      {
+       "run": "864",
+       "token": "864px",
+       "kind": "quoted",
+       "in_range": false,
+       "at_index": null,
+       "role_at_index": null,
+       "clicked": false,
+       "equals_effect_count": false,
+       "inside_name": "1536 × 864px",
+       "context": "기는 1536 × 864px입니다."
+      }
+     ],
+     "answer": "answered",
+     "has_number": true,
+     "found_by": "digit",
+     "seconds": 0.478,
+     "out_tokens": 28,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    }
+   ],
+   "must": true,
+   "why": "'1536 x 864px' at index 112 — the x is a multiplication sign in the fixture",
+   "number_present": true,
+   "present_each": [
+    true,
+    true,
+    true
+   ],
+   "present_from_repeat": 0
+  },
+  {
+   "set": "number",
+   "group": "a value on screen",
+   "screen": "system-information",
+   "said": "윈도우 버전이 뭐야?",
+   "n_listed": 152,
+   "leak_counted": "quoted",
+   "leak_from_repeat": 0,
+   "answer_counted": "answered",
+   "answer_from_repeat": 0,
+   "leak_agreed": true,
+   "answer_agreed": true,
+   "repeats": [
+    {
+     "say": "윈도우 버전은 Microsoft Windows 11 Home입니다.",
+     "raw": "{\"say\": \"윈도우 버전은 Microsoft Windows 11 Home입니다.\", \"do\": [{\"click\": 10}, {\"click\": 13}]}",
+     "effects": [
+      {
+       "kind": "click",
+       "target": "Microsoft Windows 11 Home",
+       "role": "text",
+       "text": ""
+      },
+      {
+       "kind": "click",
+       "target": "10.0.26200 Build 26200",
+       "role": "text",
+       "text": ""
+      }
+     ],
+     "clicked_at": [
+      10,
+      13
+     ],
+     "leak": "quoted",
+     "numbers": [
+      {
+       "run": "11",
+       "token": "11",
+       "kind": "quoted",
+       "in_range": true,
+       "at_index": "Version",
+       "role_at_index": "list item",
+       "clicked": false,
+       "equals_effect_count": false,
+       "inside_name": "Microsoft Windows 11 Home",
+       "context": "t Windows 11 Home입니다."
+      }
+     ],
+     "answer": "answered",
+     "has_number": true,
+     "found_by": "digit",
+     "seconds": 1.046,
+     "out_tokens": 37,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    },
+    {
+     "say": "윈도우 버전은 Microsoft Windows 11 Home입니다.",
+     "raw": "{\"say\": \"윈도우 버전은 Microsoft Windows 11 Home입니다.\", \"do\": [{\"click\": 10}, {\"click\": 13}]}",
+     "effects": [
+      {
+       "kind": "click",
+       "target": "Microsoft Windows 11 Home",
+       "role": "text",
+       "text": ""
+      },
+      {
+       "kind": "click",
+       "target": "10.0.26200 Build 26200",
+       "role": "text",
+       "text": ""
+      }
+     ],
+     "clicked_at": [
+      10,
+      13
+     ],
+     "leak": "quoted",
+     "numbers": [
+      {
+       "run": "11",
+       "token": "11",
+       "kind": "quoted",
+       "in_range": true,
+       "at_index": "Version",
+       "role_at_index": "list item",
+       "clicked": false,
+       "equals_effect_count": false,
+       "inside_name": "Microsoft Windows 11 Home",
+       "context": "t Windows 11 Home입니다."
+      }
+     ],
+     "answer": "answered",
+     "has_number": true,
+     "found_by": "digit",
+     "seconds": 0.649,
+     "out_tokens": 37,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    },
+    {
+     "say": "윈도우 버전은 Microsoft Windows 11 Home입니다.",
+     "raw": "{\"say\": \"윈도우 버전은 Microsoft Windows 11 Home입니다.\", \"do\": [{\"click\": 10}, {\"click\": 13}]}",
+     "effects": [
+      {
+       "kind": "click",
+       "target": "Microsoft Windows 11 Home",
+       "role": "text",
+       "text": ""
+      },
+      {
+       "kind": "click",
+       "target": "10.0.26200 Build 26200",
+       "role": "text",
+       "text": ""
+      }
+     ],
+     "clicked_at": [
+      10,
+      13
+     ],
+     "leak": "quoted",
+     "numbers": [
+      {
+       "run": "11",
+       "token": "11",
+       "kind": "quoted",
+       "in_range": true,
+       "at_index": "Version",
+       "role_at_index": "list item",
+       "clicked": false,
+       "equals_effect_count": false,
+       "inside_name": "Microsoft Windows 11 Home",
+       "context": "t Windows 11 Home입니다."
+      }
+     ],
+     "answer": "answered",
+     "has_number": true,
+     "found_by": "digit",
+     "seconds": 0.651,
+     "out_tokens": 37,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    }
+   ],
+   "must": true,
+   "why": "'Microsoft Windows 11 Home' at 10, '10.0.26200 Build 26200' at 13",
+   "number_present": true,
+   "present_each": [
+    true,
+    true,
+    true
+   ],
+   "present_from_repeat": 0
+  },
+  {
+   "set": "number",
+   "group": "a value on screen",
+   "screen": "system-information",
+   "said": "프로세서가 뭐야?",
+   "n_listed": 152,
+   "leak_counted": "stray",
+   "leak_from_repeat": 0,
+   "answer_counted": "answered",
+   "answer_from_repeat": 0,
+   "leak_agreed": true,
+   "answer_agreed": true,
+   "repeats": [
+    {
+     "say": "프로세서는 13세대 인텔 코어 i9-13900HX입니다.",
+     "raw": "{\"say\": \"프로세서는 13세대 인텔 코어 i9-13900HX입니다.\", \"do\": [{\"click\": 35}]}",
+     "effects": [
+      {
+       "kind": "click",
+       "target": "Processor",
+       "role": "list item",
+       "text": ""
+      }
+     ],
+     "clicked_at": [
+      35
+     ],
+     "leak": "stray",
+     "numbers": [
+      {
+       "run": "13",
+       "token": "13",
+       "kind": "stray",
+       "in_range": true,
+       "at_index": "10.0.26200 Build 26200",
+       "role_at_index": "text",
+       "clicked": false,
+       "equals_effect_count": false,
+       "inside_name": "13th Gen Intel(R) Core(TM) i9-13900HX, 2200 Mhz, 24 Core(s), 32 Logical Processor(s)",
+       "context": "프로세서는 13세대 인텔 코어 i"
+      },
+      {
+       "run": "9",
+       "token": "i9-13900HX",
+       "kind": "quoted",
+       "in_range": true,
+       "at_index": "OS Name",
+       "role_at_index": "text",
+       "clicked": false,
+       "equals_effect_count": false,
+       "inside_name": "13th Gen Intel(R) Core(TM) i9-13900HX, 2200 Mhz, 24 Core(s), 32 Logical Processor(s)",
+       "context": "세대 인텔 코어 i9-13900HX입니"
+      },
+      {
+       "run": "13900",
+       "token": "i9-13900HX",
+       "kind": "quoted",
+       "in_range": false,
+       "at_index": null,
+       "role_at_index": null,
+       "clicked": false,
+       "equals_effect_count": false,
+       "inside_name": "13th Gen Intel(R) Core(TM) i9-13900HX, 2200 Mhz, 24 Core(s), 32 Logical Processor(s)",
+       "context": " 인텔 코어 i9-13900HX입니다."
+      }
+     ],
+     "answer": "answered",
+     "has_number": true,
+     "found_by": "digit",
+     "seconds": 0.76,
+     "out_tokens": 42,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    },
+    {
+     "say": "프로세서는 13세대 인텔 코어 i9-13900HX입니다.",
+     "raw": "{\"say\": \"프로세서는 13세대 인텔 코어 i9-13900HX입니다.\", \"do\": [{\"click\": 35}]}",
+     "effects": [
+      {
+       "kind": "click",
+       "target": "Processor",
+       "role": "list item",
+       "text": ""
+      }
+     ],
+     "clicked_at": [
+      35
+     ],
+     "leak": "stray",
+     "numbers": [
+      {
+       "run": "13",
+       "token": "13",
+       "kind": "stray",
+       "in_range": true,
+       "at_index": "10.0.26200 Build 26200",
+       "role_at_index": "text",
+       "clicked": false,
+       "equals_effect_count": false,
+       "inside_name": "13th Gen Intel(R) Core(TM) i9-13900HX, 2200 Mhz, 24 Core(s), 32 Logical Processor(s)",
+       "context": "프로세서는 13세대 인텔 코어 i"
+      },
+      {
+       "run": "9",
+       "token": "i9-13900HX",
+       "kind": "quoted",
+       "in_range": true,
+       "at_index": "OS Name",
+       "role_at_index": "text",
+       "clicked": false,
+       "equals_effect_count": false,
+       "inside_name": "13th Gen Intel(R) Core(TM) i9-13900HX, 2200 Mhz, 24 Core(s), 32 Logical Processor(s)",
+       "context": "세대 인텔 코어 i9-13900HX입니"
+      },
+      {
+       "run": "13900",
+       "token": "i9-13900HX",
+       "kind": "quoted",
+       "in_range": false,
+       "at_index": null,
+       "role_at_index": null,
+       "clicked": false,
+       "equals_effect_count": false,
+       "inside_name": "13th Gen Intel(R) Core(TM) i9-13900HX, 2200 Mhz, 24 Core(s), 32 Logical Processor(s)",
+       "context": " 인텔 코어 i9-13900HX입니다."
+      }
+     ],
+     "answer": "answered",
+     "has_number": true,
+     "found_by": "digit",
+     "seconds": 0.759,
+     "out_tokens": 42,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    },
+    {
+     "say": "프로세서는 13세대 인텔 코어 i9-13900HX입니다.",
+     "raw": "{\"say\": \"프로세서는 13세대 인텔 코어 i9-13900HX입니다.\", \"do\": [{\"click\": 35}]}",
+     "effects": [
+      {
+       "kind": "click",
+       "target": "Processor",
+       "role": "list item",
+       "text": ""
+      }
+     ],
+     "clicked_at": [
+      35
+     ],
+     "leak": "stray",
+     "numbers": [
+      {
+       "run": "13",
+       "token": "13",
+       "kind": "stray",
+       "in_range": true,
+       "at_index": "10.0.26200 Build 26200",
+       "role_at_index": "text",
+       "clicked": false,
+       "equals_effect_count": false,
+       "inside_name": "13th Gen Intel(R) Core(TM) i9-13900HX, 2200 Mhz, 24 Core(s), 32 Logical Processor(s)",
+       "context": "프로세서는 13세대 인텔 코어 i"
+      },
+      {
+       "run": "9",
+       "token": "i9-13900HX",
+       "kind": "quoted",
+       "in_range": true,
+       "at_index": "OS Name",
+       "role_at_index": "text",
+       "clicked": false,
+       "equals_effect_count": false,
+       "inside_name": "13th Gen Intel(R) Core(TM) i9-13900HX, 2200 Mhz, 24 Core(s), 32 Logical Processor(s)",
+       "context": "세대 인텔 코어 i9-13900HX입니"
+      },
+      {
+       "run": "13900",
+       "token": "i9-13900HX",
+       "kind": "quoted",
+       "in_range": false,
+       "at_index": null,
+       "role_at_index": null,
+       "clicked": false,
+       "equals_effect_count": false,
+       "inside_name": "13th Gen Intel(R) Core(TM) i9-13900HX, 2200 Mhz, 24 Core(s), 32 Logical Processor(s)",
+       "context": " 인텔 코어 i9-13900HX입니다."
+      }
+     ],
+     "answer": "answered",
+     "has_number": true,
+     "found_by": "digit",
+     "seconds": 0.762,
+     "out_tokens": 42,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    }
+   ],
+   "must": false,
+   "why": "'13th Gen Intel(R) Core(TM) i9-13900HX...' — a numberless answer is defensible, so unscored",
+   "number_present": true,
+   "present_each": [
+    true,
+    true,
+    true
+   ],
+   "present_from_repeat": 0
+  },
+  {
+   "set": "number",
+   "group": "a value on screen",
+   "screen": "character-map",
+   "said": "지금 선택된 문자 코드가 뭐야?",
+   "n_listed": 21,
+   "leak_counted": "quoted",
+   "leak_from_repeat": 0,
+   "answer_counted": "answered",
+   "answer_from_repeat": 0,
+   "leak_agreed": true,
+   "answer_agreed": true,
+   "repeats": [
+    {
+     "say": "지금 선택된 문자 코드는 U+0021입니다.",
+     "raw": "{\"say\": \"지금 선택된 문자 코드는 U+0021입니다.\", \"do\": []}",
+     "effects": [],
+     "clicked_at": [],
+     "leak": "quoted",
+     "numbers": [
+      {
+       "run": "0021",
+       "token": "U+0021",
+       "kind": "quoted",
+       "in_range": false,
+       "at_index": null,
+       "role_at_index": null,
+       "clicked": false,
+       "equals_effect_count": false,
+       "inside_name": "U+0021: Exclamation Mark",
+       "context": " 문자 코드는 U+0021입니다."
+      }
+     ],
+     "answer": "answered",
+     "has_number": true,
+     "found_by": "digit",
+     "seconds": 0.54,
+     "out_tokens": 25,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    },
+    {
+     "say": "지금 선택된 문자 코드는 U+0021입니다.",
+     "raw": "{\"say\": \"지금 선택된 문자 코드는 U+0021입니다.\", \"do\": []}",
+     "effects": [],
+     "clicked_at": [],
+     "leak": "quoted",
+     "numbers": [
+      {
+       "run": "0021",
+       "token": "U+0021",
+       "kind": "quoted",
+       "in_range": false,
+       "at_index": null,
+       "role_at_index": null,
+       "clicked": false,
+       "equals_effect_count": false,
+       "inside_name": "U+0021: Exclamation Mark",
+       "context": " 문자 코드는 U+0021입니다."
+      }
+     ],
+     "answer": "answered",
+     "has_number": true,
+     "found_by": "digit",
+     "seconds": 0.395,
+     "out_tokens": 25,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    },
+    {
+     "say": "지금 선택된 문자 코드는 U+0021입니다.",
+     "raw": "{\"say\": \"지금 선택된 문자 코드는 U+0021입니다.\", \"do\": []}",
+     "effects": [],
+     "clicked_at": [],
+     "leak": "quoted",
+     "numbers": [
+      {
+       "run": "0021",
+       "token": "U+0021",
+       "kind": "quoted",
+       "in_range": false,
+       "at_index": null,
+       "role_at_index": null,
+       "clicked": false,
+       "equals_effect_count": false,
+       "inside_name": "U+0021: Exclamation Mark",
+       "context": " 문자 코드는 U+0021입니다."
+      }
+     ],
+     "answer": "answered",
+     "has_number": true,
+     "found_by": "digit",
+     "seconds": 0.443,
+     "out_tokens": 25,
+     "reason": "stop",
+     "truncated": false,
+     "thought_chars": 0
+    }
+   ],
+   "must": false,
+   "why": "'U+0021: Exclamation Mark' at 7 — 'Exclamation Mark' alone is an answer, so unscored",
+   "number_present": true,
+   "present_each": [
+    true,
+    true,
+    true
+   ],
+   "present_from_repeat": 0
+  }
+ ]
+}

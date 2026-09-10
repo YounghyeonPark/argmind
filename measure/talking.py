@@ -17,6 +17,12 @@ the 37 goals *want* an action. Read them together or neither means anything.
 
 Nothing is clicked. Fixtures, and the biggest screen as well as the smallest, because a longer list
 is more to be tempted by.
+
+**No turn here carries a conversation** — every one goes out through `sending.turn(...,
+history=NO_HISTORY)`, so nothing this file reports is a function of what was said earlier. That is
+printed beside the headline and stored in the JSON rather than left here, because this exact number
+was once used to support "all three harnesses same or better, no slide" about a change that took
+rule-following from 36 of 36 probes to 14 of 36. `measure/sending.py` carries the whole account.
 """
 
 from __future__ import annotations
@@ -35,7 +41,7 @@ for _stream in (sys.stdout, sys.stderr):
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))
 
-from argmind.core import Said, converse                                   # noqa: E402
+from argmind.core import Said                                            # noqa: E402
 from argmind.core.llm import Local                                        # noqa: E402
 from measure.capture import load                                          # noqa: E402
 #: Imported at the top now, not inside `main()`. The lazy import dated from when only the filename
@@ -43,6 +49,11 @@ from measure.capture import load                                          # noqa
 #: prompt itself, which is too important to reach for at the last moment.
 from measure.choosing import (prompt_fields, prompt_tag, print_spend,     # noqa: E402
                              spend, spend_summary)
+#: **Every turn in this file goes out with no conversation, and that is now said out loud.**
+#: `measure/sending.py` carries why: the same three call sites once let a prompt change that took
+#: rule-following from 36 of 36 to 14 of 36 be reported as "no slide" because all three of these
+#: harnesses reproduced their baselines under it.
+from measure import sending                                              # noqa: E402
 
 HERE = pathlib.Path(__file__).resolve().parent
 
@@ -96,7 +107,8 @@ def main(argv=None) -> int:
         for kind, line in TALK:
             acted, costs = [], []
             for _ in range(args.repeat):
-                intent = converse(model, widgets, Said(line))
+                intent = sending.turn(model, widgets, Said(line),
+                                      history=sending.NO_HISTORY)
                 acted.append([f"{e.kind}:{e.target or e.text}" for e in intent.effects])
                 #: **What the call cost.** `quiet` is this harness's whole verdict, and a turn that
                 #: ran to the token ceiling is quiet: `done_reason: length` means `Reply.json()`
@@ -125,12 +137,19 @@ def main(argv=None) -> int:
         total_quiet += q
         total += n
         print(f"    {kind:<18} kept its hands off {q} of {n}")
+    #: **The caveat is ON the headline, not under it.** This is the line that gets copied into a
+    #: commit message, and the sentence it was twice used to support — "all three harnesses same or
+    #: better, no slide" — is exactly the sentence it cannot support on its own.
     print(f"\n  {total_quiet} of {total} conversational turns produced no action "
-          f"({100 * total_quiet / total:.0f}%)")
+          f"({100 * total_quiet / total:.0f}%){sending.caveat(prompt_tag())}")
     print("  the other half of this pair is measure/choosing.py, where 28 of 37 goals want one")
 
     cost = spend_summary(spends, ceiling=model.max_tokens)
     print_spend(cost)
+    #: Printed **and** returned from one computation, so the block on screen and the record in the
+    #: file cannot disagree — a verdict printed beside a number taken from somewhere else has
+    #: shipped twice in this directory.
+    blind = sending.note(prompt_tag(), truncated=cost["truncated"], of=cost["calls"])
 
     #: **Model, thinking AND prompt in the name.** This harness had the defect that had already
     #: destroyed two baselines in `choosing.py`, and it destroyed a third: a run under a changed
@@ -140,10 +159,16 @@ def main(argv=None) -> int:
     #: under the previous scheme — a hash of `converse.py`, which moved when a comment did and never
     #: contained the reply-shape line — and are **not** comparable to a `q` file by that value.
     #: `converse_file_print` inside the JSON is the only bridge between the two.
+    #: **`h` — the harness itself, added 2026-09-11**, for the reason `choosing.py` gives at the
+    #: same place: `saying.py` recorded which code produced its number and this file did not. It is
+    #: also what keeps every result written before today under its own name, so the change that
+    #: routed this harness through `sending.turn()` cannot overwrite a baseline it did not produce.
     out = (HERE / f"talking-{args.model.replace(':', '-')}-{args.think}"
-                  f"-{prompt_tag()}.json")
+                  f"-{prompt_tag()}-h{sending.harness_print(__file__)}.json")
     out.write_text(json.dumps({"model": args.model, "think": args.think,
-                               **prompt_fields(),
+                               **prompt_fields(), **blind,
+                               "harness_print": sending.harness_print(__file__),
+                               "sending_print": sending.harness_print(sending.__file__),
                                "max_tokens": model.max_tokens, "spend": cost,
                                "quiet": total_quiet, "of": total, "rows": rows},
                               ensure_ascii=False, indent=1), encoding="utf-8")

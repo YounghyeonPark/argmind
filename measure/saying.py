@@ -154,8 +154,16 @@ Three conditions it would fail to notice changing: the **language** of the reply
 counts the same as one in Korean, and every case here is Korean, so an English-language leak rate is
 unmeasured — `measure/repair.py` owns that question), **whether the widget the number points at was
 the right one** (`choosing.py` owns that; a reply may be clean and wrong), and what `converse()`
-does to a reply **after** it arrives — `_said()`'s de-misfiling and `_effect()`'s validation are not
-sent to the model, so `q` cannot see them move.
+does to a reply **after** it arrives — `_effect()`'s validation and the `MOST_AT_ONCE` refusal of an
+over-long batch are not sent to the model, so `q` cannot see them move. (`_said()`, named here until
+2026-09-11, no longer exists: it searched `do` for a misfiled utterance and was deleted with the
+"do"-first ordering it was built for.)
+
+A fourth, and the largest: **no turn here carries a conversation.** Every one goes out through
+`sending.turn(..., history=NO_HISTORY)`, so a leak that only appears once there is something to
+refer back to is not in this number and cannot be. It is printed beside the headline and stored in
+the JSON, not left here — this harness's 0-of-32 was part of a "no slide" that was wrong by 22
+probes of 36. `measure/sending.py`.
 
 One condition it *does* check rather than assume: that the model was shown `0:`-based numbering at
 all. `describe()`'s output is asserted to be a substring of the prompt actually sent, so a change to
@@ -182,7 +190,7 @@ for _stream in (sys.stdout, sys.stderr):
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))
 
-from argmind.core import Said, converse                                   # noqa: E402
+from argmind.core import Said                                             # noqa: E402
 from argmind.core.converse import MAX_LISTED, describe                    # noqa: E402
 from argmind.core.llm import Local                                        # noqa: E402
 from measure.capture import load                                          # noqa: E402
@@ -191,6 +199,10 @@ from measure.choosing import (prompt_fields, prompt_tag, print_spend,     # noqa
 #: Reused rather than copied — `screen_print` and `residency` exist once, in the file that first
 #: needed them, for the same reason `Fixed` and `Nothing` live in `measure/repair.py`.
 from measure.conversation import Recorder, file_print, residency, screen_print   # noqa: E402
+#: **Every turn in this file goes out with no conversation.** `measure/sending.py` is where that is
+#: counted, printed and recorded; it is not a note in a docstring because this harness's own leak
+#: number was once part of a "no slide" that was wrong by 22 probes of 36.
+from measure import sending                                               # noqa: E402
 
 HERE = pathlib.Path(__file__).resolve().parent
 
@@ -343,12 +355,11 @@ PUNCT = set(" \t\r\n.,!?~-–—…\"'`()[]{}<>:;·、。！？，「」『』/\
 def harness_print() -> str:
     """Six characters over **this file**.
 
-    `f` says the case list moved; this says the rule that turns a reply into a verdict moved, and a
-    run under a different rule is a different experiment. The cost is that editing a comment gets a
-    new filename. That is the cheaper direction: in this directory the third baseline was destroyed
-    by the fix for the second, and no amount of cosmetic churn has ever cost anything comparable.
+    Delegates to `sending.harness_print` so there is **one** definition of it: this was the only
+    harness that recorded the quantity, `choosing.py` and `talking.py` now record it too, and three
+    copies of a hash is three chances for one of them to hash something else.
     """
-    return hashlib.sha256(pathlib.Path(__file__).read_bytes()).hexdigest()[:6]
+    return sending.harness_print(__file__)
 
 
 def data_print() -> str:
@@ -535,7 +546,7 @@ def ask_once(model, widgets, text: str):
     """One turn on a fixture. Returns the intent, the truncated list it was shown, and where its
     clicks landed in that list."""
     listed = list(widgets[:MAX_LISTED])
-    intent = converse(model, listed, Said(text))
+    intent = sending.turn(model, listed, Said(text), history=sending.NO_HISTORY)
     clicked_at = set()
     for e in intent.effects:
         if e.kind != "click":
@@ -679,7 +690,10 @@ def run(args) -> int:
                           for r in rows for rep in r["repeats"]),
                          ceiling=model.inner.max_tokens)
     print_spend(cost)
-    write(rows, args, took, screens, model, cost)
+    #: Printed **and** returned, so the block a reader sees and the record stored below are one
+    #: computation. Passed down rather than recomputed in `write()` for the same reason.
+    blind = sending.note(prompt_tag(), truncated=cost["truncated"], of=cost["calls"])
+    write(rows, args, took, screens, model, cost, blind)
     model.inner.release()
     return 0
 
@@ -753,6 +767,11 @@ def summarise(rows, repeat: int, took: float) -> None:
         print(f"    LEAKED    {bad:>3} of {n}  ({100 * bad / n:>3.0f}%)   of which "
               f"{counted[INDEX]} conclusive (index of a widget it clicked), "
               f"{counted[STRAY]} stray, {counted[OFFLIST]} off-list")
+        #: **The caveat rides the headline**, immediately under it rather than appended, only
+        #: because that line is already 130 characters. "leak 5 of 32" is the figure that gets
+        #: quoted, and it was once part of "all three harnesses same or better, no slide" about a
+        #: change that took rule-following from 36 of 36 probes to 14 of 36.
+        print(f"    {'':<10}{sending.caveat(prompt_tag()).strip()}")
         arguable = [r for r in leak
                     if r["leak_counted"] in (STRAY, OFFLIST)
                     and any(d["equals_effect_count"] and not d["clicked"]
@@ -837,7 +856,7 @@ def summarise(rows, repeat: int, took: float) -> None:
     print(f"    disagreed across repeats: {len(dis)} of {n}")
 
 
-def write(rows, args, took: float, screens, model, cost) -> None:
+def write(rows, args, took: float, screens, model, cost, blind) -> None:
     """Everything, including every reply verbatim, under a name that carries the conditions.
 
     **Model, thinking, prompt, screens and case list are all in the filename.** Three baselines in
@@ -866,9 +885,9 @@ def write(rows, args, took: float, screens, model, cost) -> None:
         #: alone; the reply-shape line that took this harness's own headline from 6 of 32 to 0 of 32
         #: appears in no file written before today. A reader can now diff two runs instead of
         #: trusting six hex characters to have meant the same thing twice.
-        **prompt_fields(),
+        **prompt_fields(), **blind,
         "screens_print": screen_print(), "data_print": data_print(),
-        "harness_print": harness_print(),
+        "harness_print": harness_print(), "sending_print": file_print("measure.sending"),
         "llm_print": file_print(Local.__module__),
         #: The classifier is `h`, but the *fingerprints themselves* live in `measure/choosing.py`
         #: now, along with the probe that defines what "the prompt" means here. A change to that

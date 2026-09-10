@@ -33,10 +33,32 @@ Perception and actuation. The screens are fixtures captured from real windows, s
 fail because a window was not in front or a click missed — which is the point: a bad number then
 points at choosing, and only at choosing.
 
+**And the conversation.** Every goal goes out through `sending.turn(..., history=NO_HISTORY)`, so no
+`Recently:` block reaches the model and this number cannot move on a change that only affects what
+the agent does mid-conversation. That was true before 2026-09-11 as well; what is new is that it is
+now **counted, printed on the headline and stored in the JSON** instead of being a keyword argument
+three call sites happened not to pass. It cost two wrong conclusions in two days — a "no slide" over
+a change that took rule-following from 36 of 36 to 14 of 36, and a 111-call sweep *from this file*
+quoted as evidence that a token-ceiling degeneration had ended when 18 of 1,845 conversational turns
+still hit it. `measure/sending.py` has the whole account and `--prompt-check` refuses to pass if any
+of the machinery is removed.
+
 ## The prompt fingerprint every harness here imports — `q`, from 2026-09-10
 
     python -m measure.choosing --prompt-record    what is sent, verbatim, and its six characters
-    python -m measure.choosing --prompt-check     that it moves on the prompt and not on prose
+    python -m measure.choosing --prompt-check     that it moves on the prompt and not on prose,
+                                                  and that no harness can be blind in silence
+
+**`--prompt-check` reworked 2026-09-11 after it lost two rows in a day and did not stop.** It read
+`9 of 11`: one row searched for the `do`-first reply shape, reverted the day before, and another for
+"fourteen named keys", rewritten in `d60e60f`. Each printed *this row tests nothing* and the run
+carried on to a summary whose parenthesis — *3 that must not fork, 8 that must* — counted two rows
+that were not rows. Now every row is resolved **before any is scored**, and one dead row prints the
+dead rows and nothing else. **Eight of the eleven name no literal at all**: they find the module
+docstring, the field pair inside `converse()` whichever way round it ships, the text of `SYSTEM` and
+`UNPROMPTED`, and the current value of each constant, so the two failure modes that actually
+happened here cannot recur. The remaining three do name a literal, are marked as such in the table,
+and can still die — fatally now, which is the point.
 
 **This number is a function of the prompt that was sent, and until today nothing here measured
 that.** `prompt_print()` hashed `converse.py` — the file — which failed in both directions at once.
@@ -65,10 +87,12 @@ recorded in every new file and kept out of every new name.
 from __future__ import annotations
 
 import argparse
+import ast
 import collections
 import json
 import pathlib
 import random
+import re
 import sys
 import zlib
 import time
@@ -81,7 +105,10 @@ for _stream in (sys.stdout, sys.stderr):
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))
 
-from argmind.core import Perceived, Said, Widget, converse               # noqa: E402
+#: `converse` is deliberately NOT imported here. `sending.turn()` is the only way into
+#: it from a harness, and `--prompt-check` walks every file in this directory asserting
+#: exactly that — including this one, which is where it first caught something.
+from argmind.core import Perceived, Said, Widget                          # noqa: E402
 #: `SYSTEM` only. `MAX_LISTED` and `MOST_AT_ONCE` are read off the *resolved module* inside
 #: `prompt_record()` instead, so that `--prompt-check` can measure a mutant's values rather than the
 #: shipped ones — a check that read the constants from here would have reported "MOST_AT_ONCE does
@@ -90,6 +117,11 @@ from argmind.core.converse import SYSTEM                                 # noqa:
 import hashlib                                                          # noqa: E402
 from argmind.core.llm import Local, Reply                                # noqa: E402
 from measure.capture import load                                         # noqa: E402
+#: **Every turn in this file goes out with no conversation.** `measure/sending.py` counts it, prints
+#: it beside the headline and stores it, and `prompt_check()` below refuses to pass if any of that
+#: is dropped. It is not a note in a docstring because this number was part of a "no slide" that was
+#: wrong by 22 probes of 36.
+from measure import sending                                              # noqa: E402
 
 HERE = pathlib.Path(__file__).resolve().parent
 RIGHT, WRONG, MISSED, DECLINED = "right", "wrong", "missed", "declined"
@@ -191,11 +223,15 @@ def prompt_record(module=None) -> str:
 
     ## What it would fail to notice changing
 
-    `_said()`'s recovery of a misfiled utterance, `_effect()`'s validation, and anything else
+    `_effect()`'s validation, the `MOST_AT_ONCE` refusal of an over-long batch, and anything else
     `converse()` does to the reply *after* it arrives: those are not sent, so they are not here.
-    They are real conditions and this print does not cover them. Also outside it, and covered
-    elsewhere: which fixtures were used (`s`), which cases (`f`), the classifier (`h`), and the
-    model wrapper's `num_ctx` / `num_predict` / `temperature` (`llm_print`).
+    (`_said()` stood in this list until 2026-09-11 and **no longer exists** — it searched `do` for a
+    misfiled utterance and was deleted along with the "do"-first ordering it was built for. A
+    docstring naming a function the library does not have is the same defect as a fingerprint row
+    searching for a literal the file does not contain, one paragraph away from where that one was
+    found.) They are real conditions and this print does not cover them. Also outside it, and
+    covered elsewhere: which fixtures were used (`s`), which cases (`f`), the harness itself (`h`),
+    and the model wrapper's `num_ctx` / `num_predict` / `temperature` (`llm_print`).
     """
     import importlib                                                     # noqa: PLC0415
 
@@ -386,30 +422,212 @@ def print_spend(s: dict) -> None:
 
 # ---- can the fingerprint fail in both directions? -------------------------------------------------
 
-#: `(label, from, to, must_fork)`. **Written before the scheme was run**, and half of them assert
+class Dead(Exception):
+    """A row that cannot be applied to the shipped file. **Fatal, and it stops the run.**
+
+    On 2026-09-11 this check read `9 of 11`. Two rows searched for literals that no longer existed —
+    the field-ordering row looked for the `do`-first text, reverted the day before, and another
+    looked for "fourteen named keys", rewritten in `d60e60f`. Each printed `this row tests nothing`
+    and the check carried on to a summary reading `9 of 11 as labelled (3 that must not fork, 8 that
+    must)`. Every number in that parenthesis was wrong: two of the eleven rows were not rows.
+
+    The exit code was 1 throughout, so nothing was *silently* green — but the line a person reads is
+    the summary, and a summary that counts a dead row among the live ones is the same defect this
+    check exists to catch one level up. A substitution matching nothing changes nothing, so every
+    "must NOT fork" row would pass for the wrong reason.
+
+    So: rows are resolved **before any of them is scored**, and one dead row means no score is
+    printed at all. There is no partial verdict.
+    """
+
+
+# ---- how a row finds what it edits ---------------------------------------------------------------
+#
+# **Eight of the eleven rows below name no literal at all**, because a hard-coded literal is a copy
+# of the library kept in the harness, and this directory has now watched three of them go stale
+# (`fourteen named keys`, the `do`-first ordering, and `_said()` in two docstrings). An editor that
+# derives its target from the file cannot go stale: it fails only when the *thing* is gone, which is
+# what a row is for.
+#
+# Each editor is `(source, module) -> (new_source, what_it_did)` and raises `Dead` when it cannot
+# find its target. `module` is the **shipped** `argmind.core.converse`, so an editor can read the
+# current value of what it is about to change rather than assuming one.
+
+
+def _byte_span(source: str, node) -> tuple:
+    """`(start, end)` byte offsets of an AST node in `source`'s UTF-8 encoding.
+
+    Bytes, not characters. `col_offset` is a UTF-8 byte offset and `converse.py`'s docstring is full
+    of Korean, so slicing the `str` by those numbers silently takes the wrong span the moment a
+    non-ASCII character sits on the same line — which is the shape of bug that makes a mutation
+    land somewhere nobody looked.
+    """
+    raw = source.encode("utf-8")
+    lines = raw.splitlines(keepends=True)
+    start = sum(len(x) for x in lines[:node.lineno - 1]) + node.col_offset
+    end = sum(len(x) for x in lines[:node.end_lineno - 1]) + node.end_col_offset
+    return start, end
+
+
+def _splice(source: str, node, new: str) -> str:
+    start, end = _byte_span(source, node)
+    raw = source.encode("utf-8")
+    return (raw[:start] + new.encode("utf-8") + raw[end:]).decode("utf-8")
+
+
+def _assignment(source: str, name: str):
+    """The module-level `name = <value>` node, or `Dead`."""
+    for node in ast.parse(source).body:
+        if isinstance(node, ast.Assign) and any(
+                isinstance(t, ast.Name) and t.id == name for t in node.targets):
+            return node
+    raise Dead(f"no module-level assignment to {name}")
+
+
+def literal(old: str, new: str):
+    """An exact literal that must appear **exactly once**. The only kind that can still go stale."""
+    def edit(source, _module):
+        n = source.count(old)
+        if n != 1:
+            raise Dead(f"{old[:46]!r} appears {n} times in converse.py, not once")
+        return source.replace(old, new), f"{old[:30]!r} -> {new[:30]!r}"
+    return edit
+
+
+def module_docstring():
+    """Replace the **whole** module docstring. Covers every prose row that has ever died here at
+    once, and is stronger than naming a sentence: the claim is that *no* prose in this file is sent
+    to the model, not that three particular paragraphs are not."""
+    def edit(source, _module):
+        first = (ast.parse(source).body or [None])[0]
+        if not (isinstance(first, ast.Expr) and isinstance(first.value, ast.Constant)
+                and isinstance(first.value.value, str)):
+            raise Dead("converse.py has no module docstring to rewrite")
+        was = len(first.value.value.splitlines())
+        return _splice(source, first.value, '"""Replaced by --prompt-check."""'), \
+            f"{was} lines of prose -> one"
+    return edit
+
+
+def top_comment():
+    """A comment line, prepended. Cannot go stale: it names nothing in the file."""
+    def edit(source, _module):
+        return "# a comment that must not fork a baseline\n" + source, "one comment line added"
+    return edit
+
+
+def blank_line():
+    """A blank line before the first `def`. Reformatting must not fork a baseline either."""
+    def edit(source, _module):
+        for node in ast.parse(source).body:
+            if isinstance(node, (ast.FunctionDef, ast.ClassDef)):
+                lines = source.splitlines(keepends=True)
+                at = node.lineno - 1
+                return "".join(lines[:at]) + "\n" + "".join(lines[at:]), \
+                    f"blank line before line {node.lineno}"
+        raise Dead("converse.py defines no function to put a blank line in front of")
+    return edit
+
+
+def field_order():
+    """Swap the two fields of the reply-shape object, **whichever way round it currently ships**.
+
+    This is the row that died. It named the `do`-first text, the owner reverted to `say`-first on
+    2026-09-10, and the row went quiet the next morning. Deriving it means the row survives the next
+    flip too — and there will be one, because `converse.py` records this ordering as a measured
+    trade with a column of costs on each side, not as a settled default.
+
+    Searched inside `converse()`'s own source only. The module docstring shows the same object twice
+    as an example, and a whole-file search matches those and mutates prose instead of the prompt.
+
+    **A cross-check, and it is the reason to believe this editor rather than the row's label.** On
+    2026-09-11 flipping the shipped `say`-first source produced `q1ec131` — which is the fingerprint
+    in the name of the `do`-first result files this directory already holds, measured a day earlier
+    from a genuinely different tree. A derived mutation landing on a hash that was recorded before
+    the derivation existed is not something a plausible-but-wrong edit does.
+    """
+    pair = re.compile(r'\{(?P<a>"(?:say|do)":[^{}]*?), (?P<b>"(?:say|do)":[^{}]*?)\}')
+
+    def edit(source, _module):
+        for node in ast.parse(source).body:
+            if isinstance(node, ast.FunctionDef) and node.name == "converse":
+                break
+        else:
+            raise Dead("converse.py defines no function called converse")
+        start, end = _byte_span(source, node)
+        raw = source.encode("utf-8")
+        body = raw[start:end].decode("utf-8")
+        found = [m for m in pair.finditer(body)
+                 if m.group("a")[:4] != m.group("b")[:4]]
+        if len(found) != 1:
+            raise Dead(f"{len(found)} say/do field pairs inside converse(), not one — the "
+                       f"reply-shape object has moved or changed shape")
+        m = found[0]
+        swapped = body[:m.start()] + "{" + m.group("b") + ", " + m.group("a") + "}" + body[m.end():]
+        order = m.group("a")[1:4].strip('"')
+        return (raw[:start] + swapped.encode("utf-8") + raw[end:]).decode("utf-8"), \
+            f"{order}-first -> the other way round"
+    return edit
+
+
+def prompt_text(name: str):
+    """Append a word to `SYSTEM` or `UNPROMPTED`, reading the current text off the module.
+
+    Names the variable, never a sentence in it, so rewording the prompt cannot kill the row that
+    checks rewording the prompt is noticed.
+    """
+    def edit(source, module):
+        node = _assignment(source, name)
+        was = getattr(module, name, None)
+        if not isinstance(was, str):
+            raise Dead(f"{name} is not a string on the shipped module")
+        return _splice(source, node.value, repr(was + " And one more sentence.")), \
+            f"{name} ({len(was)} chars) + one sentence"
+    return edit
+
+
+def constant(name: str, by: int = 7):
+    """Move `MAX_LISTED` or `MOST_AT_ONCE` off whatever it currently is.
+
+    `MOST_AT_ONCE = 3` was hard-coded here, so a day when three becomes two is a day this row dies.
+    Reading the value makes the row a statement about the constant rather than about its value.
+    """
+    def edit(source, module):
+        node = _assignment(source, name)
+        was = getattr(module, name, None)
+        if not isinstance(was, int):
+            raise Dead(f"{name} is not an int on the shipped module")
+        return _splice(source, node.value, repr(was + by)), f"{name} {was} -> {was + by}"
+    return edit
+
+
+#: `(label, edit, must_fork, why)`. **Written before the scheme was run**, and three of them assert
 #: that the print does NOT move — a fingerprint that only ever proves it can change has proved the
-#: easy half. `from` is a literal that must exist in the shipped `converse.py`; a mutant whose
-#: substitution matched nothing would silently pass every row, so that is checked separately.
+#: easy half.
 #:
-#: The first row is not hypothetical: it is the correction to `converse.py`'s docstring that the old
-#: scheme was blocking on the day this was written (the environment declares fifteen names over
-#: fourteen distinct virtual keys — `esc` and `escape` are both 0x1B).
+#: Every row is resolved against the shipped `converse.py` before any of them is scored, and a row
+#: that cannot find its target is `Dead`: the whole check stops with no score printed. See `Dead`.
 PROMPT_MUTANTS = (
-    ("the blocked docstring correction", "fourteen named keys",
-     "fifteen names over fourteen distinct virtual keys", False),
-    ("a stale tally removed from a docstring", "`enter` (41), `tab` (24) and `zoom in` (3)",
-     "`enter`, `tab` and `zoom in`", False),
-    ("a plain comment", "from .intent import Effect, Intent",
-     "# a comment that must not fork a baseline\nfrom .intent import Effect, Intent", False),
-    ("the reply-shape line", "Reply with only JSON:", "Reply with JSON only:", True),
-    ("the field ordering", '{"do": [ ... ], "say": "<what you say back>"}',
-     '{"say": "<what you say back>", "do": [ ... ]}', True),
-    ("a word of SYSTEM", "a wrong click is worse", "a wrong click is far worse", True),
-    ("a word of UNPROMPTED", "Nobody asked you anything", "Nobody asked you a thing", True),
-    ("the widget-line numbering", '{i}: {w.role} "{w.name}"', '{i}. {w.role} "{w.name}"', True),
-    ("the history-line format", '"  {who}: {text}"', '"  {who} said: {text}"', True),
-    ("MOST_AT_ONCE", "MOST_AT_ONCE = 3", "MOST_AT_ONCE = 8", True),
-    ("MAX_LISTED", "MAX_LISTED = 200", "MAX_LISTED = 150", True),
+    ("prose — the whole module docstring", module_docstring(), False,
+     "a comment forked the old scheme, and an agent reverted its own writing to protect a baseline"),
+    ("a plain comment", top_comment(), False,
+     "the cheapest possible library edit must be free"),
+    ("reformatting — one blank line", blank_line(), False,
+     "so must the second cheapest"),
+    ("the reply-shape phrase", literal("Reply with only JSON:", "Reply with JSON only:"), True,
+     "a literal row: it can still die, and now it dies fatally"),
+    ("the field ordering", field_order(), True,
+     "the largest measured effect in this project: rule-following 9 of 36 against 36 of 36"),
+    ("a word of SYSTEM", prompt_text("SYSTEM"), True, "the instruction itself"),
+    ("a word of UNPROMPTED", prompt_text("UNPROMPTED"), True,
+     "only rendered on the unprompted probe, so this also proves that probe is reaching it"),
+    ("the widget-line numbering", literal('{i}: {w.role} "{w.name}"', '{i}. {w.role} "{w.name}"'),
+     True, "a literal row; saying.py's whole leak axis rests on 0-based numbering"),
+    ("the history-line format", literal('"  {who}: {text}"', '"  {who} said: {text}"'), True,
+     "a literal row, and the ONE thing here that only the with-history probe renders"),
+    ("MOST_AT_ONCE", constant("MOST_AT_ONCE"), True,
+     "never in the prompt, and one of only two things ever measured to move the line"),
+    ("MAX_LISTED", constant("MAX_LISTED"), True, "never in the prompt; decides what is shown"),
 )
 
 
@@ -430,44 +648,205 @@ def _mutant_module(source: str):
     return mod
 
 
+def audit_sources(named) -> dict:
+    """What each `(filename, source)` does about the conversation, read off its syntax tree.
+
+    Takes sources rather than paths so it can be pointed at deliberately broken ones — see
+    `AUDIT_MUSTS`. An auditor that has never been shown a file it should reject is an auditor whose
+    passing means nothing, and three of the four things it looks for are absences.
+
+    **AST, not a substring search.** `main()` mentioning `learn_features` inside a help string has
+    already defeated a text search in this repository, and every rule below is of that shape.
+    """
+    out = {"direct": [], "unnamed": [], "silent": [], "senders": []}
+    for name, source in named:
+        calls = [n for n in ast.walk(ast.parse(source)) if isinstance(n, ast.Call)]
+        called = {(n.func.attr if isinstance(n.func, ast.Attribute) else
+                   n.func.id if isinstance(n.func, ast.Name) else None) for n in calls}
+        if name != "sending.py" and "converse" in called:
+            out["direct"].append(name)
+        turns = [n for n in calls
+                 if (isinstance(n.func, ast.Attribute) and n.func.attr == "turn")
+                 or (isinstance(n.func, ast.Name) and n.func.id == "turn")]
+        if name == "sending.py" or not turns:
+            continue
+        out["senders"].append(name)
+        if any(not any(k.arg == "history" for k in n.keywords) for n in turns):
+            out["unnamed"].append(name)
+        missing = [w for w in ("note", "caveat") if w not in called]
+        if missing:
+            out["silent"].append(f"{name} (no sending.{'/'.join(missing)} call)")
+    return out
+
+
+#: `(key, label, why it matters)`. The rule, and what breaks if it stops holding.
+AUDIT_ROWS = (
+    ("direct", "converse() is reached only through sending.turn()",
+     "a harness calling converse() directly can omit history= again"),
+    ("unnamed", "every turn() names history=", "keyword-only, so this is belt and braces"),
+    ("silent", "every sender prints caveat() and note()",
+     "** the blindness would be back to being invisible **"),
+)
+
+#: A file that satisfies every rule. Used to prove the auditor is not simply rejecting everything —
+#: "it caught four bad files" and "it rejects all input" look identical from four bad files.
+CLEAN_SENDER = ('from measure import sending\n'
+                'def go(m, w, t):\n'
+                '    r = sending.turn(m, w, t, history=sending.NO_HISTORY)\n'
+                '    print(sending.caveat("q"))\n'
+                '    return r, sending.note("q")\n')
+
+#: `(what is wrong with it, the source, which key must light up)`. One per rule, written to break
+#: exactly one thing, because a mutant that breaks two cannot tell you which rule caught it.
+AUDIT_MUSTS = (
+    ("a harness calling converse() directly",
+     CLEAN_SENDER.replace("sending.turn(m, w, t, history=sending.NO_HISTORY)",
+                          "converse(m, w, t)"), "direct"),
+    ("a turn() that does not name history",
+     CLEAN_SENDER.replace(", history=sending.NO_HISTORY", ""), "unnamed"),
+    ("a sender that never prints caveat()",
+     CLEAN_SENDER.replace('    print(sending.caveat("q"))\n', ""), "silent"),
+    #: The one that would have been missed by a text search: `note` and `caveat` are named in a
+    #: string and in a comment, and neither is a call.
+    ("caveat named in prose but never called",
+     CLEAN_SENDER.replace('    print(sending.caveat("q"))\n',
+                          '    # sending.caveat is printed by the caller\n'
+                          '    print("see sending.caveat")\n'), "silent"),
+)
+
+
+def sending_check() -> int:
+    """Prove that the three history-free harnesses cannot go back to being *quietly* history-free.
+
+    Nothing here calls a model. Four claims, each of which has to be able to fail:
+
+    1. **`sending.turn()` sends exactly what a bare `converse()` sent.** Byte for byte, over four
+       renders. This is the whole reason the four baselines at `qa62805` survived the change that
+       routed the harnesses through it — a stochastic re-run at temperature 0 could not have
+       established it, and this does, without a model.
+    2. **No harness reaches `converse()` any other way.** An AST walk, not a substring search:
+       `main()` mentioning a function inside a help string has already defeated a text search in
+       this repository once.
+    3. **Every `turn()` names `history=`.** It is keyword-only with no default, so omitting it is a
+       `TypeError` at run time; this makes it a failure at check time instead, before 111 calls.
+    4. **Every harness that sends a turn also prints the coverage block and puts the caveat on its
+       headline.** This is the one that matters. The blindness was never the problem — the problem
+       was a run that looked unmoved and a person who reported "no slide". A gate on the *output* is
+       the only one that reaches that.
+
+    What it does not check: that the printed block is read. Nothing can.
+    """
+    print("\n  WHAT THE HARNESSES SEND — can they be blind without saying so?\n")
+    bad = 0
+
+    #: 1 — the wrapper is transparent. Run inside `sending.py`, because doing it here made this
+    #: file a caller of `converse()` and check 2 below duly failed on its own checker.
+    same = sending.transparent((
+        ("asked, history", Said(PROBE_TEXT), PROBE_WIDGETS, PROBE_HISTORY),
+        ("asked, none", Said(PROBE_TEXT), PROBE_WIDGETS, ()),
+        ("unprompted, none", Perceived(PROBE_TEXT), PROBE_WIDGETS, ()),
+        ("asked, no widgets", Said(PROBE_TEXT), (), ())), _Capture)
+    for label, ok in same:
+        bad += not ok
+        print(f"  {'ok ' if ok else 'FAIL':<4} turn() == converse() on the {label:<20} probe"
+              f"{'' if ok else '   ** every baseline in this directory was re-defined **'}")
+
+    #: 2, 3, 4 — what the files do, read off their syntax trees.
+    found = audit_sources([(p.name, p.read_text(encoding="utf-8"))
+                           for p in sorted(HERE.glob("*.py"))])
+    for key, label, why in AUDIT_ROWS:
+        got = found[key]
+        bad += bool(got)
+        print(f"  {'ok ' if not got else 'FAIL':<4} {label:<52}"
+              f"{'' if not got else '  ' + ', '.join(got) + ' — ' + why}")
+    print(f"       senders: {', '.join(found['senders']) or 'none'}")
+
+    #: 5 — the deferral names files, so the files have to be there.
+    gone = [n for n in sending.COVERS_HISTORY if not (HERE / n).exists()]
+    bad += bool(gone)
+    print(f"  {'ok ' if not gone else 'FAIL':<4} "
+          f"{'every harness named as covering the axis exists':<52}"
+          f"{'' if not gone else '  missing: ' + ', '.join(gone)}")
+
+    #: 6 — **can 2, 3 and 4 fail?** Three of the four checks above are "a thing was not found", and
+    #: a search with a typo in it finds nothing on a healthy tree and nothing on a broken one. Every
+    #: row above passing is only evidence if these fail, so the same auditor is run against four
+    #: sources written to break it, one per rule.
+    print()
+    for label, source, key in AUDIT_MUSTS:
+        caught = bool(audit_sources([("mutant.py", source)])[key])
+        bad += not caught
+        print(f"  {'ok ' if caught else 'FAIL':<4} the audit catches {label:<36}"
+              f"{'' if caught else '  ** rows 2-4 above prove nothing **'}")
+    #: The other direction: the same auditor must pass a file that does it right, or "caught" above
+    #: could be an auditor that reports everything.
+    clean = audit_sources([("clean.py", CLEAN_SENDER)])
+    quiet = not any(clean[k] for k, _l, _w in AUDIT_ROWS)
+    bad += not quiet
+    print(f"  {'ok ' if quiet else 'FAIL':<4} and passes a sender that does it right"
+          f"{'' if quiet else '  ** it fails everything, so it proves nothing **'}")
+    return bad
+
+
 def prompt_check() -> int:
-    """Prove the claim in `prompt_print()`'s docstring, both halves, and return 0 or 1.
+    """Prove the claim in `prompt_print()`'s docstring, both halves, then `sending_check()`.
 
         python -m measure.choosing --prompt-check
 
-    **The claim is two-sided and so is this**: a comment, a docstring and a withdrawn tally must
-    leave the print exactly where it was, and the reply shape, the field ordering, either prompt
-    text, the numbering, the history format, `MOST_AT_ONCE` and `MAX_LISTED` must every one of them
-    move it. A scheme that only demonstrates the second half is a scheme nobody has shown to be
-    better than the one it replaced, which hashed the whole file and moved on everything.
+    **The claim is two-sided and so is this**: prose, a comment and a reformat must leave the print
+    exactly where it was, and the reply shape, the field ordering, either prompt text, the
+    numbering, the history format, `MOST_AT_ONCE` and `MAX_LISTED` must every one of them move it. A
+    scheme that only demonstrates the second half is a scheme nobody has shown to be better than the
+    one it replaced, which hashed the whole file and moved on everything.
+
+    **Every row is resolved before any row is scored**, and a row that cannot find what it edits
+    stops the check with no score printed. See `Dead` for the morning this was written.
     """
     import argmind.core                                                  # noqa: PLC0415
+    import importlib                                                     # noqa: PLC0415
 
     path = pathlib.Path(argmind.core.__file__).with_name("converse.py")
     source = path.read_text(encoding="utf-8")
     before = path.read_bytes()
+    shipped = importlib.import_module("argmind.core.converse")
+
+    #: **Resolve everything first.** A dead row is not a failed row — it is a row that was not run,
+    #: and the two must not be added together into "9 of 11".
+    prepared, dead = [], []
+    for label, edit, must_fork, why in PROMPT_MUTANTS:
+        try:
+            text, did = edit(source, shipped)
+        except Dead as why_not:
+            dead.append((label, str(why_not)))
+            continue
+        if text == source:
+            dead.append((label, "the edit applied cleanly and changed nothing"))
+            continue
+        prepared.append((label, text, did, must_fork, why))
+    if dead:
+        print(f"  {len(dead)} of {len(PROMPT_MUTANTS)} rows cannot be applied to the shipped "
+              f"converse.py. **No score is printed.**\n")
+        for label, why_not in dead:
+            print(f"  DEAD  {label:<40} {why_not}")
+        print("\n  A row that edits nothing passes every 'must NOT fork' test for the wrong reason,")
+        print("  so a check with a dead row in it is not a weaker check — it is a check whose")
+        print("  summary is false. Fix the rows in PROMPT_MUTANTS, then re-run. Nothing was scored.")
+        return 1
+
     base = prompt_print()
     print(f"  shipped converse.py -> {PROMPT_LETTER}{base}   "
-          f"(old scheme's p{converse_file_print()})\n")
-    print(f"  {'':<3} {'edit':<40} {'old p':<8} {'new q':<8} verdict")
+          f"(old scheme's p{converse_file_print()})")
+    print(f"  {len(prepared)} rows, all live\n")
+    print(f"  {'':<4} {'edit':<34} {'what it did':<30} {'old p':<8} {'new q':<8} verdict")
     bad = 0
-    for label, old, new, must_fork in PROMPT_MUTANTS:
-        if source.count(old) != 1:
-            #: A substitution that matches nothing changes nothing, so every "did not fork" row
-            #: would pass for the wrong reason and the check would report a clean sweep while
-            #: testing nothing. That is this project's own recurring defect, so it is fatal here.
-            print(f"  {'!!':<3} {label:<40} literal appears {source.count(old)} times in "
-                  f"converse.py — this row tests nothing")
-            bad += 1
-            continue
-        text = source.replace(old, new)
+    for label, text, did, must_fork, _why in prepared:
         got = prompt_print(_mutant_module(text))
         legacy = hashlib.sha256(text.encode("utf-8")).hexdigest()[:6]
         forked = got != base
         ok = forked == must_fork
         bad += not ok
         want = "must fork" if must_fork else "must NOT fork"
-        print(f"  {'ok ' if ok else 'FAIL':<3} {label:<40} p{legacy:<7} "
+        print(f"  {'ok ' if ok else 'FAIL':<4} {label:<34} {did[:30]:<30} p{legacy:<7} "
               f"{PROMPT_LETTER}{got:<7} {'forked' if forked else 'unchanged':<9} — {want}")
     #: The library is read and never written, and this says so out loud rather than trusting the
     #: sentence above. `measure/` owning a check that mutates `argmind/` would be one crash away
@@ -475,12 +854,14 @@ def prompt_check() -> int:
     if path.read_bytes() != before:
         print("\n  FAIL: converse.py changed on disk during a check that only reads it")
         bad += 1
-    n = len(PROMPT_MUTANTS)
-    forks = sum(1 for _l, _o, _n, f in PROMPT_MUTANTS if f)
-    print(f"\n  {n - bad} of {n} as labelled ({n - forks} that must not fork, {forks} that must)"
-          f"{'' if not bad else '   <- the scheme does not do what its docstring says'}")
+    n = len(prepared)
+    forks = sum(1 for _l, _t, _d, f, _w in prepared if f)
+    print(f"\n  {n - bad} of {n} live rows as labelled ({n - forks} that must not fork, {forks} "
+          f"that must){'' if not bad else '   <- the scheme does not do what its docstring says'}")
     print("  the old scheme (sha256 of converse.py) forks on every row above, including the three "
           "that are only prose — that is what it was replaced for")
+    bad += sending_check()
+    print(f"\n  {'PASS' if not bad else str(bad) + ' FAILURES'}")
     return 1 if bad else 0
 
 
@@ -604,7 +985,8 @@ def run(model_name: str, repeat: int, only: str | None, *,
                 rejected.append(None if got is not None else raw)
                 costs.append(spend(reply))
                 continue
-            intent = converse(model, widgets, Said(g["goal"]))
+            intent = sending.turn(model, widgets, Said(g["goal"]),
+                                  history=sending.NO_HISTORY)
             clicks = [e.target for e in intent.effects if e.kind == "click"]
             #: **How many, not only which.** The talking harness showed the spurious actions come in
             #: threes and eights while a real request wants one, and that comparison was impossible
@@ -648,8 +1030,14 @@ def run(model_name: str, repeat: int, only: str | None, *,
     disagreed = [r for r in rows if not r["agreed"]]
     print(f"    disagreed  {len(disagreed):>3}   across {repeat} runs at temperature 0"
           f"{' — so a single run is not this number' if disagreed else ''}")
+    #: **The caveat is ON the headline.** These two lines are what gets copied into a commit
+    #: message, and "same or better, no slide" is exactly the claim they cannot carry alone.
+    print(f"\n  {tally[RIGHT]} of {len(answerable)} answerable right, "
+          f"{tally[RIGHT] + tally[DECLINED]} of {len(rows)} correct decisions"
+          f"{sending.caveat(prompt_tag())}")
     cost = spend_summary(spends, ceiling=model.max_tokens)
     print_spend(cost)
+    blind = sending.note(prompt_tag(), truncated=cost["truncated"], of=cost["calls"])
 
     #: **The model and the prompt are both part of the filename, and every model gets one.** Two
     #: separate versions of this have destroyed a baseline: first a 14b run overwrote the 7b file
@@ -665,6 +1053,14 @@ def run(model_name: str, repeat: int, only: str | None, *,
     #: `p` file and a `q` file cannot be mistaken for a matched pair however carelessly they are
     #: read. `converse_file_print` in the JSON is what bridges them.
     tag += f"-{prompt_tag()}"
+    #: **`h` — the harness itself, added 2026-09-11.** `saying.py` recorded this and `choosing.py`
+    #: did not, which is the drift that has destroyed three baselines here: a name that carries
+    #: some conditions and not others. It is also what makes the change that added `sending.turn()`
+    #: safe — every recorded file keeps its own name, because no new run can collide with one
+    #: written before `h` existed. The cost is that editing a comment in this file gets a new
+    #: filename; in this directory that has never cost anything and the alternative has, three
+    #: times.
+    tag += f"-h{sending.harness_print(__file__)}"
     if named:
         #: The `--by-name` arm asks a different question, assembled in this file, and `q` describes
         #: only the one `converse()` asks. `n` is that second prompt, and it is absent from every
@@ -687,6 +1083,11 @@ def run(model_name: str, repeat: int, only: str | None, *,
         #: the reply-shape line that produced the largest measured change in this project was in no
         #: result file anywhere; `prompt_record` is what was actually sent.
         **prompt_fields(),
+        #: Printed **and** stored from one computation — `note()` returns what it printed, so the
+        #: block on screen and the record in the file cannot disagree.
+        **blind,
+        "harness_print": sending.harness_print(__file__),
+        "sending_print": sending.harness_print(sending.__file__),
         #: Only on the arm that uses it, so an index run cannot be read as having asked it.
         **({"by_name_prompt": by_name_print(), "by_name_record": by_name_record()} if named else {}),
         "max_tokens": model.max_tokens, "spend": cost,
@@ -721,7 +1122,9 @@ def main(argv=None) -> int:
                         "then stop. No model, no screens, nothing written")
     p.add_argument("--prompt-check", action="store_true",
                    help="prove the fingerprint moves on the eight things that are the prompt and "
-                        "stays put on the three that are only prose. Reads argmind/, writes "
+                        "stays put on the three that are only prose; then that no harness here can "
+                        "send a turn without saying what it left out. A row that cannot find what "
+                        "it edits is fatal and no score is printed. Reads argmind/, writes "
                         "nothing, calls no model")
     a = p.parse_args(argv)
     if a.prompt_record:
