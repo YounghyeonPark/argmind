@@ -52,7 +52,7 @@ the two days that built this, three of them flattering.
     argmind/__main__.py           app / look / talk / say / watch
     measure/                      goals, captured screens, and every answer behind the numbers
 
-**55 tests, none needing a display, a model or a network.** Re-derive with `python -m pytest`.
+**57 tests, none needing a display, a model or a network.** Re-derive with `python -m pytest`.
 
 ### The invariants a change could break without noticing
 
