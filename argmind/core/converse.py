@@ -31,11 +31,16 @@ from __future__ import annotations
 
 from .intent import Effect, Intent
 
-__all__ = ["converse", "describe", "MAX_LISTED"]
+__all__ = ["converse", "describe", "MAX_LISTED", "MOST_AT_ONCE"]
 
 #: A widget list has to fit in the context beside the conversation. 142 elements measured at ~1,630
 #: prompt tokens, so this is roomy at 8192 and stops one pathological window from filling it.
 MAX_LISTED = 200
+
+#: The most things one thought may do. Click the box, type the name, press enter — that is the
+#: longest sequence this design has ever needed, and an answer longer than it is a misread turn
+#: rather than an ambitious one.
+MOST_AT_ONCE = 3
 
 SYSTEM = """You are a helper the person talks to while they work at their PC.
 
@@ -86,8 +91,23 @@ def converse(model, widgets, trigger, *, history=None, limit: int = MAX_LISTED) 
     reply = model.ask("\n".join(lines))
     got = reply.json() or {}
 
+    wanted = got.get("do") or []
+    #: **More things at once than any real request has is a sign the turn was misread**, and the
+    #: honest response is to distrust the batch rather than to keep the first few. Measured over 28
+    #: goals that genuinely want an action: 27 produce one or two effects, and the single one that
+    #: produced three was wrong anyway. Measured over 34 turns that want none — questions about the
+    #: screen, about the past, about the agent itself — the spurious ones come in threes, fours and
+    #: an eight: *"클릭도 할 수 있어?"* proposed clicking eight things including the close button,
+    #: while saying, correctly, "yes, I can click".
+    #:
+    #: The limit is `MOST_AT_ONCE` and not the eight this used to allow, because three is what the
+    #: documented multi-step case actually is — click the box, type the name, press enter — and
+    #: eight was a number nothing had ever justified.
+    if len(wanted) > MOST_AT_ONCE:
+        return Intent(str(got.get("say", "")).strip(), [], trigger, reply)
+
     effects = []
-    for item in (got.get("do") or [])[:8]:
+    for item in wanted:
         effect = _effect(item, listed, trigger)
         if effect is not None:
             effects.append(effect)

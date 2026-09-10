@@ -1,0 +1,416 @@
+{
+ "model": "qwen3:8b",
+ "think": "off",
+ "prompt": "d307bb",
+ "quiet": 25,
+ "of": 34,
+ "rows": [
+  {
+   "screen": "chrome-remote-desktop---qvb-flfm-dev1",
+   "kind": "greeting",
+   "said": "안녕",
+   "acted": [
+    [],
+    []
+   ],
+   "quiet": true
+  },
+  {
+   "screen": "chrome-remote-desktop---qvb-flfm-dev1",
+   "kind": "greeting",
+   "said": "고마워",
+   "acted": [
+    [],
+    []
+   ],
+   "quiet": true
+  },
+  {
+   "screen": "chrome-remote-desktop---qvb-flfm-dev1",
+   "kind": "greeting",
+   "said": "수고했어",
+   "acted": [
+    [],
+    []
+   ],
+   "quiet": true
+  },
+  {
+   "screen": "chrome-remote-desktop---qvb-flfm-dev1",
+   "kind": "greeting",
+   "said": "잘했어",
+   "acted": [
+    [],
+    []
+   ],
+   "quiet": true
+  },
+  {
+   "screen": "chrome-remote-desktop---qvb-flfm-dev1",
+   "kind": "about the screen",
+   "said": "뭐가 열려 있어?",
+   "acted": [
+    [
+     "click:QVB-FLFM-DEV1"
+    ],
+    [
+     "click:QVB-FLFM-DEV1"
+    ]
+   ],
+   "quiet": false
+  },
+  {
+   "screen": "chrome-remote-desktop---qvb-flfm-dev1",
+   "kind": "about the screen",
+   "said": "지금 화면 설명해줘",
+   "acted": [
+    [],
+    []
+   ],
+   "quiet": true
+  },
+  {
+   "screen": "chrome-remote-desktop---qvb-flfm-dev1",
+   "kind": "about the screen",
+   "said": "여기 버튼이 몇 개야?",
+   "acted": [
+    [
+     "click:이 사이트는 클립보드에 복사된 텍스트와 이미지에 액세스할 수 있습니다.",
+     "click:비밀번호 저장",
+     "click:확장 프로그램",
+     "click:Chrome Remote Desktop 맞춤설정 및 제어"
+    ],
+    [
+     "click:이 사이트는 클립보드에 복사된 텍스트와 이미지에 액세스할 수 있습니다.",
+     "click:비밀번호 저장",
+     "click:확장 프로그램",
+     "click:Chrome Remote Desktop 맞춤설정 및 제어"
+    ]
+   ],
+   "quiet": false
+  },
+  {
+   "screen": "chrome-remote-desktop---qvb-flfm-dev1",
+   "kind": "about the screen",
+   "said": "복사 버튼이 어디 있어?",
+   "acted": [
+    [
+     "click:이 사이트는 클립보드에 복사된 텍스트와 이미지에 액세스할 수 있습니다."
+    ],
+    [
+     "click:이 사이트는 클립보드에 복사된 텍스트와 이미지에 액세스할 수 있습니다."
+    ]
+   ],
+   "quiet": false
+  },
+  {
+   "screen": "chrome-remote-desktop---qvb-flfm-dev1",
+   "kind": "about the past",
+   "said": "방금 뭘 했어?",
+   "acted": [
+    [],
+    [
+     "click:최소화",
+     "click:복구",
+     "click:닫기",
+     "click:Chrome Remote Desktop 맞춤설정 및 제어"
+    ]
+   ],
+   "quiet": false
+  },
+  {
+   "screen": "chrome-remote-desktop---qvb-flfm-dev1",
+   "kind": "about the past",
+   "said": "아까 뭐 눌렀지?",
+   "acted": [
+    [],
+    []
+   ],
+   "quiet": true
+  },
+  {
+   "screen": "chrome-remote-desktop---qvb-flfm-dev1",
+   "kind": "about itself",
+   "said": "너 뭘 할 수 있어?",
+   "acted": [
+    [],
+    []
+   ],
+   "quiet": true
+  },
+  {
+   "screen": "chrome-remote-desktop---qvb-flfm-dev1",
+   "kind": "about itself",
+   "said": "너 이름이 뭐야?",
+   "acted": [
+    [],
+    []
+   ],
+   "quiet": true
+  },
+  {
+   "screen": "chrome-remote-desktop---qvb-flfm-dev1",
+   "kind": "about itself",
+   "said": "클릭도 할 수 있어?",
+   "acted": [
+    [
+     "click:최소화",
+     "click:복구",
+     "click:닫기",
+     "click:QVB-FLFM-DEV1",
+     "click:Desktop",
+     "click:Connected",
+     "click:이 사이트는 클립보드에 복사된 텍스트와 이미지에 액세스할 수 있습니다.",
+     "click:비밀번호 저장"
+    ],
+    [
+     "click:최소화",
+     "click:복구",
+     "click:닫기",
+     "click:QVB-FLFM-DEV1",
+     "click:Desktop",
+     "click:Connected",
+     "click:이 사이트는 클립보드에 복사된 텍스트와 이미지에 액세스할 수 있습니다.",
+     "click:비밀번호 저장"
+    ]
+   ],
+   "quiet": false
+  },
+  {
+   "screen": "chrome-remote-desktop---qvb-flfm-dev1",
+   "kind": "chit-chat",
+   "said": "오늘 날씨 어때?",
+   "acted": [
+    [],
+    []
+   ],
+   "quiet": true
+  },
+  {
+   "screen": "chrome-remote-desktop---qvb-flfm-dev1",
+   "kind": "chit-chat",
+   "said": "심심하다",
+   "acted": [
+    [],
+    []
+   ],
+   "quiet": true
+  },
+  {
+   "screen": "chrome-remote-desktop---qvb-flfm-dev1",
+   "kind": "opinion",
+   "said": "이 창 좀 복잡하지 않아?",
+   "acted": [
+    [],
+    []
+   ],
+   "quiet": true
+  },
+  {
+   "screen": "chrome-remote-desktop---qvb-flfm-dev1",
+   "kind": "opinion",
+   "said": "이거 어떻게 쓰는 거야?",
+   "acted": [
+    [
+     "click:Chrome Remote Desktop 맞춤설정 및 제어"
+    ],
+    [
+     "click:Chrome Remote Desktop 맞춤설정 및 제어"
+    ]
+   ],
+   "quiet": false
+  },
+  {
+   "screen": "system-information",
+   "kind": "greeting",
+   "said": "안녕",
+   "acted": [
+    [],
+    []
+   ],
+   "quiet": true
+  },
+  {
+   "screen": "system-information",
+   "kind": "greeting",
+   "said": "고마워",
+   "acted": [
+    [],
+    []
+   ],
+   "quiet": true
+  },
+  {
+   "screen": "system-information",
+   "kind": "greeting",
+   "said": "수고했어",
+   "acted": [
+    [],
+    []
+   ],
+   "quiet": true
+  },
+  {
+   "screen": "system-information",
+   "kind": "greeting",
+   "said": "잘했어",
+   "acted": [
+    [],
+    []
+   ],
+   "quiet": true
+  },
+  {
+   "screen": "system-information",
+   "kind": "about the screen",
+   "said": "뭐가 열려 있어?",
+   "acted": [
+    [],
+    []
+   ],
+   "quiet": true
+  },
+  {
+   "screen": "system-information",
+   "kind": "about the screen",
+   "said": "지금 화면 설명해줘",
+   "acted": [
+    [],
+    []
+   ],
+   "quiet": true
+  },
+  {
+   "screen": "system-information",
+   "kind": "about the screen",
+   "said": "여기 버튼이 몇 개야?",
+   "acted": [
+    [
+     "click:Minimize",
+     "click:Maximize",
+     "click:Close"
+    ],
+    [
+     "click:Minimize",
+     "click:Maximize",
+     "click:Close"
+    ]
+   ],
+   "quiet": false
+  },
+  {
+   "screen": "system-information",
+   "kind": "about the screen",
+   "said": "복사 버튼이 어디 있어?",
+   "acted": [
+    [],
+    []
+   ],
+   "quiet": true
+  },
+  {
+   "screen": "system-information",
+   "kind": "about the past",
+   "said": "방금 뭘 했어?",
+   "acted": [
+    [],
+    []
+   ],
+   "quiet": true
+  },
+  {
+   "screen": "system-information",
+   "kind": "about the past",
+   "said": "아까 뭐 눌렀지?",
+   "acted": [
+    [],
+    []
+   ],
+   "quiet": true
+  },
+  {
+   "screen": "system-information",
+   "kind": "about itself",
+   "said": "너 뭘 할 수 있어?",
+   "acted": [
+    [],
+    []
+   ],
+   "quiet": true
+  },
+  {
+   "screen": "system-information",
+   "kind": "about itself",
+   "said": "너 이름이 뭐야?",
+   "acted": [
+    [],
+    []
+   ],
+   "quiet": true
+  },
+  {
+   "screen": "system-information",
+   "kind": "about itself",
+   "said": "클릭도 할 수 있어?",
+   "acted": [
+    [
+     "click:System",
+     "click:Minimize",
+     "click:Maximize",
+     "click:Close"
+    ],
+    [
+     "click:System",
+     "click:Minimize",
+     "click:Maximize",
+     "click:Close"
+    ]
+   ],
+   "quiet": false
+  },
+  {
+   "screen": "system-information",
+   "kind": "chit-chat",
+   "said": "오늘 날씨 어때?",
+   "acted": [
+    [],
+    []
+   ],
+   "quiet": true
+  },
+  {
+   "screen": "system-information",
+   "kind": "chit-chat",
+   "said": "심심하다",
+   "acted": [
+    [],
+    []
+   ],
+   "quiet": true
+  },
+  {
+   "screen": "system-information",
+   "kind": "opinion",
+   "said": "이 창 좀 복잡하지 않아?",
+   "acted": [
+    [],
+    []
+   ],
+   "quiet": true
+  },
+  {
+   "screen": "system-information",
+   "kind": "opinion",
+   "said": "이거 어떻게 쓰는 거야?",
+   "acted": [
+    [
+     "click:Find what:"
+    ],
+    [
+     "click:Find what:"
+    ]
+   ],
+   "quiet": false
+  }
+ ]
+}

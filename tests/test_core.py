@@ -211,6 +211,29 @@ def test_a_NESTED_reply_is_read_whole(text, effects):
     assert len(ex.did) == effects
 
 
+def test_MORE_THINGS_AT_ONCE_than_any_real_request_has_is_refused_whole():
+    """**A misread turn, not an ambitious one.** Measured: over 28 goals that genuinely want an
+    action, 27 produce one effect or two and the single one that produced three was wrong anyway.
+    Over 34 turns that want none, the spurious ones come in threes, fours and an eight — asked
+    *"클릭도 할 수 있어?"* it proposed clicking eight things including the close button, while
+    answering the question correctly.
+
+    Refused whole rather than truncated: keeping the first three of eight is trusting a reply that
+    has already shown it misunderstood. The speech survives, because the speech was right.
+    """
+    many = [{"click": i} for i in range(4)]
+    ex = session(FakeModel(says("네, 클릭도 할 수 있어", *many))).exchange("클릭도 할 수 있어?")
+    assert ex.did == [] and ex.refused == []
+    assert ex.said == "네, 클릭도 할 수 있어", "it threw away the answer along with the actions"
+
+
+def test_a_genuine_multi_step_request_still_fits():
+    """The limit is three because three is what the documented sequence is. One less and this
+    breaks; the eight it replaced was a number nothing had justified."""
+    s = session(FakeModel(says("검색할게요", {"click": 1}, {"type": "argmind"}, {"key": "enter"})))
+    assert len(s.exchange("share에 argmind 치고 엔터").did) == 3
+
+
 def test_NOTHING_MATCHED_is_counted_because_it_decides_what_to_build_next():
     """`blind` is the number that would justify anything slower and cleverer than this. Estimating
     it later is how the previous project spent a month on a mechanism nothing needed."""

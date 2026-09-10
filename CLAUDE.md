@@ -106,6 +106,26 @@ actions, refusals and "they said no" in the conversation beside the speech, and 
 when it proposes, runs, or you press 아니오. It changed none of the four outcomes: not an
 improvement, the removal of a dependence on the model having good manners.
 
+**A quarter of conversation produced an action, and a limit fixed a third of that for free.**
+`measure/talking.py`: 17 things that ask for nothing, on the smallest and largest windows — **25 of
+34 kept its hands off, 74%**. *"클릭도 할 수 있어?"* proposed clicking eight things including 닫기
+while answering the question correctly. **In every failure the speech is right and the action is
+decorative.**
+
+Splitting talking from choosing means classifying first, and a classifier is a round trip. The
+prompt route — take `do` out of the default reply shape — **looked like the first prompt success
+here and was a confound I introduced**: `--think` defaulted to unset, so qwen3:8b thought, and 5.63 s
+a call instead of 0.45 is the only reason it was caught. Measured properly the new shape never wins
+a cell (thinking off: talk 100% but choose **24 of 37**, because it stops acting at all). Reverted.
+**Prompt edits here are 0 for 5.**
+
+What worked is a signature. Real requests want one thing or two — 27 of 28 — while the spurious ones
+come in threes, fours and an eight. **`MOST_AT_ONCE = 3` refuses an over-long batch whole** rather
+than truncating, because keeping the first three of eight trusts a reply that has already shown it
+misunderstood. Three is the documented multi-step case exactly; the eight it replaced was never
+justified. **Conversation 74% → 85%, choosing unchanged at 30 of 37, latency unchanged.** The first
+change here to improve something with no trade.
+
 **A question about the past makes it act again** (0 of 1) and that is being left alone. A prompt
 line aimed at it did not fix it and broke a language case, taking Korean from 5 of 6 to 4 of 6 —
 **the fourth prompt edit here to make something worse, 0 for 4**. In the app the effect is a

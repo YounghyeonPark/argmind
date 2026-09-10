@@ -55,11 +55,27 @@ sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))
 
 from argmind.core import Said, converse                                  # noqa: E402
 from argmind.core.converse import SYSTEM                                 # noqa: E402
+import hashlib                                                          # noqa: E402
 from argmind.core.llm import Local                                       # noqa: E402
 from measure.capture import load                                         # noqa: E402
 
 HERE = pathlib.Path(__file__).resolve().parent
 RIGHT, WRONG, MISSED, DECLINED = "right", "wrong", "missed", "declined"
+
+
+def prompt_print() -> str:
+    """Six characters that change when the prompt does.
+
+    Hashes `converse.py` itself, which holds both the system prompt and the reply-shape
+    instructions — the two things that have moved and the two things a number is silently a
+    function of. Reading the file rather than the module because `argmind.core` re-exports a
+    *function* called `converse` over the *module* called `converse`, and asking for the source of
+    the wrong one is a quiet way to fingerprint nothing.
+    """
+    import argmind.core                                                  # noqa: PLC0415
+
+    source = pathlib.Path(argmind.core.__file__).with_name("converse.py")
+    return hashlib.sha256(source.read_bytes()).hexdigest()[:6]
 
 
 def by_name(model, widgets, goal):
@@ -162,7 +178,7 @@ def run(model_name: str, repeat: int, only: str | None, *,
             #: and the analysis of it silently scored against an order that was never shown to the
             #: model. A measurement whose conditions cannot be reconstructed is not a measurement.
             random.Random(shuffle * 1000003 + zlib.crc32(g["goal"].encode())).shuffle(widgets)
-        seen, rejected = [], []
+        seen, rejected, counts = [], [], []
         for _ in range(repeat):
             if named:
                 got, raw = by_name(model, widgets, g["goal"])
@@ -171,6 +187,10 @@ def run(model_name: str, repeat: int, only: str | None, *,
                 continue
             intent = converse(model, widgets, Said(g["goal"]))
             clicks = [e.target for e in intent.effects if e.kind == "click"]
+            #: **How many, not only which.** The talking harness showed the spurious actions come in
+            #: threes and eights while a real request wants one, and that comparison was impossible
+            #: because this file kept the first click and dropped the count.
+            counts.append(len(intent.effects))
             seen.append(clicks[0] if clicks else None)
         results = [outcome(c, g["accept"]) for c in seen]
         #: Positions are recorded rather than reconstructed later, for the same reason: the order
@@ -186,7 +206,7 @@ def run(model_name: str, repeat: int, only: str | None, *,
         rows.append({"screen": g["screen"], "goal": g["goal"], "accept": g["accept"],
                      "chose": seen, "results": results, "counted": worst, "agreed": agreed,
                      "chose_at": at, "right_at": right_at, "n_listed": len(names),
-                     "rejected": rejected})
+                     "rejected": rejected, "effects": counts})
         mark = "" if agreed else "  (disagreed across runs)"
         print(f"  {worst.upper():<9} {g['screen'][:14]:<14} {g['goal'][:28]:<28} "
               f"{str(seen[0])[:34]}{mark}")
@@ -204,18 +224,23 @@ def run(model_name: str, repeat: int, only: str | None, *,
     print(f"    disagreed  {len(disagreed):>3}   across {repeat} runs at temperature 0"
           f"{' — so a single run is not this number' if disagreed else ''}")
 
-    #: **The model is part of the filename.** It was not, and a 14b run silently overwrote the 7b
-    #: baseline this whole document compares against — a measurement that destroys the thing it is
-    #: being compared to.
+    #: **The model and the prompt are both part of the filename, and every model gets one.** Two
+    #: separate versions of this have destroyed a baseline: first a 14b run overwrote the 7b file
+    #: because the name carried only the protocol, and then the fix — keeping the historic name for
+    #: the 7b — let a *7b* run overwrite it again. There is no exception now.
     stem = model_name.replace(":", "-").replace("/", "-")
     tag = (("name" if named else "index") + ("" if shuffle is None else f"-shuffled{shuffle}")
-           + ("" if not drop else "-without-" + "-".join(drop)))
-    tag = f"{tag}-{stem}" if stem != "qwen2.5-7b" else tag
+           + ("" if not drop else "-without-" + "-".join(drop)) + f"-{stem}")
     tag += "" if think is None else ("-thinking" if think else "-nothink")
+    tag += f"-p{prompt_print()}"
     out = HERE / f"choosing-{tag}.json"
     out.write_text(json.dumps({
         "model": model_name, "repeat": repeat, "seconds": round(took, 1),
-        "how": how, "named": named, "shuffle": shuffle,
+        "how": how, "named": named, "shuffle": shuffle, "think": think,
+        #: **Which prompt produced this.** Four rows of a model-comparison table were measured under
+        #: one reply shape and a fifth under another, and nothing in the files said so — the table
+        #: read as a comparison of models and was partly a comparison of prompts.
+        "prompt": prompt_print(), "prompt_text": SYSTEM,
         "screens": {k: len(v) for k, v in screens.items()},
         "tally": dict(tally), "rows": rows,
     }, ensure_ascii=False, indent=1), encoding="utf-8")
@@ -234,10 +259,11 @@ def main(argv=None) -> int:
                    help="ask for the exact name instead of a list index")
     p.add_argument("--shuffle", type=int, default=None, metavar="SEED",
                    help="shuffle each screen's order — separates an index error from a meaning one")
-    p.add_argument("--think", choices=("on", "off"), default=None,
-                   help="a reasoning model's thinking. Off makes qwen3:8b answer in 0.36 s instead "
-                        "of 4.48 s; the default leaves the field out, which is what a model that "
-                        "has never heard of it needs")
+    p.add_argument("--think", choices=("on", "off"), default="off",
+                   help="a reasoning model's thinking. **Defaults to off, which is what ships** — "
+                        "leaving it unset used to omit the field, so qwen3:8b thought, and a run "
+                        "meant to measure a prompt change measured the prompt AND the thinking "
+                        "(5.63 s a call instead of 0.45 gave it away)")
     p.add_argument("--drop", default=None, metavar="ROLES",
                    help="comma-separated roles to leave out of the list, e.g. 'text'. Order is "
                         "preserved, because shuffling was measured to cost accuracy")

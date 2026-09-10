@@ -63,6 +63,78 @@ with a button*, so the cost of this defect is a row you ignore — exactly the "
 fine" case. Spending another four attempts on it would be optimising the axis the owner just said
 was not the point.
 
+## A quarter of conversation produced an action, and the fix was not to split the call
+
+`measure/talking.py`. Seventeen things a person says that ask for **nothing** — greetings,
+questions about the screen, about the past, about the agent itself, chit-chat, opinions — on the
+smallest and largest captured windows, twice each. Its pair is `measure/choosing.py`, where 28 of 37
+goals *want* an action: a model that never acts scores perfectly here and is useless, so neither
+number means anything alone.
+
+**25 of 34 kept its hands off. 74%.** And the failures are not near-misses:
+
+    클릭도 할 수 있어?      proposed clicking 8 things including 닫기, while saying "네, 클릭도 할 수 있어"
+    방금 뭘 했어?          proposed 4 clicks including 닫기
+    여기 버튼이 몇 개야?     said "버튼이 4개 있어" and proposed clicking all four
+
+**In every case the speech is right and the action is decorative.** The model understands the turn;
+it fills `do` because `do` is always in the shape it was asked for.
+
+### The obvious fix was to separate talking from choosing, and it is the wrong one
+
+Splitting the paths means classifying first, and a classifier is a round trip — the thing this design
+spends its whole budget on. The prompt route was tried instead: take `do` out of the default reply
+shape and ask for it *only* when acting.
+
+**It looked like the first prompt edit here to work, and that was a confound I introduced.**
+Conversation went to 34 of 34 and choosing appeared to rise to 33 of 37 — but that run took 5.63 s a
+call instead of 0.45, because `--think` defaulted to *unset* and qwen3:8b therefore thought. The
+latency is the only reason it was caught. Measured properly:
+
+| | old shape | new shape |
+|---|---|---|
+| **thinking off** | talk 74%, choose **30 of 37**, 0.45 s | talk 100%, choose 24 of 37, 0.71 s |
+| **thinking on** | talk **94%**, choose **34 of 37**, 3.75 s | talk —, choose 33 of 37, 5.63 s |
+
+The new shape never wins a cell. It buys silence by not acting at all — 15 of 28 goals missed —
+which is the same slide along the act-versus-refuse line as everything else. Reverted;
+`converse.py` is byte-identical to what was committed. **Prompt edits here are 0 for 5.**
+
+### The spurious actions have a signature, and it is free to use
+
+| effects in one reply | goals that want an action (28) | conversational turns that went wrong (9) |
+|---|---|---|
+| 0–2 | **27** | 4 |
+| 3 or more | 1, and it was wrong anyway | **5** — a three, three fours, and an eight |
+
+A real request wants one thing, occasionally two. **An answer proposing more things at once than any
+real request has is a misread turn, not an ambitious one** — so the whole batch is refused rather
+than truncated, because keeping the first three of eight is trusting a reply that has already shown
+it misunderstood.
+
+`MOST_AT_ONCE = 3`, replacing a limit of eight that nothing had ever justified. Three is what the
+documented multi-step case actually is: click the box, type the name, press enter.
+
+| | before | after |
+|---|---|---|
+| conversation with no action | 25 of 34 (74%) | **29 of 34 (85%)** |
+| choosing, correct decisions | 30 of 37 | **30 of 37** |
+| a call | 0.47 s | 0.48 s |
+
+**The first change on this project to improve something with no trade at all.** Not a better prompt
+and not a second call — a limit derived from what the two measurements together say a real request
+looks like.
+
+**What it does not fix**: the four remaining spurious turns propose exactly one thing, and nothing
+distinguishes them from a real request by shape. In the app each costs a row you ignore, which is
+the case the owner called fine. The lever that would fix them is thinking — 94% and 34 of 37 — at
+3.75 s a reply, and that is a trade against the conversation itself.
+
+**A limit of this goal set, stated because the number depends on it**: none of the 37 goals is a
+genuine three-step request. `test_ONE_THOUGHT_can_produce_SEVERAL_effects` covers that case in the
+suite, and the fixtures are static screens where a real three-step task cannot be posed honestly —
+the second step's widgets do not exist until the first has run.
+
 ## What is still unmeasured about interaction
 
 Everything that is not a single objective fact. Whether it is *pleasant*: it answers in one terse
