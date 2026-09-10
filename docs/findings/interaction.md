@@ -189,6 +189,73 @@ evidence for a window of 48; at distance 8 both settings carried the entire hist
 identical prompts, so that step is repeat noise and **the only real step is 12 → 24 lines**. And I
 told the owner twelve lines was about three turns; it is 5.7.
 
+## The field order is a trade between two defects, and three harnesses cannot see one side
+
+Putting `do` before `say` took the index leak from 6 of 32 to 0 of 32 and moved choosing and talking
+up, and it was committed as an improvement with no slide. **That claim was measured on three
+harnesses that call `converse()` with no history at all** — `talking.py:99`, `saying.py:538`, and
+`choosing.py` whose only `history=` is inside the fingerprint probe. Anything that depends on the
+conversation is invisible to all three, and they reproduced their baselines digit for digit under a
+prompt change that makes the agent click the eraser when greeted.
+
+**What the order actually does, measured on individual probes:**
+
+| a stated rule was obeyed | d=1 | d=3 | d=5 | d=8 |
+|---|---|---|---|---|
+| `do` first (shipped) | 0/9 | 6/9 | 1/9 | 7/9 |
+| `say` first | **9/9** | **9/9** | **9/9** | **9/9** |
+
+It is `converse.py`'s own leak mechanism running backwards. **Whichever field is written first is
+written without the other.** Speech first carries the freshest thing the model has, which is the
+index — that is the leak. Action first is committed before anything has been considered, and a rule
+lives in language rather than in the action slot. Under say-first the probe answers *"이 창을 닫을 수
+없습니다. 닫기 버튼은 절대 누르지 않겠습니다"*; under do-first, *"창을 닫겠습니다"* with `Close`
+clicked.
+
+|  | `do` first (shipped) | `say` first |
+|---|---|---|
+| index leak | **0 of 32** | 6 of 32 |
+| choosing, correct decisions | **32 of 37** | 30 of 37 |
+| talking, quiet | **31 of 34** | 29 of 34 |
+| a stated rule obeyed, d ≤ 8 | 14 of 36 | **36 of 36** |
+
+**The defect is not distance and not truncation.** At distance 1 — the rule four lines up, nothing
+dropped — the shipped agent violated it in 36 of 36 probes across four processes, controls violating
+36 of 36. The earlier table recording "kept 2/2 at distance 1" was measured under say-first. **The
+rule is not forgotten, it is out-argued by the field it was asked to fill first.**
+
+### A third option with a higher ceiling, and the reason it is not built
+
+Pinning the rule line verbatim below the widget list, keeping do-first and adding no words: **11 of
+12 powered cells at d ≤ 8 against 4 of 12**, controls violating 36 of 36, and no cost on leak,
+choosing or talking. Two placement controls bound it — hoisting the rule to the end of the
+`Recently:` block gives 3/3 at d=1 and **0/3** at d=8, and moving the whole history block below the
+list gives 2/3 and 1/3. So it is not "which block" and not "inside the window": it is **past the
+widget list, and short**.
+
+It needs an oracle, and **the classification-free version is worse than the disease.** Repeating
+every line the person said, below the list, made the constraint table look like a win and multiplied
+spurious effects during ordinary filler turns by **4.5× (338 over 225 conversations against 75)**:
+
+    지우개 골라줘        -> Eraser selected.   ['Eraser']
+    안녕                -> Eraser selected.   ['Eraser']
+    오늘 날씨 어때?      -> Eraser selected.   ['Eraser']
+    심심하다            -> Eraser selected.   ['Eraser']
+
+A pinned prohibition has nothing to execute; **a pinned request gets re-executed every turn after**.
+The filler counter caught it; the constraint table alone would have shipped it.
+
+### Two limits of this fixture, stated because a fix could be fitted to them
+
+**Every constraint, reference and reoffer case puts its anchor at turn 1.** Any heuristic keyed on
+position — pin the oldest, pin the first — scores perfectly and measures the fixture. A case that
+states its rule mid-conversation is the discriminator and does not exist yet.
+
+**`converse_file_print()` is not stable under a checkout on this machine.** It reads raw bytes and
+`core.autocrlf=true`; a plain `git checkout -- argmind/core/converse.py` moved it `9b561b → ac432a`
+with `git diff` empty. The field documented as the bridge across the fingerprint migration cannot do
+that job. `prompt_print()` is immune because it renders strings.
+
 **Repeat 1 is not exchangeable with repeats 2 and 3.** Of 19 disagreeing cells, **16 have the first
 repeat as the odd one out** (p < 0.0001 against uniform placement), and in 12 of those the cold first
 draw was the *better* one. The likely mechanism is prefix-cache reuse on the replays, unproven. The
