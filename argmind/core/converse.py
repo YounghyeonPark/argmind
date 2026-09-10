@@ -5,36 +5,101 @@ The model answers both in a single round trip, because latency is the budget and
 double the only expensive thing in the loop. Measured on this machine with a 142-widget list:
 **67–85 ms to first token**, 156–200 ms in total.
 
-    {"do": [], "say": "..."}                           answered, nothing touched
-    {"do": [{"click": 3}], "say": "..."}               answered, and one thing to do
-    {"do": [{"click": 3}, {"key": "enter"}], "say": "..."}   several
+    {"say": "...", "do": []}                           answered, nothing touched
+    {"say": "...", "do": [{"click": 3}]}               answered, and one thing to do
+    {"say": "...", "do": [{"click": 3}, {"key": "enter"}]}   several
 
-**"do" comes before "say", and that ordering IS the fix for a communication defect.** Measured over
-32 requests whose correct reply contains no number at all: with "say" first the model spoke the
-internal index in **6 of 32** replies — *"지우개는 22번 버튼입니다"*, and twice the whole reply was the bare
-number — and with "do" first, **0 of 32**, exact paired p = 0.031. The reading is that the number is
-the freshest thing the model has when it reaches the first field it must fill: put the field the
-number belongs in *first* and the address is discharged where it belongs, leaving the speech to be
-composed after the decision rather than in place of it. It is the same de-referencing `_effect()`
-already does, moved one step earlier. **This was not a sentence added to the prompt.** Five have
-been added to `SYSTEM` over this project's life and all five slid the model between acting and
-refusing without moving the line; the two things that ever moved it are `MOST_AT_ONCE` and this.
+**WHICHEVER FIELD IS WRITTEN FIRST IS WRITTEN WITHOUT THE OTHER.** One mechanism, two opposite
+defects, and it is the thing to know before editing the line that renders below. Speech first is
+composed before the decision exists, so the freshest thing the model is holding — the widget's
+index — lands in the sentence: *"지우개는 22번 버튼입니다"*, and sometimes the reply is the bare number.
+Action first is committed before anything has been considered, so a rule the person stated a few
+turns ago is never consulted — a rule lives in language and there is nowhere to put one in an
+action slot — and the speech that should have carried it is written afterwards or not at all:
+**68 turns of 1,845 clicked something and said NOTHING**, measured with "do" first. Reordering this
+line repairs neither defect. It chooses which one to pay.
 
-**A placeholder that says "<text>" gets the nearest literal typed into it.** With "say" now the last
-key in the envelope, `{"type": "<text>"}` produced `{"type": "say"}` **11 times in 68 conversational
-turns** — the agent typing the word *say* into the person's application. Naming the slot
-`"<text to type>"` takes that to 0. The placeholder is load-bearing, not decoration.
+**"say" is first, and that is a MEASURED TRADE the owner settled on 2026-09-10 with both columns in
+front of them — not a default and not an arbitrary ordering.** `qwen3:8b`, thinking off, the same
+fixtures, worst of three repeats throughout:
 
-**The key slot is closed, and "|..." in it was measured to cost 22 to 71 SECONDS.** With "do"
-first, `{"key": "<enter|tab|escape|...>"}` sends the model into degenerate repetition on a request
-it cannot satisfy cleanly: asked *"확대해줘"* on Paint it emitted `{"key": "tab"}` **two hundred times**,
-1,338 output tokens and 22 s on one wording; on another it ran to the 4,096-token ceiling — **71 s
-and `done_reason: length`, so `Reply.json()` returned None and the turn produced nothing at all**.
-`MOST_AT_ONCE` refuses the batch, so nothing is pressed; what it cannot refund is the wait. With the
-alternatives closed the same call is 0.4-0.6 s and 22 output tokens, and no reply in a 111-call
-sweep exceeds 40. **The quantity to watch is generated LENGTH, not seconds** — a sweep run while
-this machine was busy shows 6-14 s stalls at 17-39 output tokens on the **baseline** as well, so
-wall-clock tails here are prefill and belong to the machine, while 1,338 and 4,096 do not.
+                                             "do" first      "say" first        harness
+    the index spoken to the person           0 of 32         5 of 32            saying
+    a rule stated d turns ago obeyed         9 of 36        36 of 36            conversation, d ≤ 8
+    correct decisions                       32 of 37        28 of 37            choosing
+    turns that touch nothing                31 of 34        31 of 34            talking
+    turns that said nothing at all      71 of 1,845     18 of 1,845             conversation
+    a call, median                          0.59 s          0.60 s              conversation
+
+The rule row is nine individual probes at each of d = 1, 3, 5, 8 — **9/9 at every one of them**
+against 3/9, 3/9, 1/9, 2/9 — and its own control arm reads 3/9 at every distance, so the treatment
+is what moved and not the screen. It is the largest effect anything in `measure/` has recorded for
+this file.
+
+**What it costs, at these sizes, is choosing and the leak.** Four correct decisions here, and **that
+row is the noisiest thing in the table**: "say" first has read 21, 23 and 24 right of 28 across
+runs — `qa62805`, `p5461db`, and a back-to-back repeat of `p5461db` — against 24 twice for "do"
+first. Two to four is the size; one run is not. **Talking's two did not reproduce at all**: 31 of 34
+both ways here, against 29 of 34 at `p5461db`. The leak is the dependable cost — five or six of 32
+against zero, wherever it has been measured — and four of the five are conclusive, the index of a
+widget the same reply clicked.
+
+The reasoning the numbers do not settle is the owner's, and it is about interaction rather than
+accuracy: **an agent that visibly disregards an instruction it was just given damages the
+conversation more than one that occasionally says "22"** — an action is gated behind a button, and a
+broken rule is gated by nothing.
+
+**Neither column is a regression that somebody fixed.** Both are shipped configurations of this one
+literal, measured on the same four harnesses; the fingerprints are `q1ec131` for the first and
+`qa62805` for the second, and `measure/`'s result files carry them in their names. **This was never
+a sentence added to the prompt.** Five have been added to `SYSTEM` over this project's life and all
+five slid the model between acting and refusing without moving the line. The three changes that have
+moved anything measured here are structural: `MOST_AT_ONCE`, this ordering, and closing the key list
+— and only the first two touch the acting-versus-refusing line at all.
+
+**A `say` filed inside `do` is a "do"-first failure and its recovery went with the ordering.**
+`_said()` used to search `do` for an utterance the model had misfiled there — `{"do": [{"say":
+"화면에 20개의 버튼이 있어요."}]}` — at 3 and 4 of 132 calls on two "do"-first wordings. Under "say"
+first the envelope's own `say` was non-empty in **2,165 of the 2,165 calls that parsed**, of 2,183
+logged across all four harnesses, so its precondition never occurred once. It was deleted rather
+than left in as insurance, for two reasons. It never covered the failure that actually silences this
+agent: `_said()` was live for all 71 silent turns above and recovered none of them, because a
+"do"-first silence is a `say` that was never written, not one written in the wrong place. And a
+silent repair costs something even when it never fires — `saying.py`'s `answer.empty` category is
+the one place a misfile is visible, and a recovery upstream of it would take that away.
+
+**The remaining 18 silences have a different cause and no repair here.** They ran to the 4,096-token
+ceiling, so `Reply.json()` returns `None`, there is no reply to read a field out of, and the turn
+produces nothing at all — see the key-slot paragraph below, which is where that failure lives.
+
+**A placeholder that says "<text>" gets the nearest literal typed into it.** Measured with "say"
+last in the envelope, `{"type": "<text>"}` produced `{"type": "say"}` **11 times in 68
+conversational turns** — the agent typing the word *say* into the person's application. Naming
+the slot `"<text to type>"` takes that to 0. The placeholder is load-bearing, not decoration, and
+it is kept under either ordering: it cost nothing to name properly and nothing has measured the
+failure to depend on where `say` sits.
+
+**The key slot is closed, and "|..." in it was measured to cost 22 to 71 SECONDS.** Measured with
+"do" first, `{"key": "<enter|tab|escape|...>"}` sends the model into degenerate repetition on a
+request it cannot satisfy cleanly: asked *"확대해줘"* on Paint it emitted `{"key": "tab"}` **two
+hundred times**, 1,338 output tokens and 22 s on one wording; on another it ran to the
+4,096-token ceiling — **71 s and `done_reason: length`, so `Reply.json()` returned None and the
+turn produced nothing at all**. `MOST_AT_ONCE` refuses the batch, so nothing is pressed; what it
+cannot refund is the wait. With the alternatives closed the same call is 0.4-0.6 s and 22 output
+tokens, and no reply in a 111-call sweep exceeds 40. **The quantity to watch is generated LENGTH,
+not seconds** — a sweep run while this machine was busy shows 6-14 s stalls at 17-39 output tokens
+on the **baseline** as well, so wall-clock tails here are prefill and belong to the machine, while
+1,338 and 4,096 do not.
+**Closing the list did not end the degeneration, and that correction is from 2026-09-10.** The
+sweep behind "no reply exceeds 40" was `choosing.py`, which carries no conversation; with a history
+in the prompt and "say" first, **18 of 1,845 turns still ran to the 4,096-token ceiling** — the same
+`{"key": "tab"}` repetition, every one of them the same filler line, *"너 뭘 할 수 있어?"*, on one
+screen, at 69-71 s each: **47% of that run's model time in 1.0% of its turns**. Against 3 of 1,845
+with "do" first. The closed list is kept — a separate change with its own justification, which the
+owner did not reverse — but what it bought is a **rate**, not an impossibility, and a reply that
+hits the ceiling is a turn the person hears nothing back from. `num_predict` is where that is
+bounded, and it belongs to `llm.py` rather than to this file.
+
 **The trade is real**: the environment declares **fifteen key names over fourteen distinct virtual
 keys** (`esc` and `escape` are both `0x1B`) and this advertises three. Whether that costs anything
 is **unknown, not zero** — no goal in `measure/goals.json` needs a key beyond `enter` or `tab`, and
@@ -45,8 +110,11 @@ is **unknown, not zero** — no goal in `measure/goals.json` needs a key beyond 
 can re-derive them**: every harness stores aggregates and no per-effect record survives. A number
 that cannot be re-derived is exactly what this project's standards forbid, and it sat here for a day
 because correcting a comment in this file used to fork the measurement fingerprint. It no longer
-does — `measure/choosing.py` hashes the prompt as rendered, and `--prompt-check` asserts that this
-very edit does not fork it.
+does — `measure/choosing.py` hashes the prompt as rendered, `--prompt-check` asserts that a prose
+edit does not fork it, and **the say-first change exercised that for real**: this file's own hash
+moved through six values on 2026-09-10 while `q` stayed `qa62805` from the moment the reply-shape
+line was swapped, so the paragraphs above were written after the runs they report rather than
+guessed before them.
 
 What survives the withdrawal is the shape of the argument, which does not depend on the counts: the
 open list never produced a valid key that the closed one misses, and it did produce an invented
@@ -130,15 +198,22 @@ def converse(model, widgets, trigger, *, history=None, limit: int = MAX_LISTED) 
         (f"They said: {trigger.text}" if trigger.asked
          else f"You noticed: {trigger.text}"),
         "",
-        'Reply with only JSON: {"do": [ ... ], "say": "<what you say back>"} where each entry of',
+        'Reply with only JSON: {"say": "<what you say back>", "do": [ ... ]} where each entry of',
         '"do" is {"click": <number>}, {"type": "<text to type>"} or {"key": "<enter|tab|escape>"}.',
         'Leave "do" empty if nothing should happen.',
     ]
     reply = model.ask("\n".join(lines))
     got = reply.json() or {}
 
+    #: `.get`, because **14 of 2,165 logged replies carried no `"do"` key at all** — the model
+    #: finished the sentence and stopped. That is the same mechanism the docstring opens with, seen
+    #: from the side this ordering pays it on, and it costs nothing: nothing to do is a real answer.
     wanted = got.get("do") or []
-    said = _said(got, wanted)
+    #: The envelope's own field, and **the only place an utterance is looked for**. Under this
+    #: ordering the model filled it in every one of those 2,165 replies, and the recovery that used
+    #: to stand here went with the ordering it was built for — the docstring says why it was deleted
+    #: rather than kept as insurance.
+    said = str(got.get("say", "")).strip()
     #: **More things at once than any real request has is a sign the turn was misread**, and the
     #: honest response is to distrust the batch rather than to keep the first few. Measured over 28
     #: goals that genuinely want an action: 27 produce one or two effects, and the single one that
@@ -159,37 +234,6 @@ def converse(model, widgets, trigger, *, history=None, limit: int = MAX_LISTED) 
         if effect is not None:
             effects.append(effect)
     return Intent(said, effects, trigger, reply)
-
-
-def _said(got, wanted) -> str:
-    """What the person hears — including the case where the model filed it in the wrong place.
-
-    Asking for `"do"` first buys a clean reply at the cost of one new way to be misunderstood: the
-    model sometimes answers `{"do": [{"say": "화면에 20개의 버튼이 있어요."}]}`, putting the whole utterance
-    inside the list of things to do. `_effect()` correctly drops that entry — it is not an effect —
-    and the person then hears **nothing at all**, which is the worst outcome available: measured at
-    **3 of 132 calls** on one wording of the prompt and 4 of 132 on another, always on a question
-    that had a perfectly good answer waiting inside it.
-
-    Recovering it is de-misfiling, not repair. It is the same move `_effect()` makes when it turns
-    an index into a name, and it is deliberately incapable of changing anything else:
-
-    * it never runs when the model filled `"say"` properly, so a correct reply cannot be rewritten;
-    * it never adds, drops or alters an effect — the entry stays unusable and stays dropped;
-    * it prefers the envelope to the list, so a reply carrying both is read the ordinary way.
-
-    **Not fixed in the prompt on purpose.** Of six wordings measured, two provoke the misfiling
-    and four do not, with no mechanism distinguishing them; at temperature 0 that makes a quiet
-    wording luck rather than a fix, and luck is not something to ship. This makes the ordering
-    robust to the wording instead of dependent on it.
-    """
-    said = str(got.get("say", "")).strip()
-    if said:
-        return said
-    for item in wanted:
-        if isinstance(item, dict) and isinstance(item.get("say"), str) and item["say"].strip():
-            return item["say"].strip()
-    return ""
 
 
 def _effect(item, listed, trigger) -> Effect | None:
