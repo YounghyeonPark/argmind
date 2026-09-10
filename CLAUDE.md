@@ -337,15 +337,23 @@ call it.
 
 ## Sub-agent team
 
-Three project-scoped agents in `.claude/agents/`, checked in for the same reason `.githooks/` is —
-the discipline belongs to the project, not to one machine. `parity-verifier` and `embedded-reviewer`
-were removed with the C++ port they existed to check.
+Five project-scoped agents in `.claude/agents/`, checked in for the same reason `.githooks/` is —
+the discipline belongs to the project, not to one machine. **Rebuilt 2026-09-10 for the project this
+became**; `.claude/agents/README.md` has the tally that chose them.
 
 | agent | when to reach for it |
 |---|---|
+| `harness-auditor` | before running a new measurement; before quoting a number; when a result is convenient |
+| `prompt-referee` | after **any** edit to `converse.py`, the widget list, the model or its options |
+| `windows-reviewer` | after any change under `argmind/env/`; before trusting a coordinate |
 | `evidence-auditor` | before a commit stating a number; after editing this file; when a result looks good |
-| `numerics-reviewer` | when a measurement needs designing so it can produce a negative result |
 | `mutation-tester` | after writing a module and its tests; before claiming a suite protects something |
+
+**`numerics-reviewer` is gone**: it answered precision, conditioning and estimator questions, and
+there is no estimator here any more. Over the two days that rebuilt this project, measurements
+destroyed their own baseline or lost their conditions **7 times**, prompt changes were judged on one
+of their two harnesses **5 times**, Windows/COM/DPI/z-order defects appeared **6 times**, and
+precision questions **0 times**.
 
 A sub-agent's conclusion is a claim about the repository, and claims get verified. **They are also a
 dependency**: two were once launched, both terminated on a spend limit before reporting, and the

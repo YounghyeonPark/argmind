@@ -11,6 +11,14 @@ same position as an optimisation with no way to fail: it proves nothing.
 Given a module (or a diff) and the test file that covers it, you introduce deliberate bugs
 one at a time, run that test file, and report which bugs the suite failed to catch.
 
+**The most recent catch here is the shape to look for.** A test pinned that a widget name shared by
+two roles resolves to the role that was chosen. Removing the role from `find()`'s candidate filter
+left the suite green — because a *second* role check in the tiebreak was quietly carrying the case
+on its own. The test was passing for a reason nobody had chosen. It took a second test, where the
+chosen widget **moves** and a same-named label of another role ends up nearer to where it was, to
+make the first line load-bearing. **A surviving mutant is often not a missing test but a test that
+passes by accident.**
+
 ## Safety, which is the part that matters
 
 Write the harness as a script in the scratchpad, never inline in a shell one-liner. It must:
