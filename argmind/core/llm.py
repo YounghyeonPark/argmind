@@ -61,15 +61,20 @@ class Reply:
     """What came back, and what it cost — both, always. A latency figure that is not attached to the
     call it describes is how a stale number gets published."""
 
-    __slots__ = ("text", "ttft", "total", "prompt_tokens", "out_tokens", "reason")
+    __slots__ = ("text", "ttft", "total", "prompt_tokens", "out_tokens", "reason", "thought")
 
-    def __init__(self, text, ttft, total, prompt_tokens, out_tokens, reason) -> None:
+    def __init__(self, text, ttft, total, prompt_tokens, out_tokens, reason, thought=0) -> None:
         self.text = text
         self.ttft = ttft
         self.total = float(total)
         self.prompt_tokens = prompt_tokens
         self.out_tokens = out_tokens
         self.reason = reason
+        #: Characters of reasoning the model produced and this class threw away. **Discarding it
+        #: was right and hiding its cost was not**: `qwen3:8b` answered a twelve-token question with
+        #: 201 output tokens and 1,506 characters of thinking, at 2.95 s to first token, and nothing
+        #: in the reply said why. Counted so the bill is visible.
+        self.thought = int(thought)
 
     @property
     def truncated(self) -> bool:
@@ -128,7 +133,7 @@ class Local:
     """One call to a local model. No streaming callbacks, no session state — the loop owns those."""
 
     def __init__(self, model: str, *, host: str = OLLAMA, ctx: int = 8192,
-                 max_tokens: int = 4096, keep_alive: str = "60s") -> None:
+                 max_tokens: int = 4096, keep_alive: str = "60s", think=None) -> None:
         self.model = model
         self.host = host.rstrip("/")
         #: How long the server keeps the weights resident after a call. **A real trade, not a
@@ -144,12 +149,18 @@ class Local:
         #: while the content is empty. Measured: at 8192 the same call answers correctly.
         self.ctx = int(ctx)
         self.max_tokens = int(max_tokens)
+        #: `False` switches a reasoning model's thinking off; `None` leaves the field out entirely,
+        #: which is what a model that has never heard of it needs. Measured: `qwen3:8b` takes
+        #: **8.29 s and 336 tokens** to answer `{"say": "hi"}` with thinking on and **1.70 s and 7
+        #: tokens** with it off. The agent asks a model to pick a name from a list it can already
+        #: see; there is nothing there to reason about for 1,500 characters.
+        self.think = think
 
     def ask(self, prompt: str, images=None) -> Reply:
         content = {"role": "user", "content": prompt}
         if images:
             content["images"] = [self._b64(im) for im in images]
-        body = json.dumps({
+        payload = {
             "model": self.model,
             "messages": [content],
             "stream": True,
@@ -157,10 +168,13 @@ class Local:
             #: No `format: "json"`. It silences this model completely -- 366 ms, empty output. The
             #: shape is asked for in the prompt and pulled out of the text by `Reply.json()`.
             "options": {"num_predict": self.max_tokens, "num_ctx": self.ctx, "temperature": 0},
-        }).encode()
+        }
+        if self.think is not None:
+            payload["think"] = self.think
+        body = json.dumps(payload).encode()
         req = urllib.request.Request(f"{self.host}/api/chat", data=body,
                                      headers={"Content-Type": "application/json"})
-        t0, ttft, text, last = time.perf_counter(), None, "", {}
+        t0, ttft, text, last, thinking = time.perf_counter(), None, "", {}, 0
         try:
             with urllib.request.urlopen(req, timeout=600) as r:
                 for line in r:
@@ -169,7 +183,9 @@ class Local:
                     d = json.loads(line)
                     #: The answer is `message.content`. `message.thinking` is the model reasoning and
                     #: is deliberately discarded: it is not an answer, and reading `response` (the
-                    #: other endpoint's field) returns nothing at all.
+                    #: other endpoint's field) returns nothing at all. **Its size is kept**, because
+                    #: throwing the text away also threw away the only sign of what it cost.
+                    thinking += len((d.get("message") or {}).get("thinking") or "")
                     chunk = (d.get("message") or {}).get("content")
                     if chunk:
                         if ttft is None:
@@ -181,7 +197,7 @@ class Local:
             raise RuntimeError(NOT_RUNNING) from exc
         return Reply(text.strip(), ttft, time.perf_counter() - t0,
                      last.get("prompt_eval_count"), last.get("eval_count"),
-                     last.get("done_reason"))
+                     last.get("done_reason"), thinking)
 
     def release(self) -> bool:
         """Ask the server to unload the weights now. Returns whether it answered.

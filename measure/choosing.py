@@ -115,7 +115,7 @@ def outcome(chosen, accept) -> str:
 
 
 def run(model_name: str, repeat: int, only: str | None, *,
-        named: bool = False, shuffle: int | None = None, drop=()) -> int:
+        named: bool = False, shuffle: int | None = None, drop=(), think=None) -> int:
     screens = {name: widgets for name, _window, widgets in load()}
     if drop:
         #: **Leaving something out of the list is a change to what the model can see**, not a
@@ -135,11 +135,12 @@ def run(model_name: str, repeat: int, only: str | None, *,
         print("  nothing to run — capture some screens first (python -m measure.capture)")
         return 2
 
-    model = Local(model_name)
+    model = Local(model_name, think=think)
     rows, tally = [], collections.Counter()
     how = ("by NAME" if named else "by number") + (
         "" if shuffle is None else f", shuffled {shuffle}") + (
-        "" if not drop else f", without {'/'.join(drop)}")
+        "" if not drop else f", without {'/'.join(drop)}") + (
+        "" if think is None else f", thinking {'on' if think else 'off'}")
     print(f"  {model_name} | {len(goals)} goals x {repeat} | {how} | "
           f"{len(screens)} screens, {sum(len(w) for w in screens.values())} widgets\n")
     print(f"  {'outcome':<9} {'screen':<14} {'goal':<28} chose")
@@ -210,6 +211,7 @@ def run(model_name: str, repeat: int, only: str | None, *,
     tag = (("name" if named else "index") + ("" if shuffle is None else f"-shuffled{shuffle}")
            + ("" if not drop else "-without-" + "-".join(drop)))
     tag = f"{tag}-{stem}" if stem != "qwen2.5-7b" else tag
+    tag += "" if think is None else ("-thinking" if think else "-nothink")
     out = HERE / f"choosing-{tag}.json"
     out.write_text(json.dumps({
         "model": model_name, "repeat": repeat, "seconds": round(took, 1),
@@ -224,20 +226,25 @@ def run(model_name: str, repeat: int, only: str | None, *,
 
 def main(argv=None) -> int:
     p = argparse.ArgumentParser(prog="python -m measure.choosing", description=__doc__)
-    p.add_argument("--model", default="qwen2.5:14b",
-                   help="the 7b baseline every table in docs/findings is against is qwen2.5:7b")
+    p.add_argument("--model", default="qwen3:8b",
+                   help="what ships. The baseline every early table compares against is qwen2.5:7b")
     p.add_argument("--repeat", type=int, default=3)
     p.add_argument("--only", default=None, metavar="SCREEN", help="substring of a screen name")
     p.add_argument("--by-name", action="store_true",
                    help="ask for the exact name instead of a list index")
     p.add_argument("--shuffle", type=int, default=None, metavar="SEED",
                    help="shuffle each screen's order — separates an index error from a meaning one")
+    p.add_argument("--think", choices=("on", "off"), default=None,
+                   help="a reasoning model's thinking. Off makes qwen3:8b answer in 0.36 s instead "
+                        "of 4.48 s; the default leaves the field out, which is what a model that "
+                        "has never heard of it needs")
     p.add_argument("--drop", default=None, metavar="ROLES",
                    help="comma-separated roles to leave out of the list, e.g. 'text'. Order is "
                         "preserved, because shuffling was measured to cost accuracy")
     a = p.parse_args(argv)
     return run(a.model, a.repeat, a.only, named=a.by_name, shuffle=a.shuffle,
-               drop=tuple(r.strip() for r in a.drop.split(",")) if a.drop else ())
+               drop=tuple(r.strip() for r in a.drop.split(",")) if a.drop else (),
+               think={"on": True, "off": False}.get(a.think))
 
 
 if __name__ == "__main__":

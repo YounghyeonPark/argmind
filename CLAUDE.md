@@ -160,7 +160,33 @@ and it is a wash: identical correct decisions, two more harmful outcomes for two
 ones, and a regression on a goal that worked. **Not adopted.** It also weakens the density
 direction: a third off the list moves nothing.
 
-### The larger model moved the line, and broke the latency clause
+### The model is where the gain was — `qwen3:8b`, thinking off, is the default
+
+| model | right / 28 | correct / 37 | a call |
+|---|---|---|---|
+| `qwen2.5:7b` | 18 | 26 | 0.45 s |
+| **`qwen3:8b`, thinking off** | 23 | **30** | **0.45 s** |
+| `qwen2.5:14b` | 25 | 32 | 2.39 s |
+| `qwen3:8b`, thinking on | **27 (96%)** | **34** | 3.75 s |
+
+**Row one to row two is the only free change measured on this project** — same latency, four more
+correct decisions. **One 5 GB model covers both ends**: `--think` reaches 96%, above the criterion's
+nine in ten, at 3.75 s. The 14B sits between them, costs 10.4 GB, and needs a second download to
+reach where a flag already goes.
+
+**Neither end passes the whole criterion** (below nine in ten *or* over a second is failure).
+Thinking off is 82% at 0.45 s; thinking on is 96% at 3.75 s. The default takes the latency clause: a
+wrong proposal costs a glance and a "no", a wait is paid every turn, and a person confirms every
+action anyway. **Bigger is not monotonically better** — the 14B gets two goals wrong that both 8B
+configurations get right.
+
+**A tenth way this harness produced a confident wrong number**: `llm.py` discards
+`message.thinking`, correctly, and that hid what it cost — 201 output tokens and 1,112 characters of
+reasoning for a twelve-token answer, with nothing in the `Reply` saying why. Its length is recorded
+as `Reply.thought` now. `Local(think=False)` switches reasoning off and models that never heard of
+the field accept it.
+
+### The 14B experiment that came first, and broke the latency clause
 
 **`qwen2.5:14b` is the default now.** Same 37 goals, same prompt, three repeats, **run twice and
 identical both times**:

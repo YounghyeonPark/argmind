@@ -183,7 +183,46 @@ of hardware information. Not adopted.
 
 It also weakens the density direction further. A third off the list, and the total does not move.
 
-### A bigger model is the first thing that moved the line — and it breaks the latency clause
+### The model is where the gain was, and the newer 8B beats the bigger 14B
+
+Four configurations, same 37 goals, same prompt, three repeats each:
+
+| model | right / 28 | wrong | *no-answer* | missed | declined / 9 | correct | a call |
+|---|---|---|---|---|---|---|---|
+| `qwen2.5:7b` | 18 | 8 | 1 | 3 | 8 | 26 of 37 | 0.45 s |
+| **`qwen3:8b`, thinking off** | 23 | 5 | 2 | 2 | 7 | **30 of 37** | **0.45 s** |
+| `qwen2.5:14b` | 25 | 5 | 2 | 0 | 7 | 32 of 37 | 2.39 s |
+| **`qwen3:8b`, thinking on** | **27** | 3 | 2 | 0 | 7 | **34 of 37** | 3.75 s |
+
+**Row one to row two is the only free change measured on this project.** Same latency to two decimal
+places, four more correct decisions. Everything else here has been a trade.
+
+**One 5 GB model covers both ends of the frontier.** `qwen3:8b` at 0.45 s is the fast point and the
+same model thinking is the accurate one — 27 of 28 is 96%, above the criterion's nine in ten. The
+14B sits between them, costs 10.4 GB, and needs a second download to reach a place one flag already
+goes. Adopted: **`qwen3:8b` with `think=False`, and `--think` for the other end.**
+
+**Neither end passes the whole criterion.** `REBUILD.md` fails the design if the right-thing rate is
+below nine in ten *or* a reply routinely takes more than a second. Thinking off is 82% and 0.45 s;
+thinking on is 96% and 3.75 s. The shipped default takes the latency clause, because a wrong
+proposal costs a glance and a "no" while a wait is paid on every turn including pure conversation —
+and the app makes a person confirm every action anyway.
+
+**Bigger is not monotonically better.** The 14B gets two goals wrong that both 8B models get right:
+`동그라미 그리고 싶어` → `Rectangle`, and `빨간색 골라줘` → `Orange`.
+
+**Unmeasured, and the obvious next thing**: thinking only when an action is at stake. Answering
+*"뭐가 열려 있어?"* needs no reasoning and choosing a widget to click might; `converse` does both in
+one call, so separating them means two calls and the round trip is the budget.
+
+### The tenth way this harness produced a confident wrong number
+
+`llm.py` discards `message.thinking` — correctly, it is not an answer — and **that hid what it
+cost**. `qwen3:8b` answered a twelve-token question with 201 output tokens and 1,112 characters of
+reasoning, 2.95 s to first token, and nothing in the `Reply` said why. The text is still discarded
+and its length is now recorded as `Reply.thought`, so the bill is visible.
+
+### A bigger model moved the line first — and breaks the latency clause
 
 `qwen2.5:14b`, same 37 goals, same prompt, same three repeats, **run twice and identical both
 times** (25/5/0/7, 262 s and 265 s).

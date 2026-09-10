@@ -36,16 +36,25 @@ for _stream in (sys.stdout, sys.stderr):
     except (AttributeError, OSError):                      # a pipe that will not be reconfigured
         pass
 
-#: **qwen2.5:14b, and it fails one clause of this project's own criterion.** Measured over the same
-#: 37 goals, three repeats, reproduced twice: 25 of 28 answerable right against the 7b's 18, and 32
-#: of 37 correct decisions against 26 — the first intervention that moved the line rather than
-#: sliding along the trade between acting and refusing, which three prompt and list edits all did.
+#: **qwen3:8b with its thinking switched off.** Measured over the same 37 goals, three repeats:
 #:
-#: The cost is latency. **2.38 s a call against the 7b's 0.44 s**, and `REBUILD.md` says the design
-#: has failed "if a reply routinely takes more than a second". It is 10.4 GB and sits entirely in
-#: this machine's 16 GB of VRAM, so that figure is what a 14B costs here and not a spill to be
-#: tuned away. `--model qwen2.5:7b` is one flag back to the fast, less accurate side.
-DEFAULT_MODEL = "qwen2.5:14b"
+#:     model                right/28  correct/37   a call
+#:     qwen2.5:7b              18        26        0.45 s
+#:     qwen3:8b, no thinking   23        30        0.45 s
+#:     qwen2.5:14b             25        32        2.39 s
+#:     qwen3:8b, thinking      27        34        3.75 s
+#:
+#: The first row to the second is a free upgrade — same latency, four more correct decisions — and
+#: it is the only change measured on this project that cost nothing. The last row is the most
+#: accurate thing available here, 27 of 28 against a criterion of nine in ten, and at 3.75 s it is
+#: not a conversation. `--think on` is that trade, one flag away.
+#:
+#: **`think=False` is sent explicitly**, because leaving it out costs `qwen3:8b` 1,112 characters of
+#: reasoning to pick a name out of a list it can already see. Models that have never heard of the
+#: field accept it: `qwen2.5:7b` answered in 0.11 s with it set.
+DEFAULT_MODEL = "qwen3:8b"
+#: Reasoning off. `None` here would omit the field and let a thinking model think.
+DEFAULT_THINK = False
 
 
 def parser() -> argparse.ArgumentParser:
@@ -69,6 +78,9 @@ def parser() -> argparse.ArgumentParser:
                         "the foreground window changing")
     p.add_argument("--dry", action="store_true",
                    help="for `app`: propose and confirm as usual, but touch nothing")
+    p.add_argument("--think", action="store_true",
+                   help="let a reasoning model reason. 27 of 28 goals right instead of 23, and "
+                        "3.75 s a reply instead of 0.45 — accuracy against conversation")
     p.add_argument("--cold", action="store_true",
                    help="for `app`: do not load the model until the first question. Saves 5-6 GB "
                         "until you use it and costs about 10 s when you do")
@@ -107,7 +119,8 @@ def look(args) -> int:
 
 def _session(args, watches=None) -> Session:
     eyes, hands = _environment(args)
-    return Session(eyes=eyes, model=Local(args.model), hands=hands, limit=args.limit,
+    return Session(eyes=eyes, model=Local(args.model, think=DEFAULT_THINK), hands=hands,
+                   limit=args.limit,
                    watches=watches, may_act_unprompted=args.allow_unprompted)
 
 
@@ -169,7 +182,8 @@ def app(args) -> int:
     from .app import launch                                              # noqa: PLC0415
 
     return launch(model=args.model, limit=args.limit, rate=args.rate,
-                  dry=args.dry, notice=args.notice, warm=not args.cold)
+                  dry=args.dry, notice=args.notice, warm=not args.cold,
+                  think=True if args.think else DEFAULT_THINK)
 
 
 def watch(args) -> int:
