@@ -341,13 +341,20 @@ Five project-scoped agents in `.claude/agents/`, checked in for the same reason 
 the discipline belongs to the project, not to one machine. **Rebuilt 2026-09-10 for the project this
 became**; `.claude/agents/README.md` has the tally that chose them.
 
-| agent | when to reach for it |
-|---|---|
-| `harness-auditor` | before running a new measurement; before quoting a number; when a result is convenient |
-| `prompt-referee` | after **any** edit to `converse.py`, the widget list, the model or its options |
-| `windows-reviewer` | after any change under `argmind/env/`; before trusting a coordinate |
-| `evidence-auditor` | before a commit stating a number; after editing this file; when a result looks good |
-| `mutation-tester` | after writing a module and its tests; before claiming a suite protects something |
+| agent | when to reach for it | builds? |
+|---|---|---|
+| `measurement` | to get a number nobody has; before believing one | writes `measure/` |
+| `environment` | to give the agent something it cannot see or do; after any change under `argmind/env/` | writes `argmind/env/` |
+| `prompt-referee` | after **any** edit to `converse.py`, the widget list, the model or its options | runs measurements |
+| `evidence-auditor` | before a commit stating a number; after editing this file; when a result looks good | no |
+| `mutation-tester` | after writing a module and its tests; before claiming a suite protects something | restores what it edits |
+
+**The first version of this list was five checkers and no builders**, because it inherited the
+previous team's silhouette and because "work done by hand twice" was tallied from a session where
+one hand did all the building. Counted properly the construction recurred too — seven measurement
+harnesses and five environment capabilities in two days — so the two agents that own an area now
+write as well as review. Checkers still outnumber builders on purpose: four conclusions were
+withdrawn in two days, three of them flattering, and the typing was never the bottleneck.
 
 **`numerics-reviewer` is gone**: it answered precision, conditioning and estimator questions, and
 there is no estimator here any more. Over the two days that rebuilt this project, measurements
