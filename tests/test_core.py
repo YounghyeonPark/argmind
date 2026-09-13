@@ -408,6 +408,126 @@ def test_ONLY_SOMETHING_THAT_HAPPENED_is_written_in_the_PAST_TENSE():
             assert NOTHING_DONE in text, f"{who!r} never says nothing happened: {text!r}"
 
 
+# ---- an offer nobody has answered yet ---------------------------------------------------------
+
+def _offered(name="닫기", role="button"):
+    from argmind.core.intent import Effect                                # noqa: PLC0415
+
+    return [Effect("click", target=name, role=role)]
+
+
+def test_an_UNANSWERED_offer_is_rendered_where_the_DECISION_is_made():
+    """**The acceptance defect: the person says yes and nothing happens.** Measured over 15 live
+    cases, 8 acted — and **all seven failures were `ignored`, none `drifted`**, so the yes reached no
+    widget at all rather than the wrong one. Shown `offered: to click the button "Eraser"` and told
+    *"어 눌러줘"*, the agent replied *"어떤 버튼을 눌러야 해?"* — it parsed *press it* and asked which
+    button, with the answer in the prompt above it.
+
+    The offer was present and not available: the whole widget list sits between the transcript and
+    the person's words, 21 lines on Character Map and 123 on Paint, and acceptance splits 6 of 8
+    against 2 of 7 along exactly that. So the standing offer is rendered a second time next to
+    `They said:`. **Adjacency is the fix**, and this asserts the adjacency rather than the presence.
+    """
+    from argmind.core.converse import STILL_OPEN, STILL_OPEN_TAIL        # noqa: PLC0415
+
+    s = session(FakeModel(says("네")))
+    s.observe()
+    s.remember_doing(offered=_offered())
+    s.exchange("응")
+    lines = s.model.prompts[-1].splitlines()
+    at = lines.index(STILL_OPEN)
+    assert "닫기" in lines[at + 1] and lines[at + 1].startswith("  to click"), lines[at:at + 3]
+    assert lines[at + 2] == STILL_OPEN_TAIL
+    #: One blank line and then the person. Anything between the two is the defect coming back.
+    assert lines[at + 3:at + 5] == ["", "They said: 응"], lines[at:at + 5]
+    #: **Repeated, not moved.** The transcript is the record of what happened and stays whole; this
+    #: copy is the state of the conversation at the moment of deciding, rebuilt every turn.
+    block = s.model.prompts[-1].split("Recently:")[1].split("On screen now:")[0]
+    assert 'offered: to click the button "닫기"' in block, block
+
+
+def test_a_standing_offer_survives_FOUR_ordinary_turns_of_something_else():
+    """**`FARACCEPT` is 0 of 4 and the harness verified the offer was in the window every time**, so
+    the window is not what failed and four turns of small talk must not close an offer. Only the
+    thing being done, failing, or being turned down closes one."""
+    from argmind.core.converse import STILL_OPEN                          # noqa: PLC0415
+
+    s = session(FakeModel(*[says(f"r{i}") for i in range(5)]))
+    s.observe()
+    s.remember_doing(offered=_offered())
+    for line in ("오늘 날씨 어때?", "커피 한 잔 마시고 싶다", "너 이름이 뭐야?", "수고했어"):
+        s.exchange(line)
+    s.exchange("응 해줘")
+    assert STILL_OPEN in s.model.prompts[-1], "four ordinary turns closed an offer nobody answered"
+
+
+@pytest.mark.parametrize("channel", ["did", "could not", "they said no to"])
+def test_an_offer_that_has_been_SETTLED_is_no_longer_STANDING(channel):
+    """Done, gone, or refused — three ways for an offer to stop being open, and the prompt has to
+    stop showing it as one. **Any settling line closes every open offer**: matching a settlement to
+    the offer it settles would mean parsing `loop.py`'s sentence back into an effect, and a stale
+    proposal beside the person's next words is this defect one turn later.
+    """
+    from argmind.core.converse import still_open                          # noqa: PLC0415
+
+    history = [("offered", 'to click the button "Copy" — nothing was done; they have not accepted'),
+               ("them", "응"), ("you", "네"), (channel, 'the button "Copy"')]
+    assert still_open(history[:1]) and not still_open(history)
+    assert not still_open([]) and not still_open(None)
+
+
+def test_the_standing_offer_reads_the_LABELS_remember_doing_ACTUALLY_WRITES():
+    """**The cross-module guard, and the reason it is worth a test of its own.** `loop.py` imports
+    `converse.py`, so `converse.py` cannot import the channel names back and a shared constant would
+    be a contract change. It repeats the four spellings instead — and a rename on the other side
+    would stop the block rendering at all, silently, restoring the defect while every other test
+    passed. A fix that can evaporate without a failing test is not fixed.
+    """
+    from argmind.core.converse import OFFER_OPEN, OFFER_SETTLED           # noqa: PLC0415
+    from argmind.core.intent import Effect                                # noqa: PLC0415
+
+    s = session(FakeModel(says("닫을게요", {"click": 0})))
+    s.exchange("닫아줘")
+    s.remember_doing(offered=_offered("Copy"), refused=[Effect("type", text="hello")],
+                     turned_down=[Effect("key", text="enter")])
+    written = {who for who, _t in s.history if who not in ("them", "you")}
+    assert written == {OFFER_OPEN, *OFFER_SETTLED}, (
+        f"remember_doing() writes {sorted(written)} and converse.py watches for "
+        f"{sorted({OFFER_OPEN, *OFFER_SETTLED})} — the standing-offer slot is reading a label "
+        "nothing writes, or ignoring one that settles an offer")
+
+
+def test_a_turn_with_NO_open_offer_renders_WHAT_IT_RENDERED_BEFORE():
+    """**The blast radius, asserted rather than described.** `measure/choosing.py` and
+    `measure/talking.py` send no history at all, so neither can see this change — and neither can
+    vouch for it. Every turn without an unanswered offer keeps the shape those numbers were measured
+    on: the widget list, a blank line, the person.
+    """
+    from argmind.core.converse import STILL_OPEN, STILL_OPEN_TAIL         # noqa: PLC0415
+
+    s = session(FakeModel(says("안녕하세요"), says("네")))
+    s.exchange("안녕")
+    #: A second turn, so there is a `Recently:` block and still nothing standing in it.
+    s.exchange("잘 지내?")
+    for prompt in s.model.prompts:
+        assert STILL_OPEN not in prompt and STILL_OPEN_TAIL not in prompt
+    lines = s.model.prompts[-1].splitlines()
+    at = lines.index("They said: 잘 지내?")
+    assert lines[at - 2:at] == ['3: menu item "File"', ""], lines[at - 3:at + 1]
+
+
+def test_an_UNPROMPTED_thought_gets_no_standing_offer_because_NOBODY_SPOKE():
+    """The slot's second line is about what *they* say next, and on an unprompted thought they said
+    nothing. A line that is false whenever it renders is worse than no line."""
+    from argmind.core.converse import STILL_OPEN                          # noqa: PLC0415
+
+    s = session(FakeModel(says("빌드 끝났네요")))
+    s.observe()
+    s.remember_doing(offered=_offered())
+    s.think(Perceived("'Build succeeded' appeared"))
+    assert STILL_OPEN not in s.model.prompts[-1]
+
+
 # ---- noticing, and the permission that goes with it -------------------------------------------
 
 def test_the_model_is_TOLD_when_nobody_asked():
