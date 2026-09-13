@@ -1,0 +1,564 @@
+# argmind — the golden transcript of argmind/core/loop.py.
+# GENERATED. Do not edit by hand: the tag below is taken over the body, and a hand
+# edit fails as a hand edit rather than as a difference in behaviour.
+#
+# tag tb5ccc8
+#
+# Re-bless:  ARGMIND_BLESS_LOOP=re-bless python -m pytest tests/test_loop_golden.py
+# A diff below is a behaviour change in the loop. Read the docstring of
+# tests/test_loop_golden.py before accepting one, and never commit it together with
+# the change it records.
+#---- transcript ----
+=== 0. the constants the loop is written around ===
+
+# A port that changes one of these has changed a derived number, not a name.
+# MOST_AT_ONCE and MAX_LISTED are converse.py's and are pinned by r322a4c.
+  REMEMBER_TURNS = 12
+  MIN_GAP = 3.0
+  SPOKE, NOTICED = 'them', 'noticed'
+  TURN_OPENS = ('them', 'noticed')
+  NOTHING_DONE = 'nothing was done'
+  PAST, PLAIN, ING = 0, 1, 2
+  VERBS['click'] = ('clicked', 'click', 'clicking')
+  VERBS['key'] = ('pressed', 'press', 'pressing')
+  VERBS['type'] = ('typed', 'type', 'typing')
+
+=== 1. remember_doing(): four channels, and the tense carries the state ===
+
+# The past tense belongs to `did` and to nothing else; every other line says in
+# words that nothing happened, so a reader that ignores the label still cannot
+# conclude a click landed. Only `offered` and `turned_down` are fed anywhere in
+# measure/, which makes these the least protected sentences in the file.
+
+-- offered --
+  [click with a role]
+    offered | 'to click the button "Copy" — nothing was done; they have not accepted'
+  [click with no role]
+    offered | 'to click the thing "Copy" — nothing was done; they have not accepted'
+  [type]
+    offered | 'to type "hello" — nothing was done; they have not accepted'
+  [key]
+    offered | 'to press enter — nothing was done; they have not accepted'
+  [a kind VERBS does not list]
+    offered | 'to press  — nothing was done; they have not accepted'
+
+-- refused --
+  [click with a role]
+    could not | 'click the button "Copy" — it had gone by then; nothing was done'
+  [click with no role]
+    could not | 'click the thing "Copy" — it had gone by then; nothing was done'
+  [type]
+    could not | 'type "hello" — it had gone by then; nothing was done'
+  [key]
+    could not | 'press enter — it had gone by then; nothing was done'
+  [a kind VERBS does not list]
+    could not | 'press  — it had gone by then; nothing was done'
+
+-- turned_down --
+  [click with a role]
+    they said no to | 'clicking the button "Copy" — nothing was done'
+  [click with no role]
+    they said no to | 'clicking the thing "Copy" — nothing was done'
+  [type]
+    they said no to | 'typing "hello" — nothing was done'
+  [key]
+    they said no to | 'pressing enter — nothing was done'
+  [a kind VERBS does not list]
+    they said no to | 'pressing  — nothing was done'
+
+-- did --
+# `did` is the one channel handed the widget as it was AT THE MOMENT OF ACTING,
+# so its role comes from the world while the other three print the role the
+# model chose. Here the model chose `button` and the world says `combo box`.
+  [click with a role]
+    did | 'clicked the combo box "Copy"'
+  [click with no role]
+    did | 'clicked the combo box "Copy"'
+  [type]
+    did | 'typed "hello"'
+  [key]
+    did | 'pressed enter'
+  [a kind VERBS does not list]
+    did | 'pressed '
+
+-- the order within one call --
+# Source order: offered, did, could not, they said no to. It is not cosmetic —
+# converse.still_open() closes every open offer on any settling line, so an
+# offer written in the same call as a settlement is already closed by the time
+# the next prompt is built.
+  offered | 'to click the button "Copy" — nothing was done; they have not accepted'
+  did | 'clicked the button "Cut"'
+  could not | 'type "bye" — it had gone by then; nothing was done'
+  they said no to | 'pressing tab — nothing was done'
+
+-- nothing to record --
+# Four empty channels is the default, so a turn that did nothing writes nothing.
+  (empty)
+
+=== 2. recent(): a window measured in turns, cut where a turn opens ===
+
+# A turn opens on `them` or `noticed` and on nothing else. 0 is none and None is
+# all: `history[-0:]` was the whole list, so the one value a person reaches for
+# to turn memory off used to turn it all the way up.
+-- the history being windowed --
+  offered | 'to click the button "Copy" — nothing was done; they have not accepted'
+  them | 'alpha'
+  you | 'reply alpha'
+  them | 'bravo'
+  you | 'reply bravo'
+  did | 'clicked the button "Share"'
+  noticed | "'Build succeeded' appeared"
+  you | 'reply charlie'
+  offered | 'to click the button "Open" — nothing was done; they have not accepted'
+  them | 'delta'
+  you | 'reply delta'
+  could not | 'click the button "닫기" — it had gone by then; nothing was done'
+
+-- turns=None -> 12 lines --
+  offered | 'to click the button "Copy" — nothing was done; they have not accepted'
+  them | 'alpha'
+  you | 'reply alpha'
+  them | 'bravo'
+  you | 'reply bravo'
+  did | 'clicked the button "Share"'
+  noticed | "'Build succeeded' appeared"
+  you | 'reply charlie'
+  offered | 'to click the button "Open" — nothing was done; they have not accepted'
+  them | 'delta'
+  you | 'reply delta'
+  could not | 'click the button "닫기" — it had gone by then; nothing was done'
+
+-- turns=0 -> 0 lines --
+  (empty)
+
+-- turns=-1 -> 0 lines --
+  (empty)
+
+-- turns=1 -> 3 lines --
+  them | 'delta'
+  you | 'reply delta'
+  could not | 'click the button "닫기" — it had gone by then; nothing was done'
+
+-- turns=2 -> 6 lines --
+  noticed | "'Build succeeded' appeared"
+  you | 'reply charlie'
+  offered | 'to click the button "Open" — nothing was done; they have not accepted'
+  them | 'delta'
+  you | 'reply delta'
+  could not | 'click the button "닫기" — it had gone by then; nothing was done'
+
+-- turns=3 -> 9 lines --
+  them | 'bravo'
+  you | 'reply bravo'
+  did | 'clicked the button "Share"'
+  noticed | "'Build succeeded' appeared"
+  you | 'reply charlie'
+  offered | 'to click the button "Open" — nothing was done; they have not accepted'
+  them | 'delta'
+  you | 'reply delta'
+  could not | 'click the button "닫기" — it had gone by then; nothing was done'
+
+-- turns=4 -> 12 lines --
+  offered | 'to click the button "Copy" — nothing was done; they have not accepted'
+  them | 'alpha'
+  you | 'reply alpha'
+  them | 'bravo'
+  you | 'reply bravo'
+  did | 'clicked the button "Share"'
+  noticed | "'Build succeeded' appeared"
+  you | 'reply charlie'
+  offered | 'to click the button "Open" — nothing was done; they have not accepted'
+  them | 'delta'
+  you | 'reply delta'
+  could not | 'click the button "닫기" — it had gone by then; nothing was done'
+
+-- turns=99 -> 12 lines --
+  offered | 'to click the button "Copy" — nothing was done; they have not accepted'
+  them | 'alpha'
+  you | 'reply alpha'
+  them | 'bravo'
+  you | 'reply bravo'
+  did | 'clicked the button "Share"'
+  noticed | "'Build succeeded' appeared"
+  you | 'reply charlie'
+  offered | 'to click the button "Open" — nothing was done; they have not accepted'
+  them | 'delta'
+  you | 'reply delta'
+  could not | 'click the button "닫기" — it had gone by then; nothing was done'
+
+-- a history no turn has opened --
+# Lines written before anybody spoke are legitimate: remember_doing() on a fresh
+# session produces them. They are carried while they are all there is.
+  turns=None -> 2 lines
+    offered | 'to click the button "Copy" — nothing was done; they have not accepted'
+    did | 'clicked the button "Share"'
+  turns=0 -> 0 lines
+    (empty)
+  turns=1 -> 2 lines
+    offered | 'to click the button "Copy" — nothing was done; they have not accepted'
+    did | 'clicked the button "Share"'
+  turns=12 -> 2 lines
+    offered | 'to click the button "Copy" — nothing was done; they have not accepted'
+    did | 'clicked the button "Share"'
+  an empty history, turns=12 -> []
+
+=== 3. the window as decide() hands it over, turn by turn ===
+
+# remember_turns=2. Turn one writes three lines and turn three writes three, so
+# a two-turn window is four lines at one boundary and six at another — which is
+# the whole reason the unit is turns: the expensive turns are the ones a
+# follow-up refers back to, and a line window shrank the memory exactly there.
+-- before turn 1 ('line one') --
+  (empty)
+-- before turn 2 ('line two') --
+  them | 'line one'
+  you | 'reply one'
+  did | 'clicked the button "Share"'
+-- before turn 3 ('line three') --
+  them | 'line one'
+  you | 'reply one'
+  did | 'clicked the button "Share"'
+  them | 'line two'
+  you | 'reply two'
+-- before turn 4 ('line four') --
+  them | 'line two'
+  you | 'reply two'
+  them | 'line three'
+  you | 'reply three'
+  could not | 'click the button "닫기" — it had gone by then; nothing was done'
+
+-- the whole history afterwards --
+  them | 'line one'
+  you | 'reply one'
+  did | 'clicked the button "Share"'
+  them | 'line two'
+  you | 'reply two'
+  them | 'line three'
+  you | 'reply three'
+  could not | 'click the button "닫기" — it had gone by then; nothing was done'
+  them | 'line four'
+  you | 'reply four'
+
+-- recent() afterwards -> 5 lines --
+  them | 'line three'
+  you | 'reply three'
+  could not | 'click the button "닫기" — it had gone by then; nothing was done'
+  them | 'line four'
+  you | 'reply four'
+
+=== 4. find(): the world as it is now, and the role is half of the key ===
+
+# Character Map, measured: a `text` reading 'Font :' sits in front of a `combo
+# box` of the same name. The name alone returns the label, the click lands on a
+# piece of text and does nothing — indistinguishable from a click that missed.
+  find('Font :', 'combo box') -> combo box 'Font :' @ 86,106 321x30 window='Win' centre=(246, 121)
+  find('Font :', 'text') -> text 'Font :' @ 34,107 53x20 window='Win' centre=(60, 117)
+  find('Font :', '') -> text 'Font :' @ 34,107 53x20 window='Win' centre=(60, 117)
+  find('Font :', 'button') -> (none)
+  find('Nothing', '') -> (none)
+  find('Nothing', 'button') -> (none)
+  reads consumed: 7 (one per find, plus the observe)
+
+-- the tiebreak among namesakes of the same role --
+# Nearest to where a thing of that role was last seen: a thing moves rather than
+# teleporting past its own copies.
+  last seen at [(20, 110), (20, 410)], now at [(20, 310), (20, 140)]
+  find('Item', 'list item') -> list item 'Item' @ 0,130 40x20 window='Win' centre=(20, 140)
+
+-- the tiebreak with nothing ever seen --
+# `find` is public because an interface resolving an action a second way would
+# be a second answer, so it has to work before any observe: the fallback is the
+# first candidate, not a crash and not None.
+  seen=[]
+  find('Item', 'list item') -> list item 'Item' @ 0,300 40x20 window='Win' centre=(20, 310)
+
+-- the role filters the candidates, it does not merely break a tie --
+# A mutation found this: with the role dropped from the filter the Character Map
+# case still passed, because the nearest thing of that role was the right one.
+# Only when the chosen thing MOVES does a namesake of another role end up nearer
+# to where it used to be, and win.
+  find('Item', 'list item') -> list item 'Item' @ 0,320 40x20 window='Win' centre=(20, 330)
+  find('Item', '')          -> text 'Item' @ 0,100 40x20 window='Win' centre=(20, 110)
+
+=== 5. one turn, every field of what comes out of it ===
+
+# Three turns on one session: one that acts, one that only speaks, one that does
+# three things. look_s is the environment's own number; think_s and act_s come
+# from the fake clock and pin WHICH REGION is timed, not how long it takes.
+-- '닫아줘' --
+  n=0
+  trigger kind='said' asked=True at=1010.000000 text='닫아줘'
+  said='닫을게요'
+  n_widgets=4
+  look_s=0.125000 think_s=0.250000 act_s=0.250000 total_s=0.625000
+  did: click target='닫기' role='button' text='' because=said unprompted=False | target=button '닫기' @ 10,20 40x30 window='Win' centre=(30, 35) | confirmed=False
+  proposed: (none)
+  refused: (none)
+  hands: ["click button '닫기' at (30, 35)"]
+  blind=0 vanished=0 unknown_keys=0 reads=3
+-- '뭐가 열려 있지?' --
+  n=1
+  trigger kind='said' asked=True at=1020.000000 text='뭐가 열려 있지?'
+  said='세 개 열려 있어요'
+  n_widgets=4
+  look_s=0.125000 think_s=0.250000 act_s=0.250000 total_s=0.625000
+  did: (none)
+  proposed: (none)
+  refused: (none)
+  hands: ["click button '닫기' at (30, 35)"]
+  blind=1 vanished=0 unknown_keys=0 reads=4
+-- 'share에 argmind 치고 엔터' --
+  n=2
+  trigger kind='said' asked=True at=1030.000000 text='share에 argmind 치고 엔터'
+  said='검색할게요'
+  n_widgets=4
+  look_s=0.125000 think_s=0.250000 act_s=0.250000 total_s=0.625000
+  did: click target='Share' role='button' text='' because=said unprompted=False | target=button 'Share' @ 60,20 40x30 window='Win' centre=(80, 35) | confirmed=False
+  did: type target='' role='' text='argmind' because=said unprompted=False | target=(none) | confirmed=None
+  did: key target='' role='' text='enter' because=said unprompted=False | target=(none) | confirmed=None
+  proposed: (none)
+  refused: (none)
+  hands: ["click button 'Share' at (80, 35)", "type 'argmind'", "key 'enter'"]
+  blind=1 vanished=0 unknown_keys=0 reads=7
+
+-- the conversation it wrote for itself --
+  them | '닫아줘'
+  you | '닫을게요'
+  did | 'clicked the button "닫기"'
+  them | '뭐가 열려 있지?'
+  you | '세 개 열려 있어요'
+  them | 'share에 argmind 치고 엔터'
+  you | '검색할게요'
+  did | 'clicked the button "Share"'
+  did | 'typed "argmind"'
+  did | 'pressed enter'
+
+-- report() --
+  acted = 4
+  asked = 3
+  confirmed = 0
+  gone_before_click = 0
+  median_look_ms = 125
+  median_think_ms = 250
+  median_total_ms = 625
+  nothing_matched = 1
+  noticed = 0
+  proposed_only = 0
+  spoke_only = 1
+  thoughts = 3
+  unconfirmed = 2
+  unknown_keys = 0
+
+-- report() on a session that has not thought yet --
+  thoughts = 0
+
+=== 6. noticing, and the permission that is not in the utterance ===
+
+# An unprompted effect without standing permission is downgraded to speech, not
+# refused: the refusal path is conversational, and the default is that way
+# because a wrong click has no undo.
+-- may_act_unprompted=False --
+  n=0
+  trigger kind='perceived' asked=False at=1040.000000 text="'Build succeeded' appeared"
+  said='빌드 끝났어요. 열까요?'
+  n_widgets=4
+  look_s=0.125000 think_s=0.250000 act_s=0.250000 total_s=0.625000
+  did: (none)
+  proposed: click target='Share' role='button' text='' because=perceived unprompted=True
+  refused: (none)
+  hands: (nothing)
+  history:
+    noticed | "'Build succeeded' appeared"
+    you | '빌드 끝났어요. 열까요?'
+  acted = 0
+  asked = 0
+  confirmed = 0
+  gone_before_click = 0
+  median_look_ms = 125
+  median_think_ms = 250
+  median_total_ms = 625
+  nothing_matched = 0
+  noticed = 1
+  proposed_only = 1
+  spoke_only = 1
+  thoughts = 1
+  unconfirmed = 0
+  unknown_keys = 0
+
+-- may_act_unprompted=True --
+  n=0
+  trigger kind='perceived' asked=False at=1050.000000 text="'Build succeeded' appeared"
+  said='빌드 끝났어요. 열까요?'
+  n_widgets=4
+  look_s=0.125000 think_s=0.250000 act_s=0.250000 total_s=0.625000
+  did: click target='Share' role='button' text='' because=perceived unprompted=True | target=button 'Share' @ 60,20 40x30 window='Win' centre=(80, 35) | confirmed=False
+  proposed: (none)
+  refused: (none)
+  hands: ["click button 'Share' at (80, 35)"]
+  history:
+    noticed | "'Build succeeded' appeared"
+    you | '빌드 끝났어요. 열까요?'
+    did | 'clicked the button "Share"'
+  acted = 1
+  asked = 0
+  confirmed = 0
+  gone_before_click = 0
+  median_look_ms = 125
+  median_think_ms = 250
+  median_total_ms = 625
+  nothing_matched = 0
+  noticed = 1
+  proposed_only = 0
+  spoke_only = 0
+  thoughts = 1
+  unconfirmed = 1
+  unknown_keys = 0
+
+# THE OFFER IS NOT WRITTEN DOWN BY THE LOOP. think() records `did` and `refused`
+# and nothing else, so a downgraded effect leaves no `offered` line and
+# converse.still_open() cannot see it. Only an interface — app.py's proposal
+# row — feeds that channel. Recorded here as it stands, not fixed here.
+
+-- an effect nobody caused runs whoever is asking --
+# `unprompted` is false when `because` is None, so an effect built by hand is
+# not treated as the agent's own idea. That is the permission model's open edge
+# and it is written down here rather than argued about.
+  did=["key target='' role='' text='enter' because=None unprompted=False | target=(none) | confirmed=None"]
+  proposed=[] refused=[]
+  hands: ["key 'enter'"]
+
+=== 7. poll(), and the floor a watch keeps ===
+
+# Perception changes 13 seconds in 14 and a model call costs 0.3-2 s, so an
+# unfloored watch is a model that never stops and an agent that never listens.
+# The clock below is moved by this file; nothing here reads the wall.
+  watches: WindowChanged(gap=3.0), Appeared('build'), Vanished('mute')
+
+-- t=1050.000000 (+0.0) : first poll: there is no BEFORE, so nothing whatever happened --
+  seen now: ['닫기', 'Share', 'Mute (m)']
+  fired: (nothing)
+
+-- t=1050.000000 (+0.0) : the window changed, something appeared, something went away --
+  seen now: ['Send', 'Build succeeded']
+  fired: kind='perceived' asked=False at=1050.000000 text="the window changed to 'Mail'"
+  fired: kind='perceived' asked=False at=1050.000000 text="'Build succeeded' appeared"
+  fired: kind='perceived' asked=False at=1050.000000 text="'Mute (m)' went away"
+
+-- t=1051.000000 (+1.0) : all three would fire and all three are inside the floor --
+  seen now: ['닫기', 'Build again', 'Mute (m)']
+  fired: (nothing)
+
+-- t=1053.500000 (+2.5) : 3.5 s after the LAST FIRING, not 2.5 s after the last check --
+  seen now: ['Send', 'Build succeeded']
+  fired: kind='perceived' asked=False at=1053.500000 text="the window changed to 'Mail'"
+  fired: kind='perceived' asked=False at=1053.500000 text="'Build succeeded' appeared"
+  fired: kind='perceived' asked=False at=1053.500000 text="'Mute (m)' went away"
+
+-- t=1056.500000 (+3.0) : exactly at the floor, which is not inside it --
+  seen now: ['닫기', 'Build again', 'Mute (m)']
+  fired: kind='perceived' asked=False at=1056.500000 text="the window changed to 'Win'"
+  fired: kind='perceived' asked=False at=1056.500000 text="'Build again' appeared"
+
+-- a session with no watches still looks --
+# poll() observes whether or not anything is watching, so `seen` is fresh for
+# the next decision. Returning [] because it never looked is a different bug.
+  poll() -> []  seen=['닫기', 'Share', 'Mute (m)'] reads=1
+  poll() -> []  seen=['Send', 'Build succeeded'] reads=2
+
+=== 8. perform(): resolved against the world AS IT IS NOW ===
+
+# Thirteen times in fourteen, over the second a call takes, something listed when
+# the question was asked is gone when the answer arrives. Clicking a remembered
+# rectangle is clicking where something used to be.
+-- the target moved between the question and the answer --
+  n=0
+  trigger kind='said' asked=True at=1066.500000 text='close it'
+  said='닫을게요'
+  n_widgets=4
+  look_s=0.125000 think_s=0.250000 act_s=0.250000 total_s=0.625000
+  did: click target='닫기' role='button' text='' because=said unprompted=False | target=button '닫기' @ 999,500 40x30 window='Win' centre=(1019, 515) | confirmed=False
+  proposed: (none)
+  refused: (none)
+  hands: ["click button '닫기' at (1019, 515)"]
+
+-- the target had gone by then --
+  n=0
+  trigger kind='said' asked=True at=1076.500000 text='close it'
+  said='닫을게요'
+  n_widgets=4
+  look_s=0.125000 think_s=0.250000 act_s=0.250000 total_s=0.625000
+  did: (none)
+  proposed: (none)
+  refused: click target='닫기' role='button' text='' because=said unprompted=False
+  hands: (nothing)
+  blind=0 vanished=1 unknown_keys=0 reads=2
+  history:
+    them | 'close it'
+    you | '닫을게요'
+    could not | 'click the button "닫기" — it had gone by then; nothing was done'
+
+-- confirmation asks the widget layer, and only when something was clicked --
+# None in a dry run: nothing was clicked, so nothing should have changed, and
+# False there would read as a failure that never happened.
+  [dry run] confirmed=None target=button '닫기' @ 10,20 40x30 window='Win' centre=(30, 35)
+  [still exactly where it was] confirmed=False target=button '닫기' @ 10,20 40x30 window='Win' centre=(30, 35)
+  [the thing is gone] confirmed=True target=button '닫기' @ 10,20 40x30 window='Win' centre=(30, 35)
+  [the window changed] confirmed=True target=button '닫기' @ 10,20 40x30 window='Win' centre=(30, 35)
+
+-- an effect of a kind perform() has no arm for --
+# Refused, not attempted and not raised. converse() cannot build one, so this is
+# reachable only by an interface constructing an Intent — which is a thing an
+# interface is allowed to do.
+  did=["click target='Share' role='button' text='' because=None unprompted=False | target=button 'Share' @ 60,20 40x30 window='Win' centre=(80, 35) | confirmed=False"]
+  proposed=[]
+  refused=["scroll target='Pane' role='pane' text='' because=None unprompted=False"]
+  hands: ["click button 'Share' at (80, 35)"]
+# `vanished` counts a target that went, and an unknown kind is not that.
+  blind=0 vanished=0 unknown_keys=0 reads=3
+
+=== 9. decide(): a key the environment does not have ===
+
+# The model has emitted {'key': 'zoom in'}, a key on no platform. `press` raises
+# and nothing between it and think() catches, so one invented keystroke used to
+# cost the whole turn — including the sentence already composed.
+-- declares three keys --
+  n=0
+  trigger kind='said' asked=True at=1126.500000 text='확대해줘'
+  said='확대할게요'
+  n_widgets=4
+  look_s=0.125000 think_s=0.250000 act_s=0.250000 total_s=0.625000
+  did: (none)
+  proposed: (none)
+  refused: (none)
+  hands: (nothing)
+  blind=1 vanished=0 unknown_keys=1 reads=1
+  history:
+    them | '확대해줘'
+    you | '확대할게요'
+
+-- declares nothing, so keeps every key --
+  n=0
+  trigger kind='said' asked=True at=1136.500000 text='확대해줘'
+  said='확대할게요'
+  n_widgets=4
+  look_s=0.125000 think_s=0.250000 act_s=0.250000 total_s=0.625000
+  did: key target='' role='' text='zoom in' because=said unprompted=False | target=(none) | confirmed=None
+  proposed: (none)
+  refused: (none)
+  hands: ["key 'zoom in'"]
+  blind=0 vanished=0 unknown_keys=0 reads=1
+  history:
+    them | '확대해줘'
+    you | '확대할게요'
+    did | 'pressed zoom in'
+
+# A dropped key is not filed as something that WENT AWAY: `could not` means it
+# had gone by then, and that sentence would be false in the core's own context
+# on the very next call.
+
+-- decide() looks first if nothing has been observed --
+# A decision needs a world, and the first read is not the interface's job to
+# remember. The count is how a port shows it did the same thing.
+  before: seen=[] reads=0
+  after:  n_seen=4 reads=1 say='ok' effects=[]
+  intent.trigger kind='said' asked=True
