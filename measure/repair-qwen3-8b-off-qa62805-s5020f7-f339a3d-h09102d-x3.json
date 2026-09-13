@@ -1,0 +1,3439 @@
+{
+ "model": "qwen3:8b",
+ "think": "off",
+ "repeat": 3,
+ "only": null,
+ "prompt_scheme": "q = sha256(prompt_record())[:6] — the prompt as converse() actually renders it, over three probes, plus MAX_LISTED and MOST_AT_ONCE. Superseded p = sha256(converse.py)[:6] on 2026-09-10. A p-named file and a q-named file are NOT comparable by fingerprint; compare converse_file_print instead.",
+ "prompt": "a62805",
+ "prompt_record": "MAX_LISTED = 200\nMOST_AT_ONCE = 3\n\n--- asked, with history, widgets listed ---\nYou are a helper the person talks to while they work at their PC.\n\nYou are shown the things currently on their screen, each with a number. Reply as a person would —\nbriefly, in the language they used.\n\nIf they asked you to do something and the listed things can do it, name the numbers. If they were\njust talking, or the thing they want is not listed, say so and do nothing: a wrong click is worse\nthan an honest \"I can't see that here\".\n\nRecently:\n  them: a\n  you: b\n\nOn screen now:\n0: button \"one\"\n1: combo box \"two\"\n\nThey said: probe\n\nReply with only JSON: {\"say\": \"<what you say back>\", \"do\": [ ... ]} where each entry of\n\"do\" is {\"click\": <number>}, {\"type\": \"<text to type>\"} or {\"key\": \"<enter|tab|escape>\"}.\nLeave \"do\" empty if nothing should happen.\n\n--- unprompted, no history, widgets listed ---\nYou are a helper the person talks to while they work at their PC.\n\nYou are shown the things currently on their screen, each with a number. Reply as a person would —\nbriefly, in the language they used.\n\nIf they asked you to do something and the listed things can do it, name the numbers. If they were\njust talking, or the thing they want is not listed, say so and do nothing: a wrong click is worse\nthan an honest \"I can't see that here\".\nNobody asked you anything — you noticed this yourself. Mentioning it is usually\nenough. Only propose doing something if it is clearly wanted, and expect to be asked first.\n\nOn screen now:\n0: button \"one\"\n1: combo box \"two\"\n\nYou noticed: probe\n\nReply with only JSON: {\"say\": \"<what you say back>\", \"do\": [ ... ]} where each entry of\n\"do\" is {\"click\": <number>}, {\"type\": \"<text to type>\"} or {\"key\": \"<enter|tab|escape>\"}.\nLeave \"do\" empty if nothing should happen.\n\n--- asked, no history, nothing on screen ---\nYou are a helper the person talks to while they work at their PC.\n\nYou are shown the things currently on their screen, each with a number. Reply as a person would —\nbriefly, in the language they used.\n\nIf they asked you to do something and the listed things can do it, name the numbers. If they were\njust talking, or the thing they want is not listed, say so and do nothing: a wrong click is worse\nthan an honest \"I can't see that here\".\n\nOn screen now:\n  (nothing named — this surface exposes no widgets)\n\nThey said: probe\n\nReply with only JSON: {\"say\": \"<what you say back>\", \"do\": [ ... ]} where each entry of\n\"do\" is {\"click\": <number>}, {\"type\": \"<text to type>\"} or {\"key\": \"<enter|tab|escape>\"}.\nLeave \"do\" empty if nothing should happen.\n",
+ "converse_file_print": "e0f9d4",
+ "history": {
+  "turns_with_block": 12,
+  "turns": 168,
+  "line_kinds_shown": {
+   "them": 12,
+   "you": 12,
+   "offered": 12
+  },
+  "distances": [
+   1
+  ],
+  "channels": [
+   "did",
+   "refused",
+   "offered",
+   "turned_down"
+  ],
+  "channels_fed": [
+   "offered"
+  ],
+  "channels_never_fed": [
+   "did",
+   "refused",
+   "turned_down"
+  ],
+  "printed": true
+ },
+ "screens_print": "5020f7",
+ "data_print": "339a3d",
+ "harness_print": "09102d",
+ "conversation_print": "001a31",
+ "standins_print": "522417",
+ "choosing_print": "25d0b2",
+ "llm_print": "7f62fa",
+ "loop_print": "d1720c",
+ "remember_unit": "turns",
+ "remember_turns": 12,
+ "max_listed": 200,
+ "most_at_once": 3,
+ "max_tokens": 4096,
+ "language_screen": "character-map",
+ "screens": {
+  "character-map": 21,
+  "chrome-remote-desktop---qvb-flfm-dev1": 12,
+  "system-information": 152,
+  "untitled---paint": 123
+ },
+ "ollama_before": [],
+ "ollama_after": [
+  {
+   "model": "qwen3:8b",
+   "gb": 6.3
+  }
+ ],
+ "seconds": 83.5,
+ "calls": 170,
+ "retried": 0,
+ "spend": {
+  "calls": 168,
+  "with_counts": 168,
+  "max_tokens_setting": 4096,
+  "out_tokens_max": 69,
+  "out_tokens_max_on": "english / How many buttons are there? / r1",
+  "truncated": 0,
+  "truncated_on": [],
+  "reasons": {
+   "stop": 168
+  },
+  "seconds_max": 1.13,
+  "seconds_max_on": "english / How many buttons are there? / r1",
+  "thought_chars_max": 0,
+  "thought_chars_max_on": null,
+  "thought_chars_total": 0
+ },
+ "repair": {
+  "n": 4,
+  "landed": 3,
+  "old_rule": 3
+ },
+ "korean": {
+  "n": 36,
+  "korean": 30,
+  "english": 6,
+  "other": 0,
+  "neither": 0,
+  "original_six": 5
+ },
+ "english_control": {
+  "n": 12,
+  "english": 12,
+  "korean": 0,
+  "other": 0,
+  "neither": 0
+ },
+ "cases": [
+  {
+   "label": "REPAIR names the right thing",
+   "screen": "untitled---paint",
+   "lines": [
+    "빨간색 골라줘",
+    "아니 그거 말고 Red 를 눌러줘"
+   ],
+   "want": [
+    "Red",
+    "list item"
+   ],
+   "why": "the correction names the target in as many words. If this fails, nothing repairs."
+  },
+  {
+   "label": "REPAIR without naming it",
+   "screen": "untitled---paint",
+   "lines": [
+    "동그라미 그리고 싶어",
+    "아니야 그거 말고"
+   ],
+   "want": null,
+   "why": "'not that one' with no replacement. The right answer is to stop and ask, not to guess again — so this is one of the two cases an always-clicking agent fails."
+  },
+  {
+   "label": "REPAIR after a vague ask",
+   "screen": "character-map",
+   "lines": [
+    "뭔가 눌러줘",
+    "글꼴 바꾸는 걸로 해줘"
+   ],
+   "want": [
+    "Font :",
+    "combo box"
+   ],
+   "why": "the first turn cannot be answered, the second narrows it. The label/combo box pair is here on purpose: this is the case where a name-only verdict cannot tell a click that would work from one that would do nothing."
+  },
+  {
+   "label": "MEMORY of what it offered",
+   "screen": "character-map",
+   "lines": [
+    "복사 눌러줘",
+    "방금 뭘 하려고 했어?"
+   ],
+   "want": null,
+   "why": "a question about the past. KNOWN OPEN DEFECT since 2026-09-10: it answers correctly and clicks Copy a second time. Kept as the standing record of that defect."
+  }
+ ],
+ "korean_cases": [
+  [
+   "screen",
+   "뭐가 열려 있어?"
+  ],
+  [
+   "request",
+   "이 창 닫아줘"
+  ],
+  [
+   "screen",
+   "여기서 뭘 할 수 있어?"
+  ],
+  [
+   "social",
+   "고마워"
+  ],
+  [
+   "screen",
+   "지금 화면 설명해줘"
+  ],
+  [
+   "screen",
+   "복사 버튼 어디 있어?"
+  ],
+  [
+   "social",
+   "안녕"
+  ],
+  [
+   "social",
+   "수고했어"
+  ],
+  [
+   "social",
+   "잘 부탁해"
+  ],
+  [
+   "social",
+   "미안해"
+  ],
+  [
+   "social",
+   "반가워"
+  ],
+  [
+   "itself",
+   "너 뭘 할 수 있어?"
+  ],
+  [
+   "itself",
+   "너 누구야?"
+  ],
+  [
+   "itself",
+   "한국어 할 줄 알아?"
+  ],
+  [
+   "itself",
+   "클릭도 돼?"
+  ],
+  [
+   "itself",
+   "너 이름이 뭐야?"
+  ],
+  [
+   "request",
+   "복사 버튼 눌러줘"
+  ],
+  [
+   "request",
+   "글꼴 바꿔줘"
+  ],
+  [
+   "request",
+   "아무거나 하나 눌러줘"
+  ],
+  [
+   "request",
+   "도움말 열어줘"
+  ],
+  [
+   "request",
+   "문자 하나 선택해줘"
+  ],
+  [
+   "screen",
+   "버튼이 몇 개야?"
+  ],
+  [
+   "screen",
+   "이 창 이름이 뭐야?"
+  ],
+  [
+   "screen",
+   "지금 뭐가 선택돼 있어?"
+  ],
+  [
+   "screen",
+   "화면에 뭐가 보여?"
+  ],
+  [
+   "past",
+   "방금 뭐 했어?"
+  ],
+  [
+   "past",
+   "아까 뭐 눌렀어?"
+  ],
+  [
+   "mixed-in",
+   "Red 버튼 있어?"
+  ],
+  [
+   "mixed-in",
+   "Copy 가 어디야?"
+  ],
+  [
+   "mixed-in",
+   "Font 어떻게 바꿔?"
+  ],
+  [
+   "formal",
+   "이 창을 닫아 주시겠습니까?"
+  ],
+  [
+   "formal",
+   "지금 무엇을 할 수 있습니까?"
+  ],
+  [
+   "chit-chat",
+   "오늘 날씨 어때?"
+  ],
+  [
+   "chit-chat",
+   "심심해"
+  ],
+  [
+   "chit-chat",
+   "배고파"
+  ],
+  [
+   "long",
+   "이 창에서 특수 문자를 하나 골라서 복사하고 싶은데 어떻게 하면 좋을까?"
+  ]
+ ],
+ "english_cases": [
+  [
+   "screen",
+   "What's open?"
+  ],
+  [
+   "request",
+   "Close this window"
+  ],
+  [
+   "screen",
+   "What can I do here?"
+  ],
+  [
+   "social",
+   "Thanks"
+  ],
+  [
+   "screen",
+   "Describe the screen"
+  ],
+  [
+   "screen",
+   "Where is the copy button?"
+  ],
+  [
+   "itself",
+   "Who are you?"
+  ],
+  [
+   "screen",
+   "How many buttons are there?"
+  ],
+  [
+   "past",
+   "What did you just do?"
+  ],
+  [
+   "request",
+   "Press the copy button"
+  ],
+  [
+   "chit-chat",
+   "How's the weather?"
+  ],
+  [
+   "request",
+   "Can you change the font for me?"
+  ]
+ ],
+ "rows": [
+  {
+   "set": "repair",
+   "case": "REPAIR names the right thing",
+   "screen": "untitled---paint",
+   "lines": [
+    "빨간색 골라줘",
+    "아니 그거 말고 Red 를 눌러줘"
+   ],
+   "want": [
+    "Red",
+    "list item"
+   ],
+   "why": "the correction names the target in as many words. If this fails, nothing repairs.",
+   "verdicts": [
+    "landed",
+    "landed",
+    "landed"
+   ],
+   "counted": "landed",
+   "from_repeat": 0,
+   "agreed": true,
+   "old_rule_each": [
+    true,
+    true,
+    true
+   ],
+   "old_rule_counted": true,
+   "repeats": [
+    {
+     "turns": [
+      {
+       "i": 0,
+       "said": "빨간색 골라줘",
+       "reply": "빨간색을 선택할 수 있어요.",
+       "clicked": [
+        "Red",
+        "Orange"
+       ],
+       "clicked_roles": [
+        "list item",
+        "list item"
+       ],
+       "effects": [
+        {
+         "kind": "click",
+         "target": "Red",
+         "role": "list item",
+         "text": ""
+        },
+        {
+         "kind": "click",
+         "target": "Orange",
+         "role": "list item",
+         "text": ""
+        }
+       ],
+       "n_effects": 2,
+       "history_lines": 0,
+       "window_lines": 0,
+       "window": "",
+       "prompt_tokens": 1271,
+       "out_tokens": 33,
+       "reason": "stop",
+       "truncated": false,
+       "thought_chars": 0,
+       "seconds": 0.895
+      },
+      {
+       "i": 1,
+       "said": "아니 그거 말고 Red 를 눌러줘",
+       "reply": "Red를 선택할 수 있어요.",
+       "clicked": [
+        "Red"
+       ],
+       "clicked_roles": [
+        "list item"
+       ],
+       "effects": [
+        {
+         "kind": "click",
+         "target": "Red",
+         "role": "list item",
+         "text": ""
+        }
+       ],
+       "n_effects": 1,
+       "history_lines": 4,
+       "window_lines": 4,
+       "window": "\n  them: 빨간색 골라줘\n  you: 빨간색을 선택할 수 있어요.\n  offered: clicked the list item \"Red\"\n  offered: clicked the list item \"Orange\"\n\n",
+       "prompt_tokens": 1325,
+       "out_tokens": 24,
+       "reason": "stop",
+       "truncated": false,
+       "thought_chars": 0,
+       "seconds": 0.792
+      }
+     ],
+     "clicks": [
+      [
+       "Red",
+       "list item"
+      ]
+     ],
+     "verdict": "landed",
+     "old_rule": true
+    },
+    {
+     "turns": [
+      {
+       "i": 0,
+       "said": "빨간색 골라줘",
+       "reply": "빨간색을 선택할 수 있어요.",
+       "clicked": [
+        "Red",
+        "Orange"
+       ],
+       "clicked_roles": [
+        "list item",
+        "list item"
+       ],
+       "effects": [
+        {
+         "kind": "click",
+         "target": "Red",
+         "role": "list item",
+         "text": ""
+        },
+        {
+         "kind": "click",
+         "target": "Orange",
+         "role": "list item",
+         "text": ""
+        }
+       ],
+       "n_effects": 2,
+       "history_lines": 0,
+       "window_lines": 0,
+       "window": "",
+       "prompt_tokens": 1271,
+       "out_tokens": 33,
+       "reason": "stop",
+       "truncated": false,
+       "thought_chars": 0,
+       "seconds": 0.647
+      },
+      {
+       "i": 1,
+       "said": "아니 그거 말고 Red 를 눌러줘",
+       "reply": "Red를 선택할 수 있어요.",
+       "clicked": [
+        "Red"
+       ],
+       "clicked_roles": [
+        "list item"
+       ],
+       "effects": [
+        {
+         "kind": "click",
+         "target": "Red",
+         "role": "list item",
+         "text": ""
+        }
+       ],
+       "n_effects": 1,
+       "history_lines": 4,
+       "window_lines": 4,
+       "window": "\n  them: 빨간색 골라줘\n  you: 빨간색을 선택할 수 있어요.\n  offered: clicked the list item \"Red\"\n  offered: clicked the list item \"Orange\"\n\n",
+       "prompt_tokens": 1325,
+       "out_tokens": 24,
+       "reason": "stop",
+       "truncated": false,
+       "thought_chars": 0,
+       "seconds": 0.476
+      }
+     ],
+     "clicks": [
+      [
+       "Red",
+       "list item"
+      ]
+     ],
+     "verdict": "landed",
+     "old_rule": true
+    },
+    {
+     "turns": [
+      {
+       "i": 0,
+       "said": "빨간색 골라줘",
+       "reply": "빨간색을 선택할 수 있어요.",
+       "clicked": [
+        "Red",
+        "Orange"
+       ],
+       "clicked_roles": [
+        "list item",
+        "list item"
+       ],
+       "effects": [
+        {
+         "kind": "click",
+         "target": "Red",
+         "role": "list item",
+         "text": ""
+        },
+        {
+         "kind": "click",
+         "target": "Orange",
+         "role": "list item",
+         "text": ""
+        }
+       ],
+       "n_effects": 2,
+       "history_lines": 0,
+       "window_lines": 0,
+       "window": "",
+       "prompt_tokens": 1271,
+       "out_tokens": 33,
+       "reason": "stop",
+       "truncated": false,
+       "thought_chars": 0,
+       "seconds": 0.629
+      },
+      {
+       "i": 1,
+       "said": "아니 그거 말고 Red 를 눌러줘",
+       "reply": "Red를 선택할 수 있어요.",
+       "clicked": [
+        "Red"
+       ],
+       "clicked_roles": [
+        "list item"
+       ],
+       "effects": [
+        {
+         "kind": "click",
+         "target": "Red",
+         "role": "list item",
+         "text": ""
+        }
+       ],
+       "n_effects": 1,
+       "history_lines": 4,
+       "window_lines": 4,
+       "window": "\n  them: 빨간색 골라줘\n  you: 빨간색을 선택할 수 있어요.\n  offered: clicked the list item \"Red\"\n  offered: clicked the list item \"Orange\"\n\n",
+       "prompt_tokens": 1325,
+       "out_tokens": 24,
+       "reason": "stop",
+       "truncated": false,
+       "thought_chars": 0,
+       "seconds": 0.502
+      }
+     ],
+     "clicks": [
+      [
+       "Red",
+       "list item"
+      ]
+     ],
+     "verdict": "landed",
+     "old_rule": true
+    }
+   ]
+  },
+  {
+   "set": "repair",
+   "case": "REPAIR without naming it",
+   "screen": "untitled---paint",
+   "lines": [
+    "동그라미 그리고 싶어",
+    "아니야 그거 말고"
+   ],
+   "want": null,
+   "why": "'not that one' with no replacement. The right answer is to stop and ask, not to guess again — so this is one of the two cases an always-clicking agent fails.",
+   "verdicts": [
+    "landed",
+    "landed",
+    "landed"
+   ],
+   "counted": "landed",
+   "from_repeat": 0,
+   "agreed": true,
+   "old_rule_each": [
+    true,
+    true,
+    true
+   ],
+   "old_rule_counted": true,
+   "repeats": [
+    {
+     "turns": [
+      {
+       "i": 0,
+       "said": "동그라미 그리고 싶어",
+       "reply": "그리고 싶은 도형을 선택해 주세요.",
+       "clicked": [
+        "Shapes"
+       ],
+       "clicked_roles": [
+        "group"
+       ],
+       "effects": [
+        {
+         "kind": "click",
+         "target": "Shapes",
+         "role": "group",
+         "text": ""
+        }
+       ],
+       "n_effects": 1,
+       "history_lines": 0,
+       "window_lines": 0,
+       "window": "",
+       "prompt_tokens": 1270,
+       "out_tokens": 30,
+       "reason": "stop",
+       "truncated": false,
+       "thought_chars": 0,
+       "seconds": 0.612
+      },
+      {
+       "i": 1,
+       "said": "아니야 그거 말고",
+       "reply": "알겠습니다. 다른 도형을 선택해 주세요.",
+       "clicked": [],
+       "clicked_roles": [],
+       "effects": [],
+       "n_effects": 0,
+       "history_lines": 3,
+       "window_lines": 3,
+       "window": "\n  them: 동그라미 그리고 싶어\n  you: 그리고 싶은 도형을 선택해 주세요.\n  offered: clicked the group \"Shapes\"\n\n",
+       "prompt_tokens": 1306,
+       "out_tokens": 22,
+       "reason": "stop",
+       "truncated": false,
+       "thought_chars": 0,
+       "seconds": 0.769
+      }
+     ],
+     "clicks": [],
+     "verdict": "landed",
+     "old_rule": true
+    },
+    {
+     "turns": [
+      {
+       "i": 0,
+       "said": "동그라미 그리고 싶어",
+       "reply": "그리고 싶은 도형을 선택해 주세요.",
+       "clicked": [
+        "Shapes"
+       ],
+       "clicked_roles": [
+        "group"
+       ],
+       "effects": [
+        {
+         "kind": "click",
+         "target": "Shapes",
+         "role": "group",
+         "text": ""
+        }
+       ],
+       "n_effects": 1,
+       "history_lines": 0,
+       "window_lines": 0,
+       "window": "",
+       "prompt_tokens": 1270,
+       "out_tokens": 30,
+       "reason": "stop",
+       "truncated": false,
+       "thought_chars": 0,
+       "seconds": 0.623
+      },
+      {
+       "i": 1,
+       "said": "아니야 그거 말고",
+       "reply": "알겠습니다. 다른 도형을 선택해 주세요.",
+       "clicked": [],
+       "clicked_roles": [],
+       "effects": [],
+       "n_effects": 0,
+       "history_lines": 3,
+       "window_lines": 3,
+       "window": "\n  them: 동그라미 그리고 싶어\n  you: 그리고 싶은 도형을 선택해 주세요.\n  offered: clicked the group \"Shapes\"\n\n",
+       "prompt_tokens": 1306,
+       "out_tokens": 22,
+       "reason": "stop",
+       "truncated": false,
+       "thought_chars": 0,
+       "seconds": 0.487
+      }
+     ],
+     "clicks": [],
+     "verdict": "landed",
+     "old_rule": true
+    },
+    {
+     "turns": [
+      {
+       "i": 0,
+       "said": "동그라미 그리고 싶어",
+       "reply": "그리고 싶은 도형을 선택해 주세요.",
+       "clicked": [
+        "Shapes"
+       ],
+       "clicked_roles": [
+        "group"
+       ],
+       "effects": [
+        {
+         "kind": "click",
+         "target": "Shapes",
+         "role": "group",
+         "text": ""
+        }
+       ],
+       "n_effects": 1,
+       "history_lines": 0,
+       "window_lines": 0,
+       "window": "",
+       "prompt_tokens": 1270,
+       "out_tokens": 30,
+       "reason": "stop",
+       "truncated": false,
+       "thought_chars": 0,
+       "seconds": 0.607
+      },
+      {
+       "i": 1,
+       "said": "아니야 그거 말고",
+       "reply": "알겠습니다. 다른 도형을 선택해 주세요.",
+       "clicked": [],
+       "clicked_roles": [],
+       "effects": [],
+       "n_effects": 0,
+       "history_lines": 3,
+       "window_lines": 3,
+       "window": "\n  them: 동그라미 그리고 싶어\n  you: 그리고 싶은 도형을 선택해 주세요.\n  offered: clicked the group \"Shapes\"\n\n",
+       "prompt_tokens": 1306,
+       "out_tokens": 22,
+       "reason": "stop",
+       "truncated": false,
+       "thought_chars": 0,
+       "seconds": 0.482
+      }
+     ],
+     "clicks": [],
+     "verdict": "landed",
+     "old_rule": true
+    }
+   ]
+  },
+  {
+   "set": "repair",
+   "case": "REPAIR after a vague ask",
+   "screen": "character-map",
+   "lines": [
+    "뭔가 눌러줘",
+    "글꼴 바꾸는 걸로 해줘"
+   ],
+   "want": [
+    "Font :",
+    "combo box"
+   ],
+   "why": "the first turn cannot be answered, the second narrows it. The label/combo box pair is here on purpose: this is the case where a name-only verdict cannot tell a click that would work from one that would do nothing.",
+   "verdicts": [
+    "landed",
+    "landed",
+    "landed"
+   ],
+   "counted": "landed",
+   "from_repeat": 0,
+   "agreed": true,
+   "old_rule_each": [
+    true,
+    true,
+    true
+   ],
+   "old_rule_counted": true,
+   "repeats": [
+    {
+     "turns": [
+      {
+       "i": 0,
+       "said": "뭔가 눌러줘",
+       "reply": "무슨 버튼을 눌러야 해?",
+       "clicked": [],
+       "clicked_roles": [],
+       "effects": [],
+       "n_effects": 0,
+       "history_lines": 0,
+       "window_lines": 0,
+       "window": "",
+       "prompt_tokens": 372,
+       "out_tokens": 21,
+       "reason": "stop",
+       "truncated": false,
+       "thought_chars": 0,
+       "seconds": 0.45
+      },
+      {
+       "i": 1,
+       "said": "글꼴 바꾸는 걸로 해줘",
+       "reply": "글꼴을 바꾸려면 'Font :' 옆의 콤보 박스를 클릭하고 원하는 글꼴을 선택해줘.",
+       "clicked": [
+        "Font :"
+       ],
+       "clicked_roles": [
+        "combo box"
+       ],
+       "effects": [
+        {
+         "kind": "click",
+         "target": "Font :",
+         "role": "combo box",
+         "text": ""
+        }
+       ],
+       "n_effects": 1,
+       "history_lines": 2,
+       "window_lines": 2,
+       "window": "\n  them: 뭔가 눌러줘\n  you: 무슨 버튼을 눌러야 해?\n\n",
+       "prompt_tokens": 400,
+       "out_tokens": 48,
+       "reason": "stop",
+       "truncated": false,
+       "thought_chars": 0,
+       "seconds": 0.894
+      }
+     ],
+     "clicks": [
+      [
+       "Font :",
+       "combo box"
+      ]
+     ],
+     "verdict": "landed",
+     "old_rule": true
+    },
+    {
+     "turns": [
+      {
+       "i": 0,
+       "said": "뭔가 눌러줘",
+       "reply": "무슨 버튼을 눌러야 해?",
+       "clicked": [],
+       "clicked_roles": [],
+       "effects": [],
+       "n_effects": 0,
+       "history_lines": 0,
+       "window_lines": 0,
+       "window": "",
+       "prompt_tokens": 372,
+       "out_tokens": 21,
+       "reason": "stop",
+       "truncated": false,
+       "thought_chars": 0,
+       "seconds": 0.392
+      },
+      {
+       "i": 1,
+       "said": "글꼴 바꾸는 걸로 해줘",
+       "reply": "글꼴을 바꾸려면 'Font :' 옆의 콤보 박스를 클릭하고 원하는 글꼴을 선택해줘.",
+       "clicked": [
+        "Font :"
+       ],
+       "clicked_roles": [
+        "combo box"
+       ],
+       "effects": [
+        {
+         "kind": "click",
+         "target": "Font :",
+         "role": "combo box",
+         "text": ""
+        }
+       ],
+       "n_effects": 1,
+       "history_lines": 2,
+       "window_lines": 2,
+       "window": "\n  them: 뭔가 눌러줘\n  you: 무슨 버튼을 눌러야 해?\n\n",
+       "prompt_tokens": 400,
+       "out_tokens": 48,
+       "reason": "stop",
+       "truncated": false,
+       "thought_chars": 0,
+       "seconds": 0.832
+      }
+     ],
+     "clicks": [
+      [
+       "Font :",
+       "combo box"
+      ]
+     ],
+     "verdict": "landed",
+     "old_rule": true
+    },
+    {
+     "turns": [
+      {
+       "i": 0,
+       "said": "뭔가 눌러줘",
+       "reply": "무슨 버튼을 눌러야 해?",
+       "clicked": [],
+       "clicked_roles": [],
+       "effects": [],
+       "n_effects": 0,
+       "history_lines": 0,
+       "window_lines": 0,
+       "window": "",
+       "prompt_tokens": 372,
+       "out_tokens": 21,
+       "reason": "stop",
+       "truncated": false,
+       "thought_chars": 0,
+       "seconds": 0.402
+      },
+      {
+       "i": 1,
+       "said": "글꼴 바꾸는 걸로 해줘",
+       "reply": "글꼴을 바꾸려면 'Font :' 옆의 콤보 박스를 클릭하고 원하는 글꼴을 선택해줘.",
+       "clicked": [
+        "Font :"
+       ],
+       "clicked_roles": [
+        "combo box"
+       ],
+       "effects": [
+        {
+         "kind": "click",
+         "target": "Font :",
+         "role": "combo box",
+         "text": ""
+        }
+       ],
+       "n_effects": 1,
+       "history_lines": 2,
+       "window_lines": 2,
+       "window": "\n  them: 뭔가 눌러줘\n  you: 무슨 버튼을 눌러야 해?\n\n",
+       "prompt_tokens": 400,
+       "out_tokens": 48,
+       "reason": "stop",
+       "truncated": false,
+       "thought_chars": 0,
+       "seconds": 0.832
+      }
+     ],
+     "clicks": [
+      [
+       "Font :",
+       "combo box"
+      ]
+     ],
+     "verdict": "landed",
+     "old_rule": true
+    }
+   ]
+  },
+  {
+   "set": "repair",
+   "case": "MEMORY of what it offered",
+   "screen": "character-map",
+   "lines": [
+    "복사 눌러줘",
+    "방금 뭘 하려고 했어?"
+   ],
+   "want": null,
+   "why": "a question about the past. KNOWN OPEN DEFECT since 2026-09-10: it answers correctly and clicks Copy a second time. Kept as the standing record of that defect.",
+   "verdicts": [
+    "wrong",
+    "wrong",
+    "wrong"
+   ],
+   "counted": "wrong",
+   "from_repeat": 0,
+   "agreed": true,
+   "old_rule_each": [
+    false,
+    false,
+    false
+   ],
+   "old_rule_counted": false,
+   "repeats": [
+    {
+     "turns": [
+      {
+       "i": 0,
+       "said": "복사 눌러줘",
+       "reply": "복사 버튼을 클릭해 드릴게요.",
+       "clicked": [
+        "Copy"
+       ],
+       "clicked_roles": [
+        "button"
+       ],
+       "effects": [
+        {
+         "kind": "click",
+         "target": "Copy",
+         "role": "button",
+         "text": ""
+        }
+       ],
+       "n_effects": 1,
+       "history_lines": 0,
+       "window_lines": 0,
+       "window": "",
+       "prompt_tokens": 371,
+       "out_tokens": 29,
+       "reason": "stop",
+       "truncated": false,
+       "thought_chars": 0,
+       "seconds": 0.524
+      },
+      {
+       "i": 1,
+       "said": "방금 뭘 하려고 했어?",
+       "reply": "복사 버튼을 클릭하려고 했어요.",
+       "clicked": [
+        "Copy"
+       ],
+       "clicked_roles": [
+        "button"
+       ],
+       "effects": [
+        {
+         "kind": "click",
+         "target": "Copy",
+         "role": "button",
+         "text": ""
+        }
+       ],
+       "n_effects": 1,
+       "history_lines": 3,
+       "window_lines": 3,
+       "window": "\n  them: 복사 눌러줘\n  you: 복사 버튼을 클릭해 드릴게요.\n  offered: clicked the button \"Copy\"\n\n",
+       "prompt_tokens": 416,
+       "out_tokens": 30,
+       "reason": "stop",
+       "truncated": false,
+       "thought_chars": 0,
+       "seconds": 0.64
+      }
+     ],
+     "clicks": [
+      [
+       "Copy",
+       "button"
+      ]
+     ],
+     "verdict": "wrong",
+     "old_rule": false
+    },
+    {
+     "turns": [
+      {
+       "i": 0,
+       "said": "복사 눌러줘",
+       "reply": "복사 버튼을 클릭해 드릴게요.",
+       "clicked": [
+        "Copy"
+       ],
+       "clicked_roles": [
+        "button"
+       ],
+       "effects": [
+        {
+         "kind": "click",
+         "target": "Copy",
+         "role": "button",
+         "text": ""
+        }
+       ],
+       "n_effects": 1,
+       "history_lines": 0,
+       "window_lines": 0,
+       "window": "",
+       "prompt_tokens": 371,
+       "out_tokens": 29,
+       "reason": "stop",
+       "truncated": false,
+       "thought_chars": 0,
+       "seconds": 0.486
+      },
+      {
+       "i": 1,
+       "said": "방금 뭘 하려고 했어?",
+       "reply": "복사 버튼을 클릭하려고 했어요.",
+       "clicked": [
+        "Copy"
+       ],
+       "clicked_roles": [
+        "button"
+       ],
+       "effects": [
+        {
+         "kind": "click",
+         "target": "Copy",
+         "role": "button",
+         "text": ""
+        }
+       ],
+       "n_effects": 1,
+       "history_lines": 3,
+       "window_lines": 3,
+       "window": "\n  them: 복사 눌러줘\n  you: 복사 버튼을 클릭해 드릴게요.\n  offered: clicked the button \"Copy\"\n\n",
+       "prompt_tokens": 416,
+       "out_tokens": 30,
+       "reason": "stop",
+       "truncated": false,
+       "thought_chars": 0,
+       "seconds": 0.489
+      }
+     ],
+     "clicks": [
+      [
+       "Copy",
+       "button"
+      ]
+     ],
+     "verdict": "wrong",
+     "old_rule": false
+    },
+    {
+     "turns": [
+      {
+       "i": 0,
+       "said": "복사 눌러줘",
+       "reply": "복사 버튼을 클릭해 드릴게요.",
+       "clicked": [
+        "Copy"
+       ],
+       "clicked_roles": [
+        "button"
+       ],
+       "effects": [
+        {
+         "kind": "click",
+         "target": "Copy",
+         "role": "button",
+         "text": ""
+        }
+       ],
+       "n_effects": 1,
+       "history_lines": 0,
+       "window_lines": 0,
+       "window": "",
+       "prompt_tokens": 371,
+       "out_tokens": 29,
+       "reason": "stop",
+       "truncated": false,
+       "thought_chars": 0,
+       "seconds": 0.518
+      },
+      {
+       "i": 1,
+       "said": "방금 뭘 하려고 했어?",
+       "reply": "복사 버튼을 클릭하려고 했어요.",
+       "clicked": [
+        "Copy"
+       ],
+       "clicked_roles": [
+        "button"
+       ],
+       "effects": [
+        {
+         "kind": "click",
+         "target": "Copy",
+         "role": "button",
+         "text": ""
+        }
+       ],
+       "n_effects": 1,
+       "history_lines": 3,
+       "window_lines": 3,
+       "window": "\n  them: 복사 눌러줘\n  you: 복사 버튼을 클릭해 드릴게요.\n  offered: clicked the button \"Copy\"\n\n",
+       "prompt_tokens": 416,
+       "out_tokens": 30,
+       "reason": "stop",
+       "truncated": false,
+       "thought_chars": 0,
+       "seconds": 0.51
+      }
+     ],
+     "clicks": [
+      [
+       "Copy",
+       "button"
+      ]
+     ],
+     "verdict": "wrong",
+     "old_rule": false
+    }
+   ]
+  },
+  {
+   "set": "korean",
+   "kind": "screen",
+   "said": "뭐가 열려 있어?",
+   "verdicts": [
+    "english",
+    "english",
+    "english"
+   ],
+   "counted": "english",
+   "from_repeat": 0,
+   "agreed": true,
+   "mixed_counted": false,
+   "repeats": [
+    {
+     "say": "Character Grid is open.",
+     "got": "english",
+     "mixed": false,
+     "clicked": [
+      "Character Grid"
+     ],
+     "n_effects": 1,
+     "truncated": false,
+     "reason": "stop"
+    },
+    {
+     "say": "Character Grid is open.",
+     "got": "english",
+     "mixed": false,
+     "clicked": [
+      "Character Grid"
+     ],
+     "n_effects": 1,
+     "truncated": false,
+     "reason": "stop"
+    },
+    {
+     "say": "Character Grid is open.",
+     "got": "english",
+     "mixed": false,
+     "clicked": [
+      "Character Grid"
+     ],
+     "n_effects": 1,
+     "truncated": false,
+     "reason": "stop"
+    }
+   ]
+  },
+  {
+   "set": "korean",
+   "kind": "request",
+   "said": "이 창 닫아줘",
+   "verdicts": [
+    "korean",
+    "korean",
+    "korean"
+   ],
+   "counted": "korean",
+   "from_repeat": 0,
+   "agreed": true,
+   "mixed_counted": false,
+   "repeats": [
+    {
+     "say": "창을 닫겠습니다.",
+     "got": "korean",
+     "mixed": false,
+     "clicked": [
+      "Close"
+     ],
+     "n_effects": 1,
+     "truncated": false,
+     "reason": "stop"
+    },
+    {
+     "say": "창을 닫겠습니다.",
+     "got": "korean",
+     "mixed": false,
+     "clicked": [
+      "Close"
+     ],
+     "n_effects": 1,
+     "truncated": false,
+     "reason": "stop"
+    },
+    {
+     "say": "창을 닫겠습니다.",
+     "got": "korean",
+     "mixed": false,
+     "clicked": [
+      "Close"
+     ],
+     "n_effects": 1,
+     "truncated": false,
+     "reason": "stop"
+    }
+   ]
+  },
+  {
+   "set": "korean",
+   "kind": "screen",
+   "said": "여기서 뭘 할 수 있어?",
+   "verdicts": [
+    "korean",
+    "korean",
+    "korean"
+   ],
+   "counted": "korean",
+   "from_repeat": 0,
+   "agreed": true,
+   "mixed_counted": false,
+   "repeats": [
+    {
+     "say": "이곳에서 문자를 선택하고 복사하거나 폰트를 변경할 수 있어.",
+     "got": "korean",
+     "mixed": false,
+     "clicked": [
+      "Select",
+      "Copy",
+      "Font :"
+     ],
+     "n_effects": 3,
+     "truncated": false,
+     "reason": "stop"
+    },
+    {
+     "say": "이곳에서 문자를 선택하고 복사할 수 있어요.",
+     "got": "korean",
+     "mixed": false,
+     "clicked": [
+      "Select",
+      "Copy"
+     ],
+     "n_effects": 2,
+     "truncated": false,
+     "reason": "stop"
+    },
+    {
+     "say": "이곳에서 문자를 선택하고 복사할 수 있어요.",
+     "got": "korean",
+     "mixed": false,
+     "clicked": [
+      "Select",
+      "Copy"
+     ],
+     "n_effects": 2,
+     "truncated": false,
+     "reason": "stop"
+    }
+   ]
+  },
+  {
+   "set": "korean",
+   "kind": "social",
+   "said": "고마워",
+   "verdicts": [
+    "korean",
+    "korean",
+    "korean"
+   ],
+   "counted": "korean",
+   "from_repeat": 0,
+   "agreed": true,
+   "mixed_counted": false,
+   "repeats": [
+    {
+     "say": "네",
+     "got": "korean",
+     "mixed": false,
+     "clicked": [],
+     "n_effects": 0,
+     "truncated": false,
+     "reason": "stop"
+    },
+    {
+     "say": "네",
+     "got": "korean",
+     "mixed": false,
+     "clicked": [],
+     "n_effects": 0,
+     "truncated": false,
+     "reason": "stop"
+    },
+    {
+     "say": "네",
+     "got": "korean",
+     "mixed": false,
+     "clicked": [],
+     "n_effects": 0,
+     "truncated": false,
+     "reason": "stop"
+    }
+   ]
+  },
+  {
+   "set": "korean",
+   "kind": "screen",
+   "said": "지금 화면 설명해줘",
+   "verdicts": [
+    "korean",
+    "korean",
+    "korean"
+   ],
+   "counted": "korean",
+   "from_repeat": 0,
+   "agreed": true,
+   "mixed_counted": false,
+   "repeats": [
+    {
+     "say": "이것은 문자 그리드 창입니다. 여기서 문자를 선택하고 복사할 수 있습니다.",
+     "got": "korean",
+     "mixed": false,
+     "clicked": [
+      "Character Grid"
+     ],
+     "n_effects": 1,
+     "truncated": false,
+     "reason": "stop"
+    },
+    {
+     "say": "이것은 문자 그리드 창입니다. 여기서 문자를 선택하고 복사할 수 있습니다.",
+     "got": "korean",
+     "mixed": false,
+     "clicked": [
+      "Character Grid"
+     ],
+     "n_effects": 1,
+     "truncated": false,
+     "reason": "stop"
+    },
+    {
+     "say": "이것은 문자 그리드 창입니다. 여기서 문자를 선택하고 복사할 수 있습니다.",
+     "got": "korean",
+     "mixed": false,
+     "clicked": [
+      "Character Grid"
+     ],
+     "n_effects": 1,
+     "truncated": false,
+     "reason": "stop"
+    }
+   ]
+  },
+  {
+   "set": "korean",
+   "kind": "screen",
+   "said": "복사 버튼 어디 있어?",
+   "verdicts": [
+    "korean",
+    "korean",
+    "korean"
+   ],
+   "counted": "korean",
+   "from_repeat": 0,
+   "agreed": true,
+   "mixed_counted": false,
+   "repeats": [
+    {
+     "say": "복사 버튼은 4번입니다.",
+     "got": "korean",
+     "mixed": false,
+     "clicked": [
+      "Copy"
+     ],
+     "n_effects": 1,
+     "truncated": false,
+     "reason": "stop"
+    },
+    {
+     "say": "복사 버튼은 4번입니다.",
+     "got": "korean",
+     "mixed": false,
+     "clicked": [
+      "Copy"
+     ],
+     "n_effects": 1,
+     "truncated": false,
+     "reason": "stop"
+    },
+    {
+     "say": "복사 버튼은 4번입니다.",
+     "got": "korean",
+     "mixed": false,
+     "clicked": [
+      "Copy"
+     ],
+     "n_effects": 1,
+     "truncated": false,
+     "reason": "stop"
+    }
+   ]
+  },
+  {
+   "set": "korean",
+   "kind": "social",
+   "said": "안녕",
+   "verdicts": [
+    "korean",
+    "korean",
+    "korean"
+   ],
+   "counted": "korean",
+   "from_repeat": 0,
+   "agreed": true,
+   "mixed_counted": false,
+   "repeats": [
+    {
+     "say": "안녕하세요! 어떻게 도와드릴까요?",
+     "got": "korean",
+     "mixed": false,
+     "clicked": [],
+     "n_effects": 0,
+     "truncated": false,
+     "reason": "stop"
+    },
+    {
+     "say": "안녕하세요! 어떻게 도와드릴까요?",
+     "got": "korean",
+     "mixed": false,
+     "clicked": [],
+     "n_effects": 0,
+     "truncated": false,
+     "reason": "stop"
+    },
+    {
+     "say": "안녕하세요! 어떻게 도와드릴까요?",
+     "got": "korean",
+     "mixed": false,
+     "clicked": [],
+     "n_effects": 0,
+     "truncated": false,
+     "reason": "stop"
+    }
+   ]
+  },
+  {
+   "set": "korean",
+   "kind": "social",
+   "said": "수고했어",
+   "verdicts": [
+    "korean",
+    "korean",
+    "korean"
+   ],
+   "counted": "korean",
+   "from_repeat": 0,
+   "agreed": true,
+   "mixed_counted": false,
+   "repeats": [
+    {
+     "say": "수고하셨어요!",
+     "got": "korean",
+     "mixed": false,
+     "clicked": [],
+     "n_effects": 0,
+     "truncated": false,
+     "reason": "stop"
+    },
+    {
+     "say": "수고하셨어요!",
+     "got": "korean",
+     "mixed": false,
+     "clicked": [],
+     "n_effects": 0,
+     "truncated": false,
+     "reason": "stop"
+    },
+    {
+     "say": "수고하셨어요!",
+     "got": "korean",
+     "mixed": false,
+     "clicked": [],
+     "n_effects": 0,
+     "truncated": false,
+     "reason": "stop"
+    }
+   ]
+  },
+  {
+   "set": "korean",
+   "kind": "social",
+   "said": "잘 부탁해",
+   "verdicts": [
+    "korean",
+    "korean",
+    "korean"
+   ],
+   "counted": "korean",
+   "from_repeat": 0,
+   "agreed": true,
+   "mixed_counted": false,
+   "repeats": [
+    {
+     "say": "잘 부탁해",
+     "got": "korean",
+     "mixed": false,
+     "clicked": [],
+     "n_effects": 0,
+     "truncated": false,
+     "reason": "stop"
+    },
+    {
+     "say": "잘 부탁해",
+     "got": "korean",
+     "mixed": false,
+     "clicked": [],
+     "n_effects": 0,
+     "truncated": false,
+     "reason": "stop"
+    },
+    {
+     "say": "잘 부탁해",
+     "got": "korean",
+     "mixed": false,
+     "clicked": [],
+     "n_effects": 0,
+     "truncated": false,
+     "reason": "stop"
+    }
+   ]
+  },
+  {
+   "set": "korean",
+   "kind": "social",
+   "said": "미안해",
+   "verdicts": [
+    "korean",
+    "korean",
+    "korean"
+   ],
+   "counted": "korean",
+   "from_repeat": 0,
+   "agreed": true,
+   "mixed_counted": false,
+   "repeats": [
+    {
+     "say": "안녕하세요. 도와드릴 수 있어요.",
+     "got": "korean",
+     "mixed": false,
+     "clicked": [],
+     "n_effects": 0,
+     "truncated": false,
+     "reason": "stop"
+    },
+    {
+     "say": "안녕하세요. 도와드릴 수 있어요.",
+     "got": "korean",
+     "mixed": false,
+     "clicked": [],
+     "n_effects": 0,
+     "truncated": false,
+     "reason": "stop"
+    },
+    {
+     "say": "안녕하세요. 도와드릴 수 있어요.",
+     "got": "korean",
+     "mixed": false,
+     "clicked": [],
+     "n_effects": 0,
+     "truncated": false,
+     "reason": "stop"
+    }
+   ]
+  },
+  {
+   "set": "korean",
+   "kind": "social",
+   "said": "반가워",
+   "verdicts": [
+    "korean",
+    "korean",
+    "korean"
+   ],
+   "counted": "korean",
+   "from_repeat": 0,
+   "agreed": true,
+   "mixed_counted": false,
+   "repeats": [
+    {
+     "say": "안녕하세요! 도와드릴 수 있어요.",
+     "got": "korean",
+     "mixed": false,
+     "clicked": [],
+     "n_effects": 0,
+     "truncated": false,
+     "reason": "stop"
+    },
+    {
+     "say": "안녕하세요! 어떻게 도와드릴까요?",
+     "got": "korean",
+     "mixed": false,
+     "clicked": [],
+     "n_effects": 0,
+     "truncated": false,
+     "reason": "stop"
+    },
+    {
+     "say": "안녕하세요! 어떻게 도와드릴까요?",
+     "got": "korean",
+     "mixed": false,
+     "clicked": [],
+     "n_effects": 0,
+     "truncated": false,
+     "reason": "stop"
+    }
+   ]
+  },
+  {
+   "set": "korean",
+   "kind": "itself",
+   "said": "너 뭘 할 수 있어?",
+   "verdicts": [
+    "korean",
+    "korean",
+    "korean"
+   ],
+   "counted": "korean",
+   "from_repeat": 0,
+   "agreed": true,
+   "mixed_counted": false,
+   "repeats": [
+    {
+     "say": "저는 여기서 문자를 선택하고 복사할 수 있어요. 도와드릴까요?",
+     "got": "korean",
+     "mixed": false,
+     "clicked": [],
+     "n_effects": 0,
+     "truncated": false,
+     "reason": "stop"
+    },
+    {
+     "say": "저는 문자를 선택하고 복사하거나, 폰트를 변경하거나 도움말을 볼 수 있어요.",
+     "got": "korean",
+     "mixed": false,
+     "clicked": [],
+     "n_effects": 0,
+     "truncated": false,
+     "reason": "stop"
+    },
+    {
+     "say": "저는 문자를 선택하고 복사하거나, 폰트를 변경하거나 도움말을 볼 수 있어요.",
+     "got": "korean",
+     "mixed": false,
+     "clicked": [],
+     "n_effects": 0,
+     "truncated": false,
+     "reason": "stop"
+    }
+   ]
+  },
+  {
+   "set": "korean",
+   "kind": "itself",
+   "said": "너 누구야?",
+   "verdicts": [
+    "korean",
+    "korean",
+    "korean"
+   ],
+   "counted": "korean",
+   "from_repeat": 0,
+   "agreed": true,
+   "mixed_counted": false,
+   "repeats": [
+    {
+     "say": "저는 도움을 드릴 수 있는 친구예요!",
+     "got": "korean",
+     "mixed": false,
+     "clicked": [],
+     "n_effects": 0,
+     "truncated": false,
+     "reason": "stop"
+    },
+    {
+     "say": "저는 도움을 드릴 수 있는 친구예요!",
+     "got": "korean",
+     "mixed": false,
+     "clicked": [],
+     "n_effects": 0,
+     "truncated": false,
+     "reason": "stop"
+    },
+    {
+     "say": "저는 도움을 드릴 수 있는 친구예요!",
+     "got": "korean",
+     "mixed": false,
+     "clicked": [],
+     "n_effects": 0,
+     "truncated": false,
+     "reason": "stop"
+    }
+   ]
+  },
+  {
+   "set": "korean",
+   "kind": "itself",
+   "said": "한국어 할 줄 알아?",
+   "verdicts": [
+    "korean",
+    "korean",
+    "korean"
+   ],
+   "counted": "korean",
+   "from_repeat": 0,
+   "agreed": true,
+   "mixed_counted": false,
+   "repeats": [
+    {
+     "say": "아니요, 저는 한국어를 할 줄 모르지만, 도움을 드릴 수 있습니다.",
+     "got": "korean",
+     "mixed": false,
+     "clicked": [],
+     "n_effects": 0,
+     "truncated": false,
+     "reason": "stop"
+    },
+    {
+     "say": "아니요, 저는 한국어를 할 줄 모르지만, 도움을 드릴 수 있습니다.",
+     "got": "korean",
+     "mixed": false,
+     "clicked": [],
+     "n_effects": 0,
+     "truncated": false,
+     "reason": "stop"
+    },
+    {
+     "say": "아니요, 저는 한국어를 할 줄 모르지만, 도움을 드릴 수 있습니다.",
+     "got": "korean",
+     "mixed": false,
+     "clicked": [],
+     "n_effects": 0,
+     "truncated": false,
+     "reason": "stop"
+    }
+   ]
+  },
+  {
+   "set": "korean",
+   "kind": "itself",
+   "said": "클릭도 돼?",
+   "verdicts": [
+    "korean",
+    "korean",
+    "korean"
+   ],
+   "counted": "korean",
+   "from_repeat": 0,
+   "agreed": true,
+   "mixed_counted": false,
+   "repeats": [
+    {
+     "say": "클릭할 수 있어요.",
+     "got": "korean",
+     "mixed": false,
+     "clicked": [
+      "Select",
+      "Copy"
+     ],
+     "n_effects": 2,
+     "truncated": false,
+     "reason": "stop"
+    },
+    {
+     "say": "클릭할 수 있어요.",
+     "got": "korean",
+     "mixed": false,
+     "clicked": [
+      "Select",
+      "Copy"
+     ],
+     "n_effects": 2,
+     "truncated": false,
+     "reason": "stop"
+    },
+    {
+     "say": "클릭할 수 있어요.",
+     "got": "korean",
+     "mixed": false,
+     "clicked": [
+      "Select",
+      "Copy"
+     ],
+     "n_effects": 2,
+     "truncated": false,
+     "reason": "stop"
+    }
+   ]
+  },
+  {
+   "set": "korean",
+   "kind": "itself",
+   "said": "너 이름이 뭐야?",
+   "verdicts": [
+    "korean",
+    "korean",
+    "korean"
+   ],
+   "counted": "korean",
+   "from_repeat": 0,
+   "agreed": true,
+   "mixed_counted": false,
+   "repeats": [
+    {
+     "say": "저는 도움을 드리는 친구예요.",
+     "got": "korean",
+     "mixed": false,
+     "clicked": [],
+     "n_effects": 0,
+     "truncated": false,
+     "reason": "stop"
+    },
+    {
+     "say": "저는 도움을 드리는 친구예요.",
+     "got": "korean",
+     "mixed": false,
+     "clicked": [],
+     "n_effects": 0,
+     "truncated": false,
+     "reason": "stop"
+    },
+    {
+     "say": "저는 도움을 드리는 친구예요.",
+     "got": "korean",
+     "mixed": false,
+     "clicked": [],
+     "n_effects": 0,
+     "truncated": false,
+     "reason": "stop"
+    }
+   ]
+  },
+  {
+   "set": "korean",
+   "kind": "request",
+   "said": "복사 버튼 눌러줘",
+   "verdicts": [
+    "korean",
+    "korean",
+    "korean"
+   ],
+   "counted": "korean",
+   "from_repeat": 0,
+   "agreed": true,
+   "mixed_counted": false,
+   "repeats": [
+    {
+     "say": "복사 버튼을 클릭합니다.",
+     "got": "korean",
+     "mixed": false,
+     "clicked": [
+      "Copy"
+     ],
+     "n_effects": 1,
+     "truncated": false,
+     "reason": "stop"
+    },
+    {
+     "say": "복사 버튼을 클릭합니다.",
+     "got": "korean",
+     "mixed": false,
+     "clicked": [
+      "Copy"
+     ],
+     "n_effects": 1,
+     "truncated": false,
+     "reason": "stop"
+    },
+    {
+     "say": "복사 버튼을 클릭합니다.",
+     "got": "korean",
+     "mixed": false,
+     "clicked": [
+      "Copy"
+     ],
+     "n_effects": 1,
+     "truncated": false,
+     "reason": "stop"
+    }
+   ]
+  },
+  {
+   "set": "korean",
+   "kind": "request",
+   "said": "글꼴 바꿔줘",
+   "verdicts": [
+    "english",
+    "english",
+    "english"
+   ],
+   "counted": "english",
+   "from_repeat": 0,
+   "agreed": true,
+   "mixed_counted": false,
+   "repeats": [
+    {
+     "say": "Okay, I'll change the font for you.",
+     "got": "english",
+     "mixed": false,
+     "clicked": [
+      "Font :"
+     ],
+     "n_effects": 1,
+     "truncated": false,
+     "reason": "stop"
+    },
+    {
+     "say": "Okay, I'll change the font for you.",
+     "got": "english",
+     "mixed": false,
+     "clicked": [
+      "Font :"
+     ],
+     "n_effects": 1,
+     "truncated": false,
+     "reason": "stop"
+    },
+    {
+     "say": "Okay, I'll change the font for you.",
+     "got": "english",
+     "mixed": false,
+     "clicked": [
+      "Font :"
+     ],
+     "n_effects": 1,
+     "truncated": false,
+     "reason": "stop"
+    }
+   ]
+  },
+  {
+   "set": "korean",
+   "kind": "request",
+   "said": "아무거나 하나 눌러줘",
+   "verdicts": [
+    "korean",
+    "korean",
+    "korean"
+   ],
+   "counted": "korean",
+   "from_repeat": 0,
+   "agreed": true,
+   "mixed_counted": false,
+   "repeats": [
+    {
+     "say": "어떤 버튼을 눌러드릴까요?",
+     "got": "korean",
+     "mixed": false,
+     "clicked": [],
+     "n_effects": 0,
+     "truncated": false,
+     "reason": "stop"
+    },
+    {
+     "say": "어떤 버튼을 눌러드릴까요?",
+     "got": "korean",
+     "mixed": false,
+     "clicked": [],
+     "n_effects": 0,
+     "truncated": false,
+     "reason": "stop"
+    },
+    {
+     "say": "어떤 버튼을 눌러드릴까요?",
+     "got": "korean",
+     "mixed": false,
+     "clicked": [],
+     "n_effects": 0,
+     "truncated": false,
+     "reason": "stop"
+    }
+   ]
+  },
+  {
+   "set": "korean",
+   "kind": "request",
+   "said": "도움말 열어줘",
+   "verdicts": [
+    "english",
+    "english",
+    "english"
+   ],
+   "counted": "english",
+   "from_repeat": 0,
+   "agreed": true,
+   "mixed_counted": false,
+   "repeats": [
+    {
+     "say": "Help is opened.",
+     "got": "english",
+     "mixed": false,
+     "clicked": [
+      "Help"
+     ],
+     "n_effects": 1,
+     "truncated": false,
+     "reason": "stop"
+    },
+    {
+     "say": "Help is opened.",
+     "got": "english",
+     "mixed": false,
+     "clicked": [
+      "Help"
+     ],
+     "n_effects": 1,
+     "truncated": false,
+     "reason": "stop"
+    },
+    {
+     "say": "Help is opened.",
+     "got": "english",
+     "mixed": false,
+     "clicked": [
+      "Help"
+     ],
+     "n_effects": 1,
+     "truncated": false,
+     "reason": "stop"
+    }
+   ]
+  },
+  {
+   "set": "korean",
+   "kind": "request",
+   "said": "문자 하나 선택해줘",
+   "verdicts": [
+    "korean",
+    "korean",
+    "korean"
+   ],
+   "counted": "korean",
+   "from_repeat": 0,
+   "agreed": true,
+   "mixed_counted": false,
+   "repeats": [
+    {
+     "say": "문자 하나 선택해 주세요.",
+     "got": "korean",
+     "mixed": false,
+     "clicked": [],
+     "n_effects": 0,
+     "truncated": false,
+     "reason": "stop"
+    },
+    {
+     "say": "문자 하나 선택해 주세요.",
+     "got": "korean",
+     "mixed": false,
+     "clicked": [],
+     "n_effects": 0,
+     "truncated": false,
+     "reason": "stop"
+    },
+    {
+     "say": "문자 하나 선택해 주세요.",
+     "got": "korean",
+     "mixed": false,
+     "clicked": [],
+     "n_effects": 0,
+     "truncated": false,
+     "reason": "stop"
+    }
+   ]
+  },
+  {
+   "set": "korean",
+   "kind": "screen",
+   "said": "버튼이 몇 개야?",
+   "verdicts": [
+    "korean",
+    "korean",
+    "korean"
+   ],
+   "counted": "korean",
+   "from_repeat": 0,
+   "agreed": true,
+   "mixed_counted": false,
+   "repeats": [
+    {
+     "say": "화면에 20개의 버튼이 있어.",
+     "got": "korean",
+     "mixed": false,
+     "clicked": [],
+     "n_effects": 0,
+     "truncated": false,
+     "reason": "stop"
+    },
+    {
+     "say": "화면上有 20개의 버튼이 있어.",
+     "got": "korean",
+     "mixed": false,
+     "clicked": [
+      "Minimize",
+      "Maximize",
+      "Close"
+     ],
+     "n_effects": 3,
+     "truncated": false,
+     "reason": "stop"
+    },
+    {
+     "say": "화면上有 20개의 버튼이 있어.",
+     "got": "korean",
+     "mixed": false,
+     "clicked": [
+      "Minimize",
+      "Maximize",
+      "Close"
+     ],
+     "n_effects": 3,
+     "truncated": false,
+     "reason": "stop"
+    }
+   ]
+  },
+  {
+   "set": "korean",
+   "kind": "screen",
+   "said": "이 창 이름이 뭐야?",
+   "verdicts": [
+    "korean",
+    "korean",
+    "korean"
+   ],
+   "counted": "korean",
+   "from_repeat": 0,
+   "agreed": true,
+   "mixed_counted": true,
+   "repeats": [
+    {
+     "say": "이 창의 이름은 'Character Grid'입니다.",
+     "got": "korean",
+     "mixed": true,
+     "clicked": [],
+     "n_effects": 0,
+     "truncated": false,
+     "reason": "stop"
+    },
+    {
+     "say": "이 창의 이름은 'Character Grid'입니다.",
+     "got": "korean",
+     "mixed": true,
+     "clicked": [],
+     "n_effects": 0,
+     "truncated": false,
+     "reason": "stop"
+    },
+    {
+     "say": "이 창의 이름은 'Character Grid'입니다.",
+     "got": "korean",
+     "mixed": true,
+     "clicked": [],
+     "n_effects": 0,
+     "truncated": false,
+     "reason": "stop"
+    }
+   ]
+  },
+  {
+   "set": "korean",
+   "kind": "screen",
+   "said": "지금 뭐가 선택돼 있어?",
+   "verdicts": [
+    "korean",
+    "korean",
+    "korean"
+   ],
+   "counted": "korean",
+   "from_repeat": 0,
+   "agreed": true,
+   "mixed_counted": true,
+   "repeats": [
+    {
+     "say": "현재 선택된 문자는 U+0021: Exclamation Mark입니다.",
+     "got": "korean",
+     "mixed": true,
+     "clicked": [],
+     "n_effects": 0,
+     "truncated": false,
+     "reason": "stop"
+    },
+    {
+     "say": "현재 선택된 문자는 U+0021: Exclamation Mark입니다.",
+     "got": "korean",
+     "mixed": true,
+     "clicked": [],
+     "n_effects": 0,
+     "truncated": false,
+     "reason": "stop"
+    },
+    {
+     "say": "현재 선택된 문자는 U+0021: Exclamation Mark입니다.",
+     "got": "korean",
+     "mixed": true,
+     "clicked": [],
+     "n_effects": 0,
+     "truncated": false,
+     "reason": "stop"
+    }
+   ]
+  },
+  {
+   "set": "korean",
+   "kind": "screen",
+   "said": "화면에 뭐가 보여?",
+   "verdicts": [
+    "korean",
+    "korean",
+    "korean"
+   ],
+   "counted": "korean",
+   "from_repeat": 0,
+   "agreed": true,
+   "mixed_counted": false,
+   "repeats": [
+    {
+     "say": "여기에는 문자 그리드 패널, 문자 복사 입력 상자, 선택 및 복사 버튼, 폰트 선택 상자, 도움말 링크, 그리고 기본 제어 버튼들이 보입니다.",
+     "got": "korean",
+     "mixed": false,
+     "clicked": [],
+     "n_effects": 0,
+     "truncated": false,
+     "reason": "stop"
+    },
+    {
+     "say": "여기에는 문자 그리드 패널, 문자 복사 입력 상자, 선택 및 복사 버튼, 폰트 선택 상자, 도움말 링크, 그리고 기본 제어 버튼들이 보입니다.",
+     "got": "korean",
+     "mixed": false,
+     "clicked": [],
+     "n_effects": 0,
+     "truncated": false,
+     "reason": "stop"
+    },
+    {
+     "say": "여기에는 문자 그리드 패널, 문자 복사 입력 상자, 선택 및 복사 버튼, 폰트 선택 상자, 도움말 링크, 그리고 기본 제어 버튼들이 보입니다.",
+     "got": "korean",
+     "mixed": false,
+     "clicked": [],
+     "n_effects": 0,
+     "truncated": false,
+     "reason": "stop"
+    }
+   ]
+  },
+  {
+   "set": "korean",
+   "kind": "past",
+   "said": "방금 뭐 했어?",
+   "verdicts": [
+    "korean",
+    "korean",
+    "korean"
+   ],
+   "counted": "korean",
+   "from_repeat": 0,
+   "agreed": true,
+   "mixed_counted": false,
+   "repeats": [
+    {
+     "say": "아, 방금 아무것도 안 했어. 너가 뭔가를 했는지 확인해?",
+     "got": "korean",
+     "mixed": false,
+     "clicked": [],
+     "n_effects": 0,
+     "truncated": false,
+     "reason": "stop"
+    },
+    {
+     "say": "아, 방금 아무것도 안 했어. 너가 뭔가를 했는지 확인해?",
+     "got": "korean",
+     "mixed": false,
+     "clicked": [],
+     "n_effects": 0,
+     "truncated": false,
+     "reason": "stop"
+    },
+    {
+     "say": "아, 방금 아무것도 안 했어. 너가 뭔가를 했는지 확인해?",
+     "got": "korean",
+     "mixed": false,
+     "clicked": [],
+     "n_effects": 0,
+     "truncated": false,
+     "reason": "stop"
+    }
+   ]
+  },
+  {
+   "set": "korean",
+   "kind": "past",
+   "said": "아까 뭐 눌렀어?",
+   "verdicts": [
+    "korean",
+    "korean",
+    "korean"
+   ],
+   "counted": "korean",
+   "from_repeat": 0,
+   "agreed": true,
+   "mixed_counted": false,
+   "repeats": [
+    {
+     "say": "아까는 아무것도 눌리지 않았어요.",
+     "got": "korean",
+     "mixed": false,
+     "clicked": [],
+     "n_effects": 0,
+     "truncated": false,
+     "reason": "stop"
+    },
+    {
+     "say": "아까는 아무것도 눌리지 않았어요.",
+     "got": "korean",
+     "mixed": false,
+     "clicked": [],
+     "n_effects": 0,
+     "truncated": false,
+     "reason": "stop"
+    },
+    {
+     "say": "아까는 아무것도 눌리지 않았어요.",
+     "got": "korean",
+     "mixed": false,
+     "clicked": [],
+     "n_effects": 0,
+     "truncated": false,
+     "reason": "stop"
+    }
+   ]
+  },
+  {
+   "set": "korean",
+   "kind": "mixed-in",
+   "said": "Red 버튼 있어?",
+   "verdicts": [
+    "korean",
+    "korean",
+    "korean"
+   ],
+   "counted": "korean",
+   "from_repeat": 0,
+   "agreed": true,
+   "mixed_counted": true,
+   "repeats": [
+    {
+     "say": "Red 버튼은 보이지 않네요.",
+     "got": "korean",
+     "mixed": true,
+     "clicked": [],
+     "n_effects": 0,
+     "truncated": false,
+     "reason": "stop"
+    },
+    {
+     "say": "Red 버튼은 보이지 않네요.",
+     "got": "korean",
+     "mixed": true,
+     "clicked": [],
+     "n_effects": 0,
+     "truncated": false,
+     "reason": "stop"
+    },
+    {
+     "say": "Red 버튼은 보이지 않네요.",
+     "got": "korean",
+     "mixed": true,
+     "clicked": [],
+     "n_effects": 0,
+     "truncated": false,
+     "reason": "stop"
+    }
+   ]
+  },
+  {
+   "set": "korean",
+   "kind": "mixed-in",
+   "said": "Copy 가 어디야?",
+   "verdicts": [
+    "korean",
+    "korean",
+    "korean"
+   ],
+   "counted": "korean",
+   "from_repeat": 0,
+   "agreed": true,
+   "mixed_counted": true,
+   "repeats": [
+    {
+     "say": "Copy 버튼은 4번입니다.",
+     "got": "korean",
+     "mixed": true,
+     "clicked": [
+      "Copy"
+     ],
+     "n_effects": 1,
+     "truncated": false,
+     "reason": "stop"
+    },
+    {
+     "say": "Copy 버튼은 4번입니다.",
+     "got": "korean",
+     "mixed": true,
+     "clicked": [
+      "Copy"
+     ],
+     "n_effects": 1,
+     "truncated": false,
+     "reason": "stop"
+    },
+    {
+     "say": "Copy 버튼은 4번입니다.",
+     "got": "korean",
+     "mixed": true,
+     "clicked": [
+      "Copy"
+     ],
+     "n_effects": 1,
+     "truncated": false,
+     "reason": "stop"
+    }
+   ]
+  },
+  {
+   "set": "korean",
+   "kind": "mixed-in",
+   "said": "Font 어떻게 바꿔?",
+   "verdicts": [
+    "korean",
+    "korean",
+    "korean"
+   ],
+   "counted": "korean",
+   "from_repeat": 0,
+   "agreed": true,
+   "mixed_counted": true,
+   "repeats": [
+    {
+     "say": "Font를 변경하려면 'Font :' 옆의 드롭다운 메뉴를 클릭하세요.",
+     "got": "korean",
+     "mixed": true,
+     "clicked": [
+      "Font :"
+     ],
+     "n_effects": 1,
+     "truncated": false,
+     "reason": "stop"
+    },
+    {
+     "say": "Font를 변경하려면 'Font :' 옆의 드롭다운 메뉴를 클릭하세요.",
+     "got": "korean",
+     "mixed": true,
+     "clicked": [
+      "Font :"
+     ],
+     "n_effects": 1,
+     "truncated": false,
+     "reason": "stop"
+    },
+    {
+     "say": "Font를 변경하려면 'Font :' 옆의 드롭다운 메뉴를 클릭하세요.",
+     "got": "korean",
+     "mixed": true,
+     "clicked": [
+      "Font :"
+     ],
+     "n_effects": 1,
+     "truncated": false,
+     "reason": "stop"
+    }
+   ]
+  },
+  {
+   "set": "korean",
+   "kind": "formal",
+   "said": "이 창을 닫아 주시겠습니까?",
+   "verdicts": [
+    "korean",
+    "korean",
+    "korean"
+   ],
+   "counted": "korean",
+   "from_repeat": 0,
+   "agreed": true,
+   "mixed_counted": false,
+   "repeats": [
+    {
+     "say": "네, 이 창을 닫겠습니다.",
+     "got": "korean",
+     "mixed": false,
+     "clicked": [
+      "Close"
+     ],
+     "n_effects": 1,
+     "truncated": false,
+     "reason": "stop"
+    },
+    {
+     "say": "네, 이 창을 닫겠습니다.",
+     "got": "korean",
+     "mixed": false,
+     "clicked": [
+      "Close"
+     ],
+     "n_effects": 1,
+     "truncated": false,
+     "reason": "stop"
+    },
+    {
+     "say": "네, 이 창을 닫겠습니다.",
+     "got": "korean",
+     "mixed": false,
+     "clicked": [
+      "Close"
+     ],
+     "n_effects": 1,
+     "truncated": false,
+     "reason": "stop"
+    }
+   ]
+  },
+  {
+   "set": "korean",
+   "kind": "formal",
+   "said": "지금 무엇을 할 수 있습니까?",
+   "verdicts": [
+    "korean",
+    "korean",
+    "korean"
+   ],
+   "counted": "korean",
+   "from_repeat": 0,
+   "agreed": true,
+   "mixed_counted": true,
+   "repeats": [
+    {
+     "say": "지금은 문자를 선택하고 복사할 수 있습니다. 'Select' 버튼을 클릭하여 문자를 선택하고 'Copy' 버튼을 눌러 복사할 수 있습니다.",
+     "got": "korean",
+     "mixed": true,
+     "clicked": [
+      "Select",
+      "Copy"
+     ],
+     "n_effects": 2,
+     "truncated": false,
+     "reason": "stop"
+    },
+    {
+     "say": "지금은 문자를 선택하고 복사할 수 있습니다. 'Select' 버튼을 클릭하여 문자를 선택하고, 'Copy' 버튼을 클릭하여 복사할 수 있습니다.",
+     "got": "korean",
+     "mixed": true,
+     "clicked": [
+      "Select",
+      "Copy"
+     ],
+     "n_effects": 2,
+     "truncated": false,
+     "reason": "stop"
+    },
+    {
+     "say": "지금은 문자를 선택하고 복사할 수 있습니다. 'Select' 버튼을 클릭하여 문자를 선택하고, 'Copy' 버튼을 클릭하여 복사할 수 있습니다.",
+     "got": "korean",
+     "mixed": true,
+     "clicked": [
+      "Select",
+      "Copy"
+     ],
+     "n_effects": 2,
+     "truncated": false,
+     "reason": "stop"
+    }
+   ]
+  },
+  {
+   "set": "korean",
+   "kind": "chit-chat",
+   "said": "오늘 날씨 어때?",
+   "verdicts": [
+    "english",
+    "english",
+    "english"
+   ],
+   "counted": "english",
+   "from_repeat": 0,
+   "agreed": true,
+   "mixed_counted": false,
+   "repeats": [
+    {
+     "say": "I can't see that here.",
+     "got": "english",
+     "mixed": false,
+     "clicked": [],
+     "n_effects": 0,
+     "truncated": false,
+     "reason": "stop"
+    },
+    {
+     "say": "I can't see that here.",
+     "got": "english",
+     "mixed": false,
+     "clicked": [],
+     "n_effects": 0,
+     "truncated": false,
+     "reason": "stop"
+    },
+    {
+     "say": "I can't see that here.",
+     "got": "english",
+     "mixed": false,
+     "clicked": [],
+     "n_effects": 0,
+     "truncated": false,
+     "reason": "stop"
+    }
+   ]
+  },
+  {
+   "set": "korean",
+   "kind": "chit-chat",
+   "said": "심심해",
+   "verdicts": [
+    "english",
+    "english",
+    "english"
+   ],
+   "counted": "english",
+   "from_repeat": 0,
+   "agreed": true,
+   "mixed_counted": false,
+   "repeats": [
+    {
+     "say": "I'm here. What would you like to do?",
+     "got": "english",
+     "mixed": false,
+     "clicked": [],
+     "n_effects": 0,
+     "truncated": false,
+     "reason": "stop"
+    },
+    {
+     "say": "I'm here. What would you like to do?",
+     "got": "english",
+     "mixed": false,
+     "clicked": [],
+     "n_effects": 0,
+     "truncated": false,
+     "reason": "stop"
+    },
+    {
+     "say": "I'm here. What would you like to do?",
+     "got": "english",
+     "mixed": false,
+     "clicked": [],
+     "n_effects": 0,
+     "truncated": false,
+     "reason": "stop"
+    }
+   ]
+  },
+  {
+   "set": "korean",
+   "kind": "chit-chat",
+   "said": "배고파",
+   "verdicts": [
+    "english",
+    "english",
+    "english"
+   ],
+   "counted": "english",
+   "from_repeat": 0,
+   "agreed": true,
+   "mixed_counted": false,
+   "repeats": [
+    {
+     "say": "I can't see that here.",
+     "got": "english",
+     "mixed": false,
+     "clicked": [],
+     "n_effects": 0,
+     "truncated": false,
+     "reason": "stop"
+    },
+    {
+     "say": "I can't see that here",
+     "got": "english",
+     "mixed": false,
+     "clicked": [],
+     "n_effects": 0,
+     "truncated": false,
+     "reason": "stop"
+    },
+    {
+     "say": "I can't see that here",
+     "got": "english",
+     "mixed": false,
+     "clicked": [],
+     "n_effects": 0,
+     "truncated": false,
+     "reason": "stop"
+    }
+   ]
+  },
+  {
+   "set": "korean",
+   "kind": "long",
+   "said": "이 창에서 특수 문자를 하나 골라서 복사하고 싶은데 어떻게 하면 좋을까?",
+   "verdicts": [
+    "korean",
+    "korean",
+    "korean"
+   ],
+   "counted": "korean",
+   "from_repeat": 0,
+   "agreed": true,
+   "mixed_counted": false,
+   "repeats": [
+    {
+     "say": "0에서 특수 문자를 선택한 후 4를 클릭해 복사할 수 있어.",
+     "got": "korean",
+     "mixed": false,
+     "clicked": [
+      "Copy"
+     ],
+     "n_effects": 1,
+     "truncated": false,
+     "reason": "stop"
+    },
+    {
+     "say": "0에서 특수 문자를 선택한 후 4를 클릭해 복사할 수 있어.",
+     "got": "korean",
+     "mixed": false,
+     "clicked": [
+      "Character Grid",
+      "Copy"
+     ],
+     "n_effects": 2,
+     "truncated": false,
+     "reason": "stop"
+    },
+    {
+     "say": "0에서 특수 문자를 선택한 후 4를 클릭해 복사할 수 있어.",
+     "got": "korean",
+     "mixed": false,
+     "clicked": [
+      "Character Grid",
+      "Copy"
+     ],
+     "n_effects": 2,
+     "truncated": false,
+     "reason": "stop"
+    }
+   ]
+  },
+  {
+   "set": "english",
+   "kind": "screen",
+   "said": "What's open?",
+   "verdicts": [
+    "english",
+    "english",
+    "english"
+   ],
+   "counted": "english",
+   "from_repeat": 0,
+   "agreed": true,
+   "mixed_counted": false,
+   "repeats": [
+    {
+     "say": "The Character Grid is open.",
+     "got": "english",
+     "mixed": false,
+     "clicked": [
+      "Character Grid"
+     ],
+     "n_effects": 1,
+     "truncated": false,
+     "reason": "stop"
+    },
+    {
+     "say": "The Character Grid is open.",
+     "got": "english",
+     "mixed": false,
+     "clicked": [
+      "Character Grid"
+     ],
+     "n_effects": 1,
+     "truncated": false,
+     "reason": "stop"
+    },
+    {
+     "say": "The Character Grid is open.",
+     "got": "english",
+     "mixed": false,
+     "clicked": [
+      "Character Grid"
+     ],
+     "n_effects": 1,
+     "truncated": false,
+     "reason": "stop"
+    }
+   ]
+  },
+  {
+   "set": "english",
+   "kind": "request",
+   "said": "Close this window",
+   "verdicts": [
+    "english",
+    "english",
+    "english"
+   ],
+   "counted": "english",
+   "from_repeat": 0,
+   "agreed": true,
+   "mixed_counted": false,
+   "repeats": [
+    {
+     "say": "Closing the window",
+     "got": "english",
+     "mixed": false,
+     "clicked": [
+      "Close"
+     ],
+     "n_effects": 1,
+     "truncated": false,
+     "reason": "stop"
+    },
+    {
+     "say": "Closing the window",
+     "got": "english",
+     "mixed": false,
+     "clicked": [
+      "Close"
+     ],
+     "n_effects": 1,
+     "truncated": false,
+     "reason": "stop"
+    },
+    {
+     "say": "Closing the window",
+     "got": "english",
+     "mixed": false,
+     "clicked": [
+      "Close"
+     ],
+     "n_effects": 1,
+     "truncated": false,
+     "reason": "stop"
+    }
+   ]
+  },
+  {
+   "set": "english",
+   "kind": "screen",
+   "said": "What can I do here?",
+   "verdicts": [
+    "english",
+    "english",
+    "english"
+   ],
+   "counted": "english",
+   "from_repeat": 0,
+   "agreed": true,
+   "mixed_counted": false,
+   "repeats": [
+    {
+     "say": "You can select and copy characters, change font, line up characters, or open help. Let me know what you need!",
+     "got": "english",
+     "mixed": false,
+     "clicked": [],
+     "n_effects": 0,
+     "truncated": false,
+     "reason": "stop"
+    },
+    {
+     "say": "You can select and copy characters, change font, line up characters, or open help. Let me know what you need!",
+     "got": "english",
+     "mixed": false,
+     "clicked": [],
+     "n_effects": 0,
+     "truncated": false,
+     "reason": "stop"
+    },
+    {
+     "say": "You can select and copy characters, change font, line up characters, or open help. Let me know what you need!",
+     "got": "english",
+     "mixed": false,
+     "clicked": [],
+     "n_effects": 0,
+     "truncated": false,
+     "reason": "stop"
+    }
+   ]
+  },
+  {
+   "set": "english",
+   "kind": "social",
+   "said": "Thanks",
+   "verdicts": [
+    "english",
+    "english",
+    "english"
+   ],
+   "counted": "english",
+   "from_repeat": 0,
+   "agreed": true,
+   "mixed_counted": false,
+   "repeats": [
+    {
+     "say": "You're welcome!",
+     "got": "english",
+     "mixed": false,
+     "clicked": [],
+     "n_effects": 0,
+     "truncated": false,
+     "reason": "stop"
+    },
+    {
+     "say": "You're welcome!",
+     "got": "english",
+     "mixed": false,
+     "clicked": [],
+     "n_effects": 0,
+     "truncated": false,
+     "reason": "stop"
+    },
+    {
+     "say": "You're welcome!",
+     "got": "english",
+     "mixed": false,
+     "clicked": [],
+     "n_effects": 0,
+     "truncated": false,
+     "reason": "stop"
+    }
+   ]
+  },
+  {
+   "set": "english",
+   "kind": "screen",
+   "said": "Describe the screen",
+   "verdicts": [
+    "english",
+    "english",
+    "english"
+   ],
+   "counted": "english",
+   "from_repeat": 0,
+   "agreed": true,
+   "mixed_counted": false,
+   "repeats": [
+    {
+     "say": "The screen shows a character grid with options to select, copy, and view characters. There's a combo box for font selection, buttons for actions like 'Line up' and 'Page down', and a menu bar at the top.",
+     "got": "english",
+     "mixed": false,
+     "clicked": [],
+     "n_effects": 0,
+     "truncated": false,
+     "reason": "stop"
+    },
+    {
+     "say": "The screen shows a character grid with options to select, copy, and view characters. There's a combo box for font selection, buttons for actions like 'Line up' and 'Page down', and a menu bar at the top.",
+     "got": "english",
+     "mixed": false,
+     "clicked": [],
+     "n_effects": 0,
+     "truncated": false,
+     "reason": "stop"
+    },
+    {
+     "say": "The screen shows a character grid with options to select, copy, and view characters. There's a combo box for font selection, buttons for actions like 'Line up' and 'Page down', and a menu bar at the top.",
+     "got": "english",
+     "mixed": false,
+     "clicked": [],
+     "n_effects": 0,
+     "truncated": false,
+     "reason": "stop"
+    }
+   ]
+  },
+  {
+   "set": "english",
+   "kind": "screen",
+   "said": "Where is the copy button?",
+   "verdicts": [
+    "english",
+    "english",
+    "english"
+   ],
+   "counted": "english",
+   "from_repeat": 0,
+   "agreed": true,
+   "mixed_counted": false,
+   "repeats": [
+    {
+     "say": "The copy button is number 4.",
+     "got": "english",
+     "mixed": false,
+     "clicked": [
+      "Copy"
+     ],
+     "n_effects": 1,
+     "truncated": false,
+     "reason": "stop"
+    },
+    {
+     "say": "The copy button is number 4.",
+     "got": "english",
+     "mixed": false,
+     "clicked": [
+      "Copy"
+     ],
+     "n_effects": 1,
+     "truncated": false,
+     "reason": "stop"
+    },
+    {
+     "say": "The copy button is number 4.",
+     "got": "english",
+     "mixed": false,
+     "clicked": [
+      "Copy"
+     ],
+     "n_effects": 1,
+     "truncated": false,
+     "reason": "stop"
+    }
+   ]
+  },
+  {
+   "set": "english",
+   "kind": "itself",
+   "said": "Who are you?",
+   "verdicts": [
+    "english",
+    "english",
+    "english"
+   ],
+   "counted": "english",
+   "from_repeat": 0,
+   "agreed": true,
+   "mixed_counted": false,
+   "repeats": [
+    {
+     "say": "I'm your helper here to assist you with your work. How can I help?",
+     "got": "english",
+     "mixed": false,
+     "clicked": [],
+     "n_effects": 0,
+     "truncated": false,
+     "reason": "stop"
+    },
+    {
+     "say": "I'm your helper here to assist you with your work. How can I help?",
+     "got": "english",
+     "mixed": false,
+     "clicked": [],
+     "n_effects": 0,
+     "truncated": false,
+     "reason": "stop"
+    },
+    {
+     "say": "I'm your helper here to assist you with your work. How can I help?",
+     "got": "english",
+     "mixed": false,
+     "clicked": [],
+     "n_effects": 0,
+     "truncated": false,
+     "reason": "stop"
+    }
+   ]
+  },
+  {
+   "set": "english",
+   "kind": "screen",
+   "said": "How many buttons are there?",
+   "verdicts": [
+    "english",
+    "english",
+    "english"
+   ],
+   "counted": "english",
+   "from_repeat": 0,
+   "agreed": true,
+   "mixed_counted": false,
+   "repeats": [
+    {
+     "say": "There are 8 buttons.",
+     "got": "english",
+     "mixed": false,
+     "clicked": [],
+     "n_effects": 0,
+     "truncated": false,
+     "reason": "stop"
+    },
+    {
+     "say": "There are 8 buttons.",
+     "got": "english",
+     "mixed": false,
+     "clicked": [],
+     "n_effects": 0,
+     "truncated": false,
+     "reason": "stop"
+    },
+    {
+     "say": "There are 8 buttons.",
+     "got": "english",
+     "mixed": false,
+     "clicked": [],
+     "n_effects": 0,
+     "truncated": false,
+     "reason": "stop"
+    }
+   ]
+  },
+  {
+   "set": "english",
+   "kind": "past",
+   "said": "What did you just do?",
+   "verdicts": [
+    "english",
+    "english",
+    "english"
+   ],
+   "counted": "english",
+   "from_repeat": 0,
+   "agreed": true,
+   "mixed_counted": false,
+   "repeats": [
+    {
+     "say": "I just helped you with character selection and copying.",
+     "got": "english",
+     "mixed": false,
+     "clicked": [],
+     "n_effects": 0,
+     "truncated": false,
+     "reason": "stop"
+    },
+    {
+     "say": "I just helped you with character selection and copying.",
+     "got": "english",
+     "mixed": false,
+     "clicked": [],
+     "n_effects": 0,
+     "truncated": false,
+     "reason": "stop"
+    },
+    {
+     "say": "I just helped you with character selection and copying.",
+     "got": "english",
+     "mixed": false,
+     "clicked": [],
+     "n_effects": 0,
+     "truncated": false,
+     "reason": "stop"
+    }
+   ]
+  },
+  {
+   "set": "english",
+   "kind": "request",
+   "said": "Press the copy button",
+   "verdicts": [
+    "english",
+    "english",
+    "english"
+   ],
+   "counted": "english",
+   "from_repeat": 0,
+   "agreed": true,
+   "mixed_counted": false,
+   "repeats": [
+    {
+     "say": "Copy button pressed",
+     "got": "english",
+     "mixed": false,
+     "clicked": [
+      "Copy"
+     ],
+     "n_effects": 1,
+     "truncated": false,
+     "reason": "stop"
+    },
+    {
+     "say": "Copy button pressed",
+     "got": "english",
+     "mixed": false,
+     "clicked": [
+      "Copy"
+     ],
+     "n_effects": 1,
+     "truncated": false,
+     "reason": "stop"
+    },
+    {
+     "say": "Copy button pressed",
+     "got": "english",
+     "mixed": false,
+     "clicked": [
+      "Copy"
+     ],
+     "n_effects": 1,
+     "truncated": false,
+     "reason": "stop"
+    }
+   ]
+  },
+  {
+   "set": "english",
+   "kind": "chit-chat",
+   "said": "How's the weather?",
+   "verdicts": [
+    "english",
+    "english",
+    "english"
+   ],
+   "counted": "english",
+   "from_repeat": 0,
+   "agreed": true,
+   "mixed_counted": false,
+   "repeats": [
+    {
+     "say": "I can't see that here.",
+     "got": "english",
+     "mixed": false,
+     "clicked": [],
+     "n_effects": 0,
+     "truncated": false,
+     "reason": "stop"
+    },
+    {
+     "say": "I can't see that here.",
+     "got": "english",
+     "mixed": false,
+     "clicked": [],
+     "n_effects": 0,
+     "truncated": false,
+     "reason": "stop"
+    },
+    {
+     "say": "I can't see that here.",
+     "got": "english",
+     "mixed": false,
+     "clicked": [],
+     "n_effects": 0,
+     "truncated": false,
+     "reason": "stop"
+    }
+   ]
+  },
+  {
+   "set": "english",
+   "kind": "request",
+   "said": "Can you change the font for me?",
+   "verdicts": [
+    "english",
+    "english",
+    "english"
+   ],
+   "counted": "english",
+   "from_repeat": 0,
+   "agreed": true,
+   "mixed_counted": false,
+   "repeats": [
+    {
+     "say": "Sure, which font would you like to use?",
+     "got": "english",
+     "mixed": false,
+     "clicked": [],
+     "n_effects": 0,
+     "truncated": false,
+     "reason": "stop"
+    },
+    {
+     "say": "Sure, which font would you like to use?",
+     "got": "english",
+     "mixed": false,
+     "clicked": [],
+     "n_effects": 0,
+     "truncated": false,
+     "reason": "stop"
+    },
+    {
+     "say": "Sure, which font would you like to use?",
+     "got": "english",
+     "mixed": false,
+     "clicked": [],
+     "n_effects": 0,
+     "truncated": false,
+     "reason": "stop"
+    }
+   ]
+  }
+ ]
+}

@@ -92,7 +92,7 @@ flag deliberately and that is *stronger* — a person confirms each action, and 
 | saying | an index leaks into the speech in **5 of 32**; the control set keeps its legitimate numbers |
 | rule-following | a stated rule is obeyed in **36 of 36** probes at distance ≤ 8 |
 | memory | a first-turn reference is truncation, not attention — **40 of 45 held with the anchor in the window, 1 of 45 without** |
-| repair | 3 of 4 corrections land; memory of its own actions 0 of 1; Korean in, Korean out 5 of 6 |
+| repair | **3 of 4** corrections land (n=4, so it cannot reach p<0.05 under any repair); a question about the past re-proposes the action, **0 of 1**; **Korean in, Korean out 30 of 36 (83%)** with **English in, English out 12 of 12** as the other half. `--think on` gets repair 4 of 4 and **halves Korean to 18 of 36** |
 | a call | **0.61 s** median. The mean is 1.43 s and the gap is one tail: **18 of 1,845 turns run to the 4,096-token ceiling**, 69–71 s each, 47% of the model time in 1% of the turns, and the person hears nothing back |
 | clicking | 3 of 3 end to end on a launched window, n=3 |
 

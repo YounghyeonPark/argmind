@@ -70,8 +70,10 @@ fixture of the same size would be invisible to them; that is why `s` exists.
 the JSON but not the name. The verdicts are at temperature 0 and do not move with the machine's
 load; **the millisecond figures do**, and this run shared a card with another process's models.
 
-Nothing is clicked: `Fixed` eyes and `Nothing` hands, imported from `measure.repair` rather than
-copied, so there is one definition of them.
+Nothing is clicked: `Fixed` eyes and `Nothing` hands, imported from `measure.standins` rather than
+copied, so there is one definition of them. They lived in `measure/repair.py` until 2026-09-13 and
+moved out because this file importing a leaf harness made a cycle the moment that harness wanted
+`Recorder`, `recent_block` or `drive` back out of here.
 """
 
 from __future__ import annotations
@@ -96,7 +98,7 @@ from argmind.core import Said, Session                                    # noqa
 from argmind.core.llm import OLLAMA, Local                                # noqa: E402
 from measure.capture import load                                          # noqa: E402
 from measure.choosing import prompt_fields, prompt_tag                    # noqa: E402
-from measure.repair import Fixed, Nothing                                 # noqa: E402
+from measure.standins import Fixed, Nothing                               # noqa: E402
 
 HERE = pathlib.Path(__file__).resolve().parent
 
@@ -311,6 +313,14 @@ def drive(model, widgets, lines, remember, *, turn_down_after=None):
         clicks = [e.target for e in intent.effects if e.kind == "click"]
         turns.append({
             "i": i, "said": line, "reply": intent.say, "clicked": clicks,
+            #: **The role, added 2026-09-13, because the name alone is not the key.** Character Map
+            #: lists a `text` label reading `Font :` immediately before a `combo box` of the same
+            #: name; a harness that scores `clicked == ["Font :"]` as correct scores the click that
+            #: lands on the label and does nothing — which is the exact defect `Effect.role` was
+            #: introduced for. `measure/repair.py` scores on the pair; nothing here reads it yet.
+            "clicked_roles": [e.role for e in intent.effects if e.kind == "click"],
+            "effects": [{"kind": e.kind, "target": e.target, "role": e.role, "text": e.text}
+                        for e in intent.effects],
             "n_effects": len(intent.effects),
             #: The delta, never a bare boolean: how much of the past reached the model.
             "history_lines": before,

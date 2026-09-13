@@ -19,7 +19,54 @@ measurement.
 |---|---|
 | **repair** | it picks the wrong thing, you say so — does the correction land? **3 of 4** |
 | **memory** | you ask what it just did — does it answer without doing it again? **0 of 1** |
-| **language** | Korean in, Korean out? **5 of 6** |
+| **language** | Korean in, Korean out? **5 of 6** — superseded, see below |
+
+## Both circulating repair figures were stale, and one was never true (2026-09-13)
+
+`measure/repair.py` wrote `repair-{model}-{think}.json` — **no prompt fingerprint, no fixtures, no
+case list, no harness hash** — so two prompt experiments overwrote its baseline in place and left two
+numbers that disagreed with each other:
+
+| | Korean in, Korean out | provenance |
+|---|---|---|
+| the file on disk | 4 of 6 | **never true of any tree in git** — the run under a `SYSTEM` line reverted the same day |
+| CLAUDE.md quoted | 5 of 6 | its file is gone; dated two minutes before `38aa39c`, at prompt `pd307bb`, when `Session` still took `remember` in **lines** and `MOST_AT_ONCE` did not exist |
+
+Neither described the shipped agent. Both **values** reproduce today, which is not the same as either
+having been confirmed.
+
+**Fresh, at `qa62805`, three repeats, worst counted**, filename now carrying model, thinking, prompt,
+fixtures, cases, harness and repeats:
+
+| | thinking off (shipped) | thinking on |
+|---|---|---|
+| repair | **3 of 4** | 4 of 4 |
+| Korean in, Korean out | **30 of 36 (83%)** | 18 of 36 (50%) |
+| English in, English out | 12 of 12 | 12 of 12 |
+| the original six | 5 of 6 | 3 of 6 |
+| within-arm disagreement | 0 of 36 | **9 of 36** |
+
+The six were a fair subset — 5 of 6 is 83.3% and 30 of 36 is 83.3% — they simply carried no power: at
+six cases the best possible improvement could not reach significance. At 36 it is p = 0.031.
+
+**Do not read `--think on` as better.** It fixes the memory case 3 of 3 (n=1 case, an anecdote with a
+denominator) and **halves the Korean rate**, produces 5 replies at the token ceiling, and disagrees
+with itself on 9 of 36.
+
+**An English control was added** and it matters: a harness that only rewards Korean would score a
+model that always answers in Korean as perfect. 12 of 12 English in, English out.
+
+### A candidate mechanism for the memory defect, with evidence
+
+`Session.remember_doing(offered=…)` renders through `_describe`, which is written for actions taken.
+So an offer that was **never performed** is written into the conversation as:
+
+    offered: clicked the button "Copy"
+
+Past tense, word for word what a completed action says — only the `who` differs. Asked *"방금 뭘
+하려고 했어?"* immediately after being shown that line, the agent answers correctly and clicks Copy
+again, 3 of 3. **n = 1 case, so this is a hypothesis with evidence rather than a result**, and it is
+the first mechanism anybody has proposed for a defect recorded as unexplained.
 
 ## Repair works, and it was working by luck
 
