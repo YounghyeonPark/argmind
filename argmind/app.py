@@ -38,6 +38,7 @@ a property of one desk. If it fails here, the app says so and refuses to click a
 
 from __future__ import annotations
 
+import collections
 import os
 import queue
 import sys
@@ -72,6 +73,19 @@ DEFAULT_MODEL = "qwen3:8b"
 #: Reasoning off. `None` here would omit the field and let a thinking model think.
 DEFAULT_THINK = False
 
+#: The talk key. Held, not toggled — push-to-talk is `voice.py`'s design decision and the reason
+#: there is no `MIN_GAP` here, no echo cancellation and no way to mistake a phone call in the room
+#: for a turn. **F9 because the entry box must keep every key a person types**, and a Tk binding
+#: only fires when this window has focus — so you have to be looking at argmind to talk to it. That
+#: is a real limit of doing it without a system-wide hook, and the status bar says so.
+TALK_KEY = "F9"
+#: How long the inbox waits while a transcript is coming. Transcription is 234 ms median, p90 300,
+#: max 645 — measured on synthesised speech, so a floor.
+QUICK = 0.05
+#: How long to keep waiting after the key comes up before saying nothing was heard. Extended while
+#: the listener still has audio in hand.
+AWAIT_SPEECH = 3.0
+
 INK = {
     "bg": "#fbfbfa", "panel": "#f2f1ee", "line": "#dedcd6", "text": "#23211d",
     "you": "#2f5d8a", "agent": "#23211d", "act": "#8a5a1a", "noticed": "#6b6862",
@@ -103,7 +117,8 @@ class Agent(threading.Thread):
 
     def __init__(self, *, model: str, limit: int, rate: float, dry: bool,
                  watches, every: float = 0.7, build=None, warm: bool = True,
-                 think=DEFAULT_THINK) -> None:
+                 think=DEFAULT_THINK, build_voice=None,
+                 may_speak_unprompted: bool = False) -> None:
         super().__init__(daemon=True, name="argmind-agent")
         self.inbox: queue.Queue = queue.Queue()
         self.outbox: queue.Queue = queue.Queue()
@@ -135,6 +150,27 @@ class Agent(threading.Thread):
         self._title_of = lambda: ""
         self._what_is_at = lambda _x, _y: ("", "")
 
+        # ---- voice, and it is off until somebody switches it on ----------------------------------
+        #: **Not inverted, unlike `may_act_unprompted`.** The app inverts that one because there is
+        #: a stronger gate downstream — a person pressing 실행. There is no downstream gate on a
+        #: sentence: you cannot un-hear one.
+        self.may_speak_unprompted = bool(may_speak_unprompted)
+        #: Built lazily and separately from eyes/hands/model, because the listener holds 1,544 MiB
+        #: of weights the moment it is first pressed and nobody should pay that for launching a
+        #: window. Injectable for the same reason `build` is: `test_app.py` runs with no devices.
+        self.build_voice = build_voice or self._voices
+        self.listener = None
+        self.speaker = None
+        #: Hold durations, for the measurement that does not exist yet. Whisper transcribes silence
+        #: as words **120 of 120**, so a stray press is a turn; rejecting it needs a minimum hold or
+        #: a no-speech threshold, and both need numbers only real recorded speech can set. Recording
+        #: what the presses actually were is how that session produces a number instead of a guess.
+        self.holds: collections.deque = collections.deque(maxlen=128)
+        self._held_from: float | None = None
+        #: While a transcript is on its way, the inbox wait drops from `every` to `QUICK`. A spoken
+        #: turn should not spend 0.7 s of the person's patience sitting in a poll interval.
+        self._awaiting = 0.0
+
     # ---- what the window calls ------------------------------------------------------------------
 
     def ask(self, text: str) -> None:
@@ -150,6 +186,42 @@ class Agent(threading.Thread):
         self.alive = False
         self.inbox.put(("quit", None))
 
+    def use_voice(self, on: bool) -> None:
+        """Open or close the microphone and the voice. Queued — it is slow and nothing waits on it.
+
+        There is no command-line flag for this and there must not be: `tests/test_voice.py` forbids
+        the word in `__main__.py`, because the CLI performs actions with no confirm button and a
+        microphone there would let a mis-transcription click something. The switch lives in the
+        window for the same reason the 실행 button does.
+        """
+        self.inbox.put(("voice", bool(on)))
+
+    def talk(self, down: bool) -> None:
+        """The talk key. **Called on the GUI thread, deliberately not through the inbox.**
+
+        Both calls it makes are cheap signals into worker threads that these objects own — `stop()`
+        measured at 0.069 ms, `hold()` is a queue put — and both are useless if they wait. The inbox
+        is only read between turns, so a queued `hold(True)` pressed while the model is thinking
+        would start capturing after the answer, losing the first word of an interruption, and a
+        queued `stop()` would arrive after the sentence being interrupted had finished.
+        """
+        speaker, listener = self.speaker, self.listener
+        #: **This is barge-in, and it is the whole of it.** The agent's speech is a courtesy and the
+        #: person's is the input, so there is no arbitration and no queue: cut mid-word, no resume.
+        if down and speaker is not None:
+            speaker.stop()
+        if listener is None:
+            return
+        if down:
+            self._held_from = time.perf_counter()
+        else:
+            started = self._held_from
+            self._held_from = None
+            if started is not None:
+                self.holds.append(round(time.perf_counter() - started, 3))
+            self._awaiting = time.monotonic() + AWAIT_SPEECH
+        listener.hold(down)
+
     # ---- the thread -----------------------------------------------------------------------------
 
     def run(self) -> None:                                                # pragma: no cover - GUI
@@ -162,13 +234,15 @@ class Agent(threading.Thread):
             return
         while self.alive:
             try:
-                what, payload = self.inbox.get(timeout=self.every)
+                wait = QUICK if time.monotonic() < self._awaiting else self.every
+                what, payload = self.inbox.get(timeout=wait)
             except queue.Empty:
                 self._idle()
                 continue
             if what == "quit":
                 break
-            handler = {"ask": self._ask, "run": self._run, "drop": self._drop}.get(what)
+            handler = {"ask": self._ask, "run": self._run, "drop": self._drop,
+                       "voice": self._voice}.get(what)
             if handler is None:
                 continue
             try:
@@ -186,6 +260,45 @@ class Agent(threading.Thread):
         return (WindowsEyes(ignore_pid=os.getpid()),
                 WindowsHands(live=not self.dry, max_per_second=self.rate),
                 Local(self.model_name, think=self.think))
+
+    def _voices(self):
+        """The Windows pair. Imported here, so a machine with no torch still opens the window."""
+        from .env.sapi import SapiSpeaker                                 # noqa: PLC0415
+        from .env.whisper import WhisperListener                          # noqa: PLC0415
+
+        #: `pace_limit` stays unset. `whisper.py` names the audio that would set it and says why
+        #: that audio does not exist yet; a guessed cut-off silently drops real turns.
+        return WhisperListener(), SapiSpeaker()
+
+    def _voice(self, on: bool) -> None:
+        if bool(on) == (self.listener is not None or self.speaker is not None):
+            return
+        if not on:
+            self._shut_voice()
+            self._say("voice", (False, ""))
+            return
+        try:
+            self.listener, self.speaker = self.build_voice()
+        except Exception as exc:                                          # noqa: BLE001
+            #: A missing microphone, no Korean voice, no CUDA — all of them arrive here, and none of
+            #: them may take the window down. The person keeps a working agent they can type at.
+            self._shut_voice()
+            self._say("voice", (False, f"{type(exc).__name__}: {exc}"))
+            return
+        korean = getattr(self.speaker, "has_korean", lambda: True)()
+        self._say("voice", (True, "" if korean else
+                            "한국어 음성이 없어 한국어 대답은 소리가 나지 않습니다"))
+
+    def _shut_voice(self) -> None:
+        for part in (self.listener, self.speaker):
+            try:
+                if part is not None:
+                    part.release()
+            except Exception:                                             # noqa: BLE001, S110
+                pass
+        self.listener = self.speaker = None
+        self._held_from = None
+        self._awaiting = 0.0
 
     def _setup(self) -> None:
         eyes, hands, model = self.build()
@@ -235,6 +348,7 @@ class Agent(threading.Thread):
         self._say("busy", False)
 
     def _teardown(self) -> None:
+        self._shut_voice()
         if self.session is not None:
             try:
                 self.session.model.release()
@@ -244,6 +358,8 @@ class Agent(threading.Thread):
     # ---- the work -------------------------------------------------------------------------------
 
     def _idle(self) -> None:
+        if self._listen():
+            return
         title = self._title_of()
         if title != self._title:
             self._title = title
@@ -253,6 +369,35 @@ class Agent(threading.Thread):
         for trigger in self.session.poll():
             self._say("noticed", trigger.text)
             self._think(trigger)
+
+    def _listen(self) -> bool:
+        """Take a finished utterance if there is one. Returns whether it handled the tick.
+
+        A spoken turn is `Said(text)` — **the same trigger a typed one makes**. `Trigger.asked` is
+        what decides whether an effect is downgraded to speech, so a separate kind for speech would
+        make every spoken request unprompted and invert the permission model by a spelling.
+        """
+        if self.listener is None:
+            return False
+        heard = self.listener.heard()
+        if heard is not None:
+            self._awaiting = 0.0
+            #: **Verbatim, as the person's line.** If what it thought it heard is not written down,
+            #: a misunderstanding leaves no evidence in the room and there is nothing for
+            #: *"아니 그거 말고"* to point at.
+            self._say("heard", heard.text)
+            self._think(Said(heard.text))
+            return True
+        if not self._awaiting:
+            return False
+        if getattr(self.listener, "pending", lambda: 0)():
+            #: Still transcribing. Do not give up on the person mid-sentence.
+            self._awaiting = time.monotonic() + AWAIT_SPEECH
+            return False
+        if time.monotonic() >= self._awaiting:
+            self._awaiting = 0.0
+            self._say("unheard", None)
+        return False
 
     def _ask(self, text: str) -> None:
         self._think(Said(text))
@@ -269,6 +414,7 @@ class Agent(threading.Thread):
         if intent.say:
             self.session.history.append(("you", intent.say))
             self._say("say", intent.say)
+            self._speak(intent.say, asked=trigger.asked)
         elif not intent.effects:
             self._say("say", "…")
         for effect in intent.effects:
@@ -276,6 +422,25 @@ class Agent(threading.Thread):
         self._say("stat", {"widgets": seen, "took": took,
                            "unprompted": not trigger.asked})
         self._say("busy", False)
+
+    def _speak(self, text: str, *, asked: bool) -> None:
+        """Say it aloud, if there is a voice and if it was spoken to.
+
+        **A median reply is ~3.1 s of Korean speech and a p90 is 6.5 s** — longer than the model
+        call, the transcription and the synthesis put together — which is why `say()` returns at
+        once and why the talk key can cut it off.
+        """
+        if self.speaker is None or not text.strip():
+            return
+        if not asked and not self.may_speak_unprompted:
+            #: A `Watch` firing makes noise in the room on its own. Off by default and **not**
+            #: inverted the way `may_act_unprompted` is: a proposal waits behind a button, a
+            #: sentence does not wait behind anything.
+            return
+        try:
+            self.speaker.say(text)
+        except Exception as exc:                                          # noqa: BLE001
+            self._say("note", f"음성 출력 실패 — {type(exc).__name__}: {exc}")
 
     def _propose(self, effect) -> None:
         token, self._next = self._next, self._next + 1
@@ -352,6 +517,12 @@ class Window:                                                             # prag
         self.rows: dict[int, tk.Frame] = {}
         self.busy = False
         self.since = 0.0
+        #: Off until somebody switches it on. The listener holds 1,544 MiB the moment it is first
+        #: pressed and the speaker makes noise in a room the app cannot see, so neither is something
+        #: to start by surprise.
+        self.voice_on = False
+        #: Windows repeats KeyPress while a key is held; KeyRelease comes only on the real release.
+        self._held = False
 
         self.root = tk.Tk()
         self.root.title("argmind")
@@ -372,6 +543,13 @@ class Window:                                                             # prag
         self._status()
         self.root.grid_rowconfigure(1, weight=1)
         self.root.grid_columnconfigure(0, weight=1)
+
+        #: **Bound on the toplevel, so it fires wherever the focus is inside this window** — the
+        #: entry box included, which is why the key is F9 and not a character. It does not fire when
+        #: another application has focus: a system-wide hook is out of scope and sits badly with an
+        #: app whose whole discipline is not stealing focus. So: you look at argmind to talk to it.
+        self.root.bind(f"<KeyPress-{TALK_KEY}>", self._talk_down)
+        self.root.bind(f"<KeyRelease-{TALK_KEY}>", self._talk_up)
 
         self.write("연결 중…", "note")
         self.root.after(60, self._drain)
@@ -426,6 +604,10 @@ class Window:                                                             # prag
                                      bg=INK["panel"], fg=INK["text"], font=self.small,
                                      activebackground=INK["line"])
         self.send_button.grid(row=0, column=1, sticky="ns", padx=(6, 0))
+        self.voice_button = tk.Button(frame, text="음성 켜기", command=self.toggle_voice, bd=0,
+                                      padx=10, bg=INK["panel"], fg=INK["dim"], font=self.small,
+                                      activebackground=INK["line"])
+        self.voice_button.grid(row=0, column=2, sticky="ns", padx=(6, 0))
         self.entry.focus_set()
 
     def _status(self) -> None:
@@ -440,6 +622,26 @@ class Window:                                                             # prag
         self.text.insert("end", line + "\n", tag)
         self.text.configure(state="disabled")
         self.text.see("end")
+
+    def toggle_voice(self) -> None:
+        self.voice_button.configure(text="여는 중…", state="disabled")
+        self.agent.use_voice(not self.voice_on)
+
+    def _talk_down(self, _e=None):
+        if not self.voice_on or self._held:
+            return "break"
+        self._held = True
+        self.agent.talk(True)
+        self.status.configure(text=f"듣는 중 — {TALK_KEY} 를 누르고 계세요")
+        return "break"
+
+    def _talk_up(self, _e=None):
+        if not self._held:
+            return "break"
+        self._held = False
+        self.agent.talk(False)
+        self.status.configure(text="옮겨 적는 중…")
+        return "break"
 
     def send(self) -> None:
         text = self.entry.get().strip()
@@ -497,6 +699,26 @@ class Window:                                                             # prag
             self.write(payload, "agent")
         elif kind == "noticed":
             self.write(f"· {payload}", "noticed")
+        elif kind == "heard":
+            #: Verbatim, and marked as heard rather than typed, so a wrong transcript is visible as
+            #: a wrong transcript instead of as the agent misunderstanding a sentence you never said.
+            self.write(f"나(음성): {payload}", "you")
+            self.status.configure(text="")
+        elif kind == "unheard":
+            #: Whisper answers silence with words 120 times out of 120, so the listener's guards
+            #: throw some transcripts away. Saying nothing here would look like the app hanging.
+            self.write("  (아무 말도 알아듣지 못했습니다)", "note")
+            self.status.configure(text="")
+        elif kind == "voice":
+            on, why = payload
+            self.voice_on = bool(on)
+            self.voice_button.configure(text="음성 끄기" if on else "음성 켜기", state="normal",
+                                        fg=INK["text"] if on else INK["dim"])
+            if on:
+                self.write(f"음성이 켜졌습니다. {TALK_KEY} 를 누르고 말하세요 — 이 창에 "
+                           f"포커스가 있어야 하고, 누르면 하던 말을 멈춥니다.", "noticed")
+            if why:
+                self.write(f"  {why}", "note")
         elif kind == "propose":
             self.propose(payload)
         elif kind == "ran":

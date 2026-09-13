@@ -251,3 +251,156 @@ def test_the_session_permits_unprompted_action_ONLY_because_a_person_gates_it():
     assert len(calls) == 1, (
         f"{len(calls)} places call perform(); the app's whole safety argument is that there is one, "
         "reached only by a button")
+
+
+# ---- voice ---------------------------------------------------------------------------------------
+#
+# The devices are fakes for the same reason eyes and hands are: `python -m pytest` must not need a
+# microphone, a speaker, a GPU or a network. What is tested here is the wiring — which trigger a
+# spoken turn makes, when a reply is allowed to become sound, and that a missing device leaves a
+# working agent behind rather than a dead thread.
+
+class FakeEar:
+    """A `Listener` that hands over whatever the test queued."""
+
+    def __init__(self, *utterances) -> None:
+        self.queued = list(utterances)
+        self.holds: list[bool] = []
+        self.released = False
+
+    def hold(self, down):
+        self.holds.append(bool(down))
+
+    def heard(self):
+        return self.queued.pop(0) if self.queued else None
+
+    def pending(self):
+        return len(self.queued)
+
+    def release(self):
+        self.released = True
+
+
+class FakeMouth:
+    """A `Speaker` that records instead of making a sound."""
+
+    def __init__(self) -> None:
+        self.said: list[str] = []
+        self.stops = 0
+        self.released = False
+
+    def say(self, text):
+        self.said.append(text)
+
+    def stop(self):
+        self.stops += 1
+
+    def speaking(self):
+        return False
+
+    def release(self):
+        self.released = True
+
+
+def voiced(model, *utterances, watches=(), screens=(), **kw):
+    ear, mouth = FakeEar(*utterances), FakeMouth()
+    a = agent(model, *screens, watches=watches, **kw)
+    a.build_voice = lambda: (ear, mouth)
+    a.ear_for_test, a.mouth_for_test = ear, mouth
+    return a
+
+
+def test_a_SPOKEN_turn_is_the_same_trigger_as_a_typed_one():
+    """**`Said`, not a kind of its own**, and the reason is the permission model rather than tidiness.
+
+    `Trigger.asked` is what decides whether an effect is downgraded to speech. A `Spoke()` kind
+    would make every spoken request *unprompted* — the whole gate inverted by a spelling — and the
+    symptom would not be an error, it would be an agent that quietly stopped proposing anything for
+    the person who talks to it.
+    """
+    from argmind.voice import Heard
+
+    a = voiced(FakeModel(says("복사를 눌러 드릴게요", {"click": 3})), Heard("복사 눌러줘", 1.4))
+    a.inbox.put(("voice", True))
+    messages = drain(a, 10, timeout=5.0)
+    kinds = [k for k, _p in messages]
+
+    assert "heard" in kinds, "the utterance never reached the agent"
+    #: Verbatim, and before the answer: a wrong transcript has to be visible as a wrong transcript.
+    assert [p for k, p in messages if k == "heard"] == ["복사 눌러줘"]
+    assert kinds.index("heard") < kinds.index("say")
+    assert only(messages, "propose"), (
+        "a spoken request produced no proposal — `asked` is false, so it was read as unprompted")
+
+
+def test_it_SPEAKS_a_reply_it_was_asked_for_and_NOT_one_it_volunteered():
+    """`may_speak_unprompted` is False and **is not inverted the way `may_act_unprompted` is.**
+
+    The app inverts the action flag because there is a stronger gate downstream — a person pressing
+    실행. There is no downstream gate on a sentence. So a `Watch` firing writes a line and stays
+    quiet, and only a turn the person started is allowed to make noise in the room.
+    """
+    from argmind.voice import Heard
+
+    asked = voiced(FakeModel(says("네, 복사할게요")), Heard("복사 눌러줘", 1.2))
+    asked.inbox.put(("voice", True))
+    drain(asked, 8, timeout=5.0)
+    assert asked.mouth_for_test.said == ["네, 복사할게요"]
+
+    built = SCREEN + [w("Build succeeded")]
+    volunteered = voiced(FakeModel(says("빌드가 끝났어요")), screens=(SCREEN, built, built),
+                         watches=[Appeared("build", gap=0.0)])
+    volunteered.inbox.put(("voice", True))
+    messages = drain(volunteered, 8, timeout=5.0)
+    assert only(messages, "noticed"), "the watch never fired, so this proves nothing"
+    assert volunteered.mouth_for_test.said == [], (
+        "it spoke a sentence nobody asked for; may_speak_unprompted is False and there is no "
+        "button between a sentence and the room")
+
+
+def test_the_TALK_KEY_cuts_the_agent_off_and_records_what_was_held():
+    """Barge-in is the key going down calling `stop()`, and it is **not** queued.
+
+    The inbox is only read between turns, so a queued `stop()` would arrive after the sentence it
+    was meant to interrupt had finished, and a queued `hold(True)` would start capturing after the
+    answer and lose the first word. Both are cheap signals into threads those objects own.
+
+    The hold durations are kept because nothing yet can reject a stray press: Whisper transcribes
+    silence as words 120 times out of 120, and the thresholds that would catch it need real recorded
+    speech to set. Recording the presses is how that session produces a number instead of a guess.
+    """
+    a = voiced(FakeModel(says("네")))
+    a._voice(True)
+    a.talk(True)
+    a.talk(False)
+
+    assert a.mouth_for_test.stops == 1, "the key went down and the agent kept talking over them"
+    assert a.ear_for_test.holds == [True, False]
+    assert len(a.holds) == 1 and a.holds[0] >= 0.0
+    a._shut_voice()
+    assert a.ear_for_test.released and a.mouth_for_test.released
+
+
+def test_a_MISSING_DEVICE_leaves_a_working_agent():
+    """No microphone, no Korean voice, no CUDA — all of them arrive as an exception from the same
+    call, and none of them may take the window down. The person keeps an agent they can type at."""
+    a = agent(FakeModel(says("네")))
+    a.build_voice = lambda: (_ for _ in ()).throw(RuntimeError("no microphone"))
+    a._voice(True)
+
+    assert a.listener is None and a.speaker is None
+    kind, (ok, why) = a.outbox.get_nowait()
+    assert kind == "voice" and ok is False and "no microphone" in why
+
+
+def test_speaking_is_NOT_a_second_way_to_run_an_action():
+    """The argument `voice.py` makes, asserted from the app's side: a spoken *"응"* reaches
+    `perform` only the way a typed one does — by producing a proposal that waits for the button."""
+    from argmind.voice import Heard
+
+    a = voiced(FakeModel(says("복사를 눌러 드릴게요", {"click": 3})), Heard("응 그렇게 해줘", 1.6))
+    a.inbox.put(("voice", True))
+    messages = drain(a, 10, timeout=5.0)
+
+    assert only(messages, "propose"), "nothing was proposed, so this proves nothing"
+    assert a.hands_for_test.done == [], "a spoken sentence ran an action with no button"
