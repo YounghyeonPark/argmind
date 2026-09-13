@@ -60,11 +60,25 @@ many probes had the target in the window *without* the anchor turn being there.
 
 ## Conditions this number is a function of
 
-Model, thinking, the prompt (`converse.py`), the fixture screens, the case and filler text, the
-distance and the window. **All of those are in the filename**: `p` is `converse.py`, `s` is every
-file under `screens/`, `f` is the cases and the filler as this run actually used them. The other
-harnesses here fingerprint the prompt and record a widget *count* for the screens, so a re-captured
-fixture of the same size would be invisible to them; that is why `s` exists.
+Model, thinking, the prompt (`q`, what `converse.py` renders), the fixture screens (`s`, every file
+under `screens/`), the case and filler text (`f`, as this run used them), **this harness (`h`)**,
+**`argmind/core/loop.py` (`l`)**, the distance and the window. All of those are in the filename. The
+other harnesses here fingerprint the prompt and record a widget *count* for the screens, so a
+re-captured fixture of the same size would be invisible to them; that is why `s` exists.
+
+**`h` and `l` arrived on 2026-09-13 and the two conditions they cover are the two that move without
+anybody typing anything.** Until then this file recorded `loop_print`, `llm_print`, `s` and `f` —
+everything except itself — and put neither in the name, while being the only member of
+`sending.COVERS_HISTORY`: the single file three other harnesses point at when they print *"the axis
+was run at this prompt"*. Two runs of two rewritten trees wrote one path and the second overwrote a
+committed baseline; it came back out of git 33 minutes later. `l` is newline-normalised, the same
+quantity `reoffer.py` writes as `l` (see `sending.norm_print` for why the JSON keys disagree).
+
+**The name is still not proof of difference, so `main()` refuses to overwrite.** `standins.py`,
+`capture.py` and `choosing.py` are recorded in the JSON and not in the name; a run that differs only
+in one of those produces the same path, and the refusal is what catches it. `LEGACY` below is the
+one file here that predates both letters, why it was left alone, and what a reader comparing across
+that boundary is looking at.
 
 `llm.py` — `num_ctx`, `temperature`, `num_predict` — and what else was resident on the GPU go into
 the JSON but not the name. The verdicts are at temperature 0 and do not move with the machine's
@@ -99,6 +113,10 @@ from argmind.core.llm import OLLAMA, Local                                # noqa
 from measure.capture import load                                          # noqa: E402
 from measure.choosing import prompt_fields, prompt_tag                    # noqa: E402
 from measure.standins import Fixed, Nothing                               # noqa: E402
+#: For `harness_print` and `norm_print` — one definition of each, there. This file
+#: sends no turn through `sending.turn()`: every call here goes through `Session`,
+#: which is the point of the harness.
+from measure import sending                                                # noqa: E402
 
 HERE = pathlib.Path(__file__).resolve().parent
 
@@ -134,6 +152,29 @@ def file_print(module_name: str) -> str:
         pathlib.Path(sys.modules[module_name].__file__).read_bytes()).hexdigest()[:6]
 
 
+def harness_print() -> str:
+    """Six characters over **this file**. `h` in the filename, `harness_print` in the JSON.
+
+    It was the one condition this harness did not record. `s` said the fixtures moved, `f` the
+    cases, `q` the prompt, `loop_print` the window — and the code that drives the conversation and
+    turns a reply into a verdict was invisible, in the file three other harnesses defer to by name.
+    Two arms of one comparison wrote the same path, and the second overwrote a committed baseline;
+    it came back out of git 33 minutes later.
+
+    **What it covers and what it does not.** This file, byte for byte, including its prose. Not
+    `standins.py`, not `capture.py`, not `choosing.py`'s `prompt_fields` — those are recorded in the
+    JSON beside it and are *not* in the name, so editing one of them still lets two runs collide by
+    filename. That residual is why `main()` refuses to overwrite an existing result rather than
+    trusting the name to be complete.
+
+    One definition, in `sending.py`, so this and `reoffer.py` and `choosing.py` cannot drift into
+    hashing three slightly different things under one letter.
+    """
+    from measure import sending                                          # noqa: PLC0415
+
+    return sending.harness_print(__file__)
+
+
 def residency():
     """What else is loaded on this GPU, from `ollama ps`, at the moment of asking.
 
@@ -150,6 +191,42 @@ def residency():
         return None
     return [{"model": m.get("name"), "gb": round((m.get("size") or 0) / 1e9, 1)}
             for m in got.get("models", [])]
+
+#: **The one result in this directory that predates `h` and `l`, and what can honestly be said about
+#: it.** Data rather than prose, because `main()` prints it whenever that file is still on disk and
+#: `--rescore` is the check behind the third claim.
+#:
+#: It was **left where it is** rather than renamed or re-taken, and the reasons are worth the four
+#: lines: `argmind/core/llm.py` cites it by name (a file `measure/` may not edit), and three
+#: committed results — `choosing-…-hc162c9`, `saying-…-h35874b`, `talking-…-h35d38f` — record that
+#: name inside their own `history` block. Renaming it would make four records name a file that does
+#: not exist, to gain a label this constant states exactly. Re-taking it would cost 45 minutes and
+#: would **not** produce the same experiment: `loop.py` changed on 2026-09-13 (`3ef5769`, the offer
+#: tense), so a run today measures a different history writer, and the two would differ in two
+#: things at once.
+LEGACY = {
+    "file": "conversation-qwen3-8b-off-qa62805-s5020f7-f041650-d1.3.5.8.12@r12-x3.json",
+    "taken": "2026-09-11 12:28",
+    "produced_by": "measure/conversation.py at commit 7e1d0e5 (git blob 4f0ebd7), the state of this "
+                   "file from 2026-09-10 19:08 until dd62ee5 on 2026-09-13 12:05",
+    "harness_print": "NOT RECORDED and not reconstructible byte for byte — the working tree is "
+                     "CRLF and nothing stored what the file hashed to on the machine that ran it. "
+                     "A hash computed from the git blob today would be a different quantity wearing "
+                     "the same letter, so none is written down",
+    "differs_from_today": "prose; Fixed/Nothing imported from measure.standins instead of "
+                          "measure.repair (the class bodies moved unchanged); and drive() now "
+                          "records clicked_roles and effects per turn. Nothing on the path from a "
+                          "line to a prompt, and nothing in judge()",
+    "checked_by": "python -m measure.conversation --rescore FILE — today's judge() re-run over the "
+                  "stored transcripts of that file. 75 cells, 225 repeats: every verdict reproduced",
+    "loop_print": "d1720c — the PRE-3ef5769 loop.py, where an offer was written in the past tense. "
+                  "The shipped tree is d8d312/lbc9cc0. This file is therefore not a baseline for "
+                  "the shipped agent, and measure/sending.py's deferral says so to every harness "
+                  "that points at it",
+    "across_the_boundary": "a run today is named …-x3-h<six>-l<six> and this one is named …-x3. "
+                           "The two are NOT a before/after of anything: the harness recording and "
+                           "loop.py's history writing both moved between them",
+}
 
 #: Verdicts, worst last in each list — the sort order for "worst of N counted".
 HELD, SILENT, WRONG = "held", "silent", "wrong"
@@ -638,6 +715,127 @@ def run(model, screens, cells, repeat, turned_down, axis_name) -> list:
     return rows
 
 
+def result_path(a, distances, remembers, repeat, loop_norm) -> pathlib.Path:
+    """Where this run will write, resolved **before the model is loaded**.
+
+    **Every condition in the name, including the axis that was held FIXED.** The recorded failure
+    here is a filename that carried the protocol and not the model, then not the prompt, and a third
+    baseline destroyed by the fix for the second. A distance sweep and a window sweep are different
+    runs, and a window sweep at distance 5 and one at distance 8 are two different measurements with
+    the same shape — so the fixed value goes in as well as the swept one.
+
+    **`q`, not `p`, from 2026-09-10.** `p` was a hash of `converse.py`; `q` is a hash of the prompt
+    that file renders. Every conversation baseline on disk before that date carries `p5461db` and is
+    not comparable to a `q` run by fingerprint — the letter says so at a glance, and
+    `converse_file_print` in the JSON is what relates the two.
+
+    **`h` and `l` from 2026-09-13, and they close a live accident rather than a hypothetical one.**
+    `h` is this file; `l` is `argmind/core/loop.py`, newline-normalised, the same quantity
+    `reoffer.py` names `l`. Without them a rewritten harness over a rewritten history writer
+    produced *the same path* as the baseline it was meant to be compared against, and overwrote it.
+    Every other condition in the name is a choice somebody typed; these two move under a `git pull`.
+
+    It is a pure function of the arguments and the files on disk, which is what lets `main()` refuse
+    45 minutes earlier than the write.
+    """
+    parts = [a.model.replace(":", "-"), a.think, prompt_tag(),
+             f"s{screen_print()}", f"f{data_print()}", f"h{harness_print()}", f"l{loop_norm}"]
+    if a.axis in ("d", "both"):
+        parts.append("d" + ".".join(str(d) for d in distances) + f"@r{a.shipped}")
+    if a.axis in ("r", "both"):
+        #: `t`, not `r`. The unit changed on 2026-09-10 and a filename that did not change with it
+        #: would put two different measurements under one name.
+        parts.append("t" + ".".join(str(r) for r in remembers) + f"@d{a.at_distance}")
+    parts.append(f"x{repeat}")
+    if a.turned_down:
+        parts.append("turneddown")
+    if a.only:
+        parts.append(a.only)
+    if a.english_rule:
+        parts.append("englishrule")
+    return HERE / ("conversation-" + "-".join(parts) + ".json")
+
+
+def refuse(out: pathlib.Path) -> None:
+    """Say why this run will not write, in the only words that stop somebody deleting the file.
+
+    **The name is never trusted to be complete.** `h` and `l` closed the two conditions that move on
+    their own; `standins.py`, `capture.py` and `choosing.py`'s `prompt_fields` are recorded in the
+    JSON and are *not* in the name, so two runs can still collide. The one time this happened, two
+    arms wrote one path and the second overwrote a committed baseline — 33 minutes to get it back
+    out of git, and the fifth instance of that shape in this directory.
+    """
+    print(f"\n  ** REFUSING TO WRITE: {out.name} already exists. **")
+    print("     Every condition this harness puts in a name is identical to a run already on disk.")
+    print("     Either this is that run again, or something not in the name moved: standins.py,")
+    print("     capture.py, choosing.py. Check the JSON's prints before assuming which.")
+    print("     Move or rename the existing file and re-run. Do not delete it —")
+    print("     measure/sending.py's deferral points three other harnesses at whichever file "
+          "is here.")
+
+
+def rescore(path) -> int:
+    """Re-judge a recorded run's stored transcripts with **today's** `judge()`. Calls no model.
+
+    The question it answers is the migration question: *did the scoring change under a result that
+    is still being quoted?* A recorded row carries every turn of every repeat, so the verdicts can
+    be recomputed exactly — and a harness edit that only added fields to `drive()` must reproduce
+    all of them. If it does not, the file's numbers describe code that no longer exists and the
+    disagreements are printed one by one rather than summarised into a rate.
+
+    **It cannot check everything and says which half it checks.** Scoring, yes, byte for byte.
+    What was *sent* — the lines, the window, the prompt — no: that would need the model again. So a
+    pass here says the verdicts in the file are the verdicts today's rules give to the conversations
+    that happened, and says nothing about whether those conversations would happen again.
+    """
+    got = json.loads(pathlib.Path(path).read_text(encoding="utf-8"))
+    cases = {c["id"]: c for c in got["cases"]}
+    print(f"\n  RESCORING {pathlib.Path(path).name}")
+    print(f"    recorded at prompt {got.get('prompt_scheme', 'p')[:1]}{got.get('prompt')}, "
+          f"loop.py {got.get('loop_print')}, harness "
+          f"{got.get('harness_print') or 'NOT RECORDED — this is the file the migration is about'}")
+    print(f"    today's harness h{harness_print()}, judge() as it stands now\n")
+    rows = got["rows"]
+    #: The floor rows are scored by `floor()` and not by `judge()`; they are counted as skipped
+    #: rather than silently passed, because "not checked" and "checked and agreed" are the two
+    #: things this whole directory exists to keep apart.
+    #: **Two tallies, not one.** A per-repeat verdict and a per-row worst-of-N are different
+    #: quantities and adding them gives a denominator that matches neither — 226 out of 225
+    #: repeats, which is the shape of a display disagreeing with the thing beside it.
+    same = moved = missing = rows_same = rows_moved = 0
+    for row in rows:
+        case = cases.get(row["case"])
+        if case is None or "turns" not in row:
+            missing += 1
+            continue
+        for i, turns in enumerate(row["turns"]):
+            was = row["verdicts"][i]
+            now = judge(case, turns, row["arm"])["verdict"]
+            if was == now:
+                same += 1
+                continue
+            moved += 1
+            print(f"    MOVED  {row['case']:<11} {row['arm']:<8} N={row['distance']:<3} "
+                  f"win={row['remember']:<3} repeat {i + 1}: {was} -> {now}")
+        real = [v for v in row["verdicts"] if v != VOID]
+        counted = VOID if not real else sorted(real, key=WORST[row["kind"]].index)[-1]
+        if counted == row["counted"]:
+            rows_same += 1
+        else:
+            rows_moved += 1
+            print(f"    MOVED  {row['case']:<11} {row['arm']:<8} worst-of-{row['n']} "
+                  f"{row['counted']} -> {counted}")
+    print(f"    {same} of {same + moved} stored per-repeat verdicts reproduce ({moved} moved)")
+    print(f"    {rows_same} of {rows_same + rows_moved} stored worst-of-N cells reproduce "
+          f"({rows_moved} moved); {missing} rows carried no transcript to re-score")
+    print(f"    {len(rows)} rows, {len(got.get('floor', []))} floor rows NOT re-scored "
+          f"(floor() scores those, not judge())")
+    if moved or rows_moved:
+        print("\n  ** the scoring has moved under this file: its numbers are not what today's "
+              "rules give. **")
+    return 1 if moved or rows_moved or missing else 0
+
+
 def main(argv=None) -> int:
     p = argparse.ArgumentParser(prog="python -m measure.conversation", description=__doc__)
     p.add_argument("--model", default="qwen3:8b")
@@ -666,7 +864,12 @@ def main(argv=None) -> int:
                    help="state each constraint using the widget's own name. Changes the rule and "
                         "nothing else — the probe, the filler and the control are untouched")
     p.add_argument("--quick", action="store_true", help="one distance, one window, one repeat")
+    p.add_argument("--rescore", default=None, metavar="FILE",
+                   help="re-judge a recorded run's stored transcripts with today's judge(). No "
+                        "model, no fixtures. The check behind LEGACY")
     a = p.parse_args(argv)
+    if a.rescore:
+        return rescore(a.rescore)
 
     distances = [int(x) for x in a.distances.split(",")]
     remembers = [int(x) for x in a.remembers.split(",")]
@@ -697,6 +900,19 @@ def main(argv=None) -> int:
         print(f"  filler names a target — that is the confound this measures: {dirty}")
         return 2
 
+    #: Off the module object, never off a path rebuilt from the name — the same lesson as
+    #: `file_print`. `sending.norm_print` is the one definition; `reoffer.py` uses it too.
+    loop_norm = sending.norm_print(sys.modules[Session.__module__].__file__)
+
+    #: **Resolved and refused BEFORE the model is loaded.** Every part of the name is a hash of a
+    #: file or a flag off the command line, so the path is knowable with no calls made — and the
+    #: run this exists to prevent costs 45 minutes before it reaches the write. Checked again at
+    #: the write, because two of these can be in flight at once.
+    out = result_path(a, distances, remembers, repeat, loop_norm)
+    if out.exists():
+        refuse(out)
+        return 3
+
     inner = Local(a.model, think={"on": True, "off": False}[a.think])
     for _ in range(2):
         inner.ask("Reply with the single word: ready")
@@ -704,8 +920,20 @@ def main(argv=None) -> int:
 
     print(f"  {a.model} | thinking {a.think} | prompt {prompt_tag()} | {repeat} repeats, "
           f"worst counted")
+    print(f"  harness h{harness_print()} | loop.py l{loop_norm} "
+          f"(raw {file_print(Session.__module__)}) | screens s{screen_print()} | "
+          f"cases f{data_print()}")
     print(f"  {len(CASES)} cases | filler is ordinary conversation, {len(FILLER)} lines available"
-          f"{' | turned_down recorded' if a.turned_down else ''}\n")
+          f"{' | turned_down recorded' if a.turned_down else ''}")
+    #: **Printed while the file is still there, not remembered.** The one result in this directory
+    #: that carries neither `h` nor `l`; three other harnesses defer to it by name.
+    if (HERE / LEGACY["file"]).exists():
+        print(f"\n  THE ONE RESULT HERE THAT PREDATES h AND l — still on disk, deliberately")
+        print(f"    {LEGACY['file']}")
+        for key in ("produced_by", "harness_print", "differs_from_today", "checked_by",
+                    "loop_print", "across_the_boundary"):
+            print(f"    {key:<20} {LEGACY[key]}")
+    print()
 
     before_ps = residency()
     if before_ps and len(before_ps) > 1:
@@ -761,36 +989,24 @@ def main(argv=None) -> int:
         print(f"    effects proposed during the filler turns  {sum(fillers)} over "
               f"{len(fillers)} conversations ({sum(1 for f in fillers if f)} of them had any)")
 
-    #: **Every condition in the name, including the axis that was held FIXED.** The recorded
-    #: failure here is a filename that carried the protocol and not the model, then not the prompt,
-    #: and a third baseline destroyed by the fix for the second. A distance sweep and a window
-    #: sweep are different runs, and a window sweep at distance 5 and one at distance 8 are two
-    #: different measurements with the same shape — so the fixed value goes in as well as the swept
-    #: one.
-    #: **`q`, not `p`, from 2026-09-10.** `p` was a hash of `converse.py`; `q` is a hash of the
-    #: prompt that file renders. Every conversation baseline on disk carries `p5461db` and is not
-    #: comparable to a `q` run by fingerprint — the letter says so at a glance, and
-    #: `converse_file_print` in the JSON is what relates the two.
-    parts = [a.model.replace(":", "-"), a.think, prompt_tag(),
-             f"s{screen_print()}", f"f{data_print()}"]
-    if a.axis in ("d", "both"):
-        parts.append("d" + ".".join(str(d) for d in distances) + f"@r{a.shipped}")
-    if a.axis in ("r", "both"):
-        #: `t`, not `r`. The unit changed on 2026-09-10 and a filename that did not change with it
-        #: would put two different measurements under one name.
-        parts.append("t" + ".".join(str(r) for r in remembers) + f"@d{a.at_distance}")
-    parts.append(f"x{repeat}")
-    if a.turned_down:
-        parts.append("turneddown")
-    if a.only:
-        parts.append(a.only)
-    if a.english_rule:
-        parts.append("englishrule")
-    tag = "-".join(parts)
-    out = HERE / f"conversation-{tag}.json"
+    #: The name was built by `result_path()` before any call was made — see there for what is in
+    #: it and why. Re-checked at the write. `result_path()` already refused before the model was loaded;
+    #: this is the second of the two, for two runs started a minute apart.
+    if out.exists():
+        refuse(out)
+        inner.release()
+        return 3
     out.write_text(json.dumps({
         "model": a.model, "think": a.think, **prompt_fields(),
         "screens_print": screen_print(), "data_print": data_print(),
+        #: **This file, which recorded everything except itself.** See `harness_print`.
+        "harness_print": harness_print(),
+        #: The measure-side modules `h` does not cover. In the JSON and not in the name: they are
+        #: the residual the refusal above exists for.
+        "standins_print": file_print("measure.standins"),
+        "capture_print": file_print("measure.capture"),
+        "choosing_print": file_print("measure.choosing"),
+        "sending_print": file_print("measure.sending"),
         #: The model wrapper is a condition too — `num_ctx`, `temperature` and `num_predict` live in
         #: `llm.py` and none of them is visible from here. **Resolved through the imported module,
         #: not by rebuilding the path from the module name**: the second form is relative to the
@@ -801,7 +1017,13 @@ def main(argv=None) -> int:
         #: model wrapper and `prompt_tag` the prompt; the file that decides how much of the
         #: conversation reaches that prompt was invisible, which is precisely the axis this harness
         #: sweeps. Found on 2026-09-10 when the unit changed under the recorded runs.
-        "loop_print": file_print(Session.__module__), "remember_unit": "turns",
+        "loop_print": file_print(Session.__module__),
+        #: **Two hashes of one file, and they are not interchangeable.** `loop_print` is the byte
+        #: hash, kept under that key because every recorded conversation result holds it and
+        #: `sending.deferral()` reads it out of them. `loop_print_norm` is the same file with
+        #: `\r\n` normalised — the value `reoffer.py` puts in *its* filename and, confusingly,
+        #: stores under `loop_print`. `l` in a filename means the normalised one in both files.
+        "loop_print_norm": loop_norm, "remember_unit": "turns",
         "ollama_before": before_ps, "ollama_after": residency(), "repeat": repeat,
         "axis": a.axis, "distances": distances, "remembers": remembers,
         "shipped_remember": a.shipped, "at_distance": a.at_distance, "turned_down": a.turned_down,

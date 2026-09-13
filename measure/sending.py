@@ -52,8 +52,12 @@ fine; it can only refuse to let a history-free run be read as though it had. Spe
 
 * A conversation result at the right `q` says a run happened, **not that it passed** - `note()`
   prints the filename and does not open it. Nothing here reads a verdict out of it.
-* `q` covers the prompt. A change to `argmind/core/loop.py` - the window, `remember_turns` - moves
-  none of these fingerprints, and only `conversation.py` records `loop_print`.
+* `q` covers the prompt and **not** `argmind/core/loop.py` - the window, `remember_turns`, and what
+  a history line says. `deferral()` compares that file's hash as a second condition since
+  2026-09-13, so a run at the right prompt under a different history writer no longer prints as
+  coverage; what it still cannot see is a change to any *other* file of `argmind/` that moves
+  behaviour without moving the rendered prompt. `measure/reoffer.py` records the whole tree for
+  exactly that reason and this does not.
 * The reverse blindness is not covered here at all: `conversation.py` sends conversations and never
   sends a 152-widget screen with no history, so *it* is blind to what these three measure. That is
   stated, not instrumented, because no run has yet been misread in that direction.
@@ -71,6 +75,10 @@ import pathlib
 import re
 
 from argmind.core import converse
+#: Imported for its **file**, not for anything it does: `loop.py` decides what the history says and
+#: how much of it is carried, and the deferral below is a claim about the history axis. See
+#: `loop_now()`.
+from argmind.core import loop as _loop
 
 HERE = pathlib.Path(__file__).resolve().parent
 
@@ -83,7 +91,11 @@ WITH_HISTORY_TRUNCATED = "18 of 1,845 turns (measure/conversation.py --axis d, q
 #: that reduced it to one is the paragraph below.** Data, not prose, because `note()` prints it and
 #: `--prompt-check` asserts every file named here exists.
 COVERS_HISTORY = {
-    "conversation.py": "python -m measure.conversation --axis d   1,872 calls, ~24 min",
+    #: **The cost, measured rather than remembered.** This line said "~24 min" and the recorded run
+    #: it describes took 2,671 s — 44.5 minutes for 1,872 calls at qa62805. A wrong cost is how a
+    #: re-run gets deferred as unaffordable or scheduled as cheap; it is one field of the JSON.
+    "conversation.py": "python -m measure.conversation --axis d   1,872 calls, ~45 min "
+                       "(measured 2,671 s at qa62805)",
 }
 
 #: **`repair.py` was in the dict above until 2026-09-13 and `deferral()` never looked at it.**
@@ -105,7 +117,8 @@ COVERS_HISTORY = {
 #: them. Listed, printed, and explicitly not counted.
 EXERCISES_HISTORY = {
     "repair.py": "4 second turns per repeat, all at distance 1, no without-history arm",
-    "reoffer.py": "20 second turns per repeat, all at distance 1, no without-history arm",
+    "reoffer.py": "44 scored turns per repeat, 40 of them one turn after their offer and 4 five "
+                  "turns after it; no without-history arm",
 }
 
 #: Every file named anywhere above. `--prompt-check` walks this, so a harness renamed out from under
@@ -201,6 +214,27 @@ def harness_print(path) -> str:
     return hashlib.sha256(pathlib.Path(path).read_bytes()).hexdigest()[:6]
 
 
+def norm_print(path) -> str:
+    """Six characters over a source file with `\\r\\n` normalised to `\\n`. **Not `harness_print`.**
+
+    `core.autocrlf=true` in this clone: the working tree is CRLF and anything `git archive` writes
+    is LF, so a byte hash says every file of a package differs between an exported tree and this
+    one, and none does after normalising. `measure/reoffer.py` needs that to state *which* file its
+    two arms differ in; `measure/conversation.py` needs it so the `l` in its filename is the same
+    quantity `reoffer.py` puts in its own.
+
+    **The two quantities are deliberately named apart and must stay apart.** `reoffer.py`'s JSON
+    calls the normalised one `loop_print` and the byte one `loop_print_raw`;
+    `conversation.py`'s JSON calls the byte one `loop_print` — the key it has carried since
+    2026-09-10, which is what the recorded files hold — and the normalised one `loop_print_norm`.
+    One letter in a filename (`l`) means the normalised value in both, and a reader comparing a
+    JSON key across the two files has to read this paragraph. That is the cost of not rewriting
+    recorded results to match a later convention.
+    """
+    return hashlib.sha256(
+        pathlib.Path(path).read_bytes().replace(b"\r\n", b"\n")).hexdigest()[:6]
+
+
 def tally() -> dict:
     """What this run actually sent. `{"with": n, "without": n}`."""
     return {"with": _SENT["with"], "without": _SENT["without"]}
@@ -240,24 +274,76 @@ def _prompt_of(path: pathlib.Path) -> str | None:
     return f"{scheme.group(1) if scheme else 'p'}{got.group(1)}"
 
 
+def _loop_of(path: pathlib.Path) -> str | None:
+    """The `loop_print` a conversation result recorded — the **byte** hash of `argmind/core/loop.py`
+    as that run saw it — or `None` for a file written before the key existed.
+
+    Same head-then-full-parse shape as `_prompt_of`, and the same rule: the JSON is the record.
+    `None` means *not recorded*, which is a third state and must never print as *matches* — a run
+    from before 2026-09-10 carries no `loop_print` at all.
+    """
+    try:
+        head = path.read_bytes()[:65536].decode("utf-8", "ignore")
+        got = re.search(r'"loop_print":\s*"([0-9a-f]{6})"', head)
+        if got:
+            return got.group(1)
+        return json.loads(path.read_text(encoding="utf-8")).get("loop_print")
+    except (ValueError, OSError):
+        return None
+
+
+def loop_now() -> str:
+    """The byte hash of the `argmind/core/loop.py` **this process imported**.
+
+    Resolved off the module object rather than off a path rebuilt from the package name: the second
+    form is relative to the working directory and would quietly record the wrong file — or `None` —
+    whenever a harness is run from anywhere but the repository root.
+
+    **Why the deferral needs it at all.** `q` covers the prompt `converse.py` renders. It does not
+    cover `loop.py`, which decides what a history line *says* and how many turns are carried, and
+    on 2026-09-13 that file changed: an offer is no longer written in the past tense. Every
+    conversation result on disk predates that. Without this, three harnesses would go on printing
+    *"the axis was run at this prompt"* against a file taken under a different history writer, for
+    as long as the prompt happened not to move — which is the same shape as the filename that
+    carried the protocol and not the model.
+    """
+    return harness_print(_loop.__file__)
+
+
 def conversation_runs() -> list:
-    """Every `conversation-*.json` in this directory as `(path, q, mtime)`, newest first."""
-    got = [(p, _prompt_of(p), p.stat().st_mtime) for p in sorted(HERE.glob("conversation-*.json"))]
-    return sorted(got, key=lambda t: t[2], reverse=True)
+    """Every `conversation-*.json` in this directory as `(path, q, loop_print, mtime)`, newest
+    first."""
+    got = [(p, _prompt_of(p), _loop_of(p), p.stat().st_mtime)
+           for p in sorted(HERE.glob("conversation-*.json"))]
+    #: `t[3]`, the mtime. It was `t[2]` and the tuple grew a member in front of it — the whole
+    #: reason this line is commented is that a silent re-sort by hex string would have changed
+    #: which run `newest_run` names without changing anything a reader could see.
+    return sorted(got, key=lambda t: t[3], reverse=True)
 
 
 def deferral(tag: str) -> dict:
-    """Whether any conversation result on disk was taken at `tag`, and which.
+    """Whether any conversation result on disk was taken at `tag` **and at this `loop.py`**, and
+    which.
 
-    **It reports existence, never a verdict.** A run at the right prompt says the axis was exercised
-    at this prompt; whether it passed is in that file and is not read here. The two states print
-    differently and neither of them is a tick.
+    **It reports existence, never a verdict.** A run at the right prompt and the right history
+    writer says the axis was exercised at this tree; whether it passed is in that file and is not
+    read here. The states print differently and none of them is a tick.
+
+    **Two conditions, not one, since 2026-09-13.** `exercised_at_this_prompt` is kept because it is
+    what the recorded JSONs in this directory hold and dropping it would silently redefine a field;
+    `exercised_at_this_tree` is the one the caveat is now built on. A run at the same prompt under
+    a different `loop.py` is a real reading of a real tree — it is just not a reading of *this*
+    one, and the two must not print the same.
     """
     runs = conversation_runs()
+    here = loop_now()
     #: Compared **with** the scheme letter. See `_prompt_of` - two schemes can collide on the six
     #: hex characters and can never collide on the letter, and a `p` file counting as coverage for
     #: a `q` prompt is the one way this instrument could print a tick it has not earned.
-    at = [p for p, q, _m in runs if q == tag]
+    at = [p for p, q, _l, _m in runs if q == tag]
+    #: `l is not None` is load-bearing: a file from before the key existed has an unknown history
+    #: writer, and unknown must not count as matching.
+    at_tree = [p for p, q, l, _m in runs if q == tag and l is not None and l == here]
     return {
         "axis": "the conversation - a 'Recently:' block in the prompt",
         "sent_by_this_run": False,
@@ -266,20 +352,35 @@ def deferral(tag: str) -> dict:
         #: same distinction the printed block makes, rather than a shorter list with no reason.
         "exercises_only": EXERCISES_HISTORY,
         "prompt": tag,
+        "loop_print": here,
         "runs_at_this_prompt": [p.name for p in at],
+        "runs_at_this_prompt_and_loop": [p.name for p in at_tree],
+        #: What the runs at the right prompt were taken under, so a reader sees the mismatch itself
+        #: rather than a bare `False`. Never a bare boolean.
+        "loop_prints_at_this_prompt": sorted({str(l) for p, q, l, _m in runs if q == tag}),
         "newest_run_at": (runs[0][1] if runs else None),
+        "newest_run_loop": (runs[0][2] if runs else None),
         "newest_run": (runs[0][0].name if runs else None),
         #: The whole point of the field. `False` here is what makes "no slide" unsupported.
         "exercised_at_this_prompt": bool(at),
+        "exercised_at_this_tree": bool(at_tree),
     }
 
 
 def caveat(tag: str) -> str:
-    """The clause that goes **on** the headline, short enough to survive being copied out of it."""
+    """The clause that goes **on** the headline, short enough to survive being copied out of it.
+
+    **Three states, since the history writer became a condition.** The middle one — a run at this
+    prompt taken under a different `loop.py` — used to print as the first, and it is the state this
+    repository is actually in today.
+    """
     d = deferral(tag)
-    return ("   [no conversation sent; conversation.py has run at " + tag + "]"
-            if d["exercised_at_this_prompt"] else
-            "   [no conversation sent; NOTHING has run the history axis at " + tag + "]")
+    if d["exercised_at_this_tree"]:
+        return f"   [no conversation sent; conversation.py has run at {tag} + loop {d['loop_print']}]"
+    if d["exercised_at_this_prompt"]:
+        return (f"   [no conversation sent; conversation.py has run at {tag} but under a different "
+                f"loop.py ({'/'.join(d['loop_prints_at_this_prompt'])} -> {d['loop_print']})]")
+    return f"   [no conversation sent; NOTHING has run the history axis at {tag}]"
 
 
 def note(tag: str, truncated=None, of=None) -> dict:
@@ -319,6 +420,21 @@ def note(tag: str, truncated=None, of=None) -> dict:
             print(f"        {name}")
         print("    ** that says the axis was RUN at this prompt, not that it passed. Nothing here")
         print("       reads its verdict. Open it before reporting anything as 'no slide'. **")
+        #: **The second condition, added 2026-09-13.** `q` covers the prompt and not `loop.py`,
+        #: which decides what a history line says; the tense of an offer changed that morning and
+        #: every conversation result on disk predates it. Printed as the two hashes, not as a
+        #: boolean, because "which loop.py" is the thing a reader has to go and check.
+        if not d["exercised_at_this_tree"]:
+            print(f"    ** and NONE of them at this loop.py: they were taken at "
+                  f"{', '.join(d['loop_prints_at_this_prompt'])} and this tree is "
+                  f"{d['loop_print']}.")
+            print("       loop.py is what writes the history the prompt renders, so the axis is "
+                  "unmeasured at")
+            print("       THIS tree. Re-run measure/conversation.py before reading the above as "
+                  "coverage. **")
+        else:
+            print(f"    {len(d['runs_at_this_prompt_and_loop'])} of them at this loop.py "
+                  f"({d['loop_print']}) as well as this prompt.")
     else:
         newest = f"{d['newest_run_at']} ({d['newest_run']})" if d["newest_run"] else "none on disk"
         print(f"    at this prompt ({tag}): ** NO conversation result exists. Newest is "
