@@ -48,11 +48,16 @@ the two days that built this, three of them flattering.
                      converse.py  one call: what to say, and what if anything to do
                      loop.py      observe / poll / decide / perform, separately
     argmind/env/     windows.py   UI Automation for eyes, SendInput for hands
+                     sapi.py      the voice — Heami for Korean, never an English one
+                     whisper.py   the microphone and Whisper, with the guards silence needs
+    argmind/voice.py              Heard / Listener / Speaker — the seam, and why it is not a contract
     argmind/app.py                the window — `python -m argmind app`
     argmind/__main__.py           app / look / talk / say / watch
     measure/                      goals, captured screens, and every answer behind the numbers
+    native/prompt-spike/          Rust: renders the prompt byte-identically. See the port, below
 
-**102 tests, none needing a display, a model or a network.** Re-derive with `python -m pytest`.
+**152 tests, none needing a display, a model, a network, a microphone or a speaker.** Re-derive
+with `python -m pytest`.
 
 ### The invariants a change could break without noticing
 
@@ -127,7 +132,12 @@ cannot be repaired is not.
 
 ## What is NOT built
 
-No microphone, no speaker, no phone environment, no robot environment. Whether a confirmed click
+No phone environment, no robot environment. **Voice is built and is off until switched on**: hold
+F9 in the window, which means you have to be looking at argmind to talk to it. Speaking is free
+(4–43 ms) and already Korean; hearing is 234 ms and **transcribes silence as words 120 times out of
+120**, so a stray key press is a turn — it cannot act on one, but it will answer it aloud. The two
+instruments that would reject it need a threshold only real recorded speech can set, and **that
+recording does not exist yet**. Whether a confirmed click
 achieves what the person *wanted* is unmeasured beyond n=3. The agent still answers some Korean in
 English. A question about the past makes it propose the action again 9 times in 23. **It can say the
 right sentence and drop the action** — the `silent` shape, one case in eight, the reply identical to
@@ -140,10 +150,29 @@ memory problem.
 **Streaming was measured and declined**: warm, the first token lands at 36 ms and `say` completes at
 232 ms of a 478 ms reply, so it buys ~250 ms at the cost of extracting a string from partial JSON.
 
-**The open architectural question**: a robot has no deterministic source of WHERE. Anything filling
-that slot is a *detector*, and the core would then receive probabilistic output through an interface
-whose contract is that it is exact — the rule inverted at the seam. A phone fits honestly;
-`uiautomator` has the same shape as UIA.
+**The robot is off the target list, and not for a reason a rewrite fixes.** It has no deterministic
+source of WHERE — anything filling that slot is a *detector*, and the core would receive
+probabilistic output through an interface whose contract is that it is exact. Since refusing spoken
+confirmation it has none of WHETHER either: its only confirmation channel is the speech that was
+refused. It wants a different core. A phone fits honestly; `uiautomator` has the same shape as UIA.
+
+## The core moves to Rust — 2026-09-13, the owner's decision
+
+> Python은 규모가 커질수록 한계가 드러남. 다른언어로 구현하는게 맞음.
+
+**The argument is scale, and the latency measurements do not answer it** — they say a turn spends
+0.032 ms in all of `converse()` against 1,019 ms of waiting, and that the FFI seam a port adds
+costs *more* than the work it removes (0.144 ms to carry 152 widgets across as JSON). Both are
+about speed, which is not what was claimed. What a native core does buy, in this project's own
+terms: **rules currently held by AST tests become held by the compiler** — `converse()` already
+never reads `.rect`, so a `Listing { name, role }` type makes "the model is never shown a
+coordinate" structural rather than asserted.
+
+Staged so each step is verifiable, and **the instruments come first**: `measure/` is 7,489 lines
+against the core's 575 lines of code, and it is the asset. Stage 1 is done — `native/prompt-spike/`
+renders the prompt to the same `r322a4c`, and forks on a one-character change. Stage 0's golden
+transcript is done. `docs/findings/porting-the-core.md` has the accounting, what breaks in
+`measure/`, and what would refute the plan.
 
 ## Where the detail lives
 
@@ -154,6 +183,9 @@ whose contract is that it is exact — the rule inverted at the seam. A phone fi
 | `docs/findings/interaction.md` | the priority, and repair / memory / language / spurious action / the history window |
 | `docs/findings/the-pc-app.md` | the window: self-blindness, pointing, cold start, the withdrawn diagnosis |
 | `docs/findings/harness-pitfalls.md` | **ten ways the model harness lied and seven ways the measuring code did** — the list to check when a measurement reads zero |
+| `docs/findings/porting-the-core.md` | **the move to Rust**: what speed does not decide, the robot answered, the AST rules audited one at a time, what breaks in `measure/`, and the staging |
+| `argmind/voice.py` | voice is *interface*, not a contract — and why *"응"* out loud cannot run an action |
+| `tests/test_loop_golden.py` | the behavioural record of `loop.py`, and the five things writing it found |
 | `docs/findings/what-the-old-tree-measured.md` | the removed library's transferable results, and how to reach the rest |
 
 ## Sub-agent team
