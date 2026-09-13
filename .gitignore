@@ -23,3 +23,6 @@ cpu_backend/problem.bin
 
 # C++ build trees. The sources are tracked; the objects are not.
 cpp/build*/
+
+# Rust build output — see docs/findings/porting-the-core.md
+native/**/target/
