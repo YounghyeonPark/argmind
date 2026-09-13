@@ -79,9 +79,11 @@ named `-qa62805-` beside it are.
   `remember_doing`'s own signature, so a fifth channel would announce itself.
 * **Only the second turn of the four repair cases carries a conversation.** Every language case is
   one turn, so most of this run's turns render no `Recently:` block at all — printed as a count of
-  this run rather than claimed here. `measure/sending.py` names this file as covering the history
-  axis for the three harnesses that send none; at four second-turns per repeat, all at distance 1,
-  that is a thin claim and the block below says so in numbers.
+  this run rather than claimed here. `measure/sending.py` **named this file as covering the history
+  axis** for the three harnesses that send none until 2026-09-13, while its `deferral()` only ever
+  looked for a `conversation-*.json`; four second-turns per repeat, all at distance 1, with no
+  without-history arm is not coverage for a "no slide" reading, so the claim was dropped rather than
+  wired up. This file is now in `sending.EXERCISES_HISTORY`, printed and explicitly not counted.
 * **Two of the four captured screens**, and `Fixed` eyes: nothing moves between the decision and the
   action, so `Session.find()`'s staleness path and `vanished` are unreachable here.
 * Whether a reply is a *sentence* — `measure/saying.py` covers that, and it is where the index leak
@@ -363,10 +365,11 @@ def history_note(turns_with, turns_total, kinds) -> dict:
     the same shape: measured off this run, printed beside the headline, and stored as the object
     that was printed rather than recomputed for the file.
 
-    What it will not do is print a tick. `sending.COVERS_HISTORY` names this file as covering the
-    history axis for `choosing`, `saying` and `talking`; the numbers below are what that claim is
-    actually worth, and at four second-turns per repeat it is thin. The distance axis and the
-    controls are in `measure/conversation.py` and are not here.
+    What it will not do is print a tick. `sending.COVERS_HISTORY` named this file as covering the
+    history axis for `choosing`, `saying` and `talking` until 2026-09-13; the numbers below are what
+    that claim was actually worth, and at four second-turns per repeat it was thin enough that the
+    claim was withdrawn — `sending.EXERCISES_HISTORY` now names this file and says it is not
+    counted. The distance axis and the controls are in `measure/conversation.py`, not here.
     """
     missing = [c for c in FED if c not in CHANNELS]
     if missing:

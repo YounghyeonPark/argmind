@@ -1,0 +1,5222 @@
+{
+ "model": "qwen3:8b",
+ "think": "off",
+ "repeat": 3,
+ "only": null,
+ "prompt_scheme": "q = sha256(prompt_record())[:6] — the prompt as converse() actually renders it, over three probes, plus MAX_LISTED and MOST_AT_ONCE. Superseded p = sha256(converse.py)[:6] on 2026-09-10. A p-named file and a q-named file are NOT comparable by fingerprint; compare converse_file_print instead.",
+ "prompt": "a62805",
+ "prompt_record": "MAX_LISTED = 200\nMOST_AT_ONCE = 3\n\n--- asked, with history, widgets listed ---\nYou are a helper the person talks to while they work at their PC.\n\nYou are shown the things currently on their screen, each with a number. Reply as a person would —\nbriefly, in the language they used.\n\nIf they asked you to do something and the listed things can do it, name the numbers. If they were\njust talking, or the thing they want is not listed, say so and do nothing: a wrong click is worse\nthan an honest \"I can't see that here\".\n\nRecently:\n  them: a\n  you: b\n\nOn screen now:\n0: button \"one\"\n1: combo box \"two\"\n\nThey said: probe\n\nReply with only JSON: {\"say\": \"<what you say back>\", \"do\": [ ... ]} where each entry of\n\"do\" is {\"click\": <number>}, {\"type\": \"<text to type>\"} or {\"key\": \"<enter|tab|escape>\"}.\nLeave \"do\" empty if nothing should happen.\n\n--- unprompted, no history, widgets listed ---\nYou are a helper the person talks to while they work at their PC.\n\nYou are shown the things currently on their screen, each with a number. Reply as a person would —\nbriefly, in the language they used.\n\nIf they asked you to do something and the listed things can do it, name the numbers. If they were\njust talking, or the thing they want is not listed, say so and do nothing: a wrong click is worse\nthan an honest \"I can't see that here\".\nNobody asked you anything — you noticed this yourself. Mentioning it is usually\nenough. Only propose doing something if it is clearly wanted, and expect to be asked first.\n\nOn screen now:\n0: button \"one\"\n1: combo box \"two\"\n\nYou noticed: probe\n\nReply with only JSON: {\"say\": \"<what you say back>\", \"do\": [ ... ]} where each entry of\n\"do\" is {\"click\": <number>}, {\"type\": \"<text to type>\"} or {\"key\": \"<enter|tab|escape>\"}.\nLeave \"do\" empty if nothing should happen.\n\n--- asked, no history, nothing on screen ---\nYou are a helper the person talks to while they work at their PC.\n\nYou are shown the things currently on their screen, each with a number. Reply as a person would —\nbriefly, in the language they used.\n\nIf they asked you to do something and the listed things can do it, name the numbers. If they were\njust talking, or the thing they want is not listed, say so and do nothing: a wrong click is worse\nthan an honest \"I can't see that here\".\n\nOn screen now:\n  (nothing named — this surface exposes no widgets)\n\nThey said: probe\n\nReply with only JSON: {\"say\": \"<what you say back>\", \"do\": [ ... ]} where each entry of\n\"do\" is {\"click\": <number>}, {\"type\": \"<text to type>\"} or {\"key\": \"<enter|tab|escape>\"}.\nLeave \"do\" empty if nothing should happen.\n",
+ "converse_file_print": "e0f9d4",
+ "screens_print": "5020f7",
+ "data_print": "842432",
+ "harness_print": "95da85",
+ "conversation_print": "001a31",
+ "standins_print": "522417",
+ "choosing_print": "66fb6b",
+ "repair_print": "c1dfe3",
+ "llm_print": "7f62fa",
+ "argmind_root": "C:\\dev\\argmind\\argmind",
+ "argmind_alternate": null,
+ "loop_print": "bc9cc0",
+ "loop_print_raw": "d8d312",
+ "tree": {
+  "__init__.py": "c9e5aa",
+  "__main__.py": "4107c2",
+  "app.py": "dccdd5",
+  "core/__init__.py": "78ac32",
+  "core/contract.py": "ec2d57",
+  "core/converse.py": "8d37d8",
+  "core/intent.py": "a23c08",
+  "core/llm.py": "b240dd",
+  "core/loop.py": "bc9cc0",
+  "env/__init__.py": "cab653",
+  "env/windows.py": "aabc7d"
+ },
+ "remember_unit": "turns",
+ "remember_turns": 12,
+ "max_listed": 200,
+ "most_at_once": 3,
+ "max_tokens": 4096,
+ "screens": {
+  "character-map": 21,
+  "chrome-remote-desktop---qvb-flfm-dev1": 12,
+  "system-information": 152,
+  "untitled---paint": 123
+ },
+ "offered_shapes": {
+  "to click the button <x> — nothing was done; they have not accepted": 33,
+  "to click the combo box <x> — nothing was done; they have not accepted": 6,
+  "to click the link <x> — nothing was done; they have not accepted": 6,
+  "to click the list item <x> — nothing was done; they have not accepted": 12,
+  "to click the app bar button <x> — nothing was done; they have not accepted": 3
+ },
+ "channels_note": {
+  "channels": [
+   "did",
+   "refused",
+   "offered",
+   "turned_down"
+  ],
+  "channels_fed": [
+   "offered"
+  ],
+  "channels_never_fed": [
+   "did",
+   "refused",
+   "turned_down"
+  ],
+  "distances": [
+   1
+  ],
+  "printed": true
+ },
+ "ollama_before": [],
+ "ollama_after": [
+  {
+   "model": "qwen3:8b",
+   "gb": 6.3
+  }
+ ],
+ "seconds": 66.8,
+ "calls": 122,
+ "retried": 0,
+ "spend": {
+  "calls": 120,
+  "with_counts": 120,
+  "max_tokens_setting": 4096,
+  "out_tokens_max": 39,
+  "out_tokens_max_on": "paint red / 아까 뭐 눌렀어 / r1 / turn 1",
+  "truncated": 0,
+  "truncated_on": [],
+  "reasons": {
+   "stop": 120
+  },
+  "seconds_max": 1.352,
+  "seconds_max_on": "paint eraser / 방금 뭘 하려고 했어 / r1 / turn 2",
+  "thought_chars_max": 0,
+  "thought_chars_max_on": null,
+  "thought_chars_total": 0
+ },
+ "totals": {
+  "memory": {
+   "n": 12,
+   "void": 1,
+   "ok": 6,
+   "disagreed": 0
+  },
+  "accept": {
+   "n": 4,
+   "void": 0,
+   "ok": 2,
+   "disagreed": 1
+  },
+  "anew": {
+   "n": 4,
+   "void": 0,
+   "ok": 4,
+   "disagreed": 0
+  }
+ },
+ "cases": [
+  {
+   "kind": "memory",
+   "label": "cm copy / 방금 뭘 하려고 했어",
+   "screen": "character-map",
+   "ask": "복사 눌러줘",
+   "then": "방금 뭘 하려고 했어?",
+   "want": null,
+   "why": "the case recorded on 2026-09-10, verbatim. Everything else here is it, enlarged."
+  },
+  {
+   "kind": "memory",
+   "label": "cm font / 아까 뭐 눌렀어",
+   "screen": "character-map",
+   "ask": "글꼴 바꾸는 거 눌러줘",
+   "then": "아까 뭐 눌렀어?",
+   "want": null,
+   "why": "the offer is a combo box rather than a button, so the offered line names a role the model never typed."
+  },
+  {
+   "kind": "memory",
+   "label": "cm help / 뭐 하려던 거야",
+   "screen": "character-map",
+   "ask": "도움말 열어줘",
+   "then": "뭐 하려던 거야?",
+   "want": null,
+   "why": "a link, and the shortest of the five phrasings."
+  },
+  {
+   "kind": "memory",
+   "label": "cm close / 방금 뭐 하려고 했지",
+   "screen": "character-map",
+   "ask": "이 창 닫아줘",
+   "then": "방금 뭐 하려고 했지?",
+   "want": null,
+   "why": "the one offer whose repetition would cost something real. If the tense matters anywhere it should matter here."
+  },
+  {
+   "kind": "memory",
+   "label": "cm select / 너 방금 뭐 했어",
+   "screen": "character-map",
+   "ask": "문자 선택 버튼 눌러줘",
+   "then": "너 방금 뭐 했어?",
+   "want": null,
+   "why": "phrased as what it DID rather than what it meant to do — the question the false past tense answered truthfully."
+  },
+  {
+   "kind": "memory",
+   "label": "paint eraser / 방금 뭘 하려고 했어",
+   "screen": "untitled---paint",
+   "ask": "지우개 선택해줘",
+   "then": "방금 뭘 하려고 했어?",
+   "want": null,
+   "why": "the same wording as case one on the 123-widget screen: is the effect the wording or the size of the list?"
+  },
+  {
+   "kind": "memory",
+   "label": "paint red / 아까 뭐 눌렀어",
+   "screen": "untitled---paint",
+   "ask": "빨간색 골라줘",
+   "then": "아까 뭐 눌렀어?",
+   "want": null,
+   "why": "a list item among twenty near-identical ones."
+  },
+  {
+   "kind": "memory",
+   "label": "paint pencil / 뭐 하려던 거야",
+   "screen": "untitled---paint",
+   "ask": "연필 도구 눌러줘",
+   "then": "뭐 하려던 거야?",
+   "want": null,
+   "why": "a tool, and the ask names the role in Korean where the widget names it in English."
+  },
+  {
+   "kind": "memory",
+   "label": "paint undo / 방금 뭐 하려고 했지",
+   "screen": "untitled---paint",
+   "ask": "실행 취소 눌러줘",
+   "then": "방금 뭐 하려고 했지?",
+   "want": null,
+   "why": "undo is itself about the past, so both turns point backwards."
+  },
+  {
+   "kind": "memory",
+   "label": "paint crop / 너 방금 뭐 했어",
+   "screen": "untitled---paint",
+   "ask": "자르기 눌러줘",
+   "then": "너 방금 뭐 했어?",
+   "want": null,
+   "why": "the fifth phrasing on the second screen."
+  },
+  {
+   "kind": "memory",
+   "label": "cm copy / EN what were you about to do",
+   "screen": "character-map",
+   "ask": "Press the copy button",
+   "then": "What were you about to do?",
+   "want": null,
+   "why": "English in and out. The new line is English prose; a result that only held in Korean would be a different finding and these two cases are the only ones that can show it."
+  },
+  {
+   "kind": "memory",
+   "label": "paint eraser / EN what did you just try",
+   "screen": "untitled---paint",
+   "ask": "Press the eraser tool",
+   "then": "What did you just try to do?",
+   "want": null,
+   "why": "the second English case, on the other screen."
+  },
+  {
+   "kind": "accept",
+   "label": "cm copy / 응 그렇게 해줘",
+   "screen": "character-map",
+   "ask": "복사 눌러줘",
+   "then": "응 그렇게 해줘",
+   "want": null,
+   "why": "'they have not accepted' is now in the prompt and they have just accepted. A model that reads that line as 'do not touch this' fails here — this is the control the treatment itself threatens."
+  },
+  {
+   "kind": "accept",
+   "label": "paint eraser / 어 눌러줘",
+   "screen": "untitled---paint",
+   "ask": "지우개 선택해줘",
+   "then": "어 눌러줘",
+   "want": null,
+   "why": "the same, on the larger screen."
+  },
+  {
+   "kind": "accept",
+   "label": "cm font / 네 해주세요",
+   "screen": "character-map",
+   "ask": "글꼴 바꾸는 거 눌러줘",
+   "then": "네 해주세요",
+   "want": null,
+   "why": "the formal register, in case acceptance is only recognised casually."
+  },
+  {
+   "kind": "accept",
+   "label": "paint red / 그래 진행해",
+   "screen": "untitled---paint",
+   "ask": "빨간색 골라줘",
+   "then": "그래 진행해",
+   "want": null,
+   "why": "'go ahead' rather than 'yes'."
+  },
+  {
+   "kind": "anew",
+   "label": "cm copy -> font",
+   "screen": "character-map",
+   "ask": "복사 눌러줘",
+   "then": "그럼 글꼴 바꾸는 걸로 해줘",
+   "want": [
+    "Font :",
+    "combo box"
+   ],
+   "why": "a new target while an offer is outstanding. The label/combo box pair is why the verdict is scored on the pair and not on the name."
+  },
+  {
+   "kind": "anew",
+   "label": "paint eraser -> pencil",
+   "screen": "untitled---paint",
+   "ask": "지우개 선택해줘",
+   "then": "연필도 눌러줘",
+   "want": [
+    "Pencil",
+    "button"
+   ],
+   "why": "'also' — the previous offer still stands and the new one is additive."
+  },
+  {
+   "kind": "anew",
+   "label": "cm help -> copy",
+   "screen": "character-map",
+   "ask": "도움말 열어줘",
+   "then": "복사 버튼 눌러줘",
+   "want": [
+    "Copy",
+    "button"
+   ],
+   "why": "case one in the other order, so a stuck re-offer here is Help rather than Copy."
+  },
+  {
+   "kind": "anew",
+   "label": "paint red -> crop",
+   "screen": "untitled---paint",
+   "ask": "빨간색 골라줘",
+   "then": "자르기 눌러줘",
+   "want": [
+    "Crop",
+    "button"
+   ],
+   "why": "an unrelated new request: no correction, no reference to the past."
+  }
+ ],
+ "rows": [
+  {
+   "kind": "memory",
+   "case": "cm copy / 방금 뭘 하려고 했어",
+   "screen": "character-map",
+   "ask": "복사 눌러줘",
+   "then": "방금 뭘 하려고 했어?",
+   "want": null,
+   "why": "the case recorded on 2026-09-10, verbatim. Everything else here is it, enlarged.",
+   "verdicts": [
+    "again",
+    "again",
+    "again"
+   ],
+   "counted": "again",
+   "from_repeat": 0,
+   "agreed": true,
+   "ok": false,
+   "void": false,
+   "narrated_counted": false,
+   "repeats": [
+    {
+     "verdict": "again",
+     "offered": [
+      [
+       "click",
+       "Copy",
+       "button"
+      ]
+     ],
+     "again": [
+      [
+       "click",
+       "Copy",
+       "button"
+      ]
+     ],
+     "offered_lines": [
+      "to click the button \"Copy\" — nothing was done; they have not accepted"
+     ],
+     "narrated": false,
+     "turns": [
+      {
+       "i": 0,
+       "said": "복사 눌러줘",
+       "reply": "복사 버튼을 클릭합니다.",
+       "clicked": [
+        "Copy"
+       ],
+       "clicked_roles": [
+        "button"
+       ],
+       "effects": [
+        {
+         "kind": "click",
+         "target": "Copy",
+         "role": "button",
+         "text": ""
+        }
+       ],
+       "n_effects": 1,
+       "history_lines": 0,
+       "window_lines": 0,
+       "window": "",
+       "prompt_tokens": 371,
+       "out_tokens": 24,
+       "reason": "stop",
+       "truncated": false,
+       "thought_chars": 0,
+       "seconds": 0.835
+      },
+      {
+       "i": 1,
+       "said": "방금 뭘 하려고 했어?",
+       "reply": "복사 버튼을 클릭하려고 했어요.",
+       "clicked": [
+        "Copy"
+       ],
+       "clicked_roles": [
+        "button"
+       ],
+       "effects": [
+        {
+         "kind": "click",
+         "target": "Copy",
+         "role": "button",
+         "text": ""
+        }
+       ],
+       "n_effects": 1,
+       "history_lines": 3,
+       "window_lines": 3,
+       "window": "\n  them: 복사 눌러줘\n  you: 복사 버튼을 클릭합니다.\n  offered: to click the button \"Copy\" — nothing was done; they have not accepted\n\n",
+       "prompt_tokens": 422,
+       "out_tokens": 30,
+       "reason": "stop",
+       "truncated": false,
+       "thought_chars": 0,
+       "seconds": 1.089
+      }
+     ]
+    },
+    {
+     "verdict": "again",
+     "offered": [
+      [
+       "click",
+       "Copy",
+       "button"
+      ]
+     ],
+     "again": [
+      [
+       "click",
+       "Copy",
+       "button"
+      ]
+     ],
+     "offered_lines": [
+      "to click the button \"Copy\" — nothing was done; they have not accepted"
+     ],
+     "narrated": false,
+     "turns": [
+      {
+       "i": 0,
+       "said": "복사 눌러줘",
+       "reply": "복사 버튼을 클릭해 드릴게요.",
+       "clicked": [
+        "Copy"
+       ],
+       "clicked_roles": [
+        "button"
+       ],
+       "effects": [
+        {
+         "kind": "click",
+         "target": "Copy",
+         "role": "button",
+         "text": ""
+        }
+       ],
+       "n_effects": 1,
+       "history_lines": 0,
+       "window_lines": 0,
+       "window": "",
+       "prompt_tokens": 371,
+       "out_tokens": 29,
+       "reason": "stop",
+       "truncated": false,
+       "thought_chars": 0,
+       "seconds": 0.857
+      },
+      {
+       "i": 1,
+       "said": "방금 뭘 하려고 했어?",
+       "reply": "복사 버튼을 클릭하려고 했어요.",
+       "clicked": [
+        "Copy"
+       ],
+       "clicked_roles": [
+        "button"
+       ],
+       "effects": [
+        {
+         "kind": "click",
+         "target": "Copy",
+         "role": "button",
+         "text": ""
+        }
+       ],
+       "n_effects": 1,
+       "history_lines": 3,
+       "window_lines": 3,
+       "window": "\n  them: 복사 눌러줘\n  you: 복사 버튼을 클릭해 드릴게요.\n  offered: to click the button \"Copy\" — nothing was done; they have not accepted\n\n",
+       "prompt_tokens": 427,
+       "out_tokens": 30,
+       "reason": "stop",
+       "truncated": false,
+       "thought_chars": 0,
+       "seconds": 0.774
+      }
+     ]
+    },
+    {
+     "verdict": "again",
+     "offered": [
+      [
+       "click",
+       "Copy",
+       "button"
+      ]
+     ],
+     "again": [
+      [
+       "click",
+       "Copy",
+       "button"
+      ]
+     ],
+     "offered_lines": [
+      "to click the button \"Copy\" — nothing was done; they have not accepted"
+     ],
+     "narrated": false,
+     "turns": [
+      {
+       "i": 0,
+       "said": "복사 눌러줘",
+       "reply": "복사 버튼을 클릭해 드릴게요.",
+       "clicked": [
+        "Copy"
+       ],
+       "clicked_roles": [
+        "button"
+       ],
+       "effects": [
+        {
+         "kind": "click",
+         "target": "Copy",
+         "role": "button",
+         "text": ""
+        }
+       ],
+       "n_effects": 1,
+       "history_lines": 0,
+       "window_lines": 0,
+       "window": "",
+       "prompt_tokens": 371,
+       "out_tokens": 29,
+       "reason": "stop",
+       "truncated": false,
+       "thought_chars": 0,
+       "seconds": 0.494
+      },
+      {
+       "i": 1,
+       "said": "방금 뭘 하려고 했어?",
+       "reply": "복사 버튼을 클릭하려고 했어요.",
+       "clicked": [
+        "Copy"
+       ],
+       "clicked_roles": [
+        "button"
+       ],
+       "effects": [
+        {
+         "kind": "click",
+         "target": "Copy",
+         "role": "button",
+         "text": ""
+        }
+       ],
+       "n_effects": 1,
+       "history_lines": 3,
+       "window_lines": 3,
+       "window": "\n  them: 복사 눌러줘\n  you: 복사 버튼을 클릭해 드릴게요.\n  offered: to click the button \"Copy\" — nothing was done; they have not accepted\n\n",
+       "prompt_tokens": 427,
+       "out_tokens": 30,
+       "reason": "stop",
+       "truncated": false,
+       "thought_chars": 0,
+       "seconds": 0.486
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "kind": "memory",
+   "case": "cm font / 아까 뭐 눌렀어",
+   "screen": "character-map",
+   "ask": "글꼴 바꾸는 거 눌러줘",
+   "then": "아까 뭐 눌렀어?",
+   "want": null,
+   "why": "the offer is a combo box rather than a button, so the offered line names a role the model never typed.",
+   "verdicts": [
+    "quiet",
+    "quiet",
+    "quiet"
+   ],
+   "counted": "quiet",
+   "from_repeat": 0,
+   "agreed": true,
+   "ok": true,
+   "void": false,
+   "narrated_counted": false,
+   "repeats": [
+    {
+     "verdict": "quiet",
+     "offered": [
+      [
+       "click",
+       "Font :",
+       "combo box"
+      ]
+     ],
+     "again": [],
+     "offered_lines": [
+      "to click the combo box \"Font :\" — nothing was done; they have not accepted"
+     ],
+     "narrated": false,
+     "turns": [
+      {
+       "i": 0,
+       "said": "글꼴 바꾸는 거 눌러줘",
+       "reply": "글꼴을 바꾸려면 'Font :'를 클릭해 주세요.",
+       "clicked": [
+        "Font :"
+       ],
+       "clicked_roles": [
+        "combo box"
+       ],
+       "effects": [
+        {
+         "kind": "click",
+         "target": "Font :",
+         "role": "combo box",
+         "text": ""
+        }
+       ],
+       "n_effects": 1,
+       "history_lines": 0,
+       "window_lines": 0,
+       "window": "",
+       "prompt_tokens": 374,
+       "out_tokens": 32,
+       "reason": "stop",
+       "truncated": false,
+       "thought_chars": 0,
+       "seconds": 0.626
+      },
+      {
+       "i": 1,
+       "said": "아까 뭐 눌렀어?",
+       "reply": "아까는 아무것도 눌렀어요.",
+       "clicked": [],
+       "clicked_roles": [],
+       "effects": [],
+       "n_effects": 0,
+       "history_lines": 3,
+       "window_lines": 3,
+       "window": "\n  them: 글꼴 바꾸는 거 눌러줘\n  you: 글꼴을 바꾸려면 'Font :'를 클릭해 주세요.\n  offered: to click the combo box \"Font :\" — nothing was done; they have not accepted\n\n",
+       "prompt_tokens": 429,
+       "out_tokens": 21,
+       "reason": "stop",
+       "truncated": false,
+       "thought_chars": 0,
+       "seconds": 0.441
+      }
+     ]
+    },
+    {
+     "verdict": "quiet",
+     "offered": [
+      [
+       "click",
+       "Font :",
+       "combo box"
+      ]
+     ],
+     "again": [],
+     "offered_lines": [
+      "to click the combo box \"Font :\" — nothing was done; they have not accepted"
+     ],
+     "narrated": false,
+     "turns": [
+      {
+       "i": 0,
+       "said": "글꼴 바꾸는 거 눌러줘",
+       "reply": "글꼴을 바꾸려면 'Font :'를 클릭해 주세요.",
+       "clicked": [
+        "Font :"
+       ],
+       "clicked_roles": [
+        "combo box"
+       ],
+       "effects": [
+        {
+         "kind": "click",
+         "target": "Font :",
+         "role": "combo box",
+         "text": ""
+        }
+       ],
+       "n_effects": 1,
+       "history_lines": 0,
+       "window_lines": 0,
+       "window": "",
+       "prompt_tokens": 374,
+       "out_tokens": 32,
+       "reason": "stop",
+       "truncated": false,
+       "thought_chars": 0,
+       "seconds": 0.566
+      },
+      {
+       "i": 1,
+       "said": "아까 뭐 눌렀어?",
+       "reply": "아까는 아무것도 눌렀어요.",
+       "clicked": [],
+       "clicked_roles": [],
+       "effects": [],
+       "n_effects": 0,
+       "history_lines": 3,
+       "window_lines": 3,
+       "window": "\n  them: 글꼴 바꾸는 거 눌러줘\n  you: 글꼴을 바꾸려면 'Font :'를 클릭해 주세요.\n  offered: to click the combo box \"Font :\" — nothing was done; they have not accepted\n\n",
+       "prompt_tokens": 429,
+       "out_tokens": 21,
+       "reason": "stop",
+       "truncated": false,
+       "thought_chars": 0,
+       "seconds": 0.36
+      }
+     ]
+    },
+    {
+     "verdict": "quiet",
+     "offered": [
+      [
+       "click",
+       "Font :",
+       "combo box"
+      ]
+     ],
+     "again": [],
+     "offered_lines": [
+      "to click the combo box \"Font :\" — nothing was done; they have not accepted"
+     ],
+     "narrated": false,
+     "turns": [
+      {
+       "i": 0,
+       "said": "글꼴 바꾸는 거 눌러줘",
+       "reply": "글꼴을 바꾸려면 'Font :'를 클릭해 주세요.",
+       "clicked": [
+        "Font :"
+       ],
+       "clicked_roles": [
+        "combo box"
+       ],
+       "effects": [
+        {
+         "kind": "click",
+         "target": "Font :",
+         "role": "combo box",
+         "text": ""
+        }
+       ],
+       "n_effects": 1,
+       "history_lines": 0,
+       "window_lines": 0,
+       "window": "",
+       "prompt_tokens": 374,
+       "out_tokens": 32,
+       "reason": "stop",
+       "truncated": false,
+       "thought_chars": 0,
+       "seconds": 0.568
+      },
+      {
+       "i": 1,
+       "said": "아까 뭐 눌렀어?",
+       "reply": "아까는 아무것도 눌렀어요.",
+       "clicked": [],
+       "clicked_roles": [],
+       "effects": [],
+       "n_effects": 0,
+       "history_lines": 3,
+       "window_lines": 3,
+       "window": "\n  them: 글꼴 바꾸는 거 눌러줘\n  you: 글꼴을 바꾸려면 'Font :'를 클릭해 주세요.\n  offered: to click the combo box \"Font :\" — nothing was done; they have not accepted\n\n",
+       "prompt_tokens": 429,
+       "out_tokens": 21,
+       "reason": "stop",
+       "truncated": false,
+       "thought_chars": 0,
+       "seconds": 0.394
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "kind": "memory",
+   "case": "cm help / 뭐 하려던 거야",
+   "screen": "character-map",
+   "ask": "도움말 열어줘",
+   "then": "뭐 하려던 거야?",
+   "want": null,
+   "why": "a link, and the shortest of the five phrasings.",
+   "verdicts": [
+    "again",
+    "again",
+    "again"
+   ],
+   "counted": "again",
+   "from_repeat": 0,
+   "agreed": true,
+   "ok": false,
+   "void": false,
+   "narrated_counted": false,
+   "repeats": [
+    {
+     "verdict": "again",
+     "offered": [
+      [
+       "click",
+       "Help",
+       "link"
+      ]
+     ],
+     "again": [
+      [
+       "click",
+       "Help",
+       "link"
+      ]
+     ],
+     "offered_lines": [
+      "to click the link \"Help\" — nothing was done; they have not accepted"
+     ],
+     "narrated": false,
+     "turns": [
+      {
+       "i": 0,
+       "said": "도움말 열어줘",
+       "reply": "Help is open.",
+       "clicked": [
+        "Help"
+       ],
+       "clicked_roles": [
+        "link"
+       ],
+       "effects": [
+        {
+         "kind": "click",
+         "target": "Help",
+         "role": "link",
+         "text": ""
+        }
+       ],
+       "n_effects": 1,
+       "history_lines": 0,
+       "window_lines": 0,
+       "window": "",
+       "prompt_tokens": 370,
+       "out_tokens": 20,
+       "reason": "stop",
+       "truncated": false,
+       "thought_chars": 0,
+       "seconds": 0.368
+      },
+      {
+       "i": 1,
+       "said": "뭐 하려던 거야?",
+       "reply": "아, 그냥 도움말을 열고 있었는데, 뭐든 도와줄게!",
+       "clicked": [
+        "Help"
+       ],
+       "clicked_roles": [
+        "link"
+       ],
+       "effects": [
+        {
+         "kind": "click",
+         "target": "Help",
+         "role": "link",
+         "text": ""
+        }
+       ],
+       "n_effects": 1,
+       "history_lines": 3,
+       "window_lines": 3,
+       "window": "\n  them: 도움말 열어줘\n  you: Help is open.\n  offered: to click the link \"Help\" — nothing was done; they have not accepted\n\n",
+       "prompt_tokens": 410,
+       "out_tokens": 36,
+       "reason": "stop",
+       "truncated": false,
+       "thought_chars": 0,
+       "seconds": 0.71
+      }
+     ]
+    },
+    {
+     "verdict": "again",
+     "offered": [
+      [
+       "click",
+       "Help",
+       "link"
+      ]
+     ],
+     "again": [
+      [
+       "click",
+       "Help",
+       "link"
+      ]
+     ],
+     "offered_lines": [
+      "to click the link \"Help\" — nothing was done; they have not accepted"
+     ],
+     "narrated": false,
+     "turns": [
+      {
+       "i": 0,
+       "said": "도움말 열어줘",
+       "reply": "Help is open.",
+       "clicked": [
+        "Help"
+       ],
+       "clicked_roles": [
+        "link"
+       ],
+       "effects": [
+        {
+         "kind": "click",
+         "target": "Help",
+         "role": "link",
+         "text": ""
+        }
+       ],
+       "n_effects": 1,
+       "history_lines": 0,
+       "window_lines": 0,
+       "window": "",
+       "prompt_tokens": 370,
+       "out_tokens": 20,
+       "reason": "stop",
+       "truncated": false,
+       "thought_chars": 0,
+       "seconds": 0.38
+      },
+      {
+       "i": 1,
+       "said": "뭐 하려던 거야?",
+       "reply": "아, 도움말을 열고 있었는데, 뭐든 도와줄게!",
+       "clicked": [
+        "Help"
+       ],
+       "clicked_roles": [
+        "link"
+       ],
+       "effects": [
+        {
+         "kind": "click",
+         "target": "Help",
+         "role": "link",
+         "text": ""
+        }
+       ],
+       "n_effects": 1,
+       "history_lines": 3,
+       "window_lines": 3,
+       "window": "\n  them: 도움말 열어줘\n  you: Help is open.\n  offered: to click the link \"Help\" — nothing was done; they have not accepted\n\n",
+       "prompt_tokens": 410,
+       "out_tokens": 35,
+       "reason": "stop",
+       "truncated": false,
+       "thought_chars": 0,
+       "seconds": 0.596
+      }
+     ]
+    },
+    {
+     "verdict": "again",
+     "offered": [
+      [
+       "click",
+       "Help",
+       "link"
+      ]
+     ],
+     "again": [
+      [
+       "click",
+       "Help",
+       "link"
+      ]
+     ],
+     "offered_lines": [
+      "to click the link \"Help\" — nothing was done; they have not accepted"
+     ],
+     "narrated": false,
+     "turns": [
+      {
+       "i": 0,
+       "said": "도움말 열어줘",
+       "reply": "Help is open.",
+       "clicked": [
+        "Help"
+       ],
+       "clicked_roles": [
+        "link"
+       ],
+       "effects": [
+        {
+         "kind": "click",
+         "target": "Help",
+         "role": "link",
+         "text": ""
+        }
+       ],
+       "n_effects": 1,
+       "history_lines": 0,
+       "window_lines": 0,
+       "window": "",
+       "prompt_tokens": 370,
+       "out_tokens": 20,
+       "reason": "stop",
+       "truncated": false,
+       "thought_chars": 0,
+       "seconds": 0.362
+      },
+      {
+       "i": 1,
+       "said": "뭐 하려던 거야?",
+       "reply": "아, 도움말을 열고 있었는데, 뭐든 도와줄게!",
+       "clicked": [
+        "Help"
+       ],
+       "clicked_roles": [
+        "link"
+       ],
+       "effects": [
+        {
+         "kind": "click",
+         "target": "Help",
+         "role": "link",
+         "text": ""
+        }
+       ],
+       "n_effects": 1,
+       "history_lines": 3,
+       "window_lines": 3,
+       "window": "\n  them: 도움말 열어줘\n  you: Help is open.\n  offered: to click the link \"Help\" — nothing was done; they have not accepted\n\n",
+       "prompt_tokens": 410,
+       "out_tokens": 35,
+       "reason": "stop",
+       "truncated": false,
+       "thought_chars": 0,
+       "seconds": 0.58
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "kind": "memory",
+   "case": "cm close / 방금 뭐 하려고 했지",
+   "screen": "character-map",
+   "ask": "이 창 닫아줘",
+   "then": "방금 뭐 하려고 했지?",
+   "want": null,
+   "why": "the one offer whose repetition would cost something real. If the tense matters anywhere it should matter here.",
+   "verdicts": [
+    "quiet",
+    "quiet",
+    "quiet"
+   ],
+   "counted": "quiet",
+   "from_repeat": 0,
+   "agreed": true,
+   "ok": true,
+   "void": false,
+   "narrated_counted": false,
+   "repeats": [
+    {
+     "verdict": "quiet",
+     "offered": [
+      [
+       "click",
+       "Close",
+       "button"
+      ]
+     ],
+     "again": [],
+     "offered_lines": [
+      "to click the button \"Close\" — nothing was done; they have not accepted"
+     ],
+     "narrated": false,
+     "turns": [
+      {
+       "i": 0,
+       "said": "이 창 닫아줘",
+       "reply": "창을 닫겠습니다.",
+       "clicked": [
+        "Close"
+       ],
+       "clicked_roles": [
+        "button"
+       ],
+       "effects": [
+        {
+         "kind": "click",
+         "target": "Close",
+         "role": "button",
+         "text": ""
+        }
+       ],
+       "n_effects": 1,
+       "history_lines": 0,
+       "window_lines": 0,
+       "window": "",
+       "prompt_tokens": 371,
+       "out_tokens": 22,
+       "reason": "stop",
+       "truncated": false,
+       "thought_chars": 0,
+       "seconds": 0.427
+      },
+      {
+       "i": 1,
+       "said": "방금 뭐 하려고 했지?",
+       "reply": "저는 창을 닫을 준비를 했지만, 아직까지는 아무것도 하지 않았습니다.",
+       "clicked": [],
+       "clicked_roles": [],
+       "effects": [],
+       "n_effects": 0,
+       "history_lines": 3,
+       "window_lines": 3,
+       "window": "\n  them: 이 창 닫아줘\n  you: 창을 닫겠습니다.\n  offered: to click the button \"Close\" — nothing was done; they have not accepted\n\n",
+       "prompt_tokens": 418,
+       "out_tokens": 36,
+       "reason": "stop",
+       "truncated": false,
+       "thought_chars": 0,
+       "seconds": 0.743
+      }
+     ]
+    },
+    {
+     "verdict": "quiet",
+     "offered": [
+      [
+       "click",
+       "Close",
+       "button"
+      ]
+     ],
+     "again": [],
+     "offered_lines": [
+      "to click the button \"Close\" — nothing was done; they have not accepted"
+     ],
+     "narrated": false,
+     "turns": [
+      {
+       "i": 0,
+       "said": "이 창 닫아줘",
+       "reply": "창을 닫겠습니다.",
+       "clicked": [
+        "Close"
+       ],
+       "clicked_roles": [
+        "button"
+       ],
+       "effects": [
+        {
+         "kind": "click",
+         "target": "Close",
+         "role": "button",
+         "text": ""
+        }
+       ],
+       "n_effects": 1,
+       "history_lines": 0,
+       "window_lines": 0,
+       "window": "",
+       "prompt_tokens": 371,
+       "out_tokens": 22,
+       "reason": "stop",
+       "truncated": false,
+       "thought_chars": 0,
+       "seconds": 0.407
+      },
+      {
+       "i": 1,
+       "said": "방금 뭐 하려고 했지?",
+       "reply": "저는 창을 닫을 준비를 했지만, 아직까지는 아무것도 하지 않았습니다.",
+       "clicked": [],
+       "clicked_roles": [],
+       "effects": [],
+       "n_effects": 0,
+       "history_lines": 3,
+       "window_lines": 3,
+       "window": "\n  them: 이 창 닫아줘\n  you: 창을 닫겠습니다.\n  offered: to click the button \"Close\" — nothing was done; they have not accepted\n\n",
+       "prompt_tokens": 418,
+       "out_tokens": 36,
+       "reason": "stop",
+       "truncated": false,
+       "thought_chars": 0,
+       "seconds": 0.637
+      }
+     ]
+    },
+    {
+     "verdict": "quiet",
+     "offered": [
+      [
+       "click",
+       "Close",
+       "button"
+      ]
+     ],
+     "again": [],
+     "offered_lines": [
+      "to click the button \"Close\" — nothing was done; they have not accepted"
+     ],
+     "narrated": false,
+     "turns": [
+      {
+       "i": 0,
+       "said": "이 창 닫아줘",
+       "reply": "창을 닫겠습니다.",
+       "clicked": [
+        "Close"
+       ],
+       "clicked_roles": [
+        "button"
+       ],
+       "effects": [
+        {
+         "kind": "click",
+         "target": "Close",
+         "role": "button",
+         "text": ""
+        }
+       ],
+       "n_effects": 1,
+       "history_lines": 0,
+       "window_lines": 0,
+       "window": "",
+       "prompt_tokens": 371,
+       "out_tokens": 22,
+       "reason": "stop",
+       "truncated": false,
+       "thought_chars": 0,
+       "seconds": 0.416
+      },
+      {
+       "i": 1,
+       "said": "방금 뭐 하려고 했지?",
+       "reply": "저는 창을 닫을 준비를 했지만, 아직까지는 아무것도 하지 않았습니다.",
+       "clicked": [],
+       "clicked_roles": [],
+       "effects": [],
+       "n_effects": 0,
+       "history_lines": 3,
+       "window_lines": 3,
+       "window": "\n  them: 이 창 닫아줘\n  you: 창을 닫겠습니다.\n  offered: to click the button \"Close\" — nothing was done; they have not accepted\n\n",
+       "prompt_tokens": 418,
+       "out_tokens": 36,
+       "reason": "stop",
+       "truncated": false,
+       "thought_chars": 0,
+       "seconds": 0.62
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "kind": "memory",
+   "case": "cm select / 너 방금 뭐 했어",
+   "screen": "character-map",
+   "ask": "문자 선택 버튼 눌러줘",
+   "then": "너 방금 뭐 했어?",
+   "want": null,
+   "why": "phrased as what it DID rather than what it meant to do — the question the false past tense answered truthfully.",
+   "verdicts": [
+    "again",
+    "again",
+    "again"
+   ],
+   "counted": "again",
+   "from_repeat": 0,
+   "agreed": true,
+   "ok": false,
+   "void": false,
+   "narrated_counted": false,
+   "repeats": [
+    {
+     "verdict": "again",
+     "offered": [
+      [
+       "click",
+       "Select",
+       "button"
+      ]
+     ],
+     "again": [
+      [
+       "click",
+       "Select",
+       "button"
+      ]
+     ],
+     "offered_lines": [
+      "to click the button \"Select\" — nothing was done; they have not accepted"
+     ],
+     "narrated": false,
+     "turns": [
+      {
+       "i": 0,
+       "said": "문자 선택 버튼 눌러줘",
+       "reply": "문자 선택 버튼을 눌러드릴게요.",
+       "clicked": [
+        "Select"
+       ],
+       "clicked_roles": [
+        "button"
+       ],
+       "effects": [
+        {
+         "kind": "click",
+         "target": "Select",
+         "role": "button",
+         "text": ""
+        }
+       ],
+       "n_effects": 1,
+       "history_lines": 0,
+       "window_lines": 0,
+       "window": "",
+       "prompt_tokens": 372,
+       "out_tokens": 29,
+       "reason": "stop",
+       "truncated": false,
+       "thought_chars": 0,
+       "seconds": 0.532
+      },
+      {
+       "i": 1,
+       "said": "너 방금 뭐 했어?",
+       "reply": "문자 선택 버튼을 눌러드릴게요.",
+       "clicked": [
+        "Select"
+       ],
+       "clicked_roles": [
+        "button"
+       ],
+       "effects": [
+        {
+         "kind": "click",
+         "target": "Select",
+         "role": "button",
+         "text": ""
+        }
+       ],
+       "n_effects": 1,
+       "history_lines": 3,
+       "window_lines": 3,
+       "window": "\n  them: 문자 선택 버튼 눌러줘\n  you: 문자 선택 버튼을 눌러드릴게요.\n  offered: to click the button \"Select\" — nothing was done; they have not accepted\n\n",
+       "prompt_tokens": 423,
+       "out_tokens": 29,
+       "reason": "stop",
+       "truncated": false,
+       "thought_chars": 0,
+       "seconds": 0.573
+      }
+     ]
+    },
+    {
+     "verdict": "again",
+     "offered": [
+      [
+       "click",
+       "Select",
+       "button"
+      ]
+     ],
+     "again": [
+      [
+       "click",
+       "Select",
+       "button"
+      ]
+     ],
+     "offered_lines": [
+      "to click the button \"Select\" — nothing was done; they have not accepted"
+     ],
+     "narrated": false,
+     "turns": [
+      {
+       "i": 0,
+       "said": "문자 선택 버튼 눌러줘",
+       "reply": "문자 선택 버튼을 눌러드릴게요.",
+       "clicked": [
+        "Select"
+       ],
+       "clicked_roles": [
+        "button"
+       ],
+       "effects": [
+        {
+         "kind": "click",
+         "target": "Select",
+         "role": "button",
+         "text": ""
+        }
+       ],
+       "n_effects": 1,
+       "history_lines": 0,
+       "window_lines": 0,
+       "window": "",
+       "prompt_tokens": 372,
+       "out_tokens": 29,
+       "reason": "stop",
+       "truncated": false,
+       "thought_chars": 0,
+       "seconds": 0.542
+      },
+      {
+       "i": 1,
+       "said": "너 방금 뭐 했어?",
+       "reply": "문자 선택 버튼을 눌러드릴게요.",
+       "clicked": [
+        "Select"
+       ],
+       "clicked_roles": [
+        "button"
+       ],
+       "effects": [
+        {
+         "kind": "click",
+         "target": "Select",
+         "role": "button",
+         "text": ""
+        }
+       ],
+       "n_effects": 1,
+       "history_lines": 3,
+       "window_lines": 3,
+       "window": "\n  them: 문자 선택 버튼 눌러줘\n  you: 문자 선택 버튼을 눌러드릴게요.\n  offered: to click the button \"Select\" — nothing was done; they have not accepted\n\n",
+       "prompt_tokens": 423,
+       "out_tokens": 29,
+       "reason": "stop",
+       "truncated": false,
+       "thought_chars": 0,
+       "seconds": 0.534
+      }
+     ]
+    },
+    {
+     "verdict": "again",
+     "offered": [
+      [
+       "click",
+       "Select",
+       "button"
+      ]
+     ],
+     "again": [
+      [
+       "click",
+       "Select",
+       "button"
+      ]
+     ],
+     "offered_lines": [
+      "to click the button \"Select\" — nothing was done; they have not accepted"
+     ],
+     "narrated": false,
+     "turns": [
+      {
+       "i": 0,
+       "said": "문자 선택 버튼 눌러줘",
+       "reply": "문자 선택 버튼을 눌러드릴게요.",
+       "clicked": [
+        "Select"
+       ],
+       "clicked_roles": [
+        "button"
+       ],
+       "effects": [
+        {
+         "kind": "click",
+         "target": "Select",
+         "role": "button",
+         "text": ""
+        }
+       ],
+       "n_effects": 1,
+       "history_lines": 0,
+       "window_lines": 0,
+       "window": "",
+       "prompt_tokens": 372,
+       "out_tokens": 29,
+       "reason": "stop",
+       "truncated": false,
+       "thought_chars": 0,
+       "seconds": 0.541
+      },
+      {
+       "i": 1,
+       "said": "너 방금 뭐 했어?",
+       "reply": "문자 선택 버튼을 눌러드릴게요.",
+       "clicked": [
+        "Select"
+       ],
+       "clicked_roles": [
+        "button"
+       ],
+       "effects": [
+        {
+         "kind": "click",
+         "target": "Select",
+         "role": "button",
+         "text": ""
+        }
+       ],
+       "n_effects": 1,
+       "history_lines": 3,
+       "window_lines": 3,
+       "window": "\n  them: 문자 선택 버튼 눌러줘\n  you: 문자 선택 버튼을 눌러드릴게요.\n  offered: to click the button \"Select\" — nothing was done; they have not accepted\n\n",
+       "prompt_tokens": 423,
+       "out_tokens": 29,
+       "reason": "stop",
+       "truncated": false,
+       "thought_chars": 0,
+       "seconds": 0.521
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "kind": "memory",
+   "case": "paint eraser / 방금 뭘 하려고 했어",
+   "screen": "untitled---paint",
+   "ask": "지우개 선택해줘",
+   "then": "방금 뭘 하려고 했어?",
+   "want": null,
+   "why": "the same wording as case one on the 123-widget screen: is the effect the wording or the size of the list?",
+   "verdicts": [
+    "again",
+    "again",
+    "again"
+   ],
+   "counted": "again",
+   "from_repeat": 0,
+   "agreed": true,
+   "ok": false,
+   "void": false,
+   "narrated_counted": false,
+   "repeats": [
+    {
+     "verdict": "again",
+     "offered": [
+      [
+       "click",
+       "Eraser",
+       "button"
+      ]
+     ],
+     "again": [
+      [
+       "click",
+       "Eraser",
+       "button"
+      ]
+     ],
+     "offered_lines": [
+      "to click the button \"Eraser\" — nothing was done; they have not accepted"
+     ],
+     "narrated": false,
+     "turns": [
+      {
+       "i": 0,
+       "said": "지우개 선택해줘",
+       "reply": "지우개를 선택했습니다.",
+       "clicked": [
+        "Eraser"
+       ],
+       "clicked_roles": [
+        "button"
+       ],
+       "effects": [
+        {
+         "kind": "click",
+         "target": "Eraser",
+         "role": "button",
+         "text": ""
+        }
+       ],
+       "n_effects": 1,
+       "history_lines": 0,
+       "window_lines": 0,
+       "window": "",
+       "prompt_tokens": 1268,
+       "out_tokens": 23,
+       "reason": "stop",
+       "truncated": false,
+       "thought_chars": 0,
+       "seconds": 0.751
+      },
+      {
+       "i": 1,
+       "said": "방금 뭘 하려고 했어?",
+       "reply": "지우개를 선택하려고 했어요.",
+       "clicked": [
+        "Eraser"
+       ],
+       "clicked_roles": [
+        "button"
+       ],
+       "effects": [
+        {
+         "kind": "click",
+         "target": "Eraser",
+         "role": "button",
+         "text": ""
+        }
+       ],
+       "n_effects": 1,
+       "history_lines": 3,
+       "window_lines": 3,
+       "window": "\n  them: 지우개 선택해줘\n  you: 지우개를 선택했습니다.\n  offered: to click the button \"Eraser\" — nothing was done; they have not accepted\n\n",
+       "prompt_tokens": 1317,
+       "out_tokens": 29,
+       "reason": "stop",
+       "truncated": false,
+       "thought_chars": 0,
+       "seconds": 1.352
+      }
+     ]
+    },
+    {
+     "verdict": "again",
+     "offered": [
+      [
+       "click",
+       "Eraser",
+       "button"
+      ]
+     ],
+     "again": [
+      [
+       "click",
+       "Eraser",
+       "button"
+      ]
+     ],
+     "offered_lines": [
+      "to click the button \"Eraser\" — nothing was done; they have not accepted"
+     ],
+     "narrated": false,
+     "turns": [
+      {
+       "i": 0,
+       "said": "지우개 선택해줘",
+       "reply": "지우개를 선택했습니다.",
+       "clicked": [
+        "Eraser"
+       ],
+       "clicked_roles": [
+        "button"
+       ],
+       "effects": [
+        {
+         "kind": "click",
+         "target": "Eraser",
+         "role": "button",
+         "text": ""
+        }
+       ],
+       "n_effects": 1,
+       "history_lines": 0,
+       "window_lines": 0,
+       "window": "",
+       "prompt_tokens": 1268,
+       "out_tokens": 23,
+       "reason": "stop",
+       "truncated": false,
+       "thought_chars": 0,
+       "seconds": 0.492
+      },
+      {
+       "i": 1,
+       "said": "방금 뭘 하려고 했어?",
+       "reply": "지우개를 선택하려고 했어요.",
+       "clicked": [
+        "Eraser"
+       ],
+       "clicked_roles": [
+        "button"
+       ],
+       "effects": [
+        {
+         "kind": "click",
+         "target": "Eraser",
+         "role": "button",
+         "text": ""
+        }
+       ],
+       "n_effects": 1,
+       "history_lines": 3,
+       "window_lines": 3,
+       "window": "\n  them: 지우개 선택해줘\n  you: 지우개를 선택했습니다.\n  offered: to click the button \"Eraser\" — nothing was done; they have not accepted\n\n",
+       "prompt_tokens": 1317,
+       "out_tokens": 29,
+       "reason": "stop",
+       "truncated": false,
+       "thought_chars": 0,
+       "seconds": 0.566
+      }
+     ]
+    },
+    {
+     "verdict": "again",
+     "offered": [
+      [
+       "click",
+       "Eraser",
+       "button"
+      ]
+     ],
+     "again": [
+      [
+       "click",
+       "Eraser",
+       "button"
+      ]
+     ],
+     "offered_lines": [
+      "to click the button \"Eraser\" — nothing was done; they have not accepted"
+     ],
+     "narrated": false,
+     "turns": [
+      {
+       "i": 0,
+       "said": "지우개 선택해줘",
+       "reply": "지우개를 선택했습니다.",
+       "clicked": [
+        "Eraser"
+       ],
+       "clicked_roles": [
+        "button"
+       ],
+       "effects": [
+        {
+         "kind": "click",
+         "target": "Eraser",
+         "role": "button",
+         "text": ""
+        }
+       ],
+       "n_effects": 1,
+       "history_lines": 0,
+       "window_lines": 0,
+       "window": "",
+       "prompt_tokens": 1268,
+       "out_tokens": 23,
+       "reason": "stop",
+       "truncated": false,
+       "thought_chars": 0,
+       "seconds": 0.491
+      },
+      {
+       "i": 1,
+       "said": "방금 뭘 하려고 했어?",
+       "reply": "지우개를 선택하려고 했어요.",
+       "clicked": [
+        "Eraser"
+       ],
+       "clicked_roles": [
+        "button"
+       ],
+       "effects": [
+        {
+         "kind": "click",
+         "target": "Eraser",
+         "role": "button",
+         "text": ""
+        }
+       ],
+       "n_effects": 1,
+       "history_lines": 3,
+       "window_lines": 3,
+       "window": "\n  them: 지우개 선택해줘\n  you: 지우개를 선택했습니다.\n  offered: to click the button \"Eraser\" — nothing was done; they have not accepted\n\n",
+       "prompt_tokens": 1317,
+       "out_tokens": 29,
+       "reason": "stop",
+       "truncated": false,
+       "thought_chars": 0,
+       "seconds": 0.587
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "kind": "memory",
+   "case": "paint red / 아까 뭐 눌렀어",
+   "screen": "untitled---paint",
+   "ask": "빨간색 골라줘",
+   "then": "아까 뭐 눌렀어?",
+   "want": null,
+   "why": "a list item among twenty near-identical ones.",
+   "verdicts": [
+    "quiet",
+    "quiet",
+    "quiet"
+   ],
+   "counted": "quiet",
+   "from_repeat": 0,
+   "agreed": true,
+   "ok": true,
+   "void": false,
+   "narrated_counted": false,
+   "repeats": [
+    {
+     "verdict": "quiet",
+     "offered": [
+      [
+       "click",
+       "Red",
+       "list item"
+      ],
+      [
+       "click",
+       "Orange",
+       "list item"
+      ]
+     ],
+     "again": [],
+     "offered_lines": [
+      "to click the list item \"Red\" — nothing was done; they have not accepted",
+      "to click the list item \"Orange\" — nothing was done; they have not accepted"
+     ],
+     "narrated": false,
+     "turns": [
+      {
+       "i": 0,
+       "said": "빨간색 골라줘",
+       "reply": "빨간색을 선택할 수 있는 옵션을 찾았어요.",
+       "clicked": [
+        "Red",
+        "Orange"
+       ],
+       "clicked_roles": [
+        "list item",
+        "list item"
+       ],
+       "effects": [
+        {
+         "kind": "click",
+         "target": "Red",
+         "role": "list item",
+         "text": ""
+        },
+        {
+         "kind": "click",
+         "target": "Orange",
+         "role": "list item",
+         "text": ""
+        }
+       ],
+       "n_effects": 2,
+       "history_lines": 0,
+       "window_lines": 0,
+       "window": "",
+       "prompt_tokens": 1271,
+       "out_tokens": 39,
+       "reason": "stop",
+       "truncated": false,
+       "thought_chars": 0,
+       "seconds": 0.778
+      },
+      {
+       "i": 1,
+       "said": "아까 뭐 눌렀어?",
+       "reply": "아까는 아무것도 눌렀어요.",
+       "clicked": [],
+       "clicked_roles": [],
+       "effects": [],
+       "n_effects": 0,
+       "history_lines": 4,
+       "window_lines": 4,
+       "window": "\n  them: 빨간색 골라줘\n  you: 빨간색을 선택할 수 있는 옵션을 찾았어요.\n  offered: to click the list item \"Red\" — nothing was done; they have not accepted\n  offered: to click the list item \"Orange\" — nothing was done; they have not accepted\n\n",
+       "prompt_tokens": 1348,
+       "out_tokens": 21,
+       "reason": "stop",
+       "truncated": false,
+       "thought_chars": 0,
+       "seconds": 0.783
+      }
+     ]
+    },
+    {
+     "verdict": "quiet",
+     "offered": [
+      [
+       "click",
+       "Red",
+       "list item"
+      ]
+     ],
+     "again": [],
+     "offered_lines": [
+      "to click the list item \"Red\" — nothing was done; they have not accepted"
+     ],
+     "narrated": false,
+     "turns": [
+      {
+       "i": 0,
+       "said": "빨간색 골라줘",
+       "reply": "빨간색을 선택할 수 있어요.",
+       "clicked": [
+        "Red"
+       ],
+       "clicked_roles": [
+        "list item"
+       ],
+       "effects": [
+        {
+         "kind": "click",
+         "target": "Red",
+         "role": "list item",
+         "text": ""
+        }
+       ],
+       "n_effects": 1,
+       "history_lines": 0,
+       "window_lines": 0,
+       "window": "",
+       "prompt_tokens": 1271,
+       "out_tokens": 26,
+       "reason": "stop",
+       "truncated": false,
+       "thought_chars": 0,
+       "seconds": 0.499
+      },
+      {
+       "i": 1,
+       "said": "아까 뭐 눌렀어?",
+       "reply": "아까는 아무것도 눌렀어요.",
+       "clicked": [],
+       "clicked_roles": [],
+       "effects": [],
+       "n_effects": 0,
+       "history_lines": 3,
+       "window_lines": 3,
+       "window": "\n  them: 빨간색 골라줘\n  you: 빨간색을 선택할 수 있어요.\n  offered: to click the list item \"Red\" — nothing was done; they have not accepted\n\n",
+       "prompt_tokens": 1321,
+       "out_tokens": 21,
+       "reason": "stop",
+       "truncated": false,
+       "thought_chars": 0,
+       "seconds": 0.731
+      }
+     ]
+    },
+    {
+     "verdict": "quiet",
+     "offered": [
+      [
+       "click",
+       "Red",
+       "list item"
+      ]
+     ],
+     "again": [],
+     "offered_lines": [
+      "to click the list item \"Red\" — nothing was done; they have not accepted"
+     ],
+     "narrated": false,
+     "turns": [
+      {
+       "i": 0,
+       "said": "빨간색 골라줘",
+       "reply": "빨간색을 선택할 수 있어요.",
+       "clicked": [
+        "Red"
+       ],
+       "clicked_roles": [
+        "list item"
+       ],
+       "effects": [
+        {
+         "kind": "click",
+         "target": "Red",
+         "role": "list item",
+         "text": ""
+        }
+       ],
+       "n_effects": 1,
+       "history_lines": 0,
+       "window_lines": 0,
+       "window": "",
+       "prompt_tokens": 1271,
+       "out_tokens": 26,
+       "reason": "stop",
+       "truncated": false,
+       "thought_chars": 0,
+       "seconds": 0.541
+      },
+      {
+       "i": 1,
+       "said": "아까 뭐 눌렀어?",
+       "reply": "아까는 아무것도 눌렀어요.",
+       "clicked": [],
+       "clicked_roles": [],
+       "effects": [],
+       "n_effects": 0,
+       "history_lines": 3,
+       "window_lines": 3,
+       "window": "\n  them: 빨간색 골라줘\n  you: 빨간색을 선택할 수 있어요.\n  offered: to click the list item \"Red\" — nothing was done; they have not accepted\n\n",
+       "prompt_tokens": 1321,
+       "out_tokens": 21,
+       "reason": "stop",
+       "truncated": false,
+       "thought_chars": 0,
+       "seconds": 0.43
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "kind": "memory",
+   "case": "paint pencil / 뭐 하려던 거야",
+   "screen": "untitled---paint",
+   "ask": "연필 도구 눌러줘",
+   "then": "뭐 하려던 거야?",
+   "want": null,
+   "why": "a tool, and the ask names the role in Korean where the widget names it in English.",
+   "verdicts": [
+    "quiet",
+    "quiet",
+    "quiet"
+   ],
+   "counted": "quiet",
+   "from_repeat": 0,
+   "agreed": true,
+   "ok": true,
+   "void": false,
+   "narrated_counted": false,
+   "repeats": [
+    {
+     "verdict": "quiet",
+     "offered": [
+      [
+       "click",
+       "Pencil",
+       "button"
+      ]
+     ],
+     "again": [],
+     "offered_lines": [
+      "to click the button \"Pencil\" — nothing was done; they have not accepted"
+     ],
+     "narrated": false,
+     "turns": [
+      {
+       "i": 0,
+       "said": "연필 도구 눌러줘",
+       "reply": "연필 도구를 클릭합니다.",
+       "clicked": [
+        "Pencil"
+       ],
+       "clicked_roles": [
+        "button"
+       ],
+       "effects": [
+        {
+         "kind": "click",
+         "target": "Pencil",
+         "role": "button",
+         "text": ""
+        }
+       ],
+       "n_effects": 1,
+       "history_lines": 0,
+       "window_lines": 0,
+       "window": "",
+       "prompt_tokens": 1270,
+       "out_tokens": 25,
+       "reason": "stop",
+       "truncated": false,
+       "thought_chars": 0,
+       "seconds": 0.528
+      },
+      {
+       "i": 1,
+       "said": "뭐 하려던 거야?",
+       "reply": "저는 도구를 클릭하거나 입력할 수 있어요. 무엇을 도와드릴까요?",
+       "clicked": [],
+       "clicked_roles": [],
+       "effects": [],
+       "n_effects": 0,
+       "history_lines": 3,
+       "window_lines": 3,
+       "window": "\n  them: 연필 도구 눌러줘\n  you: 연필 도구를 클릭합니다.\n  offered: to click the button \"Pencil\" — nothing was done; they have not accepted\n\n",
+       "prompt_tokens": 1316,
+       "out_tokens": 32,
+       "reason": "stop",
+       "truncated": false,
+       "thought_chars": 0,
+       "seconds": 0.978
+      }
+     ]
+    },
+    {
+     "verdict": "quiet",
+     "offered": [
+      [
+       "click",
+       "Pencil",
+       "button"
+      ]
+     ],
+     "again": [],
+     "offered_lines": [
+      "to click the button \"Pencil\" — nothing was done; they have not accepted"
+     ],
+     "narrated": false,
+     "turns": [
+      {
+       "i": 0,
+       "said": "연필 도구 눌러줘",
+       "reply": "연필 도구를 클릭합니다.",
+       "clicked": [
+        "Pencil"
+       ],
+       "clicked_roles": [
+        "button"
+       ],
+       "effects": [
+        {
+         "kind": "click",
+         "target": "Pencil",
+         "role": "button",
+         "text": ""
+        }
+       ],
+       "n_effects": 1,
+       "history_lines": 0,
+       "window_lines": 0,
+       "window": "",
+       "prompt_tokens": 1270,
+       "out_tokens": 25,
+       "reason": "stop",
+       "truncated": false,
+       "thought_chars": 0,
+       "seconds": 0.542
+      },
+      {
+       "i": 1,
+       "said": "뭐 하려던 거야?",
+       "reply": "저는 도구를 클릭하거나 입력할 수 있어요. 무엇을 도와드릴까요?",
+       "clicked": [],
+       "clicked_roles": [],
+       "effects": [],
+       "n_effects": 0,
+       "history_lines": 3,
+       "window_lines": 3,
+       "window": "\n  them: 연필 도구 눌러줘\n  you: 연필 도구를 클릭합니다.\n  offered: to click the button \"Pencil\" — nothing was done; they have not accepted\n\n",
+       "prompt_tokens": 1316,
+       "out_tokens": 32,
+       "reason": "stop",
+       "truncated": false,
+       "thought_chars": 0,
+       "seconds": 0.637
+      }
+     ]
+    },
+    {
+     "verdict": "quiet",
+     "offered": [
+      [
+       "click",
+       "Pencil",
+       "button"
+      ]
+     ],
+     "again": [],
+     "offered_lines": [
+      "to click the button \"Pencil\" — nothing was done; they have not accepted"
+     ],
+     "narrated": false,
+     "turns": [
+      {
+       "i": 0,
+       "said": "연필 도구 눌러줘",
+       "reply": "연필 도구를 클릭합니다.",
+       "clicked": [
+        "Pencil"
+       ],
+       "clicked_roles": [
+        "button"
+       ],
+       "effects": [
+        {
+         "kind": "click",
+         "target": "Pencil",
+         "role": "button",
+         "text": ""
+        }
+       ],
+       "n_effects": 1,
+       "history_lines": 0,
+       "window_lines": 0,
+       "window": "",
+       "prompt_tokens": 1270,
+       "out_tokens": 25,
+       "reason": "stop",
+       "truncated": false,
+       "thought_chars": 0,
+       "seconds": 0.542
+      },
+      {
+       "i": 1,
+       "said": "뭐 하려던 거야?",
+       "reply": "저는 도구를 클릭하거나 입력할 수 있어요. 무엇을 도와드릴까요?",
+       "clicked": [],
+       "clicked_roles": [],
+       "effects": [],
+       "n_effects": 0,
+       "history_lines": 3,
+       "window_lines": 3,
+       "window": "\n  them: 연필 도구 눌러줘\n  you: 연필 도구를 클릭합니다.\n  offered: to click the button \"Pencil\" — nothing was done; they have not accepted\n\n",
+       "prompt_tokens": 1316,
+       "out_tokens": 32,
+       "reason": "stop",
+       "truncated": false,
+       "thought_chars": 0,
+       "seconds": 0.619
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "kind": "memory",
+   "case": "paint undo / 방금 뭐 하려고 했지",
+   "screen": "untitled---paint",
+   "ask": "실행 취소 눌러줘",
+   "then": "방금 뭐 하려고 했지?",
+   "want": null,
+   "why": "undo is itself about the past, so both turns point backwards.",
+   "verdicts": [
+    "quiet",
+    "quiet",
+    "quiet"
+   ],
+   "counted": "quiet",
+   "from_repeat": 0,
+   "agreed": true,
+   "ok": true,
+   "void": false,
+   "narrated_counted": false,
+   "repeats": [
+    {
+     "verdict": "quiet",
+     "offered": [
+      [
+       "click",
+       "Undo",
+       "app bar button"
+      ]
+     ],
+     "again": [],
+     "offered_lines": [
+      "to click the app bar button \"Undo\" — nothing was done; they have not accepted"
+     ],
+     "narrated": false,
+     "turns": [
+      {
+       "i": 0,
+       "said": "실행 취소 눌러줘",
+       "reply": "Undo clicked",
+       "clicked": [
+        "Undo"
+       ],
+       "clicked_roles": [
+        "app bar button"
+       ],
+       "effects": [
+        {
+         "kind": "click",
+         "target": "Undo",
+         "role": "app bar button",
+         "text": ""
+        }
+       ],
+       "n_effects": 1,
+       "history_lines": 0,
+       "window_lines": 0,
+       "window": "",
+       "prompt_tokens": 1269,
+       "out_tokens": 18,
+       "reason": "stop",
+       "truncated": false,
+       "thought_chars": 0,
+       "seconds": 0.402
+      },
+      {
+       "i": 1,
+       "said": "방금 뭐 하려고 했지?",
+       "reply": "방금 뭔가를 하려고 했는데, 취소했어요.",
+       "clicked": [],
+       "clicked_roles": [],
+       "effects": [],
+       "n_effects": 0,
+       "history_lines": 3,
+       "window_lines": 3,
+       "window": "\n  them: 실행 취소 눌러줘\n  you: Undo clicked\n  offered: to click the app bar button \"Undo\" — nothing was done; they have not accepted\n\n",
+       "prompt_tokens": 1314,
+       "out_tokens": 30,
+       "reason": "stop",
+       "truncated": false,
+       "thought_chars": 0,
+       "seconds": 0.893
+      }
+     ]
+    },
+    {
+     "verdict": "quiet",
+     "offered": [
+      [
+       "click",
+       "Undo",
+       "app bar button"
+      ]
+     ],
+     "again": [],
+     "offered_lines": [
+      "to click the app bar button \"Undo\" — nothing was done; they have not accepted"
+     ],
+     "narrated": false,
+     "turns": [
+      {
+       "i": 0,
+       "said": "실행 취소 눌러줘",
+       "reply": "Undo clicked",
+       "clicked": [
+        "Undo"
+       ],
+       "clicked_roles": [
+        "app bar button"
+       ],
+       "effects": [
+        {
+         "kind": "click",
+         "target": "Undo",
+         "role": "app bar button",
+         "text": ""
+        }
+       ],
+       "n_effects": 1,
+       "history_lines": 0,
+       "window_lines": 0,
+       "window": "",
+       "prompt_tokens": 1269,
+       "out_tokens": 18,
+       "reason": "stop",
+       "truncated": false,
+       "thought_chars": 0,
+       "seconds": 0.453
+      },
+      {
+       "i": 1,
+       "said": "방금 뭐 하려고 했지?",
+       "reply": "방금 뭔가를 하려고 했는데, 취소했어요.",
+       "clicked": [],
+       "clicked_roles": [],
+       "effects": [],
+       "n_effects": 0,
+       "history_lines": 3,
+       "window_lines": 3,
+       "window": "\n  them: 실행 취소 눌러줘\n  you: Undo clicked\n  offered: to click the app bar button \"Undo\" — nothing was done; they have not accepted\n\n",
+       "prompt_tokens": 1314,
+       "out_tokens": 30,
+       "reason": "stop",
+       "truncated": false,
+       "thought_chars": 0,
+       "seconds": 0.545
+      }
+     ]
+    },
+    {
+     "verdict": "quiet",
+     "offered": [
+      [
+       "click",
+       "Undo",
+       "app bar button"
+      ]
+     ],
+     "again": [],
+     "offered_lines": [
+      "to click the app bar button \"Undo\" — nothing was done; they have not accepted"
+     ],
+     "narrated": false,
+     "turns": [
+      {
+       "i": 0,
+       "said": "실행 취소 눌러줘",
+       "reply": "Undo clicked",
+       "clicked": [
+        "Undo"
+       ],
+       "clicked_roles": [
+        "app bar button"
+       ],
+       "effects": [
+        {
+         "kind": "click",
+         "target": "Undo",
+         "role": "app bar button",
+         "text": ""
+        }
+       ],
+       "n_effects": 1,
+       "history_lines": 0,
+       "window_lines": 0,
+       "window": "",
+       "prompt_tokens": 1269,
+       "out_tokens": 18,
+       "reason": "stop",
+       "truncated": false,
+       "thought_chars": 0,
+       "seconds": 0.404
+      },
+      {
+       "i": 1,
+       "said": "방금 뭐 하려고 했지?",
+       "reply": "방금 뭔가를 하려고 했는데, 취소했어요.",
+       "clicked": [],
+       "clicked_roles": [],
+       "effects": [],
+       "n_effects": 0,
+       "history_lines": 3,
+       "window_lines": 3,
+       "window": "\n  them: 실행 취소 눌러줘\n  you: Undo clicked\n  offered: to click the app bar button \"Undo\" — nothing was done; they have not accepted\n\n",
+       "prompt_tokens": 1314,
+       "out_tokens": 30,
+       "reason": "stop",
+       "truncated": false,
+       "thought_chars": 0,
+       "seconds": 0.617
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "kind": "memory",
+   "case": "paint crop / 너 방금 뭐 했어",
+   "screen": "untitled---paint",
+   "ask": "자르기 눌러줘",
+   "then": "너 방금 뭐 했어?",
+   "want": null,
+   "why": "the fifth phrasing on the second screen.",
+   "verdicts": [
+    "quiet",
+    "quiet",
+    "quiet"
+   ],
+   "counted": "quiet",
+   "from_repeat": 0,
+   "agreed": true,
+   "ok": true,
+   "void": false,
+   "narrated_counted": false,
+   "repeats": [
+    {
+     "verdict": "quiet",
+     "offered": [
+      [
+       "click",
+       "Crop",
+       "button"
+      ]
+     ],
+     "again": [],
+     "offered_lines": [
+      "to click the button \"Crop\" — nothing was done; they have not accepted"
+     ],
+     "narrated": false,
+     "turns": [
+      {
+       "i": 0,
+       "said": "자르기 눌러줘",
+       "reply": "30",
+       "clicked": [
+        "Crop"
+       ],
+       "clicked_roles": [
+        "button"
+       ],
+       "effects": [
+        {
+         "kind": "click",
+         "target": "Crop",
+         "role": "button",
+         "text": ""
+        }
+       ],
+       "n_effects": 1,
+       "history_lines": 0,
+       "window_lines": 0,
+       "window": "",
+       "prompt_tokens": 1269,
+       "out_tokens": 19,
+       "reason": "stop",
+       "truncated": false,
+       "thought_chars": 0,
+       "seconds": 0.401
+      },
+      {
+       "i": 1,
+       "said": "너 방금 뭐 했어?",
+       "reply": "저는 아무것도 안 했어요. 당신이 무엇을 원하시나요?",
+       "clicked": [],
+       "clicked_roles": [],
+       "effects": [],
+       "n_effects": 0,
+       "history_lines": 3,
+       "window_lines": 3,
+       "window": "\n  them: 자르기 눌러줘\n  you: 30\n  offered: to click the button \"Crop\" — nothing was done; they have not accepted\n\n",
+       "prompt_tokens": 1311,
+       "out_tokens": 30,
+       "reason": "stop",
+       "truncated": false,
+       "thought_chars": 0,
+       "seconds": 0.88
+      }
+     ]
+    },
+    {
+     "verdict": "quiet",
+     "offered": [
+      [
+       "click",
+       "Crop",
+       "button"
+      ]
+     ],
+     "again": [],
+     "offered_lines": [
+      "to click the button \"Crop\" — nothing was done; they have not accepted"
+     ],
+     "narrated": false,
+     "turns": [
+      {
+       "i": 0,
+       "said": "자르기 눌러줘",
+       "reply": "30",
+       "clicked": [
+        "Crop"
+       ],
+       "clicked_roles": [
+        "button"
+       ],
+       "effects": [
+        {
+         "kind": "click",
+         "target": "Crop",
+         "role": "button",
+         "text": ""
+        }
+       ],
+       "n_effects": 1,
+       "history_lines": 0,
+       "window_lines": 0,
+       "window": "",
+       "prompt_tokens": 1269,
+       "out_tokens": 19,
+       "reason": "stop",
+       "truncated": false,
+       "thought_chars": 0,
+       "seconds": 0.44
+      },
+      {
+       "i": 1,
+       "said": "너 방금 뭐 했어?",
+       "reply": "저는 아무것도 안 했어요. 당신이 무엇을 원하는지 알려주세요.",
+       "clicked": [],
+       "clicked_roles": [],
+       "effects": [],
+       "n_effects": 0,
+       "history_lines": 3,
+       "window_lines": 3,
+       "window": "\n  them: 자르기 눌러줘\n  you: 30\n  offered: to click the button \"Crop\" — nothing was done; they have not accepted\n\n",
+       "prompt_tokens": 1311,
+       "out_tokens": 31,
+       "reason": "stop",
+       "truncated": false,
+       "thought_chars": 0,
+       "seconds": 0.622
+      }
+     ]
+    },
+    {
+     "verdict": "quiet",
+     "offered": [
+      [
+       "click",
+       "Crop",
+       "button"
+      ]
+     ],
+     "again": [],
+     "offered_lines": [
+      "to click the button \"Crop\" — nothing was done; they have not accepted"
+     ],
+     "narrated": false,
+     "turns": [
+      {
+       "i": 0,
+       "said": "자르기 눌러줘",
+       "reply": "30",
+       "clicked": [
+        "Crop"
+       ],
+       "clicked_roles": [
+        "button"
+       ],
+       "effects": [
+        {
+         "kind": "click",
+         "target": "Crop",
+         "role": "button",
+         "text": ""
+        }
+       ],
+       "n_effects": 1,
+       "history_lines": 0,
+       "window_lines": 0,
+       "window": "",
+       "prompt_tokens": 1269,
+       "out_tokens": 19,
+       "reason": "stop",
+       "truncated": false,
+       "thought_chars": 0,
+       "seconds": 0.429
+      },
+      {
+       "i": 1,
+       "said": "너 방금 뭐 했어?",
+       "reply": "저는 아무것도 안 했어요. 당신이 무엇을 원하는지 알려주세요.",
+       "clicked": [],
+       "clicked_roles": [],
+       "effects": [],
+       "n_effects": 0,
+       "history_lines": 3,
+       "window_lines": 3,
+       "window": "\n  them: 자르기 눌러줘\n  you: 30\n  offered: to click the button \"Crop\" — nothing was done; they have not accepted\n\n",
+       "prompt_tokens": 1311,
+       "out_tokens": 31,
+       "reason": "stop",
+       "truncated": false,
+       "thought_chars": 0,
+       "seconds": 0.602
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "kind": "memory",
+   "case": "cm copy / EN what were you about to do",
+   "screen": "character-map",
+   "ask": "Press the copy button",
+   "then": "What were you about to do?",
+   "want": null,
+   "why": "English in and out. The new line is English prose; a result that only held in Korean would be a different finding and these two cases are the only ones that can show it.",
+   "verdicts": [
+    "again",
+    "again",
+    "again"
+   ],
+   "counted": "again",
+   "from_repeat": 0,
+   "agreed": true,
+   "ok": false,
+   "void": false,
+   "narrated_counted": true,
+   "repeats": [
+    {
+     "verdict": "again",
+     "offered": [
+      [
+       "click",
+       "Copy",
+       "button"
+      ]
+     ],
+     "again": [
+      [
+       "click",
+       "Copy",
+       "button"
+      ]
+     ],
+     "offered_lines": [
+      "to click the button \"Copy\" — nothing was done; they have not accepted"
+     ],
+     "narrated": true,
+     "turns": [
+      {
+       "i": 0,
+       "said": "Press the copy button",
+       "reply": "Copy button pressed",
+       "clicked": [
+        "Copy"
+       ],
+       "clicked_roles": [
+        "button"
+       ],
+       "effects": [
+        {
+         "kind": "click",
+         "target": "Copy",
+         "role": "button",
+         "text": ""
+        }
+       ],
+       "n_effects": 1,
+       "history_lines": 0,
+       "window_lines": 0,
+       "window": "",
+       "prompt_tokens": 368,
+       "out_tokens": 19,
+       "reason": "stop",
+       "truncated": false,
+       "thought_chars": 0,
+       "seconds": 0.413
+      },
+      {
+       "i": 1,
+       "said": "What were you about to do?",
+       "reply": "I was about to copy the selected character.",
+       "clicked": [
+        "Copy"
+       ],
+       "clicked_roles": [
+        "button"
+       ],
+       "effects": [
+        {
+         "kind": "click",
+         "target": "Copy",
+         "role": "button",
+         "text": ""
+        }
+       ],
+       "n_effects": 1,
+       "history_lines": 3,
+       "window_lines": 3,
+       "window": "\n  them: Press the copy button\n  you: Copy button pressed\n  offered: to click the button \"Copy\" — nothing was done; they have not accepted\n\n",
+       "prompt_tokens": 407,
+       "out_tokens": 24,
+       "reason": "stop",
+       "truncated": false,
+       "thought_chars": 0,
+       "seconds": 0.486
+      }
+     ]
+    },
+    {
+     "verdict": "again",
+     "offered": [
+      [
+       "click",
+       "Copy",
+       "button"
+      ]
+     ],
+     "again": [
+      [
+       "click",
+       "Copy",
+       "button"
+      ]
+     ],
+     "offered_lines": [
+      "to click the button \"Copy\" — nothing was done; they have not accepted"
+     ],
+     "narrated": true,
+     "turns": [
+      {
+       "i": 0,
+       "said": "Press the copy button",
+       "reply": "Copy button pressed",
+       "clicked": [
+        "Copy"
+       ],
+       "clicked_roles": [
+        "button"
+       ],
+       "effects": [
+        {
+         "kind": "click",
+         "target": "Copy",
+         "role": "button",
+         "text": ""
+        }
+       ],
+       "n_effects": 1,
+       "history_lines": 0,
+       "window_lines": 0,
+       "window": "",
+       "prompt_tokens": 368,
+       "out_tokens": 19,
+       "reason": "stop",
+       "truncated": false,
+       "thought_chars": 0,
+       "seconds": 0.36
+      },
+      {
+       "i": 1,
+       "said": "What were you about to do?",
+       "reply": "I was about to copy the selected character.",
+       "clicked": [
+        "Copy"
+       ],
+       "clicked_roles": [
+        "button"
+       ],
+       "effects": [
+        {
+         "kind": "click",
+         "target": "Copy",
+         "role": "button",
+         "text": ""
+        }
+       ],
+       "n_effects": 1,
+       "history_lines": 3,
+       "window_lines": 3,
+       "window": "\n  them: Press the copy button\n  you: Copy button pressed\n  offered: to click the button \"Copy\" — nothing was done; they have not accepted\n\n",
+       "prompt_tokens": 407,
+       "out_tokens": 24,
+       "reason": "stop",
+       "truncated": false,
+       "thought_chars": 0,
+       "seconds": 0.4
+      }
+     ]
+    },
+    {
+     "verdict": "again",
+     "offered": [
+      [
+       "click",
+       "Copy",
+       "button"
+      ]
+     ],
+     "again": [
+      [
+       "click",
+       "Copy",
+       "button"
+      ]
+     ],
+     "offered_lines": [
+      "to click the button \"Copy\" — nothing was done; they have not accepted"
+     ],
+     "narrated": true,
+     "turns": [
+      {
+       "i": 0,
+       "said": "Press the copy button",
+       "reply": "Copy button pressed",
+       "clicked": [
+        "Copy"
+       ],
+       "clicked_roles": [
+        "button"
+       ],
+       "effects": [
+        {
+         "kind": "click",
+         "target": "Copy",
+         "role": "button",
+         "text": ""
+        }
+       ],
+       "n_effects": 1,
+       "history_lines": 0,
+       "window_lines": 0,
+       "window": "",
+       "prompt_tokens": 368,
+       "out_tokens": 19,
+       "reason": "stop",
+       "truncated": false,
+       "thought_chars": 0,
+       "seconds": 0.34
+      },
+      {
+       "i": 1,
+       "said": "What were you about to do?",
+       "reply": "I was about to copy the selected character.",
+       "clicked": [
+        "Copy"
+       ],
+       "clicked_roles": [
+        "button"
+       ],
+       "effects": [
+        {
+         "kind": "click",
+         "target": "Copy",
+         "role": "button",
+         "text": ""
+        }
+       ],
+       "n_effects": 1,
+       "history_lines": 3,
+       "window_lines": 3,
+       "window": "\n  them: Press the copy button\n  you: Copy button pressed\n  offered: to click the button \"Copy\" — nothing was done; they have not accepted\n\n",
+       "prompt_tokens": 407,
+       "out_tokens": 24,
+       "reason": "stop",
+       "truncated": false,
+       "thought_chars": 0,
+       "seconds": 0.48
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "kind": "memory",
+   "case": "paint eraser / EN what did you just try",
+   "screen": "untitled---paint",
+   "ask": "Press the eraser tool",
+   "then": "What did you just try to do?",
+   "want": null,
+   "why": "the second English case, on the other screen.",
+   "verdicts": [
+    "void",
+    "void",
+    "void"
+   ],
+   "counted": "void",
+   "from_repeat": 0,
+   "agreed": true,
+   "ok": false,
+   "void": true,
+   "narrated_counted": false,
+   "repeats": [
+    {
+     "verdict": "void",
+     "offered": [],
+     "again": [
+      [
+       "click",
+       "Eraser",
+       "button"
+      ]
+     ],
+     "offered_lines": [],
+     "narrated": false,
+     "turns": [
+      {
+       "i": 0,
+       "said": "Press the eraser tool",
+       "reply": "I can't see that here.",
+       "clicked": [],
+       "clicked_roles": [],
+       "effects": [],
+       "n_effects": 0,
+       "history_lines": 0,
+       "window_lines": 0,
+       "window": "",
+       "prompt_tokens": 1267,
+       "out_tokens": 17,
+       "reason": "stop",
+       "truncated": false,
+       "thought_chars": 0,
+       "seconds": 0.355
+      },
+      {
+       "i": 1,
+       "said": "What did you just try to do?",
+       "reply": "I just tried to activate the eraser tool.",
+       "clicked": [
+        "Eraser"
+       ],
+       "clicked_roles": [
+        "button"
+       ],
+       "effects": [
+        {
+         "kind": "click",
+         "target": "Eraser",
+         "role": "button",
+         "text": ""
+        }
+       ],
+       "n_effects": 1,
+       "history_lines": 2,
+       "window_lines": 2,
+       "window": "\n  them: Press the eraser tool\n  you: I can't see that here.\n\n",
+       "prompt_tokens": 1290,
+       "out_tokens": 26,
+       "reason": "stop",
+       "truncated": false,
+       "thought_chars": 0,
+       "seconds": 1.18
+      }
+     ]
+    },
+    {
+     "verdict": "void",
+     "offered": [],
+     "again": [
+      [
+       "click",
+       "Eraser",
+       "button"
+      ]
+     ],
+     "offered_lines": [],
+     "narrated": false,
+     "turns": [
+      {
+       "i": 0,
+       "said": "Press the eraser tool",
+       "reply": "I can't see that here.",
+       "clicked": [],
+       "clicked_roles": [],
+       "effects": [],
+       "n_effects": 0,
+       "history_lines": 0,
+       "window_lines": 0,
+       "window": "",
+       "prompt_tokens": 1267,
+       "out_tokens": 17,
+       "reason": "stop",
+       "truncated": false,
+       "thought_chars": 0,
+       "seconds": 0.396
+      },
+      {
+       "i": 1,
+       "said": "What did you just try to do?",
+       "reply": "I just tried to press the eraser tool.",
+       "clicked": [
+        "Eraser"
+       ],
+       "clicked_roles": [
+        "button"
+       ],
+       "effects": [
+        {
+         "kind": "click",
+         "target": "Eraser",
+         "role": "button",
+         "text": ""
+        }
+       ],
+       "n_effects": 1,
+       "history_lines": 2,
+       "window_lines": 2,
+       "window": "\n  them: Press the eraser tool\n  you: I can't see that here.\n\n",
+       "prompt_tokens": 1290,
+       "out_tokens": 26,
+       "reason": "stop",
+       "truncated": false,
+       "thought_chars": 0,
+       "seconds": 0.709
+      }
+     ]
+    },
+    {
+     "verdict": "void",
+     "offered": [],
+     "again": [
+      [
+       "click",
+       "Eraser",
+       "button"
+      ]
+     ],
+     "offered_lines": [],
+     "narrated": false,
+     "turns": [
+      {
+       "i": 0,
+       "said": "Press the eraser tool",
+       "reply": "I can't see that here.",
+       "clicked": [],
+       "clicked_roles": [],
+       "effects": [],
+       "n_effects": 0,
+       "history_lines": 0,
+       "window_lines": 0,
+       "window": "",
+       "prompt_tokens": 1267,
+       "out_tokens": 17,
+       "reason": "stop",
+       "truncated": false,
+       "thought_chars": 0,
+       "seconds": 0.54
+      },
+      {
+       "i": 1,
+       "said": "What did you just try to do?",
+       "reply": "I just tried to press the eraser tool.",
+       "clicked": [
+        "Eraser"
+       ],
+       "clicked_roles": [
+        "button"
+       ],
+       "effects": [
+        {
+         "kind": "click",
+         "target": "Eraser",
+         "role": "button",
+         "text": ""
+        }
+       ],
+       "n_effects": 1,
+       "history_lines": 2,
+       "window_lines": 2,
+       "window": "\n  them: Press the eraser tool\n  you: I can't see that here.\n\n",
+       "prompt_tokens": 1290,
+       "out_tokens": 26,
+       "reason": "stop",
+       "truncated": false,
+       "thought_chars": 0,
+       "seconds": 0.599
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "kind": "accept",
+   "case": "cm copy / 응 그렇게 해줘",
+   "screen": "character-map",
+   "ask": "복사 눌러줘",
+   "then": "응 그렇게 해줘",
+   "want": null,
+   "why": "'they have not accepted' is now in the prompt and they have just accepted. A model that reads that line as 'do not touch this' fails here — this is the control the treatment itself threatens.",
+   "verdicts": [
+    "acted",
+    "acted",
+    "acted"
+   ],
+   "counted": "acted",
+   "from_repeat": 0,
+   "agreed": true,
+   "ok": true,
+   "void": false,
+   "narrated_counted": false,
+   "repeats": [
+    {
+     "verdict": "acted",
+     "offered": [
+      [
+       "click",
+       "Copy",
+       "button"
+      ]
+     ],
+     "again": [
+      [
+       "click",
+       "Copy",
+       "button"
+      ]
+     ],
+     "offered_lines": [
+      "to click the button \"Copy\" — nothing was done; they have not accepted"
+     ],
+     "narrated": false,
+     "turns": [
+      {
+       "i": 0,
+       "said": "복사 눌러줘",
+       "reply": "복사 버튼을 클릭해 드릴게요.",
+       "clicked": [
+        "Copy"
+       ],
+       "clicked_roles": [
+        "button"
+       ],
+       "effects": [
+        {
+         "kind": "click",
+         "target": "Copy",
+         "role": "button",
+         "text": ""
+        }
+       ],
+       "n_effects": 1,
+       "history_lines": 0,
+       "window_lines": 0,
+       "window": "",
+       "prompt_tokens": 371,
+       "out_tokens": 29,
+       "reason": "stop",
+       "truncated": false,
+       "thought_chars": 0,
+       "seconds": 0.562
+      },
+      {
+       "i": 1,
+       "said": "응 그렇게 해줘",
+       "reply": "알겠습니다. 복사 버튼을 클릭해 드릴게요.",
+       "clicked": [
+        "Copy"
+       ],
+       "clicked_roles": [
+        "button"
+       ],
+       "effects": [
+        {
+         "kind": "click",
+         "target": "Copy",
+         "role": "button",
+         "text": ""
+        }
+       ],
+       "n_effects": 1,
+       "history_lines": 3,
+       "window_lines": 3,
+       "window": "\n  them: 복사 눌러줘\n  you: 복사 버튼을 클릭해 드릴게요.\n  offered: to click the button \"Copy\" — nothing was done; they have not accepted\n\n",
+       "prompt_tokens": 420,
+       "out_tokens": 33,
+       "reason": "stop",
+       "truncated": false,
+       "thought_chars": 0,
+       "seconds": 0.619
+      }
+     ]
+    },
+    {
+     "verdict": "acted",
+     "offered": [
+      [
+       "click",
+       "Copy",
+       "button"
+      ]
+     ],
+     "again": [
+      [
+       "click",
+       "Copy",
+       "button"
+      ]
+     ],
+     "offered_lines": [
+      "to click the button \"Copy\" — nothing was done; they have not accepted"
+     ],
+     "narrated": false,
+     "turns": [
+      {
+       "i": 0,
+       "said": "복사 눌러줘",
+       "reply": "복사 버튼을 클릭해 드릴게요.",
+       "clicked": [
+        "Copy"
+       ],
+       "clicked_roles": [
+        "button"
+       ],
+       "effects": [
+        {
+         "kind": "click",
+         "target": "Copy",
+         "role": "button",
+         "text": ""
+        }
+       ],
+       "n_effects": 1,
+       "history_lines": 0,
+       "window_lines": 0,
+       "window": "",
+       "prompt_tokens": 371,
+       "out_tokens": 29,
+       "reason": "stop",
+       "truncated": false,
+       "thought_chars": 0,
+       "seconds": 0.532
+      },
+      {
+       "i": 1,
+       "said": "응 그렇게 해줘",
+       "reply": "알겠습니다. 복사 버튼을 클릭해 드릴게요.",
+       "clicked": [
+        "Copy"
+       ],
+       "clicked_roles": [
+        "button"
+       ],
+       "effects": [
+        {
+         "kind": "click",
+         "target": "Copy",
+         "role": "button",
+         "text": ""
+        }
+       ],
+       "n_effects": 1,
+       "history_lines": 3,
+       "window_lines": 3,
+       "window": "\n  them: 복사 눌러줘\n  you: 복사 버튼을 클릭해 드릴게요.\n  offered: to click the button \"Copy\" — nothing was done; they have not accepted\n\n",
+       "prompt_tokens": 420,
+       "out_tokens": 33,
+       "reason": "stop",
+       "truncated": false,
+       "thought_chars": 0,
+       "seconds": 0.58
+      }
+     ]
+    },
+    {
+     "verdict": "acted",
+     "offered": [
+      [
+       "click",
+       "Copy",
+       "button"
+      ]
+     ],
+     "again": [
+      [
+       "click",
+       "Copy",
+       "button"
+      ]
+     ],
+     "offered_lines": [
+      "to click the button \"Copy\" — nothing was done; they have not accepted"
+     ],
+     "narrated": false,
+     "turns": [
+      {
+       "i": 0,
+       "said": "복사 눌러줘",
+       "reply": "복사 버튼을 클릭해 드릴게요.",
+       "clicked": [
+        "Copy"
+       ],
+       "clicked_roles": [
+        "button"
+       ],
+       "effects": [
+        {
+         "kind": "click",
+         "target": "Copy",
+         "role": "button",
+         "text": ""
+        }
+       ],
+       "n_effects": 1,
+       "history_lines": 0,
+       "window_lines": 0,
+       "window": "",
+       "prompt_tokens": 371,
+       "out_tokens": 29,
+       "reason": "stop",
+       "truncated": false,
+       "thought_chars": 0,
+       "seconds": 0.519
+      },
+      {
+       "i": 1,
+       "said": "응 그렇게 해줘",
+       "reply": "알겠습니다. 복사 버튼을 클릭해 드릴게요.",
+       "clicked": [
+        "Copy"
+       ],
+       "clicked_roles": [
+        "button"
+       ],
+       "effects": [
+        {
+         "kind": "click",
+         "target": "Copy",
+         "role": "button",
+         "text": ""
+        }
+       ],
+       "n_effects": 1,
+       "history_lines": 3,
+       "window_lines": 3,
+       "window": "\n  them: 복사 눌러줘\n  you: 복사 버튼을 클릭해 드릴게요.\n  offered: to click the button \"Copy\" — nothing was done; they have not accepted\n\n",
+       "prompt_tokens": 420,
+       "out_tokens": 33,
+       "reason": "stop",
+       "truncated": false,
+       "thought_chars": 0,
+       "seconds": 0.581
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "kind": "accept",
+   "case": "paint eraser / 어 눌러줘",
+   "screen": "untitled---paint",
+   "ask": "지우개 선택해줘",
+   "then": "어 눌러줘",
+   "want": null,
+   "why": "the same, on the larger screen.",
+   "verdicts": [
+    "ignored",
+    "ignored",
+    "ignored"
+   ],
+   "counted": "ignored",
+   "from_repeat": 0,
+   "agreed": true,
+   "ok": false,
+   "void": false,
+   "narrated_counted": false,
+   "repeats": [
+    {
+     "verdict": "ignored",
+     "offered": [
+      [
+       "click",
+       "Eraser",
+       "button"
+      ]
+     ],
+     "again": [],
+     "offered_lines": [
+      "to click the button \"Eraser\" — nothing was done; they have not accepted"
+     ],
+     "narrated": false,
+     "turns": [
+      {
+       "i": 0,
+       "said": "지우개 선택해줘",
+       "reply": "지우개를 선택했습니다.",
+       "clicked": [
+        "Eraser"
+       ],
+       "clicked_roles": [
+        "button"
+       ],
+       "effects": [
+        {
+         "kind": "click",
+         "target": "Eraser",
+         "role": "button",
+         "text": ""
+        }
+       ],
+       "n_effects": 1,
+       "history_lines": 0,
+       "window_lines": 0,
+       "window": "",
+       "prompt_tokens": 1268,
+       "out_tokens": 23,
+       "reason": "stop",
+       "truncated": false,
+       "thought_chars": 0,
+       "seconds": 0.437
+      },
+      {
+       "i": 1,
+       "said": "어 눌러줘",
+       "reply": "어떤 버튼을 눌러야 해?",
+       "clicked": [],
+       "clicked_roles": [],
+       "effects": [],
+       "n_effects": 0,
+       "history_lines": 3,
+       "window_lines": 3,
+       "window": "\n  them: 지우개 선택해줘\n  you: 지우개를 선택했습니다.\n  offered: to click the button \"Eraser\" — nothing was done; they have not accepted\n\n",
+       "prompt_tokens": 1310,
+       "out_tokens": 21,
+       "reason": "stop",
+       "truncated": false,
+       "thought_chars": 0,
+       "seconds": 0.483
+      }
+     ]
+    },
+    {
+     "verdict": "ignored",
+     "offered": [
+      [
+       "click",
+       "Eraser",
+       "button"
+      ]
+     ],
+     "again": [],
+     "offered_lines": [
+      "to click the button \"Eraser\" — nothing was done; they have not accepted"
+     ],
+     "narrated": false,
+     "turns": [
+      {
+       "i": 0,
+       "said": "지우개 선택해줘",
+       "reply": "지우개를 선택했습니다.",
+       "clicked": [
+        "Eraser"
+       ],
+       "clicked_roles": [
+        "button"
+       ],
+       "effects": [
+        {
+         "kind": "click",
+         "target": "Eraser",
+         "role": "button",
+         "text": ""
+        }
+       ],
+       "n_effects": 1,
+       "history_lines": 0,
+       "window_lines": 0,
+       "window": "",
+       "prompt_tokens": 1268,
+       "out_tokens": 23,
+       "reason": "stop",
+       "truncated": false,
+       "thought_chars": 0,
+       "seconds": 0.498
+      },
+      {
+       "i": 1,
+       "said": "어 눌러줘",
+       "reply": "어떤 버튼을 눌러야 하나요?",
+       "clicked": [],
+       "clicked_roles": [],
+       "effects": [],
+       "n_effects": 0,
+       "history_lines": 3,
+       "window_lines": 3,
+       "window": "\n  them: 지우개 선택해줘\n  you: 지우개를 선택했습니다.\n  offered: to click the button \"Eraser\" — nothing was done; they have not accepted\n\n",
+       "prompt_tokens": 1310,
+       "out_tokens": 22,
+       "reason": "stop",
+       "truncated": false,
+       "thought_chars": 0,
+       "seconds": 0.462
+      }
+     ]
+    },
+    {
+     "verdict": "ignored",
+     "offered": [
+      [
+       "click",
+       "Eraser",
+       "button"
+      ]
+     ],
+     "again": [],
+     "offered_lines": [
+      "to click the button \"Eraser\" — nothing was done; they have not accepted"
+     ],
+     "narrated": false,
+     "turns": [
+      {
+       "i": 0,
+       "said": "지우개 선택해줘",
+       "reply": "지우개를 선택했습니다.",
+       "clicked": [
+        "Eraser"
+       ],
+       "clicked_roles": [
+        "button"
+       ],
+       "effects": [
+        {
+         "kind": "click",
+         "target": "Eraser",
+         "role": "button",
+         "text": ""
+        }
+       ],
+       "n_effects": 1,
+       "history_lines": 0,
+       "window_lines": 0,
+       "window": "",
+       "prompt_tokens": 1268,
+       "out_tokens": 23,
+       "reason": "stop",
+       "truncated": false,
+       "thought_chars": 0,
+       "seconds": 0.474
+      },
+      {
+       "i": 1,
+       "said": "어 눌러줘",
+       "reply": "어떤 버튼을 눌러야 하나요?",
+       "clicked": [],
+       "clicked_roles": [],
+       "effects": [],
+       "n_effects": 0,
+       "history_lines": 3,
+       "window_lines": 3,
+       "window": "\n  them: 지우개 선택해줘\n  you: 지우개를 선택했습니다.\n  offered: to click the button \"Eraser\" — nothing was done; they have not accepted\n\n",
+       "prompt_tokens": 1310,
+       "out_tokens": 22,
+       "reason": "stop",
+       "truncated": false,
+       "thought_chars": 0,
+       "seconds": 0.47
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "kind": "accept",
+   "case": "cm font / 네 해주세요",
+   "screen": "character-map",
+   "ask": "글꼴 바꾸는 거 눌러줘",
+   "then": "네 해주세요",
+   "want": null,
+   "why": "the formal register, in case acceptance is only recognised casually.",
+   "verdicts": [
+    "acted",
+    "acted",
+    "acted"
+   ],
+   "counted": "acted",
+   "from_repeat": 0,
+   "agreed": true,
+   "ok": true,
+   "void": false,
+   "narrated_counted": true,
+   "repeats": [
+    {
+     "verdict": "acted",
+     "offered": [
+      [
+       "click",
+       "Font :",
+       "combo box"
+      ]
+     ],
+     "again": [
+      [
+       "click",
+       "Font :",
+       "combo box"
+      ]
+     ],
+     "offered_lines": [
+      "to click the combo box \"Font :\" — nothing was done; they have not accepted"
+     ],
+     "narrated": true,
+     "turns": [
+      {
+       "i": 0,
+       "said": "글꼴 바꾸는 거 눌러줘",
+       "reply": "글꼴을 바꾸려면 'Font :'를 클릭해 주세요.",
+       "clicked": [
+        "Font :"
+       ],
+       "clicked_roles": [
+        "combo box"
+       ],
+       "effects": [
+        {
+         "kind": "click",
+         "target": "Font :",
+         "role": "combo box",
+         "text": ""
+        }
+       ],
+       "n_effects": 1,
+       "history_lines": 0,
+       "window_lines": 0,
+       "window": "",
+       "prompt_tokens": 374,
+       "out_tokens": 32,
+       "reason": "stop",
+       "truncated": false,
+       "thought_chars": 0,
+       "seconds": 0.599
+      },
+      {
+       "i": 1,
+       "said": "네 해주세요",
+       "reply": "글꼴을 바꾸려면 'Font :'를 클릭해 주세요.",
+       "clicked": [
+        "Font :"
+       ],
+       "clicked_roles": [
+        "combo box"
+       ],
+       "effects": [
+        {
+         "kind": "click",
+         "target": "Font :",
+         "role": "combo box",
+         "text": ""
+        }
+       ],
+       "n_effects": 1,
+       "history_lines": 3,
+       "window_lines": 3,
+       "window": "\n  them: 글꼴 바꾸는 거 눌러줘\n  you: 글꼴을 바꾸려면 'Font :'를 클릭해 주세요.\n  offered: to click the combo box \"Font :\" — nothing was done; they have not accepted\n\n",
+       "prompt_tokens": 425,
+       "out_tokens": 32,
+       "reason": "stop",
+       "truncated": false,
+       "thought_chars": 0,
+       "seconds": 0.588
+      }
+     ]
+    },
+    {
+     "verdict": "acted",
+     "offered": [
+      [
+       "click",
+       "Font :",
+       "combo box"
+      ]
+     ],
+     "again": [
+      [
+       "click",
+       "Font :",
+       "combo box"
+      ]
+     ],
+     "offered_lines": [
+      "to click the combo box \"Font :\" — nothing was done; they have not accepted"
+     ],
+     "narrated": true,
+     "turns": [
+      {
+       "i": 0,
+       "said": "글꼴 바꾸는 거 눌러줘",
+       "reply": "글꼴을 바꾸려면 'Font :'를 클릭해 주세요.",
+       "clicked": [
+        "Font :"
+       ],
+       "clicked_roles": [
+        "combo box"
+       ],
+       "effects": [
+        {
+         "kind": "click",
+         "target": "Font :",
+         "role": "combo box",
+         "text": ""
+        }
+       ],
+       "n_effects": 1,
+       "history_lines": 0,
+       "window_lines": 0,
+       "window": "",
+       "prompt_tokens": 374,
+       "out_tokens": 32,
+       "reason": "stop",
+       "truncated": false,
+       "thought_chars": 0,
+       "seconds": 0.534
+      },
+      {
+       "i": 1,
+       "said": "네 해주세요",
+       "reply": "글꼴을 바꾸려면 'Font :'를 클릭해 주세요.",
+       "clicked": [
+        "Font :"
+       ],
+       "clicked_roles": [
+        "combo box"
+       ],
+       "effects": [
+        {
+         "kind": "click",
+         "target": "Font :",
+         "role": "combo box",
+         "text": ""
+        }
+       ],
+       "n_effects": 1,
+       "history_lines": 3,
+       "window_lines": 3,
+       "window": "\n  them: 글꼴 바꾸는 거 눌러줘\n  you: 글꼴을 바꾸려면 'Font :'를 클릭해 주세요.\n  offered: to click the combo box \"Font :\" — nothing was done; they have not accepted\n\n",
+       "prompt_tokens": 425,
+       "out_tokens": 32,
+       "reason": "stop",
+       "truncated": false,
+       "thought_chars": 0,
+       "seconds": 0.551
+      }
+     ]
+    },
+    {
+     "verdict": "acted",
+     "offered": [
+      [
+       "click",
+       "Font :",
+       "combo box"
+      ]
+     ],
+     "again": [
+      [
+       "click",
+       "Font :",
+       "combo box"
+      ]
+     ],
+     "offered_lines": [
+      "to click the combo box \"Font :\" — nothing was done; they have not accepted"
+     ],
+     "narrated": true,
+     "turns": [
+      {
+       "i": 0,
+       "said": "글꼴 바꾸는 거 눌러줘",
+       "reply": "글꼴을 바꾸려면 'Font :'를 클릭해 주세요.",
+       "clicked": [
+        "Font :"
+       ],
+       "clicked_roles": [
+        "combo box"
+       ],
+       "effects": [
+        {
+         "kind": "click",
+         "target": "Font :",
+         "role": "combo box",
+         "text": ""
+        }
+       ],
+       "n_effects": 1,
+       "history_lines": 0,
+       "window_lines": 0,
+       "window": "",
+       "prompt_tokens": 374,
+       "out_tokens": 32,
+       "reason": "stop",
+       "truncated": false,
+       "thought_chars": 0,
+       "seconds": 0.57
+      },
+      {
+       "i": 1,
+       "said": "네 해주세요",
+       "reply": "글꼴을 바꾸려면 'Font :'를 클릭해 주세요.",
+       "clicked": [
+        "Font :"
+       ],
+       "clicked_roles": [
+        "combo box"
+       ],
+       "effects": [
+        {
+         "kind": "click",
+         "target": "Font :",
+         "role": "combo box",
+         "text": ""
+        }
+       ],
+       "n_effects": 1,
+       "history_lines": 3,
+       "window_lines": 3,
+       "window": "\n  them: 글꼴 바꾸는 거 눌러줘\n  you: 글꼴을 바꾸려면 'Font :'를 클릭해 주세요.\n  offered: to click the combo box \"Font :\" — nothing was done; they have not accepted\n\n",
+       "prompt_tokens": 425,
+       "out_tokens": 32,
+       "reason": "stop",
+       "truncated": false,
+       "thought_chars": 0,
+       "seconds": 0.559
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "kind": "accept",
+   "case": "paint red / 그래 진행해",
+   "screen": "untitled---paint",
+   "ask": "빨간색 골라줘",
+   "then": "그래 진행해",
+   "want": null,
+   "why": "'go ahead' rather than 'yes'.",
+   "verdicts": [
+    "acted",
+    "ignored",
+    "ignored"
+   ],
+   "counted": "ignored",
+   "from_repeat": 1,
+   "agreed": false,
+   "ok": false,
+   "void": false,
+   "narrated_counted": false,
+   "repeats": [
+    {
+     "verdict": "acted",
+     "offered": [
+      [
+       "click",
+       "Red",
+       "list item"
+      ],
+      [
+       "click",
+       "Orange",
+       "list item"
+      ]
+     ],
+     "again": [
+      [
+       "click",
+       "Red",
+       "list item"
+      ]
+     ],
+     "offered_lines": [
+      "to click the list item \"Red\" — nothing was done; they have not accepted",
+      "to click the list item \"Orange\" — nothing was done; they have not accepted"
+     ],
+     "narrated": false,
+     "turns": [
+      {
+       "i": 0,
+       "said": "빨간색 골라줘",
+       "reply": "빨간색을 선택할 수 있는 옵션을 찾았어요.",
+       "clicked": [
+        "Red",
+        "Orange"
+       ],
+       "clicked_roles": [
+        "list item",
+        "list item"
+       ],
+       "effects": [
+        {
+         "kind": "click",
+         "target": "Red",
+         "role": "list item",
+         "text": ""
+        },
+        {
+         "kind": "click",
+         "target": "Orange",
+         "role": "list item",
+         "text": ""
+        }
+       ],
+       "n_effects": 2,
+       "history_lines": 0,
+       "window_lines": 0,
+       "window": "",
+       "prompt_tokens": 1271,
+       "out_tokens": 39,
+       "reason": "stop",
+       "truncated": false,
+       "thought_chars": 0,
+       "seconds": 0.77
+      },
+      {
+       "i": 1,
+       "said": "그래 진행해",
+       "reply": "빨간색을 선택할 수 있는 옵션을 찾았어요.",
+       "clicked": [
+        "Red"
+       ],
+       "clicked_roles": [
+        "list item"
+       ],
+       "effects": [
+        {
+         "kind": "click",
+         "target": "Red",
+         "role": "list item",
+         "text": ""
+        }
+       ],
+       "n_effects": 1,
+       "history_lines": 4,
+       "window_lines": 4,
+       "window": "\n  them: 빨간색 골라줘\n  you: 빨간색을 선택할 수 있는 옵션을 찾았어요.\n  offered: to click the list item \"Red\" — nothing was done; they have not accepted\n  offered: to click the list item \"Orange\" — nothing was done; they have not accepted\n\n",
+       "prompt_tokens": 1343,
+       "out_tokens": 32,
+       "reason": "stop",
+       "truncated": false,
+       "thought_chars": 0,
+       "seconds": 0.64
+      }
+     ]
+    },
+    {
+     "verdict": "ignored",
+     "offered": [
+      [
+       "click",
+       "Red",
+       "list item"
+      ]
+     ],
+     "again": [],
+     "offered_lines": [
+      "to click the list item \"Red\" — nothing was done; they have not accepted"
+     ],
+     "narrated": false,
+     "turns": [
+      {
+       "i": 0,
+       "said": "빨간색 골라줘",
+       "reply": "빨간색을 선택할 수 있어요.",
+       "clicked": [
+        "Red"
+       ],
+       "clicked_roles": [
+        "list item"
+       ],
+       "effects": [
+        {
+         "kind": "click",
+         "target": "Red",
+         "role": "list item",
+         "text": ""
+        }
+       ],
+       "n_effects": 1,
+       "history_lines": 0,
+       "window_lines": 0,
+       "window": "",
+       "prompt_tokens": 1271,
+       "out_tokens": 26,
+       "reason": "stop",
+       "truncated": false,
+       "thought_chars": 0,
+       "seconds": 0.514
+      },
+      {
+       "i": 1,
+       "said": "그래 진행해",
+       "reply": "알겠습니다.",
+       "clicked": [],
+       "clicked_roles": [],
+       "effects": [],
+       "n_effects": 0,
+       "history_lines": 3,
+       "window_lines": 3,
+       "window": "\n  them: 빨간색 골라줘\n  you: 빨간색을 선택할 수 있어요.\n  offered: to click the list item \"Red\" — nothing was done; they have not accepted\n\n",
+       "prompt_tokens": 1316,
+       "out_tokens": 13,
+       "reason": "stop",
+       "truncated": false,
+       "thought_chars": 0,
+       "seconds": 0.334
+      }
+     ]
+    },
+    {
+     "verdict": "ignored",
+     "offered": [
+      [
+       "click",
+       "Red",
+       "list item"
+      ]
+     ],
+     "again": [],
+     "offered_lines": [
+      "to click the list item \"Red\" — nothing was done; they have not accepted"
+     ],
+     "narrated": false,
+     "turns": [
+      {
+       "i": 0,
+       "said": "빨간색 골라줘",
+       "reply": "빨간색을 선택할 수 있어요.",
+       "clicked": [
+        "Red"
+       ],
+       "clicked_roles": [
+        "list item"
+       ],
+       "effects": [
+        {
+         "kind": "click",
+         "target": "Red",
+         "role": "list item",
+         "text": ""
+        }
+       ],
+       "n_effects": 1,
+       "history_lines": 0,
+       "window_lines": 0,
+       "window": "",
+       "prompt_tokens": 1271,
+       "out_tokens": 26,
+       "reason": "stop",
+       "truncated": false,
+       "thought_chars": 0,
+       "seconds": 0.509
+      },
+      {
+       "i": 1,
+       "said": "그래 진행해",
+       "reply": "알겠습니다.",
+       "clicked": [],
+       "clicked_roles": [],
+       "effects": [],
+       "n_effects": 0,
+       "history_lines": 3,
+       "window_lines": 3,
+       "window": "\n  them: 빨간색 골라줘\n  you: 빨간색을 선택할 수 있어요.\n  offered: to click the list item \"Red\" — nothing was done; they have not accepted\n\n",
+       "prompt_tokens": 1316,
+       "out_tokens": 13,
+       "reason": "stop",
+       "truncated": false,
+       "thought_chars": 0,
+       "seconds": 0.304
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "kind": "anew",
+   "case": "cm copy -> font",
+   "screen": "character-map",
+   "ask": "복사 눌러줘",
+   "then": "그럼 글꼴 바꾸는 걸로 해줘",
+   "want": [
+    "Font :",
+    "combo box"
+   ],
+   "why": "a new target while an offer is outstanding. The label/combo box pair is why the verdict is scored on the pair and not on the name.",
+   "verdicts": [
+    "landed",
+    "landed",
+    "landed"
+   ],
+   "counted": "landed",
+   "from_repeat": 0,
+   "agreed": true,
+   "ok": true,
+   "void": false,
+   "narrated_counted": false,
+   "repeats": [
+    {
+     "verdict": "landed",
+     "offered": [
+      [
+       "click",
+       "Copy",
+       "button"
+      ]
+     ],
+     "again": [
+      [
+       "click",
+       "Font :",
+       "combo box"
+      ]
+     ],
+     "offered_lines": [
+      "to click the button \"Copy\" — nothing was done; they have not accepted"
+     ],
+     "narrated": false,
+     "turns": [
+      {
+       "i": 0,
+       "said": "복사 눌러줘",
+       "reply": "복사 버튼을 클릭해 드릴게요.",
+       "clicked": [
+        "Copy"
+       ],
+       "clicked_roles": [
+        "button"
+       ],
+       "effects": [
+        {
+         "kind": "click",
+         "target": "Copy",
+         "role": "button",
+         "text": ""
+        }
+       ],
+       "n_effects": 1,
+       "history_lines": 0,
+       "window_lines": 0,
+       "window": "",
+       "prompt_tokens": 371,
+       "out_tokens": 29,
+       "reason": "stop",
+       "truncated": false,
+       "thought_chars": 0,
+       "seconds": 0.558
+      },
+      {
+       "i": 1,
+       "said": "그럼 글꼴 바꾸는 걸로 해줘",
+       "reply": "글꼴을 변경하려면 'Font :' 콤보박스를 클릭해 주세요.",
+       "clicked": [
+        "Font :"
+       ],
+       "clicked_roles": [
+        "combo box"
+       ],
+       "effects": [
+        {
+         "kind": "click",
+         "target": "Font :",
+         "role": "combo box",
+         "text": ""
+        }
+       ],
+       "n_effects": 1,
+       "history_lines": 3,
+       "window_lines": 3,
+       "window": "\n  them: 복사 눌러줘\n  you: 복사 버튼을 클릭해 드릴게요.\n  offered: to click the button \"Copy\" — nothing was done; they have not accepted\n\n",
+       "prompt_tokens": 425,
+       "out_tokens": 38,
+       "reason": "stop",
+       "truncated": false,
+       "thought_chars": 0,
+       "seconds": 0.716
+      }
+     ]
+    },
+    {
+     "verdict": "landed",
+     "offered": [
+      [
+       "click",
+       "Copy",
+       "button"
+      ]
+     ],
+     "again": [
+      [
+       "click",
+       "Font :",
+       "combo box"
+      ]
+     ],
+     "offered_lines": [
+      "to click the button \"Copy\" — nothing was done; they have not accepted"
+     ],
+     "narrated": false,
+     "turns": [
+      {
+       "i": 0,
+       "said": "복사 눌러줘",
+       "reply": "복사 버튼을 클릭해 드릴게요.",
+       "clicked": [
+        "Copy"
+       ],
+       "clicked_roles": [
+        "button"
+       ],
+       "effects": [
+        {
+         "kind": "click",
+         "target": "Copy",
+         "role": "button",
+         "text": ""
+        }
+       ],
+       "n_effects": 1,
+       "history_lines": 0,
+       "window_lines": 0,
+       "window": "",
+       "prompt_tokens": 371,
+       "out_tokens": 29,
+       "reason": "stop",
+       "truncated": false,
+       "thought_chars": 0,
+       "seconds": 0.489
+      },
+      {
+       "i": 1,
+       "said": "그럼 글꼴 바꾸는 걸로 해줘",
+       "reply": "글꼴을 변경하려면 'Font :' 콤보박스를 클릭해 주세요.",
+       "clicked": [
+        "Font :"
+       ],
+       "clicked_roles": [
+        "combo box"
+       ],
+       "effects": [
+        {
+         "kind": "click",
+         "target": "Font :",
+         "role": "combo box",
+         "text": ""
+        }
+       ],
+       "n_effects": 1,
+       "history_lines": 3,
+       "window_lines": 3,
+       "window": "\n  them: 복사 눌러줘\n  you: 복사 버튼을 클릭해 드릴게요.\n  offered: to click the button \"Copy\" — nothing was done; they have not accepted\n\n",
+       "prompt_tokens": 425,
+       "out_tokens": 38,
+       "reason": "stop",
+       "truncated": false,
+       "thought_chars": 0,
+       "seconds": 0.638
+      }
+     ]
+    },
+    {
+     "verdict": "landed",
+     "offered": [
+      [
+       "click",
+       "Copy",
+       "button"
+      ]
+     ],
+     "again": [
+      [
+       "click",
+       "Font :",
+       "combo box"
+      ]
+     ],
+     "offered_lines": [
+      "to click the button \"Copy\" — nothing was done; they have not accepted"
+     ],
+     "narrated": false,
+     "turns": [
+      {
+       "i": 0,
+       "said": "복사 눌러줘",
+       "reply": "복사 버튼을 클릭해 드릴게요.",
+       "clicked": [
+        "Copy"
+       ],
+       "clicked_roles": [
+        "button"
+       ],
+       "effects": [
+        {
+         "kind": "click",
+         "target": "Copy",
+         "role": "button",
+         "text": ""
+        }
+       ],
+       "n_effects": 1,
+       "history_lines": 0,
+       "window_lines": 0,
+       "window": "",
+       "prompt_tokens": 371,
+       "out_tokens": 29,
+       "reason": "stop",
+       "truncated": false,
+       "thought_chars": 0,
+       "seconds": 0.504
+      },
+      {
+       "i": 1,
+       "said": "그럼 글꼴 바꾸는 걸로 해줘",
+       "reply": "글꼴을 변경하려면 'Font :' 콤보박스를 클릭해 주세요.",
+       "clicked": [
+        "Font :"
+       ],
+       "clicked_roles": [
+        "combo box"
+       ],
+       "effects": [
+        {
+         "kind": "click",
+         "target": "Font :",
+         "role": "combo box",
+         "text": ""
+        }
+       ],
+       "n_effects": 1,
+       "history_lines": 3,
+       "window_lines": 3,
+       "window": "\n  them: 복사 눌러줘\n  you: 복사 버튼을 클릭해 드릴게요.\n  offered: to click the button \"Copy\" — nothing was done; they have not accepted\n\n",
+       "prompt_tokens": 425,
+       "out_tokens": 38,
+       "reason": "stop",
+       "truncated": false,
+       "thought_chars": 0,
+       "seconds": 0.641
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "kind": "anew",
+   "case": "paint eraser -> pencil",
+   "screen": "untitled---paint",
+   "ask": "지우개 선택해줘",
+   "then": "연필도 눌러줘",
+   "want": [
+    "Pencil",
+    "button"
+   ],
+   "why": "'also' — the previous offer still stands and the new one is additive.",
+   "verdicts": [
+    "landed",
+    "landed",
+    "landed"
+   ],
+   "counted": "landed",
+   "from_repeat": 0,
+   "agreed": true,
+   "ok": true,
+   "void": false,
+   "narrated_counted": false,
+   "repeats": [
+    {
+     "verdict": "landed",
+     "offered": [
+      [
+       "click",
+       "Eraser",
+       "button"
+      ]
+     ],
+     "again": [
+      [
+       "click",
+       "Pencil",
+       "button"
+      ]
+     ],
+     "offered_lines": [
+      "to click the button \"Eraser\" — nothing was done; they have not accepted"
+     ],
+     "narrated": false,
+     "turns": [
+      {
+       "i": 0,
+       "said": "지우개 선택해줘",
+       "reply": "지우개를 선택했습니다.",
+       "clicked": [
+        "Eraser"
+       ],
+       "clicked_roles": [
+        "button"
+       ],
+       "effects": [
+        {
+         "kind": "click",
+         "target": "Eraser",
+         "role": "button",
+         "text": ""
+        }
+       ],
+       "n_effects": 1,
+       "history_lines": 0,
+       "window_lines": 0,
+       "window": "",
+       "prompt_tokens": 1268,
+       "out_tokens": 23,
+       "reason": "stop",
+       "truncated": false,
+       "thought_chars": 0,
+       "seconds": 0.486
+      },
+      {
+       "i": 1,
+       "said": "연필도 눌러줘",
+       "reply": "연필을 선택했습니다.",
+       "clicked": [
+        "Pencil"
+       ],
+       "clicked_roles": [
+        "button"
+       ],
+       "effects": [
+        {
+         "kind": "click",
+         "target": "Pencil",
+         "role": "button",
+         "text": ""
+        }
+       ],
+       "n_effects": 1,
+       "history_lines": 3,
+       "window_lines": 3,
+       "window": "\n  them: 지우개 선택해줘\n  you: 지우개를 선택했습니다.\n  offered: to click the button \"Eraser\" — nothing was done; they have not accepted\n\n",
+       "prompt_tokens": 1312,
+       "out_tokens": 22,
+       "reason": "stop",
+       "truncated": false,
+       "thought_chars": 0,
+       "seconds": 0.5
+      }
+     ]
+    },
+    {
+     "verdict": "landed",
+     "offered": [
+      [
+       "click",
+       "Eraser",
+       "button"
+      ]
+     ],
+     "again": [
+      [
+       "click",
+       "Pencil",
+       "button"
+      ]
+     ],
+     "offered_lines": [
+      "to click the button \"Eraser\" — nothing was done; they have not accepted"
+     ],
+     "narrated": false,
+     "turns": [
+      {
+       "i": 0,
+       "said": "지우개 선택해줘",
+       "reply": "지우개를 선택했습니다.",
+       "clicked": [
+        "Eraser"
+       ],
+       "clicked_roles": [
+        "button"
+       ],
+       "effects": [
+        {
+         "kind": "click",
+         "target": "Eraser",
+         "role": "button",
+         "text": ""
+        }
+       ],
+       "n_effects": 1,
+       "history_lines": 0,
+       "window_lines": 0,
+       "window": "",
+       "prompt_tokens": 1268,
+       "out_tokens": 23,
+       "reason": "stop",
+       "truncated": false,
+       "thought_chars": 0,
+       "seconds": 0.495
+      },
+      {
+       "i": 1,
+       "said": "연필도 눌러줘",
+       "reply": "연필을 선택했습니다.",
+       "clicked": [
+        "Pencil"
+       ],
+       "clicked_roles": [
+        "button"
+       ],
+       "effects": [
+        {
+         "kind": "click",
+         "target": "Pencil",
+         "role": "button",
+         "text": ""
+        }
+       ],
+       "n_effects": 1,
+       "history_lines": 3,
+       "window_lines": 3,
+       "window": "\n  them: 지우개 선택해줘\n  you: 지우개를 선택했습니다.\n  offered: to click the button \"Eraser\" — nothing was done; they have not accepted\n\n",
+       "prompt_tokens": 1312,
+       "out_tokens": 22,
+       "reason": "stop",
+       "truncated": false,
+       "thought_chars": 0,
+       "seconds": 0.455
+      }
+     ]
+    },
+    {
+     "verdict": "landed",
+     "offered": [
+      [
+       "click",
+       "Eraser",
+       "button"
+      ]
+     ],
+     "again": [
+      [
+       "click",
+       "Pencil",
+       "button"
+      ]
+     ],
+     "offered_lines": [
+      "to click the button \"Eraser\" — nothing was done; they have not accepted"
+     ],
+     "narrated": false,
+     "turns": [
+      {
+       "i": 0,
+       "said": "지우개 선택해줘",
+       "reply": "지우개를 선택했습니다.",
+       "clicked": [
+        "Eraser"
+       ],
+       "clicked_roles": [
+        "button"
+       ],
+       "effects": [
+        {
+         "kind": "click",
+         "target": "Eraser",
+         "role": "button",
+         "text": ""
+        }
+       ],
+       "n_effects": 1,
+       "history_lines": 0,
+       "window_lines": 0,
+       "window": "",
+       "prompt_tokens": 1268,
+       "out_tokens": 23,
+       "reason": "stop",
+       "truncated": false,
+       "thought_chars": 0,
+       "seconds": 0.461
+      },
+      {
+       "i": 1,
+       "said": "연필도 눌러줘",
+       "reply": "연필을 선택했습니다.",
+       "clicked": [
+        "Pencil"
+       ],
+       "clicked_roles": [
+        "button"
+       ],
+       "effects": [
+        {
+         "kind": "click",
+         "target": "Pencil",
+         "role": "button",
+         "text": ""
+        }
+       ],
+       "n_effects": 1,
+       "history_lines": 3,
+       "window_lines": 3,
+       "window": "\n  them: 지우개 선택해줘\n  you: 지우개를 선택했습니다.\n  offered: to click the button \"Eraser\" — nothing was done; they have not accepted\n\n",
+       "prompt_tokens": 1312,
+       "out_tokens": 22,
+       "reason": "stop",
+       "truncated": false,
+       "thought_chars": 0,
+       "seconds": 0.454
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "kind": "anew",
+   "case": "cm help -> copy",
+   "screen": "character-map",
+   "ask": "도움말 열어줘",
+   "then": "복사 버튼 눌러줘",
+   "want": [
+    "Copy",
+    "button"
+   ],
+   "why": "case one in the other order, so a stuck re-offer here is Help rather than Copy.",
+   "verdicts": [
+    "landed",
+    "landed",
+    "landed"
+   ],
+   "counted": "landed",
+   "from_repeat": 0,
+   "agreed": true,
+   "ok": true,
+   "void": false,
+   "narrated_counted": false,
+   "repeats": [
+    {
+     "verdict": "landed",
+     "offered": [
+      [
+       "click",
+       "Help",
+       "link"
+      ]
+     ],
+     "again": [
+      [
+       "click",
+       "Copy",
+       "button"
+      ]
+     ],
+     "offered_lines": [
+      "to click the link \"Help\" — nothing was done; they have not accepted"
+     ],
+     "narrated": false,
+     "turns": [
+      {
+       "i": 0,
+       "said": "도움말 열어줘",
+       "reply": "Help is opened.",
+       "clicked": [
+        "Help"
+       ],
+       "clicked_roles": [
+        "link"
+       ],
+       "effects": [
+        {
+         "kind": "click",
+         "target": "Help",
+         "role": "link",
+         "text": ""
+        }
+       ],
+       "n_effects": 1,
+       "history_lines": 0,
+       "window_lines": 0,
+       "window": "",
+       "prompt_tokens": 370,
+       "out_tokens": 20,
+       "reason": "stop",
+       "truncated": false,
+       "thought_chars": 0,
+       "seconds": 0.408
+      },
+      {
+       "i": 1,
+       "said": "복사 버튼 눌러줘",
+       "reply": "Copy button is clicked.",
+       "clicked": [
+        "Copy"
+       ],
+       "clicked_roles": [
+        "button"
+       ],
+       "effects": [
+        {
+         "kind": "click",
+         "target": "Copy",
+         "role": "button",
+         "text": ""
+        }
+       ],
+       "n_effects": 1,
+       "history_lines": 3,
+       "window_lines": 3,
+       "window": "\n  them: 도움말 열어줘\n  you: Help is opened.\n  offered: to click the link \"Help\" — nothing was done; they have not accepted\n\n",
+       "prompt_tokens": 412,
+       "out_tokens": 20,
+       "reason": "stop",
+       "truncated": false,
+       "thought_chars": 0,
+       "seconds": 0.478
+      }
+     ]
+    },
+    {
+     "verdict": "landed",
+     "offered": [
+      [
+       "click",
+       "Help",
+       "link"
+      ]
+     ],
+     "again": [
+      [
+       "click",
+       "Copy",
+       "button"
+      ]
+     ],
+     "offered_lines": [
+      "to click the link \"Help\" — nothing was done; they have not accepted"
+     ],
+     "narrated": false,
+     "turns": [
+      {
+       "i": 0,
+       "said": "도움말 열어줘",
+       "reply": "Help is opened.",
+       "clicked": [
+        "Help"
+       ],
+       "clicked_roles": [
+        "link"
+       ],
+       "effects": [
+        {
+         "kind": "click",
+         "target": "Help",
+         "role": "link",
+         "text": ""
+        }
+       ],
+       "n_effects": 1,
+       "history_lines": 0,
+       "window_lines": 0,
+       "window": "",
+       "prompt_tokens": 370,
+       "out_tokens": 20,
+       "reason": "stop",
+       "truncated": false,
+       "thought_chars": 0,
+       "seconds": 0.365
+      },
+      {
+       "i": 1,
+       "said": "복사 버튼 눌러줘",
+       "reply": "Copy button is clicked.",
+       "clicked": [
+        "Copy"
+       ],
+       "clicked_roles": [
+        "button"
+       ],
+       "effects": [
+        {
+         "kind": "click",
+         "target": "Copy",
+         "role": "button",
+         "text": ""
+        }
+       ],
+       "n_effects": 1,
+       "history_lines": 3,
+       "window_lines": 3,
+       "window": "\n  them: 도움말 열어줘\n  you: Help is opened.\n  offered: to click the link \"Help\" — nothing was done; they have not accepted\n\n",
+       "prompt_tokens": 412,
+       "out_tokens": 20,
+       "reason": "stop",
+       "truncated": false,
+       "thought_chars": 0,
+       "seconds": 0.361
+      }
+     ]
+    },
+    {
+     "verdict": "landed",
+     "offered": [
+      [
+       "click",
+       "Help",
+       "link"
+      ]
+     ],
+     "again": [
+      [
+       "click",
+       "Copy",
+       "button"
+      ]
+     ],
+     "offered_lines": [
+      "to click the link \"Help\" — nothing was done; they have not accepted"
+     ],
+     "narrated": false,
+     "turns": [
+      {
+       "i": 0,
+       "said": "도움말 열어줘",
+       "reply": "Help is opened.",
+       "clicked": [
+        "Help"
+       ],
+       "clicked_roles": [
+        "link"
+       ],
+       "effects": [
+        {
+         "kind": "click",
+         "target": "Help",
+         "role": "link",
+         "text": ""
+        }
+       ],
+       "n_effects": 1,
+       "history_lines": 0,
+       "window_lines": 0,
+       "window": "",
+       "prompt_tokens": 370,
+       "out_tokens": 20,
+       "reason": "stop",
+       "truncated": false,
+       "thought_chars": 0,
+       "seconds": 0.405
+      },
+      {
+       "i": 1,
+       "said": "복사 버튼 눌러줘",
+       "reply": "Copy button is clicked.",
+       "clicked": [
+        "Copy"
+       ],
+       "clicked_roles": [
+        "button"
+       ],
+       "effects": [
+        {
+         "kind": "click",
+         "target": "Copy",
+         "role": "button",
+         "text": ""
+        }
+       ],
+       "n_effects": 1,
+       "history_lines": 3,
+       "window_lines": 3,
+       "window": "\n  them: 도움말 열어줘\n  you: Help is opened.\n  offered: to click the link \"Help\" — nothing was done; they have not accepted\n\n",
+       "prompt_tokens": 412,
+       "out_tokens": 20,
+       "reason": "stop",
+       "truncated": false,
+       "thought_chars": 0,
+       "seconds": 0.363
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "kind": "anew",
+   "case": "paint red -> crop",
+   "screen": "untitled---paint",
+   "ask": "빨간색 골라줘",
+   "then": "자르기 눌러줘",
+   "want": [
+    "Crop",
+    "button"
+   ],
+   "why": "an unrelated new request: no correction, no reference to the past.",
+   "verdicts": [
+    "landed",
+    "landed",
+    "landed"
+   ],
+   "counted": "landed",
+   "from_repeat": 0,
+   "agreed": true,
+   "ok": true,
+   "void": false,
+   "narrated_counted": false,
+   "repeats": [
+    {
+     "verdict": "landed",
+     "offered": [
+      [
+       "click",
+       "Red",
+       "list item"
+      ],
+      [
+       "click",
+       "Orange",
+       "list item"
+      ]
+     ],
+     "again": [
+      [
+       "click",
+       "Crop",
+       "button"
+      ]
+     ],
+     "offered_lines": [
+      "to click the list item \"Red\" — nothing was done; they have not accepted",
+      "to click the list item \"Orange\" — nothing was done; they have not accepted"
+     ],
+     "narrated": false,
+     "turns": [
+      {
+       "i": 0,
+       "said": "빨간색 골라줘",
+       "reply": "빨간색을 선택할 수 있는 옵션을 찾았어요.",
+       "clicked": [
+        "Red",
+        "Orange"
+       ],
+       "clicked_roles": [
+        "list item",
+        "list item"
+       ],
+       "effects": [
+        {
+         "kind": "click",
+         "target": "Red",
+         "role": "list item",
+         "text": ""
+        },
+        {
+         "kind": "click",
+         "target": "Orange",
+         "role": "list item",
+         "text": ""
+        }
+       ],
+       "n_effects": 2,
+       "history_lines": 0,
+       "window_lines": 0,
+       "window": "",
+       "prompt_tokens": 1271,
+       "out_tokens": 39,
+       "reason": "stop",
+       "truncated": false,
+       "thought_chars": 0,
+       "seconds": 0.734
+      },
+      {
+       "i": 1,
+       "said": "자르기 눌러줘",
+       "reply": "자르기 버튼을 찾았어요.",
+       "clicked": [
+        "Crop"
+       ],
+       "clicked_roles": [
+        "button"
+       ],
+       "effects": [
+        {
+         "kind": "click",
+         "target": "Crop",
+         "role": "button",
+         "text": ""
+        }
+       ],
+       "n_effects": 1,
+       "history_lines": 4,
+       "window_lines": 4,
+       "window": "\n  them: 빨간색 골라줘\n  you: 빨간색을 선택할 수 있는 옵션을 찾았어요.\n  offered: to click the list item \"Red\" — nothing was done; they have not accepted\n  offered: to click the list item \"Orange\" — nothing was done; they have not accepted\n\n",
+       "prompt_tokens": 1347,
+       "out_tokens": 26,
+       "reason": "stop",
+       "truncated": false,
+       "thought_chars": 0,
+       "seconds": 0.559
+      }
+     ]
+    },
+    {
+     "verdict": "landed",
+     "offered": [
+      [
+       "click",
+       "Red",
+       "list item"
+      ]
+     ],
+     "again": [
+      [
+       "click",
+       "Crop",
+       "button"
+      ]
+     ],
+     "offered_lines": [
+      "to click the list item \"Red\" — nothing was done; they have not accepted"
+     ],
+     "narrated": false,
+     "turns": [
+      {
+       "i": 0,
+       "said": "빨간색 골라줘",
+       "reply": "빨간색을 선택할 수 있어요.",
+       "clicked": [
+        "Red"
+       ],
+       "clicked_roles": [
+        "list item"
+       ],
+       "effects": [
+        {
+         "kind": "click",
+         "target": "Red",
+         "role": "list item",
+         "text": ""
+        }
+       ],
+       "n_effects": 1,
+       "history_lines": 0,
+       "window_lines": 0,
+       "window": "",
+       "prompt_tokens": 1271,
+       "out_tokens": 26,
+       "reason": "stop",
+       "truncated": false,
+       "thought_chars": 0,
+       "seconds": 0.542
+      },
+      {
+       "i": 1,
+       "said": "자르기 눌러줘",
+       "reply": "자르기 버튼을 클릭할 수 있어요.",
+       "clicked": [
+        "Crop"
+       ],
+       "clicked_roles": [
+        "button"
+       ],
+       "effects": [
+        {
+         "kind": "click",
+         "target": "Crop",
+         "role": "button",
+         "text": ""
+        }
+       ],
+       "n_effects": 1,
+       "history_lines": 3,
+       "window_lines": 3,
+       "window": "\n  them: 빨간색 골라줘\n  you: 빨간색을 선택할 수 있어요.\n  offered: to click the list item \"Red\" — nothing was done; they have not accepted\n\n",
+       "prompt_tokens": 1320,
+       "out_tokens": 29,
+       "reason": "stop",
+       "truncated": false,
+       "thought_chars": 0,
+       "seconds": 0.639
+      }
+     ]
+    },
+    {
+     "verdict": "landed",
+     "offered": [
+      [
+       "click",
+       "Red",
+       "list item"
+      ]
+     ],
+     "again": [
+      [
+       "click",
+       "Crop",
+       "button"
+      ]
+     ],
+     "offered_lines": [
+      "to click the list item \"Red\" — nothing was done; they have not accepted"
+     ],
+     "narrated": false,
+     "turns": [
+      {
+       "i": 0,
+       "said": "빨간색 골라줘",
+       "reply": "빨간색을 선택할 수 있어요.",
+       "clicked": [
+        "Red"
+       ],
+       "clicked_roles": [
+        "list item"
+       ],
+       "effects": [
+        {
+         "kind": "click",
+         "target": "Red",
+         "role": "list item",
+         "text": ""
+        }
+       ],
+       "n_effects": 1,
+       "history_lines": 0,
+       "window_lines": 0,
+       "window": "",
+       "prompt_tokens": 1271,
+       "out_tokens": 26,
+       "reason": "stop",
+       "truncated": false,
+       "thought_chars": 0,
+       "seconds": 0.559
+      },
+      {
+       "i": 1,
+       "said": "자르기 눌러줘",
+       "reply": "자르기 버튼을 클릭할 수 있어요.",
+       "clicked": [
+        "Crop"
+       ],
+       "clicked_roles": [
+        "button"
+       ],
+       "effects": [
+        {
+         "kind": "click",
+         "target": "Crop",
+         "role": "button",
+         "text": ""
+        }
+       ],
+       "n_effects": 1,
+       "history_lines": 3,
+       "window_lines": 3,
+       "window": "\n  them: 빨간색 골라줘\n  you: 빨간색을 선택할 수 있어요.\n  offered: to click the list item \"Red\" — nothing was done; they have not accepted\n\n",
+       "prompt_tokens": 1320,
+       "out_tokens": 29,
+       "reason": "stop",
+       "truncated": false,
+       "thought_chars": 0,
+       "seconds": 0.555
+      }
+     ]
+    }
+   ]
+  }
+ ]
+}

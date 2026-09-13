@@ -761,11 +761,13 @@ def sending_check() -> int:
               f"{'' if not got else '  ' + ', '.join(got) + ' — ' + why}")
     print(f"       senders: {', '.join(found['senders']) or 'none'}")
 
-    #: 5 — the deferral names files, so the files have to be there.
-    gone = [n for n in sending.COVERS_HISTORY if not (HERE / n).exists()]
+    #: 5 — the deferral names files, so the files have to be there. **Both of its lists**: the one
+    #: it counts as coverage and the one it prints as explicitly not counting. A filename nobody can
+    #: open is no better in the second list than in the first.
+    gone = [n for n in sending.NAMED_HARNESSES if not (HERE / n).exists()]
     bad += bool(gone)
     print(f"  {'ok ' if not gone else 'FAIL':<4} "
-          f"{'every harness named as covering the axis exists':<52}"
+          f"{'every harness the deferral names exists, both lists':<52}"
           f"{'' if not gone else '  missing: ' + ', '.join(gone)}")
 
     #: 6 — **can 2, 3 and 4 fail?** Three of the four checks above are "a thing was not found", and

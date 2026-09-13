@@ -79,12 +79,38 @@ HERE = pathlib.Path(__file__).resolve().parent
 #: 3 of 1,845 at `q1ec131` ("do" first), 18 of 1,845 at `qa62805` ("say" first).
 WITH_HISTORY_TRUNCATED = "18 of 1,845 turns (measure/conversation.py --axis d, qa62805, say-first)"
 
-#: The harnesses that DO exercise the conversation, and what each costs. Data, not prose, because
-#: `note()` prints it and `--prompt-check` asserts every file named here exists.
+#: The harness whose result on disk `deferral()` goes looking for. **One entry, and the judgement
+#: that reduced it to one is the paragraph below.** Data, not prose, because `note()` prints it and
+#: `--prompt-check` asserts every file named here exists.
 COVERS_HISTORY = {
     "conversation.py": "python -m measure.conversation --axis d   1,872 calls, ~24 min",
-    "repair.py": "python -m measure.repair                  one conversation, no distance axis",
 }
+
+#: **`repair.py` was in the dict above until 2026-09-13 and `deferral()` never looked at it.**
+#: `exercised_at_this_prompt` is computed from `conversation-*.json` alone, so three harnesses
+#: printed *"covered by measure/repair.py"* against a claim nothing in this file checked. That is
+#: the shape of defect this module exists to prevent, one level up: a coverage instrument with a
+#: line in it that is not instrumented.
+#:
+#: Fixed by dropping the claim rather than by wiring up the check, and the judgement is:
+#: **a distance-1 harness with no without-history arm is not coverage for "no slide".** The
+#: blindness being deferred is that a prompt change can move what the agent does *mid-conversation*
+#: while three history-free numbers hold digit for digit — and that is what took rule-following from
+#: 36 of 36 probes to 14 of 36. Catching it needs an anchor far enough back to be truncated and a
+#: control arm that says the anchor was what mattered. These two send a conversation and have
+#: neither: every second turn sits one line after its offer, and there is no without-history cell to
+#: compare against, so a slide at distance 8 leaves both of them unmoved. They are listed because
+#: they *are* the two files whose numbers would move under a change to `loop.py`'s history writing —
+#: `reoffer.py` exists to measure exactly that — and a reader deciding what to re-run should see
+#: them. Listed, printed, and explicitly not counted.
+EXERCISES_HISTORY = {
+    "repair.py": "4 second turns per repeat, all at distance 1, no without-history arm",
+    "reoffer.py": "20 second turns per repeat, all at distance 1, no without-history arm",
+}
+
+#: Every file named anywhere above. `--prompt-check` walks this, so a harness renamed out from under
+#: either dict fails a check rather than printing a filename nobody can open.
+NAMED_HARNESSES = {**COVERS_HISTORY, **EXERCISES_HISTORY}
 
 
 class _NoHistory:
@@ -236,6 +262,9 @@ def deferral(tag: str) -> dict:
         "axis": "the conversation - a 'Recently:' block in the prompt",
         "sent_by_this_run": False,
         "covered_by": COVERS_HISTORY,
+        #: Named and **not** counted — see the constant. Stored so a reader of the JSON gets the
+        #: same distinction the printed block makes, rather than a shorter list with no reason.
+        "exercises_only": EXERCISES_HISTORY,
         "prompt": tag,
         "runs_at_this_prompt": [p.name for p in at],
         "newest_run_at": (runs[0][1] if runs else None),
@@ -277,7 +306,12 @@ def note(tag: str, truncated=None, of=None) -> dict:
         print(f"    token ceiling, this run: {truncated} of {of} replies. With a conversation in "
               f"the prompt: {WITH_HISTORY_TRUNCATED}.")
     for name, how in COVERS_HISTORY.items():
-        print(f"    covered by measure/{name:<18} {how}")
+        print(f"    covered by     measure/{name:<18} {how}")
+    for name, how in EXERCISES_HISTORY.items():
+        print(f"    NOT coverage:  measure/{name:<18} {how}")
+    print("    ** the second list sends a conversation and nothing here checks its result: "
+          "distance 1,")
+    print("       no without-history arm. A 'no slide' reading rests on the first list alone. **")
     if d["exercised_at_this_prompt"]:
         print(f"    at this prompt ({tag}): {len(d['runs_at_this_prompt'])} conversation result(s) "
               f"exist -")

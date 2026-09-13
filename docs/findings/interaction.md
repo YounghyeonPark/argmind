@@ -56,6 +56,50 @@ with itself on 9 of 36.
 **An English control was added** and it matters: a harness that only rewards Korean would score a
 model that always answers in Korean as perfect. 12 of 12 English in, English out.
 
+### The tense was measured, and it is halfway there — 5 fixed, 0 broken, p = 0.0625
+
+`measure/reoffer.py`, twenty two-turn cases in three groups so that no reflex passes all three, run
+against `argmind/core/loop.py` at `HEAD` and at `HEAD~1` — the only variable.
+
+| group | n | turn 2 | correct | HEAD~1 | HEAD |
+|---|---|---|---|---|---|
+| memory | 12 | *"방금 뭘 하려고 했어?"* and five other phrasings | **no** effect | 1 of 11 | **6 of 11** |
+| accept | 4 | *"응 그렇게 해줘"* | **the same** effect again | 2 of 4 | 2 of 4 |
+| anew | 4 | a different named request | the new target | 4 of 4 | 4 of 4 |
+
+**5 fixed, 0 broken, 1 correct in both, 5 wrong in both, 1 void. Exact two-sided p = 0.0625**, against
+a floor of six discordant pairs printed *before* the comparison. So: **not the pre-registered support,
+and not the pre-registered refutation either.** The direction is unanimous and is the most extreme
+outcome five pairs can produce; no re-analysis reaches 0.05, only more cases would, and enlarging
+the set after seeing 0.0625 is optional stopping. One-sided is 0.031 and choosing one-sidedness
+afterwards does not carry.
+
+Both controls are unmoved, so the gain is **not** an agent that acts less — which is the failure a
+one-group harness would have scored as a triumph. `VOID` is a verdict rather than a pass: a case is
+void if no `offered:` line reached turn 2's prompt at all, without which a change that stopped
+writing the line would have scored perfect.
+
+The commit's own n=1 claim survives its own enlargement: `cm copy / 방금 뭘 하려고 했어`, the case
+recorded verbatim on 2026-09-10, re-offers in **both** arms.
+
+**Unmeasured and named rather than implied**: `did`, `could not` and `they said no to` were rewritten
+by the same commit and **no harness feeds those channels**, so nothing here says anything about them.
+Distance 1 only, nothing performed, `Fixed` eyes.
+
+### Saying yes to an offer does nothing, 2 of 4 — a new defect, and worse than the one above
+
+A by-product of the control group, identical word for word in both arms, so it is nothing to do with
+the tense:
+
+    응 그렇게 해줘    -> acted
+    어 눌러줘        -> ignored
+    네 해주세요       -> acted
+    그래 진행해       -> ignored
+
+**The re-offer defect costs a row you ignore. This one means the thing you asked for does not
+happen** and you have to say it again — which is the interaction the owner's priority is about. Open,
+and it belongs to `conversation`.
+
 ### A candidate mechanism for the memory defect, with evidence
 
 `Session.remember_doing(offered=…)` renders through `_describe`, which is written for actions taken.
