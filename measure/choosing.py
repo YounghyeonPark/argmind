@@ -43,7 +43,7 @@ quoted as evidence that a token-ceiling degeneration had ended when 18 of 1,845 
 still hit it. `measure/sending.py` has the whole account and `--prompt-check` refuses to pass if any
 of the machinery is removed.
 
-## The prompt fingerprint every harness here imports — `q`, from 2026-09-10
+## The prompt fingerprint every harness here imports — `r`, from 2026-09-13
 
     python -m measure.choosing --prompt-record    what is sent, verbatim, and its six characters
     python -m measure.choosing --prompt-check     that it moves on the prompt and not on prose,
@@ -68,20 +68,46 @@ baselines. It under-covered: the files stored `prompt_text = SYSTEM`, so the rep
 one literal whose reordering took `saying.py` from 6 leaks of 32 to 0 — appears in **no** result
 file written before today.
 
-`q` is a hash of what `converse()` actually renders, over three probes that between them exercise
+`r` is a hash of what `converse()` actually renders, over six probes that between them exercise
 every branch of its assembly, plus `MAX_LISTED` and `MOST_AT_ONCE` because `converse.py` itself
 records that the ordering and `MOST_AT_ONCE` are the only two things ever measured to move the line.
 The rendered text is stored verbatim as `prompt_record`, so two runs are compared by diffing rather
 than by trusting six characters to have meant the same thing twice.
 
-**The migration is the letter.** Old files say `p<hex>` and new ones say `q<hex>`; the two hash
+**`q` was three probes and none of them carried an offer. That is what `r` fixes.** On 2026-09-13
+`converse.py` grew a slot that re-renders an offer nobody has answered immediately above
+`They said:`, conditioned on an `offered` line being in the history. `q`'s three probes sent
+`("them", "a"), ("you", "b")` and nothing else, so the slot never rendered under the fingerprint and
+**the shipped tag stayed `qa62805`, character for character the baseline's** — two materially
+different prompts under one name. It was not a labelling nuisance: `measure/reoffer.py` builds its
+filename out of `model / think / q / s / f / h / l / x`, none of which the fix moved, so the scored
+arm resolved to the committed baseline's own path and would have refused to write **after** every
+model call. Ten minutes of calls, exit 3, nothing recorded. `r` adds three probes — an unanswered
+offer, that same offer settled, and an unanswered offer on an unprompted turn — which between them
+pin the slot, the rule that closes an offer, and the rule that the slot is only for turns somebody
+asked on. `--prompt-check` prints both halves of that: a mutant `q` could not see, and that `r` does.
+
+**The migration is the letter, and this is its second use.** Old files say `p<hex>` (a hash of
+`converse.py`), then `q<hex>` (three probes), and new ones say `r<hex>` (six). The three hash
 different things and can collide on the hex, never on the letter. Nothing on disk was renamed,
 because a recorded measurement is not editable. A reader who lines `choosing-index-…-p5461db.json`
-up against a `q` file and treats them as a matched pair sees the letters differ, sees `prompt_scheme`
-spelled out in the new file, and sees a `prompt_record` where the old file has a `prompt_text` that
-holds only the system prompt — three refusals, of which one is in the filename. To ask the real
-question, whether two runs shared a library, compare `converse_file_print`: it is the old `p` value,
-recorded in every new file and kept out of every new name.
+up against an `r` file and treats them as a matched pair sees the letters differ, sees
+`prompt_scheme` spelled out in the new file, and sees a `prompt_record` where the old file has a
+`prompt_text` that holds only the system prompt — three refusals, of which one is in the filename.
+A `q` file against an `r` file gets the first two: `prompt_record` is in both, and diffing them shows
+exactly three blocks present in one and absent from the other. To ask the real question, whether two
+runs shared a library, compare `converse_file_print`: it is the old `p` value, recorded in every new
+file and kept out of every new name.
+
+**What this cost, stated where a reader will hit it.** `measure/reoffer.py` records
+`choosing_print` — a byte hash of *this file* — and its `compare()` holds that fixed with no way
+to declare it, so **a reoffer result written before 2026-09-13 cannot be `--compare`d against one
+written after**, on the instrument having moved rather than on anything measured. That is
+`measure/reoffer.py:875`, and it is not fixable from here: this file cannot become more sensitive
+without its own bytes changing. The two ways out are to re-run the baseline arm under this file, or
+for whoever owns `reoffer.py` to make `choosing_print` declarable. Recorded here because the last
+several times a fingerprint in this directory was made stricter, what it broke was found by somebody
+else, later.
 """
 
 from __future__ import annotations
@@ -129,20 +155,29 @@ RIGHT, WRONG, MISSED, DECLINED = "right", "wrong", "missed", "declined"
 
 # ---- what the model is actually sent -------------------------------------------------------------
 
-#: The letter every filename carries for the current scheme, and **the letter IS the scheme**. Old
-#: files say `p<hex>` and were a hash of `converse.py`; new ones say `q<hex>` and are a hash of the
-#: rendered prompt. Two schemes can produce the same six hex characters by accident and can never
-#: produce the same letter, so a reader who ignores everything else still cannot line a `p` file up
-#: against a `q` one and believe they share a prompt.
-PROMPT_LETTER = "q"
-PROMPT_SCHEME = ("q = sha256(prompt_record())[:6] — the prompt as converse() actually renders it, "
-                 "over three probes, plus MAX_LISTED and MOST_AT_ONCE. Superseded p = "
-                 "sha256(converse.py)[:6] on 2026-09-10. A p-named file and a q-named file are NOT "
-                 "comparable by fingerprint; compare converse_file_print instead.")
+#: The letter every filename carries for the current scheme, and **the letter IS the scheme**. `p`
+#: was a hash of `converse.py`; `q` was a hash of the rendered prompt over three probes; `r` is the
+#: same over six, three of which carry an offer in the history. Three schemes can produce the same
+#: six hex characters by accident and can never produce the same letter, so a reader who ignores
+#: everything else still cannot line a `p` or a `q` file up against an `r` one and believe they
+#: share a prompt.
+#:
+#: **Bumped `q` -> `r` on 2026-09-13 because the meaning changed, not because the value did.** A
+#: value that moves under an unchanged meaning is an ordinary fork; a meaning that moves under an
+#: unchanged letter is what lets somebody diff two numbers that were never the same measurement.
+PROMPT_LETTER = "r"
+PROMPT_SCHEME = ("r = sha256(prompt_record())[:6] — the prompt as converse() actually renders it, "
+                 "over six probes, three of which carry an offer in the history, plus MAX_LISTED "
+                 "and MOST_AT_ONCE. Superseded q (the same over three probes, none carrying an "
+                 "offer, so a prompt change conditioned on an offered history line was invisible "
+                 "to it) on 2026-09-13, and p = sha256(converse.py)[:6] on 2026-09-10. A p-, q- "
+                 "and r-named file are NOT comparable by fingerprint; compare converse_file_print, "
+                 "or diff prompt_record between a q and an r.")
 
 #: **The probe.** Two widgets, two lines of history, one request — fixed literal data whose only job
 #: is to make `converse()` render every branch it has: asked and unprompted, with history and
-#: without, with widgets and without. It is **not** a fixture and must not be tuned: editing
+#: without, with widgets and without, and — since 2026-09-13 — with an offer open, settled and
+#: open-on-an-unprompted-turn. It is **not** a fixture and must not be tuned: editing
 #: anything below forks every fingerprint in this directory, which is the price of hashing something
 #: rendered rather than something read off disk.
 #:
@@ -152,6 +187,96 @@ PROBE_WIDGETS = (Widget("one", "button", (0, 0, 1, 1)),
                  Widget("two", "combo box", (0, 0, 1, 1)))
 PROBE_HISTORY = (("them", "a"), ("you", "b"))
 PROBE_TEXT = "probe"
+
+#: **The two history labels the offer probes have to use to reach the branch they exist to reach.**
+#: `loop.py`'s `remember_doing()` files an offer nobody has answered under `offered` and a completed
+#: action under `did`; `converse.py` reads those same two spellings back out. They are literals here
+#: and **not** imported from either, for one reason: `prompt_record()` has to render against a
+#: `converse.py` that predates the whole idea — that comparison is the entire point of the `q -> r`
+#: bump — and an import would turn "this library has no offer slot" into an ImportError.
+#: `_offer_labels_agree()` couples them at the only point where coupling is possible.
+PROBE_OFFER_LABEL = "offered"
+PROBE_SETTLED_LABEL = "did"
+
+#: Dull ASCII like the rest of the probe, and **deliberately not `loop.py`'s exact sentence.** What
+#: `loop.py` writes is a condition of a run already — `l` in every filename that has one — and
+#: copying its prose in here would fork every fingerprint in this directory the next time that
+#: sentence is reworded. This is a stand-in whose only job is to carry the label.
+PROBE_OFFER = 'to click the button "one" - nothing was done; they have not accepted'
+PROBE_SETTLED = 'clicked the button "one"'
+
+#: `PROBE_HISTORY` with an offer nobody has answered appended, and the same with that offer settled.
+#: Appended rather than woven in, so diffing a probe-4 block against a probe-1 block in any two
+#: `prompt_record`s shows one line.
+PROBE_OPEN_HISTORY = PROBE_HISTORY + ((PROBE_OFFER_LABEL, PROBE_OFFER),)
+PROBE_SETTLED_HISTORY = PROBE_OPEN_HISTORY + ((PROBE_SETTLED_LABEL, PROBE_SETTLED),)
+
+#: **The six renders `r` hashes, and what each one is for.** Every branch of `converse()`'s prompt
+#: assembly has to be reached by at least one of them, because a branch no probe reaches is a
+#: prompt change no filename in this directory records.
+#:
+#: 1-3 are the `q` set: asked/unprompted, history/none, widgets/none.
+#:
+#: 4-6 were added on 2026-09-13 and they exist as a set, not as one probe with two spares:
+#:
+#: * **4** renders the standing-offer slot. Without it the slot is invisible and two prompts share
+#:   a tag, which is what happened.
+#: * **5** is the same offer *settled*. It is the only probe that can see the rule that closes an
+#:   offer: break it so that a completed action stops closing one and 5 forks. Its absence would
+#:   leave "the slot renders when it should not" outside the fingerprint entirely.
+#: * **6** is an unanswered offer on an **unprompted** turn, where the shipped rule is that the slot
+#:   does *not* render — the tail line asks what *they* say next and nobody said anything. Remove
+#:   that gate and 6 forks; without 6, removing it moves nothing, because 2 sends no history.
+#:
+#: 5 and 6 are the two rows that must fork if a rule *stops applying*, which is the direction a
+#: fingerprint made of positive examples always misses.
+PROBES = (
+    ("asked, with history, widgets listed", Said(PROBE_TEXT), PROBE_WIDGETS, PROBE_HISTORY),
+    ("unprompted, no history, widgets listed", Perceived(PROBE_TEXT), PROBE_WIDGETS, ()),
+    ("asked, no history, nothing on screen", Said(PROBE_TEXT), (), ()),
+    ("asked, an offer nobody has answered, widgets listed",
+     Said(PROBE_TEXT), PROBE_WIDGETS, PROBE_OPEN_HISTORY),
+    ("asked, that same offer settled, widgets listed",
+     Said(PROBE_TEXT), PROBE_WIDGETS, PROBE_SETTLED_HISTORY),
+    ("unprompted, an offer nobody has answered, widgets listed",
+     Perceived(PROBE_TEXT), PROBE_WIDGETS, PROBE_OPEN_HISTORY),
+)
+
+#: **The superseded `q` set, kept as data and read by exactly one thing**: the `--prompt-check` row
+#: that shows what `q` could not see. A scheme replaced with the assertion that it was too narrow
+#: and no demonstration is a scheme swapped on a hunch, and this directory has spent two days on
+#: exactly that mistake in the other direction. Nothing else may use it, and nothing writes it.
+PROBES_Q = PROBES[:3]
+
+
+def _offer_labels_agree(module) -> None:
+    """Refuse if the module names its offer labels and the probes' labels are not them.
+
+    **The one coupling the offer probes cannot do without.** Probes 4-6 reach the standing-offer
+    branch only because they spell the label the way `converse.py` spells it. Rename it in
+    `converse.py` and `loop.py` together and the probes go on rendering perfectly — as three more
+    ordinary history probes, covering nothing — and the fingerprint narrows in silence, which is
+    the same failure `q` had, one layer down.
+
+    **Absent is allowed and that is deliberate, not lenient.** A `converse.py` with no `OFFER_OPEN`
+    is a library from before the slot existed, and `prompt_record()` must render against one of
+    those: it is what `git show HEAD:argmind/core/converse.py` produces, and rendering it is how the
+    two directions of the fix get compared without writing a byte into `argmind/`. What is refused
+    is a module that names the concept and names it something else.
+    """
+    opens = getattr(module, "OFFER_OPEN", None)
+    if opens is not None and opens != PROBE_OFFER_LABEL:
+        raise RuntimeError(
+            f"converse.OFFER_OPEN is {opens!r} and this file's PROBE_OFFER_LABEL is "
+            f"{PROBE_OFFER_LABEL!r}, so probes 4-6 no longer render the standing-offer slot and "
+            f"the fingerprint has quietly narrowed to what q covered. Change PROBE_OFFER_LABEL, "
+            f"bump PROMPT_LETTER, and expect every fingerprint in measure/ to move")
+    settled = getattr(module, "OFFER_SETTLED", None)
+    if settled is not None and PROBE_SETTLED_LABEL not in settled:
+        raise RuntimeError(
+            f"converse.OFFER_SETTLED is {settled!r} and this file's PROBE_SETTLED_LABEL is "
+            f"{PROBE_SETTLED_LABEL!r}, so probe 5 no longer settles the offer it opens and nothing "
+            f"in this fingerprint covers the rule that closes one")
 
 
 class _Capture:
@@ -185,13 +310,14 @@ def _render(speak, label: str, trigger, widgets, history) -> tuple[str, str]:
     return f"--- {label} ---\n{cap.sent}\n", cap.sent
 
 
-def prompt_record(module=None) -> str:
+def prompt_record(module=None, probes=None) -> str:
     """**What is actually sent**, verbatim — stored beside every result rather than hashed away
     into six characters.
 
     `module` is `argmind.core.converse` unless `--prompt-check` hands in a mutant of it; taking it
     as an argument is what lets this file prove its own claim without writing a byte into
-    `argmind/`.
+    `argmind/`. `probes` is `PROBES` unless `--prompt-check` hands in `PROBES_Q`, which it does
+    once, to show what the superseded scheme could not see.
 
     ## Why this replaced a hash of `converse.py` (2026-09-10)
 
@@ -212,14 +338,30 @@ def prompt_record(module=None) -> str:
 
     ## What is in it
 
-    Three renders through the real `converse()`, covering every branch of its assembly — asked /
+    Six renders through the real `converse()`, covering every branch of its assembly — asked /
     unprompted (so `UNPROMPTED` is in the record), history / none (so the `Recently:` header and the
     `  who: text` line format are), widgets / none (so `describe()`'s `0: role "name"` numbering is,
-    and so is the empty-surface line). Plus `MAX_LISTED` and `MOST_AT_ONCE` as bare numbers, because
-    they are conditions of the result that never appear in the prompt: `converse.py`'s own docstring
-    records that of everything ever tried, **`MOST_AT_ONCE` and the field ordering are the only two
-    things that ever moved the measured line**, so a print blind to one of them is blind to half of
-    what is known to work.
+    and so is the empty-surface line), and an offer open / settled / open-but-unprompted (so the
+    standing-offer slot is, and so are the two rules that decide when it is *not* rendered). Plus
+    `MAX_LISTED` and `MOST_AT_ONCE` as bare numbers, because they are conditions of the result that
+    never appear in the prompt: `converse.py`'s own docstring records that of everything ever tried,
+    **`MOST_AT_ONCE` and the field ordering are the only two things that ever moved the measured
+    line**, so a print blind to one of them is blind to half of what is known to work.
+
+    ## Why there are six and not three (2026-09-13)
+
+    There were three, and the third thing this file's docstring says a fingerprint must survive —
+    a change the probes do not exercise — happened. `converse.py` grew a block rendered only when
+    the history holds an `offered` line, the probes' history was `("them", "a"), ("you", "b")`, and
+    the shipped tag did not move: `qa62805` before the change and `qa62805` after. Two prompts, one
+    name, and `measure/reoffer.py` — whose filename is built out of that tag and nothing else that
+    the change moved — would have made every model call of a scored arm and then refused to write,
+    onto the committed baseline's own path.
+
+    The three added probes are not "one that triggers it". Probe 4 renders the slot; probe 5 settles
+    the offer so the *closing* rule is covered; probe 6 makes the turn unprompted so the *gate* is.
+    A fingerprint built only from probes that make a feature appear cannot see the feature being
+    made to appear in more places, which is the same blindness the other way up.
 
     ## What it would fail to notice changing
 
@@ -232,6 +374,18 @@ def prompt_record(module=None) -> str:
     found.) They are real conditions and this print does not cover them. Also outside it, and
     covered elsewhere: which fixtures were used (`s`), which cases (`f`), the harness itself (`h`),
     and the model wrapper's `num_ctx` / `num_predict` / `temperature` (`llm_print`).
+
+    **The wording `loop.py` files an offer under**, too. `PROBE_OFFER` is a stand-in for it on
+    purpose: that sentence is a condition of a run already, carried by `l`, and copying it here
+    would fork every fingerprint in this directory the next time it is reworded — the coupling
+    the `p` scheme was abandoned for. What the probes pin is the label, `offered`, because the
+    branch is keyed on it; `_offer_labels_agree()` refuses if the library renames it.
+
+    And **any branch keyed on something no probe varies**: a second unanswered offer, a history
+    longer than the window, a `Watch` trigger that is neither `Said` nor `Perceived`. Six probes
+    cover six configurations and `converse()` has more than six. That is the standing debt of any
+    scheme of this shape, and the reason `prompt_record` is stored verbatim beside every result
+    rather than only hashed — a diff can show a reader something the six characters cannot.
     """
     import importlib                                                     # noqa: PLC0415
 
@@ -241,12 +395,11 @@ def prompt_record(module=None) -> str:
     #: function and every attribute read here fails, or worse, succeeds on the wrong object. The
     #: scheme this replaced carried the same warning in its docstring and this still caught me.
     m = module or importlib.import_module("argmind.core.converse")
+    #: Before anything renders. A probe that has stopped reaching its branch renders perfectly.
+    _offer_labels_agree(m)
     blocks = [f"MAX_LISTED = {m.MAX_LISTED}\nMOST_AT_ONCE = {m.MOST_AT_ONCE}\n"]
     texts = []
-    for label, trigger, widgets, history in (
-            ("asked, with history, widgets listed", Said(PROBE_TEXT), PROBE_WIDGETS, PROBE_HISTORY),
-            ("unprompted, no history, widgets listed", Perceived(PROBE_TEXT), PROBE_WIDGETS, ()),
-            ("asked, no history, nothing on screen", Said(PROBE_TEXT), (), ())):
+    for label, trigger, widgets, history in (PROBES if probes is None else probes):
         block, text = _render(m.converse, label, trigger, widgets, history)
         blocks.append(block)
         texts.append(text)
@@ -255,23 +408,30 @@ def prompt_record(module=None) -> str:
     #: and the fingerprint would go on looking healthy while covering less than it says. Refusing to
     #: run beats a print that quietly narrows.
     if len(set(texts)) != len(texts):
+        same = sorted({t for t in texts if texts.count(t) > 1}, key=texts.index)
+        which = [lab for (lab, *_), t in zip(probes if probes is not None else PROBES, texts)
+                 if t in same]
         raise RuntimeError(
-            "two of the three probes rendered identically, so a branch of converse()'s prompt "
-            "assembly this fingerprint claims to cover is no longer distinguishable — the probes in "
-            "measure/choosing.py need rewriting before any number is quoted")
+            f"{len(texts) - len(set(texts))} of the {len(texts)} probes rendered identically "
+            f"({', '.join(which)}), so a branch of converse()'s prompt assembly this fingerprint "
+            f"claims to cover is no longer distinguishable — the probes in measure/choosing.py "
+            f"need rewriting before any number is quoted")
     return "\n".join(blocks)
 
 
-def prompt_print(module=None) -> str:
+def prompt_print(module=None, probes=None) -> str:
     """Six characters over `prompt_record()` — the prompt as sent, not the file that builds it.
 
     **A comment cannot fork this** because a comment is not sent. Neither can a docstring, an
     import, a rename, a type annotation, or any of the reasoning `converse.py` carries about why its
     prompt is shaped the way it is. What forks it is a changed word in `SYSTEM` or `UNPROMPTED`, a
     changed reply-shape line, a changed widget-line format, a changed trigger phrasing, a changed
-    history-line format, and a changed `MAX_LISTED` or `MOST_AT_ONCE`. That list is the whole claim.
+    history-line format, a changed `MAX_LISTED` or `MOST_AT_ONCE`, and — since 2026-09-13 — the
+    standing-offer slot: its wording, its position, the rule that opens it, the rule that closes it
+    and the rule that suppresses it on an unprompted turn. That list is the whole claim, and
+    `--prompt-check` scores every line of it in both directions.
     """
-    return hashlib.sha256(prompt_record(module).encode("utf-8")).hexdigest()[:6]
+    return hashlib.sha256(prompt_record(module, probes).encode("utf-8")).hexdigest()[:6]
 
 
 def prompt_tag() -> str:
@@ -601,6 +761,55 @@ def constant(name: str, by: int = 7):
     return edit
 
 
+#: The mutant `offer_conditioned()` appends. **A wrapper, not a splice**, because the row has to
+#: apply to a `converse.py` that already has a standing-offer slot and to one that has never heard
+#: of it — the second is what `git show HEAD:argmind/core/converse.py` gives, and the row is
+#: worthless if it only works on the tree that happens to be checked out. It intercepts the model
+#: rather than the assembly for the same reason: it needs no line of `converse()` to be where it
+#: was.
+_OFFER_CONDITIONED = '''
+
+_prompt_check_shipped_converse = converse
+
+
+def converse(model, widgets, trigger, *, history=None, limit=MAX_LISTED):
+    """A --prompt-check mutant: one rendered line that appears only when the history carries an
+    offer. In memory only; nothing is written. See measure/choosing.py's offer_conditioned()."""
+
+    class _Tap:
+        def ask(self, prompt, images=None):
+            if any(who == {label} for who, _text in (history or ())):
+                prompt = prompt + "\\nThere is an offer nobody has answered."
+            return model.ask(prompt, images)
+
+    return _prompt_check_shipped_converse(_Tap(), widgets, trigger, history=history, limit=limit)
+'''
+
+
+def offer_conditioned():
+    """Add a prompt line rendered **only when the history holds an `offered` entry**.
+
+    **The row the superseded scheme could not pass, and the reason the letter moved.** It is not a
+    hypothetical shape: on 2026-09-13 `converse.py` grew exactly this — a block conditioned on an
+    `offered` history line — and `q`, whose three probes sent `("them", "a"), ("you", "b")`, gave
+    the same six characters before and after. `prompt_check()` scores this row against the shipped
+    six-probe set (it must fork) and then against `PROBES_Q` (it must not), because "the new scheme
+    catches it" is only half of "the new scheme is better than the one it replaced".
+
+    Names nothing inside `converse()`. It appends, so it cannot go stale on a rewrite, and it
+    applies equally to a library with the slot and to one without.
+    """
+    def edit(source, _module):
+        import ast as _ast                                               # noqa: PLC0415
+
+        if not any(isinstance(n, _ast.FunctionDef) and n.name == "converse"
+                   for n in _ast.parse(source).body):
+            raise Dead("converse.py defines no module-level converse() to wrap")
+        return source + _OFFER_CONDITIONED.format(label=repr(PROBE_OFFER_LABEL)), \
+            "one prompt line, only when history holds an 'offered'"
+    return edit
+
+
 #: `(label, edit, must_fork, why)`. **Written before the scheme was run**, and three of them assert
 #: that the print does NOT move — a fingerprint that only ever proves it can change has proved the
 #: easy half.
@@ -628,6 +837,8 @@ PROMPT_MUTANTS = (
     ("MOST_AT_ONCE", constant("MOST_AT_ONCE"), True,
      "never in the prompt, and one of only two things ever measured to move the line"),
     ("MAX_LISTED", constant("MAX_LISTED"), True, "never in the prompt; decides what is shown"),
+    ("a line conditioned on an offered line", offer_conditioned(), True,
+     "the row q failed: this is the shape of the 2026-09-13 change and the tag did not move"),
 )
 
 
@@ -839,7 +1050,8 @@ def prompt_check() -> int:
     print(f"  shipped converse.py -> {PROMPT_LETTER}{base}   "
           f"(old scheme's p{converse_file_print()})")
     print(f"  {len(prepared)} rows, all live\n")
-    print(f"  {'':<4} {'edit':<34} {'what it did':<30} {'old p':<8} {'new q':<8} verdict")
+    print(f"  {'':<4} {'edit':<34} {'what it did':<30} {'old p':<8} "
+          f"{'new ' + PROMPT_LETTER:<8} verdict")
     bad = 0
     for label, text, did, must_fork, _why in prepared:
         got = prompt_print(_mutant_module(text))
@@ -850,6 +1062,26 @@ def prompt_check() -> int:
         want = "must fork" if must_fork else "must NOT fork"
         print(f"  {'ok ' if ok else 'FAIL':<4} {label:<34} {did[:30]:<30} p{legacy:<7} "
               f"{PROMPT_LETTER}{got:<7} {'forked' if forked else 'unchanged':<9} — {want}")
+    #: **What `q` could not see, shown rather than asserted.** The row above says the shipped
+    #: scheme catches a prompt change conditioned on a history line; this says the scheme it
+    #: replaced did not, over the same edit, in the same process. Without the second half the letter
+    #: bump is a claim, every filename in this directory moved for a claim, and the whole cost was
+    #: paid on somebody's judgement. `q` is expected to print the same six characters twice here
+    #: — that identity is the defect, reproduced.
+    blind = _mutant_module(offer_conditioned()(source, shipped)[0])
+    q_was, q_now = prompt_print(shipped, PROBES_Q), prompt_print(blind, PROBES_Q)
+    r_now = prompt_print(blind)
+    seen = r_now != base and q_now == q_was
+    bad += not seen
+    print(f"\n  {'ok ' if seen else 'FAIL':<4} the superseded q set ({len(PROBES_Q)} probes) is "
+          f"blind to that same edit; r ({len(PROBES)} probes) is not")
+    warn = "" if q_now == q_was else ("   ** then q was not the defect this bump was made "
+                                      "for, and every filename here moved for nothing **")
+    print(f"       q{q_was} -> q{q_now}   "
+          f"{'unchanged: two prompts, one tag' if q_now == q_was else 'forked'}{warn}")
+    print(f"       {PROMPT_LETTER}{base} -> {PROMPT_LETTER}{r_now}   "
+          f"{'forked' if r_now != base else 'unchanged   ** the bump bought nothing **'}")
+
     #: The library is read and never written, and this says so out loud rather than trusting the
     #: sentence above. `measure/` owning a check that mutates `argmind/` would be one crash away
     #: from a library edited by a measurement.
@@ -1049,11 +1281,13 @@ def run(model_name: str, repeat: int, only: str | None, *,
     tag = (("name" if named else "index") + ("" if shuffle is None else f"-shuffled{shuffle}")
            + ("" if not drop else "-without-" + "-".join(drop)) + f"-{stem}")
     tag += "" if think is None else ("-thinking" if think else "-nothink")
-    #: **`q`, and the letter is the migration.** Every file here older than 2026-09-10 carries
-    #: `p<hex>`, which was a hash of `converse.py` — a different quantity under six characters of
-    #: the same shape. Two hashes can collide on the hex; they cannot collide on the letter, so a
-    #: `p` file and a `q` file cannot be mistaken for a matched pair however carelessly they are
-    #: read. `converse_file_print` in the JSON is what bridges them.
+    #: **`r`, and the letter is the migration.** Every file here older than 2026-09-10 carries
+    #: `p<hex>`, a hash of `converse.py`; everything between then and 2026-09-13 carries `q<hex>`,
+    #: the rendered prompt over three probes, none of which carried an offer — three different
+    #: quantities under six characters of the same shape. Two hashes can collide on the hex; they
+    #: cannot collide on the letter, so a `p` or a `q` file and an `r` file cannot be mistaken for a
+    #: matched pair however carelessly they are read. `converse_file_print` in the JSON bridges `p`,
+    #: and `prompt_record` — stored verbatim in both — bridges `q`.
     tag += f"-{prompt_tag()}"
     #: **`h` — the harness itself, added 2026-09-11.** `saying.py` recorded this and `choosing.py`
     #: did not, which is the drift that has destroyed three baselines here: a name that carries
@@ -1123,11 +1357,12 @@ def main(argv=None) -> int:
                    help="print the prompt exactly as converse() renders it, and its fingerprint, "
                         "then stop. No model, no screens, nothing written")
     p.add_argument("--prompt-check", action="store_true",
-                   help="prove the fingerprint moves on the eight things that are the prompt and "
-                        "stays put on the three that are only prose; then that no harness here can "
-                        "send a turn without saying what it left out. A row that cannot find what "
-                        "it edits is fatal and no score is printed. Reads argmind/, writes "
-                        "nothing, calls no model")
+                   help="prove the fingerprint moves on everything that is the prompt and stays "
+                        "put on what is only prose, and that the scheme it replaced did not; then "
+                        "that no harness here can send a turn without saying what it left out. A "
+                        "row that cannot find what it edits is fatal and no score is printed. "
+                        "Counts are printed, not written here, because a count in a help string "
+                        "goes stale. Reads argmind/, writes nothing, calls no model")
     a = p.parse_args(argv)
     if a.prompt_record:
         print(prompt_record())
