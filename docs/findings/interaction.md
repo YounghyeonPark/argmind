@@ -97,8 +97,10 @@ the tense:
     그래 진행해       -> ignored
 
 **The re-offer defect costs a row you ignore. This one means the thing you asked for does not
-happen** and you have to say it again — which is the interaction the owner's priority is about. Open,
-and it belongs to `conversation`.
+happen** and you have to say it again — which is the interaction the owner's priority is about.
+
+**Closed on 2026-09-13** — see *The standing-offer block* at the end of this file. The mechanism
+guessed at here and in the commit that fixed it was wrong; the fix was not.
 
 ### A candidate mechanism for the memory defect, with evidence
 
@@ -352,3 +354,83 @@ repeat as the odd one out** (p < 0.0001 against uniform placement), and in 12 of
 draw was the *better* one. The likely mechanism is prefix-cache reuse on the replays, unproven. The
 consequence reaches every harness here: **worst-of-N mostly reports a warm replay, and a person only
 ever gets the cold draw.**
+
+## The standing-offer block: the acceptance defect closed, and its explanation withdrawn (2026-09-13)
+
+`measure/reoffer.py`, 104 cases over four captured screens, `qwen3:8b` thinking off, three repeats
+worst-counted, two `argmind/` trees differing in `core/converse.py` and nothing else — checked, not
+assumed: `llm.py` `7f62fa` and `loop.py` `bc9cc0` on both sides.
+
+| group | | without | with | |
+|---|---|---|---|---|
+| ACCEPT | primary | 15 of 39 | **30 of 39** | 15 fixed, 0 broken, k = 15, **p = 0.00006** |
+| MEMORY | control | 8 of 23 | 14 of 23 | 8 fixed, 2 broken, p = 0.11 — holds |
+| REFUSE | control | 11 of 12 | 11 of 12 | 1 fixed, 1 broken — holds, at the boundary |
+| FARACCEPT | secondary | 3 of 12 | **10 of 12** | 7 fixed, 0 broken, p = 0.0156 |
+| RESTATE | secondary | 6 of 6 | 6 of 6 | unchanged |
+| ANEW | reported | 8 of 8 | 7 of 8 | 0 fixed, **1 broken** |
+
+**The change.** When the conversation holds an offer nobody has answered, it is rendered again
+immediately above `They said:`, with a tail naming all three readings — a yes, a no, or nothing to
+do with it. Present only when the state holds one, recomputed every turn, no imperative in it. It is
+a slot fed by conversation state, which is why it is not prompt edit number six by the count above.
+
+### The mechanism was wrong
+
+The placement was argued from **distance inside the prompt**: the widget list sits between the offer
+and the utterance, and on the 44-case set ACCEPT was 6 of 8 on Character Map (21 widget lines)
+against 2 of 7 on Paint (123). Every acceptance case lived on those two screens, so *123 lines* and
+*Paint* were one column. With cases on all four screens the baseline reads, by widget lines:
+
+    12 lines (chrome-remote-desktop)   3 of 10
+    21 lines (character-map)           7 of 10
+   123 lines (untitled---paint)        2 of  9
+   152 lines (system-information)      3 of 10
+
+Non-monotone, and **the shortest prompt in the fixtures is among the worst**. The gain is not
+concentrated at the long end either (si 3→9, cm 7→9, crd 3→6, paint 2→6). Re-rendering an
+unanswered offer beside the turn works; prompt distance is not why. The nearest surviving
+description is *availability* — being asked *"어 눌러줘"* with `offered: to click the button
+"Eraser"` in the same prompt, it asked **which button** — and that is a description, not a
+mechanism. The next suspect named in the plan is `SYSTEM`'s two-way partition of a turn (asked to do
+something / just talking), which a bare *"ㅇㅇ"* is neither of.
+
+### What it costs, and what the controls say
+
+ANEW's one break is `landed → silent`, the same case in both runs of it: asked to click Copy, then
+told *"그럼 글꼴 바꾸는 걸로 해줘"*, the reply is **word for word identical to the baseline's** —
+`글꼴을 변경하려면 'Font :' 콤보박스를 클릭해 주세요.` — and the action slot is empty where the
+baseline emitted the click. A dropped field, not a wrong choice: the say-first shape, `do` written
+after `say` and written without it. That is the thing to watch.
+
+REFUSE holds on 1 fixed against 1 broken at n = 12 and is the weakest part of the design.
+
+### Two things about the instrument that generalise
+
+**Temperature 0 here is nearly, not exactly, deterministic.** With the case list held identical, a
+re-run across sessions reproduced 0 of 44 case verdicts, 0 of 132 per-repeat verdicts, and 132 of
+132 transcripts with timings stripped. Enlarge the case list and give the *same* 44 cases
+**identical** utterances and filler, and 125 of 132 transcripts reproduce with **2 of 44 baseline
+verdicts moving** — the divergences are in free-form filler replies. So the floor is about 2 of 44
+once anything about the run changes, and a flat claim of determinism is too strong. `k = 15` in one
+direction is far outside it.
+
+**A delivery check has to read the treatment, not guess at it.** `--compare`'s offered-shape check
+was written for a `loop.py` wording arm; this fix changes no transcript wording, so it printed *"no
+treatment was applied at all and nothing below is a test of anything"* beside a real p-value.
+`slot_lines()` now reads whatever the prompt puts between the widget list and the turn, generically:
+**0 of 768 turns in the without arm, 445 of 768 in the with arm.**
+
+### What the pre-registration is and is not
+
+The 60 new utterances were chosen by somebody who knew the mechanism and knew which four cases the
+change had already repaired, and the plan says so in its own text. Fixed in advance: the endpoint,
+the test, the controls and all 104 cases, hashed into `f` before either arm ran. Three protections:
+all 44 originals kept verbatim including the three ACCEPT failures the fix did not repair, a
+factorial machine-checked balance (ACCEPT 10 per screen, 6 phrased / 4 bare and 8 ko / 2 en on each),
+and an enlarged baseline that makes the agent look **worse** than the old set did, 38% against 53%.
+
+ACCEPT and FARACCEPT are not pooled — 7 fixed and 0 broken pooled to p = 0.0156 on the small set and
+was refused then, and refused again in writing before these arms ran. ANEW is excluded from the
+criterion for the same reason in the opposite direction: it was not in the first plan, and adding it
+after seeing it break would be choosing a criterion from the data.

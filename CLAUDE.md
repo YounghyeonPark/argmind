@@ -52,7 +52,7 @@ the two days that built this, three of them flattering.
     argmind/__main__.py           app / look / talk / say / watch
     measure/                      goals, captured screens, and every answer behind the numbers
 
-**57 tests, none needing a display, a model or a network.** Re-derive with `python -m pytest`.
+**102 tests, none needing a display, a model or a network.** Re-derive with `python -m pytest`.
 
 ### The invariants a change could break without noticing
 
@@ -92,13 +92,20 @@ flag deliberately and that is *stronger* — a person confirms each action, and 
 | saying | an index leaks into the speech in **5 of 32**; the control set keeps its legitimate numbers |
 | rule-following | a stated rule is obeyed in **36 of 36** probes at distance ≤ 8 |
 | memory | a first-turn reference is truncation, not attention — **40 of 45 held with the anchor in the window, 1 of 45 without** |
-| repair | **3 of 4** corrections land (n=4, so it cannot reach p<0.05 under any repair); a question about the past re-proposes the action — the offer wording halved it, **1 of 11 → 6 of 11, p = 0.0625**, below the floor set before the run; **saying yes to an offer does nothing 2 of 4**, unmoved by that fix and open; **Korean in, Korean out 30 of 36 (83%)** with **English in, English out 12 of 12** as the other half. `--think on` gets repair 4 of 4 and **halves Korean to 18 of 36** |
-| a call | **0.61 s** median. The mean is 1.43 s and the gap is one tail: **18 of 1,845 turns run to the 4,096-token ceiling**, 69–71 s each, 47% of the model time in 1% of the turns, and the person hears nothing back |
+| accepting | a yes one turn after an offer acts in **30 of 39**, up from 15 of 39 — **15 fixed, 0 broken, p = 0.00006**, pre-registered, both controls holding, 104 cases over four screens. A yes *five turns* later, **3 of 12 → 10 of 12**. What it cost is one control case that goes `landed → silent`: the reply word for word identical and the action slot empty |
+| repair | **3 of 4** corrections land (n=4, so it cannot reach p<0.05 under any repair); a question about the past still re-proposes the action **9 times in 23** — the offer wording and then the standing-offer block each moved it, neither significantly (p = 0.0625 and 0.11) and the second only as a control; **Korean in, Korean out 30 of 36 (83%)** with **English in, English out 12 of 12** as the other half. `--think on` gets repair 4 of 4 and **halves Korean to 18 of 36** |
+| a call | **0.61 s** median, mean 1.43 s, and the gap was one tail: **18 of 1,845 turns ran to the 4,096-token ceiling**, 69–71 s each, 47% of the model time in 1% of the turns. With the stream stops that tail is gone — the same 1,872-call sweep has **0 at the ceiling, a 962-token maximum and costs 1,461 s against 2,671 s**, and what carries the attribution is the maximum, not the clock |
 | clicking | 3 of 3 end to end on a launched window, n=3 |
 
-**Prompt edits here have never been free.** Each raised a number and lowered another, and three were
-nearly recorded as improvements. The one change that moved a line was a derived limit, not a
-sentence: `MOST_AT_ONCE = 3`.
+**Prompt edits here were 0 for 5.** Each raised a number and lowered another, and three were nearly
+recorded as improvements; the only change that moved a line was a derived limit, `MOST_AT_ONCE = 3`.
+**The sixth is the first sentence-level edit that paid**, and it is a *slot fed by conversation
+state* rather than a sentence: an unanswered offer re-rendered beside the turn, present only when
+there is one. It cost one control case, and **the reason written down for making it was withdrawn
+by the run that confirmed it** — the placement was argued from prompt distance, and once the screen
+and the widget count were separated the baseline read 3 of 10 at 12 lines, 7 of 10 at 21, 2 of 9 at
+123 and 3 of 10 at 152. Non-monotone, with the shortest prompt among the worst. **The fix works and
+its explanation does not.**
 
 **The reply-shape order is a measured trade, not a default.** *Whichever field is written first is
 written without the other.* `say` first carries the freshest thing the model has — the index — into
@@ -122,7 +129,9 @@ cannot be repaired is not.
 
 No microphone, no speaker, no phone environment, no robot environment. Whether a confirmed click
 achieves what the person *wanted* is unmeasured beyond n=3. The agent still answers some Korean in
-English. A question about the past makes it propose the action again. Internal widget indices leak
+English. A question about the past makes it propose the action again 9 times in 23. **It can say the
+right sentence and drop the action** — the `silent` shape, one case in eight, the reply identical to
+one that also clicked. Internal widget indices leak
 into the speech — *"3, 122"*, *"지우개는 22번 버튼입니다"* — and nothing measures whether a reply is
 a sentence. Every turn is framed by a prompt about picking widgets even when the person says
 *"고마워"*. **A standing rule is broken while it is visible in the prompt**, so that one is not a
