@@ -1,18 +1,31 @@
 [project]
 name = "argmind"
 version = "0.0.1.dev0"
-description = "On-device online adaptation and inference for sensor systems: guarded adapters, a bounded pipeline, and a versioned record format"
+description = "A local-model agent you talk to while you work at your PC: the OS says where, the model says what"
 requires-python = ">=3.11"
 authors = [{ name = "Younghyeon Park", email = "ypark.dev@gmail.com" }]
 license = "Apache-2.0"
 license-files = ["LICENSE", "NOTICE"]
 
-# Deliberately minimal. This targets embedded and edge devices, so every
-# dependency is a portability cost. numpy is the one concession -- it is the
-# lingua franca for sample buffers and is available wherever Python is.
-dependencies = ["numpy>=1.24"]
+# **Declared to match what is imported, audited 2026-09-13.** This said `numpy` and nothing else
+# while the tree imported comtypes, sounddevice, torch, transformers and PIL -- so a clean machine
+# could not install a working agent, and the one dependency that WAS declared turns out to be used
+# by exactly one optional file. The paragraph that stood here described the removed Cortex-M
+# library's portability budget and had outlived it by four days.
+#
+# `comtypes` is not optional on Windows: it is UI Automation and SAPI, which is the whole
+# deterministic half of the design. Five MiB for it.
+dependencies = ["comtypes>=1.4; sys_platform == 'win32'"]
 
 [project.optional-dependencies]
+# Speech in and out, all of it reached from `argmind/env/whisper.py` and nowhere else. **`torch`
+# alone is 4,067 MiB, measured**, against five for everything required above -- which is why
+# docs/findings/porting-the-core.md puts the native-runtime question here and not in the core.
+voice = ["numpy>=1.24", "sounddevice>=0.5", "torch>=2.2", "transformers>=4.40"]
+# `llm.Local._b64` only, and **nothing in the tree calls it**: a leftover of the vision era the
+# rebuild ended, in a project whose organising rule is that a model is never handed an image.
+# Declared rather than silently required, and a candidate for removal rather than a feature.
+images = ["pillow>=10"]
 dev = ["pytest>=8", "ruff>=0.6"]
 
 [tool.pytest.ini_options]
