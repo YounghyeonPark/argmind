@@ -298,7 +298,8 @@ def test_a_turn_is_MORE_THAN_ITS_TWO_LINES_and_the_window_still_counts_turns():
     #: Lines written before any turn opened — `remember_doing()` on a fresh session produces them —
     #: are carried while they are all there is, and dropped once real turns fill the window rather
     #: than being counted as a turn of their own.
-    orphan = [("offered", 'clicked the button "x"'), *s.history]
+    orphan = [("offered", 'to click the button "x" — nothing was done; they have not accepted'),
+              *s.history]
     assert recent(orphan, 99)[0][0] == "offered" and recent(orphan, 2) == kept
 
 
@@ -356,6 +357,55 @@ def test_a_refusal_and_a_no_are_both_things_the_conversation_carries():
     assert "gone" in text["could not"] and "닫기" in text["could not"]
     assert "Share" in text["they said no to"]
     assert "enter" in text["offered"]
+
+
+def test_ONLY_SOMETHING_THAT_HAPPENED_is_written_in_the_PAST_TENSE():
+    """**The defect this closes, and it is a correctness defect before it is a model one.**
+
+    All four channels went through one phrase written for an action *taken*, so an offer nobody had
+    accepted was recorded as `('offered', 'clicked the button "Copy"')` — word for word what a
+    completed click records, with only the label between them, and `converse()` renders a line as
+    `  {who}: {text}`. A record that says a thing was done when it was only offered is false however
+    the model reads it, and the point of the record is that a later *"not that one"* has something
+    true to point at. (The evidence that it also costs behaviour is n=1: shown that line and asked
+    *"방금 뭘 하려고 했어?"*, it answers correctly and clicks Copy again, 3 of 3. Whether the wording
+    is the mechanism is a measurement, not this test.)
+
+    So: **the past tense of an action's verb belongs to `did` and to nothing else**, and every other
+    line says in words that nothing happened — a reader that ignores the label cannot go wrong. The
+    channels are read off `remember_doing`'s own signature, so a fifth one arrives failing this
+    rather than quietly exempt from it.
+    """
+    import inspect                                                        # noqa: PLC0415
+
+    from argmind.core.intent import Effect                                # noqa: PLC0415
+    from argmind.core.loop import NOTHING_DONE, PAST, TURN_OPENS, VERBS   # noqa: PLC0415
+
+    s = session(FakeModel(says("닫을게요", {"click": 0})))
+    s.exchange("닫아줘")
+    #: A different kind down each channel, so the verb table is exercised past `click`.
+    s.remember_doing(offered=[Effect("click", target="Copy", role="button")],
+                     refused=[Effect("type", text="hello")],
+                     turned_down=[Effect("key", text="enter")])
+
+    channels = [n for n in inspect.signature(Session.remember_doing).parameters if n != "self"]
+    lines = [(who, text) for who, text in s.history if who not in ("them", "you")]
+    assert len(lines) == len(channels) == len({who for who, _t in lines}), (
+        f"remember_doing takes {channels} and wrote {[who for who, _t in lines]} — a channel is "
+        "either unfed here, and so exempt from the rule below, or sharing another's label")
+    #: The reason `who` cannot become a speaker label. `("them", "said no to …")` reads best of
+    #: anything tried and would make a rejection **open a turn**, moving the window and putting the
+    #: mid-turn cut back — 10.7% of prompts, measured, before `recent()` cut on boundaries.
+    assert not ({who for who, _t in lines} & set(TURN_OPENS)), lines
+
+    happened = {forms[PAST] for forms in VERBS.values()}
+    for who, text in lines:
+        reads_as_done = any(verb in text for verb in happened)
+        if who == "did":
+            assert reads_as_done and NOTHING_DONE not in text, text
+        else:
+            assert not reads_as_done, f"{who!r} is written as a thing that happened: {text!r}"
+            assert NOTHING_DONE in text, f"{who!r} never says nothing happened: {text!r}"
 
 
 # ---- noticing, and the permission that goes with it -------------------------------------------

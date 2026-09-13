@@ -155,6 +155,16 @@ __all__ = ["Session", "Exchange", "Done", "recent", "REMEMBER_TURNS"]
 SPOKE, NOTICED = "them", "noticed"
 TURN_OPENS = (SPOKE, NOTICED)
 
+#: The three forms of an action's verb, in the order `_describe()` takes them. **The form is what
+#: says whether the thing happened**: the past tense is reserved for `did` and nothing else may use
+#: it. See `remember_doing()` for the record that forced the rule.
+PAST, PLAIN, ING = 0, 1, 2
+
+#: The words every record of something that did NOT happen carries. One literal rather than three
+#: spellings, because a line missing it is a line a reader can mistake for an action — which is the
+#: defect this scheme exists to close — and one name is one thing to test for.
+NOTHING_DONE = "nothing was done"
+
 #: How many turns of the conversation the next question carries. **Twelve turns, derived from the
 #: sweep** — see the module docstring for the whole of it, and for why this is a count of turns and
 #: not of lines. The short version: the reference held 40 of 45 times with its anchor inside the
@@ -444,15 +454,62 @@ class Session:
         So the record does not depend on the model having narrated itself. It also gives an answer
         to *"what did you just do?"* that is not an invention — the measured failure being that the
         question made it do the thing a second time.
+
+        ## Four states, and until 2026-09-13 one sentence for all four
+
+        `_describe()` is written for an action **taken**, and every channel went through it
+        unchanged. So an offer nobody had accepted was written
+
+            ('offered', 'clicked the button "Copy"')
+
+        — **word for word what a completed click writes.** Only the label differed, and `converse()`
+        renders a line as `  {who}: {text}`, so the model read `offered: clicked the button "Copy"`
+        with one bare word standing between an offer and a fact. The record is false on its own
+        terms whatever it does to the model: the reason this method exists is that a later *"not
+        that one"* needs something to point at, and pointing at a sentence that says it happened is
+        pointing at the wrong thing.
+
+        **The tense now carries the state and the label only names the channel.** The verb is past
+        for `did` and for nothing else, and every record of something that did not happen says
+        `NOTHING_DONE` in words — so a reader that ignores the label, or sees the line alone, still
+        cannot conclude that a click landed:
+
+            offered:         to click the button "Copy" — nothing was done; they have not accepted
+            did:             clicked the button "Copy"
+            could not:       click the button "닫기" — it had gone by then; nothing was done
+            they said no to: clicking the button "Share" — nothing was done
+
+        Each stays true for as long as the conversation keeps it, which is the property the obvious
+        phrasings lack: *"waiting for them"* is false the moment they accept, and a line that goes
+        stale is this same defect one turn later.
+
+        **The offer line says who moves next, on purpose.** Dropping the past tense stops it reading
+        as *done*; on its own that leaves it reading as *outstanding*, which invites doing the thing
+        now — the very failure being chased. *"They have not accepted"* forecloses both readings.
+
+        **`who` stays, demoted from carrier to name.** It is redundant with the text now, which is
+        what a label should be. It cannot be dropped or collapsed into a speaker: `recent()` cuts
+        turns on `TURN_OPENS`, so writing a rejection as `("them", "said no to …")` — the natural
+        speaker label, and the one that reads best — would make it **open a turn**, shifting the
+        window and reintroducing the mid-turn cut that 10.7% of prompts used to suffer. It is also
+        the only handle `measure/repair.py` has on which of these four channels a run actually feeds.
+
+        **Whether this fixes the re-click is a separate question and only a measurement answers it.**
+        The wording was wrong regardless. The evidence that it matters is n=1 — `MEMORY of what it
+        offered`, one case at three repeats, failing since 2026-09-10 — and stays n=1 until that case
+        is a set with power; `measure/repair.py` says why six discordant pairs are the floor.
         """
         for effect in offered:
-            self.history.append(("offered", _describe(effect)))
+            self.history.append(("offered", f"to {_describe(effect, form=PLAIN)}"
+                                            f" — {NOTHING_DONE}; they have not accepted"))
         for done in did:
             self.history.append(("did", _describe(done.effect, done.target)))
         for effect in refused:
-            self.history.append(("could not", f"{_describe(effect)} — it had gone by then"))
+            self.history.append(("could not", f"{_describe(effect, form=PLAIN)}"
+                                              f" — it had gone by then; {NOTHING_DONE}"))
         for effect in turned_down:
-            self.history.append(("they said no to", _describe(effect)))
+            self.history.append(("they said no to", f"{_describe(effect, form=ING)}"
+                                                    f" — {NOTHING_DONE}"))
 
     # ---- resolving against the world as it is ---------------------------------------------------
 
@@ -559,14 +616,30 @@ class Session:
         }
 
 
-def _describe(effect, widget=None) -> str:
-    """One short phrase for an effect, in the words the person would recognise."""
+#: The verb of each kind of effect, in the three forms `PAST, PLAIN, ING` index. **A table rather
+#: than four sentences** so the past tense exists in exactly one place, and so a fifth kind of effect
+#: cannot be added with only one of its forms written. Anything unlisted is described as a key press,
+#: which is what `_describe()` did before this existed.
+VERBS = {"click": ("clicked", "click", "clicking"),
+         "type": ("typed", "type", "typing"),
+         "key": ("pressed", "press", "pressing")}
+
+
+def _describe(effect, widget=None, form=PAST) -> str:
+    """One short phrase for an effect, in the words the person would recognise.
+
+    `form` picks the verb and **that is the whole state marker**: `PAST` says it happened and the
+    other two say it did not. It defaults to `PAST` because a caller that says nothing is describing
+    something done — `remember_doing()`'s `did` channel is the only one that takes the default, and
+    the reasoning lives in that docstring.
+    """
+    verb = VERBS.get(effect.kind, VERBS["key"])[form]
     if effect.kind == "click":
         role = widget.role if widget is not None else (effect.role or "thing")
-        return f'clicked the {role} "{effect.target}"'
+        return f'{verb} the {role} "{effect.target}"'
     if effect.kind == "type":
-        return f'typed "{effect.text}"'
-    return f"pressed {effect.text}"
+        return f'{verb} "{effect.text}"'
+    return f"{verb} {effect.text}"
 
 
 def _median(xs) -> float:
