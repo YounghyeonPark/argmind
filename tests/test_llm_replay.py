@@ -740,3 +740,53 @@ def test_THE_GOLDEN_IS_NOT_A_TAUTOLOGY():
              if outcome(stem, row, module=module) != want[stem][row["key"]]]
     assert moved, ("one character of Reply.json() changed and no recorded reply noticed. The "
                    "golden is pinning nothing a port could get wrong")
+def test_RAISING_THE_FLOOR_ABOVE_THE_LONGEST_COMPLETE_REPLY_STOPS_THE_SAME_THREE():
+    """**Why `LOOP_FLOOR` stays at 256 now that it no longer clears every real reply.**
+
+    The floor was derived so that no complete answer is examined for repetition at all, off a run
+    whose longest sentence was 119 characters. This corpus has complete replies of 2,357 — a listing
+    of everything on a screen — so the derivation is dated and the detector does look at real
+    output. The obvious repair is to raise the floor above the longest complete reply on record.
+
+    **It does not work, and that is the whole reason this test exists rather than a sentence.** At
+    `LOOP_FLOOR = 2560` the same three replies are stopped as degenerate, just later and thousands
+    of tokens further in. So raising the floor buys no false positive back and costs the true one
+    its saving, which is a decision somebody could otherwise reverse on plausibility alone.
+
+    A failure here means the corpus grew a reply that the two floors judge differently — which is
+    the evidence that would reopen it, and it should be read rather than blessed away.
+    """
+    raised = 2560
+    module = _mutant(f"LOOP_FLOOR 256 -> {raised}",
+                     r"^LOOP_FLOOR, LOOP_WINDOW, LOOP_PROBE, LOOP_TIMES = 256",
+                     f"LOOP_FLOOR, LOOP_WINDOW, LOOP_PROBE, LOOP_TIMES = {raised}")
+    want = golden_now()[SHIPPED_ARM]
+    shipped_rows, raised_rows, later = {}, {}, []
+    for stem, row in ROWS:
+        was, now = want[stem][row["key"]], outcome(stem, row, module=module)
+        key = f"{stem}/{row['key']}"
+        if was["reason"] == DEGENERATE:
+            shipped_rows[key] = was
+        if now["reason"] == DEGENERATE:
+            raised_rows[key] = now
+            later.append(f"{safe(row['key'])}: {was['read'][0]} -> {now['read'][0]} of "
+                         f"{now['read'][1]} lines")
+    assert set(shipped_rows) == set(raised_rows), (
+        f"a floor of {raised} changes WHICH replies are judged degenerate: only the shipped floor "
+        f"stops {sorted(set(shipped_rows) - set(raised_rows))} and only the raised one stops "
+        f"{sorted(set(raised_rows) - set(shipped_rows))}. llm.py says raising it changes no verdict")
+    assert shipped_rows, "no reply is judged degenerate at either floor, so this asserted nothing"
+    for key in shipped_rows:
+        assert raised_rows[key]["read"][0] > shipped_rows[key]["read"][0], (
+            f"{safe(key)} is stopped no later at a floor ten times higher, which cannot be right")
+        assert raised_rows[key]["json_sha"] is None and shipped_rows[key]["json_sha"] is None, (
+            f"{safe(key)} yields an answer at one of the two floors. The floor stays at 256 "
+            "because raising it recovers nothing; a row that parses at 2560 is that claim "
+            "failing, and it is llm.py's sentence that has to change, not this number")
+    examined = sum(1 for stem, row in ROWS
+                   if want[stem][row["key"]]["reason"] == FINISHED
+                   and want[stem][row["key"]]["text_chars"] >= shipped.LOOP_FLOOR)
+    print()
+    print(f"  complete replies past LOOP_FLOOR={shipped.LOOP_FLOOR}, examined and "
+          f"spared by LOOP_TIMES: {examined}")
+    print("  the same rows stop later at " + str(raised) + ": " + "; ".join(later))

@@ -66,13 +66,87 @@ output tokens **median 26, p95 47, max 4096**. The 18 are one `{"key": "tab"}` r
 the person hears nothing back from. Twenty-seven more closed a usable object and then kept talking:
 **962 output tokens for a 119-character sentence, 192 for a 31-character one**.
 
-**What the two stops are worth is ESTIMATED, and the estimate is arithmetic over that same file, not
-a run.** Healthy calls there fit `seconds = 0.150 + 0.01796 * out_tokens` (n = 1,815), and that fit
-predicts the twelve 962-token calls at 17.4 s against 16.2 measured and the eighteen 4,096-token
-ones at 73.7 against 69.0, so it is not fitted to the tail it is being used on. Closing early
-recovers **~226 s over 27 calls**; stopping a loop at 256 characters recovers **~1,210 s over 18**;
-together **~54% of that run's 2,649 s of model time**. **None of it is measured** until that harness
-is run again — `Local.ask` names the arm that would refute it.
+**What the two stops were worth was ESTIMATED there, and the replay has refuted the estimate where
+it could be checked.** The arithmetic was over that same file: healthy calls fit `seconds = 0.150 +
+0.01796 * out_tokens` (n = 1,815), and that fit predicts the twelve 962-token calls at 17.4 s
+against 16.2 measured and the eighteen 4,096-token ones at 73.7 against 69.0, so it was not fitted
+to the tail it was used on. It gave closing early **~226 s over 27 calls** and a loop stopped at 256
+characters **~1,210 s over 18**, together ~54% of that run's 2,649 s. **Both are arithmetic over
+shapes that no longer occur, and the first is over a stop that has never been observed to fire.**
+`tests/test_llm_replay.py` puts 128 recorded replies — real streams taken at prompt `r322a4c` with
+the stops off, so nothing was cut — back through the shipped logic:
+
+    stop 122     degenerate 3     length 3     closed 0
+
+Closing early recovers nothing there: 124 of the 128 close an envelope, **109 then emit no content
+at all and 13 emit exactly one chunk** (every one of those `qwen3:0.6b`), and the only two that keep
+talking are an elicited counting prompt the loop stop reaches first. The 27-call shape the 226 s
+belonged to is gone, and so is the `{"key": "tab"}` tail behind the 1,210 s.
+
+**The tail IS gone, neither stop cut it, and the cause is unattributed.** The sweep that ran 18
+turns to the ceiling came back with 0 and 1,210 s less of model time; that half is measured. Why is
+not — the candidates are `loop.py`'s history rewording, which changed the prompts between the two
+runs, and ordinary run-to-run variation, and nothing here separates them. **The reasoning that
+produced the error is the part worth keeping**: that run reported `reasons: {stop: 1845}`, and the
+absence of `degenerate` was read as evidence *for* the answered stop while the absence of `closed`
+sat in the same dictionary, in the same line of output, flattering a change committed an hour
+earlier.
+
+**What the stops are worth on the corpus rather than on a fit**: the loop stop fired 3 times in 128
+replies — **0 of the 108 rows outside the stress cases, 3 of the 20 inside them** — cutting 197 of
+4,097 stream lines on a `qwen3:0.6b` reply that would otherwise run to the ceiling, and 107 of 1,621
+on two `qwen3:8b` ones. Those three calls were measured end to end at 16.1, 23.7 and 24.1 s, and at
+a uniform generation rate the stop returns about 15, 22 and 22 s of that — an ESTIMATE, and the only
+one left in this file. `Reply.json()` is `None` on all three **with the stops off as well**, so none
+of it was bought with an answer. The answered stop is worth nothing measured at all.
+
+**Both stops stay, decided 2026-09-14, and neither is reachable on an ordinary turn with the shipped
+model.** That is an uncomfortable pair of sentences and it is the accurate one.
+
+*The answered stop stays: insurance whose premium is measured at zero.* It fires on 0 of 128 under
+the shipped pair, and on the only two streams where it would fire the loop stop reaches them first,
+so it is second in line even where its shape exists. Deleting it saves four lines and gives up the
+backstop against a shape measured **27 times in 1,845 calls** — an envelope closed, then 962 output
+tokens spent on a 119-character sentence. What removed that shape was a prompt and not the model:
+`qa62805` produced it, `r322a4c` does not, and the prompt lives in `converse.py` and `loop.py`,
+where anyone may reword it. A free backstop whose trigger is somebody else's sentence is one to
+keep. `GRACE` records what pins the constant, which is less than it looks.
+
+*The loop stop stays, unnarrowed.* It is the one that fires, and the only request it has fired on is
+one a person could reasonably make — *"1부터 200까지 세어줘"* — which is the false positive
+`LOOP_FLOOR` predicted. **Nothing narrows it, because the false positive and the true positive are
+the same shape**: the pathology this was built for was `{"key": "tab"}` two hundred times, and the
+false positive is `{"type": "N"}, {"key": "enter"}` a hundred and twenty times. The stream cannot
+tell them apart. The request can, and the request is not in the stream — putting it there would mean
+this file deciding whether a repetition was asked for, which is a question about WHAT and belongs on
+the other side of the rule. How blunt the instrument is deserves to be on the record: the same
+request over three repeats gave one reply that parsed — 122 effects, never stopped — and two that
+were stopped at 107 of 1,621 lines, and what separated them was whether the repeating unit happened
+to align to `LOOP_PROBE` characters. What bounds the damage is downstream and measured:
+`converse.MOST_AT_ONCE = 3` refuses a batch of more than three effects, so the 122-effect reply that
+did parse was refused anyway.
+
+*The third answer, and why it is not taken.* `say` is written first, so when the loop stop fires the
+sentence is usually complete already and thrown away — 2 of the 3 firings carry a whole `say` inside
+an object that never closes. Salvaging it would turn a silence into speech, which is the owner's
+stated priority, and it is still declined: on the third firing the text to salvage from is 684
+characters with the stop and 11,935 without, the sentence unterminated in both, so **the stop would
+be choosing the content of the answer** — the one thing `ask` claims it never does. A prefix salvage
+belongs where the turn is assembled, off `Reply.unfinished` and `reason`. What would change this: a
+rule for reading a partial object that returns the same answer stopped and unstopped on every row of
+the corpus.
+
+*What bounds an ordinary turn, then.* Nothing has to on the thinking-off arm: 122 of the 128
+recorded replies finish on their own at a median of 61 characters. **The tail is not gone from the
+corpus, though — it moved to `--think on`**, where an ordinary question (*"클릭도 돼?"*) ran to the
+ceiling on 3 of 3 repeats at 62-70 s each, **18,482 characters of reasoning and not one character of
+content**: 45% of the whole 128-reply corpus's 437 s of recorded model time in 2.3% of its calls,
+which is the shape quoted at 47% in 1.0% above. **Neither stop can touch it, deliberately** — both watch the content, and the
+reasoning is where a thinking model is entitled to circle. `num_predict` caught it, which is the one
+job the ceiling has. Bounding reasoning is a different decision on different evidence, and "it is
+long" is not that evidence: a truncated thought produces no answer either, so a cap turns a 65 s
+silence into a shorter silence, which is the argument this file already accepted for NOT lowering
+the ceiling.
 """
 
 from __future__ import annotations
@@ -100,33 +174,58 @@ FINISHED, CEILING, CLOSED, DEGENERATE = "stop", "length", "closed", "degenerate"
 
 #: Content chunks read *after* the reply's JSON object has closed, before the read stops.
 #:
-#: **It is not zero, and the reason is a measurement rather than caution.** Breaking on the closing
-#: brace itself would mean never receiving the server's final message, and that message is where
-#: `prompt_eval_count` and `eval_count` live — so every healthy call in every result file would
-#: trade two real token counts for a local estimate, in order to save the one token a finished reply
-#: has left to emit. A model that is done sends its end marker immediately after the brace, so the
-#: grace costs nothing at all on the calls that behave and 24 chunks (**0.43 s** at the 55.7
-#: tokens/s that run's own fit implies, which is derived and not itself a measurement) on
-#: the ones that do not. The asymmetry says err large: too
-#: large costs half a second on a call already wasting fifteen, too small silently degrades every
-#: token count in a 1,845-call result file.
+#: **It is not zero, and THAT part is measured.** Breaking on the closing brace itself would mean
+#: never receiving the server's final message, and that message is where `prompt_eval_count` and
+#: `eval_count` live — so every healthy call in every result file would trade two real token counts
+#: for a local estimate, in order to save the one token a finished reply has left to emit. It is not
+#: hypothetical: `GRACE = 1` turns **13 of the 128 recorded replies** into `closed` with no counts at
+#: all, because those 13 emit exactly one content chunk after their brace (every one of them
+#: `qwen3:0.6b`). Two is a floor with real output behind it, and `tests/test_llm_replay.py`'s
+#: mutation table holds it there.
+#:
+#: **24 IS PINNED BY NOTHING THAT OCCURS**, and this sentence is here because a number that looks
+#: derived and is not is how this project has been misled before. Above 2 the corpus cannot tell one
+#: value from another: of the 124 replies that close, 109 emit nothing afterwards, 13 emit one
+#: chunk, and the only two that go further emit 505 — an elicited *"count to 200"* — so 24 sits in a
+#: gap between 1 and 505 that no recorded output occupies, and sweeping it from 2 to 600 moves no
+#: verdict on the shipped arm. The **0.43 s** this comment used to quote as the cost of a full
+#: grace came off the 1,845-call run's own fit, and there is nothing left to spend it on: no
+#: recorded reply pays more than one chunk of the grace, and the two that would pay all 24 are
+#: reached by the loop stop first, so under the shipped pair nothing pays it at all.
+#:
+#: It stays at 24 because the asymmetry that chose it still holds — too large costs half a second on
+#: a call already wasting fifteen, too small silently degrades every token count in a result file —
+#: and because moving it costs a re-bless of `tests/golden/llm-replay.txt` and buys nothing anybody
+#: has measured. **A value inside an unpinned gap, with a measured floor under it.**
 GRACE = 24
 
 #: The loop detector. `LOOP_PROBE` characters off the tail, counted within the last `LOOP_WINDOW`,
 #: is degeneration at `LOOP_TIMES` non-overlapping occurrences.
 #:
-#: **`LOOP_FLOOR` is where the false-positive argument is spent**: nothing is examined at all until
-#: the reply is longer than any complete reply this project has recorded. The longest sentence in
-#: the 1,845-call run is 119 characters and the longest under an ordinary reply is 88, so a complete
-#: envelope runs to roughly 160 characters; 256 is comfortably past that, and past it the reply has
-#: also failed to close an object that a real answer closes inside 26 tokens. A cycle of up to
-#: `LOOP_WINDOW // LOOP_TIMES` = 128 characters is caught, and the measured one is sixteen.
+#: **`LOOP_FLOOR` WAS where the false-positive argument was spent, and it is no longer the whole of
+#: it.** The derivation: the longest sentence in the 1,845-call run is 119 characters and the
+#: longest under an ordinary reply is 88, so a complete envelope runs to roughly 160 characters; 256
+#: is comfortably past that, and past it the reply has also failed to close an object that a real
+#: answer closes inside 26 tokens. **At `r322a4c` the claim that nothing real is examined is
+#: dated** — 5 of the 122 complete replies in the recorded corpus are longer than the floor, the
+#: longest at 2,357 characters, so five real replies are examined and none is judged degenerate.
+#: What spares them is `LOOP_TIMES`, not the floor. A cycle of up to `LOOP_WINDOW // LOOP_TIMES` =
+#: 128 characters is caught, and the measured one is sixteen.
+#:
+#: **Raising the floor above the longest complete reply does not remove the false positive**, and
+#: that is measured rather than argued: at `LOOP_FLOOR = 2560` all three of the corpus's firings
+#: still fire, at 989 of 1,621 lines instead of 107 and 845 of 4,097 instead of 197. It spends
+#: thousands of tokens to change no verdict, so the floor stays at 256.
 #:
 #: **The cost of a false positive is bounded by the benefit**, which is what makes erring toward
 #: firing safe here: a wrongly stopped turn produces nothing, and that is what the same turn already
 #: produces today after 71 s. The case it would take is a person genuinely asking for a long
-#: repeated string to be typed. A `degenerate` in `report()` that a human recognises as a real
-#: request is what would say the floor is too low.
+#: repeated string to be typed — **and that case has now been produced.** Asked *"1부터 200까지
+#: 세어줘"*, `qwen3:8b` is stopped on 2 of 3 repeats at 107 of 1,621 lines. It is elicited rather
+#: than observed, so it is a demonstration and not a rate; and what it demonstrates is not that the
+#: floor is too low. The whole reply parses to `None` with the stops off as well — the model dropped
+#: a brace at the eighty-fifth effect — and the repeat that did parse asked for 122 effects, which
+#: `MOST_AT_ONCE` refuses before anything is pressed.
 LOOP_FLOOR, LOOP_WINDOW, LOOP_PROBE, LOOP_TIMES = 256, 512, 32, 4
 
 
@@ -353,6 +452,13 @@ class Local:
         disconnects. If it does not, the work continues off-stream and the saving shows up nowhere -
         the run's wall clock would be unchanged while every per-call `seconds` fell, which is a
         disagreement the same two arms would make obvious.
+
+        **Half of that is now done, and it is the offline half.** `tests/test_llm_replay.py` replays
+        128 recorded streams and asserts `Reply.json()` under the shipped stops equals `Reply.json()`
+        with them off on every one, so *the stops change no answer* is measured on real output rather
+        than on eight strings somebody wrote. A replay cannot reach the paragraph above it: a
+        recording never hung up, so nothing on disk says whether the server would have kept
+        generating. That still needs the two arms in one session.
         """
         content = {"role": "user", "content": prompt}
         if images:

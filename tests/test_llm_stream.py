@@ -337,12 +337,23 @@ def test_the_LOOP_DETECTOR_looks_at_nothing_shorter_than_a_real_reply(text, loop
     assert not _looping(text[:LOOP_FLOOR - 1]), "something shorter than any real reply was judged"
 
 
-def test_the_FLOOR_is_above_ANY_COMPLETE_REPLY_THIS_PROJECT_HAS_MEASURED():
+def test_the_FLOOR_is_above_ANY_ORDINARY_COMPLETE_REPLY():
     """**The derivation, pinned, because a constant with its reasoning only in a comment drifts.**
-    The floor exists so that a real answer is never examined for repetition at all. Lowering it
-    below twice the longest sentence measured is a decision about false positives and it needs a
-    number behind it — the one to produce is a run of `measure/conversation.py` reporting a
-    `degenerate` on a turn a person recognises as a real request.
+    Lowering the floor below twice the longest sentence measured is a decision about false positives
+    and it needs a number behind it.
+
+    **This test was called `..._ABOVE_ANY_COMPLETE_REPLY_THIS_PROJECT_HAS_MEASURED` and that name
+    stopped being true.** At prompt `r322a4c`, 5 of the 122 complete replies in
+    `measure/replies-*.json` are longer than the floor — the longest 2,357 characters, with a 507
+    character `say` — so the detector does examine real output, and what spares it is `LOOP_TIMES`
+    rather than the floor. The assertion below is unchanged and still holds: it pins the clearance
+    over an *ordinary* reply, which is the case the floor was derived from. The wider claim is now
+    checked where it can be, against recorded output, in `tests/test_llm_replay.py`.
+
+    The number this docstring used to ask for — a `degenerate` on a turn a person recognises as a
+    real request — **has been produced**, elicited by `measure/replies.py`'s stress arm, and the
+    floor stayed at 256. `argmind/core/llm.py` carries the decision and why raising it would have
+    bought nothing.
     """
     assert LONGEST_ORDINARY_SAY < LONGEST_SAY
     assert LOOP_FLOOR >= 2 * LONGEST_SAY, (
