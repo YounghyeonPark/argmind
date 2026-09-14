@@ -9,11 +9,15 @@
 //! `ElementFromHandle`, then `FindAll(Descendants, IsOffscreen = false)`, then name, localized
 //! control type and bounding rectangle, keeping only what has a name and a positive area.
 //!
-//! **Clicking is deliberately not here yet.** Reading is safe to exercise against a real desktop;
-//! `SendInput` is not, and this project has a standing rule against clicking anything a harness did
-//! not launch itself.
+//! Clicking lives in [`hands`], where the standing rule — *never click anything the harness did
+//! not launch itself* — is a type rather than a paragraph: `Reach::OnlyProcess` looks up who owns
+//! the window under the point before every click and refuses anything else.
 
+pub mod hands;
+pub mod launch;
 pub mod speaker;
+pub use hands::{Reach, WindowsHands};
+pub use launch::Launched;
 pub use speaker::SapiSpeaker;
 
 use argmind_core::contract::{Eyes, Widget};
