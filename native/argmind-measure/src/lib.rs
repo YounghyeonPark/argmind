@@ -14,6 +14,7 @@
 pub mod choosing;
 pub mod drive;
 pub mod repair;
+pub mod saying;
 
 use std::collections::BTreeMap;
 use std::fs;
@@ -245,4 +246,29 @@ pub fn python_json(v: &serde_json::Value) -> String {
 /// prompt that had been reverted.
 pub fn data_print(v: &serde_json::Value) -> String {
     print6(python_json(v).as_bytes())
+}
+
+/// The character tables and word lists a scorer classifies with.
+///
+/// **Loaded, not transcribed.** `PUNCT` and the Korean number words are exactly the kind of table a
+/// port gets 95% right, where the missing 5% is a verdict that quietly changes — so both
+/// implementations read one copy, dumped from the Python by `native/expectations/saying.py`.
+pub struct Tables {
+    pub token_chars: String,
+    pub punct: String,
+    pub acks: Vec<String>,
+    pub number_words: Vec<String>,
+}
+
+impl Tables {
+    pub fn from_json(d: &serde_json::Value) -> Self {
+        let list = |k: &str| d[k].as_array().map(|a| a.iter()
+            .filter_map(|x| x.as_str().map(str::to_string)).collect()).unwrap_or_default();
+        Tables {
+            token_chars: d["token_chars"].as_str().unwrap_or("").to_string(),
+            punct: d["punct"].as_str().unwrap_or("").to_string(),
+            acks: list("acks"),
+            number_words: list("number_words"),
+        }
+    }
 }
