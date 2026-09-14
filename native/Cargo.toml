@@ -6,4 +6,4 @@
 # the Python side, and the reason is the same — the core calls them and nothing else reaches it.
 [workspace]
 resolver = "2"
-members = ["argmind-core"]
+members = ["argmind-core", "argmind-env-windows"]
