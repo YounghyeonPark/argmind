@@ -1,0 +1,82 @@
+{
+ "talk": [
+  [
+   "greeting",
+   "안녕"
+  ],
+  [
+   "greeting",
+   "고마워"
+  ],
+  [
+   "greeting",
+   "수고했어"
+  ],
+  [
+   "greeting",
+   "잘했어"
+  ],
+  [
+   "about the screen",
+   "뭐가 열려 있어?"
+  ],
+  [
+   "about the screen",
+   "지금 화면 설명해줘"
+  ],
+  [
+   "about the screen",
+   "여기 버튼이 몇 개야?"
+  ],
+  [
+   "about the screen",
+   "복사 버튼이 어디 있어?"
+  ],
+  [
+   "about the past",
+   "방금 뭘 했어?"
+  ],
+  [
+   "about the past",
+   "아까 뭐 눌렀지?"
+  ],
+  [
+   "about itself",
+   "너 뭘 할 수 있어?"
+  ],
+  [
+   "about itself",
+   "너 이름이 뭐야?"
+  ],
+  [
+   "about itself",
+   "클릭도 할 수 있어?"
+  ],
+  [
+   "chit-chat",
+   "오늘 날씨 어때?"
+  ],
+  [
+   "chit-chat",
+   "심심하다"
+  ],
+  [
+   "opinion",
+   "이 창 좀 복잡하지 않아?"
+  ],
+  [
+   "opinion",
+   "이거 어떻게 쓰는 거야?"
+  ]
+ ],
+ "where": [
+  "chrome-remote-desktop---qvb-flfm-dev1",
+  "system-information"
+ ],
+ "widget_counts": {
+  "character-map": 21,
+  "chrome-remote-desktop---qvb-flfm-dev1": 12,
+  "system-information": 152,
+  "untitled---paint": 123
+ }
+}

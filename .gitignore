@@ -26,7 +26,8 @@ cpp/build*/
 
 # Rust build output — see docs/findings/porting-the-core.md
 native/**/target/
-# Generated from the shipped Python by native/expectations/all.py — the corpus text again,
-# and 0.8 MB of it, so it is regenerated rather than committed.
-native/expectations/*.json
+# native/expectations/*.json is COMMITTED, deliberately. It is generated from the shipped Python
+# by native/expectations/all.py, and it is the only reference the Rust suite has for what that
+# Python did — so the day the Python goes, the golden data has to already be data. 328 KB.
+# `tests/test_expectations.py` holds it current while both implementations exist.
 

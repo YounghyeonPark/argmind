@@ -1,0 +1,83 @@
+{
+ "prompt": "r322a4c",
+ "loop_print": "d8d312",
+ "caveat": "   [no conversation sent; conversation.py has run at r322a4c but under a different loop.py (6490c0 -> d8d312)]",
+ "runs_at_this_prompt": [
+  "conversation-rust-r322a4c-s5020f7-f041650-h21f35e-l6490c0-d1.3.5.8.12@r12-x3.json",
+  "conversation-rust-r322a4c-s5020f7-f041650-h21f35e-l6490c0-d1@r12-x1.json",
+  "conversation-rust-r322a4c-s5020f7-fc17775-h21f35e-l6490c0-d1@r12-x1-reference.json"
+ ],
+ "runs_at_this_prompt_and_loop": [],
+ "loop_prints_at_this_prompt": [
+  "6490c0"
+ ],
+ "exercised_at_this_prompt": true,
+ "exercised_at_this_tree": false,
+ "runs": [
+  {
+   "file": "conversation-qwen3-8b-off-p5461db-d1.3.5.8.12@r12-x3.json",
+   "prompt": "p5461db",
+   "loop_print": null
+  },
+  {
+   "file": "conversation-qwen3-8b-off-p5461db-r48@d8-x3-constraint-englishrule.json",
+   "prompt": "p5461db",
+   "loop_print": null
+  },
+  {
+   "file": "conversation-qwen3-8b-off-p5461db-r48@d8-x3-turneddown-reoffer.json",
+   "prompt": "p5461db",
+   "loop_print": null
+  },
+  {
+   "file": "conversation-qwen3-8b-off-p5461db-r6.12.24.48@d8-x3.json",
+   "prompt": "p5461db",
+   "loop_print": null
+  },
+  {
+   "file": "conversation-qwen3-8b-off-p5461db-s5020f7-f441efd-r48@d12-x3-constraint.json",
+   "prompt": "p5461db",
+   "loop_print": null
+  },
+  {
+   "file": "conversation-qwen3-8b-off-p5461db-s5020f7-fc17775-r48@d12-x3-reference.json",
+   "prompt": "p5461db",
+   "loop_print": null
+  },
+  {
+   "file": "conversation-qwen3-8b-off-q1ec131-s5020f7-f041650-d1.3.5.8.12@r12-x3.json",
+   "prompt": "q1ec131",
+   "loop_print": "d1720c"
+  },
+  {
+   "file": "conversation-qwen3-8b-off-q1ec131-s5020f7-f441efd-d1.3.5.8.12@r12-x3-constraint.json",
+   "prompt": "q1ec131",
+   "loop_print": "d1720c"
+  },
+  {
+   "file": "conversation-qwen3-8b-off-qa62805-s5020f7-f041650-d1.3.5.8.12@r12-x3.json",
+   "prompt": "qa62805",
+   "loop_print": "d1720c"
+  },
+  {
+   "file": "conversation-qwen3-8b-off-qa62805-s5020f7-f041650-hec77a6-lbc9cc0-d1.3.5.8.12@r12-x3.json",
+   "prompt": "qa62805",
+   "loop_print": "d8d312"
+  },
+  {
+   "file": "conversation-rust-r322a4c-s5020f7-f041650-h21f35e-l6490c0-d1.3.5.8.12@r12-x3.json",
+   "prompt": "r322a4c",
+   "loop_print": "6490c0"
+  },
+  {
+   "file": "conversation-rust-r322a4c-s5020f7-f041650-h21f35e-l6490c0-d1@r12-x1.json",
+   "prompt": "r322a4c",
+   "loop_print": "6490c0"
+  },
+  {
+   "file": "conversation-rust-r322a4c-s5020f7-fc17775-h21f35e-l6490c0-d1@r12-x1-reference.json",
+   "prompt": "r322a4c",
+   "loop_print": "6490c0"
+  }
+ ]
+}

@@ -1,0 +1,2751 @@
+{
+ "describe": [
+  {
+   "label": "click with a role/past",
+   "effect": {
+    "kind": "click",
+    "target": "Copy",
+    "role": "button",
+    "text": ""
+   },
+   "form": 0,
+   "widget": null,
+   "want": "clicked the button \"Copy\""
+  },
+  {
+   "label": "click with a role/plain",
+   "effect": {
+    "kind": "click",
+    "target": "Copy",
+    "role": "button",
+    "text": ""
+   },
+   "form": 1,
+   "widget": null,
+   "want": "click the button \"Copy\""
+  },
+  {
+   "label": "click with a role/ing",
+   "effect": {
+    "kind": "click",
+    "target": "Copy",
+    "role": "button",
+    "text": ""
+   },
+   "form": 2,
+   "widget": null,
+   "want": "clicking the button \"Copy\""
+  },
+  {
+   "label": "click with a role/past+widget",
+   "effect": {
+    "kind": "click",
+    "target": "Copy",
+    "role": "button",
+    "text": ""
+   },
+   "form": 0,
+   "widget": {
+    "name": "Copy",
+    "role": "combo box",
+    "rect": [
+     10,
+     20,
+     40,
+     30
+    ],
+    "window": "Win"
+   },
+   "want": "clicked the combo box \"Copy\""
+  },
+  {
+   "label": "click with no role/past",
+   "effect": {
+    "kind": "click",
+    "target": "Copy",
+    "role": "",
+    "text": ""
+   },
+   "form": 0,
+   "widget": null,
+   "want": "clicked the thing \"Copy\""
+  },
+  {
+   "label": "click with no role/plain",
+   "effect": {
+    "kind": "click",
+    "target": "Copy",
+    "role": "",
+    "text": ""
+   },
+   "form": 1,
+   "widget": null,
+   "want": "click the thing \"Copy\""
+  },
+  {
+   "label": "click with no role/ing",
+   "effect": {
+    "kind": "click",
+    "target": "Copy",
+    "role": "",
+    "text": ""
+   },
+   "form": 2,
+   "widget": null,
+   "want": "clicking the thing \"Copy\""
+  },
+  {
+   "label": "click with no role/past+widget",
+   "effect": {
+    "kind": "click",
+    "target": "Copy",
+    "role": "",
+    "text": ""
+   },
+   "form": 0,
+   "widget": {
+    "name": "Copy",
+    "role": "combo box",
+    "rect": [
+     10,
+     20,
+     40,
+     30
+    ],
+    "window": "Win"
+   },
+   "want": "clicked the combo box \"Copy\""
+  },
+  {
+   "label": "type/past",
+   "effect": {
+    "kind": "type",
+    "target": "",
+    "role": "",
+    "text": "hello"
+   },
+   "form": 0,
+   "widget": null,
+   "want": "typed \"hello\""
+  },
+  {
+   "label": "type/plain",
+   "effect": {
+    "kind": "type",
+    "target": "",
+    "role": "",
+    "text": "hello"
+   },
+   "form": 1,
+   "widget": null,
+   "want": "type \"hello\""
+  },
+  {
+   "label": "type/ing",
+   "effect": {
+    "kind": "type",
+    "target": "",
+    "role": "",
+    "text": "hello"
+   },
+   "form": 2,
+   "widget": null,
+   "want": "typing \"hello\""
+  },
+  {
+   "label": "key/past",
+   "effect": {
+    "kind": "key",
+    "target": "",
+    "role": "",
+    "text": "enter"
+   },
+   "form": 0,
+   "widget": null,
+   "want": "pressed enter"
+  },
+  {
+   "label": "key/plain",
+   "effect": {
+    "kind": "key",
+    "target": "",
+    "role": "",
+    "text": "enter"
+   },
+   "form": 1,
+   "widget": null,
+   "want": "press enter"
+  },
+  {
+   "label": "key/ing",
+   "effect": {
+    "kind": "key",
+    "target": "",
+    "role": "",
+    "text": "enter"
+   },
+   "form": 2,
+   "widget": null,
+   "want": "pressing enter"
+  },
+  {
+   "label": "a kind VERBS does not list/past",
+   "effect": {
+    "kind": "scroll",
+    "target": "Pane",
+    "role": "pane",
+    "text": ""
+   },
+   "form": 0,
+   "widget": null,
+   "want": "pressed "
+  },
+  {
+   "label": "a kind VERBS does not list/plain",
+   "effect": {
+    "kind": "scroll",
+    "target": "Pane",
+    "role": "pane",
+    "text": ""
+   },
+   "form": 1,
+   "widget": null,
+   "want": "press "
+  },
+  {
+   "label": "a kind VERBS does not list/ing",
+   "effect": {
+    "kind": "scroll",
+    "target": "Pane",
+    "role": "pane",
+    "text": ""
+   },
+   "form": 2,
+   "widget": null,
+   "want": "pressing "
+  }
+ ],
+ "recent": [
+  {
+   "turns": null,
+   "history": [
+    [
+     "offered",
+     "to click the button \"Copy\" — nothing was done; they have not accepted"
+    ],
+    [
+     "them",
+     "alpha"
+    ],
+    [
+     "you",
+     "reply alpha"
+    ],
+    [
+     "them",
+     "bravo"
+    ],
+    [
+     "you",
+     "reply bravo"
+    ],
+    [
+     "did",
+     "clicked the button \"Share\""
+    ],
+    [
+     "noticed",
+     "'Build succeeded' appeared"
+    ],
+    [
+     "you",
+     "reply charlie"
+    ],
+    [
+     "offered",
+     "to click the button \"Open\" — nothing was done; they have not accepted"
+    ],
+    [
+     "them",
+     "delta"
+    ],
+    [
+     "you",
+     "reply delta"
+    ],
+    [
+     "could not",
+     "click the button \"닫기\" — it had gone by then; nothing was done"
+    ]
+   ],
+   "want": [
+    [
+     "offered",
+     "to click the button \"Copy\" — nothing was done; they have not accepted"
+    ],
+    [
+     "them",
+     "alpha"
+    ],
+    [
+     "you",
+     "reply alpha"
+    ],
+    [
+     "them",
+     "bravo"
+    ],
+    [
+     "you",
+     "reply bravo"
+    ],
+    [
+     "did",
+     "clicked the button \"Share\""
+    ],
+    [
+     "noticed",
+     "'Build succeeded' appeared"
+    ],
+    [
+     "you",
+     "reply charlie"
+    ],
+    [
+     "offered",
+     "to click the button \"Open\" — nothing was done; they have not accepted"
+    ],
+    [
+     "them",
+     "delta"
+    ],
+    [
+     "you",
+     "reply delta"
+    ],
+    [
+     "could not",
+     "click the button \"닫기\" — it had gone by then; nothing was done"
+    ]
+   ]
+  },
+  {
+   "turns": -1,
+   "history": [
+    [
+     "offered",
+     "to click the button \"Copy\" — nothing was done; they have not accepted"
+    ],
+    [
+     "them",
+     "alpha"
+    ],
+    [
+     "you",
+     "reply alpha"
+    ],
+    [
+     "them",
+     "bravo"
+    ],
+    [
+     "you",
+     "reply bravo"
+    ],
+    [
+     "did",
+     "clicked the button \"Share\""
+    ],
+    [
+     "noticed",
+     "'Build succeeded' appeared"
+    ],
+    [
+     "you",
+     "reply charlie"
+    ],
+    [
+     "offered",
+     "to click the button \"Open\" — nothing was done; they have not accepted"
+    ],
+    [
+     "them",
+     "delta"
+    ],
+    [
+     "you",
+     "reply delta"
+    ],
+    [
+     "could not",
+     "click the button \"닫기\" — it had gone by then; nothing was done"
+    ]
+   ],
+   "want": []
+  },
+  {
+   "turns": 0,
+   "history": [
+    [
+     "offered",
+     "to click the button \"Copy\" — nothing was done; they have not accepted"
+    ],
+    [
+     "them",
+     "alpha"
+    ],
+    [
+     "you",
+     "reply alpha"
+    ],
+    [
+     "them",
+     "bravo"
+    ],
+    [
+     "you",
+     "reply bravo"
+    ],
+    [
+     "did",
+     "clicked the button \"Share\""
+    ],
+    [
+     "noticed",
+     "'Build succeeded' appeared"
+    ],
+    [
+     "you",
+     "reply charlie"
+    ],
+    [
+     "offered",
+     "to click the button \"Open\" — nothing was done; they have not accepted"
+    ],
+    [
+     "them",
+     "delta"
+    ],
+    [
+     "you",
+     "reply delta"
+    ],
+    [
+     "could not",
+     "click the button \"닫기\" — it had gone by then; nothing was done"
+    ]
+   ],
+   "want": []
+  },
+  {
+   "turns": 1,
+   "history": [
+    [
+     "offered",
+     "to click the button \"Copy\" — nothing was done; they have not accepted"
+    ],
+    [
+     "them",
+     "alpha"
+    ],
+    [
+     "you",
+     "reply alpha"
+    ],
+    [
+     "them",
+     "bravo"
+    ],
+    [
+     "you",
+     "reply bravo"
+    ],
+    [
+     "did",
+     "clicked the button \"Share\""
+    ],
+    [
+     "noticed",
+     "'Build succeeded' appeared"
+    ],
+    [
+     "you",
+     "reply charlie"
+    ],
+    [
+     "offered",
+     "to click the button \"Open\" — nothing was done; they have not accepted"
+    ],
+    [
+     "them",
+     "delta"
+    ],
+    [
+     "you",
+     "reply delta"
+    ],
+    [
+     "could not",
+     "click the button \"닫기\" — it had gone by then; nothing was done"
+    ]
+   ],
+   "want": [
+    [
+     "them",
+     "delta"
+    ],
+    [
+     "you",
+     "reply delta"
+    ],
+    [
+     "could not",
+     "click the button \"닫기\" — it had gone by then; nothing was done"
+    ]
+   ]
+  },
+  {
+   "turns": 2,
+   "history": [
+    [
+     "offered",
+     "to click the button \"Copy\" — nothing was done; they have not accepted"
+    ],
+    [
+     "them",
+     "alpha"
+    ],
+    [
+     "you",
+     "reply alpha"
+    ],
+    [
+     "them",
+     "bravo"
+    ],
+    [
+     "you",
+     "reply bravo"
+    ],
+    [
+     "did",
+     "clicked the button \"Share\""
+    ],
+    [
+     "noticed",
+     "'Build succeeded' appeared"
+    ],
+    [
+     "you",
+     "reply charlie"
+    ],
+    [
+     "offered",
+     "to click the button \"Open\" — nothing was done; they have not accepted"
+    ],
+    [
+     "them",
+     "delta"
+    ],
+    [
+     "you",
+     "reply delta"
+    ],
+    [
+     "could not",
+     "click the button \"닫기\" — it had gone by then; nothing was done"
+    ]
+   ],
+   "want": [
+    [
+     "noticed",
+     "'Build succeeded' appeared"
+    ],
+    [
+     "you",
+     "reply charlie"
+    ],
+    [
+     "offered",
+     "to click the button \"Open\" — nothing was done; they have not accepted"
+    ],
+    [
+     "them",
+     "delta"
+    ],
+    [
+     "you",
+     "reply delta"
+    ],
+    [
+     "could not",
+     "click the button \"닫기\" — it had gone by then; nothing was done"
+    ]
+   ]
+  },
+  {
+   "turns": 3,
+   "history": [
+    [
+     "offered",
+     "to click the button \"Copy\" — nothing was done; they have not accepted"
+    ],
+    [
+     "them",
+     "alpha"
+    ],
+    [
+     "you",
+     "reply alpha"
+    ],
+    [
+     "them",
+     "bravo"
+    ],
+    [
+     "you",
+     "reply bravo"
+    ],
+    [
+     "did",
+     "clicked the button \"Share\""
+    ],
+    [
+     "noticed",
+     "'Build succeeded' appeared"
+    ],
+    [
+     "you",
+     "reply charlie"
+    ],
+    [
+     "offered",
+     "to click the button \"Open\" — nothing was done; they have not accepted"
+    ],
+    [
+     "them",
+     "delta"
+    ],
+    [
+     "you",
+     "reply delta"
+    ],
+    [
+     "could not",
+     "click the button \"닫기\" — it had gone by then; nothing was done"
+    ]
+   ],
+   "want": [
+    [
+     "them",
+     "bravo"
+    ],
+    [
+     "you",
+     "reply bravo"
+    ],
+    [
+     "did",
+     "clicked the button \"Share\""
+    ],
+    [
+     "noticed",
+     "'Build succeeded' appeared"
+    ],
+    [
+     "you",
+     "reply charlie"
+    ],
+    [
+     "offered",
+     "to click the button \"Open\" — nothing was done; they have not accepted"
+    ],
+    [
+     "them",
+     "delta"
+    ],
+    [
+     "you",
+     "reply delta"
+    ],
+    [
+     "could not",
+     "click the button \"닫기\" — it had gone by then; nothing was done"
+    ]
+   ]
+  },
+  {
+   "turns": 4,
+   "history": [
+    [
+     "offered",
+     "to click the button \"Copy\" — nothing was done; they have not accepted"
+    ],
+    [
+     "them",
+     "alpha"
+    ],
+    [
+     "you",
+     "reply alpha"
+    ],
+    [
+     "them",
+     "bravo"
+    ],
+    [
+     "you",
+     "reply bravo"
+    ],
+    [
+     "did",
+     "clicked the button \"Share\""
+    ],
+    [
+     "noticed",
+     "'Build succeeded' appeared"
+    ],
+    [
+     "you",
+     "reply charlie"
+    ],
+    [
+     "offered",
+     "to click the button \"Open\" — nothing was done; they have not accepted"
+    ],
+    [
+     "them",
+     "delta"
+    ],
+    [
+     "you",
+     "reply delta"
+    ],
+    [
+     "could not",
+     "click the button \"닫기\" — it had gone by then; nothing was done"
+    ]
+   ],
+   "want": [
+    [
+     "offered",
+     "to click the button \"Copy\" — nothing was done; they have not accepted"
+    ],
+    [
+     "them",
+     "alpha"
+    ],
+    [
+     "you",
+     "reply alpha"
+    ],
+    [
+     "them",
+     "bravo"
+    ],
+    [
+     "you",
+     "reply bravo"
+    ],
+    [
+     "did",
+     "clicked the button \"Share\""
+    ],
+    [
+     "noticed",
+     "'Build succeeded' appeared"
+    ],
+    [
+     "you",
+     "reply charlie"
+    ],
+    [
+     "offered",
+     "to click the button \"Open\" — nothing was done; they have not accepted"
+    ],
+    [
+     "them",
+     "delta"
+    ],
+    [
+     "you",
+     "reply delta"
+    ],
+    [
+     "could not",
+     "click the button \"닫기\" — it had gone by then; nothing was done"
+    ]
+   ]
+  },
+  {
+   "turns": 5,
+   "history": [
+    [
+     "offered",
+     "to click the button \"Copy\" — nothing was done; they have not accepted"
+    ],
+    [
+     "them",
+     "alpha"
+    ],
+    [
+     "you",
+     "reply alpha"
+    ],
+    [
+     "them",
+     "bravo"
+    ],
+    [
+     "you",
+     "reply bravo"
+    ],
+    [
+     "did",
+     "clicked the button \"Share\""
+    ],
+    [
+     "noticed",
+     "'Build succeeded' appeared"
+    ],
+    [
+     "you",
+     "reply charlie"
+    ],
+    [
+     "offered",
+     "to click the button \"Open\" — nothing was done; they have not accepted"
+    ],
+    [
+     "them",
+     "delta"
+    ],
+    [
+     "you",
+     "reply delta"
+    ],
+    [
+     "could not",
+     "click the button \"닫기\" — it had gone by then; nothing was done"
+    ]
+   ],
+   "want": [
+    [
+     "offered",
+     "to click the button \"Copy\" — nothing was done; they have not accepted"
+    ],
+    [
+     "them",
+     "alpha"
+    ],
+    [
+     "you",
+     "reply alpha"
+    ],
+    [
+     "them",
+     "bravo"
+    ],
+    [
+     "you",
+     "reply bravo"
+    ],
+    [
+     "did",
+     "clicked the button \"Share\""
+    ],
+    [
+     "noticed",
+     "'Build succeeded' appeared"
+    ],
+    [
+     "you",
+     "reply charlie"
+    ],
+    [
+     "offered",
+     "to click the button \"Open\" — nothing was done; they have not accepted"
+    ],
+    [
+     "them",
+     "delta"
+    ],
+    [
+     "you",
+     "reply delta"
+    ],
+    [
+     "could not",
+     "click the button \"닫기\" — it had gone by then; nothing was done"
+    ]
+   ]
+  },
+  {
+   "turns": 6,
+   "history": [
+    [
+     "offered",
+     "to click the button \"Copy\" — nothing was done; they have not accepted"
+    ],
+    [
+     "them",
+     "alpha"
+    ],
+    [
+     "you",
+     "reply alpha"
+    ],
+    [
+     "them",
+     "bravo"
+    ],
+    [
+     "you",
+     "reply bravo"
+    ],
+    [
+     "did",
+     "clicked the button \"Share\""
+    ],
+    [
+     "noticed",
+     "'Build succeeded' appeared"
+    ],
+    [
+     "you",
+     "reply charlie"
+    ],
+    [
+     "offered",
+     "to click the button \"Open\" — nothing was done; they have not accepted"
+    ],
+    [
+     "them",
+     "delta"
+    ],
+    [
+     "you",
+     "reply delta"
+    ],
+    [
+     "could not",
+     "click the button \"닫기\" — it had gone by then; nothing was done"
+    ]
+   ],
+   "want": [
+    [
+     "offered",
+     "to click the button \"Copy\" — nothing was done; they have not accepted"
+    ],
+    [
+     "them",
+     "alpha"
+    ],
+    [
+     "you",
+     "reply alpha"
+    ],
+    [
+     "them",
+     "bravo"
+    ],
+    [
+     "you",
+     "reply bravo"
+    ],
+    [
+     "did",
+     "clicked the button \"Share\""
+    ],
+    [
+     "noticed",
+     "'Build succeeded' appeared"
+    ],
+    [
+     "you",
+     "reply charlie"
+    ],
+    [
+     "offered",
+     "to click the button \"Open\" — nothing was done; they have not accepted"
+    ],
+    [
+     "them",
+     "delta"
+    ],
+    [
+     "you",
+     "reply delta"
+    ],
+    [
+     "could not",
+     "click the button \"닫기\" — it had gone by then; nothing was done"
+    ]
+   ]
+  },
+  {
+   "turns": 7,
+   "history": [
+    [
+     "offered",
+     "to click the button \"Copy\" — nothing was done; they have not accepted"
+    ],
+    [
+     "them",
+     "alpha"
+    ],
+    [
+     "you",
+     "reply alpha"
+    ],
+    [
+     "them",
+     "bravo"
+    ],
+    [
+     "you",
+     "reply bravo"
+    ],
+    [
+     "did",
+     "clicked the button \"Share\""
+    ],
+    [
+     "noticed",
+     "'Build succeeded' appeared"
+    ],
+    [
+     "you",
+     "reply charlie"
+    ],
+    [
+     "offered",
+     "to click the button \"Open\" — nothing was done; they have not accepted"
+    ],
+    [
+     "them",
+     "delta"
+    ],
+    [
+     "you",
+     "reply delta"
+    ],
+    [
+     "could not",
+     "click the button \"닫기\" — it had gone by then; nothing was done"
+    ]
+   ],
+   "want": [
+    [
+     "offered",
+     "to click the button \"Copy\" — nothing was done; they have not accepted"
+    ],
+    [
+     "them",
+     "alpha"
+    ],
+    [
+     "you",
+     "reply alpha"
+    ],
+    [
+     "them",
+     "bravo"
+    ],
+    [
+     "you",
+     "reply bravo"
+    ],
+    [
+     "did",
+     "clicked the button \"Share\""
+    ],
+    [
+     "noticed",
+     "'Build succeeded' appeared"
+    ],
+    [
+     "you",
+     "reply charlie"
+    ],
+    [
+     "offered",
+     "to click the button \"Open\" — nothing was done; they have not accepted"
+    ],
+    [
+     "them",
+     "delta"
+    ],
+    [
+     "you",
+     "reply delta"
+    ],
+    [
+     "could not",
+     "click the button \"닫기\" — it had gone by then; nothing was done"
+    ]
+   ]
+  },
+  {
+   "turns": 8,
+   "history": [
+    [
+     "offered",
+     "to click the button \"Copy\" — nothing was done; they have not accepted"
+    ],
+    [
+     "them",
+     "alpha"
+    ],
+    [
+     "you",
+     "reply alpha"
+    ],
+    [
+     "them",
+     "bravo"
+    ],
+    [
+     "you",
+     "reply bravo"
+    ],
+    [
+     "did",
+     "clicked the button \"Share\""
+    ],
+    [
+     "noticed",
+     "'Build succeeded' appeared"
+    ],
+    [
+     "you",
+     "reply charlie"
+    ],
+    [
+     "offered",
+     "to click the button \"Open\" — nothing was done; they have not accepted"
+    ],
+    [
+     "them",
+     "delta"
+    ],
+    [
+     "you",
+     "reply delta"
+    ],
+    [
+     "could not",
+     "click the button \"닫기\" — it had gone by then; nothing was done"
+    ]
+   ],
+   "want": [
+    [
+     "offered",
+     "to click the button \"Copy\" — nothing was done; they have not accepted"
+    ],
+    [
+     "them",
+     "alpha"
+    ],
+    [
+     "you",
+     "reply alpha"
+    ],
+    [
+     "them",
+     "bravo"
+    ],
+    [
+     "you",
+     "reply bravo"
+    ],
+    [
+     "did",
+     "clicked the button \"Share\""
+    ],
+    [
+     "noticed",
+     "'Build succeeded' appeared"
+    ],
+    [
+     "you",
+     "reply charlie"
+    ],
+    [
+     "offered",
+     "to click the button \"Open\" — nothing was done; they have not accepted"
+    ],
+    [
+     "them",
+     "delta"
+    ],
+    [
+     "you",
+     "reply delta"
+    ],
+    [
+     "could not",
+     "click the button \"닫기\" — it had gone by then; nothing was done"
+    ]
+   ]
+  },
+  {
+   "turns": 99,
+   "history": [
+    [
+     "offered",
+     "to click the button \"Copy\" — nothing was done; they have not accepted"
+    ],
+    [
+     "them",
+     "alpha"
+    ],
+    [
+     "you",
+     "reply alpha"
+    ],
+    [
+     "them",
+     "bravo"
+    ],
+    [
+     "you",
+     "reply bravo"
+    ],
+    [
+     "did",
+     "clicked the button \"Share\""
+    ],
+    [
+     "noticed",
+     "'Build succeeded' appeared"
+    ],
+    [
+     "you",
+     "reply charlie"
+    ],
+    [
+     "offered",
+     "to click the button \"Open\" — nothing was done; they have not accepted"
+    ],
+    [
+     "them",
+     "delta"
+    ],
+    [
+     "you",
+     "reply delta"
+    ],
+    [
+     "could not",
+     "click the button \"닫기\" — it had gone by then; nothing was done"
+    ]
+   ],
+   "want": [
+    [
+     "offered",
+     "to click the button \"Copy\" — nothing was done; they have not accepted"
+    ],
+    [
+     "them",
+     "alpha"
+    ],
+    [
+     "you",
+     "reply alpha"
+    ],
+    [
+     "them",
+     "bravo"
+    ],
+    [
+     "you",
+     "reply bravo"
+    ],
+    [
+     "did",
+     "clicked the button \"Share\""
+    ],
+    [
+     "noticed",
+     "'Build succeeded' appeared"
+    ],
+    [
+     "you",
+     "reply charlie"
+    ],
+    [
+     "offered",
+     "to click the button \"Open\" — nothing was done; they have not accepted"
+    ],
+    [
+     "them",
+     "delta"
+    ],
+    [
+     "you",
+     "reply delta"
+    ],
+    [
+     "could not",
+     "click the button \"닫기\" — it had gone by then; nothing was done"
+    ]
+   ]
+  },
+  {
+   "turns": null,
+   "history": [
+    [
+     "offered",
+     "to click the button \"Copy\" — nothing was done; they have not accepted"
+    ],
+    [
+     "you",
+     "reply alpha"
+    ],
+    [
+     "you",
+     "reply bravo"
+    ],
+    [
+     "did",
+     "clicked the button \"Share\""
+    ],
+    [
+     "you",
+     "reply charlie"
+    ],
+    [
+     "offered",
+     "to click the button \"Open\" — nothing was done; they have not accepted"
+    ],
+    [
+     "you",
+     "reply delta"
+    ],
+    [
+     "could not",
+     "click the button \"닫기\" — it had gone by then; nothing was done"
+    ]
+   ],
+   "want": [
+    [
+     "offered",
+     "to click the button \"Copy\" — nothing was done; they have not accepted"
+    ],
+    [
+     "you",
+     "reply alpha"
+    ],
+    [
+     "you",
+     "reply bravo"
+    ],
+    [
+     "did",
+     "clicked the button \"Share\""
+    ],
+    [
+     "you",
+     "reply charlie"
+    ],
+    [
+     "offered",
+     "to click the button \"Open\" — nothing was done; they have not accepted"
+    ],
+    [
+     "you",
+     "reply delta"
+    ],
+    [
+     "could not",
+     "click the button \"닫기\" — it had gone by then; nothing was done"
+    ]
+   ]
+  },
+  {
+   "turns": 0,
+   "history": [
+    [
+     "offered",
+     "to click the button \"Copy\" — nothing was done; they have not accepted"
+    ],
+    [
+     "you",
+     "reply alpha"
+    ],
+    [
+     "you",
+     "reply bravo"
+    ],
+    [
+     "did",
+     "clicked the button \"Share\""
+    ],
+    [
+     "you",
+     "reply charlie"
+    ],
+    [
+     "offered",
+     "to click the button \"Open\" — nothing was done; they have not accepted"
+    ],
+    [
+     "you",
+     "reply delta"
+    ],
+    [
+     "could not",
+     "click the button \"닫기\" — it had gone by then; nothing was done"
+    ]
+   ],
+   "want": []
+  },
+  {
+   "turns": 1,
+   "history": [
+    [
+     "offered",
+     "to click the button \"Copy\" — nothing was done; they have not accepted"
+    ],
+    [
+     "you",
+     "reply alpha"
+    ],
+    [
+     "you",
+     "reply bravo"
+    ],
+    [
+     "did",
+     "clicked the button \"Share\""
+    ],
+    [
+     "you",
+     "reply charlie"
+    ],
+    [
+     "offered",
+     "to click the button \"Open\" — nothing was done; they have not accepted"
+    ],
+    [
+     "you",
+     "reply delta"
+    ],
+    [
+     "could not",
+     "click the button \"닫기\" — it had gone by then; nothing was done"
+    ]
+   ],
+   "want": [
+    [
+     "offered",
+     "to click the button \"Copy\" — nothing was done; they have not accepted"
+    ],
+    [
+     "you",
+     "reply alpha"
+    ],
+    [
+     "you",
+     "reply bravo"
+    ],
+    [
+     "did",
+     "clicked the button \"Share\""
+    ],
+    [
+     "you",
+     "reply charlie"
+    ],
+    [
+     "offered",
+     "to click the button \"Open\" — nothing was done; they have not accepted"
+    ],
+    [
+     "you",
+     "reply delta"
+    ],
+    [
+     "could not",
+     "click the button \"닫기\" — it had gone by then; nothing was done"
+    ]
+   ]
+  },
+  {
+   "turns": 3,
+   "history": [
+    [
+     "offered",
+     "to click the button \"Copy\" — nothing was done; they have not accepted"
+    ],
+    [
+     "you",
+     "reply alpha"
+    ],
+    [
+     "you",
+     "reply bravo"
+    ],
+    [
+     "did",
+     "clicked the button \"Share\""
+    ],
+    [
+     "you",
+     "reply charlie"
+    ],
+    [
+     "offered",
+     "to click the button \"Open\" — nothing was done; they have not accepted"
+    ],
+    [
+     "you",
+     "reply delta"
+    ],
+    [
+     "could not",
+     "click the button \"닫기\" — it had gone by then; nothing was done"
+    ]
+   ],
+   "want": [
+    [
+     "offered",
+     "to click the button \"Copy\" — nothing was done; they have not accepted"
+    ],
+    [
+     "you",
+     "reply alpha"
+    ],
+    [
+     "you",
+     "reply bravo"
+    ],
+    [
+     "did",
+     "clicked the button \"Share\""
+    ],
+    [
+     "you",
+     "reply charlie"
+    ],
+    [
+     "offered",
+     "to click the button \"Open\" — nothing was done; they have not accepted"
+    ],
+    [
+     "you",
+     "reply delta"
+    ],
+    [
+     "could not",
+     "click the button \"닫기\" — it had gone by then; nothing was done"
+    ]
+   ]
+  },
+  {
+   "turns": 3,
+   "history": [],
+   "want": []
+  }
+ ],
+ "find": [
+  {
+   "label": "the desk, by name alone",
+   "fresh": [
+    {
+     "name": "닫기",
+     "role": "button",
+     "rect": [
+      10,
+      20,
+      40,
+      30
+     ],
+     "window": "Win"
+    },
+    {
+     "name": "Share",
+     "role": "button",
+     "rect": [
+      60,
+      20,
+      40,
+      30
+     ],
+     "window": "Win"
+    },
+    {
+     "name": "Mute (m)",
+     "role": "button",
+     "rect": [
+      110,
+      20,
+      40,
+      30
+     ],
+     "window": "Win"
+    },
+    {
+     "name": "File",
+     "role": "menu item",
+     "rect": [
+      35,
+      0,
+      36,
+      35
+     ],
+     "window": "Win"
+    }
+   ],
+   "seen": [
+    {
+     "name": "닫기",
+     "role": "button",
+     "rect": [
+      10,
+      20,
+      40,
+      30
+     ],
+     "window": "Win"
+    },
+    {
+     "name": "Share",
+     "role": "button",
+     "rect": [
+      60,
+      20,
+      40,
+      30
+     ],
+     "window": "Win"
+    },
+    {
+     "name": "Mute (m)",
+     "role": "button",
+     "rect": [
+      110,
+      20,
+      40,
+      30
+     ],
+     "window": "Win"
+    },
+    {
+     "name": "File",
+     "role": "menu item",
+     "rect": [
+      35,
+      0,
+      36,
+      35
+     ],
+     "window": "Win"
+    }
+   ],
+   "name": "닫기",
+   "role": "",
+   "want": {
+    "name": "닫기",
+    "role": "button",
+    "rect": [
+     10,
+     20,
+     40,
+     30
+    ],
+    "window": "Win"
+   }
+  },
+  {
+   "label": "the desk, name and role",
+   "fresh": [
+    {
+     "name": "닫기",
+     "role": "button",
+     "rect": [
+      10,
+      20,
+      40,
+      30
+     ],
+     "window": "Win"
+    },
+    {
+     "name": "Share",
+     "role": "button",
+     "rect": [
+      60,
+      20,
+      40,
+      30
+     ],
+     "window": "Win"
+    },
+    {
+     "name": "Mute (m)",
+     "role": "button",
+     "rect": [
+      110,
+      20,
+      40,
+      30
+     ],
+     "window": "Win"
+    },
+    {
+     "name": "File",
+     "role": "menu item",
+     "rect": [
+      35,
+      0,
+      36,
+      35
+     ],
+     "window": "Win"
+    }
+   ],
+   "seen": [
+    {
+     "name": "닫기",
+     "role": "button",
+     "rect": [
+      10,
+      20,
+      40,
+      30
+     ],
+     "window": "Win"
+    },
+    {
+     "name": "Share",
+     "role": "button",
+     "rect": [
+      60,
+      20,
+      40,
+      30
+     ],
+     "window": "Win"
+    },
+    {
+     "name": "Mute (m)",
+     "role": "button",
+     "rect": [
+      110,
+      20,
+      40,
+      30
+     ],
+     "window": "Win"
+    },
+    {
+     "name": "File",
+     "role": "menu item",
+     "rect": [
+      35,
+      0,
+      36,
+      35
+     ],
+     "window": "Win"
+    }
+   ],
+   "name": "닫기",
+   "role": "button",
+   "want": {
+    "name": "닫기",
+    "role": "button",
+    "rect": [
+     10,
+     20,
+     40,
+     30
+    ],
+    "window": "Win"
+   }
+  },
+  {
+   "label": "a role nothing has",
+   "fresh": [
+    {
+     "name": "닫기",
+     "role": "button",
+     "rect": [
+      10,
+      20,
+      40,
+      30
+     ],
+     "window": "Win"
+    },
+    {
+     "name": "Share",
+     "role": "button",
+     "rect": [
+      60,
+      20,
+      40,
+      30
+     ],
+     "window": "Win"
+    },
+    {
+     "name": "Mute (m)",
+     "role": "button",
+     "rect": [
+      110,
+      20,
+      40,
+      30
+     ],
+     "window": "Win"
+    },
+    {
+     "name": "File",
+     "role": "menu item",
+     "rect": [
+      35,
+      0,
+      36,
+      35
+     ],
+     "window": "Win"
+    }
+   ],
+   "seen": [
+    {
+     "name": "닫기",
+     "role": "button",
+     "rect": [
+      10,
+      20,
+      40,
+      30
+     ],
+     "window": "Win"
+    },
+    {
+     "name": "Share",
+     "role": "button",
+     "rect": [
+      60,
+      20,
+      40,
+      30
+     ],
+     "window": "Win"
+    },
+    {
+     "name": "Mute (m)",
+     "role": "button",
+     "rect": [
+      110,
+      20,
+      40,
+      30
+     ],
+     "window": "Win"
+    },
+    {
+     "name": "File",
+     "role": "menu item",
+     "rect": [
+      35,
+      0,
+      36,
+      35
+     ],
+     "window": "Win"
+    }
+   ],
+   "name": "닫기",
+   "role": "combo box",
+   "want": null
+  },
+  {
+   "label": "a name nothing has",
+   "fresh": [
+    {
+     "name": "닫기",
+     "role": "button",
+     "rect": [
+      10,
+      20,
+      40,
+      30
+     ],
+     "window": "Win"
+    },
+    {
+     "name": "Share",
+     "role": "button",
+     "rect": [
+      60,
+      20,
+      40,
+      30
+     ],
+     "window": "Win"
+    },
+    {
+     "name": "Mute (m)",
+     "role": "button",
+     "rect": [
+      110,
+      20,
+      40,
+      30
+     ],
+     "window": "Win"
+    },
+    {
+     "name": "File",
+     "role": "menu item",
+     "rect": [
+      35,
+      0,
+      36,
+      35
+     ],
+     "window": "Win"
+    }
+   ],
+   "seen": [
+    {
+     "name": "닫기",
+     "role": "button",
+     "rect": [
+      10,
+      20,
+      40,
+      30
+     ],
+     "window": "Win"
+    },
+    {
+     "name": "Share",
+     "role": "button",
+     "rect": [
+      60,
+      20,
+      40,
+      30
+     ],
+     "window": "Win"
+    },
+    {
+     "name": "Mute (m)",
+     "role": "button",
+     "rect": [
+      110,
+      20,
+      40,
+      30
+     ],
+     "window": "Win"
+    },
+    {
+     "name": "File",
+     "role": "menu item",
+     "rect": [
+      35,
+      0,
+      36,
+      35
+     ],
+     "window": "Win"
+    }
+   ],
+   "name": "없는것",
+   "role": "",
+   "want": null
+  },
+  {
+   "label": "the Font : trap, name alone",
+   "fresh": [
+    {
+     "name": "Font :",
+     "role": "text",
+     "rect": [
+      0,
+      0,
+      10,
+      10
+     ],
+     "window": "Win"
+    },
+    {
+     "name": "Font :",
+     "role": "combo box",
+     "rect": [
+      100,
+      0,
+      10,
+      10
+     ],
+     "window": "Win"
+    }
+   ],
+   "seen": [
+    {
+     "name": "Font :",
+     "role": "text",
+     "rect": [
+      0,
+      0,
+      10,
+      10
+     ],
+     "window": "Win"
+    },
+    {
+     "name": "Font :",
+     "role": "combo box",
+     "rect": [
+      100,
+      0,
+      10,
+      10
+     ],
+     "window": "Win"
+    }
+   ],
+   "name": "Font :",
+   "role": "",
+   "want": {
+    "name": "Font :",
+    "role": "text",
+    "rect": [
+     0,
+     0,
+     10,
+     10
+    ],
+    "window": "Win"
+   }
+  },
+  {
+   "label": "the Font : trap, with the role",
+   "fresh": [
+    {
+     "name": "Font :",
+     "role": "text",
+     "rect": [
+      0,
+      0,
+      10,
+      10
+     ],
+     "window": "Win"
+    },
+    {
+     "name": "Font :",
+     "role": "combo box",
+     "rect": [
+      100,
+      0,
+      10,
+      10
+     ],
+     "window": "Win"
+    }
+   ],
+   "seen": [
+    {
+     "name": "Font :",
+     "role": "text",
+     "rect": [
+      0,
+      0,
+      10,
+      10
+     ],
+     "window": "Win"
+    },
+    {
+     "name": "Font :",
+     "role": "combo box",
+     "rect": [
+      100,
+      0,
+      10,
+      10
+     ],
+     "window": "Win"
+    }
+   ],
+   "name": "Font :",
+   "role": "combo box",
+   "want": {
+    "name": "Font :",
+    "role": "combo box",
+    "rect": [
+     100,
+     0,
+     10,
+     10
+    ],
+    "window": "Win"
+   }
+  },
+  {
+   "label": "the role filters, it does not only break ties",
+   "fresh": [
+    {
+     "name": "Font :",
+     "role": "text",
+     "rect": [
+      0,
+      0,
+      10,
+      10
+     ],
+     "window": "Win"
+    },
+    {
+     "name": "Font :",
+     "role": "combo box",
+     "rect": [
+      100,
+      0,
+      10,
+      10
+     ],
+     "window": "Win"
+    }
+   ],
+   "seen": [],
+   "name": "Font :",
+   "role": "text",
+   "want": {
+    "name": "Font :",
+    "role": "text",
+    "rect": [
+     0,
+     0,
+     10,
+     10
+    ],
+    "window": "Win"
+   }
+  },
+  {
+   "label": "duplicates, nearest to where it was",
+   "fresh": [
+    {
+     "name": "Copy",
+     "role": "button",
+     "rect": [
+      0,
+      0,
+      10,
+      10
+     ],
+     "window": "Win"
+    },
+    {
+     "name": "Copy",
+     "role": "button",
+     "rect": [
+      500,
+      0,
+      10,
+      10
+     ],
+     "window": "Win"
+    },
+    {
+     "name": "Copy",
+     "role": "button",
+     "rect": [
+      250,
+      0,
+      10,
+      10
+     ],
+     "window": "Win"
+    }
+   ],
+   "seen": [
+    {
+     "name": "Copy",
+     "role": "button",
+     "rect": [
+      500,
+      0,
+      10,
+      10
+     ],
+     "window": "Win"
+    }
+   ],
+   "name": "Copy",
+   "role": "",
+   "want": {
+    "name": "Copy",
+    "role": "button",
+    "rect": [
+     500,
+     0,
+     10,
+     10
+    ],
+    "window": "Win"
+   }
+  },
+  {
+   "label": "duplicates, nothing ever seen",
+   "fresh": [
+    {
+     "name": "Copy",
+     "role": "button",
+     "rect": [
+      0,
+      0,
+      10,
+      10
+     ],
+     "window": "Win"
+    },
+    {
+     "name": "Copy",
+     "role": "button",
+     "rect": [
+      500,
+      0,
+      10,
+      10
+     ],
+     "window": "Win"
+    },
+    {
+     "name": "Copy",
+     "role": "button",
+     "rect": [
+      250,
+      0,
+      10,
+      10
+     ],
+     "window": "Win"
+    }
+   ],
+   "seen": [],
+   "name": "Copy",
+   "role": "",
+   "want": {
+    "name": "Copy",
+    "role": "button",
+    "rect": [
+     0,
+     0,
+     10,
+     10
+    ],
+    "window": "Win"
+   }
+  },
+  {
+   "label": "duplicates, seen somewhere between",
+   "fresh": [
+    {
+     "name": "Copy",
+     "role": "button",
+     "rect": [
+      0,
+      0,
+      10,
+      10
+     ],
+     "window": "Win"
+    },
+    {
+     "name": "Copy",
+     "role": "button",
+     "rect": [
+      500,
+      0,
+      10,
+      10
+     ],
+     "window": "Win"
+    },
+    {
+     "name": "Copy",
+     "role": "button",
+     "rect": [
+      250,
+      0,
+      10,
+      10
+     ],
+     "window": "Win"
+    }
+   ],
+   "seen": [
+    {
+     "name": "Copy",
+     "role": "button",
+     "rect": [
+      240,
+      0,
+      10,
+      10
+     ],
+     "window": "Win"
+    }
+   ],
+   "name": "Copy",
+   "role": "",
+   "want": {
+    "name": "Copy",
+    "role": "button",
+    "rect": [
+     250,
+     0,
+     10,
+     10
+    ],
+    "window": "Win"
+   }
+  },
+  {
+   "label": "nothing on screen at all",
+   "fresh": [],
+   "seen": [
+    {
+     "name": "닫기",
+     "role": "button",
+     "rect": [
+      10,
+      20,
+      40,
+      30
+     ],
+     "window": "Win"
+    },
+    {
+     "name": "Share",
+     "role": "button",
+     "rect": [
+      60,
+      20,
+      40,
+      30
+     ],
+     "window": "Win"
+    },
+    {
+     "name": "Mute (m)",
+     "role": "button",
+     "rect": [
+      110,
+      20,
+      40,
+      30
+     ],
+     "window": "Win"
+    },
+    {
+     "name": "File",
+     "role": "menu item",
+     "rect": [
+      35,
+      0,
+      36,
+      35
+     ],
+     "window": "Win"
+    }
+   ],
+   "name": "닫기",
+   "role": "",
+   "want": null
+  }
+ ],
+ "channels": [
+  {
+   "label": "offered/click with a role",
+   "channel": "offered",
+   "effect": {
+    "kind": "click",
+    "target": "Copy",
+    "role": "button",
+    "text": ""
+   },
+   "target": null,
+   "want": [
+    [
+     "offered",
+     "to click the button \"Copy\" — nothing was done; they have not accepted"
+    ]
+   ]
+  },
+  {
+   "label": "offered/click with no role",
+   "channel": "offered",
+   "effect": {
+    "kind": "click",
+    "target": "Copy",
+    "role": "",
+    "text": ""
+   },
+   "target": null,
+   "want": [
+    [
+     "offered",
+     "to click the thing \"Copy\" — nothing was done; they have not accepted"
+    ]
+   ]
+  },
+  {
+   "label": "offered/type",
+   "channel": "offered",
+   "effect": {
+    "kind": "type",
+    "target": "",
+    "role": "",
+    "text": "hello"
+   },
+   "target": null,
+   "want": [
+    [
+     "offered",
+     "to type \"hello\" — nothing was done; they have not accepted"
+    ]
+   ]
+  },
+  {
+   "label": "offered/key",
+   "channel": "offered",
+   "effect": {
+    "kind": "key",
+    "target": "",
+    "role": "",
+    "text": "enter"
+   },
+   "target": null,
+   "want": [
+    [
+     "offered",
+     "to press enter — nothing was done; they have not accepted"
+    ]
+   ]
+  },
+  {
+   "label": "offered/a kind VERBS does not list",
+   "channel": "offered",
+   "effect": {
+    "kind": "scroll",
+    "target": "Pane",
+    "role": "pane",
+    "text": ""
+   },
+   "target": null,
+   "want": [
+    [
+     "offered",
+     "to press  — nothing was done; they have not accepted"
+    ]
+   ]
+  },
+  {
+   "label": "refused/click with a role",
+   "channel": "refused",
+   "effect": {
+    "kind": "click",
+    "target": "Copy",
+    "role": "button",
+    "text": ""
+   },
+   "target": null,
+   "want": [
+    [
+     "could not",
+     "click the button \"Copy\" — it had gone by then; nothing was done"
+    ]
+   ]
+  },
+  {
+   "label": "refused/click with no role",
+   "channel": "refused",
+   "effect": {
+    "kind": "click",
+    "target": "Copy",
+    "role": "",
+    "text": ""
+   },
+   "target": null,
+   "want": [
+    [
+     "could not",
+     "click the thing \"Copy\" — it had gone by then; nothing was done"
+    ]
+   ]
+  },
+  {
+   "label": "refused/type",
+   "channel": "refused",
+   "effect": {
+    "kind": "type",
+    "target": "",
+    "role": "",
+    "text": "hello"
+   },
+   "target": null,
+   "want": [
+    [
+     "could not",
+     "type \"hello\" — it had gone by then; nothing was done"
+    ]
+   ]
+  },
+  {
+   "label": "refused/key",
+   "channel": "refused",
+   "effect": {
+    "kind": "key",
+    "target": "",
+    "role": "",
+    "text": "enter"
+   },
+   "target": null,
+   "want": [
+    [
+     "could not",
+     "press enter — it had gone by then; nothing was done"
+    ]
+   ]
+  },
+  {
+   "label": "refused/a kind VERBS does not list",
+   "channel": "refused",
+   "effect": {
+    "kind": "scroll",
+    "target": "Pane",
+    "role": "pane",
+    "text": ""
+   },
+   "target": null,
+   "want": [
+    [
+     "could not",
+     "press  — it had gone by then; nothing was done"
+    ]
+   ]
+  },
+  {
+   "label": "turned_down/click with a role",
+   "channel": "turned_down",
+   "effect": {
+    "kind": "click",
+    "target": "Copy",
+    "role": "button",
+    "text": ""
+   },
+   "target": null,
+   "want": [
+    [
+     "they said no to",
+     "clicking the button \"Copy\" — nothing was done"
+    ]
+   ]
+  },
+  {
+   "label": "turned_down/click with no role",
+   "channel": "turned_down",
+   "effect": {
+    "kind": "click",
+    "target": "Copy",
+    "role": "",
+    "text": ""
+   },
+   "target": null,
+   "want": [
+    [
+     "they said no to",
+     "clicking the thing \"Copy\" — nothing was done"
+    ]
+   ]
+  },
+  {
+   "label": "turned_down/type",
+   "channel": "turned_down",
+   "effect": {
+    "kind": "type",
+    "target": "",
+    "role": "",
+    "text": "hello"
+   },
+   "target": null,
+   "want": [
+    [
+     "they said no to",
+     "typing \"hello\" — nothing was done"
+    ]
+   ]
+  },
+  {
+   "label": "turned_down/key",
+   "channel": "turned_down",
+   "effect": {
+    "kind": "key",
+    "target": "",
+    "role": "",
+    "text": "enter"
+   },
+   "target": null,
+   "want": [
+    [
+     "they said no to",
+     "pressing enter — nothing was done"
+    ]
+   ]
+  },
+  {
+   "label": "turned_down/a kind VERBS does not list",
+   "channel": "turned_down",
+   "effect": {
+    "kind": "scroll",
+    "target": "Pane",
+    "role": "pane",
+    "text": ""
+   },
+   "target": null,
+   "want": [
+    [
+     "they said no to",
+     "pressing  — nothing was done"
+    ]
+   ]
+  },
+  {
+   "label": "did/click with a role",
+   "channel": "did",
+   "effect": {
+    "kind": "click",
+    "target": "Copy",
+    "role": "button",
+    "text": ""
+   },
+   "target": {
+    "name": "Copy",
+    "role": "combo box",
+    "rect": [
+     10,
+     20,
+     40,
+     30
+    ],
+    "window": "Win"
+   },
+   "want": [
+    [
+     "did",
+     "clicked the combo box \"Copy\""
+    ]
+   ]
+  },
+  {
+   "label": "did/click with no role",
+   "channel": "did",
+   "effect": {
+    "kind": "click",
+    "target": "Copy",
+    "role": "",
+    "text": ""
+   },
+   "target": {
+    "name": "Copy",
+    "role": "combo box",
+    "rect": [
+     10,
+     20,
+     40,
+     30
+    ],
+    "window": "Win"
+   },
+   "want": [
+    [
+     "did",
+     "clicked the combo box \"Copy\""
+    ]
+   ]
+  },
+  {
+   "label": "did/type",
+   "channel": "did",
+   "effect": {
+    "kind": "type",
+    "target": "",
+    "role": "",
+    "text": "hello"
+   },
+   "target": null,
+   "want": [
+    [
+     "did",
+     "typed \"hello\""
+    ]
+   ]
+  },
+  {
+   "label": "did/key",
+   "channel": "did",
+   "effect": {
+    "kind": "key",
+    "target": "",
+    "role": "",
+    "text": "enter"
+   },
+   "target": null,
+   "want": [
+    [
+     "did",
+     "pressed enter"
+    ]
+   ]
+  },
+  {
+   "label": "did/a kind VERBS does not list",
+   "channel": "did",
+   "effect": {
+    "kind": "scroll",
+    "target": "Pane",
+    "role": "pane",
+    "text": ""
+   },
+   "target": null,
+   "want": [
+    [
+     "did",
+     "pressed "
+    ]
+   ]
+  }
+ ],
+ "order": {
+  "label": "all four in one call",
+  "want": [
+   [
+    "offered",
+    "to click the button \"Copy\" — nothing was done; they have not accepted"
+   ],
+   [
+    "did",
+    "clicked the button \"Cut\""
+   ],
+   [
+    "could not",
+    "type \"bye\" — it had gone by then; nothing was done"
+   ],
+   [
+    "they said no to",
+    "pressing tab — nothing was done"
+   ]
+  ]
+ }
+}

@@ -1,0 +1,175 @@
+{
+ "screen_print": "5020f7",
+ "prompt_tag": "r322a4c",
+ "screens": [
+  {
+   "name": "character-map",
+   "window": "Character Map",
+   "widgets": 21,
+   "first": [
+    {
+     "name": "Character Grid",
+     "role": "pane",
+     "rect": [
+      46,
+      145,
+      423,
+      253
+     ]
+    },
+    {
+     "name": "Characters to copy :",
+     "role": "text",
+     "rect": [
+      34,
+      405,
+      120,
+      39
+     ]
+    },
+    {
+     "name": "Characters to copy :",
+     "role": "edit",
+     "rect": [
+      158,
+      405,
+      165,
+      26
+     ]
+    }
+   ]
+  },
+  {
+   "name": "chrome-remote-desktop---qvb-flfm-dev1",
+   "window": "Chrome Remote Desktop - QVB-FLFM-DEV1",
+   "widgets": 12,
+   "first": [
+    {
+     "name": "QVB-FLFM-DEV1 - Y",
+     "role": "region",
+     "rect": [
+      0,
+      0,
+      2560,
+      1392
+     ]
+    },
+    {
+     "name": "최소화",
+     "role": "button",
+     "rect": [
+      2423,
+      0,
+      45,
+      26
+     ]
+    },
+    {
+     "name": "복구",
+     "role": "button",
+     "rect": [
+      2468,
+      0,
+      46,
+      26
+     ]
+    }
+   ]
+  },
+  {
+   "name": "system-information",
+   "window": "System Information",
+   "widgets": 152,
+   "first": [
+    {
+     "name": "System Summary",
+     "role": "tree item",
+     "rect": [
+      66,
+      107,
+      103,
+      20
+     ]
+    },
+    {
+     "name": "Hardware Resources",
+     "role": "tree item",
+     "rect": [
+      85,
+      127,
+      125,
+      20
+     ]
+    },
+    {
+     "name": "Components",
+     "role": "tree item",
+     "rect": [
+      85,
+      147,
+      78,
+      20
+     ]
+    }
+   ]
+  },
+  {
+   "name": "untitled---paint",
+   "window": "Untitled - Paint",
+   "widgets": 123,
+   "first": [
+    {
+     "name": "File",
+     "role": "menu item",
+     "rect": [
+      267,
+      178,
+      41,
+      32
+     ]
+    },
+    {
+     "name": "Edit",
+     "role": "menu item",
+     "rect": [
+      316,
+      178,
+      44,
+      32
+     ]
+    },
+    {
+     "name": "View",
+     "role": "menu item",
+     "rect": [
+      368,
+      178,
+      50,
+      32
+     ]
+    }
+   ]
+  }
+ ],
+ "spend": {
+  "seconds": 0.478,
+  "out_tokens": 29,
+  "reason": "stop",
+  "truncated": false,
+  "thought_chars": 512
+ },
+ "spend_stopped": {
+  "seconds": 1.2,
+  "out_tokens": 41,
+  "reason": "degenerate",
+  "truncated": false,
+  "thought_chars": 0
+ },
+ "spend_none": {
+  "seconds": null,
+  "out_tokens": null,
+  "reason": null,
+  "truncated": null,
+  "thought_chars": null
+ }
+}

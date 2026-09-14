@@ -1,0 +1,220 @@
+{
+ "scheme": "r",
+ "tag": "r322a4c",
+ "record_chars": 5658,
+ "record_bytes": 5676,
+ "max_listed": 200,
+ "most_at_once": 3,
+ "probes": [
+  {
+   "label": "asked, with history, widgets listed",
+   "asked": true,
+   "text": "probe",
+   "widgets": [
+    {
+     "name": "one",
+     "role": "button",
+     "rect": [
+      0,
+      0,
+      1,
+      1
+     ],
+     "window": ""
+    },
+    {
+     "name": "two",
+     "role": "combo box",
+     "rect": [
+      0,
+      0,
+      1,
+      1
+     ],
+     "window": ""
+    }
+   ],
+   "history": [
+    [
+     "them",
+     "a"
+    ],
+    [
+     "you",
+     "b"
+    ]
+   ]
+  },
+  {
+   "label": "unprompted, no history, widgets listed",
+   "asked": false,
+   "text": "probe",
+   "widgets": [
+    {
+     "name": "one",
+     "role": "button",
+     "rect": [
+      0,
+      0,
+      1,
+      1
+     ],
+     "window": ""
+    },
+    {
+     "name": "two",
+     "role": "combo box",
+     "rect": [
+      0,
+      0,
+      1,
+      1
+     ],
+     "window": ""
+    }
+   ],
+   "history": []
+  },
+  {
+   "label": "asked, no history, nothing on screen",
+   "asked": true,
+   "text": "probe",
+   "widgets": [],
+   "history": []
+  },
+  {
+   "label": "asked, an offer nobody has answered, widgets listed",
+   "asked": true,
+   "text": "probe",
+   "widgets": [
+    {
+     "name": "one",
+     "role": "button",
+     "rect": [
+      0,
+      0,
+      1,
+      1
+     ],
+     "window": ""
+    },
+    {
+     "name": "two",
+     "role": "combo box",
+     "rect": [
+      0,
+      0,
+      1,
+      1
+     ],
+     "window": ""
+    }
+   ],
+   "history": [
+    [
+     "them",
+     "a"
+    ],
+    [
+     "you",
+     "b"
+    ],
+    [
+     "offered",
+     "to click the button \"one\" - nothing was done; they have not accepted"
+    ]
+   ]
+  },
+  {
+   "label": "asked, that same offer settled, widgets listed",
+   "asked": true,
+   "text": "probe",
+   "widgets": [
+    {
+     "name": "one",
+     "role": "button",
+     "rect": [
+      0,
+      0,
+      1,
+      1
+     ],
+     "window": ""
+    },
+    {
+     "name": "two",
+     "role": "combo box",
+     "rect": [
+      0,
+      0,
+      1,
+      1
+     ],
+     "window": ""
+    }
+   ],
+   "history": [
+    [
+     "them",
+     "a"
+    ],
+    [
+     "you",
+     "b"
+    ],
+    [
+     "offered",
+     "to click the button \"one\" - nothing was done; they have not accepted"
+    ],
+    [
+     "did",
+     "clicked the button \"one\""
+    ]
+   ]
+  },
+  {
+   "label": "unprompted, an offer nobody has answered, widgets listed",
+   "asked": false,
+   "text": "probe",
+   "widgets": [
+    {
+     "name": "one",
+     "role": "button",
+     "rect": [
+      0,
+      0,
+      1,
+      1
+     ],
+     "window": ""
+    },
+    {
+     "name": "two",
+     "role": "combo box",
+     "rect": [
+      0,
+      0,
+      1,
+      1
+     ],
+     "window": ""
+    }
+   ],
+   "history": [
+    [
+     "them",
+     "a"
+    ],
+    [
+     "you",
+     "b"
+    ],
+    [
+     "offered",
+     "to click the button \"one\" - nothing was done; they have not accepted"
+    ]
+   ]
+  }
+ ],
+ "header": "MAX_LISTED = 200\nMOST_AT_ONCE = 3\n"
+}

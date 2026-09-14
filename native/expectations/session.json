@@ -1,0 +1,2774 @@
+[
+ {
+  "label": "a plain click, dry",
+  "screens": [
+   [
+    {
+     "name": "닫기",
+     "role": "button",
+     "rect": [
+      10,
+      20,
+      40,
+      30
+     ],
+     "window": "Win"
+    },
+    {
+     "name": "Share",
+     "role": "button",
+     "rect": [
+      60,
+      20,
+      40,
+      30
+     ],
+     "window": "Win"
+    },
+    {
+     "name": "Mute (m)",
+     "role": "button",
+     "rect": [
+      110,
+      20,
+      40,
+      30
+     ],
+     "window": "Win"
+    },
+    {
+     "name": "File",
+     "role": "menu item",
+     "rect": [
+      35,
+      0,
+      36,
+      35
+     ],
+     "window": "Win"
+    }
+   ]
+  ],
+  "replies": [
+   "{\"say\": \"닫을게요\", \"do\": [{\"click\": 0}]}"
+  ],
+  "hands": {
+   "live": false,
+   "keys": null
+  },
+  "may_act_unprompted": true,
+  "turns": [
+   {
+    "asked": true,
+    "text": "닫아줘"
+   }
+  ],
+  "want": [
+   {
+    "n": 0,
+    "asked": true,
+    "trigger": "닫아줘",
+    "said": "닫을게요",
+    "n_widgets": 4,
+    "did": [
+     {
+      "effect": {
+       "kind": "click",
+       "target": "닫기",
+       "role": "button",
+       "text": "",
+       "unprompted": false
+      },
+      "confirmed": null,
+      "target": {
+       "name": "닫기",
+       "role": "button",
+       "rect": [
+        10,
+        20,
+        40,
+        30
+       ],
+       "window": "Win"
+      }
+     }
+    ],
+    "proposed": [],
+    "refused": [],
+    "history": [
+     [
+      "them",
+      "닫아줘"
+     ],
+     [
+      "you",
+      "닫을게요"
+     ],
+     [
+      "did",
+      "clicked the button \"닫기\""
+     ]
+    ],
+    "blind": 0,
+    "vanished": 0,
+    "unknown_keys": 0,
+    "hands_done": [
+     "click button '닫기' at (30, 35)"
+    ],
+    "eye_reads": 2
+   }
+  ]
+ },
+ {
+  "label": "a plain click, live and the world moved",
+  "screens": [
+   [
+    {
+     "name": "닫기",
+     "role": "button",
+     "rect": [
+      10,
+      20,
+      40,
+      30
+     ],
+     "window": "Win"
+    },
+    {
+     "name": "Share",
+     "role": "button",
+     "rect": [
+      60,
+      20,
+      40,
+      30
+     ],
+     "window": "Win"
+    },
+    {
+     "name": "Mute (m)",
+     "role": "button",
+     "rect": [
+      110,
+      20,
+      40,
+      30
+     ],
+     "window": "Win"
+    },
+    {
+     "name": "File",
+     "role": "menu item",
+     "rect": [
+      35,
+      0,
+      36,
+      35
+     ],
+     "window": "Win"
+    }
+   ],
+   [
+    {
+     "name": "닫기",
+     "role": "button",
+     "rect": [
+      10,
+      20,
+      40,
+      30
+     ],
+     "window": "Win"
+    },
+    {
+     "name": "Share",
+     "role": "button",
+     "rect": [
+      60,
+      20,
+      40,
+      30
+     ],
+     "window": "Win"
+    },
+    {
+     "name": "Mute (m)",
+     "role": "button",
+     "rect": [
+      110,
+      20,
+      40,
+      30
+     ],
+     "window": "Win"
+    },
+    {
+     "name": "File",
+     "role": "menu item",
+     "rect": [
+      35,
+      0,
+      36,
+      35
+     ],
+     "window": "Win"
+    }
+   ],
+   [
+    {
+     "name": "Share",
+     "role": "button",
+     "rect": [
+      60,
+      20,
+      40,
+      30
+     ],
+     "window": "Win"
+    },
+    {
+     "name": "Mute (m)",
+     "role": "button",
+     "rect": [
+      110,
+      20,
+      40,
+      30
+     ],
+     "window": "Win"
+    },
+    {
+     "name": "File",
+     "role": "menu item",
+     "rect": [
+      35,
+      0,
+      36,
+      35
+     ],
+     "window": "Win"
+    }
+   ]
+  ],
+  "replies": [
+   "{\"say\": \"닫을게요\", \"do\": [{\"click\": 0}]}"
+  ],
+  "hands": {
+   "live": true,
+   "keys": null
+  },
+  "may_act_unprompted": true,
+  "turns": [
+   {
+    "asked": true,
+    "text": "닫아줘"
+   }
+  ],
+  "want": [
+   {
+    "n": 0,
+    "asked": true,
+    "trigger": "닫아줘",
+    "said": "닫을게요",
+    "n_widgets": 4,
+    "did": [
+     {
+      "effect": {
+       "kind": "click",
+       "target": "닫기",
+       "role": "button",
+       "text": "",
+       "unprompted": false
+      },
+      "confirmed": true,
+      "target": {
+       "name": "닫기",
+       "role": "button",
+       "rect": [
+        10,
+        20,
+        40,
+        30
+       ],
+       "window": "Win"
+      }
+     }
+    ],
+    "proposed": [],
+    "refused": [],
+    "history": [
+     [
+      "them",
+      "닫아줘"
+     ],
+     [
+      "you",
+      "닫을게요"
+     ],
+     [
+      "did",
+      "clicked the button \"닫기\""
+     ]
+    ],
+    "blind": 0,
+    "vanished": 0,
+    "unknown_keys": 0,
+    "hands_done": [
+     "click button '닫기' at (30, 35)"
+    ],
+    "eye_reads": 3
+   }
+  ]
+ },
+ {
+  "label": "a plain click, live and nothing moved",
+  "screens": [
+   [
+    {
+     "name": "닫기",
+     "role": "button",
+     "rect": [
+      10,
+      20,
+      40,
+      30
+     ],
+     "window": "Win"
+    },
+    {
+     "name": "Share",
+     "role": "button",
+     "rect": [
+      60,
+      20,
+      40,
+      30
+     ],
+     "window": "Win"
+    },
+    {
+     "name": "Mute (m)",
+     "role": "button",
+     "rect": [
+      110,
+      20,
+      40,
+      30
+     ],
+     "window": "Win"
+    },
+    {
+     "name": "File",
+     "role": "menu item",
+     "rect": [
+      35,
+      0,
+      36,
+      35
+     ],
+     "window": "Win"
+    }
+   ],
+   [
+    {
+     "name": "닫기",
+     "role": "button",
+     "rect": [
+      10,
+      20,
+      40,
+      30
+     ],
+     "window": "Win"
+    },
+    {
+     "name": "Share",
+     "role": "button",
+     "rect": [
+      60,
+      20,
+      40,
+      30
+     ],
+     "window": "Win"
+    },
+    {
+     "name": "Mute (m)",
+     "role": "button",
+     "rect": [
+      110,
+      20,
+      40,
+      30
+     ],
+     "window": "Win"
+    },
+    {
+     "name": "File",
+     "role": "menu item",
+     "rect": [
+      35,
+      0,
+      36,
+      35
+     ],
+     "window": "Win"
+    }
+   ],
+   [
+    {
+     "name": "닫기",
+     "role": "button",
+     "rect": [
+      10,
+      20,
+      40,
+      30
+     ],
+     "window": "Win"
+    },
+    {
+     "name": "Share",
+     "role": "button",
+     "rect": [
+      60,
+      20,
+      40,
+      30
+     ],
+     "window": "Win"
+    },
+    {
+     "name": "Mute (m)",
+     "role": "button",
+     "rect": [
+      110,
+      20,
+      40,
+      30
+     ],
+     "window": "Win"
+    },
+    {
+     "name": "File",
+     "role": "menu item",
+     "rect": [
+      35,
+      0,
+      36,
+      35
+     ],
+     "window": "Win"
+    }
+   ]
+  ],
+  "replies": [
+   "{\"say\": \"닫을게요\", \"do\": [{\"click\": 0}]}"
+  ],
+  "hands": {
+   "live": true,
+   "keys": null
+  },
+  "may_act_unprompted": true,
+  "turns": [
+   {
+    "asked": true,
+    "text": "닫아줘"
+   }
+  ],
+  "want": [
+   {
+    "n": 0,
+    "asked": true,
+    "trigger": "닫아줘",
+    "said": "닫을게요",
+    "n_widgets": 4,
+    "did": [
+     {
+      "effect": {
+       "kind": "click",
+       "target": "닫기",
+       "role": "button",
+       "text": "",
+       "unprompted": false
+      },
+      "confirmed": false,
+      "target": {
+       "name": "닫기",
+       "role": "button",
+       "rect": [
+        10,
+        20,
+        40,
+        30
+       ],
+       "window": "Win"
+      }
+     }
+    ],
+    "proposed": [],
+    "refused": [],
+    "history": [
+     [
+      "them",
+      "닫아줘"
+     ],
+     [
+      "you",
+      "닫을게요"
+     ],
+     [
+      "did",
+      "clicked the button \"닫기\""
+     ]
+    ],
+    "blind": 0,
+    "vanished": 0,
+    "unknown_keys": 0,
+    "hands_done": [
+     "click button '닫기' at (30, 35)"
+    ],
+    "eye_reads": 3
+   }
+  ]
+ },
+ {
+  "label": "live, and the foreground window changed underneath",
+  "screens": [
+   [
+    {
+     "name": "닫기",
+     "role": "button",
+     "rect": [
+      10,
+      20,
+      40,
+      30
+     ],
+     "window": "Win"
+    },
+    {
+     "name": "Share",
+     "role": "button",
+     "rect": [
+      60,
+      20,
+      40,
+      30
+     ],
+     "window": "Win"
+    },
+    {
+     "name": "Mute (m)",
+     "role": "button",
+     "rect": [
+      110,
+      20,
+      40,
+      30
+     ],
+     "window": "Win"
+    },
+    {
+     "name": "File",
+     "role": "menu item",
+     "rect": [
+      35,
+      0,
+      36,
+      35
+     ],
+     "window": "Win"
+    }
+   ],
+   [
+    {
+     "name": "닫기",
+     "role": "button",
+     "rect": [
+      10,
+      20,
+      40,
+      30
+     ],
+     "window": "Win"
+    },
+    {
+     "name": "Share",
+     "role": "button",
+     "rect": [
+      60,
+      20,
+      40,
+      30
+     ],
+     "window": "Win"
+    },
+    {
+     "name": "Mute (m)",
+     "role": "button",
+     "rect": [
+      110,
+      20,
+      40,
+      30
+     ],
+     "window": "Win"
+    },
+    {
+     "name": "File",
+     "role": "menu item",
+     "rect": [
+      35,
+      0,
+      36,
+      35
+     ],
+     "window": "Win"
+    }
+   ],
+   [
+    {
+     "name": "닫기",
+     "role": "button",
+     "rect": [
+      10,
+      20,
+      40,
+      30
+     ],
+     "window": "Other"
+    }
+   ]
+  ],
+  "replies": [
+   "{\"say\": \"닫을게요\", \"do\": [{\"click\": 0}]}"
+  ],
+  "hands": {
+   "live": true,
+   "keys": null
+  },
+  "may_act_unprompted": true,
+  "turns": [
+   {
+    "asked": true,
+    "text": "닫아줘"
+   }
+  ],
+  "want": [
+   {
+    "n": 0,
+    "asked": true,
+    "trigger": "닫아줘",
+    "said": "닫을게요",
+    "n_widgets": 4,
+    "did": [
+     {
+      "effect": {
+       "kind": "click",
+       "target": "닫기",
+       "role": "button",
+       "text": "",
+       "unprompted": false
+      },
+      "confirmed": true,
+      "target": {
+       "name": "닫기",
+       "role": "button",
+       "rect": [
+        10,
+        20,
+        40,
+        30
+       ],
+       "window": "Win"
+      }
+     }
+    ],
+    "proposed": [],
+    "refused": [],
+    "history": [
+     [
+      "them",
+      "닫아줘"
+     ],
+     [
+      "you",
+      "닫을게요"
+     ],
+     [
+      "did",
+      "clicked the button \"닫기\""
+     ]
+    ],
+    "blind": 0,
+    "vanished": 0,
+    "unknown_keys": 0,
+    "hands_done": [
+     "click button '닫기' at (30, 35)"
+    ],
+    "eye_reads": 3
+   }
+  ]
+ },
+ {
+  "label": "the target vanished between deciding and acting",
+  "screens": [
+   [
+    {
+     "name": "닫기",
+     "role": "button",
+     "rect": [
+      10,
+      20,
+      40,
+      30
+     ],
+     "window": "Win"
+    },
+    {
+     "name": "Share",
+     "role": "button",
+     "rect": [
+      60,
+      20,
+      40,
+      30
+     ],
+     "window": "Win"
+    },
+    {
+     "name": "Mute (m)",
+     "role": "button",
+     "rect": [
+      110,
+      20,
+      40,
+      30
+     ],
+     "window": "Win"
+    },
+    {
+     "name": "File",
+     "role": "menu item",
+     "rect": [
+      35,
+      0,
+      36,
+      35
+     ],
+     "window": "Win"
+    }
+   ],
+   [
+    {
+     "name": "Share",
+     "role": "button",
+     "rect": [
+      60,
+      20,
+      40,
+      30
+     ],
+     "window": "Win"
+    },
+    {
+     "name": "Mute (m)",
+     "role": "button",
+     "rect": [
+      110,
+      20,
+      40,
+      30
+     ],
+     "window": "Win"
+    },
+    {
+     "name": "File",
+     "role": "menu item",
+     "rect": [
+      35,
+      0,
+      36,
+      35
+     ],
+     "window": "Win"
+    }
+   ]
+  ],
+  "replies": [
+   "{\"say\": \"닫을게요\", \"do\": [{\"click\": 0}]}"
+  ],
+  "hands": {
+   "live": false,
+   "keys": null
+  },
+  "may_act_unprompted": true,
+  "turns": [
+   {
+    "asked": true,
+    "text": "닫아줘"
+   }
+  ],
+  "want": [
+   {
+    "n": 0,
+    "asked": true,
+    "trigger": "닫아줘",
+    "said": "닫을게요",
+    "n_widgets": 4,
+    "did": [],
+    "proposed": [],
+    "refused": [
+     {
+      "kind": "click",
+      "target": "닫기",
+      "role": "button",
+      "text": "",
+      "unprompted": false
+     }
+    ],
+    "history": [
+     [
+      "them",
+      "닫아줘"
+     ],
+     [
+      "you",
+      "닫을게요"
+     ],
+     [
+      "could not",
+      "click the button \"닫기\" — it had gone by then; nothing was done"
+     ]
+    ],
+    "blind": 0,
+    "vanished": 1,
+    "unknown_keys": 0,
+    "hands_done": [],
+    "eye_reads": 2
+   }
+  ]
+ },
+ {
+  "label": "the target moved, and the nearest same-named one wins",
+  "screens": [
+   [
+    {
+     "name": "닫기",
+     "role": "button",
+     "rect": [
+      10,
+      20,
+      40,
+      30
+     ],
+     "window": "Win"
+    },
+    {
+     "name": "Share",
+     "role": "button",
+     "rect": [
+      60,
+      20,
+      40,
+      30
+     ],
+     "window": "Win"
+    },
+    {
+     "name": "Mute (m)",
+     "role": "button",
+     "rect": [
+      110,
+      20,
+      40,
+      30
+     ],
+     "window": "Win"
+    },
+    {
+     "name": "File",
+     "role": "menu item",
+     "rect": [
+      35,
+      0,
+      36,
+      35
+     ],
+     "window": "Win"
+    }
+   ],
+   [
+    {
+     "name": "닫기",
+     "role": "button",
+     "rect": [
+      300,
+      200,
+      40,
+      30
+     ],
+     "window": "Win"
+    },
+    {
+     "name": "Share",
+     "role": "button",
+     "rect": [
+      60,
+      20,
+      40,
+      30
+     ],
+     "window": "Win"
+    },
+    {
+     "name": "Mute (m)",
+     "role": "button",
+     "rect": [
+      110,
+      20,
+      40,
+      30
+     ],
+     "window": "Win"
+    },
+    {
+     "name": "File",
+     "role": "menu item",
+     "rect": [
+      35,
+      0,
+      36,
+      35
+     ],
+     "window": "Win"
+    }
+   ]
+  ],
+  "replies": [
+   "{\"say\": \"닫을게요\", \"do\": [{\"click\": 0}]}"
+  ],
+  "hands": {
+   "live": false,
+   "keys": null
+  },
+  "may_act_unprompted": true,
+  "turns": [
+   {
+    "asked": true,
+    "text": "닫아줘"
+   }
+  ],
+  "want": [
+   {
+    "n": 0,
+    "asked": true,
+    "trigger": "닫아줘",
+    "said": "닫을게요",
+    "n_widgets": 4,
+    "did": [
+     {
+      "effect": {
+       "kind": "click",
+       "target": "닫기",
+       "role": "button",
+       "text": "",
+       "unprompted": false
+      },
+      "confirmed": null,
+      "target": {
+       "name": "닫기",
+       "role": "button",
+       "rect": [
+        300,
+        200,
+        40,
+        30
+       ],
+       "window": "Win"
+      }
+     }
+    ],
+    "proposed": [],
+    "refused": [],
+    "history": [
+     [
+      "them",
+      "닫아줘"
+     ],
+     [
+      "you",
+      "닫을게요"
+     ],
+     [
+      "did",
+      "clicked the button \"닫기\""
+     ]
+    ],
+    "blind": 0,
+    "vanished": 0,
+    "unknown_keys": 0,
+    "hands_done": [
+     "click button '닫기' at (320, 215)"
+    ],
+    "eye_reads": 2
+   }
+  ]
+ },
+ {
+  "label": "two of the same name, resolved against where it was seen",
+  "screens": [
+   [
+    {
+     "name": "닫기",
+     "role": "button",
+     "rect": [
+      10,
+      20,
+      40,
+      30
+     ],
+     "window": "Win"
+    },
+    {
+     "name": "Share",
+     "role": "button",
+     "rect": [
+      60,
+      20,
+      40,
+      30
+     ],
+     "window": "Win"
+    },
+    {
+     "name": "Mute (m)",
+     "role": "button",
+     "rect": [
+      110,
+      20,
+      40,
+      30
+     ],
+     "window": "Win"
+    },
+    {
+     "name": "File",
+     "role": "menu item",
+     "rect": [
+      35,
+      0,
+      36,
+      35
+     ],
+     "window": "Win"
+    }
+   ],
+   [
+    {
+     "name": "닫기",
+     "role": "button",
+     "rect": [
+      10,
+      20,
+      40,
+      30
+     ],
+     "window": "Win"
+    },
+    {
+     "name": "닫기",
+     "role": "button",
+     "rect": [
+      400,
+      20,
+      40,
+      30
+     ],
+     "window": "Win"
+    },
+    {
+     "name": "Share",
+     "role": "button",
+     "rect": [
+      60,
+      20,
+      40,
+      30
+     ],
+     "window": "Win"
+    },
+    {
+     "name": "Mute (m)",
+     "role": "button",
+     "rect": [
+      110,
+      20,
+      40,
+      30
+     ],
+     "window": "Win"
+    },
+    {
+     "name": "File",
+     "role": "menu item",
+     "rect": [
+      35,
+      0,
+      36,
+      35
+     ],
+     "window": "Win"
+    }
+   ]
+  ],
+  "replies": [
+   "{\"say\": \"닫을게요\", \"do\": [{\"click\": 0}]}"
+  ],
+  "hands": {
+   "live": false,
+   "keys": null
+  },
+  "may_act_unprompted": true,
+  "turns": [
+   {
+    "asked": true,
+    "text": "닫아줘"
+   }
+  ],
+  "want": [
+   {
+    "n": 0,
+    "asked": true,
+    "trigger": "닫아줘",
+    "said": "닫을게요",
+    "n_widgets": 4,
+    "did": [
+     {
+      "effect": {
+       "kind": "click",
+       "target": "닫기",
+       "role": "button",
+       "text": "",
+       "unprompted": false
+      },
+      "confirmed": null,
+      "target": {
+       "name": "닫기",
+       "role": "button",
+       "rect": [
+        10,
+        20,
+        40,
+        30
+       ],
+       "window": "Win"
+      }
+     }
+    ],
+    "proposed": [],
+    "refused": [],
+    "history": [
+     [
+      "them",
+      "닫아줘"
+     ],
+     [
+      "you",
+      "닫을게요"
+     ],
+     [
+      "did",
+      "clicked the button \"닫기\""
+     ]
+    ],
+    "blind": 0,
+    "vanished": 0,
+    "unknown_keys": 0,
+    "hands_done": [
+     "click button '닫기' at (30, 35)"
+    ],
+    "eye_reads": 2
+   }
+  ]
+ },
+ {
+  "label": "typing and a key, in one intent",
+  "screens": [
+   [
+    {
+     "name": "닫기",
+     "role": "button",
+     "rect": [
+      10,
+      20,
+      40,
+      30
+     ],
+     "window": "Win"
+    },
+    {
+     "name": "Share",
+     "role": "button",
+     "rect": [
+      60,
+      20,
+      40,
+      30
+     ],
+     "window": "Win"
+    },
+    {
+     "name": "Mute (m)",
+     "role": "button",
+     "rect": [
+      110,
+      20,
+      40,
+      30
+     ],
+     "window": "Win"
+    },
+    {
+     "name": "File",
+     "role": "menu item",
+     "rect": [
+      35,
+      0,
+      36,
+      35
+     ],
+     "window": "Win"
+    }
+   ]
+  ],
+  "replies": [
+   "{\"say\": \"입력할게요\", \"do\": [{\"type\": \"hello\"}, {\"key\": \"ENTER\"}]}"
+  ],
+  "hands": {
+   "live": false,
+   "keys": null
+  },
+  "may_act_unprompted": true,
+  "turns": [
+   {
+    "asked": true,
+    "text": "hello 치고 엔터"
+   }
+  ],
+  "want": [
+   {
+    "n": 0,
+    "asked": true,
+    "trigger": "hello 치고 엔터",
+    "said": "입력할게요",
+    "n_widgets": 4,
+    "did": [
+     {
+      "effect": {
+       "kind": "type",
+       "target": "",
+       "role": "",
+       "text": "hello",
+       "unprompted": false
+      },
+      "confirmed": null,
+      "target": null
+     },
+     {
+      "effect": {
+       "kind": "key",
+       "target": "",
+       "role": "",
+       "text": "enter",
+       "unprompted": false
+      },
+      "confirmed": null,
+      "target": null
+     }
+    ],
+    "proposed": [],
+    "refused": [],
+    "history": [
+     [
+      "them",
+      "hello 치고 엔터"
+     ],
+     [
+      "you",
+      "입력할게요"
+     ],
+     [
+      "did",
+      "typed \"hello\""
+     ],
+     [
+      "did",
+      "pressed enter"
+     ]
+    ],
+    "blind": 0,
+    "vanished": 0,
+    "unknown_keys": 0,
+    "hands_done": [
+     "type 'hello'",
+     "key 'enter'"
+    ],
+    "eye_reads": 1
+   }
+  ]
+ },
+ {
+  "label": "a key the environment does not have",
+  "screens": [
+   [
+    {
+     "name": "닫기",
+     "role": "button",
+     "rect": [
+      10,
+      20,
+      40,
+      30
+     ],
+     "window": "Win"
+    },
+    {
+     "name": "Share",
+     "role": "button",
+     "rect": [
+      60,
+      20,
+      40,
+      30
+     ],
+     "window": "Win"
+    },
+    {
+     "name": "Mute (m)",
+     "role": "button",
+     "rect": [
+      110,
+      20,
+      40,
+      30
+     ],
+     "window": "Win"
+    },
+    {
+     "name": "File",
+     "role": "menu item",
+     "rect": [
+      35,
+      0,
+      36,
+      35
+     ],
+     "window": "Win"
+    }
+   ]
+  ],
+  "replies": [
+   "{\"say\": \"탭 누를게요\", \"do\": [{\"key\": \"tab\"}]}"
+  ],
+  "hands": {
+   "live": false,
+   "keys": [
+    "enter",
+    "escape"
+   ]
+  },
+  "may_act_unprompted": true,
+  "turns": [
+   {
+    "asked": true,
+    "text": "탭 눌러줘"
+   }
+  ],
+  "want": [
+   {
+    "n": 0,
+    "asked": true,
+    "trigger": "탭 눌러줘",
+    "said": "탭 누를게요",
+    "n_widgets": 4,
+    "did": [],
+    "proposed": [],
+    "refused": [],
+    "history": [
+     [
+      "them",
+      "탭 눌러줘"
+     ],
+     [
+      "you",
+      "탭 누를게요"
+     ]
+    ],
+    "blind": 1,
+    "vanished": 0,
+    "unknown_keys": 1,
+    "hands_done": [],
+    "eye_reads": 1
+   }
+  ]
+ },
+ {
+  "label": "a key the environment does have",
+  "screens": [
+   [
+    {
+     "name": "닫기",
+     "role": "button",
+     "rect": [
+      10,
+      20,
+      40,
+      30
+     ],
+     "window": "Win"
+    },
+    {
+     "name": "Share",
+     "role": "button",
+     "rect": [
+      60,
+      20,
+      40,
+      30
+     ],
+     "window": "Win"
+    },
+    {
+     "name": "Mute (m)",
+     "role": "button",
+     "rect": [
+      110,
+      20,
+      40,
+      30
+     ],
+     "window": "Win"
+    },
+    {
+     "name": "File",
+     "role": "menu item",
+     "rect": [
+      35,
+      0,
+      36,
+      35
+     ],
+     "window": "Win"
+    }
+   ]
+  ],
+  "replies": [
+   "{\"say\": \"엔터 누를게요\", \"do\": [{\"key\": \"Enter\"}]}"
+  ],
+  "hands": {
+   "live": false,
+   "keys": [
+    "enter",
+    "escape"
+   ]
+  },
+  "may_act_unprompted": true,
+  "turns": [
+   {
+    "asked": true,
+    "text": "엔터 눌러줘"
+   }
+  ],
+  "want": [
+   {
+    "n": 0,
+    "asked": true,
+    "trigger": "엔터 눌러줘",
+    "said": "엔터 누를게요",
+    "n_widgets": 4,
+    "did": [
+     {
+      "effect": {
+       "kind": "key",
+       "target": "",
+       "role": "",
+       "text": "enter",
+       "unprompted": false
+      },
+      "confirmed": null,
+      "target": null
+     }
+    ],
+    "proposed": [],
+    "refused": [],
+    "history": [
+     [
+      "them",
+      "엔터 눌러줘"
+     ],
+     [
+      "you",
+      "엔터 누를게요"
+     ],
+     [
+      "did",
+      "pressed enter"
+     ]
+    ],
+    "blind": 0,
+    "vanished": 0,
+    "unknown_keys": 0,
+    "hands_done": [
+     "key 'enter'"
+    ],
+    "eye_reads": 1
+   }
+  ]
+ },
+ {
+  "label": "noticed, and permitted to act",
+  "screens": [
+   [
+    {
+     "name": "닫기",
+     "role": "button",
+     "rect": [
+      10,
+      20,
+      40,
+      30
+     ],
+     "window": "Win"
+    },
+    {
+     "name": "Share",
+     "role": "button",
+     "rect": [
+      60,
+      20,
+      40,
+      30
+     ],
+     "window": "Win"
+    },
+    {
+     "name": "Mute (m)",
+     "role": "button",
+     "rect": [
+      110,
+      20,
+      40,
+      30
+     ],
+     "window": "Win"
+    },
+    {
+     "name": "File",
+     "role": "menu item",
+     "rect": [
+      35,
+      0,
+      36,
+      35
+     ],
+     "window": "Win"
+    }
+   ]
+  ],
+  "replies": [
+   "{\"say\": \"빌드가 끝났어요\", \"do\": [{\"click\": 1}]}"
+  ],
+  "hands": {
+   "live": false,
+   "keys": null
+  },
+  "may_act_unprompted": true,
+  "turns": [
+   {
+    "asked": false,
+    "text": "'Build succeeded' appeared"
+   }
+  ],
+  "want": [
+   {
+    "n": 0,
+    "asked": false,
+    "trigger": "'Build succeeded' appeared",
+    "said": "빌드가 끝났어요",
+    "n_widgets": 4,
+    "did": [
+     {
+      "effect": {
+       "kind": "click",
+       "target": "Share",
+       "role": "button",
+       "text": "",
+       "unprompted": true
+      },
+      "confirmed": null,
+      "target": {
+       "name": "Share",
+       "role": "button",
+       "rect": [
+        60,
+        20,
+        40,
+        30
+       ],
+       "window": "Win"
+      }
+     }
+    ],
+    "proposed": [],
+    "refused": [],
+    "history": [
+     [
+      "noticed",
+      "'Build succeeded' appeared"
+     ],
+     [
+      "you",
+      "빌드가 끝났어요"
+     ],
+     [
+      "did",
+      "clicked the button \"Share\""
+     ]
+    ],
+    "blind": 0,
+    "vanished": 0,
+    "unknown_keys": 0,
+    "hands_done": [
+     "click button 'Share' at (80, 35)"
+    ],
+    "eye_reads": 2
+   }
+  ]
+ },
+ {
+  "label": "noticed, and NOT permitted — downgraded to speech",
+  "screens": [
+   [
+    {
+     "name": "닫기",
+     "role": "button",
+     "rect": [
+      10,
+      20,
+      40,
+      30
+     ],
+     "window": "Win"
+    },
+    {
+     "name": "Share",
+     "role": "button",
+     "rect": [
+      60,
+      20,
+      40,
+      30
+     ],
+     "window": "Win"
+    },
+    {
+     "name": "Mute (m)",
+     "role": "button",
+     "rect": [
+      110,
+      20,
+      40,
+      30
+     ],
+     "window": "Win"
+    },
+    {
+     "name": "File",
+     "role": "menu item",
+     "rect": [
+      35,
+      0,
+      36,
+      35
+     ],
+     "window": "Win"
+    }
+   ]
+  ],
+  "replies": [
+   "{\"say\": \"빌드가 끝났어요\", \"do\": [{\"click\": 1}]}"
+  ],
+  "hands": {
+   "live": false,
+   "keys": null
+  },
+  "may_act_unprompted": false,
+  "turns": [
+   {
+    "asked": false,
+    "text": "'Build succeeded' appeared"
+   }
+  ],
+  "want": [
+   {
+    "n": 0,
+    "asked": false,
+    "trigger": "'Build succeeded' appeared",
+    "said": "빌드가 끝났어요",
+    "n_widgets": 4,
+    "did": [],
+    "proposed": [
+     {
+      "kind": "click",
+      "target": "Share",
+      "role": "button",
+      "text": "",
+      "unprompted": true
+     }
+    ],
+    "refused": [],
+    "history": [
+     [
+      "noticed",
+      "'Build succeeded' appeared"
+     ],
+     [
+      "you",
+      "빌드가 끝났어요"
+     ]
+    ],
+    "blind": 0,
+    "vanished": 0,
+    "unknown_keys": 0,
+    "hands_done": [],
+    "eye_reads": 1
+   }
+  ]
+ },
+ {
+  "label": "a reply with no action at all",
+  "screens": [
+   [
+    {
+     "name": "닫기",
+     "role": "button",
+     "rect": [
+      10,
+      20,
+      40,
+      30
+     ],
+     "window": "Win"
+    },
+    {
+     "name": "Share",
+     "role": "button",
+     "rect": [
+      60,
+      20,
+      40,
+      30
+     ],
+     "window": "Win"
+    },
+    {
+     "name": "Mute (m)",
+     "role": "button",
+     "rect": [
+      110,
+      20,
+      40,
+      30
+     ],
+     "window": "Win"
+    },
+    {
+     "name": "File",
+     "role": "menu item",
+     "rect": [
+      35,
+      0,
+      36,
+      35
+     ],
+     "window": "Win"
+    }
+   ]
+  ],
+  "replies": [
+   "{\"say\": \"천만에요\", \"do\": []}"
+  ],
+  "hands": {
+   "live": false,
+   "keys": null
+  },
+  "may_act_unprompted": true,
+  "turns": [
+   {
+    "asked": true,
+    "text": "고마워"
+   }
+  ],
+  "want": [
+   {
+    "n": 0,
+    "asked": true,
+    "trigger": "고마워",
+    "said": "천만에요",
+    "n_widgets": 4,
+    "did": [],
+    "proposed": [],
+    "refused": [],
+    "history": [
+     [
+      "them",
+      "고마워"
+     ],
+     [
+      "you",
+      "천만에요"
+     ]
+    ],
+    "blind": 1,
+    "vanished": 0,
+    "unknown_keys": 0,
+    "hands_done": [],
+    "eye_reads": 1
+   }
+  ]
+ },
+ {
+  "label": "an index nobody has",
+  "screens": [
+   [
+    {
+     "name": "닫기",
+     "role": "button",
+     "rect": [
+      10,
+      20,
+      40,
+      30
+     ],
+     "window": "Win"
+    },
+    {
+     "name": "Share",
+     "role": "button",
+     "rect": [
+      60,
+      20,
+      40,
+      30
+     ],
+     "window": "Win"
+    },
+    {
+     "name": "Mute (m)",
+     "role": "button",
+     "rect": [
+      110,
+      20,
+      40,
+      30
+     ],
+     "window": "Win"
+    },
+    {
+     "name": "File",
+     "role": "menu item",
+     "rect": [
+      35,
+      0,
+      36,
+      35
+     ],
+     "window": "Win"
+    }
+   ]
+  ],
+  "replies": [
+   "{\"say\": \"그건 안 보여요\", \"do\": [{\"click\": 99}]}"
+  ],
+  "hands": {
+   "live": false,
+   "keys": null
+  },
+  "may_act_unprompted": true,
+  "turns": [
+   {
+    "asked": true,
+    "text": "없는거 눌러줘"
+   }
+  ],
+  "want": [
+   {
+    "n": 0,
+    "asked": true,
+    "trigger": "없는거 눌러줘",
+    "said": "그건 안 보여요",
+    "n_widgets": 4,
+    "did": [],
+    "proposed": [],
+    "refused": [],
+    "history": [
+     [
+      "them",
+      "없는거 눌러줘"
+     ],
+     [
+      "you",
+      "그건 안 보여요"
+     ]
+    ],
+    "blind": 1,
+    "vanished": 0,
+    "unknown_keys": 0,
+    "hands_done": [],
+    "eye_reads": 1
+   }
+  ]
+ },
+ {
+  "label": "an effect kind the core does not know",
+  "screens": [
+   [
+    {
+     "name": "닫기",
+     "role": "button",
+     "rect": [
+      10,
+      20,
+      40,
+      30
+     ],
+     "window": "Win"
+    },
+    {
+     "name": "Share",
+     "role": "button",
+     "rect": [
+      60,
+      20,
+      40,
+      30
+     ],
+     "window": "Win"
+    },
+    {
+     "name": "Mute (m)",
+     "role": "button",
+     "rect": [
+      110,
+      20,
+      40,
+      30
+     ],
+     "window": "Win"
+    },
+    {
+     "name": "File",
+     "role": "menu item",
+     "rect": [
+      35,
+      0,
+      36,
+      35
+     ],
+     "window": "Win"
+    }
+   ]
+  ],
+  "replies": [
+   "{\"say\": \"스크롤할게요\", \"do\": [{\"scroll\": 3}]}"
+  ],
+  "hands": {
+   "live": false,
+   "keys": null
+  },
+  "may_act_unprompted": true,
+  "turns": [
+   {
+    "asked": true,
+    "text": "스크롤해줘"
+   }
+  ],
+  "want": [
+   {
+    "n": 0,
+    "asked": true,
+    "trigger": "스크롤해줘",
+    "said": "스크롤할게요",
+    "n_widgets": 4,
+    "did": [],
+    "proposed": [],
+    "refused": [],
+    "history": [
+     [
+      "them",
+      "스크롤해줘"
+     ],
+     [
+      "you",
+      "스크롤할게요"
+     ]
+    ],
+    "blind": 1,
+    "vanished": 0,
+    "unknown_keys": 0,
+    "hands_done": [],
+    "eye_reads": 1
+   }
+  ]
+ },
+ {
+  "label": "three turns, so the history and the counters accumulate",
+  "screens": [
+   [
+    {
+     "name": "닫기",
+     "role": "button",
+     "rect": [
+      10,
+      20,
+      40,
+      30
+     ],
+     "window": "Win"
+    },
+    {
+     "name": "Share",
+     "role": "button",
+     "rect": [
+      60,
+      20,
+      40,
+      30
+     ],
+     "window": "Win"
+    },
+    {
+     "name": "Mute (m)",
+     "role": "button",
+     "rect": [
+      110,
+      20,
+      40,
+      30
+     ],
+     "window": "Win"
+    },
+    {
+     "name": "File",
+     "role": "menu item",
+     "rect": [
+      35,
+      0,
+      36,
+      35
+     ],
+     "window": "Win"
+    }
+   ]
+  ],
+  "replies": [
+   "{\"say\": \"닫을게요\", \"do\": [{\"click\": 0}]}",
+   "{\"say\": \"천만에요\", \"do\": []}",
+   "{\"say\": \"공유할게요\", \"do\": [{\"click\": 1}]}"
+  ],
+  "hands": {
+   "live": false,
+   "keys": null
+  },
+  "may_act_unprompted": true,
+  "turns": [
+   {
+    "asked": true,
+    "text": "닫아줘"
+   },
+   {
+    "asked": true,
+    "text": "고마워"
+   },
+   {
+    "asked": true,
+    "text": "공유해줘"
+   }
+  ],
+  "want": [
+   {
+    "n": 0,
+    "asked": true,
+    "trigger": "닫아줘",
+    "said": "닫을게요",
+    "n_widgets": 4,
+    "did": [
+     {
+      "effect": {
+       "kind": "click",
+       "target": "닫기",
+       "role": "button",
+       "text": "",
+       "unprompted": false
+      },
+      "confirmed": null,
+      "target": {
+       "name": "닫기",
+       "role": "button",
+       "rect": [
+        10,
+        20,
+        40,
+        30
+       ],
+       "window": "Win"
+      }
+     }
+    ],
+    "proposed": [],
+    "refused": [],
+    "history": [
+     [
+      "them",
+      "닫아줘"
+     ],
+     [
+      "you",
+      "닫을게요"
+     ],
+     [
+      "did",
+      "clicked the button \"닫기\""
+     ]
+    ],
+    "blind": 0,
+    "vanished": 0,
+    "unknown_keys": 0,
+    "hands_done": [
+     "click button '닫기' at (30, 35)"
+    ],
+    "eye_reads": 2
+   },
+   {
+    "n": 1,
+    "asked": true,
+    "trigger": "고마워",
+    "said": "천만에요",
+    "n_widgets": 4,
+    "did": [],
+    "proposed": [],
+    "refused": [],
+    "history": [
+     [
+      "them",
+      "닫아줘"
+     ],
+     [
+      "you",
+      "닫을게요"
+     ],
+     [
+      "did",
+      "clicked the button \"닫기\""
+     ],
+     [
+      "them",
+      "고마워"
+     ],
+     [
+      "you",
+      "천만에요"
+     ]
+    ],
+    "blind": 1,
+    "vanished": 0,
+    "unknown_keys": 0,
+    "hands_done": [
+     "click button '닫기' at (30, 35)"
+    ],
+    "eye_reads": 3
+   },
+   {
+    "n": 2,
+    "asked": true,
+    "trigger": "공유해줘",
+    "said": "공유할게요",
+    "n_widgets": 4,
+    "did": [
+     {
+      "effect": {
+       "kind": "click",
+       "target": "Share",
+       "role": "button",
+       "text": "",
+       "unprompted": false
+      },
+      "confirmed": null,
+      "target": {
+       "name": "Share",
+       "role": "button",
+       "rect": [
+        60,
+        20,
+        40,
+        30
+       ],
+       "window": "Win"
+      }
+     }
+    ],
+    "proposed": [],
+    "refused": [],
+    "history": [
+     [
+      "them",
+      "닫아줘"
+     ],
+     [
+      "you",
+      "닫을게요"
+     ],
+     [
+      "did",
+      "clicked the button \"닫기\""
+     ],
+     [
+      "them",
+      "고마워"
+     ],
+     [
+      "you",
+      "천만에요"
+     ],
+     [
+      "them",
+      "공유해줘"
+     ],
+     [
+      "you",
+      "공유할게요"
+     ],
+     [
+      "did",
+      "clicked the button \"Share\""
+     ]
+    ],
+    "blind": 1,
+    "vanished": 0,
+    "unknown_keys": 0,
+    "hands_done": [
+     "click button '닫기' at (30, 35)",
+     "click button 'Share' at (80, 35)"
+    ],
+    "eye_reads": 5
+   }
+  ]
+ },
+ {
+  "label": "an empty screen",
+  "screens": [
+   []
+  ],
+  "replies": [
+   "{\"say\": \"아무것도 안 보여요\", \"do\": []}"
+  ],
+  "hands": {
+   "live": false,
+   "keys": null
+  },
+  "may_act_unprompted": true,
+  "turns": [
+   {
+    "asked": true,
+    "text": "뭐가 보여?"
+   }
+  ],
+  "want": [
+   {
+    "n": 0,
+    "asked": true,
+    "trigger": "뭐가 보여?",
+    "said": "아무것도 안 보여요",
+    "n_widgets": 0,
+    "did": [],
+    "proposed": [],
+    "refused": [],
+    "history": [
+     [
+      "them",
+      "뭐가 보여?"
+     ],
+     [
+      "you",
+      "아무것도 안 보여요"
+     ]
+    ],
+    "blind": 0,
+    "vanished": 0,
+    "unknown_keys": 0,
+    "hands_done": [],
+    "eye_reads": 2
+   }
+  ]
+ },
+ {
+  "label": "four things at once, refused as a batch",
+  "screens": [
+   [
+    {
+     "name": "닫기",
+     "role": "button",
+     "rect": [
+      10,
+      20,
+      40,
+      30
+     ],
+     "window": "Win"
+    },
+    {
+     "name": "Share",
+     "role": "button",
+     "rect": [
+      60,
+      20,
+      40,
+      30
+     ],
+     "window": "Win"
+    },
+    {
+     "name": "Mute (m)",
+     "role": "button",
+     "rect": [
+      110,
+      20,
+      40,
+      30
+     ],
+     "window": "Win"
+    },
+    {
+     "name": "File",
+     "role": "menu item",
+     "rect": [
+      35,
+      0,
+      36,
+      35
+     ],
+     "window": "Win"
+    }
+   ]
+  ],
+  "replies": [
+   "{\"say\": \"여러 개 할게요\", \"do\": [{\"click\": 0}, {\"click\": 1}, {\"type\": \"x\"}, {\"key\": \"enter\"}]}"
+  ],
+  "hands": {
+   "live": false,
+   "keys": null
+  },
+  "may_act_unprompted": true,
+  "turns": [
+   {
+    "asked": true,
+    "text": "네 개 해줘"
+   }
+  ],
+  "want": [
+   {
+    "n": 0,
+    "asked": true,
+    "trigger": "네 개 해줘",
+    "said": "여러 개 할게요",
+    "n_widgets": 4,
+    "did": [],
+    "proposed": [],
+    "refused": [],
+    "history": [
+     [
+      "them",
+      "네 개 해줘"
+     ],
+     [
+      "you",
+      "여러 개 할게요"
+     ]
+    ],
+    "blind": 1,
+    "vanished": 0,
+    "unknown_keys": 0,
+    "hands_done": [],
+    "eye_reads": 1
+   }
+  ]
+ },
+ {
+  "label": "the Font : trap, resolved at the seam",
+  "screens": [
+   [
+    {
+     "name": "Font :",
+     "role": "text",
+     "rect": [
+      0,
+      0,
+      10,
+      10
+     ],
+     "window": "Win"
+    },
+    {
+     "name": "Font :",
+     "role": "combo box",
+     "rect": [
+      100,
+      0,
+      10,
+      10
+     ],
+     "window": "Win"
+    }
+   ],
+   [
+    {
+     "name": "Font :",
+     "role": "text",
+     "rect": [
+      0,
+      0,
+      10,
+      10
+     ],
+     "window": "Win"
+    },
+    {
+     "name": "Font :",
+     "role": "combo box",
+     "rect": [
+      100,
+      0,
+      10,
+      10
+     ],
+     "window": "Win"
+    }
+   ]
+  ],
+  "replies": [
+   "{\"say\": \"글꼴 바꿀게요\", \"do\": [{\"click\": 1}]}"
+  ],
+  "hands": {
+   "live": false,
+   "keys": null
+  },
+  "may_act_unprompted": true,
+  "turns": [
+   {
+    "asked": true,
+    "text": "글꼴 바꿔줘"
+   }
+  ],
+  "want": [
+   {
+    "n": 0,
+    "asked": true,
+    "trigger": "글꼴 바꿔줘",
+    "said": "글꼴 바꿀게요",
+    "n_widgets": 2,
+    "did": [
+     {
+      "effect": {
+       "kind": "click",
+       "target": "Font :",
+       "role": "combo box",
+       "text": "",
+       "unprompted": false
+      },
+      "confirmed": null,
+      "target": {
+       "name": "Font :",
+       "role": "combo box",
+       "rect": [
+        100,
+        0,
+        10,
+        10
+       ],
+       "window": "Win"
+      }
+     }
+    ],
+    "proposed": [],
+    "refused": [],
+    "history": [
+     [
+      "them",
+      "글꼴 바꿔줘"
+     ],
+     [
+      "you",
+      "글꼴 바꿀게요"
+     ],
+     [
+      "did",
+      "clicked the combo box \"Font :\""
+     ]
+    ],
+    "blind": 0,
+    "vanished": 0,
+    "unknown_keys": 0,
+    "hands_done": [
+     "click combo box 'Font :' at (105, 5)"
+    ],
+    "eye_reads": 2
+   }
+  ]
+ },
+ {
+  "label": "the role filter alone, exposed by a target that moved",
+  "screens": [
+   [
+    {
+     "name": "Font :",
+     "role": "text",
+     "rect": [
+      0,
+      0,
+      10,
+      10
+     ],
+     "window": "Win"
+    },
+    {
+     "name": "Font :",
+     "role": "combo box",
+     "rect": [
+      100,
+      0,
+      10,
+      10
+     ],
+     "window": "Win"
+    }
+   ],
+   [
+    {
+     "name": "Font :",
+     "role": "text",
+     "rect": [
+      90,
+      0,
+      10,
+      10
+     ],
+     "window": "Win"
+    },
+    {
+     "name": "Font :",
+     "role": "combo box",
+     "rect": [
+      300,
+      0,
+      10,
+      10
+     ],
+     "window": "Win"
+    }
+   ]
+  ],
+  "replies": [
+   "{\"say\": \"글꼴 바꿀게요\", \"do\": [{\"click\": 1}]}"
+  ],
+  "hands": {
+   "live": false,
+   "keys": null
+  },
+  "may_act_unprompted": true,
+  "turns": [
+   {
+    "asked": true,
+    "text": "글꼴 바꿔줘"
+   }
+  ],
+  "want": [
+   {
+    "n": 0,
+    "asked": true,
+    "trigger": "글꼴 바꿔줘",
+    "said": "글꼴 바꿀게요",
+    "n_widgets": 2,
+    "did": [
+     {
+      "effect": {
+       "kind": "click",
+       "target": "Font :",
+       "role": "combo box",
+       "text": "",
+       "unprompted": false
+      },
+      "confirmed": null,
+      "target": {
+       "name": "Font :",
+       "role": "combo box",
+       "rect": [
+        300,
+        0,
+        10,
+        10
+       ],
+       "window": "Win"
+      }
+     }
+    ],
+    "proposed": [],
+    "refused": [],
+    "history": [
+     [
+      "them",
+      "글꼴 바꿔줘"
+     ],
+     [
+      "you",
+      "글꼴 바꿀게요"
+     ],
+     [
+      "did",
+      "clicked the combo box \"Font :\""
+     ]
+    ],
+    "blind": 0,
+    "vanished": 0,
+    "unknown_keys": 0,
+    "hands_done": [
+     "click combo box 'Font :' at (305, 5)"
+    ],
+    "eye_reads": 2
+   }
+  ]
+ },
+ {
+  "label": "the role in the 'where it was' lookup, which picks between twins",
+  "screens": [
+   [
+    {
+     "name": "Font :",
+     "role": "text",
+     "rect": [
+      0,
+      0,
+      10,
+      10
+     ],
+     "window": "Win"
+    },
+    {
+     "name": "Font :",
+     "role": "combo box",
+     "rect": [
+      200,
+      0,
+      10,
+      10
+     ],
+     "window": "Win"
+    }
+   ],
+   [
+    {
+     "name": "Font :",
+     "role": "combo box",
+     "rect": [
+      10,
+      0,
+      10,
+      10
+     ],
+     "window": "Win"
+    },
+    {
+     "name": "Font :",
+     "role": "combo box",
+     "rect": [
+      205,
+      0,
+      10,
+      10
+     ],
+     "window": "Win"
+    }
+   ]
+  ],
+  "replies": [
+   "{\"say\": \"글꼴 바꿀게요\", \"do\": [{\"click\": 1}]}"
+  ],
+  "hands": {
+   "live": false,
+   "keys": null
+  },
+  "may_act_unprompted": true,
+  "turns": [
+   {
+    "asked": true,
+    "text": "글꼴 바꿔줘"
+   }
+  ],
+  "want": [
+   {
+    "n": 0,
+    "asked": true,
+    "trigger": "글꼴 바꿔줘",
+    "said": "글꼴 바꿀게요",
+    "n_widgets": 2,
+    "did": [
+     {
+      "effect": {
+       "kind": "click",
+       "target": "Font :",
+       "role": "combo box",
+       "text": "",
+       "unprompted": false
+      },
+      "confirmed": null,
+      "target": {
+       "name": "Font :",
+       "role": "combo box",
+       "rect": [
+        205,
+        0,
+        10,
+        10
+       ],
+       "window": "Win"
+      }
+     }
+    ],
+    "proposed": [],
+    "refused": [],
+    "history": [
+     [
+      "them",
+      "글꼴 바꿔줘"
+     ],
+     [
+      "you",
+      "글꼴 바꿀게요"
+     ],
+     [
+      "did",
+      "clicked the combo box \"Font :\""
+     ]
+    ],
+    "blind": 0,
+    "vanished": 0,
+    "unknown_keys": 0,
+    "hands_done": [
+     "click combo box 'Font :' at (210, 5)"
+    ],
+    "eye_reads": 2
+   }
+  ]
+ }
+]

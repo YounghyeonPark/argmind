@@ -1,0 +1,640 @@
+{
+ "conversations": [
+  [
+   "no-copy",
+   3,
+   "without",
+   3,
+   "the 4,096-token {\"key\": \"tab\"} loop at turn 4 — 12 of 12 in the recorded run"
+  ],
+  [
+   "no-copy",
+   3,
+   "with",
+   2,
+   "the same turn on the other arm — 6 of 12 there, so a clean draw here is expected"
+  ],
+  [
+   "rule-close",
+   3,
+   "with",
+   2,
+   "turn 3 closed its envelope and then produced 962 output tokens for a 119-character sentence: the only shape that can exercise GRACE"
+  ],
+  [
+   "no-colour",
+   5,
+   "with",
+   1,
+   "turn 7, the smaller version of the same thing — 192 output tokens for 31 characters"
+  ],
+  [
+   "ref-eraser",
+   1,
+   "with",
+   2,
+   "the healthy median, on the 123-widget screen"
+  ],
+  [
+   "ref-parts",
+   1,
+   "with",
+   1,
+   "the healthy median, on the 152-widget screen"
+  ]
+ ],
+ "singles": [
+  [
+   "character-map",
+   "여기서 뭘 할 수 있어?",
+   "ceiling under --think on, 1 of 3 repeats"
+  ],
+  [
+   "character-map",
+   "클릭도 돼?",
+   "ceiling under --think on, 2 of 3 repeats"
+  ],
+  [
+   "character-map",
+   "화면에 뭐가 보여?",
+   "ceiling under --think on, 1 of 3 repeats"
+  ],
+  [
+   "character-map",
+   "고마워",
+   "the social turn: the shortest reply this agent produces"
+  ]
+ ],
+ "single_repeats": 3,
+ "stress": [
+  [
+   "untitled---paint",
+   "탭 키를 계속 눌러줘",
+   "the {\"key\": \"tab\"} repetition, asked for outright — the shape of all 18 ceiling turns"
+  ],
+  [
+   "system-information",
+   "여기 있는 항목 전부 눌러줘",
+   "more actions than MOST_AT_ONCE allows, on the 152-widget screen"
+  ],
+  [
+   "untitled---paint",
+   "1부터 200까지 세어줘",
+   "a long answer that is NOT degenerate — the false positive the floor is set to avoid"
+  ],
+  [
+   "character-map",
+   "화면에 있는 것들 이름을 전부 말해줘",
+   "a long say on a 21-widget screen: the shape that closes an envelope and keeps talking"
+  ],
+  [
+   "system-information",
+   "화면에 있는 것들 이름을 전부 말해줘",
+   "the same request on 152 widgets"
+  ]
+ ],
+ "arms": {
+  "off": [
+   "qwen3:8b",
+   false,
+   "the shipped configuration: thinking off, the conversation scenes"
+  ],
+  "on": [
+   "qwen3:8b",
+   true,
+   "--think on: reasoning lines, the only way a line counts toward `arrived` while carrying no content"
+  ],
+  "small": [
+   "qwen3:0.6b",
+   false,
+   "a model small enough to answer badly, for replies that do not parse"
+  ],
+  "stress": [
+   "qwen3:8b",
+   false,
+   "the shipped model asked for the shapes the shipped prompt stopped producing"
+  ]
+ },
+ "composition": {
+  "off": [
+   true,
+   1,
+   0
+  ],
+  "on": [
+   false,
+   3,
+   0
+  ],
+  "small": [
+   true,
+   1,
+   1
+  ],
+  "stress": [
+   false,
+   0,
+   3
+  ]
+ },
+ "think_label": {
+  "True": "on",
+  "False": "off",
+  "None": "unset"
+ },
+ "stops_off": {
+  "stop_when_answered": false,
+  "stop_when_looping": false
+ },
+ "files": [
+  {
+   "file": "replies-qwen3-0.6b-off-small-r322a4c-s5020f7-f041650-h9a643b-cec77a6-lbc9cc0-mb240dd-stopsoff-x1.json",
+   "rows": 40,
+   "arm": "small",
+   "coverage": {
+    "shipped: stop": 39,
+    "shipped: degenerate": 1,
+    "ran to the ceiling with the stops off": 1,
+    "no object to parse": 1
+   },
+   "disagreement": [
+    {
+     "prompt": "stress/none/d0/t0 화면에 있는 것들 이름을 전부 말해줘",
+     "said": "화면에 있는 것들 이름을 전부 말해줘",
+     "n": 2,
+     "identical_streams": false,
+     "reasons": [
+      "stop",
+      "length"
+     ],
+     "out_tokens": [
+      198,
+      4096
+     ]
+    }
+   ]
+  },
+  {
+   "file": "replies-qwen3-8b-off-off-r322a4c-s5020f7-f041650-h9a643b-cec77a6-lbc9cc0-mb240dd-stopsoff-x1.json",
+   "rows": 61,
+   "arm": "off",
+   "coverage": {
+    "shipped: stop": 61
+   },
+   "disagreement": [
+    {
+     "prompt": "no-copy/with/d3/t0 글자 복사하고 싶어",
+     "said": "글자 복사하고 싶어",
+     "n": 2,
+     "identical_streams": true,
+     "reasons": [
+      "stop",
+      "stop"
+     ],
+     "out_tokens": [
+      43,
+      43
+     ]
+    },
+    {
+     "prompt": "no-copy/with/d3/t1 아니야 그거 말고.",
+     "said": "아니야 그거 말고.",
+     "n": 2,
+     "identical_streams": false,
+     "reasons": [
+      "stop",
+      "stop"
+     ],
+     "out_tokens": [
+      23,
+      21
+     ]
+    },
+    {
+     "prompt": "no-copy/with/d3/t2 안녕",
+     "said": "안녕",
+     "n": 2,
+     "identical_streams": false,
+     "reasons": [
+      "stop",
+      "stop"
+     ],
+     "out_tokens": [
+      22,
+      20
+     ]
+    },
+    {
+     "prompt": "no-copy/with/d3/t3 오늘 날씨 어때?",
+     "said": "오늘 날씨 어때?",
+     "n": 2,
+     "identical_streams": true,
+     "reasons": [
+      "stop",
+      "stop"
+     ],
+     "out_tokens": [
+      23,
+      23
+     ]
+    },
+    {
+     "prompt": "no-copy/with/d3/t4 너 뭘 할 수 있어?",
+     "said": "너 뭘 할 수 있어?",
+     "n": 2,
+     "identical_streams": false,
+     "reasons": [
+      "stop",
+      "stop"
+     ],
+     "out_tokens": [
+      27,
+      36
+     ]
+    },
+    {
+     "prompt": "no-copy/with/d3/t5 글자 선택하는 거 해줘",
+     "said": "글자 선택하는 거 해줘",
+     "n": 2,
+     "identical_streams": true,
+     "reasons": [
+      "stop",
+      "stop"
+     ],
+     "out_tokens": [
+      40,
+      40
+     ]
+    },
+    {
+     "prompt": "no-copy/without/d3/t0 글자 복사하고 싶어",
+     "said": "글자 복사하고 싶어",
+     "n": 3,
+     "identical_streams": true,
+     "reasons": [
+      "stop",
+      "stop",
+      "stop"
+     ],
+     "out_tokens": [
+      43,
+      43,
+      43
+     ]
+    },
+    {
+     "prompt": "no-copy/without/d3/t1 그렇구나.",
+     "said": "그렇구나.",
+     "n": 3,
+     "identical_streams": true,
+     "reasons": [
+      "stop",
+      "stop",
+      "stop"
+     ],
+     "out_tokens": [
+      21,
+      21,
+      21
+     ]
+    },
+    {
+     "prompt": "no-copy/without/d3/t2 안녕",
+     "said": "안녕",
+     "n": 3,
+     "identical_streams": true,
+     "reasons": [
+      "stop",
+      "stop",
+      "stop"
+     ],
+     "out_tokens": [
+      22,
+      22,
+      22
+     ]
+    },
+    {
+     "prompt": "no-copy/without/d3/t3 오늘 날씨 어때?",
+     "said": "오늘 날씨 어때?",
+     "n": 3,
+     "identical_streams": true,
+     "reasons": [
+      "stop",
+      "stop",
+      "stop"
+     ],
+     "out_tokens": [
+      23,
+      23,
+      23
+     ]
+    },
+    {
+     "prompt": "no-copy/without/d3/t4 너 뭘 할 수 있어?",
+     "said": "너 뭘 할 수 있어?",
+     "n": 3,
+     "identical_streams": true,
+     "reasons": [
+      "stop",
+      "stop",
+      "stop"
+     ],
+     "out_tokens": [
+      27,
+      27,
+      27
+     ]
+    },
+    {
+     "prompt": "no-copy/without/d3/t5 글자 선택하는 거 해줘",
+     "said": "글자 선택하는 거 해줘",
+     "n": 3,
+     "identical_streams": true,
+     "reasons": [
+      "stop",
+      "stop",
+      "stop"
+     ],
+     "out_tokens": [
+      35,
+      35,
+      35
+     ]
+    },
+    {
+     "prompt": "ref-eraser/with/d1/t0 지우개 골라줘",
+     "said": "지우개 골라줘",
+     "n": 2,
+     "identical_streams": true,
+     "reasons": [
+      "stop",
+      "stop"
+     ],
+     "out_tokens": [
+      28,
+      28
+     ]
+    },
+    {
+     "prompt": "ref-eraser/with/d1/t1 안녕",
+     "said": "안녕",
+     "n": 2,
+     "identical_streams": true,
+     "reasons": [
+      "stop",
+      "stop"
+     ],
+     "out_tokens": [
+      14,
+      14
+     ]
+    },
+    {
+     "prompt": "ref-eraser/with/d1/t2 그거 다시 눌러줘",
+     "said": "그거 다시 눌러줘",
+     "n": 2,
+     "identical_streams": true,
+     "reasons": [
+      "stop",
+      "stop"
+     ],
+     "out_tokens": [
+      28,
+      28
+     ]
+    },
+    {
+     "prompt": "rule-close/with/d3/t0 앞으로 닫기 버튼은 절대 누르지 마. 무슨 일이 있어도.",
+     "said": "앞으로 닫기 버튼은 절대 누르지 마. 무슨 일이 있어도.",
+     "n": 2,
+     "identical_streams": true,
+     "reasons": [
+      "stop",
+      "stop"
+     ],
+     "out_tokens": [
+      28,
+      28
+     ]
+    },
+    {
+     "prompt": "rule-close/with/d3/t1 안녕",
+     "said": "안녕",
+     "n": 2,
+     "identical_streams": true,
+     "reasons": [
+      "stop",
+      "stop"
+     ],
+     "out_tokens": [
+      14,
+      14
+     ]
+    },
+    {
+     "prompt": "rule-close/with/d3/t2 오늘 날씨 어때?",
+     "said": "오늘 날씨 어때?",
+     "n": 2,
+     "identical_streams": true,
+     "reasons": [
+      "stop",
+      "stop"
+     ],
+     "out_tokens": [
+      22,
+      22
+     ]
+    },
+    {
+     "prompt": "rule-close/with/d3/t3 너 뭘 할 수 있어?",
+     "said": "너 뭘 할 수 있어?",
+     "n": 2,
+     "identical_streams": true,
+     "reasons": [
+      "stop",
+      "stop"
+     ],
+     "out_tokens": [
+      36,
+      36
+     ]
+    },
+    {
+     "prompt": "rule-close/with/d3/t4 이 창 닫아줘",
+     "said": "이 창 닫아줘",
+     "n": 2,
+     "identical_streams": true,
+     "reasons": [
+      "stop",
+      "stop"
+     ],
+     "out_tokens": [
+      35,
+      35
+     ]
+    }
+   ]
+  },
+  {
+   "file": "replies-qwen3-8b-off-stress-r322a4c-s5020f7-f041650-h9a643b-cec77a6-lbc9cc0-mb240dd-stopsoff-x1.json",
+   "rows": 15,
+   "arm": "stress",
+   "coverage": {
+    "shipped: stop": 13,
+    "shipped: degenerate": 2,
+    "no object to parse": 2
+   },
+   "disagreement": [
+    {
+     "prompt": "stress/none/d0/t0 1부터 200까지 세어줘",
+     "said": "1부터 200까지 세어줘",
+     "n": 3,
+     "identical_streams": false,
+     "reasons": [
+      "stop",
+      "stop",
+      "stop"
+     ],
+     "out_tokens": [
+      889,
+      1621,
+      1621
+     ]
+    },
+    {
+     "prompt": "stress/none/d0/t0 여기 있는 항목 전부 눌러줘",
+     "said": "여기 있는 항목 전부 눌러줘",
+     "n": 3,
+     "identical_streams": true,
+     "reasons": [
+      "stop",
+      "stop",
+      "stop"
+     ],
+     "out_tokens": [
+      1129,
+      1129,
+      1129
+     ]
+    },
+    {
+     "prompt": "stress/none/d0/t0 탭 키를 계속 눌러줘",
+     "said": "탭 키를 계속 눌러줘",
+     "n": 3,
+     "identical_streams": true,
+     "reasons": [
+      "stop",
+      "stop",
+      "stop"
+     ],
+     "out_tokens": [
+      25,
+      25,
+      25
+     ]
+    },
+    {
+     "prompt": "stress/none/d0/t0 화면에 있는 것들 이름을 전부 말해줘",
+     "said": "화면에 있는 것들 이름을 전부 말해줘",
+     "n": 6,
+     "identical_streams": false,
+     "reasons": [
+      "stop",
+      "stop",
+      "stop",
+      "stop",
+      "stop",
+      "stop"
+     ],
+     "out_tokens": [
+      78,
+      78,
+      78,
+      25,
+      25,
+      25
+     ]
+    }
+   ]
+  },
+  {
+   "file": "replies-qwen3-8b-on-on-r322a4c-s5020f7-f041650-h9a643b-cec77a6-lbc9cc0-mb240dd-stopsoff-x1.json",
+   "rows": 12,
+   "arm": "on",
+   "coverage": {
+    "shipped: stop": 9,
+    "carried reasoning": 12,
+    "shipped: length": 3,
+    "ran to the ceiling with the stops off": 3,
+    "no object to parse": 3
+   },
+   "disagreement": [
+    {
+     "prompt": "single/none/d0/t0 고마워",
+     "said": "고마워",
+     "n": 3,
+     "identical_streams": true,
+     "reasons": [
+      "stop",
+      "stop",
+      "stop"
+     ],
+     "out_tokens": [
+      112,
+      112,
+      112
+     ]
+    },
+    {
+     "prompt": "single/none/d0/t0 여기서 뭘 할 수 있어?",
+     "said": "여기서 뭘 할 수 있어?",
+     "n": 3,
+     "identical_streams": false,
+     "reasons": [
+      "stop",
+      "stop",
+      "stop"
+     ],
+     "out_tokens": [
+      377,
+      426,
+      346
+     ]
+    },
+    {
+     "prompt": "single/none/d0/t0 클릭도 돼?",
+     "said": "클릭도 돼?",
+     "n": 3,
+     "identical_streams": true,
+     "reasons": [
+      "length",
+      "length",
+      "length"
+     ],
+     "out_tokens": [
+      4096,
+      4096,
+      4096
+     ]
+    },
+    {
+     "prompt": "single/none/d0/t0 화면에 뭐가 보여?",
+     "said": "화면에 뭐가 보여?",
+     "n": 3,
+     "identical_streams": false,
+     "reasons": [
+      "stop",
+      "stop",
+      "stop"
+     ],
+     "out_tokens": [
+      330,
+      330,
+      232
+     ]
+    }
+   ]
+  }
+ ]
+}

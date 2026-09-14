@@ -1,0 +1,327 @@
+{
+ "leaking": [
+  [
+   "one action",
+   "untitled---paint",
+   "지우개로 바꿔줘"
+  ],
+  [
+   "one action",
+   "untitled---paint",
+   "빨간색으로 바꿔줘"
+  ],
+  [
+   "one action",
+   "untitled---paint",
+   "확대해줘"
+  ],
+  [
+   "two actions",
+   "untitled---paint",
+   "이 그림 저장하고 창 닫아줘"
+  ],
+  [
+   "two actions",
+   "untitled---paint",
+   "최소화하고 닫아줘"
+  ],
+  [
+   "nothing there",
+   "untitled---paint",
+   "크롬 열어줘"
+  ],
+  [
+   "one action",
+   "character-map",
+   "복사 눌러줘"
+  ],
+  [
+   "one action",
+   "character-map",
+   "글꼴 바꿔줘"
+  ],
+  [
+   "nothing there",
+   "character-map",
+   "볼륨 좀 줄여줘"
+  ],
+  [
+   "one action",
+   "system-information",
+   "하드웨어 리소스 열어줘"
+  ],
+  [
+   "one action",
+   "system-information",
+   "찾기 눌러줘"
+  ],
+  [
+   "two actions",
+   "system-information",
+   "소프트웨어 환경 열고 창 최대화해줘"
+  ],
+  [
+   "one action",
+   "chrome-remote-desktop---qvb-flfm-dev1",
+   "이 창 닫아줘"
+  ],
+  [
+   "one action",
+   "chrome-remote-desktop---qvb-flfm-dev1",
+   "비밀번호 저장 눌러줘"
+  ],
+  [
+   "one action",
+   "untitled---paint",
+   "자르기 해줘"
+  ],
+  [
+   "one action",
+   "untitled---paint",
+   "글씨 넣고 싶어"
+  ],
+  [
+   "one action",
+   "untitled---paint",
+   "회전시켜줘"
+  ],
+  [
+   "one action",
+   "untitled---paint",
+   "방금 한 거 되돌려"
+  ],
+  [
+   "one action",
+   "untitled---paint",
+   "설정 열어줘"
+  ],
+  [
+   "two actions",
+   "untitled---paint",
+   "지우개 고르고 크기 조절해줘"
+  ],
+  [
+   "nothing there",
+   "untitled---paint",
+   "노래 틀어줘"
+  ],
+  [
+   "one action",
+   "character-map",
+   "고급 보기 켜줘"
+  ],
+  [
+   "one action",
+   "character-map",
+   "도움말 보여줘"
+  ],
+  [
+   "two actions",
+   "character-map",
+   "글자 고르고 복사해줘"
+  ],
+  [
+   "nothing there",
+   "character-map",
+   "인쇄해줘"
+  ],
+  [
+   "one action",
+   "system-information",
+   "구성 요소 보여줘"
+  ],
+  [
+   "one action",
+   "system-information",
+   "파일 메뉴 열어줘"
+  ],
+  [
+   "two actions",
+   "system-information",
+   "찾기 열고 창 닫아줘"
+  ],
+  [
+   "nothing there",
+   "system-information",
+   "다크 모드로 바꿔줘"
+  ],
+  [
+   "one action",
+   "chrome-remote-desktop---qvb-flfm-dev1",
+   "최소화해줘"
+  ],
+  [
+   "one action",
+   "chrome-remote-desktop---qvb-flfm-dev1",
+   "확장 프로그램 열어줘"
+  ],
+  [
+   "nothing there",
+   "chrome-remote-desktop---qvb-flfm-dev1",
+   "인쇄 설정 열어줘"
+  ]
+ ],
+ "numbers": [
+  [
+   "how many",
+   "untitled---paint",
+   "여기 버튼이 몇 개야?",
+   true,
+   "49 'button' + 7 'app bar button' of 123 widgets — from measure/talking.py's TALK"
+  ],
+  [
+   "how many",
+   "character-map",
+   "여기 버튼이 몇 개야?",
+   true,
+   "9 'button' of 21 widgets"
+  ],
+  [
+   "how many",
+   "chrome-remote-desktop---qvb-flfm-dev1",
+   "여기 버튼이 몇 개야?",
+   true,
+   "7 'button' of 12 widgets"
+  ],
+  [
+   "how many",
+   "untitled---paint",
+   "색깔이 몇 개나 있어?",
+   true,
+   "20 colour list items, indexes 80-99"
+  ],
+  [
+   "how many",
+   "system-information",
+   "코어가 몇 개야?",
+   true,
+   "'... 2200 Mhz, 24 Core(s), 32 Logical Processor(s)' at index 37"
+  ],
+  [
+   "a value on screen",
+   "system-information",
+   "메모리가 얼마나 있어?",
+   true,
+   "'32.0 GB' installed at 91, '31.7 GB' total at 94"
+  ],
+  [
+   "a value on screen",
+   "system-information",
+   "사용 가능한 메모리가 얼마야?",
+   true,
+   "'12.6 GB' at index 97"
+  ],
+  [
+   "a value on screen",
+   "system-information",
+   "바이오스 날짜가 언제야?",
+   true,
+   "'LENOVO KWCN54WW, 10/22/2025' at index 40"
+  ],
+  [
+   "a value on screen",
+   "untitled---paint",
+   "캔버스 크기가 얼마야?",
+   true,
+   "'1536 x 864px' at index 112 — the x is a multiplication sign in the fixture"
+  ],
+  [
+   "a value on screen",
+   "system-information",
+   "윈도우 버전이 뭐야?",
+   true,
+   "'Microsoft Windows 11 Home' at 10, '10.0.26200 Build 26200' at 13"
+  ],
+  [
+   "a value on screen",
+   "system-information",
+   "프로세서가 뭐야?",
+   false,
+   "'13th Gen Intel(R) Core(TM) i9-13900HX...' — a numberless answer is defensible, so unscored"
+  ],
+  [
+   "a value on screen",
+   "character-map",
+   "지금 선택된 문자 코드가 뭐야?",
+   false,
+   "'U+0021: Exclamation Mark' at 7 — 'Exclamation Mark' alone is an answer, so unscored"
+  ]
+ ],
+ "token_chars": "+-./0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdefghijklmnopqrstuvwxyz",
+ "punct": "\t\n\r !\"#'()*,-./:;<>?[\\]`{|}~·–—…、。「」『』！，？",
+ "acks": [
+  "alright",
+  "done",
+  "got it",
+  "gotit",
+  "ok",
+  "okay",
+  "sure",
+  "yeah",
+  "yes",
+  "네",
+  "네알겠습니다",
+  "네알겠어",
+  "네알겠어요",
+  "넵",
+  "넵알겠습니다",
+  "알겠습니다",
+  "알겠어",
+  "알겠어요",
+  "알았어",
+  "알았어요",
+  "예",
+  "예알겠습니다",
+  "응",
+  "확인"
+ ],
+ "number_words": [
+  "하나",
+  "다섯",
+  "여섯",
+  "일곱",
+  "여덟",
+  "아홉",
+  "스물",
+  "서른",
+  "마흔",
+  "한 개",
+  "두 개",
+  "세 개",
+  "네 개",
+  "one",
+  "two",
+  "three",
+  "four",
+  "five",
+  "six",
+  "seven",
+  "eight",
+  "nine",
+  "ten",
+  "eleven",
+  "twelve",
+  "twenty",
+  "thirty",
+  "forty",
+  "fifty",
+  "hundred",
+  "dozen"
+ ],
+ "leak_order": [
+  "clean",
+  "quoted",
+  "off-list",
+  "stray",
+  "index"
+ ],
+ "answer_order": [
+  "answered",
+  "bare-name",
+  "bare-ack",
+  "echo",
+  "numeric",
+  "empty"
+ ],
+ "data_print": "3568ab"
+}

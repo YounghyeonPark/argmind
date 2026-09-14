@@ -1,0 +1,250 @@
+{
+ "cases": [
+  {
+   "label": "REPAIR names the right thing",
+   "screen": "untitled---paint",
+   "lines": [
+    "빨간색 골라줘",
+    "아니 그거 말고 Red 를 눌러줘"
+   ],
+   "want": [
+    "Red",
+    "list item"
+   ],
+   "why": "the correction names the target in as many words. If this fails, nothing repairs."
+  },
+  {
+   "label": "REPAIR without naming it",
+   "screen": "untitled---paint",
+   "lines": [
+    "동그라미 그리고 싶어",
+    "아니야 그거 말고"
+   ],
+   "want": null,
+   "why": "'not that one' with no replacement. The right answer is to stop and ask, not to guess again — so this is one of the two cases an always-clicking agent fails."
+  },
+  {
+   "label": "REPAIR after a vague ask",
+   "screen": "character-map",
+   "lines": [
+    "뭔가 눌러줘",
+    "글꼴 바꾸는 걸로 해줘"
+   ],
+   "want": [
+    "Font :",
+    "combo box"
+   ],
+   "why": "the first turn cannot be answered, the second narrows it. The label/combo box pair is here on purpose: this is the case where a name-only verdict cannot tell a click that would work from one that would do nothing."
+  },
+  {
+   "label": "MEMORY of what it offered",
+   "screen": "character-map",
+   "lines": [
+    "복사 눌러줘",
+    "방금 뭘 하려고 했어?"
+   ],
+   "want": null,
+   "why": "a question about the past. KNOWN OPEN DEFECT since 2026-09-10: it answers correctly and clicks Copy a second time. Kept as the standing record of that defect."
+  }
+ ],
+ "korean": [
+  [
+   "screen",
+   "뭐가 열려 있어?"
+  ],
+  [
+   "request",
+   "이 창 닫아줘"
+  ],
+  [
+   "screen",
+   "여기서 뭘 할 수 있어?"
+  ],
+  [
+   "social",
+   "고마워"
+  ],
+  [
+   "screen",
+   "지금 화면 설명해줘"
+  ],
+  [
+   "screen",
+   "복사 버튼 어디 있어?"
+  ],
+  [
+   "social",
+   "안녕"
+  ],
+  [
+   "social",
+   "수고했어"
+  ],
+  [
+   "social",
+   "잘 부탁해"
+  ],
+  [
+   "social",
+   "미안해"
+  ],
+  [
+   "social",
+   "반가워"
+  ],
+  [
+   "itself",
+   "너 뭘 할 수 있어?"
+  ],
+  [
+   "itself",
+   "너 누구야?"
+  ],
+  [
+   "itself",
+   "한국어 할 줄 알아?"
+  ],
+  [
+   "itself",
+   "클릭도 돼?"
+  ],
+  [
+   "itself",
+   "너 이름이 뭐야?"
+  ],
+  [
+   "request",
+   "복사 버튼 눌러줘"
+  ],
+  [
+   "request",
+   "글꼴 바꿔줘"
+  ],
+  [
+   "request",
+   "아무거나 하나 눌러줘"
+  ],
+  [
+   "request",
+   "도움말 열어줘"
+  ],
+  [
+   "request",
+   "문자 하나 선택해줘"
+  ],
+  [
+   "screen",
+   "버튼이 몇 개야?"
+  ],
+  [
+   "screen",
+   "이 창 이름이 뭐야?"
+  ],
+  [
+   "screen",
+   "지금 뭐가 선택돼 있어?"
+  ],
+  [
+   "screen",
+   "화면에 뭐가 보여?"
+  ],
+  [
+   "past",
+   "방금 뭐 했어?"
+  ],
+  [
+   "past",
+   "아까 뭐 눌렀어?"
+  ],
+  [
+   "mixed-in",
+   "Red 버튼 있어?"
+  ],
+  [
+   "mixed-in",
+   "Copy 가 어디야?"
+  ],
+  [
+   "mixed-in",
+   "Font 어떻게 바꿔?"
+  ],
+  [
+   "formal",
+   "이 창을 닫아 주시겠습니까?"
+  ],
+  [
+   "formal",
+   "지금 무엇을 할 수 있습니까?"
+  ],
+  [
+   "chit-chat",
+   "오늘 날씨 어때?"
+  ],
+  [
+   "chit-chat",
+   "심심해"
+  ],
+  [
+   "chit-chat",
+   "배고파"
+  ],
+  [
+   "long",
+   "이 창에서 특수 문자를 하나 골라서 복사하고 싶은데 어떻게 하면 좋을까?"
+  ]
+ ],
+ "english": [
+  [
+   "screen",
+   "What's open?"
+  ],
+  [
+   "request",
+   "Close this window"
+  ],
+  [
+   "screen",
+   "What can I do here?"
+  ],
+  [
+   "social",
+   "Thanks"
+  ],
+  [
+   "screen",
+   "Describe the screen"
+  ],
+  [
+   "screen",
+   "Where is the copy button?"
+  ],
+  [
+   "itself",
+   "Who are you?"
+  ],
+  [
+   "screen",
+   "How many buttons are there?"
+  ],
+  [
+   "past",
+   "What did you just do?"
+  ],
+  [
+   "request",
+   "Press the copy button"
+  ],
+  [
+   "chit-chat",
+   "How's the weather?"
+  ],
+  [
+   "request",
+   "Can you change the font for me?"
+  ]
+ ],
+ "language_screen": "character-map",
+ "original_korean": 6,
+ "data_print": "339a3d",
+ "remember_turns": 12
+}

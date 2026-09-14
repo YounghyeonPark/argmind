@@ -1,0 +1,282 @@
+[
+ {
+  "label": "plain ascii / shipped",
+  "prompt": "Reply with the single word: ready",
+  "model": "qwen3:8b",
+  "ctx": 8192,
+  "max_tokens": 4096,
+  "keep_alive": "60s",
+  "think": null,
+  "body": "{\"model\": \"qwen3:8b\", \"messages\": [{\"role\": \"user\", \"content\": \"Reply with the single word: ready\"}], \"stream\": true, \"keep_alive\": \"60s\", \"options\": {\"num_predict\": 4096, \"num_ctx\": 8192, \"temperature\": 0}}"
+ },
+ {
+  "label": "plain ascii / thinking off",
+  "prompt": "Reply with the single word: ready",
+  "model": "qwen3:8b",
+  "ctx": 8192,
+  "max_tokens": 4096,
+  "keep_alive": "60s",
+  "think": false,
+  "body": "{\"model\": \"qwen3:8b\", \"messages\": [{\"role\": \"user\", \"content\": \"Reply with the single word: ready\"}], \"stream\": true, \"keep_alive\": \"60s\", \"options\": {\"num_predict\": 4096, \"num_ctx\": 8192, \"temperature\": 0}, \"think\": false}"
+ },
+ {
+  "label": "plain ascii / thinking on",
+  "prompt": "Reply with the single word: ready",
+  "model": "qwen3:8b",
+  "ctx": 8192,
+  "max_tokens": 4096,
+  "keep_alive": "60s",
+  "think": true,
+  "body": "{\"model\": \"qwen3:8b\", \"messages\": [{\"role\": \"user\", \"content\": \"Reply with the single word: ready\"}], \"stream\": true, \"keep_alive\": \"60s\", \"options\": {\"num_predict\": 4096, \"num_ctx\": 8192, \"temperature\": 0}, \"think\": true}"
+ },
+ {
+  "label": "plain ascii / another model and window",
+  "prompt": "Reply with the single word: ready",
+  "model": "qwen3:0.6b",
+  "ctx": 4096,
+  "max_tokens": 512,
+  "keep_alive": "5m",
+  "think": null,
+  "body": "{\"model\": \"qwen3:0.6b\", \"messages\": [{\"role\": \"user\", \"content\": \"Reply with the single word: ready\"}], \"stream\": true, \"keep_alive\": \"5m\", \"options\": {\"num_predict\": 512, \"num_ctx\": 4096, \"temperature\": 0}}"
+ },
+ {
+  "label": "korean / shipped",
+  "prompt": "복사 눌러줘",
+  "model": "qwen3:8b",
+  "ctx": 8192,
+  "max_tokens": 4096,
+  "keep_alive": "60s",
+  "think": null,
+  "body": "{\"model\": \"qwen3:8b\", \"messages\": [{\"role\": \"user\", \"content\": \"\\ubcf5\\uc0ac \\ub20c\\ub7ec\\uc918\"}], \"stream\": true, \"keep_alive\": \"60s\", \"options\": {\"num_predict\": 4096, \"num_ctx\": 8192, \"temperature\": 0}}"
+ },
+ {
+  "label": "korean / thinking off",
+  "prompt": "복사 눌러줘",
+  "model": "qwen3:8b",
+  "ctx": 8192,
+  "max_tokens": 4096,
+  "keep_alive": "60s",
+  "think": false,
+  "body": "{\"model\": \"qwen3:8b\", \"messages\": [{\"role\": \"user\", \"content\": \"\\ubcf5\\uc0ac \\ub20c\\ub7ec\\uc918\"}], \"stream\": true, \"keep_alive\": \"60s\", \"options\": {\"num_predict\": 4096, \"num_ctx\": 8192, \"temperature\": 0}, \"think\": false}"
+ },
+ {
+  "label": "korean / thinking on",
+  "prompt": "복사 눌러줘",
+  "model": "qwen3:8b",
+  "ctx": 8192,
+  "max_tokens": 4096,
+  "keep_alive": "60s",
+  "think": true,
+  "body": "{\"model\": \"qwen3:8b\", \"messages\": [{\"role\": \"user\", \"content\": \"\\ubcf5\\uc0ac \\ub20c\\ub7ec\\uc918\"}], \"stream\": true, \"keep_alive\": \"60s\", \"options\": {\"num_predict\": 4096, \"num_ctx\": 8192, \"temperature\": 0}, \"think\": true}"
+ },
+ {
+  "label": "korean / another model and window",
+  "prompt": "복사 눌러줘",
+  "model": "qwen3:0.6b",
+  "ctx": 4096,
+  "max_tokens": 512,
+  "keep_alive": "5m",
+  "think": null,
+  "body": "{\"model\": \"qwen3:0.6b\", \"messages\": [{\"role\": \"user\", \"content\": \"\\ubcf5\\uc0ac \\ub20c\\ub7ec\\uc918\"}], \"stream\": true, \"keep_alive\": \"5m\", \"options\": {\"num_predict\": 512, \"num_ctx\": 4096, \"temperature\": 0}}"
+ },
+ {
+  "label": "mixed, with the quotes a prompt actually contains / shipped",
+  "prompt": "Reply with only JSON: {\"say\": \"<what you say back>\", \"do\": [ ... ]}",
+  "model": "qwen3:8b",
+  "ctx": 8192,
+  "max_tokens": 4096,
+  "keep_alive": "60s",
+  "think": null,
+  "body": "{\"model\": \"qwen3:8b\", \"messages\": [{\"role\": \"user\", \"content\": \"Reply with only JSON: {\\\"say\\\": \\\"<what you say back>\\\", \\\"do\\\": [ ... ]}\"}], \"stream\": true, \"keep_alive\": \"60s\", \"options\": {\"num_predict\": 4096, \"num_ctx\": 8192, \"temperature\": 0}}"
+ },
+ {
+  "label": "mixed, with the quotes a prompt actually contains / thinking off",
+  "prompt": "Reply with only JSON: {\"say\": \"<what you say back>\", \"do\": [ ... ]}",
+  "model": "qwen3:8b",
+  "ctx": 8192,
+  "max_tokens": 4096,
+  "keep_alive": "60s",
+  "think": false,
+  "body": "{\"model\": \"qwen3:8b\", \"messages\": [{\"role\": \"user\", \"content\": \"Reply with only JSON: {\\\"say\\\": \\\"<what you say back>\\\", \\\"do\\\": [ ... ]}\"}], \"stream\": true, \"keep_alive\": \"60s\", \"options\": {\"num_predict\": 4096, \"num_ctx\": 8192, \"temperature\": 0}, \"think\": false}"
+ },
+ {
+  "label": "mixed, with the quotes a prompt actually contains / thinking on",
+  "prompt": "Reply with only JSON: {\"say\": \"<what you say back>\", \"do\": [ ... ]}",
+  "model": "qwen3:8b",
+  "ctx": 8192,
+  "max_tokens": 4096,
+  "keep_alive": "60s",
+  "think": true,
+  "body": "{\"model\": \"qwen3:8b\", \"messages\": [{\"role\": \"user\", \"content\": \"Reply with only JSON: {\\\"say\\\": \\\"<what you say back>\\\", \\\"do\\\": [ ... ]}\"}], \"stream\": true, \"keep_alive\": \"60s\", \"options\": {\"num_predict\": 4096, \"num_ctx\": 8192, \"temperature\": 0}, \"think\": true}"
+ },
+ {
+  "label": "mixed, with the quotes a prompt actually contains / another model and window",
+  "prompt": "Reply with only JSON: {\"say\": \"<what you say back>\", \"do\": [ ... ]}",
+  "model": "qwen3:0.6b",
+  "ctx": 4096,
+  "max_tokens": 512,
+  "keep_alive": "5m",
+  "think": null,
+  "body": "{\"model\": \"qwen3:0.6b\", \"messages\": [{\"role\": \"user\", \"content\": \"Reply with only JSON: {\\\"say\\\": \\\"<what you say back>\\\", \\\"do\\\": [ ... ]}\"}], \"stream\": true, \"keep_alive\": \"5m\", \"options\": {\"num_predict\": 512, \"num_ctx\": 4096, \"temperature\": 0}}"
+ },
+ {
+  "label": "a newline and a tab / shipped",
+  "prompt": "line one\nline two\tend",
+  "model": "qwen3:8b",
+  "ctx": 8192,
+  "max_tokens": 4096,
+  "keep_alive": "60s",
+  "think": null,
+  "body": "{\"model\": \"qwen3:8b\", \"messages\": [{\"role\": \"user\", \"content\": \"line one\\nline two\\tend\"}], \"stream\": true, \"keep_alive\": \"60s\", \"options\": {\"num_predict\": 4096, \"num_ctx\": 8192, \"temperature\": 0}}"
+ },
+ {
+  "label": "a newline and a tab / thinking off",
+  "prompt": "line one\nline two\tend",
+  "model": "qwen3:8b",
+  "ctx": 8192,
+  "max_tokens": 4096,
+  "keep_alive": "60s",
+  "think": false,
+  "body": "{\"model\": \"qwen3:8b\", \"messages\": [{\"role\": \"user\", \"content\": \"line one\\nline two\\tend\"}], \"stream\": true, \"keep_alive\": \"60s\", \"options\": {\"num_predict\": 4096, \"num_ctx\": 8192, \"temperature\": 0}, \"think\": false}"
+ },
+ {
+  "label": "a newline and a tab / thinking on",
+  "prompt": "line one\nline two\tend",
+  "model": "qwen3:8b",
+  "ctx": 8192,
+  "max_tokens": 4096,
+  "keep_alive": "60s",
+  "think": true,
+  "body": "{\"model\": \"qwen3:8b\", \"messages\": [{\"role\": \"user\", \"content\": \"line one\\nline two\\tend\"}], \"stream\": true, \"keep_alive\": \"60s\", \"options\": {\"num_predict\": 4096, \"num_ctx\": 8192, \"temperature\": 0}, \"think\": true}"
+ },
+ {
+  "label": "a newline and a tab / another model and window",
+  "prompt": "line one\nline two\tend",
+  "model": "qwen3:0.6b",
+  "ctx": 4096,
+  "max_tokens": 512,
+  "keep_alive": "5m",
+  "think": null,
+  "body": "{\"model\": \"qwen3:0.6b\", \"messages\": [{\"role\": \"user\", \"content\": \"line one\\nline two\\tend\"}], \"stream\": true, \"keep_alive\": \"5m\", \"options\": {\"num_predict\": 512, \"num_ctx\": 4096, \"temperature\": 0}}"
+ },
+ {
+  "label": "an emoji, a surrogate pair once escaped / shipped",
+  "prompt": "괜찮아 👍",
+  "model": "qwen3:8b",
+  "ctx": 8192,
+  "max_tokens": 4096,
+  "keep_alive": "60s",
+  "think": null,
+  "body": "{\"model\": \"qwen3:8b\", \"messages\": [{\"role\": \"user\", \"content\": \"\\uad1c\\ucc2e\\uc544 \\ud83d\\udc4d\"}], \"stream\": true, \"keep_alive\": \"60s\", \"options\": {\"num_predict\": 4096, \"num_ctx\": 8192, \"temperature\": 0}}"
+ },
+ {
+  "label": "an emoji, a surrogate pair once escaped / thinking off",
+  "prompt": "괜찮아 👍",
+  "model": "qwen3:8b",
+  "ctx": 8192,
+  "max_tokens": 4096,
+  "keep_alive": "60s",
+  "think": false,
+  "body": "{\"model\": \"qwen3:8b\", \"messages\": [{\"role\": \"user\", \"content\": \"\\uad1c\\ucc2e\\uc544 \\ud83d\\udc4d\"}], \"stream\": true, \"keep_alive\": \"60s\", \"options\": {\"num_predict\": 4096, \"num_ctx\": 8192, \"temperature\": 0}, \"think\": false}"
+ },
+ {
+  "label": "an emoji, a surrogate pair once escaped / thinking on",
+  "prompt": "괜찮아 👍",
+  "model": "qwen3:8b",
+  "ctx": 8192,
+  "max_tokens": 4096,
+  "keep_alive": "60s",
+  "think": true,
+  "body": "{\"model\": \"qwen3:8b\", \"messages\": [{\"role\": \"user\", \"content\": \"\\uad1c\\ucc2e\\uc544 \\ud83d\\udc4d\"}], \"stream\": true, \"keep_alive\": \"60s\", \"options\": {\"num_predict\": 4096, \"num_ctx\": 8192, \"temperature\": 0}, \"think\": true}"
+ },
+ {
+  "label": "an emoji, a surrogate pair once escaped / another model and window",
+  "prompt": "괜찮아 👍",
+  "model": "qwen3:0.6b",
+  "ctx": 4096,
+  "max_tokens": 512,
+  "keep_alive": "5m",
+  "think": null,
+  "body": "{\"model\": \"qwen3:0.6b\", \"messages\": [{\"role\": \"user\", \"content\": \"\\uad1c\\ucc2e\\uc544 \\ud83d\\udc4d\"}], \"stream\": true, \"keep_alive\": \"5m\", \"options\": {\"num_predict\": 512, \"num_ctx\": 4096, \"temperature\": 0}}"
+ },
+ {
+  "label": "a backslash / shipped",
+  "prompt": "a \\ b",
+  "model": "qwen3:8b",
+  "ctx": 8192,
+  "max_tokens": 4096,
+  "keep_alive": "60s",
+  "think": null,
+  "body": "{\"model\": \"qwen3:8b\", \"messages\": [{\"role\": \"user\", \"content\": \"a \\\\ b\"}], \"stream\": true, \"keep_alive\": \"60s\", \"options\": {\"num_predict\": 4096, \"num_ctx\": 8192, \"temperature\": 0}}"
+ },
+ {
+  "label": "a backslash / thinking off",
+  "prompt": "a \\ b",
+  "model": "qwen3:8b",
+  "ctx": 8192,
+  "max_tokens": 4096,
+  "keep_alive": "60s",
+  "think": false,
+  "body": "{\"model\": \"qwen3:8b\", \"messages\": [{\"role\": \"user\", \"content\": \"a \\\\ b\"}], \"stream\": true, \"keep_alive\": \"60s\", \"options\": {\"num_predict\": 4096, \"num_ctx\": 8192, \"temperature\": 0}, \"think\": false}"
+ },
+ {
+  "label": "a backslash / thinking on",
+  "prompt": "a \\ b",
+  "model": "qwen3:8b",
+  "ctx": 8192,
+  "max_tokens": 4096,
+  "keep_alive": "60s",
+  "think": true,
+  "body": "{\"model\": \"qwen3:8b\", \"messages\": [{\"role\": \"user\", \"content\": \"a \\\\ b\"}], \"stream\": true, \"keep_alive\": \"60s\", \"options\": {\"num_predict\": 4096, \"num_ctx\": 8192, \"temperature\": 0}, \"think\": true}"
+ },
+ {
+  "label": "a backslash / another model and window",
+  "prompt": "a \\ b",
+  "model": "qwen3:0.6b",
+  "ctx": 4096,
+  "max_tokens": 512,
+  "keep_alive": "5m",
+  "think": null,
+  "body": "{\"model\": \"qwen3:0.6b\", \"messages\": [{\"role\": \"user\", \"content\": \"a \\\\ b\"}], \"stream\": true, \"keep_alive\": \"5m\", \"options\": {\"num_predict\": 512, \"num_ctx\": 4096, \"temperature\": 0}}"
+ },
+ {
+  "label": "empty / shipped",
+  "prompt": "",
+  "model": "qwen3:8b",
+  "ctx": 8192,
+  "max_tokens": 4096,
+  "keep_alive": "60s",
+  "think": null,
+  "body": "{\"model\": \"qwen3:8b\", \"messages\": [{\"role\": \"user\", \"content\": \"\"}], \"stream\": true, \"keep_alive\": \"60s\", \"options\": {\"num_predict\": 4096, \"num_ctx\": 8192, \"temperature\": 0}}"
+ },
+ {
+  "label": "empty / thinking off",
+  "prompt": "",
+  "model": "qwen3:8b",
+  "ctx": 8192,
+  "max_tokens": 4096,
+  "keep_alive": "60s",
+  "think": false,
+  "body": "{\"model\": \"qwen3:8b\", \"messages\": [{\"role\": \"user\", \"content\": \"\"}], \"stream\": true, \"keep_alive\": \"60s\", \"options\": {\"num_predict\": 4096, \"num_ctx\": 8192, \"temperature\": 0}, \"think\": false}"
+ },
+ {
+  "label": "empty / thinking on",
+  "prompt": "",
+  "model": "qwen3:8b",
+  "ctx": 8192,
+  "max_tokens": 4096,
+  "keep_alive": "60s",
+  "think": true,
+  "body": "{\"model\": \"qwen3:8b\", \"messages\": [{\"role\": \"user\", \"content\": \"\"}], \"stream\": true, \"keep_alive\": \"60s\", \"options\": {\"num_predict\": 4096, \"num_ctx\": 8192, \"temperature\": 0}, \"think\": true}"
+ },
+ {
+  "label": "empty / another model and window",
+  "prompt": "",
+  "model": "qwen3:0.6b",
+  "ctx": 4096,
+  "max_tokens": 512,
+  "keep_alive": "5m",
+  "think": null,
+  "body": "{\"model\": \"qwen3:0.6b\", \"messages\": [{\"role\": \"user\", \"content\": \"\"}], \"stream\": true, \"keep_alive\": \"5m\", \"options\": {\"num_predict\": 512, \"num_ctx\": 4096, \"temperature\": 0}}"
+ }
+]

@@ -27,16 +27,20 @@ OUT.write_text(json.dumps({
     "prompt": tag,
     "loop_print": sending.loop_now(),
     "caveat": sending.caveat(tag),
-    "runs_at_this_prompt": d["runs_at_this_prompt"],
-    "runs_at_this_prompt_and_loop": d["runs_at_this_prompt_and_loop"],
-    "loop_prints_at_this_prompt": d["loop_prints_at_this_prompt"],
-    "newest_run": d["newest_run"],
+    #: **Sorted by name, and `newest_run` deliberately absent.** Both sides scan newest first, and
+    #: "newest" is a modification time — which a fresh checkout rewrites. Committing an mtime order
+    #: as frozen data would make this file disagree with itself on the next clone, so what is stored
+    #: is the set and not the order. The Rust compares it as a set for the same reason.
+    "runs_at_this_prompt": sorted(d["runs_at_this_prompt"]),
+    "runs_at_this_prompt_and_loop": sorted(d["runs_at_this_prompt_and_loop"]),
+    "loop_prints_at_this_prompt": sorted(d["loop_prints_at_this_prompt"]),
     "exercised_at_this_prompt": d["exercised_at_this_prompt"],
     "exercised_at_this_tree": d["exercised_at_this_tree"],
     #: Every conversation result and what it was taken at, so the port's file scan is checked
     #: rather than only its conclusion.
-    "runs": [{"file": p.name, "prompt": q, "loop_print": l}
-             for p, q, l, _m in sending.conversation_runs()],
+    "runs": sorted(({"file": p.name, "prompt": q, "loop_print": l}
+                    for p, q, l, _m in sending.conversation_runs()),
+                   key=lambda r: r["file"]),
 }, ensure_ascii=False, indent=1), encoding="utf-8")
 print(f"  -> {OUT.name}")
 print(f"    {tag} + loop {sending.loop_now()}: {len(d['runs_at_this_prompt'])} runs at this prompt, "
