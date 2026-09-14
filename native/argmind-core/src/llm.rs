@@ -92,3 +92,139 @@ pub fn first_object(text: &str) -> Option<serde_json::Value> {
         .collect();
     serde_json::from_str(&slice).ok()
 }
+
+// ---- reading a stream, and when to stop reading it ------------------------------------------------
+
+/// The server's own reasons, and this reader's two.
+pub const FINISHED: &str = "stop";
+pub const CEILING: &str = "length";
+pub const CLOSED: &str = "closed";
+pub const DEGENERATE: &str = "degenerate";
+
+/// How many content chunks to keep reading after the object has closed.
+///
+/// **A gap no output occupies, and that is the honest description.** Measured over 128 recorded
+/// replies: 124 close an envelope, and of those **109 emit nothing at all afterwards, 13 emit
+/// exactly one chunk, and 2 emit 505**. So 2 is a floor held by real output — `GRACE = 1` turns
+/// those 13 into `closed` with no server token counts — and every value from 2 to 600 behaves
+/// identically on the shipped arm. 24 sits in the gap; moving it buys nothing measured.
+pub const GRACE: i64 = 24;
+
+/// Characters, not tokens, because characters are what the extractor reads and a chunk boundary is
+/// the server's business.
+pub const LOOP_FLOOR: usize = 256;
+pub const LOOP_WINDOW: usize = 512;
+pub const LOOP_PROBE: usize = 32;
+pub const LOOP_TIMES: usize = 4;
+
+/// Is the tail of this reply a short cycle repeating itself?
+///
+/// Non-overlapping occurrences of the tail rather than an exact period over the window, so a cycle
+/// that drifts slightly — a changing index, a stray space — is still caught.
+///
+/// **It is a length backstop, not a classifier**, and the file it came from says so: the pathology
+/// it was built for and its one measured false positive are the same shape, and what separated a
+/// stopped reply from an identical one that was not was whether the repeating unit happened to
+/// align to `LOOP_PROBE` characters.
+pub fn looping(text: &str) -> bool {
+    let chars: Vec<char> = text.chars().collect();
+    if chars.len() < LOOP_FLOOR {
+        return false;
+    }
+    let window: String = chars[chars.len().saturating_sub(LOOP_WINDOW)..].iter().collect();
+    let probe: String = chars[chars.len() - LOOP_PROBE..].iter().collect();
+    //: `str::matches` is non-overlapping, which is the same counting `str.count` does in Python.
+    window.matches(&probe).count() >= LOOP_TIMES
+}
+
+/// What came back, and what it cost — both, always. A latency figure detached from the call it
+/// describes is how a stale number gets published.
+#[derive(Debug, Clone)]
+pub struct Reply {
+    pub text: String,
+    /// `None` whenever the reason is one of this reader's own stops: the server puts its prompt
+    /// count only in the final message, and a read that ended early never saw one. **Absent rather
+    /// than zero** — a prompt of unknown size and a prompt of no size are not the same fact, and
+    /// the second is impossible.
+    pub prompt_tokens: Option<i64>,
+    pub out_tokens: Option<i64>,
+    pub reason: String,
+    pub thought: usize,
+}
+
+/// The reading of one reply, line by line — **and the two decisions about when to stop.**
+///
+/// A state machine rather than a loop so it can be replayed offline: 128 recorded streams go back
+/// through it with no server, which is the only way the stops have ever been tested against real
+/// output. The alternative was streams somebody imagined.
+pub struct Reading {
+    pub stop_when_answered: bool,
+    pub stop_when_looping: bool,
+    text: String,
+    envelope: Balanced,
+    spare: i64,
+    arrived: i64,
+    thinking: usize,
+    ended: Option<&'static str>,
+    last: Option<(Option<i64>, Option<i64>, String)>,
+    pub lines_read: usize,
+}
+
+impl Reading {
+    pub fn new(stop_when_answered: bool, stop_when_looping: bool) -> Self {
+        Reading { stop_when_answered, stop_when_looping, text: String::new(),
+                  envelope: Balanced::new(), spare: GRACE, arrived: 0, thinking: 0,
+                  ended: None, last: None, lines_read: 0 }
+    }
+
+    /// One line of the stream. Returns whether to keep reading.
+    ///
+    /// `thinking` is a **length** rather than the text, because `ask` only ever takes `len()` of it
+    /// and truthiness from it — recording the words would be recording something nothing reads.
+    pub fn line(&mut self, thinking: usize, chunk: Option<&str>,
+                done: Option<(Option<i64>, Option<i64>, String)>) -> bool {
+        self.lines_read += 1;
+        self.thinking += thinking;
+        if thinking > 0 || chunk.map(|c| !c.is_empty()).unwrap_or(false) {
+            self.arrived += 1;
+        }
+        if let Some(chunk) = chunk.filter(|c| !c.is_empty()) {
+            self.text.push_str(chunk);
+            if self.envelope.closed() {
+                self.spare -= 1;
+                if self.stop_when_answered && self.spare <= 0 {
+                    self.ended = Some(CLOSED);
+                    return false;
+                }
+            } else if !self.envelope.feed(chunk) && self.stop_when_looping && looping(&self.text) {
+                self.ended = Some(DEGENERATE);
+                return false;
+            }
+        }
+        if let Some(d) = done {
+            self.last = Some(d);
+        }
+        true
+    }
+
+    /// A blank line — the server sends them and `ask` skips them before anything else. Counted,
+    /// because `lines_read` is a count of what was pulled from the stream.
+    pub fn blank(&mut self) {
+        self.lines_read += 1;
+    }
+
+    pub fn finish(self) -> Reply {
+        let text = self.text.trim().to_string();
+        match self.ended {
+            None => {
+                let (prompt, out, reason) = self.last
+                    .unwrap_or((None, None, String::new()));
+                Reply { text, prompt_tokens: prompt, out_tokens: out, reason, thought: self.thinking }
+            }
+            //: A stop of this reader's own: no server counts, and `arrived` stands in for the
+            //: output count, which is the only quantity it can honestly report.
+            Some(reason) => Reply { text, prompt_tokens: None, out_tokens: Some(self.arrived),
+                                    reason: reason.to_string(), thought: self.thinking },
+        }
+    }
+}
