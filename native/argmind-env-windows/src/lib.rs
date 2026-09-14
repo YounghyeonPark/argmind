@@ -17,7 +17,7 @@ pub mod speaker;
 pub use speaker::SapiSpeaker;
 
 use argmind_core::contract::{Eyes, Widget};
-use windows::Win32::Foundation::HWND;
+use windows::Win32::Foundation::{HWND, POINT};
 use windows::Win32::System::Com::{
     CoCreateInstance, CoInitializeEx, CLSCTX_INPROC_SERVER, COINIT_MULTITHREADED,
 };
@@ -25,7 +25,9 @@ use windows::Win32::UI::Accessibility::{
     CUIAutomation, IUIAutomation, IUIAutomationElement, TreeScope_Descendants,
     UIA_IsOffscreenPropertyId,
 };
-use windows::Win32::UI::WindowsAndMessaging::GetForegroundWindow;
+use windows::Win32::UI::WindowsAndMessaging::{GetCursorPos, GetForegroundWindow,
+    GetSystemMetrics, SetCursorPos, SM_CXSCREEN, SM_CXVIRTUALSCREEN, SM_CYSCREEN,
+    SM_CYVIRTUALSCREEN};
 
 pub struct WindowsEyes {
     automation: IUIAutomation,
@@ -108,6 +110,21 @@ impl WindowsEyes {
         }
     }
 
+    /// What UI Automation says is at a point on the screen — the read half of the question a
+    /// click asks.
+    ///
+    /// **This is how a click resolves and how it fails.** The hands find an element by asking what
+    /// is at the widget's centre; when the answer is something else, the click lands on whatever
+    /// occupies that rectangle instead. Returning the name and the role rather than the element
+    /// keeps that answerable without holding a live COM pointer across the measurement.
+    pub fn at_point(&self, x: i64, y: i64) -> Option<(String, String)> {
+        unsafe {
+            let at = self.automation.ElementFromPoint(POINT { x: x as i32, y: y as i32 }).ok()?;
+            Some((at.CurrentName().ok()?.to_string(),
+                  at.CurrentLocalizedControlType().ok()?.to_string()))
+        }
+    }
+
     /// The window in front. **Not the same as `attending()` in the Python**, which skips this
     /// process's own windows so the agent does not read itself — that needs the app to exist and
     /// belongs with it, not here.
@@ -127,4 +144,48 @@ impl Eyes for WindowsEyes {
         let widgets = self.foreground();
         (widgets, t0.elapsed().as_secs_f64())
     }
+}
+
+/// How big the desktop says it is: `(virtual width, virtual height, primary width, primary height)`.
+///
+/// The two disagree on a multi-monitor desktop, and a coordinate that is fine on one is off-screen
+/// on the other.
+pub fn screen_metrics() -> (i32, i32, i32, i32) {
+    unsafe {
+        (GetSystemMetrics(SM_CXVIRTUALSCREEN), GetSystemMetrics(SM_CYVIRTUALSCREEN),
+         GetSystemMetrics(SM_CXSCREEN), GetSystemMetrics(SM_CYSCREEN))
+    }
+}
+
+/// Send the pointer to each point and read back where it actually went — **then put it back.**
+///
+/// Coordinates read from a DPI-aware process and written from a DPI-unaware one can be virtualised.
+/// If the two disagree every click is offset by the scaling factor and nothing lands, which would
+/// look exactly like the model choosing badly.
+///
+/// **It moves the real mouse pointer and presses nothing.** The original position is restored on
+/// every exit path, because a measurement that leaves somebody's cursor in the corner of the screen
+/// has changed the machine it was measuring. It lives here rather than in a harness for the reason
+/// nothing above `argmind/env/` names a platform call.
+pub fn cursor_round_trip(points: &[(i64, i64)]) -> Vec<((i64, i64), (i64, i64))> {
+    let mut keep = POINT::default();
+    unsafe {
+        let _ = GetCursorPos(&mut keep);
+    }
+    let mut out = Vec::new();
+    for (x, y) in points {
+        unsafe {
+            if SetCursorPos(*x as i32, *y as i32).is_err() {
+                continue;
+            }
+            let mut got = POINT::default();
+            if GetCursorPos(&mut got).is_ok() {
+                out.push(((*x, *y), (got.x as i64, got.y as i64)));
+            }
+        }
+    }
+    unsafe {
+        let _ = SetCursorPos(keep.x, keep.y);
+    }
+    out
 }
