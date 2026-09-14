@@ -12,6 +12,7 @@
 //! had five times.
 
 pub mod choosing;
+pub mod repair;
 
 use std::collections::BTreeMap;
 use std::fs;
