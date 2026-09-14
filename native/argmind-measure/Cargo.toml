@@ -1,0 +1,11 @@
+[package]
+name = "argmind-measure"
+version = "0.0.1"
+edition = "2021"
+description = "What every harness needs before it can measure anything."
+license = "Apache-2.0"
+
+[dependencies]
+argmind-core = { path = "../argmind-core" }
+serde_json = "1"
+sha2 = "0.10"

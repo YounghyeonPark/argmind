@@ -29,6 +29,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "argmind-measure"
+version = "0.0.1"
+dependencies = [
+ "argmind-core",
+ "serde_json",
+ "sha2",
+]
+
+[[package]]
 name = "argmind-voice"
 version = "0.0.1"
 
