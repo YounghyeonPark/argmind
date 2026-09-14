@@ -17,9 +17,7 @@ three counters, what the hands were actually told to do, and how many times the 
 Timings are not compared — `look_s` is the environment's own number and the other two are wall
 clock, which is not a property of the port.
 
-    python native/session-spike/expectations.py
-    cargo run --release --manifest-path native/session-spike/Cargo.toml -- \
-        native/session-spike/expectations.json
+    python native/expectations/all.py && cargo test --manifest-path native/Cargo.toml
 """
 import json
 import pathlib
@@ -39,7 +37,7 @@ from argmind.core.intent import Perceived                                   # no
 from tests.test_loop_golden import (DESK, DeclaringHands, ScriptedEyes,     # noqa: E402
                                     ScriptedHands, ScriptedModel, says, w)
 
-OUT = pathlib.Path(__file__).resolve().parent / "expectations.json"
+OUT = pathlib.Path(__file__).resolve().parent / "session.json"
 
 GONE = [x for x in DESK if x.name != "닫기"]
 MOVED = [w("닫기", rect=(300, 200, 40, 30)), *[x for x in DESK if x.name != "닫기"]]

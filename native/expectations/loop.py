@@ -17,9 +17,7 @@ so this exercises the branches `architect` chose when it wrote the transcript ra
 I would have thought of. Sweeps are added where a sweep is cheap and the golden pins only a few
 points.
 
-    python native/loop-spike/expectations.py
-    cargo run --release --manifest-path native/loop-spike/Cargo.toml -- \
-        native/loop-spike/expectations.json
+    python native/expectations/all.py && cargo test --manifest-path native/Cargo.toml
 """
 import json
 import pathlib
@@ -39,7 +37,7 @@ from argmind.core.loop import Done, ING, PAST, PLAIN, _describe, recent    # noq
 from tests.test_loop_golden import (CHANNEL_EFFECTS, DESK,                 # noqa: E402
                                     WINDOW_HISTORY, sitting, w)
 
-OUT = pathlib.Path(__file__).resolve().parent / "expectations.json"
+OUT = pathlib.Path(__file__).resolve().parent / "loop.json"
 
 
 def as_effect(e) -> dict:
@@ -47,7 +45,9 @@ def as_effect(e) -> dict:
 
 
 def as_widget(x) -> dict:
-    return {"name": x.name, "role": x.role, "rect": list(x.rect)}
+    #: The window is part of a `Widget` and leaving it out was the spike's shortcut. It is not
+    #: cosmetic: `Widget.__eq__` ignores it while `Session.confirm` checks it separately.
+    return {"name": x.name, "role": x.role, "rect": list(x.rect), "window": x.window}
 
 
 # ---- 1. the four channels, and the tense that carries the state ----------------------------------

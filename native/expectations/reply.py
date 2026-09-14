@@ -19,9 +19,7 @@ hand, their expectations come from the shipped Python like every other row, and 
 
 Run this, then the crate:
 
-    python native/reply-spike/expectations.py
-    cargo run --release --manifest-path native/reply-spike/Cargo.toml -- \
-        native/reply-spike/expectations.json
+    python native/expectations/all.py && cargo test --manifest-path native/Cargo.toml
 """
 import glob
 import json
@@ -39,7 +37,7 @@ for s in (sys.stdout, sys.stderr):
 
 from argmind.core.llm import Reply, _Balanced                               # noqa: E402
 
-OUT = pathlib.Path(__file__).resolve().parent / "expectations.json"
+OUT = pathlib.Path(__file__).resolve().parent / "reply.json"
 
 #: The axis the corpus cannot reach. A brace inside a string is not a brace, and an escaped quote
 #: does not end one — get either wrong and the object closes early, which is the failure that once

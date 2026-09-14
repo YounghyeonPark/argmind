@@ -1,0 +1,9 @@
+# The Rust tree. One workspace so the crates share a lock and a target directory, and so
+# `cargo test` at the top runs every equivalence check at once.
+#
+# `argmind-core` is the port of argmind/core/ and, like it, names no platform: no windows-rs, no
+# audio, no HTTP client. What an environment must provide is traits, exactly as it is protocols on
+# the Python side, and the reason is the same — the core calls them and nothing else reaches it.
+[workspace]
+resolver = "2"
+members = ["argmind-core"]
