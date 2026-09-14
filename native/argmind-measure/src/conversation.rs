@@ -23,6 +23,9 @@
 //! Everything here re-judges recorded transcripts as well as fresh ones: a row carries every turn
 //! of every repeat, which is what lets 411 committed rows be re-scored with no model.
 
+use argmind_core::contract::Widget;
+use argmind_core::intent::{Effect, Trigger};
+use argmind_core::session::Session;
 use serde_json::{json, Value};
 
 use crate::data_print;
@@ -755,4 +758,194 @@ pub fn cost_table(rows: &[Row]) -> String {
         }
     }
     out
+}
+
+// ---- driving one ---------------------------------------------------------------------------
+//
+// **Not `drive::drive`, and the Python has two of these for the same reason.** Every other harness
+// wants a reply and a click; this one wants **the prompt that was actually sent**, because the
+// whole point is telling "the anchor was truncated out of the window" apart from "the anchor was
+// there and ignored". Rebuilding the window here instead would be a second copy of the mechanism
+// under test, and a copy that agrees with itself proves nothing.
+
+/// A model a sweep can drive: it answers, and it remembers what it was asked.
+pub trait Records: argmind_core::contract::Speaks {
+    /// The last prompt handed to it, verbatim.
+    fn last_prompt(&self) -> &str;
+    /// What the last call cost, when the transport reported it.
+    fn last_reply(&self) -> Option<&argmind_core::llm::Reply>;
+}
+
+/// One turn of a driven conversation, in the shape the result files carry.
+#[derive(Debug, Clone)]
+pub struct Turn {
+    pub i: usize,
+    pub said: String,
+    pub reply: String,
+    pub clicked: Vec<String>,
+    /// **The role, because the name alone is not the key.** Character Map lists a `text` label
+    /// reading `Font :` immediately before a `combo box` of the same name; a harness scoring on the
+    /// name alone scores the click that lands on the label and does nothing.
+    pub clicked_roles: Vec<String>,
+    pub effects: Vec<Effect>,
+    pub n_effects: usize,
+    /// The delta, never a bare boolean: how much of the past existed.
+    pub history_lines: usize,
+    /// And how much of it reached the model.
+    pub window: String,
+    pub window_lines: usize,
+    pub prompt_tokens: Option<i64>,
+    pub out_tokens: Option<i64>,
+    /// **Why the model stopped.** A turn that ran to the token ceiling — no effects, nothing said —
+    /// is otherwise stored as an ordinary quiet turn with a large token count that nothing reads.
+    pub reason: String,
+    pub truncated: bool,
+    pub thought_chars: usize,
+    pub seconds: f64,
+}
+
+impl Turn {
+    pub fn to_json(&self) -> Value {
+        json!({
+            "i": self.i, "said": self.said, "reply": self.reply, "clicked": self.clicked,
+            "clicked_roles": self.clicked_roles,
+            "effects": self.effects.iter().map(|e| json!({
+                "kind": e.kind, "target": e.target, "role": e.role, "text": e.text}))
+                .collect::<Vec<_>>(),
+            "n_effects": self.n_effects, "history_lines": self.history_lines,
+            "window_lines": self.window_lines, "window": self.window,
+            "prompt_tokens": self.prompt_tokens, "out_tokens": self.out_tokens,
+            "reason": self.reason, "truncated": self.truncated,
+            "thought_chars": self.thought_chars, "seconds": self.seconds,
+        })
+    }
+}
+
+/// Run one scripted conversation. Returns a record per turn, and the model back.
+///
+/// The bookkeeping is `app.py`'s: say, reply, then file the offer — the shipped app records what it
+/// **put on the screen as a button**. `turn_down_after` is that app's "no" button, the one history
+/// line a command line has no way to produce.
+pub fn drive<M: Records>(model: M, widgets: &[Widget], lines: &[String], remember: Option<i64>,
+                         turn_down_after: Option<usize>) -> Result<(Vec<Turn>, M), String> {
+    let mut session = Session::new(crate::drive::Fixed(widgets.to_vec()), crate::drive::Nothing,
+                                   model);
+    session.remember_turns = remember;
+    let mut turns = Vec::new();
+    for (i, line) in lines.iter().enumerate() {
+        session.observe();
+        let before = session.history.len();
+        let t0 = std::time::Instant::now();
+        let intent = session.decide(&Trigger::said(line));
+        let took = t0.elapsed().as_secs_f64();
+        //: **What the block SHOULD contain, not what the history holds.** `remember = 0` is a real
+        //: arm — it means carry nothing, where it used to mean carry everything — and passing the
+        //: raw history length would abort on a prompt that is correctly empty.
+        let claimed = if remember == Some(0) { 0 } else { before };
+        let window = recent_block(session.model.last_prompt(), claimed)?;
+        let clicked: Vec<String> = intent.effects.iter()
+            .filter(|e| e.kind == "click").map(|e| e.target.clone()).collect();
+        let clicked_roles: Vec<String> = intent.effects.iter()
+            .filter(|e| e.kind == "click").map(|e| e.role.clone()).collect();
+        let (prompt_tokens, out_tokens, reason, thought) = match session.model.last_reply() {
+            Some(r) => (r.prompt_tokens, r.out_tokens, r.reason.clone(), r.thought),
+            None => (None, None, String::new(), 0),
+        };
+        turns.push(Turn {
+            i, said: line.clone(), reply: intent.say.clone(), clicked, clicked_roles,
+            effects: intent.effects.clone(), n_effects: intent.effects.len(),
+            history_lines: before,
+            window_lines: window.lines().filter(|l| !l.trim().is_empty()).count(),
+            window, prompt_tokens, out_tokens,
+            truncated: reason == argmind_core::llm::CEILING, reason,
+            thought_chars: thought, seconds: (took * 1000.0).round() / 1000.0,
+        });
+        session.history.push(("them".into(), line.clone()));
+        if !intent.say.is_empty() {
+            session.history.push(("you".into(), intent.say.clone()));
+        }
+        //: **The bookkeeping the core does not do.** `think()` never writes the `offered` channel,
+        //: so every interface has to file its own offers, and one that forgets loses the
+        //: standing-offer block with no error saying so.
+        session.remember_doing(&[], &[], &intent.effects, &[]);
+        if turn_down_after == Some(i) && !intent.effects.is_empty() {
+            session.remember_doing(&[], &[], &[], &intent.effects[..1]);
+        }
+    }
+    Ok((turns, session.model))
+}
+
+/// One `(case, distance, remember, arm)` cell, `repeat` times. Worst counted.
+pub fn cell<M: Records>(mut model: M, widgets: &[Widget], case: &Case, distance: usize,
+                        remember: i64, arm: &str, repeat: usize, turned_down: bool)
+                        -> Result<(Value, M), String> {
+    let lines = script(case, distance, arm)?;
+    let down = if turned_down && case.kind == REOFFER && arm == "with" { Some(0) } else { None };
+    let mut judged = Vec::new();
+    let mut every: Vec<Vec<Turn>> = Vec::new();
+    for _ in 0..repeat {
+        let (turns, back) = drive(model, widgets, &lines, Some(remember), down)?;
+        model = back;
+        let as_json: Vec<Value> = turns.iter().map(Turn::to_json).collect();
+        judged.push(judge(case, &as_json, arm));
+        every.push(turns);
+    }
+    let verdicts: Vec<&str> = judged.iter().map(|j| j.verdict).collect();
+    let agreed = verdicts.iter().collect::<std::collections::BTreeSet<_>>().len() == 1;
+    let row = json!({
+        "case": case.id, "kind": case.kind, "screen": case.screen, "arm": arm,
+        "distance": distance, "remember": remember,
+        "counted": counted(&verdicts, &case.kind), "verdicts": verdicts,
+        "void": verdicts.iter().filter(|v| **v == VOID).count(), "n": verdicts.len(),
+        "agreed": agreed,
+        "chose": judged.iter().map(|j| json!(j.chose)).collect::<Vec<_>>(),
+        "clicked": judged.iter().map(|j| json!(j.clicked)).collect::<Vec<_>>(),
+        "n_effects": judged.iter().map(|j| j.n_effects).collect::<Vec<_>>(),
+        "established": judged.iter().map(|j| json!(j.established)).collect::<Vec<_>>(),
+        //: `null` for the two kinds that have no refusal, so a reader cannot mistake an empty list
+        //: for "it offered nothing".
+        "offered_at_anchor": judged.iter()
+            .map(|j| if case.kind == REOFFER { json!(j.refused) } else { Value::Null })
+            .collect::<Vec<_>>(),
+        "anchor_in_window": judged.iter().map(|j| j.anchor_in_window).collect::<Vec<_>>(),
+        "target_in_window": judged.iter().map(|j| j.target_in_window).collect::<Vec<_>>(),
+        "history_lines": judged[0].history_lines,
+        "window_lines": judged.iter().map(|j| j.window_lines).collect::<Vec<_>>(),
+        "prompt_tokens": every.iter().map(|t| json!(t[t.len() - 1].prompt_tokens))
+            .collect::<Vec<_>>(),
+        "first_turn_tokens": every.iter().map(|t| json!(t[0].prompt_tokens)).collect::<Vec<_>>(),
+        "seconds": every.iter().map(|t| t[t.len() - 1].seconds).collect::<Vec<_>>(),
+        "filler_effects": judged.iter().map(|j| j.filler_effects).collect::<Vec<_>>(),
+        "n_widgets": widgets.len(),
+        "turns": every.iter().map(|t| t.iter().map(Turn::to_json).collect::<Vec<_>>())
+            .collect::<Vec<_>>(),
+    });
+    Ok((row, model))
+}
+
+/// The same probe with **no conversation at all** — distance infinity, and every test's null.
+///
+/// Nine calls, and without them a rate has no zero.
+pub fn floor<M: Records>(mut model: M, widgets: &[Widget], case: &Case, repeat: usize)
+                         -> Result<(Value, M), String> {
+    let mut clicked: Vec<Vec<String>> = Vec::new();
+    let mut tokens: Vec<Option<i64>> = Vec::new();
+    let mut seconds: Vec<f64> = Vec::new();
+    for _ in 0..repeat {
+        let (turns, back) = drive(model, widgets, &[case.probe.clone()], Some(12), None)?;
+        model = back;
+        clicked.push(turns[0].clicked.clone());
+        tokens.push(turns[0].prompt_tokens);
+        seconds.push(turns[0].seconds);
+    }
+    let verdicts: Vec<&str> = clicked.iter().map(|c| floor_verdict(case, c)).collect();
+    let agreed = clicked.iter().collect::<std::collections::BTreeSet<_>>().len() == 1;
+    Ok((json!({
+        "case": case.id, "kind": case.kind, "screen": case.screen, "arm": "alone",
+        "distance": -1, "remember": 12,
+        "counted": if case.kind == REOFFER { json!("-") } else { json!(counted(&verdicts,
+                                                                             &case.kind)) },
+        "verdicts": verdicts, "clicked": clicked, "n": repeat, "agreed": agreed,
+        "n_widgets": widgets.len(), "prompt_tokens": tokens, "seconds": seconds,
+    }), model))
 }

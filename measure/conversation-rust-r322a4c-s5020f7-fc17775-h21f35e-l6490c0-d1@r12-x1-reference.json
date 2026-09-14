@@ -1,0 +1,562 @@
+{
+  "at_distance": 8,
+  "axis": "d",
+  "calls": 12,
+  "cases": [
+    {
+      "anchor": "지우개 골라줘",
+      "id": "ref-eraser",
+      "kind": "reference",
+      "probe": "그거 다시 눌러줘",
+      "screen": "untitled---paint",
+      "want": "Eraser"
+    },
+    {
+      "anchor": "복사 버튼 눌러줘",
+      "id": "ref-copy",
+      "kind": "reference",
+      "probe": "아까 그 버튼 다시 눌러줘",
+      "screen": "character-map",
+      "want": "Copy"
+    },
+    {
+      "anchor": "Components 항목 눌러줘",
+      "id": "ref-parts",
+      "kind": "reference",
+      "probe": "그거 다시 눌러줘",
+      "screen": "system-information",
+      "want": "Components"
+    }
+  ],
+  "data_print": "c17775",
+  "distances": [
+    1
+  ],
+  "filler": [
+    "안녕",
+    "오늘 날씨 어때?",
+    "너 뭘 할 수 있어?",
+    "심심하다",
+    "커피 한 잔 마시고 싶다",
+    "너 이름이 뭐야?",
+    "오늘 할 일이 너무 많다",
+    "잠깐 쉬었다 하자",
+    "이거 어떻게 쓰는 거야?",
+    "수고했어",
+    "밥 먹고 올게",
+    "이 창 좀 복잡하지 않아?",
+    "고마워",
+    "그래 알겠어"
+  ],
+  "floor": [
+    {
+      "agreed": true,
+      "arm": "alone",
+      "case": "ref-eraser",
+      "clicked": [
+        []
+      ],
+      "counted": "silent",
+      "distance": -1,
+      "kind": "reference",
+      "n": 1,
+      "n_widgets": 123,
+      "prompt_tokens": [
+        1269
+      ],
+      "remember": 12,
+      "screen": "untitled---paint",
+      "seconds": [
+        0.64
+      ],
+      "verdicts": [
+        "silent"
+      ]
+    },
+    {
+      "agreed": true,
+      "arm": "alone",
+      "case": "ref-copy",
+      "clicked": [
+        [
+          "Page down"
+        ]
+      ],
+      "counted": "wrong",
+      "distance": -1,
+      "kind": "reference",
+      "n": 1,
+      "n_widgets": 21,
+      "prompt_tokens": [
+        374
+      ],
+      "remember": 12,
+      "screen": "character-map",
+      "seconds": [
+        0.672
+      ],
+      "verdicts": [
+        "wrong"
+      ]
+    },
+    {
+      "agreed": true,
+      "arm": "alone",
+      "case": "ref-parts",
+      "clicked": [
+        [
+          "Processor"
+        ]
+      ],
+      "counted": "wrong",
+      "distance": -1,
+      "kind": "reference",
+      "n": 1,
+      "n_widgets": 152,
+      "prompt_tokens": [
+        1867
+      ],
+      "remember": 12,
+      "screen": "system-information",
+      "seconds": [
+        0.908
+      ],
+      "verdicts": [
+        "wrong"
+      ]
+    }
+  ],
+  "harness_print": "21f35e",
+  "loop_print": "6490c0",
+  "loop_print_lang": "rust: native/argmind-core/src/session.rs",
+  "model": "qwen3:8b",
+  "prompt": "322a4c",
+  "prompt_scheme": "r = a hash of the rendered prompt over six probes",
+  "remember_unit": "turns",
+  "remembers": [
+    4
+  ],
+  "repeat": 1,
+  "retried": 0,
+  "rows": [
+    {
+      "agreed": true,
+      "anchor_in_window": [
+        true
+      ],
+      "arm": "with",
+      "axis": "distance",
+      "case": "ref-eraser",
+      "chose": [
+        "Eraser"
+      ],
+      "clicked": [
+        [
+          "Eraser"
+        ]
+      ],
+      "counted": "held",
+      "distance": 1,
+      "established": [
+        "Eraser"
+      ],
+      "filler_effects": [
+        0
+      ],
+      "first_turn_tokens": [
+        1269
+      ],
+      "history_lines": 5,
+      "kind": "reference",
+      "n": 1,
+      "n_effects": [
+        1
+      ],
+      "n_widgets": 123,
+      "offered_at_anchor": [
+        null
+      ],
+      "prompt_tokens": [
+        1377
+      ],
+      "remember": 12,
+      "screen": "untitled---paint",
+      "seconds": [
+        0.843
+      ],
+      "target_in_window": [
+        true
+      ],
+      "turns": [
+        [
+          {
+            "clicked": [
+              "Eraser"
+            ],
+            "clicked_roles": [
+              "button"
+            ],
+            "effects": [
+              {
+                "kind": "click",
+                "role": "button",
+                "target": "Eraser",
+                "text": ""
+              }
+            ],
+            "history_lines": 0,
+            "i": 0,
+            "n_effects": 1,
+            "out_tokens": 28,
+            "prompt_tokens": 1269,
+            "reason": "stop",
+            "reply": "지우개는 22번 버튼입니다.",
+            "said": "지우개 골라줘",
+            "seconds": 0.591,
+            "thought_chars": 0,
+            "truncated": false,
+            "window": "",
+            "window_lines": 0
+          },
+          {
+            "clicked": [],
+            "clicked_roles": [],
+            "effects": [],
+            "history_lines": 3,
+            "i": 1,
+            "n_effects": 0,
+            "out_tokens": 14,
+            "prompt_tokens": 1359,
+            "reason": "stop",
+            "reply": "안녕하세요!",
+            "said": "안녕",
+            "seconds": 0.601,
+            "thought_chars": 0,
+            "truncated": false,
+            "window": "\n  them: 지우개 골라줘\n  you: 지우개는 22번 버튼입니다.\n  offered: to click the button \"Eraser\" — nothing was done; they have not accepted\n\n",
+            "window_lines": 3
+          },
+          {
+            "clicked": [
+              "Eraser"
+            ],
+            "clicked_roles": [
+              "button"
+            ],
+            "effects": [
+              {
+                "kind": "click",
+                "role": "button",
+                "target": "Eraser",
+                "text": ""
+              }
+            ],
+            "history_lines": 5,
+            "i": 2,
+            "n_effects": 1,
+            "out_tokens": 28,
+            "prompt_tokens": 1377,
+            "reason": "stop",
+            "reply": "지우개는 22번 버튼입니다.",
+            "said": "그거 다시 눌러줘",
+            "seconds": 0.843,
+            "thought_chars": 0,
+            "truncated": false,
+            "window": "\n  them: 지우개 골라줘\n  you: 지우개는 22번 버튼입니다.\n  offered: to click the button \"Eraser\" — nothing was done; they have not accepted\n  them: 안녕\n  you: 안녕하세요!\n\n",
+            "window_lines": 5
+          }
+        ]
+      ],
+      "verdicts": [
+        "held"
+      ],
+      "void": 0,
+      "window_lines": [
+        5
+      ]
+    },
+    {
+      "agreed": true,
+      "anchor_in_window": [
+        true
+      ],
+      "arm": "with",
+      "axis": "distance",
+      "case": "ref-copy",
+      "chose": [
+        "Copy"
+      ],
+      "clicked": [
+        [
+          "Copy"
+        ]
+      ],
+      "counted": "held",
+      "distance": 1,
+      "established": [
+        "Copy"
+      ],
+      "filler_effects": [
+        0
+      ],
+      "first_turn_tokens": [
+        373
+      ],
+      "history_lines": 5,
+      "kind": "reference",
+      "n": 1,
+      "n_effects": [
+        1
+      ],
+      "n_widgets": 21,
+      "offered_at_anchor": [
+        null
+      ],
+      "prompt_tokens": [
+        480
+      ],
+      "remember": 12,
+      "screen": "character-map",
+      "seconds": [
+        0.537
+      ],
+      "target_in_window": [
+        true
+      ],
+      "turns": [
+        [
+          {
+            "clicked": [
+              "Copy"
+            ],
+            "clicked_roles": [
+              "button"
+            ],
+            "effects": [
+              {
+                "kind": "click",
+                "role": "button",
+                "target": "Copy",
+                "text": ""
+              }
+            ],
+            "history_lines": 0,
+            "i": 0,
+            "n_effects": 1,
+            "out_tokens": 24,
+            "prompt_tokens": 373,
+            "reason": "stop",
+            "reply": "복사 버튼을 클릭합니다.",
+            "said": "복사 버튼 눌러줘",
+            "seconds": 0.517,
+            "thought_chars": 0,
+            "truncated": false,
+            "window": "",
+            "window_lines": 0
+          },
+          {
+            "clicked": [],
+            "clicked_roles": [],
+            "effects": [],
+            "history_lines": 3,
+            "i": 1,
+            "n_effects": 0,
+            "out_tokens": 14,
+            "prompt_tokens": 459,
+            "reason": "stop",
+            "reply": "안녕하세요.",
+            "said": "안녕",
+            "seconds": 0.322,
+            "thought_chars": 0,
+            "truncated": false,
+            "window": "\n  them: 복사 버튼 눌러줘\n  you: 복사 버튼을 클릭합니다.\n  offered: to click the button \"Copy\" — nothing was done; they have not accepted\n\n",
+            "window_lines": 3
+          },
+          {
+            "clicked": [
+              "Copy"
+            ],
+            "clicked_roles": [
+              "button"
+            ],
+            "effects": [
+              {
+                "kind": "click",
+                "role": "button",
+                "target": "Copy",
+                "text": ""
+              }
+            ],
+            "history_lines": 5,
+            "i": 2,
+            "n_effects": 1,
+            "out_tokens": 26,
+            "prompt_tokens": 480,
+            "reason": "stop",
+            "reply": "아까 그 버튼을 다시 클릭합니다.",
+            "said": "아까 그 버튼 다시 눌러줘",
+            "seconds": 0.537,
+            "thought_chars": 0,
+            "truncated": false,
+            "window": "\n  them: 복사 버튼 눌러줘\n  you: 복사 버튼을 클릭합니다.\n  offered: to click the button \"Copy\" — nothing was done; they have not accepted\n  them: 안녕\n  you: 안녕하세요.\n\n",
+            "window_lines": 5
+          }
+        ]
+      ],
+      "verdicts": [
+        "held"
+      ],
+      "void": 0,
+      "window_lines": [
+        5
+      ]
+    },
+    {
+      "agreed": true,
+      "anchor_in_window": [
+        true
+      ],
+      "arm": "with",
+      "axis": "distance",
+      "case": "ref-parts",
+      "chose": [
+        "Components"
+      ],
+      "clicked": [
+        [
+          "Components"
+        ]
+      ],
+      "counted": "held",
+      "distance": 1,
+      "established": [
+        "Components"
+      ],
+      "filler_effects": [
+        0
+      ],
+      "first_turn_tokens": [
+        1867
+      ],
+      "history_lines": 5,
+      "kind": "reference",
+      "n": 1,
+      "n_effects": [
+        1
+      ],
+      "n_widgets": 152,
+      "offered_at_anchor": [
+        null
+      ],
+      "prompt_tokens": [
+        1971
+      ],
+      "remember": 12,
+      "screen": "system-information",
+      "seconds": [
+        0.943
+      ],
+      "target_in_window": [
+        true
+      ],
+      "turns": [
+        [
+          {
+            "clicked": [
+              "Components"
+            ],
+            "clicked_roles": [
+              "tree item"
+            ],
+            "effects": [
+              {
+                "kind": "click",
+                "role": "tree item",
+                "target": "Components",
+                "text": ""
+              }
+            ],
+            "history_lines": 0,
+            "i": 0,
+            "n_effects": 1,
+            "out_tokens": 23,
+            "prompt_tokens": 1867,
+            "reason": "stop",
+            "reply": "Components 항목을 클릭합니다.",
+            "said": "Components 항목 눌러줘",
+            "seconds": 0.468,
+            "thought_chars": 0,
+            "truncated": false,
+            "window": "",
+            "window_lines": 0
+          },
+          {
+            "clicked": [],
+            "clicked_roles": [],
+            "effects": [],
+            "history_lines": 3,
+            "i": 1,
+            "n_effects": 0,
+            "out_tokens": 14,
+            "prompt_tokens": 1953,
+            "reason": "stop",
+            "reply": "안녕하세요.",
+            "said": "안녕",
+            "seconds": 0.827,
+            "thought_chars": 0,
+            "truncated": false,
+            "window": "\n  them: Components 항목 눌러줘\n  you: Components 항목을 클릭합니다.\n  offered: to click the tree item \"Components\" — nothing was done; they have not accepted\n\n",
+            "window_lines": 3
+          },
+          {
+            "clicked": [
+              "Components"
+            ],
+            "clicked_roles": [
+              "tree item"
+            ],
+            "effects": [
+              {
+                "kind": "click",
+                "role": "tree item",
+                "target": "Components",
+                "text": ""
+              }
+            ],
+            "history_lines": 5,
+            "i": 2,
+            "n_effects": 1,
+            "out_tokens": 23,
+            "prompt_tokens": 1971,
+            "reason": "stop",
+            "reply": "Components 항목을 클릭합니다.",
+            "said": "그거 다시 눌러줘",
+            "seconds": 0.943,
+            "thought_chars": 0,
+            "truncated": false,
+            "window": "\n  them: Components 항목 눌러줘\n  you: Components 항목을 클릭합니다.\n  offered: to click the tree item \"Components\" — nothing was done; they have not accepted\n  them: 안녕\n  you: 안녕하세요.\n\n",
+            "window_lines": 5
+          }
+        ]
+      ],
+      "verdicts": [
+        "held"
+      ],
+      "void": 0,
+      "window_lines": [
+        5
+      ]
+    }
+  ],
+  "screens": {
+    "character-map": 21,
+    "chrome-remote-desktop---qvb-flfm-dev1": 12,
+    "system-information": 152,
+    "untitled---paint": 123
+  },
+  "screens_print": "5020f7",
+  "seconds": 7.9,
+  "shipped_remember": 12,
+  "think": "off",
+  "turned_down": false
+}

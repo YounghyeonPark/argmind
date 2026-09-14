@@ -261,11 +261,11 @@ fn the_history_a_turn_writes_is_the_one_the_run_recorded() {
 /// This is `recent()`'s turn-boundary cut, `describe()`'s wording and the offer bookkeeping,
 /// checked end to end against what a real run put in a real prompt.
 ///
-/// It can only be done on **one** of the ten files. `effects` per turn arrived on 2026-09-13; the
-/// nine older results store the click *targets* and not the roles, so their offer lines are not
-/// reconstructible and nothing here pretends otherwise. That file is also the only one recorded
-/// under the shipped `loop.py` — before `3ef5769` an offer was written in the past tense, so an
-/// older window would differ for a second reason as well.
+/// It can only be done on the results that **record their effects**. `effects` per turn arrived on
+/// 2026-09-13; every result older than that stores the click *targets* and not the roles, so their
+/// offer lines are not reconstructible and nothing here pretends otherwise. Those files also
+/// predate `3ef5769`, where an offer stopped being written in the past tense, so an older window
+/// would differ for a second reason as well.
 #[test]
 fn the_window_the_model_saw_is_rebuilt_from_the_turns() {
     let mut files = 0;
@@ -322,9 +322,10 @@ fn the_window_the_model_saw_is_rebuilt_from_the_turns() {
             }
         }
     }
-    assert_eq!(files, 1, "exactly one committed result records per-turn effects; found {files}");
+    assert!(files >= 1, "no committed result records per-turn effects");
     assert!(checked >= 1800, "only {checked} windows rebuilt");
-    println!("  {checked} windows rebuilt byte for byte from the turns of one run");
+    println!("  {checked} windows rebuilt byte for byte, over {files} of {} results",
+             runs().len());
 }
 
 /// The floor — the same probe with **no conversation at all**, every test's null.
