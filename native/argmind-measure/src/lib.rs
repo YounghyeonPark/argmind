@@ -11,6 +11,8 @@
 //! under a name nobody can compare with anything, which is the failure this project has already
 //! had five times.
 
+pub mod choosing;
+
 use std::collections::BTreeMap;
 use std::fs;
 use std::path::{Path, PathBuf};
