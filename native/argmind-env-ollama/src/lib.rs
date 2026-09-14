@@ -76,6 +76,19 @@ impl Local {
     /// `num_predict`, same `num_ctx`, same temperature. **Only the reading stops early**, so the
     /// tokens the model produces up to the stop are the tokens it would have produced anyway.
     pub fn ask(&self, prompt: &str) -> std::io::Result<Reply> {
+        self.ask_into(prompt, &mut |_| {})
+    }
+
+    /// The same call, with **every stream line handed to `keep` as the reader takes it.**
+    ///
+    /// One read loop and not two: a recorder written as a second copy of this loop would agree with
+    /// it until the day it did not, and the disagreement would be invisible — the corpus would
+    /// simply describe a reader nobody ships. `keep` sees exactly the lines the reader saw, in
+    /// order, and stops where the reader stopped, so a stream recorded with the stops **off** is
+    /// the whole stream and one recorded with them on is the prefix the stops left.
+    ///
+    /// It changes nothing about the request: same body, same `num_predict`, same `num_ctx`.
+    pub fn ask_into(&self, prompt: &str, keep: &mut dyn FnMut(&str)) -> std::io::Result<Reply> {
         let body = self.body(prompt);
         let (host, port) = split_host(&self.host);
         let stream = TcpStream::connect((host.as_str(), port))?;
@@ -91,6 +104,7 @@ impl Local {
         let mut reading = Reading::new(self.stop_when_answered, self.stop_when_looping);
         for line in Lines::new(&mut r, chunked) {
             let line = line?;
+            keep(&line);
             if line.trim().is_empty() {
                 reading.blank();
                 continue;
