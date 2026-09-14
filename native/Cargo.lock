@@ -15,9 +15,14 @@ name = "argmind-env-windows"
 version = "0.0.1"
 dependencies = [
  "argmind-core",
+ "argmind-voice",
  "serde_json",
  "windows",
 ]
+
+[[package]]
+name = "argmind-voice"
+version = "0.0.1"
 
 [[package]]
 name = "block-buffer"

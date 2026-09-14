@@ -13,6 +13,9 @@
 //! `SendInput` is not, and this project has a standing rule against clicking anything a harness did
 //! not launch itself.
 
+pub mod speaker;
+pub use speaker::SapiSpeaker;
+
 use argmind_core::contract::{Eyes, Widget};
 use windows::Win32::Foundation::HWND;
 use windows::Win32::System::Com::{
