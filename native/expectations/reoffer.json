@@ -1,0 +1,1268 @@
+{
+ "cases": [
+  {
+   "kind": "memory",
+   "label": "cm copy / 방금 뭘 하려고 했어",
+   "screen": "character-map",
+   "ask": "복사 눌러줘",
+   "then": "방금 뭘 하려고 했어?",
+   "want": null,
+   "why": "the case recorded on 2026-09-10, verbatim. Everything else here is it, enlarged."
+  },
+  {
+   "kind": "memory",
+   "label": "cm font / 아까 뭐 눌렀어",
+   "screen": "character-map",
+   "ask": "글꼴 바꾸는 거 눌러줘",
+   "then": "아까 뭐 눌렀어?",
+   "want": null,
+   "why": "the offer is a combo box rather than a button, so the offered line names a role the model never typed."
+  },
+  {
+   "kind": "memory",
+   "label": "cm help / 뭐 하려던 거야",
+   "screen": "character-map",
+   "ask": "도움말 열어줘",
+   "then": "뭐 하려던 거야?",
+   "want": null,
+   "why": "a link, and the shortest of the five phrasings."
+  },
+  {
+   "kind": "memory",
+   "label": "cm close / 방금 뭐 하려고 했지",
+   "screen": "character-map",
+   "ask": "이 창 닫아줘",
+   "then": "방금 뭐 하려고 했지?",
+   "want": null,
+   "why": "the one offer whose repetition would cost something real. If the tense matters anywhere it should matter here."
+  },
+  {
+   "kind": "memory",
+   "label": "cm select / 너 방금 뭐 했어",
+   "screen": "character-map",
+   "ask": "문자 선택 버튼 눌러줘",
+   "then": "너 방금 뭐 했어?",
+   "want": null,
+   "why": "phrased as what it DID rather than what it meant to do — the question the false past tense answered truthfully."
+  },
+  {
+   "kind": "memory",
+   "label": "paint eraser / 방금 뭘 하려고 했어",
+   "screen": "untitled---paint",
+   "ask": "지우개 선택해줘",
+   "then": "방금 뭘 하려고 했어?",
+   "want": null,
+   "why": "the same wording as case one on the 123-widget screen: is the effect the wording or the size of the list?"
+  },
+  {
+   "kind": "memory",
+   "label": "paint red / 아까 뭐 눌렀어",
+   "screen": "untitled---paint",
+   "ask": "빨간색 골라줘",
+   "then": "아까 뭐 눌렀어?",
+   "want": null,
+   "why": "a list item among twenty near-identical ones."
+  },
+  {
+   "kind": "memory",
+   "label": "paint pencil / 뭐 하려던 거야",
+   "screen": "untitled---paint",
+   "ask": "연필 도구 눌러줘",
+   "then": "뭐 하려던 거야?",
+   "want": null,
+   "why": "a tool, and the ask names the role in Korean where the widget names it in English."
+  },
+  {
+   "kind": "memory",
+   "label": "paint undo / 방금 뭐 하려고 했지",
+   "screen": "untitled---paint",
+   "ask": "실행 취소 눌러줘",
+   "then": "방금 뭐 하려고 했지?",
+   "want": null,
+   "why": "undo is itself about the past, so both turns point backwards."
+  },
+  {
+   "kind": "memory",
+   "label": "paint crop / 너 방금 뭐 했어",
+   "screen": "untitled---paint",
+   "ask": "자르기 눌러줘",
+   "then": "너 방금 뭐 했어?",
+   "want": null,
+   "why": "the fifth phrasing on the second screen."
+  },
+  {
+   "kind": "memory",
+   "lang": "en",
+   "label": "cm copy / EN what were you about to do",
+   "screen": "character-map",
+   "ask": "Press the copy button",
+   "then": "What were you about to do?",
+   "want": null,
+   "why": "English in and out. The new line is English prose; a result that only held in Korean would be a different finding and these two cases are the only ones that can show it."
+  },
+  {
+   "kind": "memory",
+   "lang": "en",
+   "label": "paint eraser / EN what did you just try",
+   "screen": "untitled---paint",
+   "ask": "Press the eraser tool",
+   "then": "What did you just try to do?",
+   "want": null,
+   "why": "the second English case, on the other screen."
+  },
+  {
+   "kind": "memory",
+   "label": "si find / 방금 뭘 하려고 했어",
+   "screen": "system-information",
+   "ask": "찾기 버튼 눌러줘",
+   "then": "방금 뭘 하려고 했어?",
+   "want": null,
+   "why": "case one's wording on the longest prompt captured — 152 widget lines between the offer and the question."
+  },
+  {
+   "kind": "memory",
+   "label": "si hardware / 아까 뭐 눌렀어",
+   "screen": "system-information",
+   "ask": "하드웨어 리소스 눌러줘",
+   "then": "아까 뭐 눌렀어?",
+   "want": null,
+   "why": "a tree item — a role neither of the first two screens offers, so the offered line names a kind of thing the set had never carried."
+  },
+  {
+   "kind": "memory",
+   "label": "si minimize / 뭐 하려던 거야",
+   "screen": "system-information",
+   "ask": "이 창 최소화해줘",
+   "then": "뭐 하려던 거야?",
+   "want": null,
+   "why": "an offer whose repetition costs something visible, on the long screen."
+  },
+  {
+   "kind": "memory",
+   "label": "si edit menu / 방금 뭐 하려고 했지",
+   "screen": "system-information",
+   "ask": "편집 메뉴 눌러줘",
+   "then": "방금 뭐 하려고 했지?",
+   "want": null,
+   "why": "a menu item on a screen that also lists a menu bar and a menu item both called 'System' — the name is not the key here either."
+  },
+  {
+   "kind": "memory",
+   "label": "si summary / 너 방금 뭐 했어",
+   "screen": "system-information",
+   "ask": "시스템 요약 눌러줘",
+   "then": "너 방금 뭐 했어?",
+   "want": null,
+   "why": "'System Summary' is three widgets — a tree item, a list and a header — so the offered line names one of three things wearing one name."
+  },
+  {
+   "kind": "memory",
+   "lang": "en",
+   "label": "si find / EN what were you about to do",
+   "screen": "system-information",
+   "ask": "Press the Find button",
+   "then": "What were you about to do?",
+   "want": null,
+   "why": "the English pair of case one, on the longest prompt."
+  },
+  {
+   "kind": "memory",
+   "label": "crd close / 방금 뭘 하려고 했어",
+   "screen": "chrome-remote-desktop---qvb-flfm-dev1",
+   "ask": "닫기 눌러줘",
+   "then": "방금 뭘 하려고 했어?",
+   "want": null,
+   "why": "case one's wording on the shortest prompt captured — 12 widget lines. With the 152 of system-information it brackets the two screens the old set had."
+  },
+  {
+   "kind": "memory",
+   "label": "crd extensions / 아까 뭐 눌렀어",
+   "screen": "chrome-remote-desktop---qvb-flfm-dev1",
+   "ask": "확장 프로그램 눌러줘",
+   "then": "아까 뭐 눌렀어?",
+   "want": null,
+   "why": "**the widget's own name is Korean**, so the offered line quotes Korean inside English prose. No other screen here can produce that, and `narrated` can finally be true of a Korean reply."
+  },
+  {
+   "kind": "memory",
+   "label": "crd minimize / 뭐 하려던 거야",
+   "screen": "chrome-remote-desktop---qvb-flfm-dev1",
+   "ask": "최소화 눌러줘",
+   "then": "뭐 하려던 거야?",
+   "want": null,
+   "why": "the shortest phrasing on the shortest screen — the least of everything, and the case most likely to work if anything does."
+  },
+  {
+   "kind": "memory",
+   "label": "crd password / 방금 뭐 하려고 했지",
+   "screen": "chrome-remote-desktop---qvb-flfm-dev1",
+   "ask": "비밀번호 저장 눌러줘",
+   "then": "방금 뭐 하려고 했지?",
+   "want": null,
+   "why": "saving a password is the one offer here a person would mind being repeated."
+  },
+  {
+   "kind": "memory",
+   "label": "crd settings / 너 방금 뭐 했어",
+   "screen": "chrome-remote-desktop---qvb-flfm-dev1",
+   "ask": "원격 데스크톱 설정 열어줘",
+   "then": "너 방금 뭐 했어?",
+   "want": null,
+   "why": "the longest widget name in the fixtures — 'Chrome Remote Desktop 맞춤설정 및 제어', mixed script, quoted whole into the offered line."
+  },
+  {
+   "kind": "memory",
+   "lang": "en",
+   "label": "crd extensions / EN what did you just try",
+   "screen": "chrome-remote-desktop---qvb-flfm-dev1",
+   "ask": "Press the extensions button",
+   "then": "What did you just try to do?",
+   "want": null,
+   "why": "English in, and the name it has to hand back is Korean."
+  },
+  {
+   "kind": "accept",
+   "form": "phrase",
+   "label": "cm copy / 응 그렇게 해줘",
+   "screen": "character-map",
+   "ask": "복사 눌러줘",
+   "then": "응 그렇게 해줘",
+   "want": null,
+   "why": "'they have not accepted' is now in the prompt and they have just accepted. A model that reads that line as 'do not touch this' fails here — this is the control the treatment itself threatens. ACTED at f842432 in both tense arms."
+  },
+  {
+   "kind": "accept",
+   "form": "phrase",
+   "label": "paint eraser / 어 눌러줘",
+   "screen": "untitled---paint",
+   "ask": "지우개 선택해줘",
+   "then": "어 눌러줘",
+   "want": null,
+   "why": "the same, on the larger screen. IGNORED 3 of 3 in both arms — one of the two failures this enlargement exists to make scoreable."
+  },
+  {
+   "kind": "accept",
+   "form": "phrase",
+   "label": "cm font / 네 해주세요",
+   "screen": "character-map",
+   "ask": "글꼴 바꾸는 거 눌러줘",
+   "then": "네 해주세요",
+   "want": null,
+   "why": "the formal register, in case acceptance is only recognised casually. ACTED."
+  },
+  {
+   "kind": "accept",
+   "form": "phrase",
+   "label": "paint red / 그래 진행해",
+   "screen": "untitled---paint",
+   "ask": "빨간색 골라줘",
+   "then": "그래 진행해",
+   "want": null,
+   "why": "'go ahead' rather than 'yes'. IGNORED as the worst of 3 (acted once) — the second failure, and the one case in the group that disagreed with itself."
+  },
+  {
+   "kind": "accept",
+   "form": "bare",
+   "label": "cm copy / 응",
+   "screen": "character-map",
+   "ask": "복사 눌러줘",
+   "then": "응",
+   "want": null,
+   "why": "the shortest acceptance in the language, on the case that already works with a phrase. If this fails and the phrase passes, the fix is about parsing, not memory."
+  },
+  {
+   "kind": "accept",
+   "form": "bare",
+   "label": "paint eraser / 어",
+   "screen": "untitled---paint",
+   "ask": "지우개 선택해줘",
+   "then": "어",
+   "want": null,
+   "why": "the same pairing on the case that already fails with a phrase."
+  },
+  {
+   "kind": "accept",
+   "form": "bare",
+   "label": "cm help / ㅇㅇ",
+   "screen": "character-map",
+   "ask": "도움말 열어줘",
+   "then": "ㅇㅇ",
+   "want": null,
+   "why": "typed rather than spoken — two consonants, no vowel. A tokeniser's worst case and what people actually type."
+  },
+  {
+   "kind": "accept",
+   "form": "bare",
+   "label": "paint pencil / 그래",
+   "screen": "untitled---paint",
+   "ask": "연필 도구 눌러줘",
+   "then": "그래",
+   "want": null,
+   "why": "'sure', which is also an ordinary conversational filler — the acceptance most easily read as small talk."
+  },
+  {
+   "kind": "accept",
+   "form": "bare",
+   "lang": "en",
+   "label": "cm copy / EN yes",
+   "screen": "character-map",
+   "ask": "Press the copy button",
+   "then": "yes",
+   "want": null,
+   "why": "English in and out. The offered line is English prose; a defect that only exists in Korean is a different finding and these four English cases are what can show it."
+  },
+  {
+   "kind": "accept",
+   "form": "bare",
+   "lang": "en",
+   "label": "paint eraser / EN go ahead",
+   "screen": "untitled---paint",
+   "ask": "Press the eraser tool",
+   "then": "go ahead",
+   "want": null,
+   "why": "the second English bare case, on the other screen."
+  },
+  {
+   "kind": "accept",
+   "form": "phrase",
+   "label": "cm close / 응 그거 해줘",
+   "screen": "character-map",
+   "ask": "이 창 닫아줘",
+   "then": "응 그거 해줘",
+   "want": null,
+   "why": "the one acceptance whose repetition costs something real. If a fix makes the agent act on anything after an offer, this is where it hurts."
+  },
+  {
+   "kind": "accept",
+   "form": "phrase",
+   "label": "paint crop / 네 그렇게 해주세요",
+   "screen": "untitled---paint",
+   "ask": "자르기 눌러줘",
+   "then": "네 그렇게 해주세요",
+   "want": null,
+   "why": "formal register on the larger screen; the pair of case 3."
+  },
+  {
+   "kind": "accept",
+   "form": "phrase",
+   "label": "cm select / 좋아 그렇게 하자",
+   "screen": "character-map",
+   "ask": "문자 선택 버튼 눌러줘",
+   "then": "좋아 그렇게 하자",
+   "want": null,
+   "why": "'let's do that' — first person plural, no imperative at all."
+  },
+  {
+   "kind": "accept",
+   "form": "phrase",
+   "label": "paint undo / 어 그거로 해줘",
+   "screen": "untitled---paint",
+   "ask": "실행 취소 눌러줘",
+   "then": "어 그거로 해줘",
+   "want": null,
+   "why": "'that one' — a pronoun pointing at the offer rather than a name."
+  },
+  {
+   "kind": "accept",
+   "form": "phrase",
+   "lang": "en",
+   "label": "cm close / EN yes, please do that",
+   "screen": "character-map",
+   "ask": "Close this window",
+   "then": "yes, please do that",
+   "want": null,
+   "why": "the English phrase against the English bare 'yes' on case 9."
+  },
+  {
+   "kind": "accept",
+   "form": "phrase",
+   "lang": "en",
+   "label": "paint crop / EN okay, do it",
+   "screen": "untitled---paint",
+   "ask": "Press the crop button",
+   "then": "okay, do it",
+   "want": null,
+   "why": "the fourth English case, on the other screen."
+  },
+  {
+   "kind": "accept",
+   "form": "phrase",
+   "label": "cm advanced / 응 그렇게 부탁해",
+   "screen": "character-map",
+   "ask": "고급 보기 체크해줘",
+   "then": "응 그렇게 부탁해",
+   "want": null,
+   "why": "a check box, the one role on this screen no acceptance case had; and the wording is the one shared by all four screens."
+  },
+  {
+   "kind": "accept",
+   "form": "bare",
+   "label": "cm minimize / 네",
+   "screen": "character-map",
+   "ask": "최소화해줘",
+   "then": "네",
+   "want": null,
+   "why": "the bare polite yes — one syllable, and the register the phrased '네 해주세요' already passes in. If '네' fails where '네 해주세요' passes, length is the variable."
+  },
+  {
+   "kind": "accept",
+   "form": "phrase",
+   "label": "paint magnifier / 응 그렇게 부탁해",
+   "screen": "untitled---paint",
+   "ask": "돋보기 눌러줘",
+   "then": "응 그렇게 부탁해",
+   "want": null,
+   "why": "the same wording as the Character Map case above, 102 widget lines further down the prompt."
+  },
+  {
+   "kind": "accept",
+   "form": "bare",
+   "label": "paint save / 네",
+   "screen": "untitled---paint",
+   "ask": "저장 눌러줘",
+   "then": "네",
+   "want": null,
+   "why": "the bare '네' on the long screen, and Save is an app bar button — a role the group carried nowhere else."
+  },
+  {
+   "kind": "accept",
+   "form": "phrase",
+   "label": "si find / 응 그렇게 해줘",
+   "screen": "system-information",
+   "ask": "찾기 버튼 눌러줘",
+   "then": "응 그렇게 해줘",
+   "want": null,
+   "why": "the wording that passes on Character Map, on the longest prompt. If it fails here and passes there, distance is doing the work."
+  },
+  {
+   "kind": "accept",
+   "form": "phrase",
+   "label": "si hardware / 어 눌러줘",
+   "screen": "system-information",
+   "ask": "하드웨어 리소스 눌러줘",
+   "then": "어 눌러줘",
+   "want": null,
+   "why": "the wording that fails on Paint 3 of 3 — the case that literally asked 'which button?'. On a third screen it is no longer one screen's."
+  },
+  {
+   "kind": "accept",
+   "form": "phrase",
+   "label": "si minimize / 네 해주세요",
+   "screen": "system-information",
+   "ask": "이 창 최소화해줘",
+   "then": "네 해주세요",
+   "want": null,
+   "why": "the formal register at 152 lines."
+  },
+  {
+   "kind": "accept",
+   "form": "phrase",
+   "label": "si edit menu / 그래 진행해",
+   "screen": "system-information",
+   "ask": "편집 메뉴 눌러줘",
+   "then": "그래 진행해",
+   "want": null,
+   "why": "'go ahead' rather than 'yes', on a menu item."
+  },
+  {
+   "kind": "accept",
+   "form": "phrase",
+   "label": "si summary / 응 그렇게 부탁해",
+   "screen": "system-information",
+   "ask": "시스템 요약 눌러줘",
+   "then": "응 그렇게 부탁해",
+   "want": null,
+   "why": "the offer names one of three widgets called 'System Summary', so accepting it has to re-pick the same role as well as the same name."
+  },
+  {
+   "kind": "accept",
+   "form": "phrase",
+   "lang": "en",
+   "label": "si find / EN okay, do it",
+   "screen": "system-information",
+   "ask": "Press the Find button",
+   "then": "okay, do it",
+   "want": null,
+   "why": "English phrase, longest prompt. Pairs with the Paint case of the same words so the English row is two wordings on four screens, not four."
+  },
+  {
+   "kind": "accept",
+   "form": "bare",
+   "label": "si find / 응",
+   "screen": "system-information",
+   "ask": "찾기 버튼 눌러줘",
+   "then": "응",
+   "want": null,
+   "why": "the shortest acceptance in the language on the longest prompt — the far corner of both axes at once, and the cell most likely to fail."
+  },
+  {
+   "kind": "accept",
+   "form": "bare",
+   "label": "si components / 그래",
+   "screen": "system-information",
+   "ask": "구성 요소 눌러줘",
+   "then": "그래",
+   "want": null,
+   "why": "'sure', which is also ordinary small talk, at 152 lines' distance from the offer."
+  },
+  {
+   "kind": "accept",
+   "form": "bare",
+   "label": "si software env / ㅇㅇ",
+   "screen": "system-information",
+   "ask": "소프트웨어 환경 눌러줘",
+   "then": "ㅇㅇ",
+   "want": null,
+   "why": "two consonants and no vowel — the typed yes. On Character Map it came back with SYSTEM's own fallback sentence."
+  },
+  {
+   "kind": "accept",
+   "form": "bare",
+   "lang": "en",
+   "label": "si minimize / EN yes",
+   "screen": "system-information",
+   "ask": "Minimize this window",
+   "then": "yes",
+   "want": null,
+   "why": "the bare English yes on the long screen."
+  },
+  {
+   "kind": "accept",
+   "form": "phrase",
+   "label": "crd close / 응 그렇게 해줘",
+   "screen": "chrome-remote-desktop---qvb-flfm-dev1",
+   "ask": "닫기 눌러줘",
+   "then": "응 그렇게 해줘",
+   "want": null,
+   "why": "the Character Map wording on the shortest prompt there is. If acceptance is a distance effect this is the cell that should pass first."
+  },
+  {
+   "kind": "accept",
+   "form": "phrase",
+   "label": "crd extensions / 어 눌러줘",
+   "screen": "chrome-remote-desktop---qvb-flfm-dev1",
+   "ask": "확장 프로그램 눌러줘",
+   "then": "어 눌러줘",
+   "want": null,
+   "why": "the Paint wording at 12 lines instead of 123, and the offered name is Korean. Failing here would say the wording, not the distance."
+  },
+  {
+   "kind": "accept",
+   "form": "phrase",
+   "label": "crd minimize / 네 해주세요",
+   "screen": "chrome-remote-desktop---qvb-flfm-dev1",
+   "ask": "최소화 눌러줘",
+   "then": "네 해주세요",
+   "want": null,
+   "why": "the formal register on the short screen."
+  },
+  {
+   "kind": "accept",
+   "form": "phrase",
+   "label": "crd password / 그래 진행해",
+   "screen": "chrome-remote-desktop---qvb-flfm-dev1",
+   "ask": "비밀번호 저장 눌러줘",
+   "then": "그래 진행해",
+   "want": null,
+   "why": "the acceptance on this screen that would cost something if it were dropped and the person had to say it twice."
+  },
+  {
+   "kind": "accept",
+   "form": "phrase",
+   "label": "crd settings / 응 그렇게 부탁해",
+   "screen": "chrome-remote-desktop---qvb-flfm-dev1",
+   "ask": "원격 데스크톱 설정 열어줘",
+   "then": "응 그렇게 부탁해",
+   "want": null,
+   "why": "the four-screen wording again, on the longest widget name in the fixtures."
+  },
+  {
+   "kind": "accept",
+   "form": "phrase",
+   "lang": "en",
+   "label": "crd close / EN yes, please do that",
+   "screen": "chrome-remote-desktop---qvb-flfm-dev1",
+   "ask": "Close this window",
+   "then": "yes, please do that",
+   "want": null,
+   "why": "English in, a Korean widget name offered back, and an English acceptance of it."
+  },
+  {
+   "kind": "accept",
+   "form": "bare",
+   "label": "crd close / 응",
+   "screen": "chrome-remote-desktop---qvb-flfm-dev1",
+   "ask": "닫기 눌러줘",
+   "then": "응",
+   "want": null,
+   "why": "the near corner against `si find / 응`'s far one: same two turns, same two words, 140 widget lines of difference."
+  },
+  {
+   "kind": "accept",
+   "form": "bare",
+   "label": "crd restore / 그래",
+   "screen": "chrome-remote-desktop---qvb-flfm-dev1",
+   "ask": "창 복구해줘",
+   "then": "그래",
+   "want": null,
+   "why": "'sure' on the short screen; the ask names the action where the widget names the state ('복구')."
+  },
+  {
+   "kind": "accept",
+   "form": "bare",
+   "label": "crd extensions / ㅇㅇ",
+   "screen": "chrome-remote-desktop---qvb-flfm-dev1",
+   "ask": "확장 프로그램 눌러줘",
+   "then": "ㅇㅇ",
+   "want": null,
+   "why": "the typed yes on the short screen."
+  },
+  {
+   "kind": "accept",
+   "form": "bare",
+   "lang": "en",
+   "label": "crd extensions / EN go ahead",
+   "screen": "chrome-remote-desktop---qvb-flfm-dev1",
+   "ask": "Press the extensions button",
+   "then": "go ahead",
+   "want": null,
+   "why": "the fourth English bare case; the pair of Paint's, on the other end of the axis."
+  },
+  {
+   "kind": "faraccept",
+   "label": "cm copy far / 응 해줘",
+   "screen": "character-map",
+   "ask": "복사 눌러줘",
+   "filler": [
+    "오늘 날씨 어때?",
+    "커피 한 잔 마시고 싶다",
+    "너 이름이 뭐야?",
+    "수고했어"
+   ],
+   "then": "응 해줘",
+   "want": null,
+   "why": "the case that accepts correctly at distance 1: if it fails here, distance is the variable and nothing about the wording is."
+  },
+  {
+   "kind": "faraccept",
+   "label": "paint eraser far / 응 해줘",
+   "screen": "untitled---paint",
+   "ask": "지우개 선택해줘",
+   "filler": [
+    "오늘 날씨 어때?",
+    "커피 한 잔 마시고 싶다",
+    "너 이름이 뭐야?",
+    "수고했어"
+   ],
+   "then": "응 해줘",
+   "want": null,
+   "why": "the case that fails at distance 1. Failing here as well is the null result."
+  },
+  {
+   "kind": "faraccept",
+   "label": "cm font far / 그래 해줘",
+   "screen": "character-map",
+   "ask": "글꼴 바꾸는 거 눌러줘",
+   "filler": [
+    "오늘 날씨 어때?",
+    "커피 한 잔 마시고 싶다",
+    "너 이름이 뭐야?",
+    "수고했어"
+   ],
+   "then": "그래 해줘",
+   "want": null,
+   "why": "a combo box rather than a button, four turns back."
+  },
+  {
+   "kind": "faraccept",
+   "lang": "mixed",
+   "label": "paint red far / EN yes go ahead",
+   "screen": "untitled---paint",
+   "ask": "빨간색 골라줘",
+   "filler": [
+    "오늘 날씨 어때?",
+    "커피 한 잔 마시고 싶다",
+    "너 이름이 뭐야?",
+    "수고했어"
+   ],
+   "then": "yes go ahead",
+   "want": null,
+   "why": "English acceptance of a Korean ask, at distance. Two things at once, deliberately: this one is a probe, not a control."
+  },
+  {
+   "kind": "faraccept",
+   "lang": "mixed",
+   "label": "cm close far / EN yes go ahead",
+   "screen": "character-map",
+   "ask": "이 창 닫아줘",
+   "filler": [
+    "오늘 날씨 어때?",
+    "커피 한 잔 마시고 싶다",
+    "너 이름이 뭐야?",
+    "수고했어"
+   ],
+   "then": "yes go ahead",
+   "want": null,
+   "why": "the mixed case Character Map lacked, so all four screens now carry one."
+  },
+  {
+   "kind": "faraccept",
+   "label": "paint crop far / 그래 해줘",
+   "screen": "untitled---paint",
+   "ask": "자르기 눌러줘",
+   "filler": [
+    "오늘 날씨 어때?",
+    "커피 한 잔 마시고 싶다",
+    "너 이름이 뭐야?",
+    "수고했어"
+   ],
+   "then": "그래 해줘",
+   "want": null,
+   "why": "the second Korean far case on Paint, on an offer that accepts correctly at distance 1."
+  },
+  {
+   "kind": "faraccept",
+   "label": "si find far / 응 해줘",
+   "screen": "system-information",
+   "ask": "찾기 버튼 눌러줘",
+   "filler": [
+    "오늘 날씨 어때?",
+    "커피 한 잔 마시고 싶다",
+    "너 이름이 뭐야?",
+    "수고했어"
+   ],
+   "then": "응 해줘",
+   "want": null,
+   "why": "distance 5 on the longest prompt — conversational distance and prompt distance at their maxima together."
+  },
+  {
+   "kind": "faraccept",
+   "label": "si minimize far / 그래 해줘",
+   "screen": "system-information",
+   "ask": "이 창 최소화해줘",
+   "filler": [
+    "오늘 날씨 어때?",
+    "커피 한 잔 마시고 싶다",
+    "너 이름이 뭐야?",
+    "수고했어"
+   ],
+   "then": "그래 해줘",
+   "want": null,
+   "why": "the second Korean far case on the long screen."
+  },
+  {
+   "kind": "faraccept",
+   "lang": "mixed",
+   "label": "si hardware far / EN yes go ahead",
+   "screen": "system-information",
+   "ask": "하드웨어 리소스 눌러줘",
+   "filler": [
+    "오늘 날씨 어때?",
+    "커피 한 잔 마시고 싶다",
+    "너 이름이 뭐야?",
+    "수고했어"
+   ],
+   "then": "yes go ahead",
+   "want": null,
+   "why": "English acceptance of a Korean ask, five turns back, on a tree item."
+  },
+  {
+   "kind": "faraccept",
+   "label": "crd close far / 응 해줘",
+   "screen": "chrome-remote-desktop---qvb-flfm-dev1",
+   "ask": "닫기 눌러줘",
+   "filler": [
+    "오늘 날씨 어때?",
+    "커피 한 잔 마시고 싶다",
+    "너 이름이 뭐야?",
+    "수고했어"
+   ],
+   "then": "응 해줘",
+   "want": null,
+   "why": "distance 5 on the shortest prompt: if the offer is still reachable anywhere, here."
+  },
+  {
+   "kind": "faraccept",
+   "label": "crd extensions far / 그래 해줘",
+   "screen": "chrome-remote-desktop---qvb-flfm-dev1",
+   "ask": "확장 프로그램 눌러줘",
+   "filler": [
+    "오늘 날씨 어때?",
+    "커피 한 잔 마시고 싶다",
+    "너 이름이 뭐야?",
+    "수고했어"
+   ],
+   "then": "그래 해줘",
+   "want": null,
+   "why": "the second Korean far case on the short screen."
+  },
+  {
+   "kind": "faraccept",
+   "lang": "mixed",
+   "label": "crd password far / EN yes go ahead",
+   "screen": "chrome-remote-desktop---qvb-flfm-dev1",
+   "ask": "비밀번호 저장 눌러줘",
+   "filler": [
+    "오늘 날씨 어때?",
+    "커피 한 잔 마시고 싶다",
+    "너 이름이 뭐야?",
+    "수고했어"
+   ],
+   "then": "yes go ahead",
+   "want": null,
+   "why": "the mixed far case on the fourth screen; the offered name is Korean and the acceptance is not."
+  },
+  {
+   "kind": "restate",
+   "label": "cm / 글자 복사하고 싶어 -> 복사 눌러줘",
+   "screen": "character-map",
+   "ask": "글자 복사하고 싶어",
+   "then": "복사 눌러줘",
+   "want": [
+    "Copy",
+    "button"
+   ],
+   "why": "a vague want, then the target by name. The ask is deliberately not the restatement."
+  },
+  {
+   "kind": "restate",
+   "label": "paint / 지우고 싶어 -> 지우개 눌러줘",
+   "screen": "untitled---paint",
+   "ask": "지우고 싶어",
+   "then": "지우개 눌러줘",
+   "want": [
+    "Eraser",
+    "button"
+   ],
+   "why": "the same shape on the 123-widget screen."
+  },
+  {
+   "kind": "restate",
+   "label": "cm / 이 창 닫고 싶어 -> 닫기 눌러줘",
+   "screen": "character-map",
+   "ask": "이 창 닫고 싶어",
+   "then": "닫기 눌러줘",
+   "want": [
+    "Close",
+    "button"
+   ],
+   "why": "the example in the request that pre-registered this group, word for word."
+  },
+  {
+   "kind": "restate",
+   "label": "paint / 자르고 싶어 -> 자르기 눌러줘",
+   "screen": "untitled---paint",
+   "ask": "자르고 싶어",
+   "then": "자르기 눌러줘",
+   "want": [
+    "Crop",
+    "button"
+   ],
+   "why": "the fourth, and the Korean name is a verb where the widget's is a noun."
+  },
+  {
+   "kind": "restate",
+   "label": "si / 하드웨어 쪽 보고 싶어 -> 하드웨어 리소스 눌러줘",
+   "screen": "system-information",
+   "ask": "하드웨어 쪽 보고 싶어",
+   "then": "하드웨어 리소스 눌러줘",
+   "want": [
+    "Hardware Resources",
+    "tree item"
+   ],
+   "why": "the first named target on a tree item, and on the longest prompt."
+  },
+  {
+   "kind": "restate",
+   "label": "si / 시스템 정보 보고 싶어 -> 시스템 요약 눌러줘",
+   "screen": "system-information",
+   "ask": "시스템 정보 찾아보고 싶어",
+   "then": "시스템 요약 눌러줘",
+   "want": [
+    "System Summary",
+    "tree item"
+   ],
+   "why": "**three widgets are called 'System Summary'** — tree item, list, header. The pair is the key and the label is not, which is the Font : defect on a third screen."
+  },
+  {
+   "kind": "restate",
+   "label": "crd / 이 창 닫고 싶어 -> 닫기 눌러줘",
+   "screen": "chrome-remote-desktop---qvb-flfm-dev1",
+   "ask": "이 창 닫고 싶어",
+   "then": "닫기 눌러줘",
+   "want": [
+    "닫기",
+    "button"
+   ],
+   "why": "the Character Map case word for word, on a screen whose Close button is named in Korean — so the restatement and the widget name are the same string."
+  },
+  {
+   "kind": "restate",
+   "label": "crd / 확장 프로그램 보고 싶어 -> 확장 프로그램 눌러줘",
+   "screen": "chrome-remote-desktop---qvb-flfm-dev1",
+   "ask": "확장 프로그램 보고 싶어",
+   "then": "확장 프로그램 눌러줘",
+   "want": [
+    "확장 프로그램",
+    "button"
+   ],
+   "why": "the fourth screen's second named target."
+  },
+  {
+   "kind": "refuse",
+   "label": "cm copy / 아니 됐어",
+   "screen": "character-map",
+   "ask": "복사 눌러줘",
+   "then": "아니 됐어",
+   "want": null,
+   "why": "the plainest refusal, on the case that accepts correctly. AGAIN here means it re-offered the very thing that was just turned down."
+  },
+  {
+   "kind": "refuse",
+   "label": "paint eraser / 아니야 하지 마",
+   "screen": "untitled---paint",
+   "ask": "지우개 선택해줘",
+   "then": "아니야 하지 마",
+   "want": null,
+   "why": "an explicit prohibition rather than a decline."
+  },
+  {
+   "kind": "refuse",
+   "label": "cm font / 됐어 안 해도 돼",
+   "screen": "character-map",
+   "ask": "글꼴 바꾸는 거 눌러줘",
+   "then": "됐어 안 해도 돼",
+   "want": null,
+   "why": "'it's fine, you don't have to' — polite, and the one most easily read as assent."
+  },
+  {
+   "kind": "refuse",
+   "lang": "en",
+   "label": "paint crop / EN no, never mind",
+   "screen": "untitled---paint",
+   "ask": "Press the crop button",
+   "then": "no, never mind",
+   "want": null,
+   "why": "English refusal against the English acceptances, so a language effect in one group can be read against the other."
+  },
+  {
+   "kind": "refuse",
+   "lang": "en",
+   "label": "cm copy / EN no, don't do that",
+   "screen": "character-map",
+   "ask": "Press the copy button",
+   "then": "no, don't do that",
+   "want": null,
+   "why": "the English refusal Character Map lacked; an explicit prohibition, so the English row carries both a decline and a prohibition."
+  },
+  {
+   "kind": "refuse",
+   "label": "paint undo / 아니 지금은 하지 마",
+   "screen": "untitled---paint",
+   "ask": "실행 취소 눌러줘",
+   "then": "아니 지금은 하지 마",
+   "want": null,
+   "why": "'not now' — a refusal with a time in it, which is the one most easily read as 'later, then'."
+  },
+  {
+   "kind": "refuse",
+   "label": "si close / 아니 됐어",
+   "screen": "system-information",
+   "ask": "이 창 닫아줘",
+   "then": "아니 됐어",
+   "want": null,
+   "why": "the plainest refusal on the longest prompt, against the same words on Character Map."
+  },
+  {
+   "kind": "refuse",
+   "label": "si edit menu / 아니야 하지 마",
+   "screen": "system-information",
+   "ask": "편집 메뉴 눌러줘",
+   "then": "아니야 하지 마",
+   "want": null,
+   "why": "an explicit prohibition at 152 lines."
+  },
+  {
+   "kind": "refuse",
+   "lang": "en",
+   "label": "si find / EN no, never mind",
+   "screen": "system-information",
+   "ask": "Press the Find button",
+   "then": "no, never mind",
+   "want": null,
+   "why": "the English refusal on the long screen, the same words as Paint's."
+  },
+  {
+   "kind": "refuse",
+   "label": "crd close / 아니 됐어",
+   "screen": "chrome-remote-desktop---qvb-flfm-dev1",
+   "ask": "닫기 눌러줘",
+   "then": "아니 됐어",
+   "want": null,
+   "why": "the plainest refusal on the shortest prompt — the same two turns as `crd close / 응` and the opposite correct answer."
+  },
+  {
+   "kind": "refuse",
+   "label": "crd password / 됐어 안 해도 돼",
+   "screen": "chrome-remote-desktop---qvb-flfm-dev1",
+   "ask": "비밀번호 저장 눌러줘",
+   "then": "됐어 안 해도 돼",
+   "want": null,
+   "why": "'you don't have to' — polite, and about the one offer here worth refusing."
+  },
+  {
+   "kind": "refuse",
+   "lang": "en",
+   "label": "crd close / EN no, never mind",
+   "screen": "chrome-remote-desktop---qvb-flfm-dev1",
+   "ask": "Close this window",
+   "then": "no, never mind",
+   "want": null,
+   "why": "the English refusal on the fourth screen; two wordings over four screens, like the English acceptances."
+  },
+  {
+   "kind": "anew",
+   "label": "cm copy -> font",
+   "screen": "character-map",
+   "ask": "복사 눌러줘",
+   "then": "그럼 글꼴 바꾸는 걸로 해줘",
+   "want": [
+    "Font :",
+    "combo box"
+   ],
+   "why": "a new target while an offer is outstanding. The label/combo box pair is why the verdict is scored on the pair and not on the name."
+  },
+  {
+   "kind": "anew",
+   "label": "paint eraser -> pencil",
+   "screen": "untitled---paint",
+   "ask": "지우개 선택해줘",
+   "then": "연필도 눌러줘",
+   "want": [
+    "Pencil",
+    "button"
+   ],
+   "why": "'also' — the previous offer still stands and the new one is additive."
+  },
+  {
+   "kind": "anew",
+   "label": "cm help -> copy",
+   "screen": "character-map",
+   "ask": "도움말 열어줘",
+   "then": "복사 버튼 눌러줘",
+   "want": [
+    "Copy",
+    "button"
+   ],
+   "why": "case one in the other order, so a stuck re-offer here is Help rather than Copy."
+  },
+  {
+   "kind": "anew",
+   "label": "paint red -> crop",
+   "screen": "untitled---paint",
+   "ask": "빨간색 골라줘",
+   "then": "자르기 눌러줘",
+   "want": [
+    "Crop",
+    "button"
+   ],
+   "why": "an unrelated new request: no correction, no reference to the past."
+  },
+  {
+   "kind": "anew",
+   "label": "si find -> edit menu",
+   "screen": "system-information",
+   "ask": "찾기 버튼 눌러줘",
+   "then": "그럼 편집 메뉴로 해줘",
+   "want": [
+    "Edit",
+    "menu item"
+   ],
+   "why": "'then make it the edit menu instead' — the same shape as the case that broke, on the longest prompt."
+  },
+  {
+   "kind": "anew",
+   "label": "si minimize -> software env",
+   "screen": "system-information",
+   "ask": "이 창 최소화해줘",
+   "then": "소프트웨어 환경도 눌러줘",
+   "want": [
+    "Software Environment",
+    "tree item"
+   ],
+   "why": "'also' — the previous offer stands and the new one is additive, on a tree item."
+  },
+  {
+   "kind": "anew",
+   "label": "crd close -> minimize",
+   "screen": "chrome-remote-desktop---qvb-flfm-dev1",
+   "ask": "닫기 눌러줘",
+   "then": "그럼 최소화로 해줘",
+   "want": [
+    "최소화",
+    "button"
+   ],
+   "why": "a new target while an offer stands, on the shortest prompt. Close and Minimize sit next to each other in the list and both are named in Korean."
+  },
+  {
+   "kind": "anew",
+   "label": "crd password -> extensions",
+   "screen": "chrome-remote-desktop---qvb-flfm-dev1",
+   "ask": "비밀번호 저장 눌러줘",
+   "then": "확장 프로그램도 눌러줘",
+   "want": [
+    "확장 프로그램",
+    "button"
+   ],
+   "why": "the additive form on the fourth screen."
+  }
+ ],
+ "filler_far": [
+  "오늘 날씨 어때?",
+  "커피 한 잔 마시고 싶다",
+  "너 이름이 뭐야?",
+  "수고했어"
+ ],
+ "groups": [
+  "memory",
+  "refuse",
+  "accept",
+  "faraccept",
+  "restate",
+  "anew"
+ ],
+ "worst": {
+  "memory": [
+   "quiet",
+   "other",
+   "again",
+   "void"
+  ],
+  "refuse": [
+   "quiet",
+   "other",
+   "again",
+   "void"
+  ],
+  "accept": [
+   "acted",
+   "drifted",
+   "ignored",
+   "void"
+  ],
+  "faraccept": [
+   "acted",
+   "drifted",
+   "ignored",
+   "void"
+  ],
+  "restate": [
+   "landed",
+   "extra",
+   "silent",
+   "wrong",
+   "stuck",
+   "void"
+  ],
+  "anew": [
+   "landed",
+   "extra",
+   "silent",
+   "wrong",
+   "stuck",
+   "void"
+  ]
+ },
+ "good": {
+  "memory": "quiet",
+  "refuse": "quiet",
+  "accept": "acted",
+  "faraccept": "acted",
+  "restate": "landed",
+  "anew": "landed"
+ },
+ "data_print": "f8bd6d",
+ "remember_turns": 12,
+ "no_slot": "(nothing between the widget list and the turn)",
+ "k_for_significance": 6,
+ "shapes": {
+  "clicked the button \"Copy\"": "clicked the button <x>",
+  "clicked the combo box \"Font :\"": "clicked the combo box <x>",
+  "clicked the link \"Help\"": "clicked the link <x>",
+  "clicked the button \"Close\"": "clicked the button <x>",
+  "clicked the button \"Select\"": "clicked the button <x>",
+  "clicked the button \"Eraser\"": "clicked the button <x>",
+  "clicked the list item \"Red\"": "clicked the list item <x>",
+  "clicked the list item \"Orange\"": "clicked the list item <x>",
+  "clicked the button \"Pencil\"": "clicked the button <x>",
+  "clicked the app bar button \"Undo\"": "clicked the app bar button <x>",
+  "clicked the button \"Crop\"": "clicked the button <x>",
+  "to click the button \"Copy\" — nothing was done; they have not accepted": "to click the button <x> — nothing was done; they have not accepted",
+  "to click the combo box \"Font :\" — nothing was done; they have not accepted": "to click the combo box <x> — nothing was done; they have not accepted",
+  "to click the link \"Help\" — nothing was done; they have not accepted": "to click the link <x> — nothing was done; they have not accepted",
+  "to click the button \"Close\" — nothing was done; they have not accepted": "to click the button <x> — nothing was done; they have not accepted",
+  "to click the button \"Select\" — nothing was done; they have not accepted": "to click the button <x> — nothing was done; they have not accepted",
+  "to click the button \"Eraser\" — nothing was done; they have not accepted": "to click the button <x> — nothing was done; they have not accepted",
+  "to click the list item \"Red\" — nothing was done; they have not accepted": "to click the list item <x> — nothing was done; they have not accepted",
+  "to click the list item \"Orange\" — nothing was done; they have not accepted": "to click the list item <x> — nothing was done; they have not accepted",
+  "to click the button \"Pencil\" — nothing was done; they have not accepted": "to click the button <x> — nothing was done; they have not accepted",
+  "to click the app bar button \"Undo\" — nothing was done; they have not accepted": "to click the app bar button <x> — nothing was done; they have not accepted",
+  "to click the button \"Crop\" — nothing was done; they have not accepted": "to click the button <x> — nothing was done; they have not accepted",
+  "Still open, from earlier:": "Still open, from earlier:",
+  "  to click the button \"Copy\" — nothing was done; they have not accepted": "to click the button <x> — nothing was done; they have not accepted",
+  "What they say next may be a yes to that, a no, or nothing to do with it.": "What they say next may be a yes to that, a no, or nothing to do with it.",
+  "  to click the combo box \"Font :\" — nothing was done; they have not accepted": "to click the combo box <x> — nothing was done; they have not accepted",
+  "  to click the link \"Help\" — nothing was done; they have not accepted": "to click the link <x> — nothing was done; they have not accepted",
+  "  to click the button \"Close\" — nothing was done; they have not accepted": "to click the button <x> — nothing was done; they have not accepted",
+  "  to click the button \"Select\" — nothing was done; they have not accepted": "to click the button <x> — nothing was done; they have not accepted",
+  "  to click the button \"Eraser\" — nothing was done; they have not accepted": "to click the button <x> — nothing was done; they have not accepted",
+  "  to click the list item \"Red\" — nothing was done; they have not accepted": "to click the list item <x> — nothing was done; they have not accepted",
+  "  to click the list item \"Orange\" — nothing was done; they have not accepted": "to click the list item <x> — nothing was done; they have not accepted",
+  "  to click the button \"Pencil\" — nothing was done; they have not accepted": "to click the button <x> — nothing was done; they have not accepted",
+  "  to click the app bar button \"Undo\" — nothing was done; they have not accepted": "to click the app bar button <x> — nothing was done; they have not accepted",
+  "  to click the button \"Crop\" — nothing was done; they have not accepted": "to click the button <x> — nothing was done; they have not accepted",
+  "to click the button \"Find\" — nothing was done; they have not accepted": "to click the button <x> — nothing was done; they have not accepted",
+  "  to click the button \"Find\" — nothing was done; they have not accepted": "to click the button <x> — nothing was done; they have not accepted",
+  "to click the tree item \"Hardware Resources\" — nothing was done; they have not accepted": "to click the tree item <x> — nothing was done; they have not accepted",
+  "  to click the tree item \"Hardware Resources\" — nothing was done; they have not accepted": "to click the tree item <x> — nothing was done; they have not accepted",
+  "to click the button \"Minimize\" — nothing was done; they have not accepted": "to click the button <x> — nothing was done; they have not accepted",
+  "  to click the button \"Minimize\" — nothing was done; they have not accepted": "to click the button <x> — nothing was done; they have not accepted",
+  "to click the menu item \"Edit\" — nothing was done; they have not accepted": "to click the menu item <x> — nothing was done; they have not accepted",
+  "  to click the menu item \"Edit\" — nothing was done; they have not accepted": "to click the menu item <x> — nothing was done; they have not accepted",
+  "to click the tree item \"System Summary\" — nothing was done; they have not accepted": "to click the tree item <x> — nothing was done; they have not accepted",
+  "  to click the tree item \"System Summary\" — nothing was done; they have not accepted": "to click the tree item <x> — nothing was done; they have not accepted",
+  "to click the button \"닫기\" — nothing was done; they have not accepted": "to click the button <x> — nothing was done; they have not accepted",
+  "  to click the button \"닫기\" — nothing was done; they have not accepted": "to click the button <x> — nothing was done; they have not accepted",
+  "to click the button \"확장 프로그램\" — nothing was done; they have not accepted": "to click the button <x> — nothing was done; they have not accepted",
+  "  to click the button \"확장 프로그램\" — nothing was done; they have not accepted": "to click the button <x> — nothing was done; they have not accepted",
+  "to click the button \"최소화\" — nothing was done; they have not accepted": "to click the button <x> — nothing was done; they have not accepted",
+  "  to click the button \"최소화\" — nothing was done; they have not accepted": "to click the button <x> — nothing was done; they have not accepted",
+  "to click the button \"비밀번호 저장\" — nothing was done; they have not accepted": "to click the button <x> — nothing was done; they have not accepted",
+  "  to click the button \"비밀번호 저장\" — nothing was done; they have not accepted": "to click the button <x> — nothing was done; they have not accepted",
+  "to click the button \"Chrome Remote Desktop 맞춤설정 및 제어\" — nothing was done; they have not accepted": "to click the button <x> — nothing was done; they have not accepted",
+  "  to click the button \"Chrome Remote Desktop 맞춤설정 및 제어\" — nothing was done; they have not accepted": "to click the button <x> — nothing was done; they have not accepted",
+  "to click the check box \"Advanced view\" — nothing was done; they have not accepted": "to click the check box <x> — nothing was done; they have not accepted",
+  "  to click the check box \"Advanced view\" — nothing was done; they have not accepted": "to click the check box <x> — nothing was done; they have not accepted",
+  "to click the button \"Magnifier\" — nothing was done; they have not accepted": "to click the button <x> — nothing was done; they have not accepted",
+  "  to click the button \"Magnifier\" — nothing was done; they have not accepted": "to click the button <x> — nothing was done; they have not accepted",
+  "to click the app bar button \"Save\" — nothing was done; they have not accepted": "to click the app bar button <x> — nothing was done; they have not accepted",
+  "  to click the app bar button \"Save\" — nothing was done; they have not accepted": "to click the app bar button <x> — nothing was done; they have not accepted",
+  "to click the tree item \"Components\" — nothing was done; they have not accepted": "to click the tree item <x> — nothing was done; they have not accepted",
+  "  to click the tree item \"Components\" — nothing was done; they have not accepted": "to click the tree item <x> — nothing was done; they have not accepted",
+  "to click the tree item \"Software Environment\" — nothing was done; they have not accepted": "to click the tree item <x> — nothing was done; they have not accepted",
+  "  to click the tree item \"Software Environment\" — nothing was done; they have not accepted": "to click the tree item <x> — nothing was done; they have not accepted",
+  "to click the button \"복구\" — nothing was done; they have not accepted": "to click the button <x> — nothing was done; they have not accepted",
+  "  to click the button \"복구\" — nothing was done; they have not accepted": "to click the button <x> — nothing was done; they have not accepted",
+  "to click the text \"Find what:\" — nothing was done; they have not accepted": "to click the text <x> — nothing was done; they have not accepted",
+  "  to click the text \"Find what:\" — nothing was done; they have not accepted": "to click the text <x> — nothing was done; they have not accepted",
+  "": "",
+  "  ": "",
+  "to click the button \"Copy\"": "to click the button <x>",
+  "no quotes at all": "no quotes at all",
+  "two \"a\" and \"b\" names": "two <x> and <x> names",
+  "an unterminated \"quote": "an unterminated \"quote",
+  "\"\" empty": "<x> empty",
+  "trailing \"": "trailing \""
+ },
+ "slot_shape_of_nothing": "(nothing between the widget list and the turn)"
+}

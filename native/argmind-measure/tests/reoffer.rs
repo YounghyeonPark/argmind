@@ -56,7 +56,14 @@ fn every_committed_verdict_comes_out_the_same() {
                 //: with today's judge therefore differs by exactly that one word — which is the
                 //: scoring change itself, recorded rather than smoothed over. Everything else must
                 //: still match, and it does.
-                let post_split = name.contains("hde897e");
+                //: **Named, not inferred.** This was `name.contains("hde897e")` — the harness
+                //: hash of the first post-split Python run — which silently classified every
+                //: *later* run as pre-split, including one written by the Rust harness that does
+                //: know about the split. The set of pre-split results is closed and frozen: two
+                //: Python harnesses, four files, and it can never grow. A list is right where a
+                //: heuristic was wrong.
+                let pre_split = name.contains("h95da85") || name.contains("h57e605");
+                let post_split = !pre_split;
                 let want_verdict = row["verdicts"][i].as_str().unwrap();
                 let comparable = if post_split || got != SILENT { got } else { WRONG };
                 assert_eq!(comparable, want_verdict,
@@ -97,6 +104,9 @@ fn every_committed_verdict_comes_out_the_same() {
     println!("  {reps} repeats over {rows} rows: {seen:?}");
     println!("  {pre_split_silent} repeats where today's judge says `silent` and the run said `wrong`");
     assert!(pre_split_silent > 0, "the silent/wrong split is not exercised by any older run");
+    //: And the closed set really is closed: five files, two harnesses, none added since.
+    assert_eq!(files.iter().filter(|(n, _)| n.contains("h95da85") || n.contains("h57e605")).count(),
+               5, "the pre-split set has changed size, which it cannot do");
 }
 
 /// The number the whole result rests on, re-derived: **15 fixed, 0 broken, p = 0.00006.**

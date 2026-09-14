@@ -194,6 +194,23 @@ pub fn rank(verdict: &str, order: &[&str]) -> usize {
 }
 
 /// The index of the worst draw, so the transcript printed beside a verdict is the one it describes.
+///
+/// Printing repeat one's reply next to a worst-of-three verdict has happened twice in this project,
+/// the second time hours after the first was criticised, and it makes a correct answer display as a
+/// defect.
+///
+/// **The tie-break is load-bearing and it is the FIRST maximum.** Rust's `max_by_key` returns the
+/// last, Python's `max(range(n), key=...)` returns the first, and every repeat agreeing is the
+/// common case — so the two disagreed on the stored index of every row where nothing went wrong.
+/// No verdict moves either way, which is why it survived: the tests compared
+/// `verdicts[worst_index(..)]` and never the index itself. Found by scoring a fresh Rust run with
+/// the Python judge and diffing the fields one at a time.
 pub fn worst_index(verdicts: &[&str], order: &[&str]) -> usize {
-    (0..verdicts.len()).max_by_key(|i| rank(verdicts[*i], order)).unwrap_or(0)
+    let mut best = 0;
+    for i in 1..verdicts.len() {
+        if rank(verdicts[i], order) > rank(verdicts[best], order) {
+            best = i;
+        }
+    }
+    best
 }

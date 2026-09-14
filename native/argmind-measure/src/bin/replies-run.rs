@@ -185,7 +185,13 @@ fn main() {
     let m = source_print(include_str!("../../../argmind-core/src/llm.rs"));
     let c = source_print(include_str!("../conversation.rs"));
     let l = source_print(include_str!("../../../argmind-core/src/session.rs"));
-    let h = source_print(include_str!("replies-run.rs"));
+    //: **`h` covers the driver AND its scorer.** In the Python these were one file and one hash;
+    //: splitting them in Rust left the scoring rules outside the fingerprint, so an edit to the
+    //: judge produced a result under a name that claimed nothing had changed. That is the exact
+    //: failure this letter was added for, reintroduced by the port and caught by a tie-break
+    //: disagreement in `worst_index`.
+    let h = source_print(&format!("{}{}", include_str!("replies-run.rs"),
+                                  include_str!("../replies.rs")));
     let s = screen_print(&dir.join("screens"));
     let f = argmind_measure::conversation::cases_print(
         &all, &argmind_measure::conversation::FILLER.iter().map(|x| x.to_string())

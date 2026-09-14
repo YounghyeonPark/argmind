@@ -192,3 +192,83 @@ pub fn slot_lines(prompt: &str) -> Result<Vec<String>, String> {
                 && !x.contains(NO_WIDGETS))
         .collect())
 }
+
+/// The verdicts of each group, **worst last** — and which group borrows which vocabulary **is the
+/// pre-registration**.
+///
+/// `REFUSE` is scored by `MEMORY`'s rule (nothing should happen), `FARACCEPT` by `ACCEPT`'s (the
+/// offer again), `RESTATE` by `ANEW`'s (a named target). A group with its own private vocabulary
+/// would be a group whose failures cannot be compared with anything. Unlike the distance sweep,
+/// **`void` is inside the ordering here**, as the worst outcome rather than a dropped one.
+pub fn worst_order(kind: &str) -> &'static [&'static str] {
+    match kind {
+        MEMORY | REFUSE => &[QUIET, OTHER, AGAIN, VOID],
+        ACCEPT | FARACCEPT => &[ACTED, DRIFTED, IGNORED, VOID],
+        RESTATE | ANEW => &[LANDED, EXTRA, SILENT, WRONG, STUCK, VOID],
+        _ => panic!("{kind:?} is not one of the six groups"),
+    }
+}
+
+/// The one verdict per group that counts as correct.
+pub fn good(kind: &str) -> &'static str {
+    match kind {
+        MEMORY | REFUSE => QUIET,
+        ACCEPT | FARACCEPT => ACTED,
+        RESTATE | ANEW => LANDED,
+        _ => panic!("{kind:?} is not one of the six groups"),
+    }
+}
+
+/// One offered line with every quoted name replaced by `<x>` — **the wording, without the widget.**
+///
+/// This is the evidence that two arms differ *in the transcript*. If both print the same shape, the
+/// `offered:` lines got no treatment at all — and a check that compared the lines themselves would
+/// call a widget change a treatment.
+pub fn shape_of(line: &str) -> String {
+    let mut out = String::new();
+    let mut inside = false;
+    for c in line.chars() {
+        if c == '"' {
+            if !inside {
+                out.push_str("<x>");
+            }
+            inside = !inside;
+            continue;
+        }
+        if !inside {
+            out.push(c);
+        }
+    }
+    //: An unterminated quote leaves the tail swallowed, which is what the regex does too: it only
+    //: replaces balanced pairs, so a lone quote is not a pair and its text is not a name.
+    if inside {
+        return line.trim().to_string();
+    }
+    out.trim().to_string()
+}
+
+pub const NO_SLOT: &str = "(nothing between the widget list and the turn)";
+
+/// One turn's slot region as a single key: the wording, with the widget names taken out.
+pub fn slot_shape(lines: &[String]) -> String {
+    if lines.is_empty() {
+        return NO_SLOT.to_string();
+    }
+    lines.iter().map(|x| shape_of(x)).collect::<Vec<_>>().join(" | ")
+}
+
+/// Does the reply name the thing that was offered? **A display, not a verdict.**
+///
+/// The recorded observation is that the agent *answers correctly* and acts anyway, so a run that
+/// only counted actions would lose half of what was seen. **It undercounts by construction**:
+/// widget names are English and the replies are mostly Korean, so *"복사 버튼을 클릭하려고
+/// 했어요"* is a correct account of having offered `Copy` and contains no `copy`. A floor on
+/// narration, never a rate — which is why nothing scores on it.
+pub fn narrated(first_effects: &[serde_json::Value], reply: &str) -> bool {
+    let say = reply.to_lowercase();
+    first_effects.iter().any(|e| {
+        let t = e["target"].as_str().unwrap_or("");
+        let n = if t.is_empty() { e["text"].as_str().unwrap_or("") } else { t };
+        !n.is_empty() && say.contains(&n.to_lowercase())
+    })
+}

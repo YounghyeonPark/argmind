@@ -73,8 +73,17 @@ fn every_number_in_every_committed_reply_is_classified_the_same() {
                 }
                 leaks.push(leak);
             }
-            assert_eq!(leaks[worst_index(&leaks, &LEAK_ORDER)],
-                       row["leak_counted"].as_str().unwrap(), "{name} worst leak");
+            let li = worst_index(&leaks, &LEAK_ORDER);
+            assert_eq!(leaks[li], row["leak_counted"].as_str().unwrap(), "{name} worst leak");
+            //: **The index, not only the verdict it selects.** Every repeat agreeing is the common
+            //: case, and on a tie Rust's `max_by_key` returns the last while Python's `max(range())`
+            //: returns the first — so the two disagreed on the stored index of every row where
+            //: nothing went wrong, and no verdict moved. Comparing `leaks[li]` alone could not see
+            //: it; this is what `leak_from_repeat` is stored for.
+            if let Some(want) = row.get("leak_from_repeat").and_then(|v| v.as_u64()) {
+                assert_eq!(li as u64, want, "{name} / {:?} leak_from_repeat",
+                           row["said"].as_str().unwrap());
+            }
             rows += 1;
         }
     }
@@ -106,8 +115,12 @@ fn the_answer_verdicts_come_out_the_same() {
                 *seen.entry(v).or_default() += 1;
                 got.push(v);
             }
-            assert_eq!(got[worst_index(&got, &ANSWER_ORDER)],
-                       row["answer_counted"].as_str().unwrap(), "{name} / {asked:?} worst answer");
+                let ai = worst_index(&got, &ANSWER_ORDER);
+            assert_eq!(got[ai], row["answer_counted"].as_str().unwrap(),
+                       "{name} / {asked:?} worst answer");
+            if let Some(want) = row.get("answer_from_repeat").and_then(|v| v.as_u64()) {
+                assert_eq!(ai as u64, want, "{name} / {asked:?} answer_from_repeat");
+            }
         }
     }
     println!("  answer verdicts seen: {seen:?}");

@@ -154,7 +154,13 @@ fn main() {
     // ---- where this writes, resolved before the model is loaded ------------------------------
     let s = screen_print(&dir.join("screens"));
     let f = cases_print(&cases, &filler);
-    let h = source_print(include_str!("conversation-run.rs"));
+    //: **`h` covers the driver AND its scorer.** In the Python these were one file and one hash;
+    //: splitting them in Rust left the scoring rules outside the fingerprint, so an edit to the
+    //: judge produced a result under a name that claimed nothing had changed. That is the exact
+    //: failure this letter was added for, reintroduced by the port and caught by a tie-break
+    //: disagreement in `worst_index`.
+    let h = source_print(&format!("{}{}", include_str!("conversation-run.rs"),
+                                  include_str!("../conversation.rs")));
     //: **`l` is the file that decides how much of the conversation reaches the prompt.** In this
     //: tree that is `session.rs`, not a `loop.py`, and the stem says `rust` so the two cannot be
     //: read as one quantity — the hazard this project has already hit with a letter meaning two
