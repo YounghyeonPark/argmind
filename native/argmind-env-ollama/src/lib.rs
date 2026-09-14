@@ -19,7 +19,7 @@
 //! * **The de-chunking**, against canned bytes.
 //! * **Not the socket.** One live call does that, and nothing here can.
 
-use std::io::{BufRead, BufReader, Read, Write};
+use std::io::{BufRead, BufReader, Write};
 use std::net::TcpStream;
 
 use argmind_core::llm::{Reading, Reply};

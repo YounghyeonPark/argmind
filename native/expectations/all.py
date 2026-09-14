@@ -18,6 +18,6 @@ for s in (sys.stdout, sys.stderr):
     except Exception:
         pass
 
-for name in ("prompt", "reply", "loop", "session", "wire", "measure"):
+for name in ("prompt", "reply", "loop", "session", "wire", "measure", "repair"):
     print(f"-- {name}")
     runpy.run_path(str(HERE / f"{name}.py"), run_name="__main__")

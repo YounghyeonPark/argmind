@@ -12,6 +12,7 @@
 //! had five times.
 
 pub mod choosing;
+pub mod drive;
 pub mod repair;
 
 use std::collections::BTreeMap;
@@ -213,4 +214,35 @@ impl Destination {
         }
         Ok(())
     }
+}
+
+/// `json.dumps(obj, ensure_ascii=False, sort_keys=True)` — the serialisation every `f` in this
+/// directory is a hash of.
+///
+/// Written out rather than reached for, because `serde_json::to_string` uses `,`/`:` where Python
+/// uses `, `/`: `. The difference is invisible until two fingerprints disagree and somebody assumes
+/// the cases moved.
+pub fn python_json(v: &serde_json::Value) -> String {
+    match v {
+        serde_json::Value::Null => "null".into(),
+        serde_json::Value::Bool(b) => b.to_string(),
+        serde_json::Value::Number(n) => n.to_string(),
+        serde_json::Value::String(s) => serde_json::to_string(s).unwrap(),
+        serde_json::Value::Array(a) =>
+            format!("[{}]", a.iter().map(python_json).collect::<Vec<_>>().join(", ")),
+        //: Keys come out sorted: `serde_json::Map` is a `BTreeMap` unless `preserve_order` is on,
+        //: which is what `sort_keys=True` asks for.
+        serde_json::Value::Object(o) => format!("{{{}}}", o.iter()
+            .map(|(k, v)| format!("{}: {}", serde_json::to_string(k).unwrap(), python_json(v)))
+            .collect::<Vec<_>>().join(", ")),
+    }
+}
+
+/// Six characters over a case list. `f` in a filename.
+///
+/// **A case list edited between two runs is two experiments sharing one name**, which is how three
+/// baselines were destroyed here, and how the only baseline one harness ever had came to describe a
+/// prompt that had been reverted.
+pub fn data_print(v: &serde_json::Value) -> String {
+    print6(python_json(v).as_bytes())
 }

@@ -145,3 +145,25 @@ fn the_sensitivity_floor_is_what_the_docstrings_quote() {
     assert!((sensitivity(6) - 0.03125).abs() < 1e-12, "6 is the first that clears 0.05");
     assert!(sensitivity(1) <= 1.0, "a probability cannot exceed one");
 }
+
+/// **The two implementations run the same experiment, or they are two experiments.**
+///
+/// `f` is a hash over all three case lists, and it is the field that catches a case edited between
+/// runs. The Rust reads the cases dumped from the Python and recomputes the fingerprint: a mismatch
+/// means either the cases moved or the serialisation did, and a port gets both silently wrong.
+#[test]
+fn the_case_lists_hash_to_the_same_f() {
+    let path = root().join("native").join("expectations").join("repair.json");
+    let d: Value = serde_json::from_str(&std::fs::read_to_string(&path).unwrap_or_else(|_| {
+        panic!("{} is missing. Generate it: python native/expectations/all.py", path.display())
+    })).unwrap();
+    let blob = serde_json::json!([d["cases"], d["korean"], d["english"],
+                                  d["language_screen"], d["original_korean"]]);
+    assert_eq!(argmind_measure::data_print(&blob), d["data_print"].as_str().unwrap());
+    //: The committed results carry it in their filenames; if this ever stops being f339a3d the
+    //: cases have moved and every recorded number is about a different experiment.
+    assert_eq!(d["data_print"].as_str().unwrap(), "339a3d");
+    assert_eq!(d["cases"].as_array().unwrap().len(), 4);
+    assert!(d["korean"].as_array().unwrap().len() >= 36);
+    assert!(d["english"].as_array().unwrap().len() >= 12);
+}
