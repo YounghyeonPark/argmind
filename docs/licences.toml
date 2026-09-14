@@ -1,0 +1,63 @@
+# Every third-party dependency this project declares, and the licence it declares for itself.
+#
+# `tests/test_licences.py` walks `pyproject.toml` and every `Cargo.toml` under `native/` and
+# requires each name here with a licence from `allowed`. **Adding a dependency therefore fails the
+# suite until a line is added here**, which is the point: the owner's rule is that only things with
+# no open-source licence problem are used, and a rule nothing enforces is one nobody keeps.
+#
+# Licences are recorded as the projects declare them. This is a record, not legal advice.
+
+# Permissive, no copyleft, no field-of-use restriction, no proprietary redistribution.
+allowed = [
+    "MIT",
+    "MIT-CMU",
+    "MIT OR Apache-2.0",
+    "Apache-2.0",
+    "BSD-3-Clause",
+    "BSD-2-Clause",
+    "ISC",
+    "Zlib",
+    "Unlicense OR MIT",
+]
+
+# **Refused on sight, with the reason**, so a future reader does not have to re-derive it.
+[refused]
+"GPL-2.0" = "copyleft — would reach this project's own source"
+"GPL-3.0" = "copyleft — would reach this project's own source"
+"AGPL-3.0" = "copyleft, and over a network boundary too"
+"LGPL-3.0" = "relinking obligation; workable but not worth it for anything here"
+"NVIDIA CUDA EULA" = """
+    Not an open-source licence. cuBLAS and cuDNN may not simply be redistributed, so a GPU build
+    that has to ship them is out — measured against, rather than assumed: the CPU path is 16.3 s
+    for a two-second clip and unusable, so the acceleration has to come from somewhere that
+    redistributes nothing proprietary. Vulkan is that somewhere."""
+"CC-BY-NC-*" = "non-commercial — a field-of-use restriction, so not open source"
+
+[python.required]
+comtypes = { licence = "MIT", why = "UI Automation and SAPI on Windows" }
+
+[python.voice]
+numpy = { licence = "BSD-3-Clause", why = "sample buffers" }
+sounddevice = { licence = "MIT", why = "capture; bundles PortAudio, also MIT" }
+torch = { licence = "BSD-3-Clause", why = "Whisper inference" }
+transformers = { licence = "Apache-2.0", why = "the Whisper pipeline" }
+
+[python.images]
+pillow = { licence = "MIT-CMU", why = "llm.Local._b64, which nothing in this tree calls" }
+
+[python.dev]
+pytest = { licence = "MIT", why = "the suite" }
+ruff = { licence = "MIT", why = "the linter" }
+
+[rust]
+windows = { licence = "MIT OR Apache-2.0", why = "UI Automation and SAPI, natively" }
+serde_json = { licence = "MIT OR Apache-2.0", why = "replies, and the expectation files" }
+sha2 = { licence = "MIT OR Apache-2.0", why = "the prompt fingerprint, in tests only" }
+
+# Not dependencies: spoken to over a port, or downloaded by the user at run time. Recorded so a
+# reader knows they were considered rather than missed.
+[external]
+ollama = { licence = "MIT", why = "a local server this talks to over HTTP" }
+qwen3 = { licence = "Apache-2.0", why = "weights, fetched by Ollama" }
+whisper = { licence = "MIT", why = "weights, fetched at first use" }
+"whisper.cpp" = { licence = "MIT", why = "candidate runtime; ggml is MIT too. Not yet a dependency" }

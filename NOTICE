@@ -1,4 +1,4 @@
-Argmind — a Computational Module for iterative solvers
+Argmind — a local-model agent you talk to while you work at your PC
 Copyright 2026 Younghyeon Park
 
 Licensed under the Apache License, Version 2.0 (the "License"); you may not use
@@ -17,33 +17,66 @@ ON THE NUMBERS IN THIS PROJECT
 
 Please read this before quoting anything from here.
 
-Figures produced by the architecture model in perf_model/ are FIRST-ORDER
-ESTIMATES, good to roughly a factor of two. They come from an analytical model,
-not from synthesis, not from silicon, and not from measurement. Nothing has been
-taped out or even synthesised. Seventeen modelling errors were found and
-corrected during this work and most of them flattered the design, so treat any
-figure that has not survived an adversarial read with suspicion — including the
-ones here.
+Every figure is labelled MEASURED, COMPUTED or ESTIMATED, in the same sentence as
+the number, and a rate carries its denominator and its conditions. Where a
+document says MEASURED it means the wall clock or the verdict was actually
+observed on the machine and at the fingerprints named beside it; re-derive any of
+them with `python -m pytest` and the harnesses in measure/.
 
-A smaller set of results IS measured, and is labelled as such in
-PHASE0_FINDINGS.md and README.md: solver iteration counts from real OSQP,
-numerical precision floors, and CPU timings on a stated host. Where a document
-says MEASURED it means the numerics or the wall clock were actually observed on
-the machine named; it does not mean silicon.
-
-Efficiency figures elsewhere in the industry are frequently quoted without a
-process node or a precision attached, which makes them uncomparable. This project
-tries not to do that. If you find a figure here missing its node, precision, or
-evidence class, that is a bug — please report it.
+Treat a flattering figure with suspicion, including the ones here. Four
+conclusions were withdrawn during the two days that built this agent, three of
+them flattering, and a previous project on this repository accumulated seventeen
+modelling errors of which most favoured the design. If you find a figure missing
+its denominator, its conditions or its evidence class, that is a bug — please
+report it.
 
 -------------------------------------------------------------------------------
-THIRD-PARTY REFERENCES
+THIRD-PARTY SOFTWARE
 
-This project validates against and interoperates with, but does not include:
+Required, and used at runtime:
 
-  OSQP        https://osqp.org/            (Apache-2.0) — reference solver
-  CVXPY       https://www.cvxpy.org/       (Apache-2.0) — optional front end
-  NumPy/SciPy https://numpy.org/           (BSD-3-Clause)
+  comtypes    https://github.com/enthought/comtypes     MIT
+              UI Automation and SAPI on Windows
 
-Published specifications, papers and vendor documentation consulted during the
-architecture study are cited inline at the point of use, with URLs.
+Optional, for speech (the `voice` extra):
+
+  numpy       https://numpy.org/                        BSD-3-Clause
+  sounddevice https://python-sounddevice.readthedocs.io/ MIT (bundles PortAudio, MIT)
+  PyTorch     https://pytorch.org/                      BSD-3-Clause
+  Transformers https://github.com/huggingface/transformers  Apache-2.0
+
+Optional, for images (the `images` extra), and reached by nothing in this tree:
+
+  Pillow      https://python-pillow.org/                MIT-CMU
+
+The Rust tree under native/:
+
+  windows-rs  https://github.com/microsoft/windows-rs   MIT OR Apache-2.0
+  serde_json  https://github.com/serde-rs/json          MIT OR Apache-2.0
+  sha2        https://github.com/RustCrypto/hashes      MIT OR Apache-2.0
+
+Spoken to over a local HTTP port, and not included or redistributed:
+
+  Ollama      https://ollama.com/                       MIT
+  qwen3       https://github.com/QwenLM/Qwen3           Apache-2.0 (weights)
+  Whisper     https://github.com/openai/whisper         MIT (weights)
+
+Windows itself — UI Automation, SAPI, SendInput — is used through the operating
+system and nothing of it is redistributed here.
+
+**No dependency of this project is under a copyleft or a proprietary licence, and
+that is a rule rather than an accident.** tests/test_licences.py holds it: every
+dependency named in pyproject.toml or in a Cargo.toml under native/ must appear
+in docs/licences.toml with a licence from a permissive allowlist, so adding one
+that does not fails the suite rather than being noticed later. The rule exists
+because the alternative is remembering, and this project's standard is that a
+rule nothing enforces is a rule nobody keeps.
+
+One consequence is recorded here because it decides an engineering choice rather
+than a legal one: **redistributing NVIDIA's CUDA runtime libraries is governed by
+NVIDIA's licence and not by an open-source one**, so a GPU build that has to ship
+cuBLAS or cuDNN is out. Where GPU acceleration is wanted, the Vulkan path is the
+one that redistributes nothing proprietary.
+
+This file lists licences as the projects themselves declare them. It is not legal
+advice.
