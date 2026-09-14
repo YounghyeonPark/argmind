@@ -11,6 +11,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "argmind-env-ollama"
+version = "0.0.1"
+dependencies = [
+ "argmind-core",
+ "serde_json",
+]
+
+[[package]]
 name = "argmind-env-windows"
 version = "0.0.1"
 dependencies = [
