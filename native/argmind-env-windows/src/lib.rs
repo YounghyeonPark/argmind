@@ -17,7 +17,7 @@ pub mod hands;
 pub mod launch;
 pub mod speaker;
 pub use hands::{Reach, WindowsHands};
-pub use launch::Launched;
+pub use launch::{foreground_is, is_minimised, pid_of, to_front, windows_of, Launched};
 pub use speaker::SapiSpeaker;
 
 use argmind_core::contract::{Eyes, Widget};
@@ -159,6 +159,18 @@ pub fn screen_metrics() -> (i32, i32, i32, i32) {
         (GetSystemMetrics(SM_CXVIRTUALSCREEN), GetSystemMetrics(SM_CYVIRTUALSCREEN),
          GetSystemMetrics(SM_CXSCREEN), GetSystemMetrics(SM_CYSCREEN))
     }
+}
+
+/// Does the cursor land where it is sent? **Asked before clicking anything.**
+///
+/// Coordinates read from a DPI-aware process and written from a DPI-unaware one can be virtualised,
+/// and then every click is offset by the scaling factor and nothing lands. Two points near the
+/// middle of the primary display, so the probe itself cannot fall off the desktop.
+pub fn pointing_is_exact() -> bool {
+    let (_, _, pw, ph) = screen_metrics();
+    let probes = [((pw / 2) as i64, (ph / 2) as i64), ((pw / 2) as i64 + 7, (ph / 2) as i64 + 11)];
+    let got = cursor_round_trip(&probes);
+    got.len() == probes.len() && got.iter().all(|(s, g)| s == g)
 }
 
 /// Send the pointer to each point and read back where it actually went — **then put it back.**
