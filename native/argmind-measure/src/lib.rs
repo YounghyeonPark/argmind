@@ -11,6 +11,7 @@
 //! under a name nobody can compare with anything, which is the failure this project has already
 //! had five times.
 
+pub mod capture;
 pub mod choosing;
 pub mod conversation;
 pub mod drive;
