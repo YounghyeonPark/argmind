@@ -12,6 +12,7 @@
 //! had five times.
 
 pub mod choosing;
+pub mod conversation;
 pub mod drive;
 pub mod repair;
 pub mod saying;
