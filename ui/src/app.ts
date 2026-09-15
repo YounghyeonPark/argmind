@@ -24,6 +24,8 @@ interface Hello {
   dry: boolean;
   speaks: boolean;
   hears: boolean;
+  noticing: boolean;
+  noticed: number;
   attending: string;
   waiting: Proposal[];
 }
@@ -116,6 +118,7 @@ stream.addEventListener("hello", (e) => {
     `${d.model}${d.dry ? " · 실행 안 함" : ""}${d.speaks ? " · 소리 켜짐" : " · 소리 꺼짐"}` +
     `${d.hears ? " · 마이크 켜짐" : ""}`;
   talk.hidden = !d.hears;
+  drawNoticing(d.noticing, d.noticed);
   // Rebuilt from the server's own list, so a reload is never a page showing buttons the server
   // has forgotten — or missing ones it still holds.
   pending.replaceChildren();
@@ -164,6 +167,44 @@ form.onsubmit = (e) => {
   line("them", text);
   void post("/say", text);
 };
+
+// ---- noticing -----------------------------------------------------------------------------------
+//
+// Off until switched on, and the count is next to the switch. Something on screen changes 13
+// seconds out of 14, so this is a standing invitation to spend a model call every few seconds —
+// and how often that is on *your* desktop is a thing to watch rather than guess.
+
+const notice = document.getElementById("notice") as HTMLButtonElement;
+let noticedSoFar = 0;
+
+function drawNoticing(on: boolean, count: number): void {
+  noticedSoFar = count;
+  notice.classList.toggle("on", on);
+  notice.textContent = on ? `지켜보는 중 · ${count}회` : "지켜보기";
+  notice.title = on
+    ? "화면이 바뀌면 먼저 말을 겁니다. 알아챌 때마다 모델 호출 한 번."
+    : "켜면 창이 바뀔 때 먼저 말을 겁니다.";
+}
+
+notice.onclick = () => {
+  const turningOn = !notice.classList.contains("on");
+  // Drawn at once rather than waiting for the round trip: the server confirms with its own event,
+  // and a button that does nothing for a moment is a button people press twice.
+  drawNoticing(turningOn, noticedSoFar);
+  void post(turningOn ? "/notice/on" : "/notice/off");
+};
+
+stream.addEventListener("noticing", (e) => {
+  drawNoticing((e as MessageEvent).data === "1", noticedSoFar);
+});
+
+stream.addEventListener("noticed", (e) => {
+  noticedSoFar += 1;
+  drawNoticing(true, noticedSoFar);
+  // What set it off, before whatever it decided to say about it. A thought arriving with no
+  // visible cause reads as the agent talking to itself.
+  line("noticed", (e as MessageEvent).data);
+});
 
 // ---- what it is looking at ----------------------------------------------------------------------
 //

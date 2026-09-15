@@ -41,9 +41,10 @@ use std::net::{TcpListener, TcpStream};
 use std::sync::mpsc::{channel, Sender};
 use std::sync::{Arc, Mutex};
 
-use argmind_core::contract::{Speaks, Widget};
+use argmind_core::contract::{Eyes, Speaks, Widget};
 use argmind_core::intent::{Effect, Trigger};
 use argmind_core::session::Session;
+use argmind_core::watch::{poll, Looking, Watch};
 use argmind_env_ollama::Local;
 use argmind_env_windows::hands::Did;
 use argmind_env_whisper::Whisper;
@@ -93,6 +94,18 @@ struct Desk {
     /// because a program was run. `--hear` turns it on, and even then it opens only while the talk
     /// key is held.
     ear: Option<(Microphone, Whisper)>,
+    /// **Off until somebody switches it on in the page.** With it on, a change of window starts a
+    /// thought nobody asked for — and something on screen changes 13 seconds out of 14, so this is
+    /// a standing invitation to spend a model call every few seconds.
+    watches: Vec<Watch>,
+    noticing: bool,
+    /// What the screen looked like last time this checked. **Empty means there is no before**, and
+    /// the first look after switching on reports nothing whatever is on screen.
+    before: Vec<argmind_core::contract::Widget>,
+    /// How many thoughts started without being asked for, and how many of those said something.
+    /// **Counted where a person can see it**, because "how often does this happen on your desktop"
+    /// is the question that decides whether it is worth having on.
+    noticed: u64,
 }
 
 /// What a connection asks the agent to do.
@@ -108,6 +121,8 @@ enum Job {
     Look,
     Confirm(u64),
     Decline(u64),
+    /// Watch the screen, or stop.
+    Notice(bool),
     /// The talk key went down or came up.
     Listen(bool),
     /// A page opened: send it the snapshot it needs to draw itself.
@@ -310,6 +325,43 @@ fn fix(out: &Listeners, model: &str, key: &str) {
     out.send("needs", &needs_json(model));
 }
 
+/// Look once, and think if a watch has something to say.
+///
+/// **Nothing here is asked for**, so whatever the model decides comes back as a sentence rather
+/// than as a click — `may_act_unprompted` is false and stays false.
+fn notice(desk: &mut Desk, out: &Listeners, now: f64) {
+    if !desk.noticing {
+        return;
+    }
+    let after = desk.session.eyes.foreground();
+    let fired = poll(&mut desk.watches, &desk.before, &after, now);
+    desk.before = after;
+    for trigger in fired {
+        desk.noticed += 1;
+        //: **Said before it is answered.** A thought that arrives with no visible cause reads as
+        //: the agent talking to itself; naming what set it off is the difference between noticing
+        //: and interrupting.
+        out.send("noticed", &trigger.text);
+        out.send("busy", "1");
+        let intent = desk.session.decide(&trigger);
+        out.send("busy", "0");
+        desk.session.history.push(("noticed".into(), trigger.text.clone()));
+        if intent.say.is_empty() {
+            //: **Silence is the common answer and it is the right one.** Saying so once would be
+            //: information; saying it every three seconds is the noise this whole floor exists to
+            //: prevent, so nothing is sent.
+            continue;
+        }
+        desk.session.history.push(("you".into(), intent.say.clone()));
+        out.send("say", &intent.say);
+        //: Not spoken aloud. A proposal waits behind a button; a sentence nobody asked for waits
+        //: behind nothing, which is why speaking is tied to having been asked.
+        for effect in &intent.effects {
+            propose(desk, out, effect.clone());
+        }
+    }
+}
+
 /// The talk key, down or up. **Letting go is what starts a turn** — nothing is transcribed while
 /// the key is still held, and nothing is recorded while it is not.
 fn listen(desk: &mut Desk, out: &Listeners, down: bool) {
@@ -361,6 +413,8 @@ fn hello(desk: &Desk, model: &str) -> String {
         format!("\"dry\":{}", desk.dry),
         format!("\"speaks\":{}", desk.voice.is_some()),
         format!("\"hears\":{}", desk.ear.is_some()),
+        format!("\"noticing\":{}", desk.noticing),
+        format!("\"noticed\":{}", desk.noticed),
         format!("\"attending\":\"{}\"", escape(&desk.session.eyes.window().1)),
         format!("\"waiting\":[{}]", waiting.join(",")),
     ];
@@ -490,8 +544,25 @@ pub fn run(how: How) {
         }
         let ear = hear.then(|| (Microphone::new(), Whisper::default()));
         let mut desk = Desk { session: Session::new(eyes, hands, Model(model)),
-                              proposals: Proposals::default(), dry, voice, ear };
-        while let Ok(job) = inbox.recv() {
+                              proposals: Proposals::default(), dry, voice, ear,
+                              //: One watch for now: the person moved to a different window, which
+                              //: is the change that means *look at this*. `Appeared` and `Vanished`
+                              //: need a name to look for and there is nowhere yet to type one.
+                              watches: vec![Watch::new(Looking::WindowChanged)],
+                              noticing: false, before: Vec::new(), noticed: 0 };
+        let started = std::time::Instant::now();
+        loop {
+            //: **A timeout rather than a blocking receive**, so the same thread that answers can
+            //: also look. One thread owns the session because COM says so, and a second one
+            //: reading the screen would be a second apartment.
+            let job = match inbox.recv_timeout(std::time::Duration::from_millis(700)) {
+                Ok(job) => job,
+                Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {
+                    notice(&mut desk, &agent_out, started.elapsed().as_secs_f64());
+                    continue;
+                }
+                Err(_) => break,
+            };
             match job {
                 Job::Said(text) => think(&mut desk, &agent_out, text.trim()),
                 Job::Confirm(n) => {
@@ -508,6 +579,19 @@ pub fn run(how: How) {
                     }
                 }
                 Job::Listen(down) => listen(&mut desk, &agent_out, down),
+                Job::Notice(on) => {
+                    desk.noticing = on;
+                    //: **Cleared on the way in, not on the way out.** Switching on with an old
+                    //: `before` would compare against a screen from ten minutes ago and report the
+                    //: whole desktop as newly changed.
+                    desk.before.clear();
+                    agent_out.send("noticing", if on { "1" } else { "0" });
+                    agent_out.send("note", if on {
+                        "화면 변화를 지켜봅니다 — 창을 바꾸면 먼저 말을 겁니다"
+                    } else {
+                        "지켜보기를 껐습니다"
+                    });
+                }
                 Job::Fix(key) => fix(&agent_out, &agent_model, &key),
                 Job::Look => agent_out.send("needs", &needs_json(&agent_model)),
                 Job::Opened(tx) => {
@@ -614,6 +698,10 @@ fn serve_one(mut stream: TcpStream, out: &Listeners, token: &str, jobs: &Sender<
         Route::Look => {
             let _ = stream.write_all(&respond("204 No Content", "text/plain", ""));
             let _ = jobs.send(Job::Look);
+        }
+        Route::Notice(on) => {
+            let _ = stream.write_all(&respond("204 No Content", "text/plain", ""));
+            let _ = jobs.send(Job::Notice(on));
         }
         Route::Listen(down) => {
             let _ = stream.write_all(&respond("204 No Content", "text/plain", ""));

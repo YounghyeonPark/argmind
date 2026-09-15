@@ -45,6 +45,12 @@
   .line.them::before { content: "› "; color: var(--dim); }
   .line.say { color: var(--say); }
   .line.note { color: var(--note); font-size: 13px; }
+  /* What set an unprompted thought off, marked so it is not mistaken for something you said. */
+  .line.noticed { color: var(--warn); font-size: 13px; }
+  .line.noticed::before { content: "◦ "; }
+
+  #notice { font-size: 12px; padding: 2px 10px; }
+  #notice.on { border-color: var(--warn); background: #fdf3ea; }
 
   #setup { border-bottom: 1px solid var(--edge); padding: 10px 14px; background: #fdfcfa; }
   .setup-head { display: flex; gap: 8px; align-items: baseline; font-weight: 600;
@@ -84,6 +90,7 @@
 <body data-token="__TOKEN__">
   <header>
     <span id="attending">…</span>
+    <button type="button" id="notice">지켜보기</button>
     <span id="status"></span>
   </header>
   <div id="spent"></div>

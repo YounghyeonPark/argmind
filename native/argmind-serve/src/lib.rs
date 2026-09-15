@@ -189,6 +189,12 @@ pub enum Route {
     /// Install the missing thing this names. **The button in the page is the approval**, and the
     /// page had to show what it would do before it could be pressed.
     Fix(String),
+    /// Watch the screen and think when it changes, or stop.
+    ///
+    /// **Off until asked for**, and the reason is a measured one: something on screen changes 13
+    /// seconds out of 14, so this is a standing invitation to spend a model call every few seconds
+    /// for as long as it is on.
+    Notice(bool),
     /// Take a fresh reading of what is missing. **Read-only** — it installs nothing, so the page
     /// can offer it freely after somebody has installed something themselves.
     Look,
@@ -217,6 +223,8 @@ pub fn route(request: &Request) -> Route {
         },
         ("POST", p) if p.starts_with("/fix/") && p.len() > 5 =>
             Route::Fix(p[5..].to_string()),
+        ("POST", "/notice/on") => Route::Notice(true),
+        ("POST", "/notice/off") => Route::Notice(false),
         ("POST", "/look") => Route::Look,
         ("POST", "/listen/start") => Route::Listen(true),
         ("POST", "/listen/stop") => Route::Listen(false),
