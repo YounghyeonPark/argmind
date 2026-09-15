@@ -55,5 +55,14 @@ fn main() {
 
     //: Blocks until 끝내기. When it returns the process ends, and the server thread with it —
     //: which is the whole point of there being a menu.
-    let _ = argmind_env_windows::tray::run(&tooltip, URL);
+    //:
+    //: **A failure here is not something to swallow.** There is no console to print to, so an
+    //: error was becoming an application that started, opened a tab and vanished — leaving a
+    //: browser pointed at a server that had gone with it. It says so in a window instead.
+    if let Err(e) = argmind_env_windows::tray::run(&tooltip, URL) {
+        argmind_env_windows::ask::confirm(
+            "argmind — 트레이 아이콘을 만들지 못했습니다",
+            &format!("{e}\n\n서버는 떠 있었지만 끄는 방법이 없어 종료합니다.\n\
+                      콘솔에서 쓰시려면 serve.exe 를 쓰세요."));
+    }
 }

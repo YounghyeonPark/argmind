@@ -399,10 +399,17 @@ impl How {
         }
     }
 
+    /// The one line a person reads to know what it will and will not do.
+    ///
+    /// **All three, because each is its own way of looking broken.** *It did nothing*, *it said
+    /// nothing* and *it never heard me* are three different complaints with three different
+    /// settings behind them, and a line that named only two would leave the third a mystery.
     pub fn line(&self) -> String {
-        format!("{} | {} | {}", self.model_name,
-                if self.dry { "dry — nothing will be pressed" } else { "live — it will press buttons" },
-                if self.speak { "speaking aloud" } else { "silent" })
+        format!("{} | {} | {} | {}", self.model_name,
+                if self.dry { "dry — nothing will be pressed" }
+                else { "live — it will press buttons" },
+                if self.speak { "speaking aloud" } else { "silent" },
+                if self.hear { "microphone on the talk key" } else { "not listening" })
     }
 }
 
@@ -419,17 +426,10 @@ pub fn run(how: How) {
     assert!(is_loopback(ADDRESS), "{ADDRESS} is not loopback");
     let token = mint_token();
     let listener = TcpListener::bind(ADDRESS).expect("could not bind");
-    println!("\n  argmind — http://{ADDRESS}/");
-    //: Both settings, on the line a person actually reads. *"It did nothing"* and *"it said
-    //: nothing"* are the two things that would otherwise look like the agent being broken.
-    println!("  {model_name} | {} | {}\n",
-             if dry { "dry — nothing will be pressed" } else { "live — it will press buttons" },
-             if speak { "speaking aloud" } else { "silent" });
-    if hear {
-        println!("  the microphone opens only while the talk key is held (whisper.cpp at {})
-",
-                 argmind_env_whisper::WHISPER);
-    }
+    //: **Nothing is printed here.** One of the two binaries running this has no console at all, so
+    //: a banner from the library goes either nowhere or into somebody else's window — and for the
+    //: one that does have a console it was being printed twice. The console binary says it; the
+    //: library serves.
 
     let out = Arc::new(Listeners::default());
     let (jobs, inbox) = channel::<Job>();
