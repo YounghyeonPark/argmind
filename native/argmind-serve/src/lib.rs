@@ -146,6 +146,12 @@ pub enum Route {
     Confirm(u64),
     /// Do not.
     Decline(u64),
+    /// Hold the talk key, or let it go.
+    ///
+    /// **Two routes rather than one recording call**, because push-to-talk is the design: the
+    /// microphone is open exactly while somebody is holding it down, which is the floor an open
+    /// microphone has no equivalent of and the reason the agent cannot hear itself.
+    Listen(bool),
     /// Anything else, named so a front end that asked wrongly is told rather than ignored.
     Unknown,
 }
@@ -163,6 +169,8 @@ pub fn route(request: &Request) -> Route {
             Ok(n) => Route::Decline(n),
             Err(_) => Route::Unknown,
         },
+        ("POST", "/listen/start") => Route::Listen(true),
+        ("POST", "/listen/stop") => Route::Listen(false),
         _ => Route::Unknown,
     }
 }

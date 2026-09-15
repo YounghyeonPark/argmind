@@ -1,0 +1,10 @@
+[package]
+name = "argmind-env-whisper"
+version = "0.0.1"
+edition = "2021"
+description = "Transcription over HTTP to a whisper.cpp server on this machine."
+license = "Apache-2.0"
+
+# None, deliberately. Raw HTTP/1.1 and a WAV header need no crate, and the recogniser itself is
+# something you install and run, the way Ollama is.
+[dependencies]

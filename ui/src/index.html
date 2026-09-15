@@ -50,6 +50,10 @@
   #form { display: flex; gap: 8px; padding: 10px 14px; border-top: 1px solid var(--edge); }
   #said { flex: 1; font: inherit; padding: 6px 10px; border: 1px solid var(--edge);
           border-radius: 3px; background: #fff; color: inherit; }
+  /* Held and listening are two states: the first is the key being down, the second is the server
+     confirming the device is open. They differ when a microphone fails to start. */
+  #talk.holding { border-color: var(--warn); }
+  #talk.listening { background: #fdf3ea; }
 </style>
 
 <body data-token="__TOKEN__">
@@ -62,6 +66,9 @@
   <form id="form" autocomplete="off">
     <input id="said" placeholder="말해보세요" autofocus>
     <button type="submit">보내기</button>
+    <!-- Hidden until the server says it has a microphone: a button that cannot work is worse
+         than no button. `type=button` so holding it never submits the form. -->
+    <button type="button" id="talk" hidden title="누르고 있는 동안 듣습니다 (스페이스)">🎤</button>
   </form>
   <script type="module" src="/app.js"></script>
 </body>

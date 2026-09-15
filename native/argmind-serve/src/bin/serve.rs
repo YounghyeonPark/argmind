@@ -42,7 +42,8 @@ use argmind_core::intent::{Effect, Trigger};
 use argmind_core::session::Session;
 use argmind_env_ollama::Local;
 use argmind_env_windows::hands::Did;
-use argmind_env_windows::{Attending, SapiSpeaker, Watcher, WindowsHands};
+use argmind_env_whisper::Whisper;
+use argmind_env_windows::{Attending, Microphone, SapiSpeaker, Watcher, WindowsHands};
 use argmind_voice::Speaker;
 use argmind_serve::proposals::{Answered, Proposal, Proposals};
 use argmind_serve::{authorised, event_stream_head, is_loopback, mint_token, parse_request, respond,
@@ -84,6 +85,10 @@ struct Desk {
     /// **`None` unless asked for.** Speaking makes a noise in a room, which is not something to
     /// start doing because a program was run — see `--speak`.
     voice: Option<SapiSpeaker>,
+    /// **`None` unless asked for**, for the same reason and more so: a microphone is not opened
+    /// because a program was run. `--hear` turns it on, and even then it opens only while the talk
+    /// key is held.
+    ear: Option<(Microphone, Whisper)>,
 }
 
 /// What a connection asks the agent to do.
@@ -94,6 +99,8 @@ enum Job {
     Said(String),
     Confirm(u64),
     Decline(u64),
+    /// The talk key went down or came up.
+    Listen(bool),
     /// A page opened: send it the snapshot it needs to draw itself.
     Opened(Sender<String>),
 }
@@ -234,12 +241,57 @@ fn act(desk: &mut Desk, out: &Listeners, p: Proposal) {
                              p.token, escape(&p.label)));
 }
 
+/// The talk key, down or up. **Letting go is what starts a turn** — nothing is transcribed while
+/// the key is still held, and nothing is recorded while it is not.
+fn listen(desk: &mut Desk, out: &Listeners, down: bool) {
+    let Some((mic, _)) = desk.ear.as_mut() else {
+        out.send("note", "마이크가 꺼져 있습니다 — --hear 로 켜세요");
+        return;
+    };
+    mic.hold(down);
+    if down {
+        out.send("hearing", "1");
+        return;
+    }
+    out.send("hearing", "0");
+    let Some((mic, whisper)) = desk.ear.as_mut() else { return };
+    let Some(clip) = mic.take() else {
+        //: **Two different silences, and they had one message.** A tap on the key is the person
+        //: holding it wrongly; a device that never opened is a machine with no microphone, and
+        //: telling somebody to hold the key longer when there is nothing to hold is worse than
+        //: saying nothing.
+        out.send("note", if mic.available {
+            "너무 짧습니다 — 말하는 동안 누르고 계세요"
+        } else {
+            "마이크를 열지 못했습니다 — 입력 장치가 있는지 확인하세요"
+        });
+        return;
+    };
+    out.send("busy", "1");
+    let heard = whisper.hear(&clip.samples, argmind_env_windows::microphone::WANT_HZ);
+    out.send("busy", "0");
+    match heard {
+        Err(why) => out.send("note", &format!("듣지 못했습니다 — {why}")),
+        Ok(text) if text.trim().is_empty() => {
+            out.send("note", "아무 말도 들리지 않았습니다");
+        }
+        Ok(text) => {
+            //: **Shown before it is answered.** A recogniser's opinion about a waveform is not
+            //: what the person said, and they have to be able to see what it thought it heard —
+            //: which is also the only way a wrong transcript is ever noticed.
+            out.send("them", &text);
+            think(desk, out, text.trim());
+        }
+    }
+}
+
 fn hello(desk: &Desk, model: &str) -> String {
     let waiting: Vec<String> = desk.proposals.waiting().iter().map(as_json).collect();
     let fields = [
         format!("\"model\":\"{}\"", escape(model)),
         format!("\"dry\":{}", desk.dry),
         format!("\"speaks\":{}", desk.voice.is_some()),
+        format!("\"hears\":{}", desk.ear.is_some()),
         format!("\"attending\":\"{}\"", escape(&desk.session.eyes.window().1)),
         format!("\"waiting\":[{}]", waiting.join(",")),
     ];
@@ -256,6 +308,9 @@ fn main() {
     //: measured at volume zero into a memory stream so a desktop somebody was using stayed quiet;
     //: making a sound is a thing to ask for, not a thing to inherit from starting a program.
     let speak = std::env::args().any(|a| a == "--speak");
+    //: Same rule, and it matters more: **a microphone is not opened because a program was run.**
+    //: Even with this, it opens only while the talk key is held.
+    let hear = std::env::args().any(|a| a == "--hear");
     let model_name = std::env::args().skip(1).find(|a| a.contains(':'))
         .unwrap_or_else(|| "qwen3:8b".into());
 
@@ -270,6 +325,11 @@ fn main() {
     println!("  {model_name} | {} | {}\n",
              if dry { "dry — nothing will be pressed" } else { "live — it will press buttons" },
              if speak { "speaking aloud" } else { "silent" });
+    if hear {
+        println!("  the microphone opens only while the talk key is held (whisper.cpp at {})
+",
+                 argmind_env_whisper::WHISPER);
+    }
 
     let out = Arc::new(Listeners::default());
     let (jobs, inbox) = channel::<Job>();
@@ -306,8 +366,9 @@ fn main() {
                 eprintln!("  a Korean voice is not installed — Korean replies will not be spoken");
             }
         }
+        let ear = hear.then(|| (Microphone::new(), Whisper::default()));
         let mut desk = Desk { session: Session::new(eyes, hands, Model(model)),
-                              proposals: Proposals::default(), dry, voice };
+                              proposals: Proposals::default(), dry, voice, ear };
         while let Ok(job) = inbox.recv() {
             match job {
                 Job::Said(text) => think(&mut desk, &agent_out, text.trim()),
@@ -324,6 +385,7 @@ fn main() {
                         agent_out.send("dropped", &p.token.to_string());
                     }
                 }
+                Job::Listen(down) => listen(&mut desk, &agent_out, down),
                 Job::Opened(tx) => {
                     let _ = tx.send(sse("hello", &hello(&desk, &agent_model)));
                 }
@@ -412,6 +474,10 @@ fn serve_one(mut stream: TcpStream, out: &Listeners, token: &str, jobs: &Sender<
         Route::Decline(n) => {
             let _ = stream.write_all(&respond("204 No Content", "text/plain", ""));
             let _ = jobs.send(Job::Decline(n));
+        }
+        Route::Listen(down) => {
+            let _ = stream.write_all(&respond("204 No Content", "text/plain", ""));
+            let _ = jobs.send(Job::Listen(down));
         }
         Route::Unknown => {
             let _ = stream.write_all(&respond("404 Not Found", "text/plain", "no"));

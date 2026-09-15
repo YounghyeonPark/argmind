@@ -23,6 +23,7 @@ interface Hello {
   model: string;
   dry: boolean;
   speaks: boolean;
+  hears: boolean;
   attending: string;
   waiting: Proposal[];
 }
@@ -112,7 +113,9 @@ stream.addEventListener("hello", (e) => {
   // Both settings shown, because "it did nothing" and "it said nothing" are the two things
   // a person would otherwise mistake for the agent being broken.
   statusLine.textContent =
-    `${d.model}${d.dry ? " · 실행 안 함" : ""}${d.speaks ? " · 소리 켜짐" : " · 소리 꺼짐"}`;
+    `${d.model}${d.dry ? " · 실행 안 함" : ""}${d.speaks ? " · 소리 켜짐" : " · 소리 꺼짐"}` +
+    `${d.hears ? " · 마이크 켜짐" : ""}`;
+  talk.hidden = !d.hears;
   // Rebuilt from the server's own list, so a reload is never a page showing buttons the server
   // has forgotten — or missing ones it still holds.
   pending.replaceChildren();
@@ -161,5 +164,48 @@ form.onsubmit = (e) => {
   line("them", text);
   void post("/say", text);
 };
+
+// ---- the talk key ------------------------------------------------------------------------------
+//
+// Push-to-talk, and the two halves are two requests. Holding is the floor an open microphone has no
+// equivalent of: the agent cannot hear itself, because the device is shut while it speaks, and a
+// phone call in the same room is not a turn addressed to it.
+
+const talk = document.getElementById("talk") as HTMLButtonElement;
+let holding = false;
+
+function hold(down: boolean): void {
+  if (down === holding) {
+    return;
+  }
+  holding = down;
+  talk.classList.toggle("holding", down);
+  void post(down ? "/listen/start" : "/listen/stop");
+}
+
+talk.onpointerdown = () => hold(true);
+// `pointerup` on the window and not the button: releasing outside it must still stop the
+// recording, or a slip of the mouse leaves the microphone open.
+window.addEventListener("pointerup", () => hold(false));
+window.addEventListener("pointercancel", () => hold(false));
+// And leaving the page entirely — a tab switch mid-hold must not keep it recording.
+window.addEventListener("blur", () => hold(false));
+
+window.addEventListener("keydown", (e) => {
+  // Not while typing: the space bar belongs to the text box when the text box has it.
+  if (e.code === "Space" && !e.repeat && document.activeElement !== input) {
+    e.preventDefault();
+    hold(true);
+  }
+});
+window.addEventListener("keyup", (e) => {
+  if (e.code === "Space") {
+    hold(false);
+  }
+});
+
+stream.addEventListener("hearing", (e) => {
+  talk.classList.toggle("listening", (e as MessageEvent).data === "1");
+});
 
 input.focus();

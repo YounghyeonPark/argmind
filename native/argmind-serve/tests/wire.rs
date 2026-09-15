@@ -157,3 +157,22 @@ fn a_response_says_how_long_it_is_in_bytes() {
     //: A stream that never ends must not advertise a length.
     assert!(!head.contains("Content-Length"));
 }
+
+/// **Holding and letting go are two routes**, and neither is a GET.
+///
+/// Push-to-talk is the design: the microphone is open exactly while somebody holds the key. A
+/// single "record" call would have to decide for itself when to stop, which is the open-microphone
+/// problem wearing a different name.
+#[test]
+fn the_microphone_opens_only_while_the_key_is_held() {
+    let post = |p: &str| parse_request(&format!("POST {p} HTTP/1.1\r\n\r\n")).unwrap();
+    assert_eq!(route(&post("/listen/start")), Route::Listen(true));
+    assert_eq!(route(&post("/listen/stop")), Route::Listen(false));
+    //: Not by GET: a prefetch, a link or an image tag must not be able to open a microphone.
+    assert_eq!(route(&get("/listen/start")), Route::Unknown);
+    assert_eq!(route(&get("/listen/stop")), Route::Unknown);
+    //: And there is no third spelling that means either of them.
+    assert_eq!(route(&post("/listen")), Route::Unknown);
+    assert_eq!(route(&post("/listen/")), Route::Unknown);
+    assert_eq!(route(&post("/listen/start/x")), Route::Unknown);
+}
