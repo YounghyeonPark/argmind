@@ -15,9 +15,11 @@
 
 pub mod hands;
 pub mod launch;
+pub mod patterns;
 pub mod speaker;
 pub use hands::{Reach, WindowsHands};
-pub use launch::{foreground_is, is_minimised, pid_of, to_front, windows_of, Launched};
+pub use patterns::{operate, Operated};
+pub use launch::{bring_to_front, foreground_is, whats_in_front, window_title, is_minimised, pid_of, to_front, windows_of, Launched};
 pub use speaker::SapiSpeaker;
 
 use argmind_core::contract::{Eyes, Widget};
@@ -71,6 +73,17 @@ fn supported(element: &IUIAutomationElement) -> Vec<&'static str> {
         }
     }
     out
+}
+
+/// One UI Automation client. **Shared shape, one definition** — the eyes and the pattern path both
+/// need one, and two ways of opening it is two ways of getting the apartment wrong.
+pub fn open_automation() -> windows::core::Result<IUIAutomation> {
+    unsafe {
+        //: The apartment the calling thread already has is taken as given — `RPC_E_CHANGED_MODE`
+        //: means somebody got here first, which is not an error for a reader.
+        let _ = CoInitializeEx(None, COINIT_MULTITHREADED);
+        CoCreateInstance(&CUIAutomation, None, CLSCTX_INPROC_SERVER)
+    }
 }
 
 pub struct WindowsEyes {
@@ -254,6 +267,18 @@ pub fn pointing_is_exact() -> bool {
     let probes = [((pw / 2) as i64, (ph / 2) as i64), ((pw / 2) as i64 + 7, (ph / 2) as i64 + 11)];
     let got = cursor_round_trip(&probes);
     got.len() == probes.len() && got.iter().all(|(s, g)| s == g)
+}
+
+/// Where the pointer is, **without moving it.**
+///
+/// Separate from [`cursor_round_trip`] on purpose: an instrument that answers *"did the pointer
+/// move?"* must not be the thing that moved it.
+pub fn cursor_now() -> (i64, i64) {
+    let mut at = POINT::default();
+    unsafe {
+        let _ = GetCursorPos(&mut at);
+    }
+    (at.x as i64, at.y as i64)
 }
 
 /// Send the pointer to each point and read back where it actually went — **then put it back.**

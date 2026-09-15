@@ -14,7 +14,7 @@ use std::time::{Duration, Instant};
 
 use windows::Win32::Foundation::{BOOL, HWND, LPARAM, TRUE};
 use windows::Win32::UI::WindowsAndMessaging::{EnumWindows, GetForegroundWindow,
-    GetWindowTextLengthW, GetWindowThreadProcessId, IsIconic, IsWindowVisible,
+    GetWindowTextLengthW, GetWindowTextW, GetWindowThreadProcessId, IsIconic, IsWindowVisible,
     SetForegroundWindow};
 
 use crate::hands::WindowsHands;
@@ -98,6 +98,48 @@ pub fn is_minimised(handle: isize) -> bool {
 /// Bring a window to the front. Best effort — Windows may refuse a process that is not in front.
 pub fn to_front(handle: isize) -> bool {
     unsafe { SetForegroundWindow(HWND(handle as _)).as_bool() }
+}
+
+/// A window's title, for saying what won instead of what was asked for.
+pub fn window_title(handle: isize) -> String {
+    unsafe {
+        let mut buf = [0u16; 256];
+        let n = GetWindowTextW(HWND(handle as _), &mut buf);
+        String::from_utf16_lossy(&buf[..n as usize])
+    }
+}
+
+/// What is in front right now: its handle, its title and the process that owns it.
+///
+/// **A refusal that does not say what won instead is half an answer.** Two harnesses refuse when
+/// they cannot get the front, and "could not get the front" alone leaves a reader unable to tell a
+/// focus-stealing rule from a window that failed to open.
+pub fn whats_in_front() -> (isize, String, Option<u32>) {
+    let handle = unsafe { GetForegroundWindow().0 as isize };
+    (handle, window_title(handle), pid_of(handle))
+}
+
+/// Ask for the front and **wait for it to actually arrive**, up to `within`.
+///
+/// One `SetForegroundWindow` is not enough and the failure is not permanent: Windows hands the
+/// foreground privilege around, a freshly launched application takes a moment before it can accept
+/// it, and whatever had focus may still be letting go. A single try reported *"could not get the
+/// front"* on a machine where the same call succeeded seconds earlier in another harness.
+///
+/// Returns whether it is genuinely in front — **the answer is the check, not the request**, because
+/// `SetForegroundWindow` returning true does not mean the window is in front.
+pub fn bring_to_front(handle: isize, pid: u32, within: Duration) -> bool {
+    let end = Instant::now() + within;
+    loop {
+        to_front(handle);
+        std::thread::sleep(Duration::from_millis(200));
+        if foreground_is(pid) {
+            return true;
+        }
+        if Instant::now() >= end {
+            return false;
+        }
+    }
 }
 
 /// An application this process started, and the only thing its hands will touch.

@@ -21,7 +21,7 @@
 use std::time::Duration;
 
 use argmind_core::contract::Eyes;
-use argmind_env_windows::{foreground_is, to_front, windows_of, Launched, WindowsEyes};
+use argmind_env_windows::{bring_to_front, windows_of, Launched, WindowsEyes};
 
 const INTERESTING: [&str; 5] = ["combo box", "button", "check box", "list", "edit"];
 
@@ -72,9 +72,7 @@ fn run() -> i32 {
     //: is the harness reading the wrong window, and the two look identical in the output. So the
     //: launched window is brought to the front and **the front is verified**; a run that cannot get
     //: it refuses rather than reporting a clean zero.
-    to_front(main_window);
-    std::thread::sleep(Duration::from_millis(600));
-    if !foreground_is(launched.pid) {
+    if !bring_to_front(main_window, launched.pid, Duration::from_secs(3)) {
         println!("  {app} is not in front — Windows refuses the front to a process that does not \
                   already have it, and every point would then resolve to whatever is covering it.");
         println!("  Refusing rather than reporting a zero about the covering window. Pass \

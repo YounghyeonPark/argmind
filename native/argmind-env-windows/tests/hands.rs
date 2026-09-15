@@ -133,3 +133,42 @@ fn a_partial_delivery_is_a_failure() {
     //: More than asked for is wrong in the other direction and is not silently fine.
     assert!(check_delivery(3, 2).is_err());
 }
+
+/// **The pattern path is off unless a harness that is measuring it turns it on.**
+///
+/// `obstruction` found `3 of 3` with patterns and `3 of 3` without, so nothing has earned them a
+/// place in the shipped click. The two harnesses that exist to measure them enable them; the
+/// default does not, and that default is the finding acted on.
+#[test]
+fn control_patterns_are_off_until_a_harness_asks_for_them() {
+    assert!(!WindowsHands::unrestricted().patterns);
+    assert!(WindowsHands::unrestricted().with_patterns().patterns);
+    //: Enabling them does not arm them, and arming does not enable them. Two flags, two meanings.
+    assert!(!WindowsHands::unrestricted().with_patterns().live());
+    assert!(!WindowsHands::unrestricted().arm().patterns);
+}
+
+/// The two paths are counted apart, and **a click that a guard stopped is neither.**
+#[test]
+fn the_pattern_arm_and_the_click_arm_are_separate_tallies() {
+    //: Bound to a process that owns no window, so the guard refuses before either path runs — the
+    //: point being that a refusal must not be booked to one of the arms.
+    let mut hands = WindowsHands::only_within(0).with_patterns();
+    assert!(matches!(hands.click_button(&somewhere(), "left"), Did::Elsewhere { .. }));
+    assert_eq!((hands.by_pattern, hands.by_click, hands.elsewhere), (0, 0, 1));
+
+    //: Unbound and dry: no window under the point resolves to the widget's name and role, so the
+    //: pattern lookup finds nothing and the click arm takes it — with a reason recorded, because
+    //: "fell back" without one is the same as no answer.
+    let mut hands = WindowsHands::unrestricted().with_patterns();
+    assert_eq!(hands.click_button(&somewhere(), "left"), Did::Sent { live: false });
+    assert_eq!((hands.by_pattern, hands.by_click), (0, 1));
+    assert!(!hands.why.is_empty(), "a fallback with no reason recorded");
+
+    //: With patterns off the reason stays empty, so a reader cannot mistake "not tried" for
+    //: "tried and failed".
+    let mut hands = WindowsHands::unrestricted();
+    hands.click_button(&somewhere(), "left");
+    assert!(hands.why.is_empty());
+    assert_eq!((hands.by_pattern, hands.by_click), (0, 1));
+}

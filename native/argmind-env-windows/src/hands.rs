@@ -24,6 +24,9 @@
 use std::time::{Duration, Instant};
 
 use argmind_core::contract::{Hands, Widget};
+use windows::Win32::UI::Accessibility::IUIAutomation;
+
+use crate::patterns::Operated;
 use windows::Win32::Foundation::{HWND, POINT};
 use windows::Win32::UI::Input::KeyboardAndMouse::{
     SendInput, INPUT, INPUT_0, INPUT_KEYBOARD, INPUT_MOUSE, KEYBDINPUT, KEYBD_EVENT_FLAGS,
@@ -116,12 +119,26 @@ pub enum Did {
     /// The point belonged to somebody else. **Not an error and not a success** — the harness that
     /// asked has to be able to tell this apart from a click that landed and did nothing.
     Elsewhere { owner: Option<u32> },
+    /// Operated through a UI Automation pattern — **no pixel was aimed at and the cursor did not
+    /// move.** `how` is which pattern.
+    Operated { how: &'static str, live: bool },
     /// Malformed: an unknown button or an unnamed key.
     Refused(String),
 }
 
 pub struct WindowsHands {
     pub reach: Reach,
+    /// **Off unless a harness that is measuring them turns them on.** `obstruction` found `3 of 3`
+    /// with and `3 of 3` without, so nothing has earned them a place in the shipped click; see
+    /// [`crate::patterns`].
+    pub patterns: bool,
+    /// Made once and only if a pattern is ever wanted.
+    automation: Option<IUIAutomation>,
+    pub by_pattern: u64,
+    pub by_click: u64,
+    /// Why the last attempt fell back to a click. **Empty is not the same as "no reason"** — it
+    /// means no fallback happened.
+    pub why: String,
     /// **Off by default.** Hands that are built and not armed do nothing, so the failure mode of
     /// forgetting a flag is a run that acts on nothing rather than a run that acts on everything.
     pub live: bool,
@@ -145,14 +162,24 @@ impl WindowsHands {
     }
 
     fn with(reach: Reach) -> Self {
-        WindowsHands { reach, live: false, max_per_second: 4.0, clicked: 0, refused: 0,
-                       elsewhere: 0, done: Vec::new(), last: None }
+        WindowsHands { reach, patterns: false, automation: None, by_pattern: 0, by_click: 0,
+                       why: String::new(), live: false, max_per_second: 4.0, clicked: 0,
+                       refused: 0, elsewhere: 0, done: Vec::new(), last: None }
     }
 
     /// Arm them. Separate from construction because a flag that both builds and arms is a flag
     /// somebody sets while meaning only to build.
     pub fn arm(mut self) -> Self {
         self.live = true;
+        self
+    }
+
+    /// Operate controls through UI Automation where one applies, falling back to a click.
+    ///
+    /// **For the harnesses that measure this path**, and for nothing else — see
+    /// [`crate::patterns`] for why it is not on by default.
+    pub fn with_patterns(mut self) -> Self {
+        self.patterns = true;
         self
     }
 
@@ -169,7 +196,7 @@ impl WindowsHands {
 
     fn record(&mut self, did: Did) -> Did {
         match &did {
-            Did::Sent { .. } => {}
+            Did::Sent { .. } | Did::Operated { .. } => {}
             Did::Elsewhere { .. } => self.elsewhere += 1,
             Did::Refused(_) => self.refused += 1,
         }
@@ -190,7 +217,30 @@ impl WindowsHands {
         if !may_touch(self.reach, owner) {
             return self.record(Did::Elsewhere { owner });
         }
+        //: **The pattern path is tried first and is gated by the same guard.** It resolves by
+        //: point too — `ElementFromPoint` then upwards — so a foreign window over the target hands
+        //: it the foreign element, and operating that is exactly what the guard exists to stop.
+        //: One guard, both paths, checked before either.
+        self.why = String::new();
+        if self.patterns && button == "left" {
+            if self.automation.is_none() {
+                self.automation = crate::open_automation().ok();
+            }
+            if let Some(automation) = &self.automation {
+                match crate::patterns::operate(automation, x, y, &widget.name, &widget.role,
+                                               self.live) {
+                    Operated::By(how) | Operated::WouldUse(how) => {
+                        self.by_pattern += 1;
+                        return self.record(Did::Operated { how, live: self.live });
+                    }
+                    Operated::Click(why) => self.why = why,
+                }
+            } else {
+                self.why = "UI Automation would not open".into();
+            }
+        }
         self.clicked += 1;
+        self.by_click += 1;
         if !self.live {
             return self.record(Did::Sent { live: false });
         }
