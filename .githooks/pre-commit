@@ -1,30 +1,29 @@
 #!/bin/sh
 # Argmind pre-commit hook.
 #
-# Two jobs, both addressing failure modes this project has actually suffered:
+# Runs the test suite. It encodes historical modelling errors as regression tests, the
+# "the model must be able to fail" invariants, and the rules this project keeps by looking
+# at itself: the licence record, the core naming no platform, one place performing, and a
+# voice seam that cannot reach an action. A commit that breaks them is a commit that has
+# quietly re-introduced something somebody already paid for once.
 #
-#   1. Run the test suite. The suite encodes twelve historical modelling errors
-#      as regression tests plus the "the model must be able to fail" invariants.
-#      A commit that breaks them is a commit that has quietly re-introduced a
-#      flattering assumption.
-#
-#   2. Warn when perf_model/ code changes without its results_*.txt being
-#      regenerated. Those outputs are tracked ON PURPOSE -- they are the evidence
-#      behind claims in PHASE0_FINDINGS.md, and versioning them is what makes a
-#      changed number visible and attributable. Code moving without outputs
-#      moving means the documents now disagree with the model.
+# **This ran `python -m pytest` until 2026-09-15.** The Python implementation is gone —
+# `git show python-before-removal-2026-09-15` — and everything it held is either ported or
+# committed as data under `native/expectations/`, `native/golden/` and `measure/`.
 #
 # Install (once per clone):   git config core.hooksPath .githooks
 # Bypass (rarely justified):  git commit --no-verify
 
 set -e
 
+log=$(mktemp 2>/dev/null || echo /tmp/argmind-cargo-test.log)
+
 echo "pre-commit: running test suite..."
-if ! python -m pytest -q >/tmp/argmind-pytest.log 2>&1; then
+if ! cargo test --manifest-path native/Cargo.toml --quiet >"$log" 2>&1; then
     echo ""
     echo "COMMIT BLOCKED: tests failed."
     echo ""
-    tail -25 /tmp/argmind-pytest.log
+    tail -30 "$log"
     echo ""
     echo "The suite pins relationships, not numbers, so a failure usually means"
     echo "either a real regression or that a settled finding has genuinely changed."
@@ -34,23 +33,28 @@ if ! python -m pytest -q >/tmp/argmind-pytest.log 2>&1; then
 fi
 echo "pre-commit: tests pass."
 
-# --- staged-file consistency check (warn only) ---------------------------------
-staged=$(git diff --cached --name-only)
-code_changed=$(echo "$staged" | grep -E '^perf_model/.*\.py$' || true)
-results_changed=$(echo "$staged" | grep -E '^perf_model/results_.*\.txt$' || true)
+# --- the front end is compiled and committed -----------------------------------
+#
+# `ui/dist/app.js` is `include_str!`d into the server, so a change to `ui/src/app.ts`
+# that is not compiled ships the old page while the diff shows the new one. That is
+# the same shape as the perf_model check this replaced: code moving without its
+# output moving means the tree now disagrees with itself.
 
-if [ -n "$code_changed" ] && [ -z "$results_changed" ]; then
+staged=$(git diff --cached --name-only)
+ts_changed=$(echo "$staged" | grep -E '^ui/src/.*\.ts$' || true)
+js_changed=$(echo "$staged" | grep -E '^ui/dist/app\.js$' || true)
+
+if [ -n "$ts_changed" ] && [ -z "$js_changed" ]; then
     echo ""
-    echo "pre-commit WARNING: perf_model/ code is staged but no results_*.txt is."
+    echo "pre-commit WARNING: ui/src is staged but ui/dist/app.js is not."
     echo "Changed:"
-    echo "$code_changed" | sed 's/^/    /'
+    echo "$ts_changed" | sed 's/^/    /'
     echo ""
-    echo "If this change affects any modelled number, regenerate and stage the"
-    echo "output so the diff shows what moved:"
-    echo "    python perf_model/argmind_model.py"
+    echo "The server embeds the compiled file, so build and stage it:"
+    echo "    cd ui && npx tsc"
     echo ""
-    echo "If it genuinely changes no output (refactor, comment, new unused"
-    echo "parameter), proceed -- this is a warning, not a block."
+    echo "If the change genuinely produces no different output, proceed --"
+    echo "this is a warning, not a block."
 fi
 
 exit 0

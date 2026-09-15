@@ -5,11 +5,16 @@ with no gaps and no overlaps.
 
 | agent | owns | model |
 |---|---|---|
+
+> **Paths updated 2026-09-15**, when the Python was deleted at
+> `python-before-removal-2026-09-15`. What each agent owns did not change; where it lives did.
+> The AST tests that held this project's rules are now `native/argmind-rules/`, which reads the
+> source rather than parsing it — weaker, and said so at the top of each file there.
 | `architect` | the shape — `contract.py`, `loop.py`, `llm.py`, the AST rules, where a new thing goes | opus |
 | `conversation` | `converse.py`, `intent.py` — what it says, how it reads a turn, repair | opus |
-| `environment` | `argmind/env/` — capabilities behind Eyes and Hands | opus |
-| `app` | `argmind/app.py`, `tests/test_app.py` — the window a person touches | opus |
-| `measurement` | `measure/` — the instruments every decision here rests on | opus |
+| `environment` | `native/argmind-env-windows/` — capabilities behind Eyes and Hands | opus |
+| `app` | `native/argmind-serve/src/app.rs`, `native/argmind-serve/tests/` — the window a person touches | opus |
+| `measurement` | `native/argmind-measure/` — the instruments every decision here rests on | opus |
 
 **Architecture leads.** `architect` drew the boundaries the other four work inside, and it is the
 only one that may change a contract. When something does not obviously belong anywhere, that is an
@@ -58,14 +63,14 @@ produced — not the standards in the abstract, which is what gets skipped under
 
 ## Boundaries, because the split is the point
 
-    architect      argmind/core/contract.py, loop.py, llm.py, tests/test_core.py
-    conversation   argmind/core/converse.py, intent.py
-    environment    argmind/env/
-    app            argmind/app.py, tests/test_app.py
+    architect      native/argmind-core/src/contract.rs, loop.py, llm.py, native/argmind-rules/tests/ and native/argmind-core/tests/
+    conversation   native/argmind-core/src/converse.rs, intent.py
+    environment    native/argmind-env-windows/
+    app            native/argmind-serve/src/app.rs, native/argmind-serve/tests/
     measurement    measure/, the scratchpad
 
 Each brief says what its agent may **not** touch. `environment` and `app` never edit `core/`;
-`measurement` never edits `argmind/`; `conversation` hands anything about `loop.py`'s shape to
+`measurement` never edits `native/`; `conversation` hands anything about `loop.py`'s shape to
 `architect`. **An agent that finds it needs something outside its area names it and stops** — that
 hand-off is the design working, not a failure.
 

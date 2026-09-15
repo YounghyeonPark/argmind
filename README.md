@@ -3,14 +3,20 @@
 **A local-model agent you talk to while you work at your PC.** Open-source model, on your machine,
 no cloud call. It answers, and it acts only when acting is what you asked for.
 
-    python -m argmind app                   the window. Leave it running while you work
-    python -m argmind look                  what is on screen right now, and how long reading it took
-    python -m argmind talk                  a conversation. It clicks only with --live
-    python -m argmind say "이 창 닫아줘"       one exchange and exit
-    python -m argmind watch --for build     it speaks when something happens, unasked
+    argmind-app                     an icon by the clock and a page in your browser.
+                                    Leave it running while you work
+    argmind look                    what is on screen right now, and how long reading it took
+    argmind talk                    a conversation. It clicks only with --live
+    argmind say "이 창 닫아줘"        one exchange and exit
+    argmind watch --for build       it speaks when something happens, unasked
+    argmind check                   what is missing, and what it offers to do about it
+
+Build it with `cargo build --release --manifest-path native/Cargo.toml`.
 
 Windows for now; the core knows nothing about Windows. Needs [Ollama](https://ollama.com) with a
-small text model (`ollama pull qwen2.5:7b`) and `comtypes`.
+small text model. **Everything else it wants, it offers to install** — the model, and the
+recogniser, which it builds from source at a pinned commit. It says exactly what it will do and
+does nothing until you say yes.
 
 ## The one rule
 
@@ -27,10 +33,17 @@ So the OS supplies the names and the rectangles, and the model only ever picks a
 
 ## What it is
 
-    argmind/core/    Widget, Eyes, Hands, the model, and the loop. No platform anywhere in it
-    argmind/env/     one environment: UI Automation for eyes, SendInput for hands
-    argmind/app.py   the window — a transcript, a box to type in, and a button per action
-    measure/         the goal set, the captured screens, and every answer behind the numbers below
+    native/argmind-core/         Widget, Eyes, Hands, the model, the session. No platform in it
+    native/argmind-env-windows/  one environment: UI Automation for eyes, SendInput for hands,
+                                 WASAPI for the microphone, SAPI for the voice
+    native/argmind-serve/        the application — a local server, a tray icon, and the CLI
+    ui/                          the page: a transcript, a box to type in, a button per action
+    native/argmind-measure/      every harness behind the numbers below
+    measure/                     the goal set, the captured screens, and every answer
+
+Rust and TypeScript. **It was Python until 2026-09-15**; that tree is at
+`python-before-removal-2026-09-15`, and what it produced is committed as data so the equivalence
+checks outlived it.
 
 Four separable pieces, because **acting is not a stage that always runs, it is something decided**,
 and a thought can start without anybody speaking:

@@ -1,9 +1,14 @@
 ---
 name: conversation
-description: Owns what the agent says and how it reads a turn — converse.py, intent.py, the prompt, the history, repair. Use to improve interaction and communication, to change what the model is shown or asked, and when a turn is misread. Writes argmind/core/converse.py and intent.py. Every change it makes is measured on BOTH harnesses before it is kept, because prompt edits here are 0 for 5.
+description: Owns what the agent says and how it reads a turn — converse.py, intent.py, the prompt, the history, repair. Use to improve interaction and communication, to change what the model is shown or asked, and when a turn is misread. Writes native/argmind-core/src/converse.rs and intent.py. Every change it makes is measured on BOTH harnesses before it is kept, because prompt edits here are 0 for 5.
 tools: Read, Grep, Glob, Bash, Write, Edit
 model: opus
 ---
+
+> **Paths updated 2026-09-15**, when the Python was deleted at
+> `python-before-removal-2026-09-15`. What each agent owns did not change; where it lives did.
+> The AST tests that held this project's rules are now `native/argmind-rules/`, which reads the
+> source rather than parsing it — weaker, and said so at the top of each file there.
 
 You own the part of argmind a person actually experiences: what it says, how it reads a turn, and
 whether you can correct it. **This is the owner's stated priority** —

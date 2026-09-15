@@ -4,8 +4,10 @@
 real-time interaction, actions taken through the OS accessibility layer. Author: Younghyeon Park
 <ypark.dev@gmail.com>. Apache-2.0. A side project, not a product.
 
-Windows, PowerShell primary, Python 3.14. Needs [Ollama](https://ollama.com) and `comtypes`.
-`python -m pytest` before quoting any number; a tracked hook in `.githooks/` runs it and blocks
+Windows, PowerShell primary. **Rust, since 2026-09-15** — the Python is at
+`python-before-removal-2026-09-15` and is not coming back. Needs [Ollama](https://ollama.com);
+everything else it wants it offers to install. `cargo test --manifest-path native/Cargo.toml`
+before quoting any number; a tracked hook in `.githooks/` runs it and blocks
 (`git config core.hooksPath .githooks` once per clone). `origin` is the private
 `YounghyeonPark/argmind`. **Location `C:\dev\argmind`** — off Google Drive since 2026-08-08, because
 sync corrupts a git repository.
@@ -21,8 +23,9 @@ work here.
 > A model never emits a coordinate.**
 
 Measured first: a vision model took **24–82 s** for a pixel and on a dense screen never answered; UI
-Automation answers exactly in **41–266 ms**. `tests/test_core.py` holds this by walking the AST — no
-core module asks a model for `x`/`y`, none hands it an image, nothing in `core/` names a platform.
+Automation answers exactly in **41–266 ms**. `argmind-rules` holds this by reading the source — no
+core module asks a model for `x`/`y`, nothing rendered into the prompt mentions a rectangle, and
+nothing in `argmind-core` names a platform.
 
 ## Standards of evidence
 
@@ -42,22 +45,31 @@ the two days that built this, three of them flattering.
 
 ## What is built
 
-    argmind/core/    contract.py  Widget, Eyes, Hands — what an environment must provide
-                     llm.py       the local model; every setting learned from a silent failure
-                     intent.py    Trigger, Effect, Intent, Watch
-                     converse.py  one call: what to say, and what if anything to do
-                     loop.py      observe / poll / decide / perform, separately
-    argmind/env/     windows.py   UI Automation for eyes, SendInput for hands
-                     sapi.py      the voice — Heami for Korean, never an English one
-                     whisper.py   the microphone and Whisper, with the guards silence needs
-    argmind/voice.py              Heard / Listener / Speaker — the seam, and why it is not a contract
-    argmind/app.py                the window — `python -m argmind app`
-    argmind/__main__.py           app / look / talk / say / watch
-    measure/                      goals, captured screens, and every answer behind the numbers
-    native/prompt-spike/          Rust: renders the prompt byte-identically. See the port, below
+    native/argmind-core/        contract.rs  Widget, Eyes, Hands — what an environment must provide
+                                llm.rs       the local model; every setting learned from a silent failure
+                                intent.rs    Trigger, Effect, Intent
+                                converse.rs  one call: what to say, and what if anything to do
+                                session.rs   observe / decide / perform, separately
+                                watch.rs     a trigger that starts from a change, with its floor
+    native/argmind-env-windows/ UI Automation for eyes, SendInput for hands, WASAPI for the
+                                microphone, SAPI for the voice, a tray icon, a cover window
+    native/argmind-env-ollama/  the model, over raw HTTP/1.1
+    native/argmind-env-whisper/ transcription, and the guard that stops silence becoming a turn
+    native/argmind-voice/       Heard / Listener / Speaker — the seam, and why it is not a contract
+    native/argmind-serve/       the application: a server, a page, a tray icon, and `argmind`
+    native/argmind-measure/     every harness behind the numbers
+    native/argmind-rules/       the rules this repository keeps, by looking at itself
+    ui/                         the front end, TypeScript with no dependency but `tsc`
+    measure/                    goals, captured screens, and every answer behind the numbers
+    native/expectations/        what the Python produced, committed as data
+    native/golden/              two recorded transcripts the suite replays
 
-**152 tests, none needing a display, a model, a network, a microphone or a speaker.** Re-derive
-with `python -m pytest`.
+**Nothing needs a display, a model, a network, a microphone or a speaker.** Re-derive with
+`cargo test --manifest-path native/Cargo.toml`.
+
+**Three rules are held by reading the source rather than by the compiler**, in `argmind-rules`:
+the licence record, the core naming no platform and being shown no coordinate, one place calling
+`perform`, and a voice seam that cannot name a `Session`. Each was checked by breaking it.
 
 ### The invariants a change could break without noticing
 
@@ -121,7 +133,7 @@ leak (0 → 5 of 32) and choosing (32 → 28 of 37) and buys rule-following (14 
 **Three of the four harnesses send no history** — `saying`, `choosing` and `talking` all call
 `converse()` without it. They reproduced their baselines digit for digit under a change that made the
 agent click the eraser when greeted. **"No slide on those three" is vacuous for anything touching the
-conversation**, and only `measure/conversation.py` can see it.
+conversation**, and only `argmind-measure`'s `conversation` harness can see it.
 
 ## The owner's priority, 2026-09-10
 
@@ -168,11 +180,26 @@ terms: **rules currently held by AST tests become held by the compiler** — `co
 never reads `.rect`, so a `Listing { name, role }` type makes "the model is never shown a
 coordinate" structural rather than asserted.
 
-Staged so each step is verifiable, and **the instruments come first**: `measure/` is 7,489 lines
-against the core's 575 lines of code, and it is the asset. Stage 1 is done — `native/prompt-spike/`
-renders the prompt to the same `r322a4c`, and forks on a one-character change. Stage 0's golden
-transcript is done. `docs/findings/porting-the-core.md` has the accounting, what breaks in
-`measure/`, and what would refute the plan.
+**That payoff has not arrived and the port is finished.** `Listing` was never built; the core
+still passes `Widget`, which carries a `rect`, and the rule is held by a test reading
+`converse.rs`. What the port *did* buy is elsewhere and is real: `Reach` makes *never touch what
+this harness did not start* a type, `Proposals` makes a stale button structurally unable to
+confirm a later action, and a job object makes *the server dies with argmind* the operating
+system's promise rather than a destructor's. Written down here because a rewrite argued from a
+benefit that did not materialise should say so.
+
+Staged so each step was verifiable, and **the instruments came first**: `measure/` was 7,489
+lines against the core's 575, and it was the asset. **Done on 2026-09-15**, when the Python was
+deleted at `python-before-removal-2026-09-15`. Every module has a successor, every harness has a
+successor, and what the Python produced is committed as data — `native/expectations/*.json` and
+`native/golden/` — so the equivalence checks outlive the implementation they were taken from.
+
+**Deleting it found three things the port had missed**, all of them by asking what would be lost
+rather than by assuming nothing would: the licence rule and the core's blindness were held only
+by Python that was about to go; the transcript guard that catches Whisper's degenerate loops — 7
+of 7 reproduced — had no Rust successor at all and `hear()` was returning whatever came off the
+socket; and *the room stays quiet unless somebody asked* was a comment in two places rather than
+a fact. `docs/findings/porting-the-core.md` has the accounting.
 
 ## Where the detail lives
 
@@ -184,8 +211,8 @@ transcript is done. `docs/findings/porting-the-core.md` has the accounting, what
 | `docs/findings/the-pc-app.md` | the window: self-blindness, pointing, cold start, the withdrawn diagnosis |
 | `docs/findings/harness-pitfalls.md` | **ten ways the model harness lied and seven ways the measuring code did** — the list to check when a measurement reads zero |
 | `docs/findings/porting-the-core.md` | **the move to Rust**: what speed does not decide, the robot answered, the AST rules audited one at a time, what breaks in `measure/`, and the staging |
-| `argmind/voice.py` | voice is *interface*, not a contract — and why *"응"* out loud cannot run an action |
-| `tests/test_loop_golden.py` | the behavioural record of `loop.py`, and the five things writing it found |
+| `native/argmind-voice/src/lib.rs` | voice is *interface*, not a contract — and why *"응"* out loud cannot run an action |
+| `native/golden/loop-transcript.txt` | the behavioural record of the Python `loop.py`, kept as evidence; its subject is now covered by `expectations/loop.json` |
 | `docs/findings/what-the-old-tree-measured.md` | the removed library's transferable results, and how to reach the rest |
 
 ## Sub-agent team
@@ -196,11 +223,11 @@ may change a contract.
 
 | agent | owns |
 |---|---|
-| `architect` | the shape — `contract.py`, `loop.py`, `llm.py`, the AST rules, where a new thing goes |
-| `conversation` | `converse.py`, `intent.py` — what it says, how it reads a turn, repair |
-| `environment` | `argmind/env/` — capabilities behind Eyes and Hands |
-| `app` | `argmind/app.py` and its tests |
-| `measurement` | `measure/` — the instruments every decision rests on |
+| `architect` | the shape — `contract.rs`, `session.rs`, `llm.rs`, the rules in `argmind-rules`, where a new thing goes |
+| `conversation` | `converse.rs`, `intent.rs` — what it says, how it reads a turn, repair |
+| `environment` | `native/argmind-env-*` — capabilities behind Eyes and Hands |
+| `app` | `argmind-serve` and `ui/` |
+| `measurement` | `argmind-measure` and `measure/` — the instruments every decision rests on |
 
 The checking moved **inside** rather than away: `conversation` runs both harnesses on every change,
 `environment` owes each capability its measurement, `architect` must find the reading where the

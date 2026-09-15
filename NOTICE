@@ -21,7 +21,9 @@ Every figure is labelled MEASURED, COMPUTED or ESTIMATED, in the same sentence a
 the number, and a rate carries its denominator and its conditions. Where a
 document says MEASURED it means the wall clock or the verdict was actually
 observed on the machine and at the fingerprints named beside it; re-derive any of
-them with `python -m pytest` and the harnesses in measure/.
+them with `cargo test --manifest-path native/Cargo.toml` and the harnesses in
+native/argmind-measure/. The captured screens, the goal sets and every recorded
+answer are in measure/.
 
 Treat a flattering figure with suspicion, including the ones here. Four
 conclusions were withdrawn during the two days that built this agent, three of
@@ -33,27 +35,20 @@ report it.
 -------------------------------------------------------------------------------
 THIRD-PARTY SOFTWARE
 
-Required, and used at runtime:
-
-  comtypes    https://github.com/enthought/comtypes     MIT
-              UI Automation and SAPI on Windows
-
-Optional, for speech (the `voice` extra):
-
-  numpy       https://numpy.org/                        BSD-3-Clause
-  sounddevice https://python-sounddevice.readthedocs.io/ MIT (bundles PortAudio, MIT)
-  PyTorch     https://pytorch.org/                      BSD-3-Clause
-  Transformers https://github.com/huggingface/transformers  Apache-2.0
-
-Optional, for images (the `images` extra), and reached by nothing in this tree:
-
-  Pillow      https://python-pillow.org/                MIT-CMU
-
-The Rust tree under native/:
+Compiled in:
 
   windows-rs  https://github.com/microsoft/windows-rs   MIT OR Apache-2.0
+              UI Automation, SAPI, WASAPI, the tray icon, job objects
   serde_json  https://github.com/serde-rs/json          MIT OR Apache-2.0
   sha2        https://github.com/RustCrypto/hashes      MIT OR Apache-2.0
+              the prompt fingerprint, in tests only
+
+The front end under ui/ takes no dependency but the TypeScript compiler, and the
+server speaks raw HTTP/1.1 with none.
+
+**The Python dependencies were removed on 2026-09-15** with the Python itself —
+comtypes, numpy, sounddevice, PyTorch, Transformers and Pillow. They are listed at
+the tag python-before-removal-2026-09-15 and none of them is used here now.
 
 Spoken to over a local HTTP port, and not included or redistributed:
 
@@ -61,14 +56,23 @@ Spoken to over a local HTTP port, and not included or redistributed:
   qwen3       https://github.com/QwenLM/Qwen3           Apache-2.0 (weights)
   Whisper     https://github.com/openai/whisper         MIT (weights)
 
+Fetched as source, compiled on the machine at a pinned commit, and run there. Not
+redistributed: nothing of it is in this repository or in anything it ships.
+
+  whisper.cpp https://github.com/ggml-org/whisper.cpp   MIT
+  ggml        vendored inside whisper.cpp               MIT
+
 Windows itself — UI Automation, SAPI, SendInput — is used through the operating
 system and nothing of it is redistributed here.
 
 **No dependency of this project is under a copyleft or a proprietary licence, and
-that is a rule rather than an accident.** tests/test_licences.py holds it: every
-dependency named in pyproject.toml or in a Cargo.toml under native/ must appear
-in docs/licences.toml with a licence from a permissive allowlist, so adding one
-that does not fails the suite rather than being noticed later. The rule exists
+that is a rule rather than an accident.** native/argmind-rules/tests/licences.rs
+holds it: every dependency named in a Cargo.toml under native/ must appear in
+docs/licences.toml with a licence from a permissive allowlist, so adding one that
+does not fails the suite rather than being noticed later. It checks the other
+direction too — that nothing recorded has stopped being a dependency — because a
+record that keeps naming what was removed reads as thorough while being wrong,
+which is exactly what this file did until 2026-09-14. The rule exists
 because the alternative is remembering, and this project's standard is that a
 rule nothing enforces is a rule nobody keeps.
 

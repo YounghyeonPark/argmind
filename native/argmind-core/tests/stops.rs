@@ -93,7 +93,7 @@ fn outcome(lines: &[Value], answered: bool, looping: bool) -> Value {
 }
 
 fn golden() -> Value {
-    let raw = fs::read_to_string(root().join("tests").join("golden").join("llm-replay.txt"))
+    let raw = fs::read_to_string(root().join("native").join("golden").join("llm-replay.txt"))
         .expect("tests/golden/llm-replay.txt");
     let body = raw.split("#---- expectations ----").nth(1).expect("the sentinel");
     serde_json::from_str(body).expect("the golden is JSON below the sentinel")

@@ -9,10 +9,17 @@ use argmind_env_windows::hands::{may_touch, owner_at, Reach};
 use argmind_env_windows::Cover;
 
 /// Far outside any monitor. Nothing draws here and nothing else lives here.
-const AWAY: (i64, i64, i64, i64) = (-4000, -4000, 200, 120);
+///
+/// **A patch each, because these run in parallel.** They all used one rectangle at first and the
+/// suite failed intermittently: a test asserting that the point stopped being ours was answered by
+/// another test's cover, still standing at the same coordinate. Two windows in one place is a
+/// perfectly good measurement of the wrong thing.
+const fn away(nth: i64) -> (i64, i64, i64, i64) {
+    (-4000 + nth * 400, -4000, 200, 120)
+}
 
-fn middle() -> (i64, i64) {
-    (AWAY.0 + AWAY.2 / 2, AWAY.1 + AWAY.3 / 2)
+fn middle(patch: (i64, i64, i64, i64)) -> (i64, i64) {
+    (patch.0 + patch.2 / 2, patch.1 + patch.3 / 2)
 }
 
 /// **A cover owns the pixels it covers**, which is the whole premise of the measurement.
@@ -21,9 +28,10 @@ fn middle() -> (i64, i64) {
 /// never having obstructed anything.
 #[test]
 fn the_window_under_the_point_is_the_cover() {
-    let (x, y) = middle();
+    let patch = away(0);
+    let (x, y) = middle(patch);
     let before = owner_at(x, y);
-    let cover = Cover::over(AWAY.0, AWAY.1, AWAY.2, AWAY.3).expect("a cover");
+    let cover = Cover::over(patch.0, patch.1, patch.2, patch.3).expect("a cover");
     let during = owner_at(x, y);
     assert_eq!(during, Some(std::process::id()),
                "the cover does not own its own pixels (before it was {before:?})");
@@ -39,8 +47,9 @@ fn the_window_under_the_point_is_the_cover() {
 /// application or a click.
 #[test]
 fn the_ordinary_reach_refuses_a_point_the_cover_took() {
-    let (x, y) = middle();
-    let cover = Cover::over(AWAY.0, AWAY.1, AWAY.2, AWAY.3).expect("a cover");
+    let patch = away(1);
+    let (x, y) = middle(patch);
+    let cover = Cover::over(patch.0, patch.1, patch.2, patch.3).expect("a cover");
     let owner = owner_at(x, y);
     let pretend_app = std::process::id().wrapping_add(1);
 
@@ -65,8 +74,9 @@ fn the_ordinary_reach_refuses_a_point_the_cover_took() {
 /// exactly what the `obstruction` harness measures on a real desktop.
 #[test]
 fn standing_aside_drops_topmost_and_coming_back_takes_it_again() {
-    let (x, y) = middle();
-    let cover = Cover::over(AWAY.0, AWAY.1, AWAY.2, AWAY.3).expect("a cover");
+    let patch = away(2);
+    let (x, y) = middle(patch);
+    let cover = Cover::over(patch.0, patch.1, patch.2, patch.3).expect("a cover");
     assert!(cover.is_topmost());
     assert_eq!(owner_at(x, y), Some(std::process::id()));
 
@@ -83,10 +93,11 @@ fn standing_aside_drops_topmost_and_coming_back_takes_it_again() {
 /// A cover smaller than what it covers is not covering it.
 #[test]
 fn a_tiny_rectangle_is_widened_to_something_that_covers() {
-    let cover = Cover::over(AWAY.0, AWAY.1, 3, 2).expect("a cover");
+    let patch = away(3);
+    let cover = Cover::over(patch.0, patch.1, 3, 2).expect("a cover");
     //: The corner it was asked for is still its own; the minimum only grows it.
-    assert_eq!(owner_at(AWAY.0 + 1, AWAY.1 + 1), Some(std::process::id()));
+    assert_eq!(owner_at(patch.0 + 1, patch.1 + 1), Some(std::process::id()));
     //: And it reaches at least the documented minimum, so a two-pixel widget is genuinely covered.
-    assert_eq!(owner_at(AWAY.0 + 50, AWAY.1 + 20), Some(std::process::id()));
+    assert_eq!(owner_at(patch.0 + 50, patch.1 + 20), Some(std::process::id()));
     drop(cover);
 }

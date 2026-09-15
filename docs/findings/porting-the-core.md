@@ -399,3 +399,63 @@ the other three do not.
 `adb` is not installed on this machine, so the one measurement the record calls decisive — the
 Android path, and whether the phone runs the core at all or is driven from the PC — could not be
 attempted today.
+
+## The port is finished, and the Python is gone — 2026-09-15
+
+`python-before-removal-2026-09-15` is the last commit with it. Every module has a successor, every
+harness has a successor, and **what the Python produced is committed as data** — `native/
+expectations/*.json` and `native/golden/` — so the equivalence checks outlived the implementation
+they were taken from. The recorded results and captured screens stay in `measure/`, which is now
+data and no code.
+
+### The stated payoff did not arrive
+
+This record argued that a native core would turn rules held by AST tests into rules held by the
+compiler, and named the example: a `Listing { name, role }` type making *the model is never shown a
+coordinate* structural. **`Listing` was never built.** The core still passes `Widget`, which carries
+a `rect`, and the rule is held by `native/argmind-rules/` reading `converse.rs` — text, not syntax,
+which is *weaker* than the `ast` walk it replaced.
+
+What the port did buy is real and is somewhere else:
+
+* **`Reach`** makes *never touch anything this harness did not start* a type rather than care, and
+  widening it for `obstruction` meant adding a variant that carries both process ids rather than
+  editing a condition.
+* **`Proposals`** makes a stale button structurally unable to confirm a later action — numbers are
+  never reused, so the defect cannot be reintroduced by an off-by-one.
+* **A job object** makes *the recogniser dies with argmind* the operating system's promise. `Drop`
+  could not do it: `std::process::exit` skips destructors and Task Manager asks nobody.
+* **`Did` and `Answered`** make "refused", "landed", "gone" and "declined" different values rather
+  than different comments, which is what let `obstruction` predict four outcomes and print them
+  beside what happened.
+
+None of those is the benefit that was argued. Recorded plainly because **a rewrite justified by a
+payoff that did not materialise should say so in the document that justified it.**
+
+### Deleting it found three things the port had missed
+
+All three were found by asking what would be lost, rather than by assuming nothing would — and none
+would have shown up as a failing test, because the tests that covered them were the ones being
+deleted.
+
+* **The licence rule and the core's blindness were held only by Python.** `tests/test_licences.py`
+  walked `native/**/Cargo.toml` as well as `pyproject.toml`; deleting it would have taken the check
+  on the Rust dependencies with it. On its first run the ported version failed, correctly: the
+  record still said whisper.cpp was *"not yet a dependency"* while argmind was compiling and
+  running it.
+* **The transcript guard had no successor at all.** Not a test — a capability. `argmind/env/
+  whisper.py` catches Whisper's degenerate loops, 7 of 7 reproduced, and rejects none of the
+  strings that must survive; the Rust `hear()` was returning whatever came off the socket. Given
+  that silence is transcribed as words **120 times out of 120**, that is the difference between a
+  guard and none.
+* **"The room stays quiet unless somebody asked" was a comment in two places.** `think` speaks and
+  `notice` does not, and nothing checked it.
+
+### What is worth taking from that
+
+**A port is finished when somebody tries to delete the original and writes down what breaks**, not
+when the new tests pass. Every one of the three had a green suite on both sides.
+
+Three of this project's rules are now held by reading the source rather than by the compiler, in
+`native/argmind-rules/`, and each was checked by breaking it: eleven mutants, eleven caught. That
+is the honest state — not what this record predicted, and better than nothing enforcing them.
