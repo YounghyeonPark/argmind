@@ -97,6 +97,11 @@ struct Desk {
 /// means, which keeps the single call to `perform` in one place rather than one per thread.
 enum Job {
     Said(String),
+    /// Install the thing this names — **the button in the page was the approval**, and the page
+    /// had to render what it would do before it could be pressed.
+    Fix(String),
+    /// Take a fresh reading of what is missing and tell the page.
+    Look,
     Confirm(u64),
     Decline(u64),
     /// The talk key went down or came up.
@@ -239,6 +244,52 @@ fn act(desk: &mut Desk, out: &Listeners, p: Proposal) {
     };
     out.send("ran", &format!("{{\"token\":{},\"label\":\"{}\",\"confirmed\":{confirmed}}}",
                              p.token, escape(&p.label)));
+}
+
+/// What is missing, as the page needs it: the whole sentence a person reads before deciding.
+fn needs_json(model: &str) -> String {
+    let rows: Vec<String> = argmind_serve::needs::every(model).iter().map(|n| {
+        //: **The description travels with the button.** A page that showed only a name and a
+        //: button would be asking the vague question this whole design exists to avoid.
+        let (offer, plan) = match &n.fix {
+            Some(f) => (true, argmind_serve::fix::describe(f)),
+            None => (false, String::new()),
+        };
+        format!("{{\"key\":\"{}\",\"what\":\"{}\",\"present\":{},\"required\":{},\
+                 \"found\":\"{}\",\"how\":\"{}\",\"offer\":{offer},\"plan\":\"{}\"}}",
+                escape(n.key), escape(n.what), n.present, n.required,
+                escape(&n.found), escape(&n.how), escape(&plan))
+    }).collect();
+    format!("[{}]", rows.join(","))
+}
+
+/// Install one thing, because somebody pressed the button that said what it would do.
+fn fix(out: &Listeners, model: &str, key: &str) {
+    //: **Re-taken rather than remembered.** A page open for an hour holds an hour-old list, and
+    //: acting on it would offer to install something that is already there.
+    let Some(need) = argmind_serve::needs::by_key(model, key) else {
+        out.send("note", &format!("{key} 라는 건 없습니다"));
+        return;
+    };
+    if need.present {
+        out.send("note", &format!("{} 은(는) 이미 있습니다", need.what));
+        out.send("needs", &needs_json(model));
+        return;
+    }
+    let Some(plan) = need.fix.as_ref() else {
+        out.send("note", &format!("{} 은(는) argmind가 할 수 있는 게 없습니다", need.what));
+        return;
+    };
+    out.send("busy", "1");
+    out.send("note", &format!("{} — 시작합니다", need.what));
+    let done = argmind_serve::fix::apply(plan, &mut |said| out.send("note", said));
+    out.send("busy", "0");
+    match done {
+        Ok(said) => out.send("note", &format!("{} — {said}", need.what)),
+        Err(why) => out.send("note", &format!("{} — 실패: {why}", need.what)),
+    }
+    //: Re-read afterwards, so the page shows what is true rather than what was asked for.
+    out.send("needs", &needs_json(model));
 }
 
 /// The talk key, down or up. **Letting go is what starts a turn** — nothing is transcribed while
@@ -386,8 +437,14 @@ fn main() {
                     }
                 }
                 Job::Listen(down) => listen(&mut desk, &agent_out, down),
+                Job::Fix(key) => fix(&agent_out, &agent_model, &key),
+                Job::Look => agent_out.send("needs", &needs_json(&agent_model)),
                 Job::Opened(tx) => {
                     let _ = tx.send(sse("hello", &hello(&desk, &agent_model)));
+                    //: **Checked when a page opens, not at startup.** Checking once at boot would
+                    //: mean a server left running overnight still telling you about something you
+                    //: installed an hour ago.
+                    let _ = tx.send(sse("needs", &needs_json(&agent_model)));
                 }
             }
         }
@@ -474,6 +531,14 @@ fn serve_one(mut stream: TcpStream, out: &Listeners, token: &str, jobs: &Sender<
         Route::Decline(n) => {
             let _ = stream.write_all(&respond("204 No Content", "text/plain", ""));
             let _ = jobs.send(Job::Decline(n));
+        }
+        Route::Fix(key) => {
+            let _ = stream.write_all(&respond("204 No Content", "text/plain", ""));
+            let _ = jobs.send(Job::Fix(key));
+        }
+        Route::Look => {
+            let _ = stream.write_all(&respond("204 No Content", "text/plain", ""));
+            let _ = jobs.send(Job::Look);
         }
         Route::Listen(down) => {
             let _ = stream.write_all(&respond("204 No Content", "text/plain", ""));

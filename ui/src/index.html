@@ -34,6 +34,19 @@
   .line.say { color: var(--say); }
   .line.note { color: var(--note); font-size: 13px; }
 
+  #setup { border-bottom: 1px solid var(--edge); padding: 10px 14px; background: #fdfcfa; }
+  .setup-head { display: flex; gap: 8px; align-items: baseline; font-weight: 600;
+                margin-bottom: 8px; }
+  .setup-head .again { margin-left: auto; font-size: 12px; padding: 2px 8px; }
+  .need { border-left: 2px solid var(--edge); padding: 4px 0 6px 10px; margin-bottom: 8px; }
+  .need.required { border-left-color: var(--warn); }
+  .need-what { font-weight: 600; }
+  .need-found { color: var(--dim); font-size: 13px; }
+  .need-how { color: var(--dim); font-size: 13px; margin-top: 4px; }
+  /* The plan keeps the line breaks the server wrote: it is the sentence being agreed to, and
+     reflowing it into a paragraph is how a list of consequences becomes a blur. */
+  .need-plan { white-space: pre-wrap; font-size: 13px; margin: 6px 0; }
+
   #pending:not(:empty) { border-top: 1px solid var(--edge); padding: 8px 14px; }
   .proposal { display: flex; gap: 8px; align-items: center; margin-bottom: 6px; }
   .what { flex: 1; }
@@ -61,6 +74,9 @@
     <span id="attending">…</span>
     <span id="status"></span>
   </header>
+  <!-- Above the transcript, because something missing is the reason nothing works, and a person
+       should not have to scroll past a conversation to find out. -->
+  <div id="setup" hidden></div>
   <div id="transcript"></div>
   <div id="pending"></div>
   <form id="form" autocomplete="off">

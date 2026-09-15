@@ -148,6 +148,12 @@ pub enum Route {
     Confirm(u64),
     /// Do not.
     Decline(u64),
+    /// Install the missing thing this names. **The button in the page is the approval**, and the
+    /// page had to show what it would do before it could be pressed.
+    Fix(String),
+    /// Take a fresh reading of what is missing. **Read-only** — it installs nothing, so the page
+    /// can offer it freely after somebody has installed something themselves.
+    Look,
     /// Hold the talk key, or let it go.
     ///
     /// **Two routes rather than one recording call**, because push-to-talk is the design: the
@@ -171,6 +177,9 @@ pub fn route(request: &Request) -> Route {
             Ok(n) => Route::Decline(n),
             Err(_) => Route::Unknown,
         },
+        ("POST", p) if p.starts_with("/fix/") && p.len() > 5 =>
+            Route::Fix(p[5..].to_string()),
+        ("POST", "/look") => Route::Look,
         ("POST", "/listen/start") => Route::Listen(true),
         ("POST", "/listen/stop") => Route::Listen(false),
         _ => Route::Unknown,

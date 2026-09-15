@@ -165,6 +165,92 @@ form.onsubmit = (e) => {
   void post("/say", text);
 };
 
+// ---- what is missing --------------------------------------------------------------------------
+//
+// The approval lives here. A button is only pressable next to the full sentence saying what it will
+// do — a panel with a name and an "install" button would be asking the vague question the whole
+// design exists to avoid, and everybody answers that one yes.
+
+interface Missing {
+  key: string;
+  what: string;
+  present: boolean;
+  required: boolean;
+  found: string;
+  how: string;
+  offer: boolean;
+  plan: string;
+}
+
+const setup = document.getElementById("setup") as HTMLElement;
+
+function drawNeeds(rows: Missing[]): void {
+  const missing = rows.filter((n) => !n.present);
+  setup.replaceChildren();
+  setup.hidden = missing.length === 0;
+  if (missing.length === 0) {
+    return;
+  }
+
+  const head = document.createElement("div");
+  head.className = "setup-head";
+  head.textContent = `없는 것 ${missing.length}개`;
+  const again = document.createElement("button");
+  again.type = "button";
+  again.className = "again";
+  again.textContent = "다시 확인";
+  again.onclick = () => void post("/look");
+  head.append(again);
+  setup.append(head);
+
+  for (const n of missing) {
+    const box = document.createElement("div");
+    box.className = n.required ? "need required" : "need";
+
+    const title = document.createElement("div");
+    title.className = "need-what";
+    title.textContent = `${n.what} — ${n.required ? "필요" : "선택"}`;
+    box.append(title);
+
+    const found = document.createElement("div");
+    found.className = "need-found";
+    found.textContent = n.found;
+    box.append(found);
+
+    if (!n.offer) {
+      const none = document.createElement("div");
+      none.className = "need-how";
+      none.textContent = n.how;
+      box.append(none);
+      setup.append(box);
+      continue;
+    }
+
+    // The whole plan, before the button and not behind it. `textContent` keeps the newlines the
+    // server wrote, and `white-space: pre-wrap` in the stylesheet keeps them on screen.
+    const plan = document.createElement("div");
+    plan.className = "need-plan";
+    plan.textContent = n.plan;
+    box.append(plan);
+
+    const yes = document.createElement("button");
+    yes.type = "button";
+    yes.className = "yes";
+    yes.textContent = "예";
+    yes.onclick = () => {
+      // Disabled on the way out: the server re-reads what is missing before acting, so a second
+      // press is harmless, but a person should not be left wondering whether the first took.
+      yes.disabled = true;
+      yes.textContent = "…";
+      void post(`/fix/${encodeURIComponent(n.key)}`);
+    };
+    box.append(yes);
+    setup.append(box);
+  }
+}
+
+stream.addEventListener("needs", (e) => drawNeeds(JSON.parse((e as MessageEvent).data) as Missing[]));
+
 // ---- the talk key ------------------------------------------------------------------------------
 //
 // Push-to-talk, and the two halves are two requests. Holding is the floor an open microphone has no

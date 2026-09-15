@@ -158,6 +158,28 @@ fn a_response_says_how_long_it_is_in_bytes() {
     assert!(!head.contains("Content-Length"));
 }
 
+/// **A fix names what it fixes**, and the name is stable rather than a position.
+///
+/// A button in a page that had been open a while would otherwise install whatever had moved into
+/// its slot — the same defect the proposal numbers are built to avoid, arriving in a different part
+/// of the program.
+#[test]
+fn installing_something_names_it_and_is_never_a_get() {
+    let post = |p: &str| parse_request(&format!("POST {p} HTTP/1.1\r\n\r\n")).unwrap();
+    assert_eq!(route(&post("/fix/model")), Route::Fix("model".into()));
+    assert_eq!(route(&post("/fix/korean-voice")), Route::Fix("korean-voice".into()));
+    //: **Never by GET.** A link, a prefetch or an image tag must not be able to start an install.
+    assert_eq!(route(&get("/fix/model")), Route::Unknown);
+    //: And a fix with no name is not a fix — it would act on whatever the server felt like.
+    assert_eq!(route(&post("/fix/")), Route::Unknown);
+    assert_eq!(route(&post("/fix")), Route::Unknown);
+
+    //: Re-reading what is missing installs nothing, so the page may offer it freely — but it still
+    //: is not a GET, because it makes the server go and look.
+    assert_eq!(route(&post("/look")), Route::Look);
+    assert_eq!(route(&get("/look")), Route::Unknown);
+}
+
 /// **Holding and letting go are two routes**, and neither is a GET.
 ///
 /// Push-to-talk is the design: the microphone is open exactly while somebody holds the key. A

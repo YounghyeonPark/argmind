@@ -20,6 +20,10 @@ use crate::fix::Fix;
 /// One thing argmind wants.
 #[derive(Debug, Clone)]
 pub struct Need {
+    /// **A stable name, not a position.** A button in a page that had been open a while would
+    /// otherwise fix whatever had moved into its slot — the same defect the proposal numbers are
+    /// built to avoid, arriving in a different part of the program.
+    pub key: &'static str,
     pub what: &'static str,
     /// Whether the agent works at all without it.
     pub required: bool,
@@ -45,12 +49,21 @@ impl Need {
     }
 }
 
+/// One need by its key, out of a freshly taken reading.
+///
+/// **Re-taken rather than remembered.** A page open for an hour is a page whose list is an hour
+/// old, and acting on it would offer to install something that is already there.
+pub fn by_key(model: &str, key: &str) -> Option<Need> {
+    every(model).into_iter().find(|n| n.key == key)
+}
+
 /// Everything, in the order a person would fix it.
 pub fn every(model: &str) -> Vec<Need> {
     let mut out = Vec::new();
 
     let ollama_up = argmind_env_ollama::manage::awake(argmind_env_ollama::OLLAMA);
     out.push(Need {
+        key: "ollama",
         what: "Ollama",
         required: true,
         present: ollama_up,
@@ -71,6 +84,7 @@ pub fn every(model: &str) -> Vec<Need> {
     //: a five gigabyte download they already have.
     let has_model = ollama_up && argmind_env_ollama::manage::has(argmind_env_ollama::OLLAMA, model);
     out.push(Need {
+        key: "model",
         what: "모델",
         required: true,
         present: has_model,
@@ -92,6 +106,7 @@ pub fn every(model: &str) -> Vec<Need> {
         &argmind_env_whisper::WHISPER.parse().expect("a literal address"),
         std::time::Duration::from_millis(400)).is_ok();
     out.push(Need {
+        key: "whisper",
         what: "받아쓰기",
         required: false,
         //: A server you build and run, the way Ollama is. Not ours to install.
@@ -114,6 +129,7 @@ pub fn every(model: &str) -> Vec<Need> {
     //: device, so this is as quiet as the two checks above it.
     let korean = argmind_env_windows::SapiSpeaker::new().map(|v| v.has_korean()).unwrap_or(false);
     out.push(Need {
+        key: "korean-voice",
         what: "한국어 음성",
         required: false,
         //: A Windows language feature, and installing one needs elevation.

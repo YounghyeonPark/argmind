@@ -1,9 +1,14 @@
 //! What argmind would do about something it is missing, in the words it will ask with.
 //!
-//! **Nothing here runs anything.** A [`Fix`] is a description of an action and [`describe`] is the
-//! sentence a person is shown before it happens; the doing lives in `setup`, behind an answer. That
-//! split is the point: the text can be read, reviewed and tested without a machine being changed,
-//! and a fix whose description drifts from what it does is a fix whose approval means nothing.
+//! A [`Fix`] is a description of an action, [`describe`] is the sentence a person is shown before
+//! it happens, and [`apply`] is the doing — **and `apply` is never reached except through an
+//! answer.** The split is the point: the text can be read, reviewed and tested without a machine
+//! being changed, and a fix whose description drifts from what it does is a fix whose approval
+//! means nothing.
+//!
+//! `apply` lives here rather than in either caller because there are two — the window in the page
+//! and the command line — and a second copy of "what yes means" is how the two come to mean
+//! different things.
 //!
 //! **Three grades, and the grade is the risk.** Fetching data into a program that is already
 //! running is not the same as running an installer, and neither is the same as asking Windows for
@@ -67,5 +72,53 @@ pub fn describe(fix: &Fix) -> String {
              · Windows가 한 번 더 물어봅니다\n\
              · 몇 분 걸리고, 인터넷에서 내려받습니다\n\n\
              실행할까요?"),
+    }
+}
+
+
+/// Do one approved fix, reporting as it goes.
+///
+/// **Reached only after a yes.** Every branch says what it did, in a sentence the person who
+/// approved it can check against the one they were shown.
+pub fn apply(fix: &Fix, say: &mut dyn FnMut(&str)) -> Result<String, String> {
+    match fix {
+        Fix::PullModel { model, .. } => {
+            let mut last = 0;
+            argmind_env_ollama::manage::pull(argmind_env_ollama::OLLAMA, model, |p| {
+                //: Every ten per cent, not every line: a pull emits thousands, and a page that
+                //: scrolls past is no more informative than one that says nothing.
+                match p.percent() {
+                    Some(pct) if pct >= last + 10 => {
+                        last = pct - pct % 10;
+                        say(&format!("{pct}%  {}", p.status));
+                    }
+                    None if p.status != "pulling manifest" => say(&p.status),
+                    _ => {}
+                }
+            })?;
+            Ok("받았습니다".into())
+        }
+        Fix::OpenPage { url, .. } => {
+            //: `explorer` hands a URL to whatever the person chose as their browser. It is a shell
+            //: command, not a downloader — **nothing is fetched or run here.**
+            std::process::Command::new("explorer").arg(url).spawn().map_err(|e| format!("{e}"))?;
+            Ok(format!("{url} 을(를) 열었습니다 — 설치는 직접 하셔야 합니다"))
+        }
+        Fix::RunElevated { command, .. } => {
+            //: **Windows asks again.** `RunAs` raises the elevation prompt, so a yes here is the
+            //: first of two and the second belongs to the operating system.
+            let done = std::process::Command::new("powershell")
+                .args(["-NoProfile", "-Command",
+                       &format!("Start-Process -Verb RunAs -Wait -FilePath cmd.exe \
+                                 -ArgumentList '/c {command}'")])
+                .status().map_err(|e| format!("{e}"))?;
+            if done.success() {
+                Ok("실행했습니다".into())
+            } else {
+                //: A cancelled elevation prompt lands here, and it is a refusal rather than a
+                //: fault — calling somebody changing their mind a failure is a lie.
+                Err("관리자 권한을 받지 못했거나 취소되었습니다".into())
+            }
+        }
     }
 }
