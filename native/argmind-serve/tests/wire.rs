@@ -1,0 +1,159 @@
+//! The seam's protocol, checked without a socket, a display or a model.
+//!
+//! Two of these are safety properties rather than correctness ones. A server puts an agent that can
+//! press buttons within reach of **anything else running as this user**, which the in-process window
+//! it replaces did not — so the loopback check and the token are not conveniences, and they are
+//! tested the way a guard is tested: by trying to get past them.
+
+use argmind_serve::{authorised, event_stream_head, is_loopback, mint_token, parse_request, respond,
+                    route, sse, Request, Route};
+
+fn get(path: &str) -> Request {
+    parse_request(&format!("GET {path} HTTP/1.1\r\nHost: x\r\n\r\n")).unwrap()
+}
+
+/// **Loopback only**, and the difference is one character in a config nobody reads twice.
+#[test]
+fn the_agent_is_not_reachable_from_the_network() {
+    assert!(is_loopback("127.0.0.1:7331"));
+    assert!(is_loopback("127.0.0.1"));
+    assert!(is_loopback("[::1]:7331"));
+    assert!(is_loopback("::1"));
+    //: The three ways somebody ends up listening to the world.
+    assert!(!is_loopback("0.0.0.0:7331"));
+    assert!(!is_loopback("[::]:7331"));
+    assert!(!is_loopback("192.168.1.20:7331"));
+    //: **And the same three with no port at all.** Every non-loopback case above carries one, so
+    //: they all take the split-off-the-port branch — and a mutation that made the *bare address*
+    //: branch answer `true` for everything survived the whole suite. That is the dangerous
+    //: direction, found by trying to get past the guard rather than by reading it.
+    assert!(!is_loopback("0.0.0.0"));
+    assert!(!is_loopback("::"));
+    assert!(!is_loopback("192.168.1.20"));
+    //: A bracket that never closes is malformed, and malformed is refused — not read as far as it
+    //: parses and then allowed.
+    assert!(!is_loopback("[::1"));
+    assert!(!is_loopback("["));
+    //: A hostname is not an address, and resolving one here would mean trusting whatever resolved
+    //: it — so anything unparseable is refused rather than looked up.
+    assert!(!is_loopback("localhost:7331"));
+    assert!(!is_loopback(""));
+    assert!(!is_loopback("nonsense"));
+}
+
+/// **Localhost is not a permission**: any program you run is on localhost.
+#[test]
+fn a_request_without_the_token_gets_nowhere() {
+    let want = mint_token();
+    assert!(authorised(&want, Some(&want)));
+    assert!(!authorised(&want, None), "no token at all must not pass");
+    assert!(!authorised(&want, Some("")));
+    assert!(!authorised(&want, Some(&want[..want.len() - 1])), "a prefix is not the token");
+    assert!(!authorised(&want, Some(&format!("{want}x"))), "an extension is not the token");
+    let mut wrong: Vec<u8> = want.clone().into_bytes();
+    wrong[7] ^= 1;
+    assert!(!authorised(&want, Some(&String::from_utf8(wrong).unwrap())));
+}
+
+/// A token has to be long, unguessable and **different every time**.
+#[test]
+fn the_token_is_freshly_minted_and_not_a_constant() {
+    let a = mint_token();
+    let b = mint_token();
+    assert_eq!(a.len(), 32);
+    assert!(a.chars().all(|c| c.is_ascii_hexdigit()));
+    assert_ne!(a, b, "two tokens in one process were identical — that is not entropy");
+    //: Sixteen of them, because two agreeing once could be luck and a constant would agree always.
+    let many: std::collections::BTreeSet<String> = (0..16).map(|_| mint_token()).collect();
+    assert_eq!(many.len(), 16);
+}
+
+/// The parser refuses what it does not fully understand, rather than guessing.
+#[test]
+fn a_request_it_cannot_read_is_refused_rather_than_guessed_at() {
+    let r = parse_request("POST /say HTTP/1.1\r\nX-Argmind-Token: abc\r\n\r\n안녕").unwrap();
+    assert_eq!(r.method, "POST");
+    assert_eq!(r.path, "/say");
+    assert_eq!(r.token.as_deref(), Some("abc"));
+    assert_eq!(r.body, "안녕");
+    //: The header name is case-insensitive, as HTTP says.
+    let r = parse_request("GET / HTTP/1.1\r\nx-ARGMIND-token:  spaced  \r\n\r\n").unwrap();
+    assert_eq!(r.token.as_deref(), Some("spaced"));
+
+    assert!(parse_request("").is_none());
+    assert!(parse_request("GET\r\n\r\n").is_none());
+    assert!(parse_request("GET /\r\n\r\n").is_none(), "no version");
+    assert!(parse_request("GET / HTTP/2\r\n\r\n").is_none(), "not a version this speaks");
+}
+
+/// **A token in a URL ends up in logs and shell history**, so the query is dropped unread.
+#[test]
+fn nothing_reads_a_query_string() {
+    assert_eq!(get("/events?token=secret").path, "/events");
+    assert_eq!(get("/events?token=secret").token, None);
+    assert_eq!(get("/#fragment").path, "/");
+    assert_eq!(route(&get("/events?anything=at&all=1")), Route::Events);
+}
+
+/// Acting is a **separate decision** from deciding, and the protocol says so.
+#[test]
+fn the_only_way_to_make_it_act_is_a_confirmation() {
+    assert_eq!(route(&get("/")), Route::Ui);
+    assert_eq!(route(&get("/index.html")), Route::Ui);
+    assert_eq!(route(&get("/events")), Route::Events);
+
+    let said = parse_request("POST /say HTTP/1.1\r\n\r\n지우개 골라줘").unwrap();
+    assert_eq!(route(&said), Route::Said("지우개 골라줘".into()));
+    //: **Saying something does not act.** That is the whole permission model: the model's answer
+    //: becomes a proposal, and a proposal waits.
+    assert!(!matches!(route(&said), Route::Confirm(_)));
+
+    let ok = parse_request("POST /confirm/3 HTTP/1.1\r\n\r\n").unwrap();
+    assert_eq!(route(&ok), Route::Confirm(3));
+    let no = parse_request("POST /decline/3 HTTP/1.1\r\n\r\n").unwrap();
+    assert_eq!(route(&no), Route::Decline(3));
+
+    //: A confirmation names **which** proposal. Without the number a stale button would confirm
+    //: whatever happens to be pending, which is a different action from the one the person read.
+    assert_eq!(route(&parse_request("POST /confirm/ HTTP/1.1\r\n\r\n").unwrap()), Route::Unknown);
+    assert_eq!(route(&parse_request("POST /confirm/x HTTP/1.1\r\n\r\n").unwrap()), Route::Unknown);
+    //: And a confirmation is never a GET: a link, an image tag or a prefetch must not be able to
+    //: press the button.
+    assert_eq!(route(&get("/confirm/3")), Route::Unknown);
+    assert_eq!(route(&get("/say")), Route::Unknown);
+}
+
+/// **A bare newline ends an event**, and a reply with a line break in it is the ordinary case.
+#[test]
+fn every_line_of_a_payload_is_framed() {
+    let one = sse("said", "hello");
+    assert_eq!(one, "event: said\ndata: hello\n\n");
+
+    let two = sse("said", "first\nsecond");
+    assert_eq!(two, "event: said\ndata: first\ndata: second\n\n");
+    //: Two events, not one with a stray line — which is what an unframed newline would produce.
+    assert_eq!(two.matches("\n\n").count(), 1);
+
+    //: A carriage return from a Windows-authored reply must not survive into the frame, or the
+    //: browser reads a trailing `\r` on every line.
+    assert_eq!(sse("x", "a\r\nb"), "event: x\ndata: a\ndata: b\n\n");
+    assert_eq!(sse("x", ""), "event: x\ndata: \n\n");
+    //: Korean is bytes on the wire and characters to the reader; nothing here counts either.
+    assert!(sse("said", "지우개는 22번입니다").contains("지우개는 22번입니다"));
+}
+
+#[test]
+fn a_response_says_how_long_it_is_in_bytes() {
+    let body = "안녕";
+    let out = String::from_utf8(respond("200 OK", "text/plain; charset=utf-8", body)).unwrap();
+    //: **Bytes, not characters.** Six here, not two — a length in characters truncates every reply
+    //: in this project's own language.
+    assert!(out.contains("Content-Length: 6"), "{out}");
+    assert!(out.ends_with("\r\n\r\n안녕"));
+    assert!(out.contains("Cache-Control: no-store"));
+
+    let head = String::from_utf8(event_stream_head()).unwrap();
+    assert!(head.contains("text/event-stream"));
+    //: A stream that never ends must not advertise a length.
+    assert!(!head.contains("Content-Length"));
+}

@@ -1,0 +1,10 @@
+[package]
+name = "argmind-serve"
+version = "0.0.1"
+edition = "2021"
+description = "The seam between the Rust core and a front end that is not Rust."
+license = "Apache-2.0"
+
+# No dependencies, deliberately. Raw HTTP/1.1 and server-sent events need none, and the licence
+# rule is cheapest to obey when there is nothing new to check.
+[dependencies]
