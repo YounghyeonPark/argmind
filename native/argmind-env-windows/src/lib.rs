@@ -27,11 +27,51 @@ use windows::Win32::System::Com::{
 };
 use windows::Win32::UI::Accessibility::{
     CUIAutomation, IUIAutomation, IUIAutomationElement, TreeScope_Descendants,
-    UIA_IsOffscreenPropertyId,
+    UIA_IsOffscreenPropertyId, UIA_PATTERN_ID,
 };
 use windows::Win32::UI::WindowsAndMessaging::{GetCursorPos, GetForegroundWindow,
     GetSystemMetrics, SetCursorPos, SM_CXSCREEN, SM_CXVIRTUALSCREEN, SM_CYSCREEN,
     SM_CYVIRTUALSCREEN};
+
+/// One step of an ancestor walk.
+#[derive(Debug, Clone)]
+pub struct Hop {
+    pub name: String,
+    pub role: String,
+    /// It is the thing that was being looked for.
+    pub matched: bool,
+    /// Only filled in on the hop that matched — see [`WindowsEyes::ancestry_at`].
+    pub patterns: Vec<&'static str>,
+    /// The element could not be read. The tree is live and a walk can run into a control that
+    /// closed; **that is a different answer from "no parent"** and is kept apart.
+    pub died: bool,
+}
+
+/// Every pattern UI Automation defines, in id order from `UIA_InvokePatternId` (10000).
+///
+/// **All of them, so the answer is "here is what this control offers"** rather than "none of the
+/// four I happened to try". The four the hands were built around were chosen from a guess about
+/// which controls expose what, and the combo box that motivated the whole question offered none of
+/// them — a guess is not a survey.
+pub const PATTERN_NAMES: [&str; 22] = [
+    "Invoke", "Selection", "Value", "RangeValue", "Scroll", "ExpandCollapse", "Grid", "GridItem",
+    "MultipleView", "Window", "SelectionItem", "Dock", "Table", "TableItem", "Text", "Toggle",
+    "Transform", "ScrollItem", "LegacyIAccessible", "ItemContainer", "VirtualizedItem",
+    "SynchronizedInput",
+];
+
+fn supported(element: &IUIAutomationElement) -> Vec<&'static str> {
+    let mut out = Vec::new();
+    for (i, name) in PATTERN_NAMES.iter().enumerate() {
+        //: An unsupported pattern answers with a null interface, which windows-rs reports as an
+        //: error — so "could not ask" and "does not have it" are one answer here, as they were in
+        //: the Python's `except: continue`.
+        if unsafe { element.GetCurrentPattern(UIA_PATTERN_ID(10000 + i as i32)) }.is_ok() {
+            out.push(*name);
+        }
+    }
+    out
+}
 
 pub struct WindowsEyes {
     automation: IUIAutomation,
@@ -127,6 +167,49 @@ impl WindowsEyes {
             Some((at.CurrentName().ok()?.to_string(),
                   at.CurrentLocalizedControlType().ok()?.to_string()))
         }
+    }
+
+    /// The chain of elements above a point, up to `hops`, stopping when one matches `want`.
+    ///
+    /// **Why walk up at all.** The centre of a combo box sits on the edit control inside it, so
+    /// asking what is at that point answers with the child and the thing that expands is its
+    /// parent. Walking up looking for the name *and the role* is cheap and exact — on the name
+    /// alone a tab item named `Claude Code` inside a group of the same name resolved to the group,
+    /// and operating the group is not what was asked for.
+    ///
+    /// Patterns are read **only on the hop that matched**, because twenty-two of them at eight hops
+    /// on every widget is a COM round trip per question and the answer is only wanted once.
+    pub fn ancestry_at(&self, x: i64, y: i64, hops: usize, want: Option<(&str, &str)>) -> Vec<Hop> {
+        let mut out = Vec::new();
+        unsafe {
+            let Ok(walker) = self.automation.RawViewWalker() else { return out };
+            let Ok(mut element) = self.automation.ElementFromPoint(POINT { x: x as i32,
+                                                                           y: y as i32 })
+            else {
+                return out;
+            };
+            for _ in 0..hops {
+                let (Ok(name), Ok(role)) = (element.CurrentName(),
+                                            element.CurrentLocalizedControlType())
+                else {
+                    out.push(Hop { name: String::new(), role: String::new(), matched: false,
+                                   patterns: Vec::new(), died: true });
+                    break;
+                };
+                let (name, role) = (name.to_string(), role.to_string());
+                let matched = want.is_some_and(|(n, r)| name == n && role == r);
+                let patterns = if matched { supported(&element) } else { Vec::new() };
+                out.push(Hop { name, role, matched, patterns, died: false });
+                if matched {
+                    break;
+                }
+                match walker.GetParentElement(&element) {
+                    Ok(parent) => element = parent,
+                    Err(_) => break,
+                }
+            }
+        }
+        out
     }
 
     /// The window in front. **Not the same as `attending()` in the Python**, which skips this

@@ -92,6 +92,13 @@ fn named(eyes: &mut WindowsEyes, pid: u32) -> BTreeSet<String> {
 }
 
 fn main() {
+    //: **`std::process::exit` does not run destructors.** Every refusal after the launch leaves
+    //: through here, or the application outlives the harness that promised to close it.
+    let code = run();
+    std::process::exit(code);
+}
+
+fn run() -> i32 {
     let dry = std::env::args().any(|a| a == "--dry");
     let app = std::env::args().skip(1).find(|a| a.ends_with(".exe"))
         .unwrap_or_else(|| "charmap.exe".into());
@@ -101,13 +108,13 @@ fn main() {
     //: choosing badly.
     if !pointing_is_exact() {
         println!("  the cursor does not go where it is sent on this display — refusing to click");
-        std::process::exit(2);
+        return 2;
     }
 
     let mut launched = Launched::start(&app).expect("could not start it");
     let Some(main_window) = launched.window(Duration::from_secs(6)) else {
         println!("  {app} opened no visible window");
-        std::process::exit(2);
+        return 2;
     };
     let pid = launched.pid;
 
@@ -199,6 +206,7 @@ fn main() {
         println!("  ({} elements died between being listed and being read)", session.eyes.vanished);
     }
     launched.close();
+    0
 }
 
 fn trim(s: &str) -> String {
