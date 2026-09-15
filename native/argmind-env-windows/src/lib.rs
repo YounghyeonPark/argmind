@@ -20,6 +20,7 @@ pub mod launch;
 pub mod microphone;
 pub mod patterns;
 pub mod speaker;
+pub mod tray;
 pub use hands::{Reach, WindowsHands};
 pub use attending::{Attending, Watcher};
 pub use microphone::{Clip, Microphone};
