@@ -244,50 +244,94 @@ fn check(a: &Args) -> i32 {
     i32::from(needs.iter().any(|n| n.required && !n.present))
 }
 
-/// Fetch the part that is safe to fetch.
+/// Offer to fix what is missing — **one window per thing, and nothing without a yes.**
+///
+/// The window says in full what will happen before it happens, because an approval given to
+/// *"install dependencies?"* is not an approval to anything in particular.
 fn setup(a: &Args) -> i32 {
     let needs = argmind_serve::needs::every(&a.model);
     println!();
     print!("{}", argmind_serve::needs::report(&needs));
-    let mine: Vec<&argmind_serve::needs::Need> = needs.iter()
-        .filter(|n| !n.present && n.band == argmind_serve::needs::Band::Fetchable).collect();
-    if mine.is_empty() {
-        println!("  받아올 게 없습니다.");
+
+    let offers: Vec<&argmind_serve::needs::Need> =
+        needs.iter().filter(|n| !n.present && n.fix.is_some()).collect();
+    if offers.is_empty() {
+        println!("  물어볼 게 없습니다.");
         return i32::from(needs.iter().any(|n| n.required && !n.present));
     }
-    if !argmind_env_ollama::manage::awake(argmind_env_ollama::OLLAMA) {
-        //: **Nothing to pull with.** Trying anyway would fail four seconds later with a socket
-        //: error instead of the sentence that says what to do.
-        println!("  Ollama가 응답하지 않아 아무것도 받아올 수 없습니다.");
-        return 1;
-    }
 
-    println!("
-  {} 를 받아옵니다. 몇 GB이고 시간이 걸립니다.
-", a.model);
-    let mut last = 0;
-    let done = argmind_env_ollama::manage::pull(argmind_env_ollama::OLLAMA, &a.model, |p| {
-        //: Every ten per cent, not every line: a pull emits thousands and a terminal that scrolls
-        //: past is no more informative than one that says nothing.
-        match p.percent() {
-            Some(pct) if pct >= last + 10 => {
-                last = pct - pct % 10;
-                println!("    {pct:>3}%  {}", p.status);
+    println!();
+    let mut done = 0;
+    let mut refused = 0;
+    for need in &offers {
+        let fix = need.fix.as_ref().expect("filtered on it");
+        let body = argmind_serve::fix::describe(fix);
+        //: **Printed as well as shown.** Somebody running this over a remote session, or reading
+        //: back what happened, should not have to have seen the window.
+        println!("  ── {} ──\n{}\n", need.what,
+                 body.lines().map(|l| format!("  {l}")).collect::<Vec<_>>().join("\n"));
+        if !argmind_env_windows::ask::confirm(fix.title(), &body) {
+            println!("  {} — 아니오\n", need.what);
+            refused += 1;
+            continue;
+        }
+        match apply(fix) {
+            Ok(said) => {
+                println!("  {} — {said}\n", need.what);
+                done += 1;
             }
-            None if p.status != "pulling manifest" => println!("    ...   {}", p.status),
-            _ => {}
+            Err(why) => println!("  {} — 실패: {why}\n", need.what),
         }
-    });
-    match done {
-        Ok(()) => {
-            println!("
-  됐습니다. argmind check 로 다시 확인해 보세요.");
-            0
+    }
+    println!("  {done}개 처리, {refused}개 거절.");
+    if done > 0 {
+        println!("  argmind check 로 다시 확인해 보세요.");
+    }
+    i32::from(needs.iter().any(|n| n.required && !n.present) && done == 0)
+}
+
+/// Do one approved fix. **Reached only after a yes**, and every branch says what it did.
+fn apply(fix: &argmind_serve::fix::Fix) -> Result<String, String> {
+    use argmind_serve::fix::Fix;
+    match fix {
+        Fix::PullModel { model, .. } => {
+            let mut last = 0;
+            argmind_env_ollama::manage::pull(argmind_env_ollama::OLLAMA, model, |p| {
+                //: Every ten per cent, not every line: a pull emits thousands, and a terminal that
+                //: scrolls past is no more informative than one that says nothing.
+                match p.percent() {
+                    Some(pct) if pct >= last + 10 => {
+                        last = pct - pct % 10;
+                        println!("    {pct:>3}%  {}", p.status);
+                    }
+                    None if p.status != "pulling manifest" => println!("    ...   {}", p.status),
+                    _ => {}
+                }
+            })?;
+            Ok("받았습니다".into())
         }
-        Err(why) => {
-            println!("
-  받지 못했습니다 — {why}");
-            1
+        Fix::OpenPage { url, .. } => {
+            //: `explorer` opens a URL in whatever the person has chosen as their browser, and it
+            //: is a shell command rather than a downloader — **nothing is fetched or run here.**
+            std::process::Command::new("explorer").arg(url).spawn()
+                .map_err(|e| format!("{e}"))?;
+            Ok(format!("{url} 을(를) 열었습니다 — 설치는 직접 하셔야 합니다"))
+        }
+        Fix::RunElevated { command, .. } => {
+            //: **Windows asks again.** `runas` raises the elevation prompt, so a yes here is the
+            //: first of two, and the second one is the operating system's own.
+            let done = std::process::Command::new("powershell")
+                .args(["-NoProfile", "-Command",
+                       &format!("Start-Process -Verb RunAs -Wait -FilePath cmd.exe \
+                                 -ArgumentList '/c {command}'")])
+                .status().map_err(|e| format!("{e}"))?;
+            if done.success() {
+                Ok("실행했습니다".into())
+            } else {
+                //: A cancelled elevation prompt lands here, and it is a refusal rather than a
+                //: fault — saying "failed" for somebody changing their mind is a lie.
+                Err("관리자 권한을 받지 못했거나 취소되었습니다".into())
+            }
         }
     }
 }

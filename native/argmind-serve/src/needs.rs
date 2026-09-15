@@ -5,26 +5,17 @@
 //!
 //! * **Already here or genuinely absent, and free to check.** A socket that answers, a voice that
 //!   is installed, a microphone that exists. Looking costs nothing and changes nothing.
-//! * **Safe to fetch.** A model, pulled by Ollama into Ollama's own store, over the socket this
-//!   project already uses. No installer runs, no executable is downloaded, nothing outside a
-//!   program the person already chose to run is touched.
-//! * **Not ours to install.** Ollama itself, a recogniser, a Windows language pack. Each means
-//!   running an installer or elevating, and **a program that can click your screen must not also
-//!   be able to install software while you are not looking.** These are reported with the exact
-//!   command and nothing else.
+//! * **Something argmind can do about it, once asked.** Every one of these carries a [`Fix`], and
+//!   a fix only happens after a window has said in full what it will do and somebody has answered
+//!   yes. The rule that used to read *we will not install software while you are not looking* is
+//!   now *you will be looking* — the same rule with the person put back into it.
+//! * **Nothing argmind can do.** Reported, and that is all.
 //!
-//! The band is a property of the need, written next to it, rather than a judgement made at the
-//! call site — so adding a need means deciding which band it is in.
+//! The fix is a property of the need, written next to it, rather than a judgement made at the call
+//! site — so adding a need means deciding what could be done about it, and the grades in [`Fix`]
+//! mean it cannot be quietly promoted from fetching data to running an installer.
 
-/// How much this program may do about a missing thing.
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub enum Band {
-    /// We can fetch it ourselves: no installer, no executable, nothing outside a program already
-    /// running by the person's choice.
-    Fetchable,
-    /// Report it and print the command. **Installing it is the person's decision to make.**
-    TheirCall,
-}
+use crate::fix::Fix;
 
 /// One thing argmind wants.
 #[derive(Debug, Clone)]
@@ -32,12 +23,14 @@ pub struct Need {
     pub what: &'static str,
     /// Whether the agent works at all without it.
     pub required: bool,
-    pub band: Band,
     pub present: bool,
     /// What is true right now, in a sentence.
     pub found: String,
     /// What to do about it, when it is missing.
     pub how: String,
+    /// **What argmind offers to do, and nothing happens until somebody answers yes.** `None` means
+    /// there is nothing it could do even with permission.
+    pub fix: Option<Fix>,
 }
 
 impl Need {
@@ -60,11 +53,17 @@ pub fn every(model: &str) -> Vec<Need> {
     out.push(Need {
         what: "Ollama",
         required: true,
-        //: An installer. Not ours to run.
-        band: Band::TheirCall,
         present: ollama_up,
         found: if ollama_up { "127.0.0.1:11434 응답함".into() } else { "응답 없음".into() },
         how: "https://ollama.com 에서 설치한 뒤 실행해 두세요".into(),
+        //: **A page, not an installer.** argmind will not download and run a third party's
+        //: executable on somebody's behalf, approval or no approval — the approval would be for a
+        //: file nobody had seen, fetched from a name nobody had checked. Opening the page hands the
+        //: decision back to where it can actually be made.
+        fix: Some(Fix::OpenPage {
+            url: "https://ollama.com/download".into(),
+            why: "Ollama가 있어야 argmind가 동작합니다.".into(),
+        }),
     });
 
     //: **Only asked when Ollama is up.** "The model is missing" and "nothing was there to ask" are
@@ -74,7 +73,6 @@ pub fn every(model: &str) -> Vec<Need> {
     out.push(Need {
         what: "모델",
         required: true,
-        band: Band::Fetchable,
         present: has_model,
         found: if !ollama_up {
             "Ollama가 없어서 확인 못 함".into()
@@ -84,6 +82,8 @@ pub fn every(model: &str) -> Vec<Need> {
             format!("{model} 없음")
         },
         how: format!("argmind setup 이 받아옵니다 (약 5 GB) — 또는 ollama pull {model}"),
+        //: Only offered when Ollama is up, because there is nothing to pull with otherwise.
+        fix: ollama_up.then(|| Fix::PullModel { model: model.to_string(), about_gb: 5.0 }),
     });
 
     //: A TCP connect and nothing else — **it is not asked to transcribe anything**, because a
@@ -95,7 +95,6 @@ pub fn every(model: &str) -> Vec<Need> {
         what: "받아쓰기",
         required: false,
         //: A server you build and run, the way Ollama is. Not ours to install.
-        band: Band::TheirCall,
         present: whisper_up,
         found: if whisper_up {
             format!("{} 응답함", argmind_env_whisper::WHISPER)
@@ -103,6 +102,12 @@ pub fn every(model: &str) -> Vec<Need> {
             format!("{} 응답 없음 — 음성 입력만 안 됩니다", argmind_env_whisper::WHISPER)
         },
         how: "whisper.cpp 를 받아 whisper-server 를 8178 포트로 띄우세요".into(),
+        //: Same reasoning as Ollama, and more so — this one is built from source, and fetching and
+        //: running somebody's build is exactly what this refuses to do unseen.
+        fix: Some(Fix::OpenPage {
+            url: "https://github.com/ggml-org/whisper.cpp".into(),
+            why: "음성 입력에는 받아쓰기 서버가 필요합니다.".into(),
+        }),
     });
 
     //: Built once and dropped. Enumerating voices reads a registry category and opens no audio
@@ -112,7 +117,6 @@ pub fn every(model: &str) -> Vec<Need> {
         what: "한국어 음성",
         required: false,
         //: A Windows language feature, and installing one needs elevation.
-        band: Band::TheirCall,
         present: korean,
         found: if korean {
             "설치됨".into()
@@ -122,6 +126,13 @@ pub fn every(model: &str) -> Vec<Need> {
             "없음 — 한국어 답변은 소리로 나오지 않습니다".into()
         },
         how: "설정 > 시간 및 언어 > 언어 > 한국어 > 옵션 > 음성 을 설치하세요".into(),
+        //: **This one argmind can actually do**, because it is one documented Windows command
+        //: rather than somebody's binary — and Windows asks for administrator rights itself, so
+        //: two separate windows say yes before anything changes.
+        fix: Some(Fix::RunElevated {
+            command: "DISM /Online /Add-Capability /CapabilityName:Language.Speech~~~ko-KR~0.0.1.0".into(),
+            why: "한국어 음성이 없으면 한국어 답변은 소리로 나오지 않습니다.".into(),
+        }),
     });
 
     out
@@ -136,19 +147,19 @@ pub fn report(needs: &[Need]) -> String {
             out.push_str(&format!("             {}\n", n.how));
         }
     }
-    let missing: Vec<&Need> = needs.iter().filter(|n| !n.present && n.required).collect();
-    let fetchable = missing.iter().filter(|n| n.band == Band::Fetchable).count();
+    let missing: Vec<&Need> = needs.iter().filter(|n| !n.present).collect();
     out.push('\n');
     if missing.is_empty() {
         out.push_str("  필요한 건 다 있습니다.\n");
-    } else {
-        out.push_str(&format!("  {}개가 없고, 그중 {fetchable}개는 argmind setup 이 받아올 수 \
-                               있습니다.\n", missing.len()));
-        //: **Named, not counted.** "One of these is yours to install" is only useful if it says
-        //: which one.
-        for n in missing.iter().filter(|n| n.band == Band::TheirCall) {
-            out.push_str(&format!("  {} 은(는) 직접 설치하셔야 합니다.\n", n.what));
-        }
+        return out;
+    }
+    let offered = missing.iter().filter(|n| n.fix.is_some()).count();
+    out.push_str(&format!("  {}개가 없습니다. argmind setup 을 실행하면 {offered}개에 대해 \
+                           물어봅니다.\n", missing.len()));
+    //: **Named, not counted.** Saying that nothing can be done about one of them is only useful if
+    //: it says which one.
+    for n in missing.iter().filter(|n| n.fix.is_none()) {
+        out.push_str(&format!("  {} 은(는) argmind가 할 수 있는 게 없습니다.\n", n.what));
     }
     out
 }
