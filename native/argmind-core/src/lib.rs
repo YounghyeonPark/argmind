@@ -22,3 +22,4 @@ pub mod converse;
 pub mod intent;
 pub mod llm;
 pub mod session;
+pub mod watch;

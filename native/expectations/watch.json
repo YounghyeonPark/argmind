@@ -1,0 +1,945 @@
+{
+ "min_gap": 3.0,
+ "rows": [
+  {
+   "scene": "same window",
+   "watch": "window",
+   "said": null,
+   "before": [
+    [
+     "A",
+     "Paint"
+    ]
+   ],
+   "after": [
+    [
+     "B",
+     "Paint"
+    ]
+   ]
+  },
+  {
+   "scene": "same window",
+   "watch": "appeared:search",
+   "said": null,
+   "before": [
+    [
+     "A",
+     "Paint"
+    ]
+   ],
+   "after": [
+    [
+     "B",
+     "Paint"
+    ]
+   ]
+  },
+  {
+   "scene": "same window",
+   "watch": "appeared:검색",
+   "said": null,
+   "before": [
+    [
+     "A",
+     "Paint"
+    ]
+   ],
+   "after": [
+    [
+     "B",
+     "Paint"
+    ]
+   ]
+  },
+  {
+   "scene": "same window",
+   "watch": "vanished:search",
+   "said": null,
+   "before": [
+    [
+     "A",
+     "Paint"
+    ]
+   ],
+   "after": [
+    [
+     "B",
+     "Paint"
+    ]
+   ]
+  },
+  {
+   "scene": "window changed",
+   "watch": "window",
+   "said": "the window changed to 'Character Map'",
+   "before": [
+    [
+     "A",
+     "Paint"
+    ]
+   ],
+   "after": [
+    [
+     "A",
+     "Character Map"
+    ]
+   ]
+  },
+  {
+   "scene": "window changed",
+   "watch": "appeared:search",
+   "said": null,
+   "before": [
+    [
+     "A",
+     "Paint"
+    ]
+   ],
+   "after": [
+    [
+     "A",
+     "Character Map"
+    ]
+   ]
+  },
+  {
+   "scene": "window changed",
+   "watch": "appeared:검색",
+   "said": null,
+   "before": [
+    [
+     "A",
+     "Paint"
+    ]
+   ],
+   "after": [
+    [
+     "A",
+     "Character Map"
+    ]
+   ]
+  },
+  {
+   "scene": "window changed",
+   "watch": "vanished:search",
+   "said": null,
+   "before": [
+    [
+     "A",
+     "Paint"
+    ]
+   ],
+   "after": [
+    [
+     "A",
+     "Character Map"
+    ]
+   ]
+  },
+  {
+   "scene": "window went empty",
+   "watch": "window",
+   "said": null,
+   "before": [
+    [
+     "A",
+     "Paint"
+    ]
+   ],
+   "after": []
+  },
+  {
+   "scene": "window went empty",
+   "watch": "appeared:search",
+   "said": null,
+   "before": [
+    [
+     "A",
+     "Paint"
+    ]
+   ],
+   "after": []
+  },
+  {
+   "scene": "window went empty",
+   "watch": "appeared:검색",
+   "said": null,
+   "before": [
+    [
+     "A",
+     "Paint"
+    ]
+   ],
+   "after": []
+  },
+  {
+   "scene": "window went empty",
+   "watch": "vanished:search",
+   "said": null,
+   "before": [
+    [
+     "A",
+     "Paint"
+    ]
+   ],
+   "after": []
+  },
+  {
+   "scene": "window arrived from nothing",
+   "watch": "window",
+   "said": "the window changed to 'Paint'",
+   "before": [],
+   "after": [
+    [
+     "A",
+     "Paint"
+    ]
+   ]
+  },
+  {
+   "scene": "window arrived from nothing",
+   "watch": "appeared:search",
+   "said": null,
+   "before": [],
+   "after": [
+    [
+     "A",
+     "Paint"
+    ]
+   ]
+  },
+  {
+   "scene": "window arrived from nothing",
+   "watch": "appeared:검색",
+   "said": null,
+   "before": [],
+   "after": [
+    [
+     "A",
+     "Paint"
+    ]
+   ]
+  },
+  {
+   "scene": "window arrived from nothing",
+   "watch": "vanished:search",
+   "said": null,
+   "before": [],
+   "after": [
+    [
+     "A",
+     "Paint"
+    ]
+   ]
+  },
+  {
+   "scene": "appeared plain",
+   "watch": "window",
+   "said": null,
+   "before": [
+    [
+     "A",
+     "Paint"
+    ]
+   ],
+   "after": [
+    [
+     "A",
+     "Paint"
+    ],
+    [
+     "Search",
+     "Paint"
+    ]
+   ]
+  },
+  {
+   "scene": "appeared plain",
+   "watch": "appeared:search",
+   "said": "'Search' appeared",
+   "before": [
+    [
+     "A",
+     "Paint"
+    ]
+   ],
+   "after": [
+    [
+     "A",
+     "Paint"
+    ],
+    [
+     "Search",
+     "Paint"
+    ]
+   ]
+  },
+  {
+   "scene": "appeared plain",
+   "watch": "appeared:검색",
+   "said": null,
+   "before": [
+    [
+     "A",
+     "Paint"
+    ]
+   ],
+   "after": [
+    [
+     "A",
+     "Paint"
+    ],
+    [
+     "Search",
+     "Paint"
+    ]
+   ]
+  },
+  {
+   "scene": "appeared plain",
+   "watch": "vanished:search",
+   "said": null,
+   "before": [
+    [
+     "A",
+     "Paint"
+    ]
+   ],
+   "after": [
+    [
+     "A",
+     "Paint"
+    ],
+    [
+     "Search",
+     "Paint"
+    ]
+   ]
+  },
+  {
+   "scene": "appeared, different case",
+   "watch": "window",
+   "said": null,
+   "before": [
+    [
+     "A",
+     "Paint"
+    ]
+   ],
+   "after": [
+    [
+     "A",
+     "Paint"
+    ],
+    [
+     "SEARCH BOX",
+     "Paint"
+    ]
+   ]
+  },
+  {
+   "scene": "appeared, different case",
+   "watch": "appeared:search",
+   "said": "'SEARCH BOX' appeared",
+   "before": [
+    [
+     "A",
+     "Paint"
+    ]
+   ],
+   "after": [
+    [
+     "A",
+     "Paint"
+    ],
+    [
+     "SEARCH BOX",
+     "Paint"
+    ]
+   ]
+  },
+  {
+   "scene": "appeared, different case",
+   "watch": "appeared:검색",
+   "said": null,
+   "before": [
+    [
+     "A",
+     "Paint"
+    ]
+   ],
+   "after": [
+    [
+     "A",
+     "Paint"
+    ],
+    [
+     "SEARCH BOX",
+     "Paint"
+    ]
+   ]
+  },
+  {
+   "scene": "appeared, different case",
+   "watch": "vanished:search",
+   "said": null,
+   "before": [
+    [
+     "A",
+     "Paint"
+    ]
+   ],
+   "after": [
+    [
+     "A",
+     "Paint"
+    ],
+    [
+     "SEARCH BOX",
+     "Paint"
+    ]
+   ]
+  },
+  {
+   "scene": "appeared, already there",
+   "watch": "window",
+   "said": null,
+   "before": [
+    [
+     "Search",
+     "Paint"
+    ]
+   ],
+   "after": [
+    [
+     "Search",
+     "Paint"
+    ]
+   ]
+  },
+  {
+   "scene": "appeared, already there",
+   "watch": "appeared:search",
+   "said": null,
+   "before": [
+    [
+     "Search",
+     "Paint"
+    ]
+   ],
+   "after": [
+    [
+     "Search",
+     "Paint"
+    ]
+   ]
+  },
+  {
+   "scene": "appeared, already there",
+   "watch": "appeared:검색",
+   "said": null,
+   "before": [
+    [
+     "Search",
+     "Paint"
+    ]
+   ],
+   "after": [
+    [
+     "Search",
+     "Paint"
+    ]
+   ]
+  },
+  {
+   "scene": "appeared, already there",
+   "watch": "vanished:search",
+   "said": null,
+   "before": [
+    [
+     "Search",
+     "Paint"
+    ]
+   ],
+   "after": [
+    [
+     "Search",
+     "Paint"
+    ]
+   ]
+  },
+  {
+   "scene": "vanished plain",
+   "watch": "window",
+   "said": null,
+   "before": [
+    [
+     "A",
+     "Paint"
+    ],
+    [
+     "Search",
+     "Paint"
+    ]
+   ],
+   "after": [
+    [
+     "A",
+     "Paint"
+    ]
+   ]
+  },
+  {
+   "scene": "vanished plain",
+   "watch": "appeared:search",
+   "said": null,
+   "before": [
+    [
+     "A",
+     "Paint"
+    ],
+    [
+     "Search",
+     "Paint"
+    ]
+   ],
+   "after": [
+    [
+     "A",
+     "Paint"
+    ]
+   ]
+  },
+  {
+   "scene": "vanished plain",
+   "watch": "appeared:검색",
+   "said": null,
+   "before": [
+    [
+     "A",
+     "Paint"
+    ],
+    [
+     "Search",
+     "Paint"
+    ]
+   ],
+   "after": [
+    [
+     "A",
+     "Paint"
+    ]
+   ]
+  },
+  {
+   "scene": "vanished plain",
+   "watch": "vanished:search",
+   "said": "'Search' went away",
+   "before": [
+    [
+     "A",
+     "Paint"
+    ],
+    [
+     "Search",
+     "Paint"
+    ]
+   ],
+   "after": [
+    [
+     "A",
+     "Paint"
+    ]
+   ]
+  },
+  {
+   "scene": "vanished, nothing matching",
+   "watch": "window",
+   "said": null,
+   "before": [
+    [
+     "A",
+     "Paint"
+    ]
+   ],
+   "after": [
+    [
+     "A",
+     "Paint"
+    ]
+   ]
+  },
+  {
+   "scene": "vanished, nothing matching",
+   "watch": "appeared:search",
+   "said": null,
+   "before": [
+    [
+     "A",
+     "Paint"
+    ]
+   ],
+   "after": [
+    [
+     "A",
+     "Paint"
+    ]
+   ]
+  },
+  {
+   "scene": "vanished, nothing matching",
+   "watch": "appeared:검색",
+   "said": null,
+   "before": [
+    [
+     "A",
+     "Paint"
+    ]
+   ],
+   "after": [
+    [
+     "A",
+     "Paint"
+    ]
+   ]
+  },
+  {
+   "scene": "vanished, nothing matching",
+   "watch": "vanished:search",
+   "said": null,
+   "before": [
+    [
+     "A",
+     "Paint"
+    ]
+   ],
+   "after": [
+    [
+     "A",
+     "Paint"
+    ]
+   ]
+  },
+  {
+   "scene": "quotes in the name",
+   "watch": "window",
+   "said": null,
+   "before": [
+    [
+     "A",
+     "Paint"
+    ]
+   ],
+   "after": [
+    [
+     "A",
+     "Paint"
+    ],
+    [
+     "say \"hello\"",
+     "Paint"
+    ]
+   ]
+  },
+  {
+   "scene": "quotes in the name",
+   "watch": "appeared:search",
+   "said": null,
+   "before": [
+    [
+     "A",
+     "Paint"
+    ]
+   ],
+   "after": [
+    [
+     "A",
+     "Paint"
+    ],
+    [
+     "say \"hello\"",
+     "Paint"
+    ]
+   ]
+  },
+  {
+   "scene": "quotes in the name",
+   "watch": "appeared:검색",
+   "said": null,
+   "before": [
+    [
+     "A",
+     "Paint"
+    ]
+   ],
+   "after": [
+    [
+     "A",
+     "Paint"
+    ],
+    [
+     "say \"hello\"",
+     "Paint"
+    ]
+   ]
+  },
+  {
+   "scene": "quotes in the name",
+   "watch": "vanished:search",
+   "said": null,
+   "before": [
+    [
+     "A",
+     "Paint"
+    ]
+   ],
+   "after": [
+    [
+     "A",
+     "Paint"
+    ],
+    [
+     "say \"hello\"",
+     "Paint"
+    ]
+   ]
+  },
+  {
+   "scene": "korean in the name",
+   "watch": "window",
+   "said": null,
+   "before": [
+    [
+     "A",
+     "Paint"
+    ]
+   ],
+   "after": [
+    [
+     "A",
+     "Paint"
+    ],
+    [
+     "검색 결과",
+     "Paint"
+    ]
+   ]
+  },
+  {
+   "scene": "korean in the name",
+   "watch": "appeared:search",
+   "said": null,
+   "before": [
+    [
+     "A",
+     "Paint"
+    ]
+   ],
+   "after": [
+    [
+     "A",
+     "Paint"
+    ],
+    [
+     "검색 결과",
+     "Paint"
+    ]
+   ]
+  },
+  {
+   "scene": "korean in the name",
+   "watch": "appeared:검색",
+   "said": "'검색 결과' appeared",
+   "before": [
+    [
+     "A",
+     "Paint"
+    ]
+   ],
+   "after": [
+    [
+     "A",
+     "Paint"
+    ],
+    [
+     "검색 결과",
+     "Paint"
+    ]
+   ]
+  },
+  {
+   "scene": "korean in the name",
+   "watch": "vanished:search",
+   "said": null,
+   "before": [
+    [
+     "A",
+     "Paint"
+    ]
+   ],
+   "after": [
+    [
+     "A",
+     "Paint"
+    ],
+    [
+     "검색 결과",
+     "Paint"
+    ]
+   ]
+  },
+  {
+   "scene": "backslash in the name",
+   "watch": "window",
+   "said": null,
+   "before": [
+    [
+     "A",
+     "Paint"
+    ]
+   ],
+   "after": [
+    [
+     "A",
+     "Paint"
+    ],
+    [
+     "C:\\Search",
+     "Paint"
+    ]
+   ]
+  },
+  {
+   "scene": "backslash in the name",
+   "watch": "appeared:search",
+   "said": "'C:\\\\Search' appeared",
+   "before": [
+    [
+     "A",
+     "Paint"
+    ]
+   ],
+   "after": [
+    [
+     "A",
+     "Paint"
+    ],
+    [
+     "C:\\Search",
+     "Paint"
+    ]
+   ]
+  },
+  {
+   "scene": "backslash in the name",
+   "watch": "appeared:검색",
+   "said": null,
+   "before": [
+    [
+     "A",
+     "Paint"
+    ]
+   ],
+   "after": [
+    [
+     "A",
+     "Paint"
+    ],
+    [
+     "C:\\Search",
+     "Paint"
+    ]
+   ]
+  },
+  {
+   "scene": "backslash in the name",
+   "watch": "vanished:search",
+   "said": null,
+   "before": [
+    [
+     "A",
+     "Paint"
+    ]
+   ],
+   "after": [
+    [
+     "A",
+     "Paint"
+    ],
+    [
+     "C:\\Search",
+     "Paint"
+    ]
+   ]
+  },
+  {
+   "scene": "window name with a quote",
+   "watch": "window",
+   "said": "the window changed to \"it's here\"",
+   "before": [
+    [
+     "A",
+     "Paint"
+    ]
+   ],
+   "after": [
+    [
+     "A",
+     "it's here"
+    ]
+   ]
+  },
+  {
+   "scene": "window name with a quote",
+   "watch": "appeared:search",
+   "said": null,
+   "before": [
+    [
+     "A",
+     "Paint"
+    ]
+   ],
+   "after": [
+    [
+     "A",
+     "it's here"
+    ]
+   ]
+  },
+  {
+   "scene": "window name with a quote",
+   "watch": "appeared:검색",
+   "said": null,
+   "before": [
+    [
+     "A",
+     "Paint"
+    ]
+   ],
+   "after": [
+    [
+     "A",
+     "it's here"
+    ]
+   ]
+  },
+  {
+   "scene": "window name with a quote",
+   "watch": "vanished:search",
+   "said": null,
+   "before": [
+    [
+     "A",
+     "Paint"
+    ]
+   ],
+   "after": [
+    [
+     "A",
+     "it's here"
+    ]
+   ]
+  }
+ ]
+}
