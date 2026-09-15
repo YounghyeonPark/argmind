@@ -1,0 +1,12 @@
+[package]
+name = "argmind-rules"
+version = "0.0.1"
+edition = "2021"
+description = "The rules this repository keeps, held by tests rather than remembered."
+license = "Apache-2.0"
+
+# **Nothing.** A crate whose job is to check what the other crates depend on cannot itself be the
+# reason the answer changes — and a TOML parser would be a dependency taken on in order to police
+# dependencies. The reader in `lib.rs` handles the shape of the two files it reads and refuses
+# anything else, which is a smaller thing to be responsible for than a parser is.
+[dependencies]

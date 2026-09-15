@@ -1,9 +1,14 @@
 # Every third-party dependency this project declares, and the licence it declares for itself.
 #
-# `tests/test_licences.py` walks `pyproject.toml` and every `Cargo.toml` under `native/` and
-# requires each name here with a licence from `allowed`. **Adding a dependency therefore fails the
-# suite until a line is added here**, which is the point: the owner's rule is that only things with
-# no open-source licence problem are used, and a rule nothing enforces is one nobody keeps.
+# `native/argmind-rules/tests/licences.rs` walks every `Cargo.toml` under `native/` and
+# `tests/test_licences.py` walks `pyproject.toml`; both require each name here with a licence from
+# `allowed`. **Adding a dependency therefore fails the suite until a line is added here**, which is
+# the point: the owner's rule is that only things with no open-source licence problem are used, and
+# a rule nothing enforces is one nobody keeps.
+#
+# The Rust test also checks the other direction — that nothing under `[rust]` has stopped being a
+# dependency — because a record that keeps listing what was removed reads as thorough while being
+# wrong, which is how the old `NOTICE` came to attribute three libraries this project had deleted.
 #
 # Licences are recorded as the projects declare them. This is a record, not legal advice.
 
@@ -60,4 +65,9 @@ sha2 = { licence = "MIT OR Apache-2.0", why = "the prompt fingerprint, in tests 
 ollama = { licence = "MIT", why = "a local server this talks to over HTTP" }
 qwen3 = { licence = "Apache-2.0", why = "weights, fetched by Ollama" }
 whisper = { licence = "MIT", why = "weights, fetched at first use" }
-"whisper.cpp" = { licence = "MIT", why = "candidate runtime; ggml is MIT too. Not yet a dependency" }
+"whisper.cpp" = { licence = "MIT", why = """
+    The recogniser's server. **argmind now clones it at a pinned commit, compiles it with the
+    compiler on the machine, and runs the result** — so it is no longer a candidate. Nothing is
+    redistributed: the source is fetched from the project's own repository at run time and the
+    binary never leaves the machine that built it. ggml, which it vendors, is MIT as well.""" }
+ggml = { licence = "MIT", why = "vendored inside whisper.cpp; compiled, never redistributed" }
