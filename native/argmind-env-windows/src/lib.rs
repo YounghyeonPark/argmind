@@ -15,6 +15,7 @@
 
 pub mod ask;
 pub mod attending;
+pub mod cover;
 pub mod hands;
 pub mod launch;
 pub mod microphone;
@@ -24,6 +25,7 @@ pub mod supervise;
 pub mod tray;
 pub use hands::{Reach, WindowsHands};
 pub use attending::{Attending, Watcher};
+pub use cover::Cover;
 pub use microphone::{Clip, Microphone};
 pub use patterns::{operate, Operated};
 pub use launch::{bring_to_front, foreground_handle_now, foreground_is, whats_in_front, window_title, is_minimised, pid_of, to_front, windows_of, Launched};

@@ -29,6 +29,27 @@ fn a_harness_may_only_touch_the_process_it_started() {
     assert!(may_touch(Reach::Anything, None));
 }
 
+/// **A harness that put its own window in the way may act into it, and into nothing else.**
+///
+/// `obstruction` needs this: it covers the target with a window of its own and then asks whether
+/// the click still reaches past. The widening is exactly two processes, both of which this program
+/// is responsible for — the one it launched and itself.
+#[test]
+fn a_harness_may_also_touch_the_cover_it_made_itself() {
+    let reach = Reach::OursAnd { ours: 7, theirs: 42 };
+    assert!(may_touch(reach, Some(42)), "the application it launched");
+    assert!(may_touch(reach, Some(7)), "the cover it made itself");
+    //: **And nothing else.** A third process at that point is a stranger's window, and this is
+    //: still the rule rather than an exception to it.
+    assert!(!may_touch(reach, Some(43)));
+    assert!(!may_touch(reach, None));
+    //: The two ids are separate, so a mistake that made them the same could not pass unnoticed as
+    //: a widening: with `ours == theirs` this is exactly `OnlyProcess`.
+    let same = Reach::OursAnd { ours: 42, theirs: 42 };
+    assert!(may_touch(same, Some(42)));
+    assert!(!may_touch(same, Some(7)));
+}
+
 /// An unarmed hand does nothing, and **that is the default**.
 #[test]
 fn hands_are_dry_until_they_are_armed() {

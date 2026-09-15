@@ -84,6 +84,14 @@ pub enum Reach {
     /// Only windows belonging to this process — what a harness gets, so that *never click anything
     /// the harness did not launch itself* is enforced by the type rather than by care.
     OnlyProcess(u32),
+    /// One other process's windows **and our own** — for the harness that puts a window of its own
+    /// over the target and then has to be allowed to act into it.
+    ///
+    /// **Still nothing the harness did not make itself.** The rule was never *one process*; it was
+    /// *only what this harness is responsible for*, and a cover this program created is as much
+    /// ours as an application it launched. Both ids are carried rather than read from the
+    /// environment, so the decision stays pure and testable with no desktop.
+    OursAnd { ours: u32, theirs: u32 },
 }
 
 /// Would a click at this point be allowed, given what owns the window there?
@@ -95,6 +103,7 @@ pub fn may_touch(reach: Reach, owner: Option<u32>) -> bool {
     match reach {
         Reach::Anything => true,
         Reach::OnlyProcess(pid) => owner == Some(pid),
+        Reach::OursAnd { ours, theirs } => owner == Some(ours) || owner == Some(theirs),
     }
 }
 
@@ -159,6 +168,11 @@ impl WindowsHands {
     /// Hands that may touch only this process's windows — a harness's.
     pub fn only_within(pid: u32) -> Self {
         WindowsHands::with(Reach::OnlyProcess(pid))
+    }
+
+    /// Hands for a harness that has put a window of its own in the way.
+    pub fn only_within_or_ours(pid: u32) -> Self {
+        WindowsHands::with(Reach::OursAnd { ours: std::process::id(), theirs: pid })
     }
 
     fn with(reach: Reach) -> Self {

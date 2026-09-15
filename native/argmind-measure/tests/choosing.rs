@@ -5,7 +5,6 @@
 //! prompt changes apart — which is a stronger check than one paired run, because it covers models,
 //! prompts and configurations that are no longer reachable.
 
-use std::collections::BTreeMap;
 use std::path::PathBuf;
 
 use argmind_measure::choosing::{counted, goals, outcome, score, tally, DECLINED, MISSED, RIGHT, WRONG};
