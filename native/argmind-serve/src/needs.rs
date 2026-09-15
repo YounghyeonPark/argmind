@@ -122,30 +122,40 @@ pub fn every(model: &str) -> Vec<Need> {
     let whisper_up = std::net::TcpStream::connect_timeout(
         &argmind_env_whisper::WHISPER.parse().expect("a literal address"),
         std::time::Duration::from_millis(400)).is_ok();
+    //: Asked once and used twice — for the sentence and for whether there is a button at all.
+    let missing = crate::recogniser::missing_tools();
     out.push(Need {
         key: "whisper",
         what: "받아쓰기",
         required: false,
-        //: A server you build and run, the way Ollama is. Not ours to install.
         present: whisper_up,
         found: if whisper_up {
             format!("{} 응답함", argmind_env_whisper::WHISPER)
         } else {
             format!("{} 응답 없음 — 음성 입력만 안 됩니다", argmind_env_whisper::WHISPER)
         },
-        how: "whisper.cpp 를 받아 whisper-server 를 8178 포트로 띄우세요".into(),
-        //: **Two things are missing here and only one of them is offered.** A recogniser needs a
-        //: server *and* a model, and the model is data — fetched, checked against a published
-        //: hash, never executed. The server itself is a build from source and is the next thing to
-        //: automate; until it is, the offer is the half that can be done honestly.
-        fix: Some(Fix::Fetch {
-            url: "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.bin".into(),
-            into: model_shed().join("ggml-base.bin").to_string_lossy().to_string(),
-            why: "받아쓰기 모델을 먼저 받아 둡니다. 서버는 아직 직접 빌드하셔야 합니다.".into(),
-            about_mb: 141,
-            //: **Published by the project**, so a wrong download is caught rather than run.
-            sha256: Some(
-                "60ed5bc3dd14eea856493d334349b405782ddcaf0028d4b5df4088345fba2efe".into()),
+        how: if missing.is_empty() {
+            "argmind가 소스에서 빌드해 띄울 수 있습니다".into()
+        } else {
+            //: **Names the tool rather than saying it cannot.** "빌드할 수 없습니다" sends somebody
+            //: looking; the name of the missing program is the whole answer.
+            format!("빌드에 {} 이(가) 필요합니다 — 설치하시면 argmind가 나머지를 합니다",
+                    missing.join(", "))
+        },
+        //: **Both halves, on one approval** — the model is data and the server is a build, and
+        //: from the person's side they are one decision: make voice input work. What the sequence
+        //: will do is spelled out in the window rather than split across two of them.
+        //:
+        //: **Offered only when it can actually be done.** A button whose first act is to discover
+        //: there is no compiler teaches somebody that argmind is unreliable, and it teaches them
+        //: that after they said yes.
+        fix: missing.is_empty().then(|| Fix::BuildRecogniser {
+            repo: crate::recogniser::REPO.into(),
+            commit: crate::recogniser::COMMIT.into(),
+            why: "음성 입력에는 받아쓰기 서버가 필요합니다.".into(),
+            minutes: crate::recogniser::MINUTES,
+            //: Cheap: a file beside the binary, written by the build that produced it.
+            built: crate::recogniser::ready(),
         }),
     });
 

@@ -255,6 +255,9 @@ interface Missing {
   found: string;
   how: string;
   offer: boolean;
+  // Whether saying yes causes code from somewhere else to run here. It arrives as a flag rather
+  // than as emphasis inside `plan`, because a sentence can be rewritten and a property cannot.
+  stranger: boolean;
   plan: string;
 }
 
@@ -308,6 +311,15 @@ function drawNeeds(rows: Missing[]): void {
     plan.className = "need-plan";
     plan.textContent = n.plan;
     box.append(plan);
+
+    // The one line that changes what is being agreed to, drawn as its own row so it cannot be
+    // skimmed past with the rest of the list.
+    if (n.stranger) {
+      const warn = document.createElement("div");
+      warn.className = "need-stranger";
+      warn.textContent = "다른 곳에서 만든 코드를 이 컴퓨터에서 실행합니다.";
+      box.append(warn);
+    }
 
     const yes = document.createElement("button");
     yes.type = "button";

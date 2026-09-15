@@ -40,6 +40,7 @@ pub mod fetch;
 pub mod fix;
 pub mod needs;
 pub mod proposals;
+pub mod recogniser;
 
 use std::collections::hash_map::RandomState;
 use std::hash::{BuildHasher, Hasher};

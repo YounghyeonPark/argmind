@@ -35,6 +35,19 @@ pub enum Fix {
     /// Separate from `Install` because **nothing is executed**: a model is read by a program that
     /// was already there.
     Fetch { url: String, into: String, why: String, about_mb: u64, sha256: Option<String> },
+    /// Clone one pinned commit, compile it here, and run what comes out.
+    ///
+    /// **Not a generic build step, and it does not pretend to be one.** It is the recogniser, whose
+    /// project publishes source rather than an installer; the constants live in
+    /// [`crate::recogniser`] and this variant carries them so the sentence can name them.
+    ///
+    /// Compiling it yourself changes who produced the bytes, not who wrote the instructions — so
+    /// this counts as running a stranger, and the window says so.
+    ///
+    /// `built` is whether a server compiled from this same commit is already sitting there, and it
+    /// exists so the window can ask the **shorter, truer question** in the ordinary case: after the
+    /// first time, saying yes downloads nothing and compiles nothing.
+    BuildRecogniser { repo: String, commit: String, why: String, minutes: u64, built: bool },
     /// A documented Windows command that needs administrator rights, run through the elevation
     /// prompt so Windows asks as well.
     RunElevated { command: String, why: String },
@@ -48,6 +61,10 @@ impl Fix {
             Fix::OpenPage { .. } => "argmind — 설치 페이지를 열까요?",
             Fix::Install { .. } => "argmind — 내려받아 설치할까요?",
             Fix::Fetch { .. } => "argmind — 파일을 받을까요?",
+            //: Two questions, so two titles. A window headed "빌드할까요?" over a sentence that
+            //: says nothing will be compiled is a window that was not read.
+            Fix::BuildRecogniser { built: true, .. } => "argmind — 받아쓰기 서버를 띄울까요?",
+            Fix::BuildRecogniser { .. } => "argmind — 받아쓰기 서버를 빌드할까요?",
             Fix::RunElevated { .. } => "argmind — 관리자 권한이 필요합니다",
         }
     }
@@ -66,7 +83,10 @@ impl Fix {
     /// and an approval for one is not an approval for the other — so they are different variants
     /// and the text says which.
     pub fn runs_a_stranger(&self) -> bool {
-        matches!(self, Fix::Install { .. })
+        //: **Building it yourself does not make it yours.** The compiler turned somebody else's
+        //: instructions into bytes on this machine and then those bytes run — which is the thing
+        //: being agreed to, whoever pressed the compile button.
+        matches!(self, Fix::Install { .. } | Fix::BuildRecogniser { .. })
     }
 }
 
@@ -92,7 +112,7 @@ pub fn describe(fix: &Fix) -> String {
             "{why}\n\n\
              · {url} 에서 약 {about_mb} MB를 내려받습니다\n\
              · 인증서를 확인하고, https가 아니면 받지 않습니다\n\
-             · **받은 설치 프로그램을 실행합니다** — 만든 곳을 신뢰한다는 뜻입니다\n\
+             · 받은 설치 프로그램을 실행합니다 — 만든 곳을 신뢰한다는 뜻입니다\n\
              · 설치 프로그램이 스스로 물어볼 수 있습니다\n\n\
              내려받아 설치할까요?"),
         Fix::Fetch { url, into, why, about_mb, sha256 } => format!(
@@ -108,6 +128,29 @@ pub fn describe(fix: &Fix) -> String {
                 //: fact about the source, and the person deciding should have it.
                 None => "게시된 해시가 없어 내용은 확인하지 못합니다",
             }),
+        //: **After the first time, the honest question is a much smaller one.** Describing a
+        //: download and a ten-minute build to somebody whose machine will spend five seconds
+        //: starting a binary it already has is the description drifting from the doing — and it is
+        //: the case that happens every time but the first.
+        Fix::BuildRecogniser { commit, why, built: true, .. } => format!(
+            "{why}\n\n\
+             · 이미 빌드되어 있습니다 (커밋 {}) — 내려받지도, 컴파일하지도 않습니다\n\
+             · 그때 빌드한 것을 실행합니다 — 남이 쓴 코드를 이 컴퓨터에서 돌린다는 뜻입니다\n\
+             · 서버는 {} 에서만 듣고, argmind를 닫으면 함께 꺼집니다\n\n\
+             띄울까요?",
+            commit.get(..12).unwrap_or(commit), argmind_env_whisper::WHISPER),
+        Fix::BuildRecogniser { repo, commit, why, minutes, .. } => format!(
+            "{why}\n\n\
+             · {repo} 에서 커밋 {} 하나만 받습니다\n\
+             · 태그가 아니라 커밋 이름입니다 — 이름이 곧 내용이라 다른 게 오면 git이 거부합니다\n\
+             · 이 컴퓨터의 컴파일러로 직접 빌드합니다 (길면 {minutes}분)\n\
+             · 빌드한 것을 실행합니다 — 남이 쓴 코드를 이 컴퓨터에서 돌린다는 뜻입니다\n\
+             · 받아쓰기 모델이 없으면 함께 받습니다 (약 {} MB, 해시를 확인합니다)\n\
+             · 서버는 {} 에서만 듣고, argmind를 닫으면 함께 꺼집니다\n\n\
+             빌드해서 띄울까요?",
+            commit.get(..12).unwrap_or(commit),
+            crate::recogniser::MODEL_MB,
+            argmind_env_whisper::WHISPER),
         Fix::RunElevated { command, why } => format!(
             "{why}\n\n\
              · 다음을 관리자 권한으로 실행합니다:\n    {command}\n\
@@ -165,6 +208,32 @@ pub fn apply(fix: &Fix, say: &mut dyn FnMut(&str)) -> Result<String, String> {
             }
             crate::fetch::get(url, &at, sha256.as_deref(), say)?;
             Ok(format!("{into} 에 받았습니다"))
+        }
+        Fix::BuildRecogniser { repo, commit, .. } => {
+            //: **Checked again here**, not only where the offer was made. Between the two, minutes
+            //: of downloading and an approval — and a build that discovers halfway through that
+            //: there is no compiler has already spent somebody's evening.
+            let missing = crate::recogniser::missing_tools();
+            if !missing.is_empty() {
+                return Err(format!("{} 이(가) 없어 빌드할 수 없습니다", missing.join(", ")));
+            }
+            //: **The whole sequence on one yes.** The model half is literally the fix that would
+            //: have been offered on its own, run through this same function — so what the person
+            //: agreed to and what happens cannot come apart, and there is one downloader rather
+            //: than two.
+            if !crate::recogniser::model_at().is_file() {
+                apply(&crate::recogniser::model_fix(), say)?;
+            }
+            let at = crate::recogniser::shed();
+            crate::recogniser::clone_at(repo, commit, &at, say)?;
+            crate::recogniser::build(&at, crate::recogniser::TARGET, say)?;
+            //: Without this it runs here and nowhere else — see `bring_runtime`.
+            crate::recogniser::bring_runtime(&crate::recogniser::server_exe(), say)?;
+            //: Written only once everything above it worked, so a half-finished tree is never
+            //: described as "already built".
+            crate::recogniser::remember_build(commit);
+            crate::recogniser::serve(say)?;
+            Ok("받아쓰기 서버가 떴습니다".into())
         }
         Fix::RunElevated { command, .. } => {
             //: **Windows asks again.** `RunAs` raises the elevation prompt, so a yes here is the

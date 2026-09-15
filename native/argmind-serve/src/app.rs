@@ -288,8 +288,14 @@ fn needs_json(model: &str) -> String {
             Some(f) => (true, crate::fix::describe(f)),
             None => (false, String::new()),
         };
+        //: **The warning is a property of the fix, not a phrase inside its description.** Emphasis
+        //: written into the sentence renders as literal asterisks in a `textContent` node and as
+        //: nothing at all in a message box — and worse, a rewrite of the sentence could drop it.
+        //: `runs_a_stranger()` cannot be dropped by editing a string.
+        let stranger = n.fix.as_ref().is_some_and(crate::fix::Fix::runs_a_stranger);
         format!("{{\"key\":\"{}\",\"what\":\"{}\",\"present\":{},\"required\":{},\
-                 \"found\":\"{}\",\"how\":\"{}\",\"offer\":{offer},\"plan\":\"{}\"}}",
+                 \"found\":\"{}\",\"how\":\"{}\",\"offer\":{offer},\"stranger\":{stranger},\
+                 \"plan\":\"{}\"}}",
                 escape(n.key), escape(n.what), n.present, n.required,
                 escape(&n.found), escape(&n.how), escape(&plan))
     }).collect();
