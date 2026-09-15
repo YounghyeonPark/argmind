@@ -44,6 +44,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "argmind-rules"
+version = "0.0.1"
+
+[[package]]
 name = "argmind-serve"
 version = "0.0.1"
 dependencies = [
