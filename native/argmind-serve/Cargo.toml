@@ -14,3 +14,4 @@ argmind-core = { path = "../argmind-core" }
 # and proposals only, and depends on neither.
 argmind-env-ollama = { path = "../argmind-env-ollama" }
 argmind-env-windows = { path = "../argmind-env-windows" }
+argmind-voice = { path = "../argmind-voice" }

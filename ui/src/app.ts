@@ -22,6 +22,7 @@ interface Proposal {
 interface Hello {
   model: string;
   dry: boolean;
+  speaks: boolean;
   attending: string;
   waiting: Proposal[];
 }
@@ -108,7 +109,10 @@ const stream = new EventSource(`/events`);
 stream.addEventListener("hello", (e) => {
   const d: Hello = JSON.parse((e as MessageEvent).data);
   header.textContent = d.attending || "(아무 창도 보고 있지 않음)";
-  statusLine.textContent = `${d.model}${d.dry ? " · 실행 안 함" : ""}`;
+  // Both settings shown, because "it did nothing" and "it said nothing" are the two things
+  // a person would otherwise mistake for the agent being broken.
+  statusLine.textContent =
+    `${d.model}${d.dry ? " · 실행 안 함" : ""}${d.speaks ? " · 소리 켜짐" : " · 소리 꺼짐"}`;
   // Rebuilt from the server's own list, so a reload is never a page showing buttons the server
   // has forgotten — or missing ones it still holds.
   pending.replaceChildren();

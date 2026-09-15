@@ -42,7 +42,8 @@ use argmind_core::intent::{Effect, Trigger};
 use argmind_core::session::Session;
 use argmind_env_ollama::Local;
 use argmind_env_windows::hands::Did;
-use argmind_env_windows::{Attending, Watcher, WindowsHands};
+use argmind_env_windows::{Attending, SapiSpeaker, Watcher, WindowsHands};
+use argmind_voice::Speaker;
 use argmind_serve::proposals::{Answered, Proposal, Proposals};
 use argmind_serve::{authorised, event_stream_head, is_loopback, mint_token, parse_request, respond,
                     route, sse, Route};
@@ -80,6 +81,9 @@ struct Desk {
     session: Session<Attending, WindowsHands, Model>,
     proposals: Proposals,
     dry: bool,
+    /// **`None` unless asked for.** Speaking makes a noise in a room, which is not something to
+    /// start doing because a program was run — see `--speak`.
+    voice: Option<SapiSpeaker>,
 }
 
 /// What a connection asks the agent to do.
@@ -149,6 +153,16 @@ fn think(desk: &mut Desk, out: &Listeners, text: &str) {
     if !intent.say.is_empty() {
         desk.session.history.push(("you".into(), intent.say.clone()));
         out.send("say", &intent.say);
+        //: **Only because they asked.** A reply to something typed is an answer; nothing here
+        //: fires unprompted yet, and when something does this is the line that must not simply
+        //: inherit permission from it — a proposal waits behind a button, a sentence waits behind
+        //: nothing.
+        if let Some(voice) = desk.voice.as_mut() {
+            //: Barge-in: a new answer replaces the last one rather than queueing behind ~3.1 s of
+            //: speech.
+            voice.stop();
+            voice.say(&intent.say);
+        }
     } else if intent.effects.is_empty() {
         out.send("say", "…");
     }
@@ -222,12 +236,26 @@ fn act(desk: &mut Desk, out: &Listeners, p: Proposal) {
 
 fn hello(desk: &Desk, model: &str) -> String {
     let waiting: Vec<String> = desk.proposals.waiting().iter().map(as_json).collect();
-    format!("{{\"model\":\"{}\",\"dry\":{},\"attending\":\"{}\",\"waiting\":[{}]}}",
-            escape(model), desk.dry, escape(&desk.session.eyes.window().1), waiting.join(","))
+    let fields = [
+        format!("\"model\":\"{}\"", escape(model)),
+        format!("\"dry\":{}", desk.dry),
+        format!("\"speaks\":{}", desk.voice.is_some()),
+        format!("\"attending\":\"{}\"", escape(&desk.session.eyes.window().1)),
+        format!("\"waiting\":[{}]", waiting.join(",")),
+    ];
+    //: Assembled from a list rather than one long format string. The first version wrapped that
+    //: string across two lines and the indentation of the second landed **inside the JSON** —
+    //: harmless, since whitespace between tokens is legal, and exactly the kind of thing that is
+    //: harmless until the day something reads the payload byte for byte.
+    format!("{{{}}}", fields.join(","))
 }
 
 fn main() {
     let dry = std::env::args().any(|a| a == "--dry");
+    //: **Off by default, and that is not a style choice.** Everything measured about this voice was
+    //: measured at volume zero into a memory stream so a desktop somebody was using stayed quiet;
+    //: making a sound is a thing to ask for, not a thing to inherit from starting a program.
+    let speak = std::env::args().any(|a| a == "--speak");
     let model_name = std::env::args().skip(1).find(|a| a.contains(':'))
         .unwrap_or_else(|| "qwen3:8b".into());
 
@@ -237,7 +265,11 @@ fn main() {
     let token = mint_token();
     let listener = TcpListener::bind(ADDRESS).expect("could not bind");
     println!("\n  argmind — http://{ADDRESS}/");
-    println!("  {model_name}{}\n", if dry { " | dry — nothing will be pressed" } else { "" });
+    //: Both settings, on the line a person actually reads. *"It did nothing"* and *"it said
+    //: nothing"* are the two things that would otherwise look like the agent being broken.
+    println!("  {model_name} | {} | {}\n",
+             if dry { "dry — nothing will be pressed" } else { "live — it will press buttons" },
+             if speak { "speaking aloud" } else { "silent" });
 
     let out = Arc::new(Listeners::default());
     let (jobs, inbox) = channel::<Job>();
@@ -257,8 +289,25 @@ fn main() {
         };
         let mut model = Local::new(&agent_model);
         model.think = Some(false);
+        let voice = if speak {
+            match SapiSpeaker::new() {
+                Ok(v) => Some(v),
+                Err(e) => {
+                    eprintln!("  no voice: {e}");
+                    None
+                }
+            }
+        } else {
+            None
+        };
+        if let Some(v) = &voice {
+            //: Said once, at startup, rather than discovered when a Korean reply comes out silent.
+            if !v.has_korean() {
+                eprintln!("  a Korean voice is not installed — Korean replies will not be spoken");
+            }
+        }
         let mut desk = Desk { session: Session::new(eyes, hands, Model(model)),
-                              proposals: Proposals::default(), dry };
+                              proposals: Proposals::default(), dry, voice };
         while let Ok(job) = inbox.recv() {
             match job {
                 Job::Said(text) => think(&mut desk, &agent_out, text.trim()),

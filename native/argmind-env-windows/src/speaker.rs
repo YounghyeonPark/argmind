@@ -193,6 +193,12 @@ impl SapiSpeaker {
                 out.extend_from_slice(&buf[..read as usize]);
             }
             self.counts.said += 1;
+            //: **Put the output back.** `SetOutput` is sticky: a voice that last spoke into a
+            //: stream keeps speaking into it, so a `say()` after any synthesis would be silent
+            //: while reporting success — the same shape as the 0-byte defect the routing rule
+            //: avoids, arriving from the other direction. `None` is the default audio device, and
+            //: it is not the same as never having set an output.
+            let _ = self.voice.SetOutput(None, false);
             Ok(out)
         }
     }
