@@ -5,6 +5,9 @@ edition = "2021"
 description = "Transcription over HTTP to a whisper.cpp server on this machine."
 license = "Apache-2.0"
 
-# None, deliberately. Raw HTTP/1.1 and a WAV header need no crate, and the recogniser itself is
-# something you install and run, the way Ollama is.
+# No third-party crate, deliberately: raw HTTP/1.1 and a WAV header need none, and the recogniser
+# itself is something you install and run, the way Ollama is. The one edge is this project's own
+# seam, taken so that characters-per-second is computed in exactly one place — the same reason
+# `Widget::centre` is the one place a name becomes a coordinate.
 [dependencies]
+argmind-voice = { path = "../argmind-voice" }

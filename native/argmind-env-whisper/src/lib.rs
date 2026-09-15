@@ -25,8 +25,12 @@
 //! the thresholds that would reject a fabrication still need a real recording session to set. Until
 //! then this reports what it got and rejects nothing on confidence it does not have.
 
+pub mod guard;
+
 use std::io::{BufRead, BufReader, Read, Write};
 use std::net::TcpStream;
+
+pub use guard::{why_rejected, REPEAT_FLOOR, REPEAT_PROBE, REPEAT_TIMES};
 
 pub const WHISPER: &str = "127.0.0.1:8178";
 
@@ -120,17 +124,34 @@ pub struct Whisper {
     pub language: Option<String>,
     pub asked: u64,
     pub failed: u64,
+    /// A limit on characters per second, or `None`. **`None` ships**, and rejects nothing on pace:
+    /// the only pace measured on this machine is a synthesiser's, 5.69 characters a second for
+    /// Korean, which is the wrong denominator for a person.
+    pub pace_limit: Option<f64>,
+    /// Why transcripts were thrown away, counted apart. **One total could not tell a recogniser
+    /// problem from a threshold problem**, and those want different fixes.
+    pub refused_empty: u64,
+    pub refused_wordless: u64,
+    pub refused_repeated: u64,
+    pub refused_pace: u64,
+    last_refusal: Option<(&'static str, String)>,
 }
 
 impl Default for Whisper {
     fn default() -> Self {
-        Whisper { host: WHISPER.to_string(), language: Some("ko".into()), asked: 0, failed: 0 }
+        Whisper { host: WHISPER.to_string(), language: Some("ko".into()), asked: 0, failed: 0,
+                  pace_limit: None, refused_empty: 0, refused_wordless: 0, refused_repeated: 0,
+                  refused_pace: 0, last_refusal: None }
     }
 }
 
 impl Whisper {
-    /// Send one clip and get back what it heard.
-    pub fn hear(&mut self, samples: &[f32], hz: u32) -> Result<String, String> {
+    /// Send one clip and get back what it heard, **or nothing, when what came back was not a turn.**
+    ///
+    /// `Ok(None)` is a rejection and not an error: the server answered, and what it answered was
+    /// `... ... ...` or the same ten characters forty times over. Which guard fired is counted, and
+    /// the reason is in [`Whisper::last_refusal`] for whoever wants to say it out loud.
+    pub fn hear(&mut self, samples: &[f32], hz: u32) -> Result<Option<String>, String> {
         self.asked += 1;
         let boundary = "argmind0aA0argmind";
         let language = self.language.clone().unwrap_or_default();
@@ -144,11 +165,35 @@ impl Whisper {
             self.failed += 1;
             e
         })?;
-        transcript_of(&answer).ok_or_else(|| {
+        let text = transcript_of(&answer).ok_or_else(|| {
             self.failed += 1;
             format!("no transcript in the answer: {}", answer.chars().take(200)
                     .collect::<String>())
-        })
+        })?;
+        //: **The guard runs here and nowhere else.** A caller that wanted the raw text could ask
+        //: the server itself; what this returns is what argmind is willing to call a turn.
+        let seconds = samples.len() as f64 / hz.max(1) as f64;
+        match guard::why_rejected(&text, seconds, self.pace_limit) {
+            None => Ok(Some(text)),
+            Some(why) => {
+                match why {
+                    "empty" => self.refused_empty += 1,
+                    "wordless" => self.refused_wordless += 1,
+                    "repeated" => self.refused_repeated += 1,
+                    _ => self.refused_pace += 1,
+                }
+                self.last_refusal = Some((why, text));
+                Ok(None)
+            }
+        }
+    }
+
+    /// Why the last transcript was thrown away, and what it said.
+    ///
+    /// **Kept rather than dropped**, because a turn that vanishes with no reason is the failure
+    /// this project keeps finding: a person spoke, nothing happened, and nothing anywhere says why.
+    pub fn last_refusal(&self) -> Option<(&'static str, &str)> {
+        self.last_refusal.as_ref().map(|(why, text)| (*why, text.as_str()))
     }
 
     fn post(&self, body: &[u8], boundary: &str) -> Result<String, String> {

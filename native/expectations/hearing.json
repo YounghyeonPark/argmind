@@ -1,0 +1,274 @@
+{
+  "constants": {
+    "floor": 32,
+    "probe": 10,
+    "times": 3
+  },
+  "degenerate": [
+    {
+      "text": "Thank you. Thank you.",
+      "wordless": false,
+      "repeating": false,
+      "why": "",
+      "why_at_5_per_second": "pace"
+    },
+    {
+      "text": "... ... ... ... ... ... ...",
+      "wordless": true,
+      "repeating": false,
+      "why": "wordless",
+      "why_at_5_per_second": "wordless"
+    },
+    {
+      "text": "... ... ... ... ... ... ... ... ...",
+      "wordless": true,
+      "repeating": true,
+      "why": "wordless",
+      "why_at_5_per_second": "wordless"
+    },
+    {
+      "text": "うんご視聴ありがとうございましたご視聴ありがとうございましたご視聴ありがとうございました",
+      "wordless": false,
+      "repeating": true,
+      "why": "repeated",
+      "why_at_5_per_second": "repeated"
+    },
+    {
+      "text": "Tchau, tchau. Tchau, tchau. Tchau, tchau. Tchau, tchau.",
+      "wordless": false,
+      "repeating": true,
+      "why": "repeated",
+      "why_at_5_per_second": "repeated"
+    },
+    {
+      "text": "Tchau, tchau. Se inscreva no canal e ative o sininho para receber notificações de novos vídeos.",
+      "wordless": false,
+      "repeating": false,
+      "why": "",
+      "why_at_5_per_second": "pace"
+    },
+    {
+      "text": "곱창 눌러줘 한글자막 by 한글자막 by 한글자막 by 한글자막 by 한글자막 by 한글자막 by 한글자막 by 한글자막 by 한글자막 by 한글자막 by 한글자막 by 한글자막 by 한글자막 by 한글자막 by 한글자막 by 한글자막 by 한글자막 by 한글자막 by 한글자막 by 한글자막 by ",
+      "wordless": false,
+      "repeating": true,
+      "why": "repeated",
+      "why_at_5_per_second": "repeated"
+    },
+    {
+      "text": "Thank you. I'm going to make sure that I'm going to make sure that I'm going to make sure that I'm going to make sure that I'm going to make sure that I'm going to make sure that I'm going to make sure that I'm going to make sure that I'm going to make sure that I'm going to make sure that I'm going to make sure that I'm going to make sure that I'm going to make sure that I'm going to make sure that I'm going to make sure that I'm going to make sure that I'm going to make sure that I'm going to make sure that I'm going to make sure that I'm going to make sure that I'm going to make sure that I'm going to make sure that I'm going to make sure that I'm going to make sure that I'm going to make sure that I'm going to make sure that I'm going to make sure that I'm going to make sure that I'm going to make sure that I'm going to make sure that I'm going to make sure that I'm going to make sure that I'm going to make sure that I'm going to make sure that I'm going to make sure that I'm going to make sure that I'm going to make sure that I'm going to make sure that I'm going to make sure that I'm going to make sure that I'm going to make sure that I'm going to make sure that I'm going to make sure that I'm going to make sure that I'm going to make sure that I'm going to make sure that I'm going to make sure that I'm going to make sure that I'm going to make sure that I'm going to make sure that I'm going to make sure that I'm going to make sure that I'm going to make sure that I'm going to make sure that I'm going to make sure that I'm going to make sure that I'm going to make sure that I'm going to make sure that I'm going to make sure that I'm going to make sure that I'm going to make sure that I'm going to make sure that I'm going to make sure that I'm going",
+      "wordless": false,
+      "repeating": true,
+      "why": "repeated",
+      "why_at_5_per_second": "repeated"
+    },
+    {
+      "text": "Mm-hmm Thank you. Thank you. Thank you.",
+      "wordless": false,
+      "repeating": true,
+      "why": "repeated",
+      "why_at_5_per_second": "repeated"
+    },
+    {
+      "text": "속삭이냐 좋아 다음 영상에서 만나요. 한글자막 by 한효정",
+      "wordless": false,
+      "repeating": false,
+      "why": "",
+      "why_at_5_per_second": "pace"
+    }
+  ],
+  "clean": [
+    {
+      "text": "지우개 눌러줘.",
+      "wordless": false,
+      "repeating": false,
+      "why": "",
+      "why_at_5_per_second": "pace"
+    },
+    {
+      "text": "빨간색을 선택할 수 있어요.",
+      "wordless": false,
+      "repeating": false,
+      "why": "",
+      "why_at_5_per_second": "pace"
+    },
+    {
+      "text": "네, 이미지를 저장하고 창을 닫을게요.",
+      "wordless": false,
+      "repeating": false,
+      "why": "",
+      "why_at_5_per_second": "pace"
+    },
+    {
+      "text": "화면에 20개의 버튼이 있어요",
+      "wordless": false,
+      "repeating": false,
+      "why": "",
+      "why_at_5_per_second": "pace"
+    },
+    {
+      "text": "공번창에서 특수문자를 선택한 후 3번 버튼을 클릭해 선택하고 4번 버튼으로 복사하세요.",
+      "wordless": false,
+      "repeating": false,
+      "why": "",
+      "why_at_5_per_second": "pace"
+    },
+    {
+      "text": "Okay, I'll select the red color.",
+      "wordless": false,
+      "repeating": false,
+      "why": "",
+      "why_at_5_per_second": "pace"
+    },
+    {
+      "text": "copy is number four",
+      "wordless": false,
+      "repeating": false,
+      "why": "",
+      "why_at_5_per_second": "pace"
+    },
+    {
+      "text": "I don't have a history of actions, you'll need to describe what you are trying to accomplish.",
+      "wordless": false,
+      "repeating": false,
+      "why": "",
+      "why_at_5_per_second": "pace"
+    },
+    {
+      "text": "BIOS version slash date is October 22nd, 2025.",
+      "wordless": false,
+      "repeating": false,
+      "why": "",
+      "why_at_5_per_second": "pace"
+    }
+  ],
+  "repetitive_human": [
+    {
+      "text": "네, 네, 네.",
+      "wordless": false,
+      "repeating": false,
+      "why": "",
+      "why_at_5_per_second": "pace"
+    },
+    {
+      "text": "아니 그거 말고",
+      "wordless": false,
+      "repeating": false,
+      "why": "",
+      "why_at_5_per_second": "pace"
+    },
+    {
+      "text": "아니 그거 말고 아니 그거 말고 아니 그거 말고",
+      "wordless": false,
+      "repeating": false,
+      "why": "",
+      "why_at_5_per_second": "pace"
+    },
+    {
+      "text": "그거 그거 그거요",
+      "wordless": false,
+      "repeating": false,
+      "why": "",
+      "why_at_5_per_second": "pace"
+    },
+    {
+      "text": "다시, 다시.",
+      "wordless": false,
+      "repeating": false,
+      "why": "",
+      "why_at_5_per_second": "pace"
+    },
+    {
+      "text": "hello hello hello",
+      "wordless": false,
+      "repeating": false,
+      "why": "",
+      "why_at_5_per_second": "pace"
+    },
+    {
+      "text": "no no no no",
+      "wordless": false,
+      "repeating": false,
+      "why": "",
+      "why_at_5_per_second": "pace"
+    },
+    {
+      "text": "okay okay",
+      "wordless": false,
+      "repeating": false,
+      "why": "",
+      "why_at_5_per_second": "pace"
+    },
+    {
+      "text": "잠깐만요 잠깐만요",
+      "wordless": false,
+      "repeating": false,
+      "why": "",
+      "why_at_5_per_second": "pace"
+    }
+  ],
+  "edges": [
+    {
+      "text": "아니 그거 말고 아니 그거 말고 아니 그거 말고",
+      "wordless": false,
+      "repeating": false,
+      "why": "",
+      "why_at_5_per_second": "pace"
+    },
+    {
+      "text": "아니 그거 말고 아니 그거 말고 아니 그거 말고 아니 그거 말고 아니 그거 말고",
+      "wordless": false,
+      "repeating": true,
+      "why": "repeated",
+      "why_at_5_per_second": "repeated"
+    },
+    {
+      "text": "곱창 눌러줘 한글자막 by 한글자막 by 한글자막 by 한글자막 by 한글자막 by",
+      "wordless": false,
+      "repeating": true,
+      "why": "repeated",
+      "why_at_5_per_second": "repeated"
+    },
+    {
+      "text": "",
+      "wordless": true,
+      "repeating": false,
+      "why": "empty",
+      "why_at_5_per_second": "empty"
+    },
+    {
+      "text": "   ",
+      "wordless": true,
+      "repeating": false,
+      "why": "empty",
+      "why_at_5_per_second": "empty"
+    },
+    {
+      "text": ".",
+      "wordless": true,
+      "repeating": false,
+      "why": "wordless",
+      "why_at_5_per_second": "wordless"
+    },
+    {
+      "text": "...",
+      "wordless": true,
+      "repeating": false,
+      "why": "wordless",
+      "why_at_5_per_second": "wordless"
+    },
+    {
+      "text": "42",
+      "wordless": false,
+      "repeating": false,
+      "why": "",
+      "why_at_5_per_second": ""
+    },
+    {
+      "text": "3.14!",
+      "wordless": false,
+      "repeating": false,
+      "why": "",
+      "why_at_5_per_second": ""
+    }
+  ]
+}

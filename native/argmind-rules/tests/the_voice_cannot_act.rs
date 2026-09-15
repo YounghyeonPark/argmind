@@ -145,6 +145,37 @@ fn the_command_line_has_no_microphone() {
              with no button, so speech there would confirm an action");
 }
 
+/// **The room stays quiet unless somebody asked.**
+///
+/// A proposal waits behind a button; a sentence waits behind nothing. So a thought the agent had by
+/// itself — a watch firing while its owner is in a meeting — appears in the page and **is not said
+/// out loud**. Both places in `app.rs` say this in a comment, which is the sentence rather than the
+/// fact: `think` speaks and `notice` does not, and one copied line would end it silently.
+#[test]
+fn only_a_reply_that_was_asked_for_is_spoken_aloud() {
+    let app = read("argmind-serve/src/app.rs");
+    let lines: Vec<&str> = app.lines().collect();
+    let mut speaking = Vec::new();
+    for (n, line) in lines.iter().enumerate() {
+        if !line.split("//").next().unwrap_or("").contains("voice.say(") {
+            continue;
+        }
+        let owner = lines[..n].iter().rev()
+            .find_map(|l| l.trim_start().strip_prefix("fn ")
+                      .map(|r| r.split('(').next().unwrap_or("").to_string()))
+            .unwrap_or_default();
+        speaking.push((n + 1, owner));
+    }
+    assert_eq!(speaking.len(), 1, "more than one place speaks: {speaking:?}");
+    assert_eq!(speaking[0].1, "think",
+               "app.rs:{} speaks from {:?}; only a turn somebody started may become sound",
+               speaking[0].0, speaking[0].1);
+
+    //: And the unprompted path is still there to be wrong about — a rule about `notice` means
+    //: nothing if `notice` has gone.
+    assert!(app.contains("fn notice("), "the unprompted path has moved; recheck this rule");
+}
+
 /// The files being read are the ones meant. **A rule checked against nothing passes forever.**
 #[test]
 fn there_is_a_seam_and_a_command_line_to_check() {

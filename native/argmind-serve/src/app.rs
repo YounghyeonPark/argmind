@@ -399,10 +399,23 @@ fn listen(desk: &mut Desk, out: &Listeners, down: bool) {
     out.send("busy", "0");
     match heard {
         Err(why) => out.send("note", &format!("듣지 못했습니다 — {why}")),
-        Ok(text) if text.trim().is_empty() => {
-            out.send("note", "아무 말도 들리지 않았습니다");
+        //: **A rejected transcript is said out loud, with the reason and with what it said.**
+        //: Silence transcribed as words is 120 of 120 here, so this fires on ordinary room tone —
+        //: and a turn that vanished with no explanation is the failure this project keeps finding.
+        //: Showing what was thrown away is also the only way anybody notices the guard is wrong.
+        Ok(None) => {
+            let said = match whisper.last_refusal() {
+                Some(("wordless", _)) => "소리만 들렸습니다 — 말로 들리지 않았습니다".to_string(),
+                Some(("repeated", text)) => {
+                    format!("같은 말이 반복돼 버렸습니다 — {:?}", text.chars().take(40)
+                            .collect::<String>())
+                }
+                Some(("pace", _)) => "너무 빠릅니다 — 받아쓴 것 같지 않습니다".to_string(),
+                _ => "아무 말도 들리지 않았습니다".to_string(),
+            };
+            out.send("note", &said);
         }
-        Ok(text) => {
+        Ok(Some(text)) => {
             //: **Shown before it is answered.** A recogniser's opinion about a waveform is not
             //: what the person said, and they have to be able to see what it thought it heard —
             //: which is also the only way a wrong transcript is ever noticed.

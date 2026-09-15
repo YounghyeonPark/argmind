@@ -21,6 +21,9 @@ dependencies = [
 [[package]]
 name = "argmind-env-whisper"
 version = "0.0.1"
+dependencies = [
+ "argmind-voice",
+]
 
 [[package]]
 name = "argmind-env-windows"
