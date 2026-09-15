@@ -27,6 +27,7 @@
 //! reachable from exactly one place; the same argument has to hold here, which is why the protocol
 //! has a `confirm` route at all rather than acting on what the model returned.
 
+pub mod needs;
 pub mod proposals;
 
 use std::collections::hash_map::RandomState;

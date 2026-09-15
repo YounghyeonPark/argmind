@@ -24,6 +24,8 @@ use std::net::TcpStream;
 
 use argmind_core::llm::{Reading, Reply};
 
+pub mod manage;
+
 pub const OLLAMA: &str = "http://127.0.0.1:11434";
 
 /// One call to a local model. No streaming callbacks, no session state — the loop owns those.

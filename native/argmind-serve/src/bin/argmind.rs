@@ -5,7 +5,15 @@
 //!   argmind say "닫아줘"         one exchange and exit
 //!   argmind talk                a conversation. It answers; it clicks only with --live
 //!   argmind watch --for build   it thinks when something happens, unasked
+//!   argmind check               what it needs, what is here, and what it would do about it
+//!   argmind setup               fetch the part that is safe to fetch
 //! ```
+//!
+//! **`check` changes nothing and `setup` fetches one thing.** What `setup` will do is a model, and
+//! only because that means Ollama putting a file in its own store over the socket this project
+//! already uses — no installer runs and no executable is downloaded. Everything else argmind wants
+//! is reported with the command to run and left alone: a program that can click your screen must
+//! not also be able to install software while you are not looking.
 //!
 //! **`look` is the default because it costs nothing, touches nothing and needs no model**, and it
 //! answers the question that decides whether any of this works on *your* screen: if the thing you
@@ -226,10 +234,70 @@ fn watch(a: &Args) -> i32 {
     }
 }
 
+/// What it needs and what is here. **Reads, and changes nothing.**
+fn check(a: &Args) -> i32 {
+    let needs = argmind_serve::needs::every(&a.model);
+    println!();
+    print!("{}", argmind_serve::needs::report(&needs));
+    //: The exit code says whether it would run, so this is usable from a script without anybody
+    //: reading the words.
+    i32::from(needs.iter().any(|n| n.required && !n.present))
+}
+
+/// Fetch the part that is safe to fetch.
+fn setup(a: &Args) -> i32 {
+    let needs = argmind_serve::needs::every(&a.model);
+    println!();
+    print!("{}", argmind_serve::needs::report(&needs));
+    let mine: Vec<&argmind_serve::needs::Need> = needs.iter()
+        .filter(|n| !n.present && n.band == argmind_serve::needs::Band::Fetchable).collect();
+    if mine.is_empty() {
+        println!("  받아올 게 없습니다.");
+        return i32::from(needs.iter().any(|n| n.required && !n.present));
+    }
+    if !argmind_env_ollama::manage::awake(argmind_env_ollama::OLLAMA) {
+        //: **Nothing to pull with.** Trying anyway would fail four seconds later with a socket
+        //: error instead of the sentence that says what to do.
+        println!("  Ollama가 응답하지 않아 아무것도 받아올 수 없습니다.");
+        return 1;
+    }
+
+    println!("
+  {} 를 받아옵니다. 몇 GB이고 시간이 걸립니다.
+", a.model);
+    let mut last = 0;
+    let done = argmind_env_ollama::manage::pull(argmind_env_ollama::OLLAMA, &a.model, |p| {
+        //: Every ten per cent, not every line: a pull emits thousands and a terminal that scrolls
+        //: past is no more informative than one that says nothing.
+        match p.percent() {
+            Some(pct) if pct >= last + 10 => {
+                last = pct - pct % 10;
+                println!("    {pct:>3}%  {}", p.status);
+            }
+            None if p.status != "pulling manifest" => println!("    ...   {}", p.status),
+            _ => {}
+        }
+    });
+    match done {
+        Ok(()) => {
+            println!("
+  됐습니다. argmind check 로 다시 확인해 보세요.");
+            0
+        }
+        Err(why) => {
+            println!("
+  받지 못했습니다 — {why}");
+            1
+        }
+    }
+}
+
 fn main() {
     let (what, a) = args();
     let code = match what.as_str() {
         "look" => look(&a),
+        "check" => check(&a),
+        "setup" => setup(&a),
         "talk" => talk(&a),
         "watch" => watch(&a),
         "say" => match a.rest.get(1) {
@@ -240,7 +308,7 @@ fn main() {
             }
         },
         other => {
-            println!("  no such thing as {other:?}. look, say, talk, watch.");
+            println!("  no such thing as {other:?}. look, say, talk, watch, check, setup.");
             2
         }
     };
