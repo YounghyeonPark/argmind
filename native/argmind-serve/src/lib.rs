@@ -20,6 +20,14 @@
 //! * every request carries a token minted at startup, and a request without it is refused before it
 //!   is routed. Localhost is not a permission: any program you run is on localhost.
 //!
+//! **The token travels two ways, and the second one is not a convenience.** `fetch` sends it as a
+//! header; `EventSource` — which is what opens the event stream — **cannot set headers at all**, so
+//! the page would be locked out of the only route that tells it anything. It also arrives as a
+//! cookie, set on the page itself: automatic, invisible to script, and absent from the URL and from
+//! shell history, which is why the query string is still read by nothing. `SameSite=Strict` is what
+//! makes the cookie safe to have — it is not attached to a request another site caused, so a page
+//! at somebody else's address cannot press this agent's buttons by pointing a form at it.
+//!
 //! ## What must survive the move
 //!
 //! **An unprompted effect without standing permission is downgraded to speech**, and the interface
@@ -64,14 +72,43 @@ pub fn parse_request(raw: &str) -> Option<Request> {
     //: so it travels in a header and nothing here reads a query string.
     let path = target.split(['?', '#']).next()?.to_string();
     let mut token = None;
+    let mut cookie = None;
     for line in lines {
         if let Some((name, value)) = line.split_once(':') {
             if name.eq_ignore_ascii_case("x-argmind-token") {
                 token = Some(value.trim().to_string());
             }
+            if name.eq_ignore_ascii_case("cookie") {
+                cookie = cookie_value(value, COOKIE);
+            }
         }
     }
+    //: **The header wins.** A programmatic client that sent one meant it; a stale cookie from an
+    //: older run of the server must not quietly override it.
+    let token = token.or(cookie);
     Some(Request { method, path, token, body: body.to_string() })
+}
+
+/// The cookie the page carries its token in.
+pub const COOKIE: &str = "argmind";
+
+/// One cookie out of a `Cookie:` header, which holds several separated by `; `.
+pub fn cookie_value(header: &str, want: &str) -> Option<String> {
+    header.split(';').find_map(|pair| {
+        let (name, value) = pair.split_once('=')?;
+        //: **Trimmed on the name and not on the value.** A cookie value may legitimately contain
+        //: spaces, and eating them would silently change the token.
+        (name.trim() == want).then(|| value.to_string())
+    })
+}
+
+/// The header that puts the token in the page, for `EventSource` to send back.
+///
+/// `HttpOnly` because nothing in the page needs to read it — it uses the copy stamped into the
+/// document for its `fetch` headers. `SameSite=Strict` because that is the whole safety of having a
+/// cookie at all: it is not attached to a request another site caused.
+pub fn cookie_header(token: &str) -> String {
+    format!("Set-Cookie: {COOKIE}={token}; Path=/; SameSite=Strict; HttpOnly\r\n")
 }
 
 /// A token minted at startup, from the operating system's entropy.
@@ -204,9 +241,14 @@ pub fn sse(event: &str, data: &str) -> String {
 
 /// A complete HTTP response.
 pub fn respond(status: &str, content_type: &str, body: &str) -> Vec<u8> {
+    respond_with(status, content_type, body, "")
+}
+
+/// The same, with an extra header — used to hand the page its cookie.
+pub fn respond_with(status: &str, content_type: &str, body: &str, extra: &str) -> Vec<u8> {
     let mut out = format!(
         "HTTP/1.1 {status}\r\nContent-Type: {content_type}\r\nContent-Length: {}\r\n\
-         Cache-Control: no-store\r\n\
+         Cache-Control: no-store\r\n{extra}\
          Connection: close\r\n\r\n", body.len());
     out.push_str(body);
     out.into_bytes()

@@ -501,7 +501,11 @@ fn serve_one(mut stream: TcpStream, out: &Listeners, token: &str, jobs: &Sender<
     match route(&request) {
         Route::Ui => {
             let page = INDEX.replace("__TOKEN__", token);
-            let _ = stream.write_all(&respond("200 OK", "text/html; charset=utf-8", &page));
+            //: **The cookie rides on the page**, because `EventSource` cannot send a header and
+            //: the event stream is the only route that tells the page anything.
+            let _ = stream.write_all(&argmind_serve::respond_with(
+                "200 OK", "text/html; charset=utf-8", &page,
+                &argmind_serve::cookie_header(token)));
         }
         Route::Events => {
             let (tx, rx) = channel::<String>();

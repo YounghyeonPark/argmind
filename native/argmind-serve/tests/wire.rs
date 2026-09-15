@@ -5,7 +5,8 @@
 //! it replaces did not — so the loopback check and the token are not conveniences, and they are
 //! tested the way a guard is tested: by trying to get past them.
 
-use argmind_serve::{authorised, event_stream_head, is_loopback, mint_token, parse_request, respond,
+use argmind_serve::{authorised, cookie_header, cookie_value, event_stream_head, is_loopback,
+                    mint_token, parse_request, respond,
                     route, sse, Request, Route};
 
 fn get(path: &str) -> Request {
@@ -53,6 +54,62 @@ fn a_request_without_the_token_gets_nowhere() {
     let mut wrong: Vec<u8> = want.clone().into_bytes();
     wrong[7] ^= 1;
     assert!(!authorised(&want, Some(&String::from_utf8(wrong).unwrap())));
+}
+
+/// **`EventSource` cannot set headers**, and that is why the token also travels as a cookie.
+///
+/// This is the bug the suite missed. Every test above sent the token the way `curl -H` sends it,
+/// and the only client that matters — a browser opening the event stream — has no way to do that
+/// at all. The page loaded, the stream was refused, and the interface said *연결 끊김* while every
+/// test passed. **A server checked only by the thing that was written to check it agrees with
+/// itself.**
+#[test]
+fn the_page_can_authenticate_without_being_able_to_send_a_header() {
+    let want = mint_token();
+    let header = cookie_header(&want);
+    assert!(header.starts_with("Set-Cookie: argmind="), "{header}");
+    //: **`SameSite=Strict` is the whole safety of having a cookie.** Without it a page at somebody
+    //: else's address could point a form at this agent and the browser would attach the token.
+    assert!(header.contains("SameSite=Strict"), "{header}");
+    //: Nothing in the page reads it — it uses the copy stamped into the document — so script has
+    //: no business being able to.
+    assert!(header.contains("HttpOnly"), "{header}");
+    //: Every route, not just the page it was set on.
+    assert!(header.contains("Path=/"), "{header}");
+
+    //: A request carrying only a cookie is a request that authenticates, which is precisely what
+    //: was broken.
+    let asked = parse_request(&format!(
+        "GET /events HTTP/1.1\r\nCookie: argmind={want}\r\n\r\n")).unwrap();
+    assert_eq!(asked.token.as_deref(), Some(want.as_str()));
+    assert!(authorised(&want, asked.token.as_deref()));
+
+    //: One cookie among several, which is what a browser actually sends.
+    let many = parse_request(&format!(
+        "GET /events HTTP/1.1\r\nCookie: other=1; argmind={want}; last=2\r\n\r\n")).unwrap();
+    assert_eq!(many.token.as_deref(), Some(want.as_str()));
+    //: A different cookie is not this one.
+    let wrong = parse_request("GET /events HTTP/1.1\r\nCookie: something=else\r\n\r\n").unwrap();
+    assert_eq!(wrong.token, None);
+    assert!(!authorised(&want, wrong.token.as_deref()));
+
+    //: **The header wins over the cookie.** A programmatic client that sent one meant it, and a
+    //: stale cookie from an older run of the server must not override it.
+    let both = parse_request(
+        "GET /events HTTP/1.1\r\nCookie: argmind=old\r\nX-Argmind-Token: new\r\n\r\n").unwrap();
+    assert_eq!(both.token.as_deref(), Some("new"));
+}
+
+#[test]
+fn one_cookie_is_read_out_of_the_several_a_browser_sends() {
+    assert_eq!(cookie_value("argmind=abc", "argmind").as_deref(), Some("abc"));
+    assert_eq!(cookie_value(" argmind=abc ", "argmind").as_deref(), Some("abc "));
+    assert_eq!(cookie_value("a=1; argmind=abc; b=2", "argmind").as_deref(), Some("abc"));
+    assert_eq!(cookie_value("a=1; b=2", "argmind"), None);
+    assert_eq!(cookie_value("", "argmind"), None);
+    //: **A prefix is not the name.** `notargmind=x` must not answer for `argmind`.
+    assert_eq!(cookie_value("notargmind=x", "argmind"), None);
+    assert_eq!(cookie_value("argmindextra=x", "argmind"), None);
 }
 
 /// A token has to be long, unguessable and **different every time**.
