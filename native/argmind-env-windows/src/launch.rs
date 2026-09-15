@@ -78,6 +78,18 @@ pub fn pid_of(handle: isize) -> Option<u32> {
     }
 }
 
+/// The window in front, without opening UI Automation.
+///
+/// [`crate::WindowsEyes::foreground_handle`] answers the same question and needs an automation
+/// client to exist first. A thread that only wants to know which window a person is in should not
+/// have to hold one — and COM objects do not cross threads.
+///
+/// # Safety
+/// None, in fact: it is `unsafe` only because the Win32 call is, and it reads a handle.
+pub unsafe fn foreground_handle_now() -> isize {
+    GetForegroundWindow().0 as isize
+}
+
 /// Is the window in front owned by this process? **Checked before every click**, because a click
 /// goes to a pixel and anything that came to the front takes it.
 pub fn foreground_is(pid: u32) -> bool {

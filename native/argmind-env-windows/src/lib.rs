@@ -25,7 +25,7 @@ pub use hands::{Reach, WindowsHands};
 pub use attending::{Attending, Watcher};
 pub use microphone::{Clip, Microphone};
 pub use patterns::{operate, Operated};
-pub use launch::{bring_to_front, foreground_is, whats_in_front, window_title, is_minimised, pid_of, to_front, windows_of, Launched};
+pub use launch::{bring_to_front, foreground_handle_now, foreground_is, whats_in_front, window_title, is_minimised, pid_of, to_front, windows_of, Launched};
 pub use speaker::SapiSpeaker;
 
 use argmind_core::contract::{Eyes, Widget};

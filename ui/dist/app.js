@@ -131,6 +131,30 @@ form.onsubmit = (e) => {
     line("them", text);
     void post("/say", text);
 };
+// ---- what it is looking at ----------------------------------------------------------------------
+//
+// The single most useful thing an interface for this can show: **the list the model was actually
+// given.** If the thing you want is not in it, no model will find it — and until it is on screen
+// that is a sentence in a document rather than something you can check.
+//
+// It is the same call that builds the prompt, so the panel cannot drift into showing a screen the
+// model never saw.
+const seeing = document.getElementById("seeing");
+const seen = document.getElementById("seen");
+const spent = document.getElementById("spent");
+stream.addEventListener("seeing", (e) => {
+    const text = e.data;
+    seen.textContent = text;
+    seeing.hidden = text.trim().length === 0;
+});
+stream.addEventListener("spent", (e) => {
+    const d = JSON.parse(e.data);
+    // Both halves apart: reading the screen and asking the model are different things, and one
+    // number covering both hides which of them is slow today.
+    const cut = d.widgets > d.listed ? ` (${d.widgets}개 중 ${d.listed}개만 보여줌)` : "";
+    spent.textContent = `${d.widgets}개 읽기 ${Math.round(d.look_ms)} ms · `
+        + `생각 ${Math.round(d.think_ms)} ms${cut}`;
+});
 const setup = document.getElementById("setup");
 function drawNeeds(rows) {
     const missing = rows.filter((n) => !n.present);

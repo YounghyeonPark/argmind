@@ -162,8 +162,22 @@ fn think(desk: &mut Desk, out: &Listeners, text: &str) {
         out.send("note", "보고 있는 창이 없습니다 — 다른 창을 한 번 눌렀다 오세요");
     }
 
-    desk.session.observe();
+    let (widgets, look_s) = desk.session.observe();
+    //: **Exactly what the model was shown, not a description of it.** The same call that builds the
+    //: prompt builds this, so the panel cannot drift into showing something the model never saw —
+    //: and *"if the thing you want is not in that list, no model will find it"* is only useful if
+    //: the list on screen is the list that went out.
+    let listed: Vec<_> = widgets.iter().take(desk.session.limit).cloned().collect();
+    out.send("seeing", &argmind_core::converse::describe_screen(&listed, desk.session.limit));
+
+    let started = std::time::Instant::now();
     let intent = desk.session.decide(&Trigger::said(text));
+    let think_s = started.elapsed().as_secs_f64();
+    //: **Both halves, apart.** Reading the screen and asking the model are 0.2 s and 0.6 s of very
+    //: different things, and one number covering both hides which of them is slow today.
+    out.send("spent", &format!("{{\"widgets\":{},\"listed\":{},\"look_ms\":{:.0},\
+                                \"think_ms\":{:.0}}}",
+                               widgets.len(), listed.len(), look_s * 1000.0, think_s * 1000.0));
 
     desk.session.history.push(("them".into(), text.to_string()));
     if !intent.say.is_empty() {
@@ -419,12 +433,34 @@ pub fn run(how: How) {
 
     let out = Arc::new(Listeners::default());
     let (jobs, inbox) = channel::<Job>();
+
+    //: **What it is looking at, live.** The window a person is in changes as they alt-tab, and an
+    //: interface that only says so once a turn has happened is one you cannot trust before you
+    //: speak. This reads a title and a handle — no UI Automation, so it costs nothing and can run
+    //: as often as it likes.
+    let watcher = Watcher::default();
+    watcher.watch();
+    let watching = watcher.clone();
+    let watching_out = Arc::clone(&out);
+    std::thread::spawn(move || {
+        let mut said = String::new();
+        loop {
+            std::thread::sleep(std::time::Duration::from_millis(600));
+            let front = unsafe { argmind_env_windows::foreground_handle_now() };
+            let now = match watching.attended(front) {
+                Some(h) => argmind_env_windows::window_title(h),
+                None => String::new(),
+            };
+            if now != said {
+                said = now.clone();
+                watching_out.send("attending", &said);
+            }
+        }
+    });
     let agent_out = Arc::clone(&out);
     let agent_model = model_name.clone();
     //: Everything COM touches lives on this thread and never leaves it.
     std::thread::spawn(move || {
-        let watcher = Watcher::default();
-        watcher.watch();
         let eyes = Attending::new(watcher).expect("UI Automation would not open");
         //: Unrestricted, and **the confirm button is what makes that safe** — the same trade
         //: `app.py` makes by inverting the unprompted flag. Dry unless asked otherwise.

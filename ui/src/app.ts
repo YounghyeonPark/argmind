@@ -165,6 +165,41 @@ form.onsubmit = (e) => {
   void post("/say", text);
 };
 
+// ---- what it is looking at ----------------------------------------------------------------------
+//
+// The single most useful thing an interface for this can show: **the list the model was actually
+// given.** If the thing you want is not in it, no model will find it — and until it is on screen
+// that is a sentence in a document rather than something you can check.
+//
+// It is the same call that builds the prompt, so the panel cannot drift into showing a screen the
+// model never saw.
+
+const seeing = document.getElementById("seeing") as HTMLElement;
+const seen = document.getElementById("seen") as HTMLElement;
+const spent = document.getElementById("spent") as HTMLElement;
+
+stream.addEventListener("seeing", (e) => {
+  const text = (e as MessageEvent).data;
+  seen.textContent = text;
+  seeing.hidden = text.trim().length === 0;
+});
+
+interface Spent {
+  widgets: number;
+  listed: number;
+  look_ms: number;
+  think_ms: number;
+}
+
+stream.addEventListener("spent", (e) => {
+  const d: Spent = JSON.parse((e as MessageEvent).data);
+  // Both halves apart: reading the screen and asking the model are different things, and one
+  // number covering both hides which of them is slow today.
+  const cut = d.widgets > d.listed ? ` (${d.widgets}개 중 ${d.listed}개만 보여줌)` : "";
+  spent.textContent = `${d.widgets}개 읽기 ${Math.round(d.look_ms)} ms · `
+    + `생각 ${Math.round(d.think_ms)} ms${cut}`;
+});
+
 // ---- what is missing --------------------------------------------------------------------------
 //
 // The approval lives here. A button is only pressable next to the full sentence saying what it will
