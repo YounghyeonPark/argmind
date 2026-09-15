@@ -275,7 +275,7 @@ fn setup(a: &Args) -> i32 {
             refused += 1;
             continue;
         }
-        match apply(fix) {
+        match argmind_serve::fix::apply(fix, &mut |said| println!("    {said}")) {
             Ok(said) => {
                 println!("  {} — {said}\n", need.what);
                 done += 1;
@@ -288,52 +288,6 @@ fn setup(a: &Args) -> i32 {
         println!("  argmind check 로 다시 확인해 보세요.");
     }
     i32::from(needs.iter().any(|n| n.required && !n.present) && done == 0)
-}
-
-/// Do one approved fix. **Reached only after a yes**, and every branch says what it did.
-fn apply(fix: &argmind_serve::fix::Fix) -> Result<String, String> {
-    use argmind_serve::fix::Fix;
-    match fix {
-        Fix::PullModel { model, .. } => {
-            let mut last = 0;
-            argmind_env_ollama::manage::pull(argmind_env_ollama::OLLAMA, model, |p| {
-                //: Every ten per cent, not every line: a pull emits thousands, and a terminal that
-                //: scrolls past is no more informative than one that says nothing.
-                match p.percent() {
-                    Some(pct) if pct >= last + 10 => {
-                        last = pct - pct % 10;
-                        println!("    {pct:>3}%  {}", p.status);
-                    }
-                    None if p.status != "pulling manifest" => println!("    ...   {}", p.status),
-                    _ => {}
-                }
-            })?;
-            Ok("받았습니다".into())
-        }
-        Fix::OpenPage { url, .. } => {
-            //: `explorer` opens a URL in whatever the person has chosen as their browser, and it
-            //: is a shell command rather than a downloader — **nothing is fetched or run here.**
-            std::process::Command::new("explorer").arg(url).spawn()
-                .map_err(|e| format!("{e}"))?;
-            Ok(format!("{url} 을(를) 열었습니다 — 설치는 직접 하셔야 합니다"))
-        }
-        Fix::RunElevated { command, .. } => {
-            //: **Windows asks again.** `runas` raises the elevation prompt, so a yes here is the
-            //: first of two, and the second one is the operating system's own.
-            let done = std::process::Command::new("powershell")
-                .args(["-NoProfile", "-Command",
-                       &format!("Start-Process -Verb RunAs -Wait -FilePath cmd.exe \
-                                 -ArgumentList '/c {command}'")])
-                .status().map_err(|e| format!("{e}"))?;
-            if done.success() {
-                Ok("실행했습니다".into())
-            } else {
-                //: A cancelled elevation prompt lands here, and it is a refusal rather than a
-                //: fault — saying "failed" for somebody changing their mind is a lie.
-                Err("관리자 권한을 받지 못했거나 취소되었습니다".into())
-            }
-        }
-    }
 }
 
 fn main() {

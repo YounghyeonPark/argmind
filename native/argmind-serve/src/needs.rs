@@ -17,6 +17,19 @@
 
 use crate::fix::Fix;
 
+/// Where models argmind fetches are kept.
+///
+/// **Beside the person's own files, not beside the executable.** A folder under the executable
+/// needs write access to wherever argmind was unpacked, which is a permission the program should
+/// not want.
+pub fn model_shed() -> std::path::PathBuf {
+    let mut at = std::env::var("LOCALAPPDATA").map(std::path::PathBuf::from)
+        .unwrap_or_else(|_| std::env::temp_dir());
+    at.push("argmind");
+    at.push("models");
+    at
+}
+
 /// One thing argmind wants.
 #[derive(Debug, Clone)]
 pub struct Need {
@@ -69,13 +82,17 @@ pub fn every(model: &str) -> Vec<Need> {
         present: ollama_up,
         found: if ollama_up { "127.0.0.1:11434 응답함".into() } else { "응답 없음".into() },
         how: "https://ollama.com 에서 설치한 뒤 실행해 두세요".into(),
-        //: **A page, not an installer.** argmind will not download and run a third party's
-        //: executable on somebody's behalf, approval or no approval — the approval would be for a
-        //: file nobody had seen, fetched from a name nobody had checked. Opening the page hands the
-        //: decision back to where it can actually be made.
-        fix: Some(Fix::OpenPage {
-            url: "https://ollama.com/download".into(),
+        //: **Downloaded and run, on one approval.** The earlier version opened a page and refused
+        //: to fetch anybody's executable; the owner's decision is that the window should ask and
+        //: the agent should then do the whole thing. What makes that approval worth having is
+        //: naming the source and verifying the certificate — recorded here because *"a file nobody
+        //: had seen, from a name nobody had checked"* was the objection, and this is the part of
+        //: it that is answered rather than overruled.
+        fix: Some(Fix::Install {
+            url: "https://ollama.com/download/OllamaSetup.exe".into(),
+            file: "OllamaSetup.exe".into(),
             why: "Ollama가 있어야 argmind가 동작합니다.".into(),
+            about_mb: 700,
         }),
     });
 
@@ -117,11 +134,18 @@ pub fn every(model: &str) -> Vec<Need> {
             format!("{} 응답 없음 — 음성 입력만 안 됩니다", argmind_env_whisper::WHISPER)
         },
         how: "whisper.cpp 를 받아 whisper-server 를 8178 포트로 띄우세요".into(),
-        //: Same reasoning as Ollama, and more so — this one is built from source, and fetching and
-        //: running somebody's build is exactly what this refuses to do unseen.
-        fix: Some(Fix::OpenPage {
-            url: "https://github.com/ggml-org/whisper.cpp".into(),
-            why: "음성 입력에는 받아쓰기 서버가 필요합니다.".into(),
+        //: **Two things are missing here and only one of them is offered.** A recogniser needs a
+        //: server *and* a model, and the model is data — fetched, checked against a published
+        //: hash, never executed. The server itself is a build from source and is the next thing to
+        //: automate; until it is, the offer is the half that can be done honestly.
+        fix: Some(Fix::Fetch {
+            url: "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.bin".into(),
+            into: model_shed().join("ggml-base.bin").to_string_lossy().to_string(),
+            why: "받아쓰기 모델을 먼저 받아 둡니다. 서버는 아직 직접 빌드하셔야 합니다.".into(),
+            about_mb: 141,
+            //: **Published by the project**, so a wrong download is caught rather than run.
+            sha256: Some(
+                "60ed5bc3dd14eea856493d334349b405782ddcaf0028d4b5df4088345fba2efe".into()),
         }),
     });
 

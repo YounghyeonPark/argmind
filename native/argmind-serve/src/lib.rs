@@ -36,6 +36,7 @@
 //! has a `confirm` route at all rather than acting on what the model returned.
 
 pub mod app;
+pub mod fetch;
 pub mod fix;
 pub mod needs;
 pub mod proposals;

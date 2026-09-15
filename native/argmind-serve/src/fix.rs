@@ -21,9 +21,20 @@ pub enum Fix {
     /// Ask Ollama to fetch a model into its own store. **No installer, no executable** — a program
     /// already running by the person's choice, putting a file where it keeps its files.
     PullModel { model: String, about_gb: f64 },
-    /// Open a page in the browser. **This installs nothing**; it is the honest end of the road for
-    /// software argmind will not fetch and run on somebody's behalf.
+    /// Open a page in the browser. **This installs nothing.**
     OpenPage { url: String, why: String },
+    /// Download an installer and run it.
+    ///
+    /// **The heaviest thing in this program**, and the one an approval has to be worth. It is
+    /// fetched over TLS with the certificate verified, and the whole sequence afterwards — running
+    /// it, waiting for it, checking it took — happens without asking again, because asking four
+    /// times for one decision is how people learn to click through.
+    Install { url: String, file: String, why: String, about_mb: u64 },
+    /// Fetch a file that is data rather than code, and put it where something expects it.
+    ///
+    /// Separate from `Install` because **nothing is executed**: a model is read by a program that
+    /// was already there.
+    Fetch { url: String, into: String, why: String, about_mb: u64, sha256: Option<String> },
     /// A documented Windows command that needs administrator rights, run through the elevation
     /// prompt so Windows asks as well.
     RunElevated { command: String, why: String },
@@ -35,6 +46,8 @@ impl Fix {
         match self {
             Fix::PullModel { .. } => "argmind — 모델을 받을까요?",
             Fix::OpenPage { .. } => "argmind — 설치 페이지를 열까요?",
+            Fix::Install { .. } => "argmind — 내려받아 설치할까요?",
+            Fix::Fetch { .. } => "argmind — 파일을 받을까요?",
             Fix::RunElevated { .. } => "argmind — 관리자 권한이 필요합니다",
         }
     }
@@ -45,6 +58,15 @@ impl Fix {
     /// still have to download and run something themselves.
     pub fn changes_the_machine(&self) -> bool {
         !matches!(self, Fix::OpenPage { .. })
+    }
+
+    /// Does saying yes cause a program from somewhere else to run on this machine?
+    ///
+    /// **The sharpest line in here.** Fetching data is not the same as executing somebody's build,
+    /// and an approval for one is not an approval for the other — so they are different variants
+    /// and the text says which.
+    pub fn runs_a_stranger(&self) -> bool {
+        matches!(self, Fix::Install { .. })
     }
 }
 
@@ -66,6 +88,26 @@ pub fn describe(fix: &Fix) -> String {
              · 브라우저로 {url} 을(를) 엽니다\n\
              · argmind가 직접 설치하지는 않습니다 — 내려받고 실행하는 건 직접 하셔야 합니다\n\n\
              페이지를 열까요?"),
+        Fix::Install { url, why, about_mb, .. } => format!(
+            "{why}\n\n\
+             · {url} 에서 약 {about_mb} MB를 내려받습니다\n\
+             · 인증서를 확인하고, https가 아니면 받지 않습니다\n\
+             · **받은 설치 프로그램을 실행합니다** — 만든 곳을 신뢰한다는 뜻입니다\n\
+             · 설치 프로그램이 스스로 물어볼 수 있습니다\n\n\
+             내려받아 설치할까요?"),
+        Fix::Fetch { url, into, why, about_mb, sha256 } => format!(
+            "{why}\n\n\
+             · {url} 에서 약 {about_mb} MB를 내려받습니다\n\
+             · {into} 에 저장합니다\n\
+             · {}\n\
+             · 실행하지 않습니다 — 데이터 파일입니다\n\n\
+             받을까요?",
+            match sha256 {
+                Some(_) => "받은 뒤 해시를 확인하고, 다르면 지웁니다",
+                //: **Said out loud rather than left out.** "Nobody published a hash for this" is a
+                //: fact about the source, and the person deciding should have it.
+                None => "게시된 해시가 없어 내용은 확인하지 못합니다",
+            }),
         Fix::RunElevated { command, why } => format!(
             "{why}\n\n\
              · 다음을 관리자 권한으로 실행합니다:\n    {command}\n\
@@ -103,6 +145,26 @@ pub fn apply(fix: &Fix, say: &mut dyn FnMut(&str)) -> Result<String, String> {
             //: command, not a downloader — **nothing is fetched or run here.**
             std::process::Command::new("explorer").arg(url).spawn().map_err(|e| format!("{e}"))?;
             Ok(format!("{url} 을(를) 열었습니다 — 설치는 직접 하셔야 합니다"))
+        }
+        Fix::Install { url, file, .. } => {
+            let at = crate::fetch::shed().join(file);
+            crate::fetch::get(url, &at, None, say)?;
+            //: **The whole sequence, without asking again.** The approval covered downloading *and*
+            //: running; stopping here to ask a second time for the half they already agreed to is
+            //: how people learn to click through dialogs without reading them.
+            crate::fetch::run(&at, &[], say)?;
+            //: Tidied up. An installer left in a temp folder is one somebody runs by accident in
+            //: six months, when it is out of date.
+            let _ = std::fs::remove_file(&at);
+            Ok("설치했습니다".into())
+        }
+        Fix::Fetch { url, into, sha256, .. } => {
+            let at = std::path::PathBuf::from(into);
+            if let Some(parent) = at.parent() {
+                std::fs::create_dir_all(parent).map_err(|e| format!("{e}"))?;
+            }
+            crate::fetch::get(url, &at, sha256.as_deref(), say)?;
+            Ok(format!("{into} 에 받았습니다"))
         }
         Fix::RunElevated { command, .. } => {
             //: **Windows asks again.** `RunAs` raises the elevation prompt, so a yes here is the

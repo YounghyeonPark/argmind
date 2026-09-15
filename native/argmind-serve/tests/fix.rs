@@ -69,6 +69,56 @@ fn an_elevated_command_says_administrator_before_it_asks() {
     assert!(elevated().title().contains("관리자"));
 }
 
+/// **Running somebody else's build is the sharpest line here**, and the window has to say so.
+///
+/// The earlier design refused to do it at all. The owner's decision is that the window asks and the
+/// agent then does the whole sequence — so the least this can do is make the sentence carry the
+/// part that was being objected to, in the words a person would use to object.
+#[test]
+fn downloading_and_running_a_stranger_is_named_as_that() {
+    let fix = Fix::Install { url: "https://ollama.com/download/OllamaSetup.exe".into(),
+                             file: "OllamaSetup.exe".into(),
+                             why: "Ollama가 있어야 argmind가 동작합니다.".into(),
+                             about_mb: 700 };
+    let said = describe(&fix);
+    //: Where from, how big, and that the certificate is checked — the three facts that turn "a
+    //: file nobody had seen" into a file somebody agreed to.
+    assert!(said.contains("ollama.com"), "{said}");
+    assert!(said.contains("700 MB"), "{said}");
+    assert!(said.contains("인증서"), "{said}");
+    //: **And that it will be run**, in those words. A sentence about downloading that quietly also
+    //: executes is the one this whole module exists to prevent.
+    assert!(said.contains("실행합니다"), "{said}");
+    assert!(said.contains("신뢰한다"), "{said}");
+    assert!(fix.runs_a_stranger());
+    assert!(fix.changes_the_machine());
+}
+
+/// **Fetching data is not running code**, and the two are different variants so the text cannot
+/// blur them.
+#[test]
+fn fetching_a_model_says_that_nothing_is_executed() {
+    let checked = Fix::Fetch { url: "https://huggingface.co/x/y".into(),
+                               into: "C:/models/ggml-base.bin".into(),
+                               why: "받아쓰기 모델".into(), about_mb: 141,
+                               sha256: Some("60ed".repeat(16)) };
+    let said = describe(&checked);
+    assert!(said.contains("실행하지 않습니다"), "{said}");
+    assert!(said.contains("해시를 확인"), "{said}");
+    //: It fetches, so it changes the machine — but it does not run a stranger, and the two
+    //: questions have two answers.
+    assert!(checked.changes_the_machine());
+    assert!(!checked.runs_a_stranger());
+
+    //: **No published hash is said out loud rather than left out.** "Nobody publishes one for
+    //: this" is a fact about the source, and the person deciding should have it in front of them.
+    let unchecked = Fix::Fetch { url: "https://example.com/x".into(), into: "x".into(),
+                                 why: "y".into(), about_mb: 1, sha256: None };
+    let said = describe(&unchecked);
+    assert!(said.contains("게시된 해시가 없어"), "{said}");
+    assert!(!said.contains("해시를 확인하고"), "{said}");
+}
+
 /// The titles are three, and they are not interchangeable.
 #[test]
 fn each_kind_of_question_has_its_own_title() {
