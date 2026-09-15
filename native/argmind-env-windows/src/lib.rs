@@ -13,11 +13,13 @@
 //! not launch itself* — is a type rather than a paragraph: `Reach::OnlyProcess` looks up who owns
 //! the window under the point before every click and refuses anything else.
 
+pub mod attending;
 pub mod hands;
 pub mod launch;
 pub mod patterns;
 pub mod speaker;
 pub use hands::{Reach, WindowsHands};
+pub use attending::{Attending, Watcher};
 pub use patterns::{operate, Operated};
 pub use launch::{bring_to_front, foreground_is, whats_in_front, window_title, is_minimised, pid_of, to_front, windows_of, Launched};
 pub use speaker::SapiSpeaker;

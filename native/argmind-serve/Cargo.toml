@@ -8,3 +8,9 @@ license = "Apache-2.0"
 # No dependencies, deliberately. Raw HTTP/1.1 and server-sent events need none, and the licence
 # rule is cheapest to obey when there is nothing new to check.
 [dependencies]
+argmind-core = { path = "../argmind-core" }
+
+# The binary is the application, so it reaches the environment; the library above it is protocol
+# and proposals only, and depends on neither.
+argmind-env-ollama = { path = "../argmind-env-ollama" }
+argmind-env-windows = { path = "../argmind-env-windows" }

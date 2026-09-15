@@ -31,3 +31,4 @@ native/**/target/
 # Python did — so the day the Python goes, the golden data has to already be data. 328 KB.
 # `tests/test_expectations.py` holds it current while both implementations exist.
 
+ui/node_modules/

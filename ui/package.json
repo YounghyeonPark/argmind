@@ -1,0 +1,14 @@
+{
+  "name": "argmind-ui",
+  "private": true,
+  "version": "0.0.1",
+  "license": "Apache-2.0",
+  "description": "The interface. One TypeScript file, compiled to one script the server embeds.",
+  "scripts": {
+    "build": "tsc",
+    "check": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "typescript": "5.9.3"
+  }
+}
