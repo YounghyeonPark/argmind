@@ -5,7 +5,11 @@ real-time interaction, actions taken through the OS accessibility layer. Author:
 <ypark.dev@gmail.com>. Apache-2.0. A side project, not a product.
 
 Windows, PowerShell primary. **Rust, since 2026-09-15** — the Python is at
-`python-before-removal-2026-09-15` and is not coming back. Needs [Ollama](https://ollama.com);
+`python-before-removal-2026-09-15` and is not coming back. **`rust-toolchain.toml` pins
+`channel = "stable"`**, which rustup resolves against the *host* — MSVC on Windows, where
+`webview2-com-sys` links the WebView2 loader statically and `argmind-app.exe` needs no file beside
+it. A `-gnu` build of it exits on a double-click with `0xC0000135` and no message;
+`argmind-serve/tests/launchable.rs` is the rule that catches that. Needs [Ollama](https://ollama.com);
 everything else it wants it offers to install. `cargo test --manifest-path native/Cargo.toml`
 before quoting any number; a tracked hook in `.githooks/` runs it and blocks
 (`git config core.hooksPath .githooks` once per clone). `origin` is the private
@@ -52,7 +56,7 @@ the two days that built this, three of them flattering.
                                 session.rs   observe / decide / perform, separately
                                 watch.rs     a trigger that starts from a change, with its floor
     native/argmind-env-windows/ UI Automation for eyes, SendInput for hands, WASAPI for the
-                                microphone, SAPI for the voice, a tray icon, a cover window
+                                microphone, SAPI for the voice, a cover window
     native/argmind-env-ollama/  the model, over raw HTTP/1.1
     native/argmind-env-whisper/ transcription, and the guard that stops silence becoming a turn
     native/argmind-env-qwentts/ the neural voice, over raw HTTP/1.1, streamed
@@ -60,6 +64,7 @@ the two days that built this, three of them flattering.
     native/argmind-serve/       the application: a server, a page, a tray icon, and `argmind`
     native/argmind-measure/     every harness behind the numbers
     native/argmind-rules/       the rules this repository keeps, by looking at itself
+    native/argmind-window/      the window the page lives in, and the icon in the tray
     ui/                         the front end, TypeScript with no dependency but `tsc`
     measure/                    goals, captured screens, and every answer behind the numbers
     native/expectations/        what the Python produced, committed as data
@@ -151,6 +156,14 @@ cannot be repaired is not.
 
 ## What is NOT built
 
+**No macOS and no Linux, and the window is the only piece that is ready for them.** The owner asked
+on 2026-09-16 for a standalone application on all three, and what exists is `argmind-window`, which
+names an operating system in exactly one function. **That is written for rather than verified** —
+there is no Mac here and no WebKitGTK, and a `cargo check` against absent system libraries is not
+evidence. Everything behind the window is Windows: UI Automation, SendInput, WASAPI, Media
+Foundation, SAPI and the neural voice. On another operating system the window would open onto a
+server that cannot start. A window is the first piece of that port and it is not the port.
+
 No phone environment, no robot environment. **Voice is built and is off until switched on**: hold
 F9 in the window, which means you have to be looking at argmind to talk to it.
 
@@ -228,6 +241,7 @@ a fact. `docs/findings/porting-the-core.md` has the accounting.
 | `docs/findings/choosing-accuracy.md` | every choosing measurement: models, prompts, the shuffle control, the refuted hypotheses |
 | `docs/findings/interaction.md` | the priority, and repair / memory / language / spurious action / the history window |
 | `docs/findings/the-pc-app.md` | the window: self-blindness, pointing, cold start, the withdrawn diagnosis |
+| `docs/findings/the-window.md` | **a standalone app rather than a browser tab**: why the house style was the wrong answer, the licence sweep across 81 crates, and the DLL failure that only a double-click finds |
 | `docs/findings/a-better-voice.md` | **the voice**: every open Korean TTS checked and its licence, and the measured answer — RTF 3.9 on the CPU, 0.15 on the GPU, and a K-quant that is thirty-two times faster and wrong |
 | `docs/findings/harness-pitfalls.md` | **ten ways the model harness lied and seven ways the measuring code did** — the list to check when a measurement reads zero |
 | `docs/findings/porting-the-core.md` | **the move to Rust**: what speed does not decide, the robot answered, the AST rules audited one at a time, what breaks in `measure/`, and the staging |

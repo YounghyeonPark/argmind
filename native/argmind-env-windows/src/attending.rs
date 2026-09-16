@@ -5,12 +5,19 @@
 //! interface is in front, and the agent would read *itself*. `app.py` solves it with an
 //! `attending()` that skips this process's own windows.
 //!
-//! **A browser makes it harder, not easier.** The interface is now a tab in somebody else's
-//! process, so "skip my own windows" no longer identifies it — and a person types into the browser
-//! before every turn, so the browser is in front at exactly the moment the agent is asked to look.
+//! **A browser made it harder, not easier.** The interface was a tab in somebody else's process,
+//! so "skip my own windows" did not identify it — and a person types into the interface before
+//! every turn, so it is in front at exactly the moment the agent is asked to look.
 //!
 //! So the rule here is different and it is deliberately simple: **the newest foreground window that
-//! is not the one in front now.** A watcher samples the foreground and keeps the distinct handles
+//! is not the one in front now.**
+//!
+//! **That reason expired on 2026-09-16** and the rule did not change with it. The page moved into
+//! a window this process owns — `argmind-window` — so `app.py`'s original test is available again
+//! and would be sharper: *skip the windows belonging to this process id*. It is not made here,
+//! because the rule that is running was measured and the replacement was not, and because the two
+//! answer differently only when a turn starts while the person is somewhere else. **Nothing
+//! regressed**: argmind's own window sits in `recent` exactly where the browser's used to. A watcher samples the foreground and keeps the distinct handles
 //! it has seen; while the person is in the interface, that answers with the window they were in
 //! before it, which is the one they mean.
 //!

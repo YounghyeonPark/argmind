@@ -1,8 +1,13 @@
-//! The application: a local server, and a TypeScript interface in your browser.
+//! The application: a local server, and a TypeScript interface.
 //!
 //! **Two binaries run this, so it lives here.** `serve` is the console one and `argmind-app` is
-//! the one with an icon by the clock; a second copy of the server is how the two come to behave
-//! differently on the day it matters.
+//! the one with a window and an icon by the clock; a second copy of the server is how the two
+//! come to behave differently on the day it matters.
+//!
+//! **The interface is a page either way.** `argmind-app` puts it in a window this program owns —
+//! `argmind-window` — and `serve` leaves it at a URL for whatever you like to open. Nothing below
+//! this line knows which, and that is worth keeping: it is HTTP and server-sent events, so the
+//! thing on the other end is replaceable.
 //!
 //! ```text
 //!   serve              read the screen, propose, and act only on a confirmation
@@ -21,12 +26,13 @@
 //! binds to loopback, checked before the socket opens, and every request carries a token minted at
 //! startup. **Localhost is not a permission.**
 //!
-//! ## One thing a browser makes harder
+//! ## One thing an interface of any kind makes harder
 //!
-//! The interface is a tab in somebody else's process, and the person is looking at it whenever they
-//! ask for anything — so the window in front is never the window they mean. [`Attending`] reads the
-//! newest window that is *not* in front, and answers with nothing rather than with the page the
-//! person is reading.
+//! The person is looking at the interface whenever they ask for anything — so the window in front
+//! is never the window they mean. [`Attending`] reads the newest window that is *not* in front,
+//! and answers with nothing rather than with the page the person is reading. **That was written
+//! when the interface was somebody else's browser** and it still holds now that the window is
+//! ours; `attending.rs` says what changed and what it did not.
 //!
 //! ## Why one thread owns everything
 //!
@@ -80,7 +86,7 @@ impl Speaks for Model {
     }
 }
 
-/// Everything the browser is told, as it happens.
+/// Everything the page is told, as it happens.
 #[derive(Default)]
 struct Listeners(Mutex<Vec<Sender<String>>>);
 
@@ -89,7 +95,7 @@ impl Listeners {
         let frame = sse(event, data);
         let Ok(mut who) = self.0.lock() else { return };
         //: A page that closed is a channel that errors, and dropping it here is the only cleanup
-        //: there is — nothing tells a server that a browser tab went away.
+        //: there is — nothing tells a server that a page went away.
         who.retain(|tx| tx.send(frame.clone()).is_ok());
     }
 }

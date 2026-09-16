@@ -1,0 +1,20 @@
+# The toolchain this repository builds with.
+#
+# **At the root rather than beside `native/Cargo.toml`.** rustup resolves this file from the
+# *current directory* upwards, and the command everything here is run with is
+# `cargo test --manifest-path native/Cargo.toml` from the repository root — so a copy under
+# `native/` is a copy nothing reads. It was put there first and the suite quietly kept building
+# with the other toolchain.
+#
+# **`stable` rather than a triple**, which rustup resolves against the *host* — and on this
+# machine the host is `x86_64-pc-windows-msvc` even though the user default is `-gnu`. Naming a
+# triple here would pin Windows onto a Linux or macOS checkout, which is the opposite of what the
+# window was built for.
+#
+# Why it matters on Windows: `webview2-com-sys` links the WebView2 loader **statically** under
+# `target_env = "msvc"` and **dynamically** under `-gnu`. A GNU build of `argmind-app.exe` imports
+# `WebView2Loader.dll`, which is not on any path a double-clicked program sees, so it exits with
+# `0xC0000135` and no message. It runs under `cargo run`, because cargo puts every build script
+# search path on the child PATH. `argmind-serve/tests/launchable.rs` is the rule that catches this.
+[toolchain]
+channel = "stable"

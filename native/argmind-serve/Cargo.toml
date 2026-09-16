@@ -17,3 +17,7 @@ argmind-env-qwentts = { path = "../argmind-env-qwentts" }
 argmind-env-whisper = { path = "../argmind-env-whisper" }
 argmind-env-windows = { path = "../argmind-env-windows" }
 argmind-voice = { path = "../argmind-voice" }
+
+# The window the page lives in. **Only the binary uses it** — the library above is protocol and
+# proposals and has no opinion about how anybody looks at it.
+argmind-window = { path = "../argmind-window" }

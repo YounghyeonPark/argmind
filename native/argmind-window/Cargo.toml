@@ -1,0 +1,22 @@
+[package]
+name = "argmind-window"
+version = "0.0.1"
+edition = "2021"
+description = "A window of its own, on three operating systems, with none of them named."
+license = "Apache-2.0"
+
+# **It depends on nothing of argmind's, deliberately.** It is handed a URL and some strings; it
+# knows nothing about sessions, models or permissions, and could put any local page in a window.
+# That is what keeps `argmind-env-windows` from being dragged in behind it, which would make the
+# one part of this program that is not platform-bound platform-bound.
+#
+# Three crates where this tree usually takes none, and the reason is in `src/lib.rs`: the
+# alternative on Windows is shipping `WebView2Loader.dll` or calling an undocumented export, and
+# this project redistributes nothing. All three are the Tauri project's, all permissive.
+[dependencies]
+# The webview: WebView2 on Windows, WKWebView on macOS, WebKitGTK on Linux.
+wry = "0.57"
+# The window and the event loop. Pinned to the same version wry builds against, so there is one.
+tao = "0.37"
+# The icon by the clock, or the menu bar, or the status area.
+tray-icon = "0.25"
