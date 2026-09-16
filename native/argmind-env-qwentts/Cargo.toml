@@ -1,0 +1,13 @@
+[package]
+name = "argmind-env-qwentts"
+version = "0.0.1"
+edition = "2021"
+description = "A neural voice, over HTTP to a qwentts.cpp server on this machine."
+license = "Apache-2.0"
+
+# No third-party crate. Raw HTTP/1.1 needs none and a WAV header is forty-four bytes of
+# little-endian integers; the two edges are this project's own — the seam it implements, and the
+# loudspeaker that does the talking, because this synthesises and does not play.
+[dependencies]
+argmind-voice = { path = "../argmind-voice" }
+argmind-env-windows = { path = "../argmind-env-windows" }

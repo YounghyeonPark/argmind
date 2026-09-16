@@ -39,14 +39,23 @@ pub const BUFFER: i64 = 600_000;
 /// What the synthesiser speaks at. Everything is resampled from this to whatever the device wants.
 pub const FROM_HZ: u32 = 24_000;
 
-#[derive(Default)]
 struct Queue {
-    /// Mono samples at [`FROM_HZ`], oldest first.
+    /// Mono samples, oldest first.
     waiting: Vec<f32>,
+    /// What rate `waiting` is at. **Carried with the samples**, because a server quietly
+    /// changing what it emits is the one way this could be wrong, and audio at the wrong
+    /// rate is not a failure — it is a chipmunk.
+    hz: u32,
     /// Bumped by `stop` and by each new utterance. **The feeder checks it rather than a flag**, so
     /// a stop that lands while the thread is mid-buffer cannot be missed and then un-missed by the
     /// next utterance setting the flag back.
     generation: u64,
+}
+
+impl Default for Queue {
+    fn default() -> Self {
+        Queue { waiting: Vec::new(), hz: FROM_HZ, generation: 0 }
+    }
 }
 
 /// A voice's mouth: hand it samples, or cut it off.
@@ -84,8 +93,9 @@ impl Loudspeaker {
         }
     }
 
-    /// Speak these samples. **Returns at once**, and replaces whatever was playing.
-    pub fn play(&mut self, samples: &[f32]) {
+    /// Speak these samples, which are mono at `hz`. **Returns at once**, and replaces whatever
+    /// was playing.
+    pub fn play(&mut self, samples: &[f32], hz: u32) {
         if self.speaking() {
             self.cut_off += 1;
         }
@@ -94,6 +104,7 @@ impl Loudspeaker {
             queue.generation += 1;
             queue.waiting.clear();
             queue.waiting.extend_from_slice(samples);
+            queue.hz = hz;
             queue.generation
         };
         self.generation.store(generation, Ordering::SeqCst);
@@ -120,6 +131,22 @@ impl Loudspeaker {
     /// boolean: it read 0 ms every time, whatever the device was doing.
     pub fn speaking(&self) -> bool {
         self.playing.load(Ordering::SeqCst)
+    }
+
+    /// Another handle on the same mouth.
+    ///
+    /// **Shares the queue rather than copying it**, so a thread that was given one can `play` into
+    /// the device the owner is holding — which is what a synthesiser answering on its own thread
+    /// needs. `cut_off` is per handle, because it counts what *this* caller interrupted.
+    pub fn clone_handle(&self) -> Loudspeaker {
+        Loudspeaker {
+            queue: Arc::clone(&self.queue),
+            running: Arc::clone(&self.running),
+            playing: Arc::clone(&self.playing),
+            generation: Arc::clone(&self.generation),
+            available: self.available,
+            cut_off: 0,
+        }
     }
 
     /// Let the thread go. Safe to call twice.
@@ -153,20 +180,20 @@ impl Loudspeaker {
     }
 }
 
-/// Stretch mono samples from [`FROM_HZ`] to the device's rate, and spread them across its channels.
+/// Stretch mono samples from `from_hz` to the device's rate, and spread them across its channels.
 ///
 /// **Linear, like the capture side.** A synthesiser's output is already band-limited and the
 /// destination rate is usually a clean 2:1; the argument for anything better is an argument about
 /// audio that has not been measured to matter here.
-pub fn to_device(samples: &[f32], to_hz: u32, channels: usize) -> Vec<f32> {
-    if samples.is_empty() || to_hz == 0 || channels == 0 {
+pub fn to_device(samples: &[f32], from_hz: u32, to_hz: u32, channels: usize) -> Vec<f32> {
+    if samples.is_empty() || from_hz == 0 || to_hz == 0 || channels == 0 {
         return Vec::new();
     }
-    let ratio = FROM_HZ as f64 / to_hz as f64;
+    let ratio = from_hz as f64 / to_hz as f64;
     //: **Counted in integers.** `(len / ratio).floor()` loses a frame at 44.1 kHz — 24000 / (24000
     //: / 44100) comes out as 44099.999… and floors to one short. One frame is nothing to hear and
     //: the arithmetic being wrong is something to fix.
-    let out_frames = samples.len() * to_hz as usize / FROM_HZ as usize;
+    let out_frames = samples.len() * to_hz as usize / from_hz as usize;
     let mut out = Vec::with_capacity(out_frames * channels);
     for i in 0..out_frames {
         let at = i as f64 * ratio;
@@ -226,7 +253,7 @@ fn feed(queue: &Mutex<Queue>, running: &AtomicBool, playing: &AtomicBool)
                     //: **Converted once, here**, rather than per buffer: resampling a whole
                     //: utterance is a millisecond and doing it in the feed loop would put it in
                     //: the path of every buffer deadline.
-                    ours = to_device(&held.waiting, rate, channels);
+                    ours = to_device(&held.waiting, held.hz, rate, channels);
                     held.waiting.clear();
                     at = 0;
                 }

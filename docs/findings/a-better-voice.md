@@ -176,9 +176,41 @@ picked up with no code change.
 
 Not large, and every piece has a precedent in this tree:
 
-1. `Fix::BuildSpeaker` — clone at a pinned commit, configure with the flag above, build, fetch
+1. `Fix::BuildSpeaker` — clone at a pinned commit, configure with the flags above, build, fetch
    two GGUFs with hash checks, run `tts-server` supervised. This is `Fix::BuildRecogniser` with
-   different constants.
+   different constants, **plus a short build path and the toolchain bin first**.
+
+### The client exists and speaks — 2026-09-16
+
+`argmind-env-qwentts`, the same shape as the Ollama and whisper clients: raw HTTP/1.1, no crate.
+`POST /v1/audio/speech` with `response_format: "wav"`, and `argmind_voice::Speaker` on top of the
+loudspeaker.
+
+Measured end to end through the server, warm:
+
+| | |
+|---|---|
+| `say()` returns | **0 ms** — the request is on its own thread, because a blocking one cannot be interrupted |
+| `say()` to the first sound | **~1.8 s** for a reply-length sentence |
+| synthesis itself | 1.80–1.81 s for 8.2–9.7 s of audio, RTF **0.19–0.22** |
+| interrupting mid-sentence | works; silent within 0.6 s of `stop()` |
+
+**The first utterance after the server starts costs far more**: 9.7 s, of which `CodecDecode`
+alone was 7.77 s against 0.32 s on the next request. Vulkan compiling its pipelines, paid once
+by a server that stays up — and a reason the server is the right shape rather than the
+command-line tool, which would pay it every time.
+
+**`say()` to first sound is the number that matters and 1.8 s is not good.** SAPI starts in
+4–43 ms. The model call before it has a median of 0.61 s, so the agent would sit silent for
+about two and a half seconds after a question. That is noticeable and it is not what this
+project means by real-time interaction.
+
+**Streaming is the answer and it is not measured.** `qwentts.cpp` decodes frame by frame and its
+server takes `stream: true`; time to *first byte* is 30–70 ms either way, but that is the
+response headers, and when the first **audio** bytes arrive was not measured because the client
+reads the body to the end. Reading it incrementally and feeding the loudspeaker as chunks land
+is the work, and the payoff would be first sound at a few hundred milliseconds instead of 1.8 s.
+Until somebody measures it, that is a hypothesis with an argument and not a number.
 2. **Playback, which is genuinely new.** SAPI synthesises *and* plays; a neural server hands
    back 24 kHz WAV and something has to put it on the speakers. WASAPI render, mirroring
    `microphone.rs`'s capture — and it has to be interruptible mid-word, because barge-in is what

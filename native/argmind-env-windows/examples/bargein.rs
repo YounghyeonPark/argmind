@@ -31,7 +31,7 @@ fn main() {
 
     println!("\n  3초짜리 음을 재생합니다 — 소리가 납니다.");
     let began = Instant::now();
-    mouth.play(&tone(3.0));
+    mouth.play(&tone(3.0), FROM_HZ);
     //: **Started is not the same as audible.** What is measured is how long until the thread says
     //: it is speaking, which is when the first samples have gone to the device.
     while !mouth.speaking() && began.elapsed().as_secs_f64() < 2.0 {
@@ -54,10 +54,10 @@ fn main() {
     //: **Barge-in is the second utterance arriving, not silence.** The one that matters in use is
     //: `play` over the top of something already speaking, so it is measured too.
     println!("\n  다시 3초를 재생하고, 1초 뒤에 다른 것으로 덮어씁니다.");
-    mouth.play(&tone(3.0));
+    mouth.play(&tone(3.0), FROM_HZ);
     std::thread::sleep(std::time::Duration::from_millis(1000));
     let over = Instant::now();
-    mouth.play(&tone(1.0));
+    mouth.play(&tone(1.0), FROM_HZ);
     println!("  play() 덮어쓰기: {:.0} ms 만에 돌아옴, 끊긴 횟수 {}",
              over.elapsed().as_secs_f64() * 1000.0, mouth.cut_off);
     std::thread::sleep(std::time::Duration::from_millis(1400));

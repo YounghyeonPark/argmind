@@ -19,6 +19,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "argmind-env-qwentts"
+version = "0.0.1"
+dependencies = [
+ "argmind-env-windows",
+ "argmind-voice",
+]
+
+[[package]]
 name = "argmind-env-whisper"
 version = "0.0.1"
 dependencies = [
