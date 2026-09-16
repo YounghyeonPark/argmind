@@ -85,24 +85,20 @@ sha2 = { licence = "MIT OR Apache-2.0", why = "the prompt fingerprint, in tests 
     추가; neural, local, nothing redistributed and nothing new to link against. Not installed on
     this machine — `Speech_OneCore\\Isolated` is empty and the only Korean token is Heami — so
     whether an ordinary application can use one here is **unverified**: it is a thing to check after
-    installing, not a thing to assert. `speaker.rs` prefers any Korean voice whose name lacks
-    `Desktop`, so a newer one is used the moment one exists.""" }
+    installing, not a thing to assert. `argmind-env-windows/src/speaker.rs` prefers any Korean
+    voice whose name lacks `Desktop`, so a newer one is used the moment one exists.""" }
 
-# **The one that fits, found by looking rather than by recalling.** The owner's rule of
+# **The one that fits was found by looking rather than by recalling.** The owner's rule of
 # 2026-09-16 is that a deep-learning framework is allowed if it is C++ or Rust, and that a Python
-# one must be rewritten. This needs neither: the runtime is C++17 over GGML — the same GGML
-# whisper.cpp already vendors and this project already builds from source — and the weights are
-# Apache-2.0 from the Qwen team.
-[speaking]
-"qwentts.cpp" = { licence = "MIT", why = """
-    C++17/GGML port of Qwen3-TTS 12 Hz. Ten languages **including Korean**, 24 kHz mono, runs on
-    CPU, and ships a `tts-server` with an OpenAI-compatible HTTP interface — the same shape argmind
-    already speaks to for Ollama and for whisper.cpp. Nothing is redistributed: the source is
-    fetched at a pinned commit and compiled here, exactly as whisper.cpp is.""" }
-"Qwen3-TTS GGUF" = { licence = "Apache-2.0", why = """
-    The weights, from the Qwen team via the qwentts.cpp author's GGUF conversion. Q8_0 is about
-    993 MB for the 0.6B talker plus 291 MB for the shared tokenizer; Q4_K_M is 629 + 255 MB. Data,
-    fetched and hash-checked, never executed.""" }
+# one must be rewritten. `qwentts.cpp` needs neither: the runtime is C++17 over GGML — the same
+# GGML whisper.cpp already vendors and this project already builds from source — and the weights
+# are Apache-2.0 from the Qwen team.
+#
+# **Its rows are in `[external]` below rather than in a table of their own**, moved there the same
+# day `Fix::BuildSpeaker` was written: argmind builds and runs it now, which is what `[external]`
+# means and is no longer what "a candidate" means. The record drifting the other way is not
+# hypothetical — this file said whisper.cpp was "not yet a dependency" while argmind was compiling
+# and running it, and a test now checks for that exact sentence.
 
 # Not dependencies: spoken to over a port, or downloaded by the user at run time. Recorded so a
 # reader knows they were considered rather than missed.
@@ -115,4 +111,24 @@ whisper = { licence = "MIT", why = "weights, fetched at first use" }
     compiler on the machine, and runs the result** — so it is no longer a candidate. Nothing is
     redistributed: the source is fetched from the project's own repository at run time and the
     binary never leaves the machine that built it. ggml, which it vendors, is MIT as well.""" }
-ggml = { licence = "MIT", why = "vendored inside whisper.cpp; compiled, never redistributed" }
+ggml = { licence = "MIT", why = """
+    Vendored inside whisper.cpp and a submodule of qwentts.cpp; compiled, never redistributed.""" }
+"qwentts.cpp" = { licence = "MIT", why = """
+    The voice's server. C++17/GGML port of Qwen3-TTS 12 Hz — ten languages **including Korean**,
+    24 kHz mono, and a `tts-server` with an OpenAI-compatible HTTP interface, which is the same
+    shape argmind already speaks to for Ollama and for whisper.cpp. **argmind clones it at a pinned
+    commit, compiles it with the compiler on the machine, and runs the result**, so it is no longer
+    a candidate. Nothing is redistributed: the source is fetched from the project's own repository
+    at run time and the binary never leaves the machine that built it.""" }
+"Qwen3-TTS GGUF" = { licence = "Apache-2.0", why = """
+    The weights, from the Qwen team via the qwentts.cpp author's GGUF conversion. **Fetched and
+    hash-checked, never executed**, and argmind pins two of them: the 0.6B talker at Q8_0
+    (992,615,488 bytes) and the 12 Hz tokenizer at Q4_K_M (254,974,752 bytes). Q8_0 for the talker
+    is not a quality preference — `ggml-vulkan`'s K-quant path gives a silently wrong answer there;
+    `native/argmind-serve/src/speaker.rs` has the measurement.""" }
+"Vulkan SDK" = { licence = "MIT OR Apache-2.0", why = """
+    **A build tool, not a dependency** — the shader compiler `ggml-vulkan` needs to generate its
+    SPIR-V, used at build time and not linked into anything argmind ships. What runs afterwards is
+    `vulkan-1.dll`, which comes with the graphics driver. argmind offers to install it with
+    `winget install --id KhronosGroup.VulkanSDK`, elevated, and the licence above is the one
+    LunarG declares through that package.""" }

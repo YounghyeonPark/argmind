@@ -98,9 +98,10 @@ impl Standing {
 /// **A fixed list rather than any string the page sends.** A key is what a stored *yes* is attached
 /// to, so a page that could invent one could invent a permission the program never asks about — and
 /// a typo would silently create a second, always-unanswered copy of a real one.
-pub const DECIDABLE: [&str; 6] = [
-    //: The four needs from `needs.rs`. `korean-voice` is elevation, the rest change the machine.
-    "ollama", "model", "whisper", "korean-voice",
+pub const DECIDABLE: [&str; 8] = [
+    //: The needs from `needs.rs`. `korean-voice` and `vulkan` are elevation, the rest change the
+    //: machine.
+    "ollama", "model", "whisper", "korean-voice", "vulkan", "speaker",
     //: Switched on, and then it keeps going: a model call every few seconds, and a device that
     //: opens while a key is held.
     "notice", "microphone",
@@ -113,6 +114,8 @@ pub fn what(key: &str) -> &'static str {
         "model" => "모델 받기",
         "whisper" => "받아쓰기 서버",
         "korean-voice" => "한국어 음성 설치",
+        "vulkan" => "Vulkan SDK 설치",
+        "speaker" => "목소리 서버",
         "notice" => "화면 지켜보기",
         "microphone" => "마이크",
         _ => "알 수 없는 권한",

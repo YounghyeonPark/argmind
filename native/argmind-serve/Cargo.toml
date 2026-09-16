@@ -13,6 +13,7 @@ argmind-core = { path = "../argmind-core" }
 # The binary is the application, so it reaches the environment; the library above it is protocol
 # and proposals only, and depends on neither.
 argmind-env-ollama = { path = "../argmind-env-ollama" }
+argmind-env-qwentts = { path = "../argmind-env-qwentts" }
 argmind-env-whisper = { path = "../argmind-env-whisper" }
 argmind-env-windows = { path = "../argmind-env-windows" }
 argmind-voice = { path = "../argmind-voice" }

@@ -36,12 +36,14 @@
 //! has a `confirm` route at all rather than acting on what the model returned.
 
 pub mod app;
+pub mod building;
 pub mod decided;
 pub mod fetch;
 pub mod fix;
 pub mod needs;
 pub mod proposals;
 pub mod recogniser;
+pub mod speaker;
 
 use std::collections::hash_map::RandomState;
 use std::hash::{BuildHasher, Hasher};

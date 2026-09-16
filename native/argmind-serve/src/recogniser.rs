@@ -16,16 +16,23 @@
 //! **What is built here dies with argmind** — see [`argmind_env_windows::supervise`]. A recogniser
 //! left listening on a port after the program that started it has gone is a process the next
 //! argmind will find and cannot account for.
+//!
+//! **The machinery is in [`crate::building`]**, which this and [`crate::speaker`] share. What is
+//! left here is what is true of the recogniser and of nothing else: which repository, which commit,
+//! which model, and what the server is told when it starts.
 
-use std::io::{BufRead, BufReader};
-use std::path::{Path, PathBuf};
-use std::process::{Command, Stdio};
+use std::path::PathBuf;
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
 use argmind_env_windows::supervise::Supervised;
 
+use crate::building::{self, Recipe};
 use crate::fix::Fix;
+
+//: Re-exported rather than moved out of reach: these are the same functions under the same names,
+//: and the tests that check them are checking the thing that runs.
+pub use crate::building::{bring_runtime, imports_of, last_few, percent_of, toolchain_dir};
 
 /// Where the source comes from, and exactly which commit.
 pub const REPO: &str = "https://github.com/ggml-org/whisper.cpp.git";
@@ -33,6 +40,8 @@ pub const REPO: &str = "https://github.com/ggml-org/whisper.cpp.git";
 pub const COMMIT: &str = "8a9ad7844d6e2a10cddf4b92de4089d7ac2b14a9";
 /// The cmake target. One binary, not the whole tree of examples.
 pub const TARGET: &str = "whisper-server";
+/// What a build needs on the machine before it can start.
+pub const TOOLS: [&str; 5] = ["git", "cmake", "g++", "mingw32-make", "objdump"];
 
 pub const MODEL_URL: &str =
     "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.bin";
@@ -54,15 +63,8 @@ pub const MODEL_MB: u64 = 141;
 pub const MINUTES: u64 = 10;
 
 /// Where the source tree and the build live.
-///
-/// Beside the person's own files rather than beside the executable, for the same reason as the
-/// models: a folder under the program needs write access to wherever argmind was unpacked.
 pub fn shed() -> PathBuf {
-    let mut at = std::env::var("LOCALAPPDATA").map(PathBuf::from)
-        .unwrap_or_else(|_| std::env::temp_dir());
-    at.push("argmind");
-    at.push("whisper.cpp");
-    at
+    building::shed("whisper.cpp")
 }
 
 pub fn server_exe() -> PathBuf {
@@ -70,27 +72,18 @@ pub fn server_exe() -> PathBuf {
 }
 
 /// Which commit the binary sitting there was built from, if anything was.
-///
-/// **A file rather than `git rev-parse`.** This is read every time the page asks what is missing,
-/// and a subprocess per check is a cost paid forever for an answer that only changes when a build
-/// finishes. The build writes it; nothing else does.
 pub fn built_at() -> Option<String> {
-    std::fs::read_to_string(server_exe().with_file_name("built-at.txt"))
-        .ok().map(|s| s.trim().to_string())
+    building::built_at(&server_exe())
 }
 
 /// Is there a server here already, built from the commit argmind would ask for?
-///
-/// **The commit matters, not just the file.** A binary left by an older argmind is not the one the
-/// window would be describing, and saying "it is already built" about it would be a lie that only
-/// shows up as a recogniser behaving unlike the one documented.
 pub fn ready() -> bool {
-    server_exe().is_file() && built_at().as_deref() == Some(COMMIT)
+    building::ready(&server_exe(), COMMIT)
 }
 
 /// Record what was built, so the next question can be the shorter one.
 pub fn remember_build(commit: &str) {
-    let _ = std::fs::write(server_exe().with_file_name("built-at.txt"), commit);
+    building::remember_build(&server_exe(), commit);
 }
 
 pub fn model_at() -> PathBuf {
@@ -112,220 +105,35 @@ pub fn model_fix() -> Fix {
 }
 
 /// What a build needs and this machine has not got.
-///
-/// **Checked before the button is offered, not after it is pressed.** A fix that cannot work is a
-/// button that fails, and a person who pressed it has learned nothing except that argmind is
-/// unreliable. Each is asked for its version, which is the cheapest way to find out whether the
-/// name on the path is really the program.
 pub fn missing_tools() -> Vec<&'static str> {
-    ["git", "cmake", "g++", "mingw32-make", "objdump"].into_iter()
-        .filter(|tool| {
-            Command::new(tool).arg("--version")
-                .stdout(Stdio::null()).stderr(Stdio::null()).stdin(Stdio::null())
-                .status().map(|s| !s.success()).unwrap_or(true)
-        })
-        .collect()
+    building::missing(&TOOLS)
 }
 
-/// Run a command, reporting the lines worth reporting and keeping the rest for the error.
+/// Put one commit of whisper.cpp in the shed.
 ///
-/// Both streams are drained — **stderr on its own thread**, because a pipe nobody reads fills up
-/// and the child stops on the write, which looks exactly like a hung build.
-fn walk(mut command: Command, say: &mut dyn FnMut(&str),
-        worth_saying: &dyn Fn(&str) -> bool) -> Result<(), String> {
-    command.stdin(Stdio::null()).stdout(Stdio::piped()).stderr(Stdio::piped());
-    let mut child = command.spawn().map_err(|e| format!("실행하지 못했습니다 ({e})"))?;
-
-    let complaints = child.stderr.take().map(|err| {
-        std::thread::spawn(move || {
-            BufReader::new(err).lines().map_while(Result::ok).collect::<Vec<_>>()
-        })
-    });
-    let mut last = Vec::new();
-    if let Some(out) = child.stdout.take() {
-        for line in BufReader::new(out).lines().map_while(Result::ok) {
-            if worth_saying(&line) {
-                say(line.trim());
-            }
-            //: A tail, not the whole log: a failing build prints thousands of lines and the ones
-            //: that say why are at the end.
-            last.push(line);
-            if last.len() > 12 {
-                last.remove(0);
-            }
-        }
-    }
-    let how = child.wait().map_err(|e| format!("{e}"))?;
-    let complaints = complaints.and_then(|t| t.join().ok()).unwrap_or_default();
-    if how.success() {
-        return Ok(());
-    }
-    let tail = last_few(&complaints, 12).iter().chain(last.iter());
-    Err(format!("실패했습니다 —\n{}",
-                tail.map(|l| format!("    {}", l.trim_end())).collect::<Vec<_>>().join("\n")))
-}
-
-/// The last `how_many`, in order. **The end of a log is where it says why.**
-pub fn last_few<T>(all: &[T], how_many: usize) -> &[T] {
-    &all[all.len().saturating_sub(how_many)..]
-}
-
-fn git(at: &Path, args: &[&str]) -> Result<String, String> {
-    let out = Command::new("git").current_dir(at).args(args).stdin(Stdio::null())
-        .output().map_err(|e| format!("git을 실행하지 못했습니다 ({e})"))?;
-    if !out.status.success() {
-        return Err(format!("git {} 실패 — {}", args.join(" "),
-                           String::from_utf8_lossy(&out.stderr).trim()));
-    }
-    Ok(String::from_utf8_lossy(&out.stdout).trim().to_string())
-}
-
-/// Put exactly one commit of one repository into a folder, and prove that is what is there.
-///
-/// `git fetch <sha>` asks for a commit by its content name; git verifies every object it writes
-/// against the name it was asked for, so a server that returned something else fails the fetch
-/// rather than the check afterwards. The `rev-parse` at the end is belt and braces, and it is the
-/// line that would catch a folder somebody had edited between runs.
-pub fn clone_at(repo: &str, commit: &str, into: &Path, say: &mut dyn FnMut(&str))
+/// **No submodules**: whisper.cpp vendors ggml as files in its own tree rather than as a link, so
+/// the shallow fetch above is the whole source.
+pub fn clone_at(repo: &str, commit: &str, into: &std::path::Path, say: &mut dyn FnMut(&str))
                 -> Result<(), String> {
-    if into.join(".git").is_dir() {
-        if let Ok(head) = git(into, &["rev-parse", "HEAD"]) {
-            if head == commit {
-                say("소스는 이미 받아져 있습니다");
-                return Ok(());
-            }
-        }
-        //: A tree at some other commit is not ours to reconcile. Starting again costs a minute and
-        //: leaves nothing ambiguous.
-        say("다른 커밋이 있어 다시 받습니다");
-        std::fs::remove_dir_all(into).map_err(|e| format!("{e}"))?;
-    }
-    std::fs::create_dir_all(into).map_err(|e| format!("{e}"))?;
-    say(&format!("소스를 받는 중: {repo} @ {}", &commit[..12]));
-    git(into, &["init", "-q", "."])?;
-    //: `remote add` fails if it is already there, which is fine — this is a fresh folder.
-    let _ = git(into, &["remote", "add", "origin", repo]);
-    git(into, &["fetch", "--depth", "1", "--quiet", "origin", commit])?;
-    git(into, &["checkout", "--quiet", "FETCH_HEAD"])?;
-
-    let head = git(into, &["rev-parse", "HEAD"])?;
-    if head != commit {
-        return Err(format!("받은 커밋이 다릅니다 — {head}, 기대한 것 {commit}"));
-    }
-    say(&format!("커밋 확인: {}", &head[..12]));
-    Ok(())
+    building::clone_at(repo, commit, into, false, say)
 }
 
-/// Configure and compile, reporting the percentage as it goes.
-///
-/// **A button that is silent for ten minutes is a button people press twice.** cmake prints
-/// `[ 42%]` on stdout, which is exactly the thing to pass on and nothing else is.
-pub fn build(at: &Path, target: &str, say: &mut dyn FnMut(&str)) -> Result<(), String> {
-    say("빌드 준비 중…");
-    let mut configure = Command::new("cmake");
-    configure.current_dir(at).args([
-        "-B", "build", "-G", "MinGW Makefiles",
-        "-DCMAKE_BUILD_TYPE=Release",
-        //: Only the one binary is wanted, and the tests download audio.
-        "-DWHISPER_BUILD_TESTS=OFF",
-        "-DWHISPER_BUILD_EXAMPLES=ON",
-    ]);
-    walk(configure, say, &|l| l.starts_with("-- Configuring") || l.starts_with("-- Generating"))?;
-
-    let jobs = std::thread::available_parallelism().map(|n| n.get()).unwrap_or(4);
-    say(&format!("컴파일 중 — {jobs}개 동시, 몇 분 걸립니다"));
-    let mut make = Command::new("cmake");
-    make.current_dir(at).args(["--build", "build", "--config", "Release",
-                               "--target", target, "-j", &jobs.to_string()]);
-    let mut told = 0usize;
-    walk(make, &mut |line| {
-        //: Every ten per cent. A build emits hundreds of these and a page that scrolls past says
-        //: no more than one that says nothing.
-        if let Some(pct) = percent_of(line) {
-            if pct >= told + 10 || pct == 100 {
-                told = pct - pct % 10;
-                say(&format!("{pct}%"));
-            }
-        }
-    }, &|l| l.trim_start().starts_with('['))?;
-    Ok(())
-}
-
-/// The `42` in `[ 42%] Building CXX object …`, and `None` for every other line.
-pub fn percent_of(line: &str) -> Option<usize> {
-    let line = line.trim_start();
-    let inside = line.strip_prefix('[')?.split(']').next()?;
-    inside.trim().strip_suffix('%')?.trim().parse().ok()
-}
-
-/// Copy the compiler's own runtime libraries next to the binary.
-///
-/// **This is the step whose absence would only show up on somebody else's machine.** A MinGW build
-/// links against `libstdc++-6.dll` and friends, which live beside the compiler and are not on the
-/// ordinary Windows path — argmind found the server here because a shell had put them there, and a
-/// program started from the tray would have got a missing-DLL box instead.
-///
-/// **The list is read from the binary, not remembered.** `objdump -p` names what it actually
-/// imports, transitively, and the filter for "is this ours to copy" is *does the toolchain have a
-/// file by that name* — so a system library is never touched and a rebuild with a different
-/// compiler brings the right set without this having to be updated.
-pub fn bring_runtime(exe: &Path, say: &mut dyn FnMut(&str)) -> Result<usize, String> {
-    let Some(beside) = toolchain_dir() else {
-        return Err("컴파일러를 찾지 못했습니다".into());
-    };
-    let Some(here) = exe.parent() else { return Err("경로가 이상합니다".into()) };
-
-    let mut todo = vec![exe.to_path_buf()];
-    let mut seen: Vec<String> = Vec::new();
-    let mut copied = 0;
-    while let Some(look_at) = todo.pop() {
-        for name in imports_of(&look_at)? {
-            let key = name.to_lowercase();
-            if seen.contains(&key) {
-                continue;
-            }
-            seen.push(key);
-            let from = beside.join(&name);
-            if !from.is_file() {
-                //: Not the toolchain's — a Windows library, and nothing to do.
-                continue;
-            }
-            let to = here.join(&name);
-            if !to.exists() {
-                std::fs::copy(&from, &to).map_err(|e| format!("{name}을(를) 못 옮겼습니다 ({e})"))?;
-                copied += 1;
-            }
-            //: What it brings with it, in turn.
-            todo.push(to);
-        }
-    }
-    if copied > 0 {
-        say(&format!("실행에 필요한 라이브러리 {copied}개를 함께 두었습니다"));
-    }
-    Ok(copied)
-}
-
-/// The DLL names a binary imports, as `objdump -p` reports them.
-pub fn imports_of(binary: &Path) -> Result<Vec<String>, String> {
-    let out = Command::new("objdump").arg("-p").arg(binary).stdin(Stdio::null())
-        .output().map_err(|e| format!("objdump를 실행하지 못했습니다 ({e})"))?;
-    if !out.status.success() {
-        return Err(format!("{}의 의존성을 읽지 못했습니다", binary.display()));
-    }
-    Ok(String::from_utf8_lossy(&out.stdout).lines()
-        .filter_map(|l| l.trim().strip_prefix("DLL Name:"))
-        .map(|n| n.trim().to_string())
-        .collect())
-}
-
-/// The folder the C++ compiler lives in, which is where its runtime lives too.
-pub fn toolchain_dir() -> Option<PathBuf> {
-    let out = Command::new("where").arg("g++.exe").stdin(Stdio::null()).output().ok()?;
-    if !out.status.success() {
-        return None;
-    }
-    let first = String::from_utf8_lossy(&out.stdout).lines().next()?.trim().to_string();
-    PathBuf::from(first).parent().map(Path::to_path_buf)
+/// Configure and compile.
+pub fn build(at: &std::path::Path, target: &str, say: &mut dyn FnMut(&str)) -> Result<(), String> {
+    Recipe {
+        at: at.to_path_buf(),
+        //: A tree that generates nothing during its own build, so the ordinary name fits inside the
+        //: path limit that bit the voice — see [`crate::building`].
+        into: "build".into(),
+        target: target.into(),
+        defines: vec![
+            //: Only the one binary is wanted, and the tests download audio.
+            "-DWHISPER_BUILD_TESTS=OFF".into(),
+            "-DWHISPER_BUILD_EXAMPLES=ON".into(),
+        ],
+        env: Vec::new(),
+        path_first: Vec::new(),
+    }.run(say)
 }
 
 /// The one recogniser argmind started, held for as long as argmind runs.

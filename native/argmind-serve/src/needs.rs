@@ -185,6 +185,63 @@ pub fn every(model: &str) -> Vec<Need> {
         }),
     });
 
+    //: **Its own need, not a condition on the one below it.** The SDK is a machine-wide developer
+    //: kit installed with administrator rights; the voice is a build. Folding them into one key
+    //: would mean a remembered *항상허용* for "the voice" silently covering an elevated install,
+    //: and a decision is only worth remembering if it was about one thing.
+    let vulkan = crate::speaker::sdk();
+    out.push(Need {
+        key: "vulkan",
+        what: "Vulkan SDK",
+        required: false,
+        present: vulkan.is_some(),
+        found: match &vulkan {
+            Some(at) => format!("{}", at.display()),
+            //: **Measured, and the number is the reason.** Same binary, same weights, GPU disabled
+            //: with `GGML_VK_VISIBLE_DEVICES=""`: RTF 0.15 against 4.8.
+            None => "없음 — 신경망 목소리는 CPU로는 32배 느려서 못 씁니다".into(),
+        },
+        how: "winget install --id KhronosGroup.VulkanSDK — 또는 https://vulkan.lunarg.com/sdk/home"
+            .into(),
+        fix: Some(crate::speaker::sdk_fix()),
+    });
+
+    let speaking = crate::speaker::answering();
+    //: Asked once and used twice — for the sentence and for whether there is a button at all.
+    let missing = crate::speaker::missing_tools();
+    out.push(Need {
+        key: "speaker",
+        what: "목소리",
+        required: false,
+        present: speaking,
+        found: if speaking {
+            format!("{} 응답함", argmind_env_qwentts::QWENTTS)
+        } else {
+            //: **What is lost is named, and it is not everything.** Windows still speaks; this is
+            //: the difference between Heami and a neural voice, not between sound and silence.
+            format!("{} 응답 없음 — Windows 음성으로 말합니다",
+                    argmind_env_qwentts::QWENTTS)
+        },
+        how: if vulkan.is_none() {
+            "Vulkan SDK를 먼저 설치하세요".into()
+        } else if missing.is_empty() {
+            "argmind가 소스에서 빌드해 띄울 수 있습니다".into()
+        } else {
+            format!("빌드에 {} 이(가) 필요합니다 — 설치하시면 argmind가 나머지를 합니다",
+                    missing.join(", "))
+        },
+        //: **Offered only when it can actually be done**, which here means the tools *and* the SDK.
+        //: A button whose first act is to discover there is no compiler teaches somebody that
+        //: argmind is unreliable, and it teaches them that after they said yes.
+        fix: (missing.is_empty() && vulkan.is_some()).then(|| Fix::BuildSpeaker {
+            repo: crate::speaker::REPO.into(),
+            commit: crate::speaker::COMMIT.into(),
+            why: "Windows 한국어 음성은 오래된 것 하나뿐이라 어색합니다.".into(),
+            minutes: crate::speaker::MINUTES,
+            built: crate::speaker::ready(),
+        }),
+    });
+
     out
 }
 

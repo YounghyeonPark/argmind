@@ -50,13 +50,14 @@ fn nothing_that_performs_an_action_can_be_answered_always() {
         //: And every one of them has a name a person would recognise in a window.
         assert_ne!(what(allowed), "알 수 없는 권한", "{allowed} has no name");
     }
-    assert_eq!(DECIDABLE.len(), 6);
+    assert_eq!(DECIDABLE.len(), 8);
 }
 
-/// The four needs and the two switches, and no third kind smuggled in by a typo.
+/// The six needs and the two switches, and no third kind smuggled in by a typo.
 #[test]
 fn the_list_is_the_needs_and_the_two_switches() {
-    assert_eq!(DECIDABLE, ["ollama", "model", "whisper", "korean-voice", "notice", "microphone"]);
+    assert_eq!(DECIDABLE, ["ollama", "model", "whisper", "korean-voice", "vulkan", "speaker",
+                           "notice", "microphone"]);
     //: Every need `needs::every` can report is decidable, or it is a question with no way to
     //: answer it for good.
     for need in argmind_serve::needs::every("qwen3:8b") {

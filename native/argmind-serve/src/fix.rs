@@ -48,6 +48,17 @@ pub enum Fix {
     /// exists so the window can ask the **shorter, truer question** in the ordinary case: after the
     /// first time, saying yes downloads nothing and compiles nothing.
     BuildRecogniser { repo: String, commit: String, why: String, minutes: u64, built: bool },
+    /// The same thing for the voice, and **a separate variant rather than a parameter.**
+    ///
+    /// They look alike and they are not the same decision. This one needs a gigabyte of weights
+    /// instead of a hundred and forty megabytes, it needs a graphics driver and a development kit
+    /// that the recogniser does not, and what it produces speaks out loud. A person who agreed to
+    /// the recogniser has not agreed to this, and a shared variant with a flag in it is how those
+    /// two approvals would come to be one.
+    ///
+    /// `built` means a server compiled from this same commit is already sitting there, so the
+    /// window can ask the **shorter, truer question** in the ordinary case.
+    BuildSpeaker { repo: String, commit: String, why: String, minutes: u64, built: bool },
     /// A documented Windows command that needs administrator rights, run through the elevation
     /// prompt so Windows asks as well.
     RunElevated { command: String, why: String },
@@ -65,6 +76,8 @@ impl Fix {
             //: says nothing will be compiled is a window that was not read.
             Fix::BuildRecogniser { built: true, .. } => "argmind — 받아쓰기 서버를 띄울까요?",
             Fix::BuildRecogniser { .. } => "argmind — 받아쓰기 서버를 빌드할까요?",
+            Fix::BuildSpeaker { built: true, .. } => "argmind — 목소리 서버를 띄울까요?",
+            Fix::BuildSpeaker { .. } => "argmind — 목소리 서버를 빌드할까요?",
             Fix::RunElevated { .. } => "argmind — 관리자 권한이 필요합니다",
         }
     }
@@ -86,7 +99,7 @@ impl Fix {
         //: **Building it yourself does not make it yours.** The compiler turned somebody else's
         //: instructions into bytes on this machine and then those bytes run — which is the thing
         //: being agreed to, whoever pressed the compile button.
-        matches!(self, Fix::Install { .. } | Fix::BuildRecogniser { .. })
+        matches!(self, Fix::Install { .. } | Fix::BuildRecogniser { .. } | Fix::BuildSpeaker { .. })
     }
 }
 
@@ -151,6 +164,32 @@ pub fn describe(fix: &Fix) -> String {
             commit.get(..12).unwrap_or(commit),
             crate::recogniser::MODEL_MB,
             argmind_env_whisper::WHISPER),
+        //: The same two questions as the recogniser, for the same reason: after the first time,
+        //: saying yes downloads nothing and compiles nothing, and describing a gigabyte and a
+        //: quarter of an hour to somebody whose machine will spend fifteen seconds loading weights
+        //: it already has is the description drifting from the doing.
+        Fix::BuildSpeaker { commit, why, built: true, .. } => format!(
+            "{why}\n\n\
+             · 이미 빌드되어 있습니다 (커밋 {}) — 내려받지도, 컴파일하지도 않습니다\n\
+             · 그때 빌드한 것을 실행합니다 — 남이 쓴 코드를 이 컴퓨터에서 돌린다는 뜻입니다\n\
+             · 그래픽카드에 모델을 올리는 데 몇십 초 걸립니다\n\
+             · 서버는 {} 에서만 듣고, argmind를 닫으면 함께 꺼집니다\n\n\
+             띄울까요?",
+            commit.get(..12).unwrap_or(commit), argmind_env_qwentts::QWENTTS),
+        Fix::BuildSpeaker { repo, commit, why, minutes, .. } => format!(
+            "{why}\n\n\
+             · {repo} 에서 커밋 {} 하나만 받습니다\n\
+             · 태그가 아니라 커밋 이름입니다 — 이름이 곧 내용이라 다른 게 오면 git이 거부합니다\n\
+             · 이 컴퓨터의 컴파일러로 직접 빌드합니다 (길면 {minutes}분)\n\
+             · 빌드한 것을 실행합니다 — 남이 쓴 코드를 이 컴퓨터에서 돌린다는 뜻입니다\n\
+             · 목소리 모델 두 개를 받습니다 (합쳐서 약 {} MB, 해시를 확인합니다)\n\
+             · 그래픽카드를 씁니다 — CPU만으로는 32배 느려서 대화가 안 됩니다\n\
+             · 이걸 띄우면 argmind가 이 목소리로 소리를 냅니다\n\
+             · 서버는 {} 에서만 듣고, argmind를 닫으면 함께 꺼집니다\n\n\
+             빌드해서 띄울까요?",
+            commit.get(..12).unwrap_or(commit),
+            crate::speaker::WEIGHTS_MB,
+            argmind_env_qwentts::QWENTTS),
         Fix::RunElevated { command, why } => format!(
             "{why}\n\n\
              · 다음을 관리자 권한으로 실행합니다:\n    {command}\n\
@@ -234,6 +273,39 @@ pub fn apply(fix: &Fix, say: &mut dyn FnMut(&str)) -> Result<String, String> {
             crate::recogniser::remember_build(commit);
             crate::recogniser::serve(say)?;
             Ok("받아쓰기 서버가 떴습니다".into())
+        }
+        Fix::BuildSpeaker { repo, commit, .. } => {
+            //: **Checked again here**, not only where the offer was made — between the two there
+            //: are minutes of downloading and an approval.
+            let missing = crate::speaker::missing_tools();
+            if !missing.is_empty() {
+                return Err(format!("{} 이(가) 없어 빌드할 수 없습니다", missing.join(", ")));
+            }
+            //: **And the SDK, separately.** It is the one thing here that a person may have
+            //: installed in the minute since the window opened, and the one thing this process
+            //: cannot learn about by looking at its own environment.
+            if crate::speaker::sdk().is_none() {
+                return Err("Vulkan SDK가 없어 빌드할 수 없습니다".into());
+            }
+            //: **The whole sequence on one yes**, and the weights are literally the fixes that
+            //: would have been offered on their own, run through this same function — so there is
+            //: one downloader rather than three and no way for them to mean different things.
+            for weights in crate::speaker::weight_fixes() {
+                let Fix::Fetch { into, .. } = &weights else { continue };
+                if !std::path::Path::new(into).is_file() {
+                    apply(&weights, say)?;
+                }
+            }
+            let at = crate::speaker::shed();
+            crate::speaker::clone_at(repo, commit, &at, say)?;
+            crate::speaker::build(&at, crate::speaker::TARGET, say)?;
+            //: Without this it runs here and nowhere else — see `bring_runtime`.
+            crate::building::bring_runtime(&crate::speaker::server_exe(), say)?;
+            //: Written only once everything above it worked, so a half-finished tree is never
+            //: described as "already built".
+            crate::speaker::remember_build(commit);
+            crate::speaker::serve(say)?;
+            Ok("목소리 서버가 떴습니다".into())
         }
         Fix::RunElevated { command, .. } => {
             //: **Windows asks again.** `RunAs` raises the elevation prompt, so a yes here is the

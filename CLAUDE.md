@@ -55,6 +55,7 @@ the two days that built this, three of them flattering.
                                 microphone, SAPI for the voice, a tray icon, a cover window
     native/argmind-env-ollama/  the model, over raw HTTP/1.1
     native/argmind-env-whisper/ transcription, and the guard that stops silence becoming a turn
+    native/argmind-env-qwentts/ the neural voice, over raw HTTP/1.1, streamed
     native/argmind-voice/       Heard / Listener / Speaker — the seam, and why it is not a contract
     native/argmind-serve/       the application: a server, a page, a tray icon, and `argmind`
     native/argmind-measure/     every harness behind the numbers
@@ -151,9 +152,17 @@ cannot be repaired is not.
 ## What is NOT built
 
 No phone environment, no robot environment. **Voice is built and is off until switched on**: hold
-F9 in the window, which means you have to be looking at argmind to talk to it. Speaking is free
-(4–43 ms) and already Korean; hearing **transcribes silence as words 120 times out of 120**, so a
-stray key press is a turn — it cannot act on one, but it will answer it aloud. **Two of the three
+F9 in the window, which means you have to be looking at argmind to talk to it.
+
+**Speaking has two voices and picks one at startup.** SAPI is free (4–43 ms), installed, and
+`Microsoft Heami Desktop` — which the owner called 어색함 on 2026-09-16. The other is a neural
+synthesiser argmind builds from source and runs on the GPU: **27–238 ms to first sound** because
+it streams, RTF 0.15, and it is used whenever it is answering on its port. If it is not, the old
+one speaks rather than nothing. `docs/findings/a-better-voice.md` has the accounting, including
+why the talker is Q8_0 and why the Vulkan SDK is asked for separately.
+
+Hearing **transcribes silence as words 120 times out of 120**, so a stray key press is a turn —
+it cannot act on one, but it will answer it aloud. **Two of the three
 guards do reject**, with no threshold in either: a transcript of nothing but punctuation is not
 something a person said, and a short cycle repeating inside one is Whisper looping (7 of 7
 reproduced degenerations caught, 0 of 18 strings that had to survive). **The third needs a number

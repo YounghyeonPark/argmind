@@ -26,6 +26,9 @@ interface Hello {
   model: string;
   dry: boolean;
   speaks: boolean;
+  /** Which voice: "neural", "windows", "none" or "off". Named rather than a flag, because the
+   *  difference between the two that speak is the whole reason the neural one was built. */
+  voice: string;
   hears: boolean;
   noticing: boolean;
   noticed: number;
@@ -127,13 +130,21 @@ recede();
 
 const stream = new EventSource(`/events`);
 
+/** What the status line says about the voice. Three states that matter and one that does not:
+ *  speaking with the neural voice, speaking with the Windows one, asked to speak and unable to,
+ *  and not asked. */
+function voiceReads(d: Hello): string {
+  if (!d.speaks) return d.voice === "none" ? "소리 안 나옴" : "소리 꺼짐";
+  return d.voice === "neural" ? "소리 켜짐 (신경망)" : "소리 켜짐 (Windows)";
+}
+
 stream.addEventListener("hello", (e) => {
   const d: Hello = JSON.parse((e as MessageEvent).data);
   header.textContent = d.attending || "(아무 창도 보고 있지 않음)";
   // Both settings shown, because "it did nothing" and "it said nothing" are the two things
   // a person would otherwise mistake for the agent being broken.
   statusLine.textContent =
-    `${d.model}${d.dry ? " · 실행 안 함" : ""}${d.speaks ? " · 소리 켜짐" : " · 소리 꺼짐"}` +
+    `${d.model}${d.dry ? " · 실행 안 함" : ""} · ${voiceReads(d)}` +
     `${d.hears ? " · 마이크 켜짐" : ""}`;
   talk.hidden = !d.hears;
   drawNoticing(d.noticing, d.noticed);

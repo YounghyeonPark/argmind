@@ -117,14 +117,22 @@ project, and the try-compile scratch directory inside it lands at
     <wherever you are>/build/ggml/src/ggml-vulkan/vulkan-shaders-gen-prefix/src/
     vulkan-shaders-gen-build/CMakeFiles/CMakeScratch/TryCompile-athnoi/...
 
-which is about 130 characters of nesting before the project's own path is counted. Anything
-deeper than roughly 120 characters fails, and it fails looking like a broken toolchain.
+**The number here was an estimate and it has since been measured. It was too kind.** Counting
+the tree a successful build leaves behind and adding back the try-compile path from the failing
+one: `ggml/src/ggml-vulkan/vulkan-shaders-gen-prefix/src/vulkan-shaders-gen-build/CMakeFiles/`
+is 87 characters below the build folder, and
+`CMakeScratch/TryCompile-xxxxxx/CMakeFiles/cmTC_xxxxx.dir/build.make` adds 68 more — **155, not
+130.** The run that failed was 126 + 155 = 281; the one that works is 52 + 155 = 207. So the
+ceiling on the build directory is about **104 characters**, not 120. A correction in the
+direction that makes the constraint tighter, which is the direction worth checking twice.
 
 **This bears directly on `Fix::BuildSpeaker`.** `recogniser::shed()` is
-`%LOCALAPPDATA%rgmind\whisper.cpp`, 49 characters, which is fine for whisper.cpp and not
+`%LOCALAPPDATA%/argmind/whisper.cpp`, 49 characters, which is fine for whisper.cpp and not
 obviously fine here. Whatever builds this has to either sit somewhere short or be measured at
 the path it will actually use — and the failure mode is a message about the C compiler, so
-nobody would guess.
+nobody would guess. It was measured before the automation was written rather than after:
+`speaker::shed()` plus its build folder `b` is **52**, and a full build was run there by hand
+first.
 
 ## The GPU is thirty-two times faster and the output is wrong
 
@@ -272,6 +280,55 @@ happened.
 A third turned up in the suite: the output frame count was `(len / ratio).floor()`, which loses
 a frame at 44.1 kHz because 24000 / (24000/44100) comes out as 44099.999…. Integer arithmetic
 now.
+
+## argmind builds it itself, and three things had to be found first — 2026-09-16
+
+`Fix::BuildSpeaker` is the recogniser's fix with different constants, and writing it turned up
+three failures that the recogniser's build could not have found because it does not do the
+things that cause them.
+
+**A process cannot see an environment variable set after it started.** This is not obscure and it
+is easy to miss, because the sequence that hits it is the ordinary one: argmind says the Vulkan
+SDK is missing, the person installs it, and argmind — the same process, four minutes later —
+still has the environment it was born with. `glslc --version` answers *not installed* on a
+machine where it is. So the SDK is found through `reg query` against
+`HKLM\SYSTEM\CurrentControlSet\Control\Session Manager\Environment`, which is the key the
+installer wrote to, and the directory is then checked on disk because an uninstall leaves the
+variable behind. **Measured on this machine**: `VULKAN_SDK` is empty in a shell started before
+the install and `C:\VulkanSDK\1.4.357.0` in the registry.
+
+**The value must be taken to the end of the line, not to the next space.** `reg.exe` prints
+`    NAME    REG_SZ    C:\Program Files\...`, and splitting on whitespace turns a default
+install into `C:\Program`. Nothing about that fails where it happened; the build fails later,
+saying something about the compiler. It is its own function, `building::value_in`, so it can be
+given text rather than a machine.
+
+**The compiler's own directory belongs at the front of the child's PATH, always.** This is the
+`0xC0000139` failure from further up, and the fix is the same fix `bring_runtime` already applies
+to the shipped binary — say which directory rather than hope. It is now in `Recipe::dress` and
+therefore applies to the recogniser's build too, which did not need it and is not harmed by it.
+
+**What is offered, and what is separate.** The SDK and the voice are two needs with two keys,
+not one. They look like one decision and they are not: the SDK is a machine-wide developer kit
+installed with administrator rights, and folding it into the voice would mean a remembered
+*항상허용* for "the voice" silently covering an elevated install. `winget install --id
+KhronosGroup.VulkanSDK -e --interactive` is the command — **`--interactive` because the one
+headless attempt on this machine ended in `Installation aborted!`**, so letting the installer put
+its own window up is the path with evidence behind it. The package id and its `MIT OR Apache-2.0`
+licence were read from `winget show`; **the install itself is unverified here**, because the SDK
+was already on this machine and uninstalling it to test the button was not worth the risk.
+
+**`MINUTES = 15`, and the measured number is 7.** A fresh clone with submodules and a full build
+at `-j 8`, at `%LOCALAPPDATA%rgmind\qwentts.cpp`, which is the path it will actually use. The
+figure is for every target rather than the one the fix asks for. Fifteen is what a person is told
+before they commit an evening and is deliberately not the measured number, for the same reason
+`recogniser::MINUTES` is 10 against a measured 4.
+
+**The talker is Q8_0 and the codec stays Q4_K_M.** That pairing is the one measured end to end,
+and it is not tidied up to match. The K-quant defect was in the talker's sampling loop; the codec
+is a different graph and every run produced correct speech, which is an observation and not a
+proof. A Q8_0 codec is published and has not been tried. `tests/speaker.rs` asserts the pairing,
+because an edit that made them consistent would reintroduce a voice that never stops talking.
 
 ## Taking the measurement
 

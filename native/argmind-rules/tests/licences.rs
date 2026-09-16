@@ -97,7 +97,7 @@ fn what_argmind_downloads_and_runs_is_in_the_record() {
     let rows = recorded(&record).expect("the record parses");
     let external: Vec<&str> = rows.iter().filter(|r| r.table == "external")
         .map(|r| r.name.as_str()).collect();
-    for wanted in ["ollama", "whisper.cpp"] {
+    for wanted in ["ollama", "whisper.cpp", "qwentts.cpp", "Qwen3-TTS GGUF"] {
         assert!(external.contains(&wanted),
                 "argmind fetches or runs {wanted:?} and the record does not name it: {external:?}");
     }

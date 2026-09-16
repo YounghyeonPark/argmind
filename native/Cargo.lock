@@ -64,6 +64,7 @@ version = "0.0.1"
 dependencies = [
  "argmind-core",
  "argmind-env-ollama",
+ "argmind-env-qwentts",
  "argmind-env-whisper",
  "argmind-env-windows",
  "argmind-voice",

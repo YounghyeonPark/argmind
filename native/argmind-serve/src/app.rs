@@ -48,6 +48,7 @@ use argmind_core::watch::{poll, Looking, Watch};
 use argmind_env_ollama::Local;
 use argmind_env_windows::hands::Did;
 use argmind_env_whisper::Whisper;
+use argmind_env_qwentts::QwenVoice;
 use argmind_env_windows::{Attending, Microphone, SapiSpeaker, Watcher, WindowsHands};
 use argmind_voice::Speaker;
 use crate::decided::{Answer, Standing};
@@ -99,7 +100,19 @@ struct Desk {
     dry: bool,
     /// **`None` unless asked for.** Speaking makes a noise in a room, which is not something to
     /// start doing because a program was run — see `--speak`.
-    voice: Option<SapiSpeaker>,
+    ///
+    /// **Boxed because there are two of them now**, and which one is in here is decided at startup
+    /// and can change once: `argmind-env-qwentts` if the neural synthesiser is answering, and
+    /// `SapiSpeaker` otherwise. Nothing above this line cares — [`argmind_voice::Speaker`] is four
+    /// methods and both have them.
+    voice: Option<Box<dyn Speaker>>,
+    /// Which one it is, for the page and for the log. **Not derived from the value**, because the
+    /// trait deliberately has no name on it: a `Speaker` is a thing that says and stops.
+    voice_is: &'static str,
+    /// Whether `--speak` was given. **Kept apart from `voice.is_some()`**, which is *can it speak
+    /// right now* — the two differ exactly when speaking was asked for and no voice could be had,
+    /// which is the case where a later install should still be picked up.
+    wants_voice: bool,
     /// **`None` unless asked for**, for the same reason and more so: a microphone is not opened
     /// because a program was run. `--hear` turns it on, and even then it opens only while the talk
     /// key is held.
@@ -414,7 +427,15 @@ fn carry_out(desk: &mut Desk, out: &Listeners, model: &str, key: &str) {
             out.send("mic-allowed", "1");
         }
         //: Everything else is a need with a fix, and `fix` re-reads what is missing before acting.
-        _ => fix(out, model, key),
+        _ => {
+            fix(out, model, key);
+            //: **The voice chosen at startup is out of date the moment this one succeeds.** Asked
+            //: here rather than assumed from the result, because what matters is whether the
+            //: server is answering and not whether a function returned `Ok`.
+            if key == "speaker" {
+                adopt_voice(desk, out);
+            }
+        }
     }
 }
 
@@ -572,12 +593,74 @@ fn listen(desk: &mut Desk, out: &Listeners, down: bool) {
     }
 }
 
+/// Which voice speaks, decided once at startup.
+///
+/// **The neural one if it is already answering, and it is never started from here.** Starting it
+/// means a build, a gigabyte of weights and somebody else's program running on this machine — a
+/// decision that has a window in front of it, [`crate::fix::Fix::BuildSpeaker`]. What this does is
+/// *use* what is there.
+///
+/// **The fallback is the point rather than a consolation.** Heami is the old voice and it is also
+/// installed, instant and already what this program shipped with; not being able to be neural must
+/// not turn into having gone silent.
+/// **Public so the choice can be asserted**, for the same reason as [`SCRIPTS`]: the interesting
+/// part is one branch, and running the application to reach it means binding a port somebody else
+/// may be holding. It opens no audio device — [`argmind_env_windows::loudspeaker::Loudspeaker`]
+/// waits until something is said.
+pub fn pick_voice() -> (Option<Box<dyn Speaker>>, &'static str) {
+    if crate::speaker::answering() {
+        eprintln!("  voice: {} on {}", crate::speaker::VOICE, argmind_env_qwentts::QWENTTS);
+        return (Some(Box::new(QwenVoice::new(crate::speaker::VOICE))), "neural");
+    }
+    match SapiSpeaker::new() {
+        Ok(v) => {
+            //: Said once, at startup, rather than discovered when a Korean reply comes out silent.
+            if !v.has_korean() {
+                eprintln!("  a Korean voice is not installed — Korean replies will not be spoken");
+            } else if v.korean_is_old() {
+                //: **Said once, at startup, and not again.** It is a fact about the machine rather
+                //: than about anything argmind did, and a program that mentions it every turn is
+                //: nagging about something it cannot fix.
+                eprintln!("  the Korean voice is Heami Desktop, the old one — argmind can build a \
+neural one instead (the 목소리 row in the page), and Windows 11 can add a newer Windows one under \
+설정 → 접근성 → 내레이터 → 자연스러운 음성 추가");
+            }
+            (Some(Box::new(v)), "windows")
+        }
+        Err(e) => {
+            eprintln!("  no voice: {e}");
+            (None, "none")
+        }
+    }
+}
+
+/// Take up the neural voice now that there is one.
+///
+/// **Called after the fix, not instead of choosing at startup.** The alternative is asking on every
+/// utterance whether a better voice has appeared, which is a 400 ms connect in the path of every
+/// reply to answer a question whose answer changes once.
+fn adopt_voice(desk: &mut Desk, out: &Listeners) {
+    if !desk.wants_voice || desk.voice_is == "neural" || !crate::speaker::answering() {
+        return;
+    }
+    if let Some(old) = desk.voice.as_mut() {
+        //: **Released rather than dropped.** SAPI holds a COM object; letting it go quietly while
+        //: it is mid-sentence is how a voice gets talked over by its replacement.
+        old.stop();
+        old.release();
+    }
+    desk.voice = Some(Box::new(QwenVoice::new(crate::speaker::VOICE)));
+    desk.voice_is = "neural";
+    out.send("note", "이제 신경망 목소리로 말합니다");
+}
+
 fn hello(desk: &Desk, model: &str) -> String {
     let waiting: Vec<String> = desk.proposals.waiting().iter().map(as_json).collect();
     let fields = [
         format!("\"model\":\"{}\"", escape(model)),
         format!("\"dry\":{}", desk.dry),
         format!("\"speaks\":{}", desk.voice.is_some()),
+        format!("\"voice\":\"{}\"", desk.voice_is),
         format!("\"hears\":{}", desk.ear.is_some()),
         format!("\"noticing\":{}", desk.noticing),
         format!("\"noticed\":{}", desk.noticed),
@@ -691,33 +774,11 @@ pub fn run(how: How) {
         };
         let mut model = Local::new(&agent_model);
         model.think = Some(false);
-        let voice = if speak {
-            match SapiSpeaker::new() {
-                Ok(v) => Some(v),
-                Err(e) => {
-                    eprintln!("  no voice: {e}");
-                    None
-                }
-            }
-        } else {
-            None
-        };
-        if let Some(v) = &voice {
-            //: Said once, at startup, rather than discovered when a Korean reply comes out silent.
-            if !v.has_korean() {
-                eprintln!("  a Korean voice is not installed — Korean replies will not be spoken");
-            } else if v.korean_is_old() {
-                //: **Said once, at startup, and not again.** It is a fact about the machine rather
-                //: than about anything argmind did, and a program that mentions it every turn is
-                //: nagging about something it cannot fix.
-                eprintln!("  the Korean voice is Heami Desktop, the old one — Windows 11 can add a \
-newer one under 설정 → 접근성 → 내레이터 → 자연스러운 음성 추가, and argmind prefers it once it \
-is there");
-            }
-        }
+        let (voice, voice_is) = if speak { pick_voice() } else { (None, "off") };
         let ear = hear.then(|| (Microphone::new(), Whisper::default()));
         let mut desk = Desk { session: Session::new(eyes, hands, Model(model)),
-                              proposals: Proposals::default(), dry, voice, ear,
+                              proposals: Proposals::default(), dry,
+                              voice, voice_is, wants_voice: speak, ear,
                               //: One watch for now: the person moved to a different window, which
                               //: is the change that means *look at this*. `Appeared` and `Vanished`
                               //: need a name to look for and there is nowhere yet to type one.
