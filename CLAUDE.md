@@ -219,6 +219,7 @@ a fact. `docs/findings/porting-the-core.md` has the accounting.
 | `docs/findings/choosing-accuracy.md` | every choosing measurement: models, prompts, the shuffle control, the refuted hypotheses |
 | `docs/findings/interaction.md` | the priority, and repair / memory / language / spurious action / the history window |
 | `docs/findings/the-pc-app.md` | the window: self-blindness, pointing, cold start, the withdrawn diagnosis |
+| `docs/findings/a-better-voice.md` | **the voice**: every open Korean TTS checked and its licence, what builds here, and the measured RTF 3.9 that rules out the CPU |
 | `docs/findings/harness-pitfalls.md` | **ten ways the model harness lied and seven ways the measuring code did** — the list to check when a measurement reads zero |
 | `docs/findings/porting-the-core.md` | **the move to Rust**: what speed does not decide, the robot answered, the AST rules audited one at a time, what breaks in `measure/`, and the staging |
 | `native/argmind-voice/src/lib.rs` | voice is *interface*, not a contract — and why *"응"* out loud cannot run an action |
