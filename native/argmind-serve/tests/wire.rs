@@ -276,3 +276,12 @@ fn only_the_page_and_its_scripts_are_served_without_a_token() {
         assert!(body.len() > 500, "{at} is {} bytes — was `npx tsc` run?", body.len());
     }
 }
+
+#[test]
+fn a_permission_answer_is_two_segments() {
+    let r = parse_request("POST /decide/notice/never HTTP/1.1\r\n\r\n").unwrap();
+    assert_eq!(r.path, "/decide/notice/never");
+    assert_eq!(route(&r), Route::Decide("notice".into(), "never".into()));
+    let f = parse_request("POST /forget/notice HTTP/1.1\r\n\r\n").unwrap();
+    assert_eq!(route(&f), Route::Forget("notice".into()));
+}

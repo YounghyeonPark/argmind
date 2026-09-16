@@ -228,6 +228,30 @@ stream.addEventListener("spent", (e) => {
         + `생각 ${Math.round(d.think_ms)} ms${cut}`;
 });
 const setup = document.getElementById("setup");
+/// The four buttons, wherever a permission is being asked about.
+///
+/// **One builder, so the setup panel and the question above it cannot come to offer different
+/// answers.** Order and spacing carry meaning: the two that are remembered sit apart from the two
+/// that are not, so 항상 is not the button a finger lands on by accident.
+function fourWays(key, pressed) {
+    const buttons = document.createElement("div");
+    buttons.className = "ask-buttons";
+    for (const [label, how, cls] of [["허용", "allow", "yes"], ["항상 허용", "always", "yes always"],
+        ["거부", "deny", "no"], ["항상 거부", "never", "no"]]) {
+        const b = document.createElement("button");
+        b.type = "button";
+        b.className = cls;
+        b.textContent = label;
+        b.onclick = () => {
+            if (pressed) {
+                pressed(b);
+            }
+            void post(`/decide/${encodeURIComponent(key)}/${how}`);
+        };
+        buttons.append(b);
+    }
+    return buttons;
+}
 function drawNeeds(rows) {
     const missing = rows.filter((n) => !n.present);
     setup.replaceChildren();
@@ -278,22 +302,74 @@ function drawNeeds(rows) {
             warn.textContent = "다른 곳에서 만든 코드를 이 컴퓨터에서 실행합니다.";
             box.append(warn);
         }
-        const yes = document.createElement("button");
-        yes.type = "button";
-        yes.className = "yes";
-        yes.textContent = "예";
-        yes.onclick = () => {
+        // **The same four answers as every other permission.** A missing thing argmind offers to
+        // install is a permission question, and answering it 항상 허용 should mean the next machine
+        // never asks — which is the whole point of having four buttons rather than one.
+        box.append(fourWays(n.key, (button) => {
             // Disabled on the way out: the server re-reads what is missing before acting, so a second
             // press is harmless, but a person should not be left wondering whether the first took.
-            yes.disabled = true;
-            yes.textContent = "…";
-            void post(`/fix/${encodeURIComponent(n.key)}`);
-        };
-        box.append(yes);
+            button.disabled = true;
+            button.textContent = "…";
+        }));
         setup.append(box);
     }
 }
 stream.addEventListener("needs", (e) => drawNeeds(JSON.parse(e.data)));
+const asking = document.getElementById("asking");
+const decisions = document.getElementById("decisions");
+function ask(a) {
+    asking.replaceChildren();
+    const what = document.createElement("div");
+    what.className = "ask-what";
+    what.textContent = a.what;
+    asking.append(what);
+    // The whole plan, before the buttons and not behind them.
+    const plan = document.createElement("div");
+    plan.className = "ask-plan";
+    plan.textContent = a.plan;
+    asking.append(plan);
+    if (a.stranger) {
+        const warn = document.createElement("div");
+        warn.className = "need-stranger";
+        warn.textContent = "다른 곳에서 만든 코드를 이 컴퓨터에서 실행합니다.";
+        asking.append(warn);
+    }
+    asking.append(fourWays(a.key, () => {
+        // The question goes as soon as it is answered: leaving it up with its buttons dead is a page
+        // that looks like it is still waiting for something.
+        asking.hidden = true;
+        asking.replaceChildren();
+    }));
+    asking.hidden = false;
+}
+stream.addEventListener("asking", (e) => ask(JSON.parse(e.data)));
+function drawDecisions(rows) {
+    decisions.replaceChildren();
+    for (const d of rows) {
+        const box = document.createElement("div");
+        box.className = "decision";
+        const name = document.createElement("span");
+        name.textContent = d.what;
+        box.append(name);
+        const standing = document.createElement("span");
+        standing.className = `standing ${d.standing}`;
+        // **Unanswered is a state and it is shown.** A settings panel that lists only what was decided
+        // cannot tell you what you will be asked about next.
+        standing.textContent =
+            d.standing === "allowed" ? "항상 허용" : d.standing === "denied" ? "항상 거부" : "아직 안 물음";
+        box.append(standing);
+        if (d.standing !== "") {
+            const forget = document.createElement("button");
+            forget.type = "button";
+            forget.textContent = "되돌리기";
+            forget.title = "다음에 다시 물어봅니다";
+            forget.onclick = () => void post(`/forget/${encodeURIComponent(d.key)}`);
+            box.append(forget);
+        }
+        decisions.append(box);
+    }
+}
+stream.addEventListener("decisions", (e) => drawDecisions(JSON.parse(e.data)));
 // ---- the talk key ------------------------------------------------------------------------------
 //
 // Push-to-talk, and the two halves are two requests. Holding is the floor an open microphone has no

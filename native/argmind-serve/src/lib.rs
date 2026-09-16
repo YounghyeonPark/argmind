@@ -36,6 +36,7 @@
 //! has a `confirm` route at all rather than acting on what the model returned.
 
 pub mod app;
+pub mod decided;
 pub mod fetch;
 pub mod fix;
 pub mod needs;
@@ -191,6 +192,15 @@ pub enum Route {
     /// Install the missing thing this names. **The button in the page is the approval**, and the
     /// page had to show what it would do before it could be pressed.
     Fix(String),
+    /// An answer to a permission question: the thing, and which of the four buttons.
+    ///
+    /// **Four rather than two**, because *yes* and *no* leave a program asking the same question
+    /// every morning, and that is how people learn to press the first button without reading it.
+    /// What may be answered *always* is a fixed list in [`crate::decided`] — and a click is not on
+    /// it.
+    Decide(String, String),
+    /// Take back something that was answered once and for all.
+    Forget(String),
     /// Watch the screen and think when it changes, or stop.
     ///
     /// **Off until asked for**, and the reason is a measured one: something on screen changes 13
@@ -225,6 +235,15 @@ pub fn route(request: &Request) -> Route {
         },
         ("POST", p) if p.starts_with("/fix/") && p.len() > 5 =>
             Route::Fix(p[5..].to_string()),
+        //: `/decide/<thing>/<how>`. Two segments, and both are checked against fixed lists before
+        //: anything happens — a permission is not a string the page gets to invent.
+        ("POST", p) if p.starts_with("/decide/") => match p[8..].split_once('/') {
+            Some((key, how)) if !key.is_empty() && !how.is_empty() =>
+                Route::Decide(key.to_string(), how.to_string()),
+            _ => Route::Unknown,
+        },
+        ("POST", p) if p.starts_with("/forget/") && p.len() > 8 =>
+            Route::Forget(p[8..].to_string()),
         ("POST", "/notice/on") => Route::Notice(true),
         ("POST", "/notice/off") => Route::Notice(false),
         ("POST", "/look") => Route::Look,

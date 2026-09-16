@@ -73,6 +73,25 @@
      have read afterwards, and a bullet in a list of six is not that. */
   .need-stranger { color: var(--warn); font-weight: 600; font-size: 13px; margin: 6px 0; }
 
+  /* The question, and the settings under it. */
+  #asking:not([hidden]) { border-bottom: 1px solid var(--edge); padding: 10px 14px;
+                          background: #fdfcfa; }
+  .ask-what { font-weight: 600; margin-bottom: 4px; }
+  .ask-plan { white-space: pre-wrap; font-size: 13px; margin: 6px 0; }
+  /* Four buttons, and the two that are remembered are drawn apart from the two that are not —
+     pressing 항상 by accident is the mistake this layout exists to make harder. */
+  .ask-buttons { display: flex; gap: 8px; align-items: center; margin-top: 8px; flex-wrap: wrap; }
+  .ask-buttons .always { margin-left: 14px; }
+  .ask-buttons .no { margin-left: auto; }
+  #settings { border-bottom: 1px solid var(--edge); font-size: 13px; }
+  #settings > summary { padding: 6px 14px; cursor: pointer; color: var(--dim); }
+  #decisions { padding: 0 14px 10px; }
+  .decision { display: flex; gap: 8px; align-items: baseline; padding: 3px 0; }
+  .decision .standing { color: var(--dim); }
+  .decision .standing.allowed { color: var(--say); }
+  .decision .standing.denied { color: var(--warn); }
+  .decision button { margin-left: auto; font-size: 12px; padding: 1px 8px; }
+
   #pending:not(:empty) { border-top: 1px solid var(--edge); padding: 8px 14px; }
   .proposal { display: flex; gap: 8px; align-items: center; margin-bottom: 6px; }
   .what { flex: 1; }
@@ -105,6 +124,15 @@
   <!-- Above the transcript, because something missing is the reason nothing works, and a person
        should not have to scroll past a conversation to find out. -->
   <div id="setup" hidden></div>
+  <!-- A question with four answers. Above the conversation for the same reason the setup panel
+       is: a person should not have to scroll past a transcript to find out why nothing works. -->
+  <div id="asking" hidden></div>
+  <!-- What has been answered once and for all, and how to take it back. Folded away, because it
+       is the panel you want on the day you want it and never otherwise. -->
+  <details id="settings">
+    <summary>설정 — 기억한 권한</summary>
+    <div id="decisions"></div>
+  </details>
   <div class="middle">
     <div class="stage">
       <!-- Drawn behind the conversation and never in front of it: it carries no information the

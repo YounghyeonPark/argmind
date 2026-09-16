@@ -50,6 +50,7 @@ use argmind_env_windows::hands::Did;
 use argmind_env_whisper::Whisper;
 use argmind_env_windows::{Attending, Microphone, SapiSpeaker, Watcher, WindowsHands};
 use argmind_voice::Speaker;
+use crate::decided::{Answer, Standing};
 use crate::proposals::{Answered, Proposal, Proposals};
 use crate::{authorised, event_stream_head, is_loopback, mint_token, parse_request, respond,
             route, sse, Route};
@@ -132,6 +133,10 @@ enum Job {
     Decline(u64),
     /// Watch the screen, or stop.
     Notice(bool),
+    /// An answer to a permission question: which thing, and which of the four buttons.
+    Decide(String, Answer),
+    /// Take back a standing answer, from the settings.
+    Forget(String),
     /// The talk key went down or came up.
     Listen(bool),
     /// A page opened: send it the snapshot it needs to draw itself.
@@ -311,6 +316,123 @@ fn needs_json(model: &str) -> String {
     format!("[{}]", rows.join(","))
 }
 
+/// The things that are missing, can be fixed, and were answered *always allow*.
+///
+/// **Read fresh every time**, like everything else about what is missing: a page open for an hour
+/// holds an hour-old list, and a decision made five minutes ago should count.
+fn standing_yes_and_missing(model: &str) -> Vec<String> {
+    crate::needs::every(model).into_iter()
+        .filter(|n| !n.present && n.fix.is_some())
+        .map(|n| n.key.to_string())
+        .filter(|k| crate::decided::standing(k) == Some(Standing::Allowed))
+        .collect()
+}
+
+/// Exactly what saying yes will do, for the window that asks.
+///
+/// **The same discipline as [`crate::fix::describe`] and for the same reason.** A question reading
+/// *"allow watching?"* is answered yes by everybody and tells them nothing; what they need is the
+/// cost, in this case a model call every few seconds for as long as it is on.
+fn plan_for(key: &str) -> String {
+    match key {
+        "notice" => String::from(
+            "화면이 바뀌면 argmind가 먼저 말을 겁니다.\n\n\
+             · 앞에 있는 창이 바뀔 때마다 알아챕니다\n\
+             · 알아챌 때마다 모델을 한 번 부릅니다 — 화면은 14초 중 13초 바뀝니다\n\
+             · 스스로 시작한 생각은 말로만 나옵니다. 클릭은 여전히 버튼을 거칩니다\n\
+             · 끄기 전까지 계속 돌아갑니다\n\n\
+             지켜볼까요?"),
+        "microphone" => String::from(
+            "말한 것을 받아쓰려면 마이크를 엽니다.\n\n\
+             · 스페이스를 **누르고 있는 동안에만** 열립니다 — 켜 두는 것이 아닙니다\n\
+             · 녹음한 소리는 이 컴퓨터의 받아쓰기 서버로만 갑니다. 밖으로 나가지 않습니다\n\
+             · 받아쓴 글은 화면에 먼저 보여 주고 나서 답합니다\n\
+             · 소리로 “응” 해도 행동은 실행되지 않습니다 — 버튼만이 실행합니다\n\n\
+             마이크를 쓸까요?"),
+        //: Everything else is a need, and the need already carries the sentence it asks with.
+        _ => crate::needs::by_key("qwen3:8b", key).and_then(|n| n.fix)
+            .map(|f| crate::fix::describe(&f))
+            .unwrap_or_else(|| format!("{} 을(를) 허용할까요?", crate::decided::what(key))),
+    }
+}
+
+/// One permission question, for the page to draw four buttons under.
+fn asking_json(key: &str) -> String {
+    let stranger = crate::needs::by_key("qwen3:8b", key).and_then(|n| n.fix)
+        .is_some_and(|f| f.runs_a_stranger());
+    format!("{{\"key\":\"{}\",\"what\":\"{}\",\"stranger\":{stranger},\"plan\":\"{}\"}}",
+            escape(key), escape(crate::decided::what(key)), escape(&plan_for(key)))
+}
+
+/// Every decidable thing and what is decided about it, for the settings panel.
+fn decisions_json() -> String {
+    let rows: Vec<String> = crate::decided::all().iter().map(|(key, name, how)| {
+        let word = match how {
+            Some(Standing::Allowed) => "allowed",
+            Some(Standing::Denied) => "denied",
+            None => "",
+        };
+        format!("{{\"key\":\"{}\",\"what\":\"{}\",\"standing\":\"{word}\"}}",
+                escape(key), escape(name))
+    }).collect();
+    format!("[{}]", rows.join(","))
+}
+
+/// One of the four buttons was pressed.
+///
+/// **The remembering and the doing are separate steps, in that order.** A standing *always* is
+/// written down before the thing is attempted, so a build that fails does not also lose the
+/// decision — and a person who pressed 항상 허용 and then closed the window has still answered.
+fn decide(desk: &mut Desk, out: &Listeners, model: &str, key: &str, answer: Answer) {
+    if let Some(standing) = answer.standing() {
+        if let Err(why) = crate::decided::keep(key, Some(standing)) {
+            out.send("note", &why);
+        }
+        out.send("decisions", &decisions_json());
+    }
+    let name = crate::decided::what(key);
+    if !answer.permits() {
+        out.send("note", &match answer {
+            //: **Where to take it back is part of the sentence.** A permanent no with no way back
+            //: is a program somebody has to reinstall.
+            Answer::AlwaysDeny => format!("{name} — 거부했습니다. 설정에서 되돌릴 수 있습니다"),
+            _ => format!("{name} — 이번에는 하지 않습니다"),
+        });
+        return;
+    }
+    carry_out(desk, out, model, key);
+}
+
+/// Do the thing a permission was for. **One place**, so an answer now and a standing answer from
+/// last week take exactly the same path.
+fn carry_out(desk: &mut Desk, out: &Listeners, model: &str, key: &str) {
+    match key {
+        //: The two switches. Nothing is installed; something starts running.
+        "notice" => switch_noticing(desk, out, true),
+        "microphone" => {
+            out.send("note", "마이크를 쓸 수 있습니다 — 말하는 동안 스페이스를 누르고 계세요");
+            out.send("mic-allowed", "1");
+        }
+        //: Everything else is a need with a fix, and `fix` re-reads what is missing before acting.
+        _ => fix(out, model, key),
+    }
+}
+
+/// Watching, on or off — **lifted out of the job loop** so a standing permission reaches the same
+/// code the button does.
+fn switch_noticing(desk: &mut Desk, out: &Listeners, on: bool) {
+    desk.noticing = on;
+    //: **Cleared on the way in, not on the way out.** Switching on with an old `before` would
+    //: compare against a screen from ten minutes ago and report the whole desktop as newly changed.
+    desk.before.clear();
+    out.send("noticing", if on { "1" } else { "0" });
+    out.send("note", if on {
+        "화면 변화를 지켜봅니다 — 창을 바꾸면 먼저 말을 겁니다"
+    } else {
+        "지켜보기를 껐습니다"
+    });
+}
+
 /// Install one thing, because somebody pressed the button that said what it would do.
 fn fix(out: &Listeners, model: &str, key: &str) {
     //: **Re-taken rather than remembered.** A page open for an hour holds an hour-old list, and
@@ -380,6 +502,22 @@ fn notice(desk: &mut Desk, out: &Listeners, now: f64) {
 /// The talk key, down or up. **Letting go is what starts a turn** — nothing is transcribed while
 /// the key is still held, and nothing is recorded while it is not.
 fn listen(desk: &mut Desk, out: &Listeners, down: bool) {
+    //: **Asked before the device opens, and only on the way down.** A question raised while
+    //: somebody is releasing the key would arrive after the moment it was about, and switching
+    //: something off never needs permission.
+    if down {
+        match crate::decided::standing("microphone") {
+            Some(Standing::Allowed) => {}
+            Some(Standing::Denied) => {
+                out.send("note", "마이크는 거부되어 있습니다 — 설정에서 바꿀 수 있습니다");
+                return;
+            }
+            None => {
+                out.send("asking", &asking_json("microphone"));
+                return;
+            }
+        }
+    }
     let Some((mic, _)) = desk.ear.as_mut() else {
         out.send("note", "마이크가 꺼져 있습니다 — --hear 로 켜세요");
         return;
@@ -607,27 +745,56 @@ pub fn run(how: How) {
                     }
                 }
                 Job::Listen(down) => listen(&mut desk, &agent_out, down),
-                Job::Notice(on) => {
-                    desk.noticing = on;
-                    //: **Cleared on the way in, not on the way out.** Switching on with an old
-                    //: `before` would compare against a screen from ten minutes ago and report the
-                    //: whole desktop as newly changed.
-                    desk.before.clear();
-                    agent_out.send("noticing", if on { "1" } else { "0" });
-                    agent_out.send("note", if on {
-                        "화면 변화를 지켜봅니다 — 창을 바꾸면 먼저 말을 겁니다"
-                    } else {
-                        "지켜보기를 껐습니다"
-                    });
-                }
+                Job::Notice(on) => match (on, crate::decided::standing("notice")) {
+                    //: **Switching off never asks.** A permission question in front of somebody
+                    //: trying to stop something is a program arguing with them.
+                    (false, _) => switch_noticing(&mut desk, &agent_out, false),
+                    (true, Some(Standing::Allowed)) => switch_noticing(&mut desk, &agent_out, true),
+                    (true, Some(Standing::Denied)) => {
+                        agent_out.send("noticing", "0");
+                        agent_out.send("note",
+                                       "지켜보기는 거부되어 있습니다 — 설정에서 바꿀 수 있습니다");
+                    }
+                    //: Nobody has answered, so ask — and the switch stays off until they do.
+                    (true, None) => {
+                        agent_out.send("noticing", "0");
+                        agent_out.send("asking", &asking_json("notice"));
+                    }
+                },
                 Job::Fix(key) => fix(&agent_out, &agent_model, &key),
-                Job::Look => agent_out.send("needs", &needs_json(&agent_model)),
+                Job::Decide(key, answer) => decide(&mut desk, &agent_out, &agent_model, &key,
+                                                   answer),
+                Job::Forget(key) => {
+                    match crate::decided::keep(&key, None) {
+                        Ok(()) => agent_out.send(
+                            "note", &format!("{} — 다음에 다시 물어봅니다",
+                                             crate::decided::what(&key))),
+                        Err(why) => agent_out.send("note", &why),
+                    }
+                    agent_out.send("decisions", &decisions_json());
+                }
+                Job::Look => {
+                    agent_out.send("needs", &needs_json(&agent_model));
+                    agent_out.send("decisions", &decisions_json());
+                    //: **This is what 항상 허용 buys.** Anything still missing that was answered
+                    //: once and for all is done now, without a second question — which is the
+                    //: whole difference between the standing answer and the one-off.
+                    for key in standing_yes_and_missing(&agent_model) {
+                        agent_out.send("note",
+                                       &format!("{} — 전에 항상 허용하셨으므로 진행합니다",
+                                                crate::decided::what(&key)));
+                        fix(&agent_out, &agent_model, &key);
+                    }
+                }
                 Job::Opened(tx) => {
                     let _ = tx.send(sse("hello", &hello(&desk, &agent_model)));
                     //: **Checked when a page opens, not at startup.** Checking once at boot would
                     //: mean a server left running overnight still telling you about something you
                     //: installed an hour ago.
                     let _ = tx.send(sse("needs", &needs_json(&agent_model)));
+                    //: **And what has already been answered**, so the settings panel is drawn
+                    //: without anybody having to press 다시 확인 to find out what they agreed to.
+                    let _ = tx.send(sse("decisions", &decisions_json()));
                 }
             }
         }
@@ -723,6 +890,27 @@ fn serve_one(mut stream: TcpStream, out: &Listeners, token: &str, jobs: &Sender<
         Route::Fix(key) => {
             let _ = stream.write_all(&respond("204 No Content", "text/plain", ""));
             let _ = jobs.send(Job::Fix(key));
+        }
+        //: **Both halves are checked here**, before anything reaches the agent: a permission the
+        //: program does not ask about and a word that is not one of the four are refused rather
+        //: than passed on and interpreted later.
+        Route::Decide(key, how) => match (crate::decided::is_decidable(&key),
+                                          Answer::from_word(&how)) {
+            (true, Some(answer)) => {
+                let _ = stream.write_all(&respond("204 No Content", "text/plain", ""));
+                let _ = jobs.send(Job::Decide(key, answer));
+            }
+            _ => {
+                let _ = stream.write_all(&respond("400 Bad Request", "text/plain", "no"));
+            }
+        },
+        Route::Forget(key) => {
+            if crate::decided::is_decidable(&key) {
+                let _ = stream.write_all(&respond("204 No Content", "text/plain", ""));
+                let _ = jobs.send(Job::Forget(key));
+            } else {
+                let _ = stream.write_all(&respond("400 Bad Request", "text/plain", "no"));
+            }
         }
         Route::Look => {
             let _ = stream.write_all(&respond("204 No Content", "text/plain", ""));
