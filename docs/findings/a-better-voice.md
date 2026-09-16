@@ -90,10 +90,41 @@ Windows asks a second time and the person answers twice. That is a different gra
 `fix.rs` and a different sentence in the window, which is exactly why those are separate
 variants.
 
+**And the command-line mode cannot raise that prompt itself.** Run unelevated it undoes its own
+`Mkdir` and aborts, having printed *restart the application as administrator* — advice it is
+not able to take. The wizard, started with no arguments, does raise the prompt. So a fix that
+shells out to this installer with flags will fail on a machine where the person has not already
+elevated, and the sentence in the window has to say which of the two they are about to get.
+
 A no-administrator route was looked at and put down: `glslc` alone from Google's `shaderc` has
 no GitHub release assets, only build-bot URLs that change, and building a fix on those is
 building one that breaks quietly. The headers are fine — Khronos, permissive — but the shader
 compiler is the piece that is hard to get honestly without the SDK.
+
+## The Vulkan build needs a short path, and that is a constraint on where argmind builds
+
+With the SDK installed, cmake finds Vulkan and reports the good news — `GL_KHR_cooperative_matrix
+supported by glslc`, which is the 4090's tensor cores being reachable. Then the build fails, and
+not for a reason that looks like a path problem:
+
+> The C compiler ... is not able to compile a simple test program.
+> `mingw32-make: CMakeFiles/cmTC_019ae.dir/build.make: No such file or directory`
+
+A compiler that works everywhere else in this tree suddenly cannot build hello world. **It is
+Windows' 260-character limit.** `ggml-vulkan` builds its shader generator as a nested external
+project, and the try-compile scratch directory inside it lands at
+
+    <wherever you are>/build/ggml/src/ggml-vulkan/vulkan-shaders-gen-prefix/src/
+    vulkan-shaders-gen-build/CMakeFiles/CMakeScratch/TryCompile-athnoi/...
+
+which is about 130 characters of nesting before the project's own path is counted. Anything
+deeper than roughly 120 characters fails, and it fails looking like a broken toolchain.
+
+**This bears directly on `Fix::BuildSpeaker`.** `recogniser::shed()` is
+`%LOCALAPPDATA%rgmind\whisper.cpp`, 49 characters, which is fine for whisper.cpp and not
+obviously fine here. Whatever builds this has to either sit somewhere short or be measured at
+the path it will actually use — and the failure mode is a message about the C compiler, so
+nobody would guess.
 
 ## What is not known
 
