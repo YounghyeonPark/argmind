@@ -56,6 +56,15 @@ use crate::{authorised, event_stream_head, is_loopback, mint_token, parse_reques
 
 const INDEX: &str = include_str!("../../../ui/src/index.html");
 const SCRIPT: &str = include_str!("../../../ui/dist/app.js");
+/// The sphere. **Its own module and its own file** — a hundred lines of projection arithmetic
+/// inside the page's logic would bury the part anybody needs to read.
+const ORB: &str = include_str!("../../../ui/dist/orb.js");
+
+/// The files served without a token, because the token arrives inside the page.
+///
+/// **Public so the list can be asserted.** It is the program's whole unauthenticated surface, and
+/// a route added to it by an edit somewhere else is the kind of change nobody reviews twice.
+pub const SCRIPTS: [(&str, &str); 2] = [("/app.js", SCRIPT), ("/orb.js", ORB)];
 const ADDRESS: &str = "127.0.0.1:7331";
 
 struct Model(Local);
@@ -662,14 +671,15 @@ fn serve_one(mut stream: TcpStream, out: &Listeners, token: &str, jobs: &Sender<
     //: **The page and its script are the two things served without a token**, because the token
     //: arrives inside the page. Neither carries anything the agent knows: that all comes down
     //: `/events`, which does need one.
-    let is_page = matches!(route(&request), Route::Ui) || request.path == "/app.js";
+    let is_page = matches!(route(&request), Route::Ui)
+        || SCRIPTS.iter().any(|(at, _)| *at == request.path);
     if !is_page && !authorised(token, request.token.as_deref()) {
         let _ = stream.write_all(&respond("403 Forbidden", "text/plain", "no token"));
         return;
     }
 
-    if request.path == "/app.js" {
-        let _ = stream.write_all(&respond("200 OK", "text/javascript; charset=utf-8", SCRIPT));
+    if let Some((_, body)) = SCRIPTS.iter().find(|(at, _)| *at == request.path) {
+        let _ = stream.write_all(&respond("200 OK", "text/javascript; charset=utf-8", body));
         return;
     }
     match route(&request) {

@@ -35,18 +35,21 @@ echo "pre-commit: tests pass."
 
 # --- the front end is compiled and committed -----------------------------------
 #
-# `ui/dist/app.js` is `include_str!`d into the server, so a change to `ui/src/app.ts`
-# that is not compiled ships the old page while the diff shows the new one. That is
-# the same shape as the perf_model check this replaced: code moving without its
+# Everything under `ui/dist/` is `include_str!`d into the server, so a change to the
+# TypeScript that is not compiled ships the old page while the diff shows the new one.
+# That is the same shape as the perf_model check this replaced: code moving without its
 # output moving means the tree now disagrees with itself.
+#
+# The orb also has a test that runs against the compiled file rather than the source, so a
+# stale build fails there as well:  node ui/src/orb.test.mjs
 
 staged=$(git diff --cached --name-only)
 ts_changed=$(echo "$staged" | grep -E '^ui/src/.*\.ts$' || true)
-js_changed=$(echo "$staged" | grep -E '^ui/dist/app\.js$' || true)
+js_changed=$(echo "$staged" | grep -E '^ui/dist/.*\.js$' || true)
 
 if [ -n "$ts_changed" ] && [ -z "$js_changed" ]; then
     echo ""
-    echo "pre-commit WARNING: ui/src is staged but ui/dist/app.js is not."
+    echo "pre-commit WARNING: ui/src is staged but nothing under ui/dist is."
     echo "Changed:"
     echo "$ts_changed" | sed 's/^/    /'
     echo ""

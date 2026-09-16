@@ -1,4 +1,3 @@
-"use strict";
 // SPDX-License-Identifier: Apache-2.0
 //
 // The interface. TypeScript, because the plan is a Rust core and a front end that is not Rust.
@@ -11,6 +10,7 @@
 // Everything arrives over one server-sent event stream. There is no polling and no state kept here
 // that the server does not also hold: a reload shows the truth, because the page rebuilds itself
 // from `hello` and then follows the stream.
+import { orb } from "./orb.js";
 const token = document.body.dataset.token ?? "";
 /** Every request carries the token. Localhost is not a permission: any program you run is on it. */
 async function post(path, body = "") {
@@ -77,6 +77,18 @@ function settle(tokenId, how) {
         line("note", how);
     }
 }
+// ---- the orb -----------------------------------------------------------------------------------
+//
+// **Fed by the events that were already arriving**, not by a second path of its own. Every call
+// below sits beside a line that already puts the same thing into the transcript, so the sphere and
+// the words cannot come to disagree — which is the only way an animation like this becomes a lie.
+const eye = orb(document.getElementById("orb"));
+// The conversation is the content. The sphere is presence, and presence recedes once there is
+// something to read.
+function recede() {
+    eye.presence(transcript.childElementCount === 0 ? 1 : 0.4);
+}
+recede();
 const stream = new EventSource(`/events`);
 stream.addEventListener("hello", (e) => {
     const d = JSON.parse(e.data);
@@ -96,29 +108,52 @@ stream.addEventListener("hello", (e) => {
     }
 });
 for (const kind of ["them", "say", "note"]) {
-    stream.addEventListener(kind, (e) => line(kind, e.data));
+    stream.addEventListener(kind, (e) => {
+        line(kind, e.data);
+        recede();
+        //: A reply is the event the person is waiting for; what they typed is not news to them.
+        if (kind === "say") {
+            eye.jolt("said");
+        }
+    });
 }
 stream.addEventListener("propose", (e) => row(JSON.parse(e.data)));
 stream.addEventListener("ran", (e) => {
     const d = JSON.parse(e.data);
     settle(d.token, d.confirmed === false ? `${d.label} — 눌렀지만 화면이 그대로임` : `${d.label} — 됨`);
+    //: **The two outcomes look different**, because "it pressed the button and the screen did not
+    //: move" is the failure this project keeps finding and it should not read as success.
+    eye.jolt(d.confirmed === false ? "refused" : "acted");
 });
 stream.addEventListener("gone", (e) => {
     const d = JSON.parse(e.data);
     settle(d.token, `${d.what} — 그새 사라짐`);
+    eye.jolt("refused");
 });
 stream.addEventListener("dropped", (e) => settle(Number(e.data), ""));
 stream.addEventListener("attending", (e) => {
     header.textContent = e.data || "(아무 창도 보고 있지 않음)";
 });
 stream.addEventListener("busy", (e) => {
-    document.body.classList.toggle("busy", e.data === "1");
+    const thinking = e.data === "1";
+    document.body.classList.toggle("busy", thinking);
+    //: **Not while the key is held.** `busy` also goes up for the transcription that follows a
+    //: release, and letting it overwrite `listening` would make the sphere flicker between two
+    //: states during one turn.
+    if (!holding) {
+        eye.doing(thinking ? "thinking" : "resting");
+    }
 });
 // The stream dying is worth saying out loud: a page that silently stops updating looks exactly
 // like an agent that has stopped thinking.
 stream.onerror = () => {
     statusLine.textContent = "연결 끊김 — 서버가 살아있는지 확인";
+    //: **And the sphere collapses.** A page whose stream died but whose animation carries on
+    //: breathing is a page that looks alive while knowing nothing, which is worse than a still one.
+    eye.doing("gone");
 };
+//: Reconnected — `EventSource` retries on its own, and `hello` is what arrives when it succeeds.
+stream.addEventListener("hello", () => eye.doing("resting"));
 const form = document.getElementById("form");
 form.onsubmit = (e) => {
     e.preventDefault();
@@ -163,6 +198,10 @@ stream.addEventListener("noticed", (e) => {
     // What set it off, before whatever it decided to say about it. A thought arriving with no
     // visible cause reads as the agent talking to itself.
     line("noticed", e.data);
+    recede();
+    //: **The one thing nobody asked for.** Sharp and short, because it is an interruption and should
+    //: read as one rather than as another reply arriving.
+    eye.jolt("noticed");
 });
 // ---- what it is looking at ----------------------------------------------------------------------
 //
@@ -290,6 +329,10 @@ window.addEventListener("keyup", (e) => {
     }
 });
 stream.addEventListener("hearing", (e) => {
-    talk.classList.toggle("listening", e.data === "1");
+    const open = e.data === "1";
+    talk.classList.toggle("listening", open);
+    //: The microphone is the one state the server knows about and the page cannot infer: the key
+    //: going down is a request, and this is the device actually being open.
+    eye.doing(open ? "listening" : "resting");
 });
 input.focus();

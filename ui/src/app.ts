@@ -13,6 +13,9 @@
 
 type Kind = "hello" | "them" | "say" | "note" | "propose" | "ran" | "gone" | "dropped" | "busy";
 
+
+import { orb } from "./orb.js";
+
 interface Proposal {
   token: number;
   label: string;
@@ -107,6 +110,21 @@ function settle(tokenId: number, how: string): void {
   }
 }
 
+// ---- the orb -----------------------------------------------------------------------------------
+//
+// **Fed by the events that were already arriving**, not by a second path of its own. Every call
+// below sits beside a line that already puts the same thing into the transcript, so the sphere and
+// the words cannot come to disagree — which is the only way an animation like this becomes a lie.
+
+const eye = orb(document.getElementById("orb") as HTMLCanvasElement);
+
+// The conversation is the content. The sphere is presence, and presence recedes once there is
+// something to read.
+function recede(): void {
+  eye.presence(transcript.childElementCount === 0 ? 1 : 0.4);
+}
+recede();
+
 const stream = new EventSource(`/events`);
 
 stream.addEventListener("hello", (e) => {
@@ -128,31 +146,55 @@ stream.addEventListener("hello", (e) => {
 });
 
 for (const kind of ["them", "say", "note"] as Kind[]) {
-  stream.addEventListener(kind, (e) => line(kind, (e as MessageEvent).data));
+  stream.addEventListener(kind, (e) => {
+    line(kind, (e as MessageEvent).data);
+    recede();
+    //: A reply is the event the person is waiting for; what they typed is not news to them.
+    if (kind === "say") {
+      eye.jolt("said");
+    }
+  });
 }
 
 stream.addEventListener("propose", (e) => row(JSON.parse((e as MessageEvent).data) as Proposal));
 stream.addEventListener("ran", (e) => {
   const d = JSON.parse((e as MessageEvent).data);
   settle(d.token, d.confirmed === false ? `${d.label} — 눌렀지만 화면이 그대로임` : `${d.label} — 됨`);
+  //: **The two outcomes look different**, because "it pressed the button and the screen did not
+  //: move" is the failure this project keeps finding and it should not read as success.
+  eye.jolt(d.confirmed === false ? "refused" : "acted");
 });
 stream.addEventListener("gone", (e) => {
   const d = JSON.parse((e as MessageEvent).data);
   settle(d.token, `${d.what} — 그새 사라짐`);
+  eye.jolt("refused");
 });
 stream.addEventListener("dropped", (e) => settle(Number((e as MessageEvent).data), ""));
 stream.addEventListener("attending", (e) => {
   header.textContent = (e as MessageEvent).data || "(아무 창도 보고 있지 않음)";
 });
 stream.addEventListener("busy", (e) => {
-  document.body.classList.toggle("busy", (e as MessageEvent).data === "1");
+  const thinking = (e as MessageEvent).data === "1";
+  document.body.classList.toggle("busy", thinking);
+  //: **Not while the key is held.** `busy` also goes up for the transcription that follows a
+  //: release, and letting it overwrite `listening` would make the sphere flicker between two
+  //: states during one turn.
+  if (!holding) {
+    eye.doing(thinking ? "thinking" : "resting");
+  }
 });
 
 // The stream dying is worth saying out loud: a page that silently stops updating looks exactly
 // like an agent that has stopped thinking.
 stream.onerror = () => {
   statusLine.textContent = "연결 끊김 — 서버가 살아있는지 확인";
+  //: **And the sphere collapses.** A page whose stream died but whose animation carries on
+  //: breathing is a page that looks alive while knowing nothing, which is worse than a still one.
+  eye.doing("gone");
 };
+
+//: Reconnected — `EventSource` retries on its own, and `hello` is what arrives when it succeeds.
+stream.addEventListener("hello", () => eye.doing("resting"));
 
 const form = document.getElementById("form") as HTMLFormElement;
 form.onsubmit = (e) => {
@@ -204,6 +246,10 @@ stream.addEventListener("noticed", (e) => {
   // What set it off, before whatever it decided to say about it. A thought arriving with no
   // visible cause reads as the agent talking to itself.
   line("noticed", (e as MessageEvent).data);
+  recede();
+  //: **The one thing nobody asked for.** Sharp and short, because it is an interruption and should
+  //: read as one rather than as another reply arriving.
+  eye.jolt("noticed");
 });
 
 // ---- what it is looking at ----------------------------------------------------------------------
@@ -379,7 +425,11 @@ window.addEventListener("keyup", (e) => {
 });
 
 stream.addEventListener("hearing", (e) => {
-  talk.classList.toggle("listening", (e as MessageEvent).data === "1");
+  const open = (e as MessageEvent).data === "1";
+  talk.classList.toggle("listening", open);
+  //: The microphone is the one state the server knows about and the page cannot infer: the key
+  //: going down is a request, and this is the device actually being open.
+  eye.doing(open ? "listening" : "resting");
 });
 
 input.focus();

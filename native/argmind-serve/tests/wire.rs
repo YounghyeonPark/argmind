@@ -255,3 +255,24 @@ fn the_microphone_opens_only_while_the_key_is_held() {
     assert_eq!(route(&post("/listen/")), Route::Unknown);
     assert_eq!(route(&post("/listen/start/x")), Route::Unknown);
 }
+
+/// **The whole unauthenticated surface, written down.**
+///
+/// The page and its scripts are served without a token, because the token arrives inside the page.
+/// That is two files today and was one yesterday — the sphere is its own module — and a third added
+/// by an edit somewhere else is exactly the kind of change nobody reviews twice. So the list is
+/// asserted rather than described.
+#[test]
+fn only_the_page_and_its_scripts_are_served_without_a_token() {
+    let free: Vec<&str> = argmind_serve::app::SCRIPTS.iter().map(|(at, _)| *at).collect();
+    assert_eq!(free, ["/app.js", "/orb.js"]);
+
+    for (at, body) in argmind_serve::app::SCRIPTS {
+        //: **Nothing the agent knows is in them.** The page carries the token; a script must not,
+        //: because a script is the thing served to anybody who asks.
+        assert!(!body.contains("__TOKEN__"), "{at} has the token placeholder in it");
+        //: And they are not empty. `include_str!` catches a missing file at compile time and
+        //: nothing catches a build that produced nothing.
+        assert!(body.len() > 500, "{at} is {} bytes — was `npx tsc` run?", body.len());
+    }
+}
