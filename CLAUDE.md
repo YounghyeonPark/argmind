@@ -164,6 +164,16 @@ cannot be repaired is not.
 
 ## What is NOT built
 
+**It runs on Linux, and there is still no Linux environment** — which sounds contradictory and is
+the exact state of things. On Ubuntu 26.04 under WSLg, `argmind-app` builds and opens its own
+window, WebKitGTK renders the page, and the server answers in 200 ms; the header reads
+*(아무 창도 보고 있지 않음)* because `argmind-env-none` is telling the truth about having no eyes.
+Running it found four things a clean cross-compile could not: the tray **panicked** and took the
+application down when `libayatana-appindicator3` was absent (fixed — the window outlives a tray
+that cannot be made), every Korean character was a box without `fonts-noto-cjk`, the needs list
+still offers `DISM` commands on Linux, and `org.a11y.Bus` is activatable there — so AT-SPI2 work
+can be done in WSL, which was the open question.
+
 **No macOS and no Linux environment**, and that is the whole of what is missing — the application
 itself is no longer in the way. The owner asked on 2026-09-16 for all three; `docs/findings/the-window.md`
 has the plan and the measurement that reordered it. The short version: the port looks like
@@ -178,7 +188,9 @@ including the manifest's. The window is what stops there: on Linux it wants `pkg
 `libdbus-1-dev`, `libgtk-3-dev`, `libwebkit2gtk-4.1-dev`, `libsoup-3.0-dev` and
 `libjavascriptcoregtk-4.1-dev`, read off the build failure rather than guessed.
 
-**What remains is a real environment for each, and it needs a machine.** Writing one that cannot be
+**The next piece is in the application rather than in an environment**: `needs.rs` and `fix.rs` are
+behind the seam for their types and not for their content, so a Linux screen is offered a Windows
+`DISM` command. **What remains after that is a real environment for each, and it needs a machine.** Writing one that cannot be
 run produces code that compiles and does not work. Three things are known before that starts:
 **Linux is two targets** — X11 allows XTEST, Wayland routes input and window reading through
 `xdg-desktop-portal` with the user's consent, which changes the permission model rather than the

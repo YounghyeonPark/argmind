@@ -189,20 +189,73 @@ the Linux check with *unresolved import*. **That is a class the source-reading r
 — the rule sees names, and only a compiler knows what actually got linked. The pre-commit hook runs
 both, and says so out loud when the Linux target is not installed rather than skipping quietly.
 
-### What Linux still wants, read off the failure rather than guessed
+### It runs on Linux — 2026-09-17
 
-The window is where it stops, and the build script says exactly why:
+WSL was installed on the second ask. Ubuntu 26.04.1, kernel 6.18, WSLg 1.0.73.2, which puts a Linux
+window on the Windows desktop. `argmind-app` was built there from the repository — `git clone` of
+the committed state rather than a copy of the working tree — and run.
+
+**It works.** A `RAIL_WINDOW` titled `argmind (Ubuntu)`, 572×909, on the Windows desktop, with
+`WebKitNetworkProcess` and `WebKitWebProcess` behind it and the page answering on 127.0.0.1:7331
+**200 ms** after start. `argmind-app` is 105 MB debug, linked against `libwebkit2gtk-4.1`,
+`libgtk-3`, `libsoup-3.0`, `libjavascriptcoregtk-4.1` and `libdbus-1`. The window's own tests pass
+there unchanged.
+
+The header reads **(아무 창도 보고 있지 않음)** — `argmind-env-none` answering honestly rather than
+inventing a window. That is the seam working, seen rather than asserted.
+
+### Four things that only running it found
+
+**The tray killed the application.** `libappindicator-sys` does not return an error when
+`libayatana-appindicator3.so.1` is absent — it **panics**, from inside a lazy initialiser. argmind
+exited before drawing anything, four seconds after the server had already answered. The missing
+library is a packaging fact; the bug was mine, because `run()` returned `Err` before the window was
+shown. **The window is the program and the icon is a convenience**, and plenty of Linux desktops
+have no system tray at all — that is not a broken machine. The tray is now built in its own
+function, allowed to fail, and its panic is caught; with no icon the close button quits, which is
+what `tray: false` already did.
+
+**Every Korean character was a box.** The container has no CJK font and the entire interface is
+Korean. `fonts-noto-cjk`, and the page renders. Nothing but running it would have said so — the
+build was clean and the HTML was correct.
+
+**Windows fixes are offered on Linux.** The `한국어 음성` row proposes
+`DISM /Online /Add-Capability …` and says *Windows가 한 번 더 물어봅니다*. `needs.rs` and `fix.rs`
+are behind the seam for their *types* and not for their *content*: which fixes exist, and what they
+say, is platform knowledge that has not moved yet. **The next piece of the port, and it is in the
+application rather than in an environment.**
+
+**And AT-SPI2 is reachable here.** `org.a11y.Bus` is activatable on the session bus at
+`/run/user/0/bus`, `at-spi2-core` is installed, and `pkg-config` reports `atspi-2` at 2.60.4. So
+WSLg can host the eyes work and not only the window — which was the open question. *Activatable* is
+not *working*: nothing has yet asked it for a widget tree, and WSLg has no window manager of its
+own, so *which window is in front* is a separate question from *what is in this window*.
+
+### What Linux wants, read off the failures rather than guessed
+
+    build:    pkg-config  libdbus-1-dev  libgtk-3-dev  libwebkit2gtk-4.1-dev
+              libsoup-3.0-dev  libjavascriptcoregtk-4.1-dev
+    run:      libayatana-appindicator3-1  fonts-noto-cjk
+    later:    libatspi2.0-dev (eyes)  libxdo-dev (hands)
+
+`libdbus` and the appindicator are the tray's, not the window's — `tray-icon` speaks
+StatusNotifierItem over D-Bus.
+
+**One thing the workspace still cannot do on Linux**: `cargo build` at the root tries to build
+`argmind-env-windows`, which is a workspace member, and fails with fifty errors. Naming the crates
+works — `-p argmind-serve` builds everything that matters. Left as it is rather than papered over,
+because the fix is a decision about workspace shape and nothing is blocked by it today.
+
+### What the cross-check predicted, and what running it added
+
+The cross-compile stopped at the window with
 
     pkg_config failed: pkg-config has not been configured to support cross-compilation
     libdbus-sys ... build.rs:25 panicked
 
-So a Linux machine needs, before `argmind-app` builds there:
-
-    pkg-config  libdbus-1-dev  libgtk-3-dev  libwebkit2gtk-4.1-dev
-    libsoup-3.0-dev  libjavascriptcoregtk-4.1-dev
-
-`libdbus` is the tray's, not the window's — `tray-icon` speaks StatusNotifierItem over D-Bus. The
-rest are wry's WebKitGTK backend.
+and that list was right as far as it went — every package it named was needed. **What it
+could not see was everything above**: the panic at run time, the missing font, the Windows
+fixes on a Linux screen. A build that succeeds says nothing about a program that runs.
 
 ### The two things a machine is needed for
 
