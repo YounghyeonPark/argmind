@@ -188,9 +188,14 @@ including the manifest's. The window is what stops there: on Linux it wants `pkg
 `libdbus-1-dev`, `libgtk-3-dev`, `libwebkit2gtk-4.1-dev`, `libsoup-3.0-dev` and
 `libjavascriptcoregtk-4.1-dev`, read off the build failure rather than guessed.
 
-**The next piece is in the application rather than in an environment**: `needs.rs` and `fix.rs` are
-behind the seam for their types and not for their content, so a Linux screen is offered a Windows
-`DISM` command. **What remains after that is a real environment for each, and it needs a machine.** Writing one that cannot be
+**The content moved behind the seam too, on 2026-09-17**: `platform::can_carry_out_fixes()` gates
+every fix, because every one of them has been run on Windows and none anywhere else. Off Windows
+each need still says what is missing and what to do by hand and offers no button — and the two rows
+that are Windows *facts* rather than Windows *fixes*, the SAPI voice and the `winget` Vulkan SDK,
+are not listed at all. Verified on Ubuntu: **없는 것 4개**, no DISM, no buttons, and the orb
+rendering in WebKitGTK.
+
+**What remains is a real environment for each, and it needs a machine.** Writing one that cannot be
 run produces code that compiles and does not work. Three things are known before that starts:
 **Linux is two targets** — X11 allows XTEST, Wayland routes input and window reading through
 `xdg-desktop-portal` with the user's consent, which changes the permission model rather than the

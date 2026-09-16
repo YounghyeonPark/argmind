@@ -219,11 +219,16 @@ what `tray: false` already did.
 Korean. `fonts-noto-cjk`, and the page renders. Nothing but running it would have said so — the
 build was clean and the HTML was correct.
 
-**Windows fixes are offered on Linux.** The `한국어 음성` row proposes
-`DISM /Online /Add-Capability …` and says *Windows가 한 번 더 물어봅니다*. `needs.rs` and `fix.rs`
-are behind the seam for their *types* and not for their *content*: which fixes exist, and what they
-say, is platform knowledge that has not moved yet. **The next piece of the port, and it is in the
-application rather than in an environment.**
+**Windows fixes were offered on Linux.** The `한국어 음성` row proposed
+`DISM /Online /Add-Capability …` and said *Windows가 한 번 더 물어봅니다*. `needs.rs` and `fix.rs`
+were behind the seam for their *types* and not for their *content*.
+
+**Fixed the same day.** `platform::can_carry_out_fixes()` now gates every fix — reported and
+offered are different things, and the difference is a button that has never worked. The two rows
+that are Windows *facts* rather than Windows *fixes* are gone off Windows entirely. Re-checked on
+Ubuntu: **없는 것 4개** where there were six, every row saying what to do by hand, no `DISM`, no
+buttons, and the orb animating in WebKitGTK. Writing the rule found a third leak nobody had
+noticed — the voice row said *Windows 음성으로 말합니다* on a machine with no voice at all.
 
 **And AT-SPI2 is reachable here.** `org.a11y.Bus` is activatable on the session bus at
 `/run/user/0/bus`, `at-spi2-core` is installed, and `pkg-config` reports `atspi-2` at 2.60.4. So
