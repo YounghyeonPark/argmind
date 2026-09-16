@@ -218,7 +218,17 @@ fn the_sdk_is_found_through_the_machines_setting_rather_than_this_processs_path(
 fn the_build_is_only_offered_when_the_tools_and_the_sdk_are_both_there() {
     let needs = argmind_serve::needs::every("qwen3:8b");
     let speaking = needs.iter().find(|n| n.key == "speaker").expect("a 목소리 row");
-    let vulkan = needs.iter().find(|n| n.key == "vulkan").expect("a Vulkan SDK row");
+
+    //: **The Vulkan row is a Windows fact rather than a Windows fix**, so off Windows there is no
+    //: row at all — the SDK does not arrive through `winget` anywhere else, and saying it is
+    //: missing would be describing somebody's Ubuntu in terms of a package manager it has not got.
+    //: `tests/portable.rs` is where its absence is the assertion.
+    let Some(vulkan) = needs.iter().find(|n| n.key == "vulkan") else {
+        assert!(!argmind_serve::platform::can_carry_out_fixes(),
+                "the Vulkan row is gone on a build that could have used it");
+        assert!(speaking.fix.is_none(), "offered a voice build with no way to run it");
+        return;
+    };
 
     if speaker::sdk().is_none() || !speaker::missing_tools().is_empty() {
         assert!(speaking.fix.is_none(),

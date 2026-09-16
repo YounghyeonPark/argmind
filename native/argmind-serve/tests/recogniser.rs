@@ -205,17 +205,27 @@ fn a_description_survives_a_commit_that_is_not_forty_characters() {
 #[test]
 fn the_button_exists_only_when_the_tools_do() {
     let whisper = argmind_serve::needs::by_key("qwen3:8b", "whisper").expect("the whisper need");
-    match (missing_tools().is_empty(), &whisper.fix) {
+    //: **Two conditions now, not one.** The tools have to be here *and* this build has to have a
+    //: tested way to use them — a headless build has the compiler and none of the rest, and an
+    //: offer there would be a button that has never worked. The rule got narrower rather than
+    //: weaker, so it is spelled out rather than relaxed.
+    let could = argmind_serve::platform::can_carry_out_fixes();
+    match (could && missing_tools().is_empty(), &whisper.fix) {
         (true, Some(Fix::BuildRecogniser { .. })) => {
             assert!(whisper.how.contains("빌드"), "{}", whisper.how);
         }
         (false, None) => {
-            //: And it names the program to install rather than saying it cannot.
-            for tool in missing_tools() {
-                assert!(whisper.how.contains(tool), "{} does not name {tool}", whisper.how);
+            //: And it names the program to install rather than saying it cannot — where the tools
+            //: are the thing in the way. Where the *build* is the thing in the way it says that
+            //: instead, and either way it says something.
+            assert!(!whisper.how.is_empty());
+            if could {
+                for tool in missing_tools() {
+                    assert!(whisper.how.contains(tool), "{} does not name {tool}", whisper.how);
+                }
             }
         }
-        (has_tools, fix) => panic!("tools present: {has_tools}, and the offer is {fix:?}"),
+        (offerable, fix) => panic!("offerable: {offerable}, and the offer is {fix:?}"),
     }
     //: Either way it is optional — argmind runs without voice input, and a need that cannot be met
     //: must not be the thing that makes the program look broken.

@@ -116,6 +116,58 @@ mod without_an_environment {
         panic!("the child never finished");
     }
 
+    /// **Nothing is offered that this build has never run.**
+    ///
+    /// The one a person actually saw: on Ubuntu the page proposed
+    /// `DISM /Online /Add-Capability …` and said *Windows가 한 번 더 물어봅니다*. The needs were
+    /// behind the seam for their types and not for their content.
+    ///
+    /// Reported is fine. **Offered is a button**, and a button that has never worked anywhere is
+    /// worse than a sentence saying what to do by hand.
+    #[test]
+    fn no_need_offers_a_fix_this_build_could_not_carry_out() {
+        assert!(!platform::can_carry_out_fixes());
+        let needs = argmind_serve::needs::every("qwen3:8b");
+        assert!(needs.len() >= 4, "only {} needs — the list looks empty", needs.len());
+
+        let offered: Vec<&str> = needs.iter().filter(|n| n.fix.is_some())
+            .map(|n| n.key).collect();
+        assert!(offered.is_empty(),
+                "offered fixes with no way to run them: {offered:?}");
+        //: And each one still says what is missing and what to do — silence would be worse than
+        //: a wrong button.
+        for need in &needs {
+            assert!(!need.found.is_empty(), "{:?} says nothing about what it found", need.key);
+            assert!(!need.how.is_empty(), "{:?} offers nothing and suggests nothing", need.key);
+        }
+    }
+
+    /// **And no need names an operating system that is not this one.**
+    ///
+    /// The sharper half: a row can carry no fix and still tell somebody their Ubuntu is missing a
+    /// Windows language pack.
+    #[test]
+    fn nothing_on_the_page_names_another_operating_system() {
+        let needs = argmind_serve::needs::every("qwen3:8b");
+        let mut wrong: Vec<String> = Vec::new();
+        for need in &needs {
+            for text in [need.what, &need.found, &need.how] {
+                for name in ["DISM", "winget", "powershell", ".exe", "Windows", "explorer"] {
+                    if text.contains(name) {
+                        wrong.push(format!("{}: {name:?} in {text:?}", need.key));
+                    }
+                }
+            }
+        }
+        assert!(wrong.is_empty(), "these name Windows on a machine that is not it: {wrong:#?}");
+        //: The two rows that are Windows facts rather than Windows fixes are gone entirely — a
+        //: machine with no SAPI has no Korean voice to install.
+        for gone in ["korean-voice", "vulkan"] {
+            assert!(!needs.iter().any(|n| n.key == gone),
+                    "{gone:?} is a Windows thing and it is on this list");
+        }
+    }
+
     /// **The whole server runs**, and the page it serves is the same page.
     ///
     /// This is the test the rest of the file exists for. It starts `app::run` on a thread exactly

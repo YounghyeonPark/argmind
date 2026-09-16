@@ -70,6 +70,29 @@ pub fn by_key(model: &str, key: &str) -> Option<Need> {
     every(model).into_iter().find(|n| n.key == key)
 }
 
+/// A fix, unless this build has no tested way to carry it out.
+///
+/// **Offered and reported are different things, and the difference is a button.** Every fix in
+/// this file has been run on Windows and none of them anywhere else — the installers are `.exe`,
+/// the elevation is `powershell -Verb RunAs`, the builds want `mingw32-make` and `objdump`. Off
+/// Windows the need is still listed and still says what is missing; what it does not do is offer
+/// a button that has never worked.
+///
+/// Running on Linux is what made this urgent: the page was proposing
+/// `DISM /Online /Add-Capability …` on Ubuntu, and saying *Windows가 한 번 더 물어봅니다*.
+fn offered(fix: Option<Fix>) -> Option<Fix> {
+    fix.filter(|_| crate::platform::can_carry_out_fixes())
+}
+
+/// What to say instead of offering, where argmind cannot help yet.
+fn by_hand(how: &str) -> String {
+    if crate::platform::can_carry_out_fixes() {
+        how.to_string()
+    } else {
+        format!("{how}  (이 운영체제에서는 argmind가 대신 해주지 못합니다)")
+    }
+}
+
 /// Everything, in the order a person would fix it.
 pub fn every(model: &str) -> Vec<Need> {
     let mut out = Vec::new();
@@ -81,19 +104,19 @@ pub fn every(model: &str) -> Vec<Need> {
         required: true,
         present: ollama_up,
         found: if ollama_up { "127.0.0.1:11434 응답함".into() } else { "응답 없음".into() },
-        how: "https://ollama.com 에서 설치한 뒤 실행해 두세요".into(),
+        how: by_hand("https://ollama.com 에서 설치한 뒤 실행해 두세요"),
         //: **Downloaded and run, on one approval.** The earlier version opened a page and refused
         //: to fetch anybody's executable; the owner's decision is that the window should ask and
         //: the agent should then do the whole thing. What makes that approval worth having is
         //: naming the source and verifying the certificate — recorded here because *"a file nobody
         //: had seen, from a name nobody had checked"* was the objection, and this is the part of
         //: it that is answered rather than overruled.
-        fix: Some(Fix::Install {
+        fix: offered(Some(Fix::Install {
             url: "https://ollama.com/download/OllamaSetup.exe".into(),
             file: "OllamaSetup.exe".into(),
             why: "Ollama가 있어야 argmind가 동작합니다.".into(),
             about_mb: 700,
-        }),
+        })),
     });
 
     //: **Only asked when Ollama is up.** "The model is missing" and "nothing was there to ask" are
@@ -114,7 +137,13 @@ pub fn every(model: &str) -> Vec<Need> {
         },
         how: format!("argmind setup 이 받아옵니다 (약 5 GB) — 또는 ollama pull {model}"),
         //: Only offered when Ollama is up, because there is nothing to pull with otherwise.
-        fix: ollama_up.then(|| Fix::PullModel { model: model.to_string(), about_gb: 5.0 }),
+        //: **The one fix that is not Windows's**, because Ollama does the work: it is an HTTP
+        //: call to a server that is already running by the person's choice. It is still gated,
+        //: because everything else in the sequence around it is not, and half a setup is worse
+        //: than a sentence — a decision to revisit the moment one other fix works off Windows.
+        fix: offered(ollama_up.then(|| Fix::PullModel {
+            model: model.to_string(), about_gb: 5.0,
+        })),
     });
 
     //: A TCP connect and nothing else — **it is not asked to transcribe anything**, because a
@@ -134,7 +163,9 @@ pub fn every(model: &str) -> Vec<Need> {
         } else {
             format!("{} 응답 없음 — 음성 입력만 안 됩니다", argmind_env_whisper::WHISPER)
         },
-        how: if missing.is_empty() {
+        how: if !crate::platform::can_carry_out_fixes() {
+            by_hand("whisper.cpp 를 빌드해 띄우면 음성 입력이 됩니다")
+        } else if missing.is_empty() {
             "argmind가 소스에서 빌드해 띄울 수 있습니다".into()
         } else {
             //: **Names the tool rather than saying it cannot.** "빌드할 수 없습니다" sends somebody
@@ -149,62 +180,73 @@ pub fn every(model: &str) -> Vec<Need> {
         //: **Offered only when it can actually be done.** A button whose first act is to discover
         //: there is no compiler teaches somebody that argmind is unreliable, and it teaches them
         //: that after they said yes.
-        fix: missing.is_empty().then(|| Fix::BuildRecogniser {
+        fix: offered(missing.is_empty().then(|| Fix::BuildRecogniser {
             repo: crate::recogniser::REPO.into(),
             commit: crate::recogniser::COMMIT.into(),
             why: "음성 입력에는 받아쓰기 서버가 필요합니다.".into(),
             minutes: crate::recogniser::MINUTES,
             //: Cheap: a file beside the binary, written by the build that produced it.
             built: crate::recogniser::ready(),
-        }),
+        })),
     });
 
     //: Built once and dropped. Enumerating voices reads a registry category and opens no audio
     //: device, so this is as quiet as the two checks above it.
-    let korean = crate::platform::Mouth::new().map(|v| v.has_korean()).unwrap_or(false);
-    out.push(Need {
-        key: "korean-voice",
-        what: "한국어 음성",
-        required: false,
-        //: A Windows language feature, and installing one needs elevation.
-        present: korean,
-        found: if korean {
-            "설치됨".into()
-        } else {
-            //: **The measured failure, named.** An English voice handed Korean produces zero bytes
-            //: and reports success, which is why the router refuses rather than falling back.
-            "없음 — 한국어 답변은 소리로 나오지 않습니다".into()
-        },
-        how: "설정 > 시간 및 언어 > 언어 > 한국어 > 옵션 > 음성 을 설치하세요".into(),
-        //: **This one argmind can actually do**, because it is one documented Windows command
-        //: rather than somebody's binary — and Windows asks for administrator rights itself, so
-        //: two separate windows say yes before anything changes.
-        fix: Some(Fix::RunElevated {
-            command: "DISM /Online /Add-Capability /CapabilityName:Language.Speech~~~ko-KR~0.0.1.0".into(),
-            why: "한국어 음성이 없으면 한국어 답변은 소리로 나오지 않습니다.".into(),
-        }),
-    });
-
-    //: **Its own need, not a condition on the one below it.** The SDK is a machine-wide developer
-    //: kit installed with administrator rights; the voice is a build. Folding them into one key
-    //: would mean a remembered *항상허용* for "the voice" silently covering an elevated install,
-    //: and a decision is only worth remembering if it was about one thing.
+    //: Read once and used by two rows — the Vulkan row below and the voice's, which will not
+    //: offer a build without it. Asked outside the conditional because the second row exists
+    //: everywhere.
     let vulkan = crate::speaker::sdk();
-    out.push(Need {
-        key: "vulkan",
-        what: "Vulkan SDK",
-        required: false,
-        present: vulkan.is_some(),
-        found: match &vulkan {
-            Some(at) => format!("{}", at.display()),
-            //: **Measured, and the number is the reason.** Same binary, same weights, GPU disabled
-            //: with `GGML_VK_VISIBLE_DEVICES=""`: RTF 0.15 against 4.8.
-            None => "없음 — 신경망 목소리는 CPU로는 32배 느려서 못 씁니다".into(),
-        },
-        how: "winget install --id KhronosGroup.VulkanSDK — 또는 https://vulkan.lunarg.com/sdk/home"
-            .into(),
-        fix: Some(crate::speaker::sdk_fix()),
-    });
+
+    //: **Two needs that only exist on one operating system**, rather than two fixes that only
+    //: work on one. A machine with no SAPI has no Korean voice to install, and the Vulkan SDK
+    //: does not arrive through `winget` anywhere else — so off Windows these are not a missing
+    //: thing argmind cannot fix, they are not a thing. Listing them would be telling somebody
+    //: their Ubuntu is missing a Windows language pack.
+    if crate::platform::can_carry_out_fixes() {
+        let korean = crate::platform::Mouth::new().map(|v| v.has_korean()).unwrap_or(false);
+        out.push(Need {
+            key: "korean-voice",
+            what: "한국어 음성",
+            required: false,
+            //: A Windows language feature, and installing one needs elevation.
+            present: korean,
+            found: if korean {
+                "설치됨".into()
+            } else {
+                //: **The measured failure, named.** An English voice handed Korean produces zero bytes
+                //: and reports success, which is why the router refuses rather than falling back.
+                "없음 — 한국어 답변은 소리로 나오지 않습니다".into()
+            },
+            how: "설정 > 시간 및 언어 > 언어 > 한국어 > 옵션 > 음성 을 설치하세요".into(),
+            //: **This one argmind can actually do**, because it is one documented Windows command
+            //: rather than somebody's binary — and Windows asks for administrator rights itself, so
+            //: two separate windows say yes before anything changes.
+            fix: Some(Fix::RunElevated {
+                command: "DISM /Online /Add-Capability /CapabilityName:Language.Speech~~~ko-KR~0.0.1.0".into(),
+                why: "한국어 음성이 없으면 한국어 답변은 소리로 나오지 않습니다.".into(),
+            }),
+        });
+
+        //: **Its own need, not a condition on the one below it.** The SDK is a machine-wide developer
+        //: kit installed with administrator rights; the voice is a build. Folding them into one key
+        //: would mean a remembered *항상허용* for "the voice" silently covering an elevated install,
+        //: and a decision is only worth remembering if it was about one thing.
+        out.push(Need {
+            key: "vulkan",
+            what: "Vulkan SDK",
+            required: false,
+            present: vulkan.is_some(),
+            found: match &vulkan {
+                Some(at) => format!("{}", at.display()),
+                //: **Measured, and the number is the reason.** Same binary, same weights, GPU disabled
+                //: with `GGML_VK_VISIBLE_DEVICES=""`: RTF 0.15 against 4.8.
+                None => "없음 — 신경망 목소리는 CPU로는 32배 느려서 못 씁니다".into(),
+            },
+            how: "winget install --id KhronosGroup.VulkanSDK — 또는 https://vulkan.lunarg.com/sdk/home"
+                .into(),
+            fix: Some(crate::speaker::sdk_fix()),
+        });
+    }
 
     let speaking = crate::speaker::answering();
     //: Asked once and used twice — for the sentence and for whether there is a button at all.
@@ -217,12 +259,20 @@ pub fn every(model: &str) -> Vec<Need> {
         found: if speaking {
             format!("{} 응답함", crate::speaker::QWENTTS_HOST)
         } else {
-            //: **What is lost is named, and it is not everything.** Windows still speaks; this is
-            //: the difference between Heami and a neural voice, not between sound and silence.
-            format!("{} 응답 없음 — Windows 음성으로 말합니다",
-                    crate::speaker::QWENTTS_HOST)
+            //: **What is lost is named, and how much depends on the machine.** Where there is a
+            //: built-in voice this is the difference between it and a neural one, not between
+            //: sound and silence; where there is not, it is the difference between sound and
+            //: silence and it says so.
+            match crate::platform::fallback_voice() {
+                Some(other) => format!("{} 응답 없음 — {other}으로 말합니다",
+                                       crate::speaker::QWENTTS_HOST),
+                None => format!("{} 응답 없음 — 소리는 나오지 않습니다",
+                                crate::speaker::QWENTTS_HOST),
+            }
         },
-        how: if vulkan.is_none() {
+        how: if !crate::platform::can_carry_out_fixes() {
+            by_hand("qwentts.cpp 를 빌드해 띄우면 이 목소리로 말합니다")
+        } else if vulkan.is_none() {
             "Vulkan SDK를 먼저 설치하세요".into()
         } else if missing.is_empty() {
             "argmind가 소스에서 빌드해 띄울 수 있습니다".into()
@@ -233,13 +283,13 @@ pub fn every(model: &str) -> Vec<Need> {
         //: **Offered only when it can actually be done**, which here means the tools *and* the SDK.
         //: A button whose first act is to discover there is no compiler teaches somebody that
         //: argmind is unreliable, and it teaches them that after they said yes.
-        fix: (missing.is_empty() && vulkan.is_some()).then(|| Fix::BuildSpeaker {
+        fix: offered((missing.is_empty() && vulkan.is_some()).then(|| Fix::BuildSpeaker {
             repo: crate::speaker::REPO.into(),
             commit: crate::speaker::COMMIT.into(),
             why: "Windows 한국어 음성은 오래된 것 하나뿐이라 어색합니다.".into(),
             minutes: crate::speaker::MINUTES,
             built: crate::speaker::ready(),
-        }),
+        })),
     });
 
     out

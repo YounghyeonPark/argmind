@@ -55,6 +55,28 @@ mod chosen {
     /// a loudspeaker, and the only one written is WASAPI — so on an environment with no audio
     /// there is nothing to prefer and the question is answered at compile time rather than by a
     /// socket timeout.
+
+    /// What speaks when the neural voice is not there, in the words a person would recognise.
+    pub fn fallback_voice() -> Option<&'static str> {
+        Some("Windows 음성")
+    }
+
+    /// Hand a URL to whatever the person chose as their browser.
+    pub fn open_url(url: &str) -> Result<(), String> {
+        //: `explorer` is a shell command, not a downloader — nothing is fetched or run here.
+        std::process::Command::new("explorer").arg(url).spawn()
+            .map(|_| ()).map_err(|e| format!("{e}"))
+    }
+
+    /// Run a documented command with administrator rights, so Windows asks as well.
+    pub fn run_elevated(command: &str) -> Result<bool, String> {
+        let done = std::process::Command::new("powershell")
+            .args(["-NoProfile", "-Command",
+                   &format!("Start-Process -Verb RunAs -Wait -FilePath cmd.exe                              -ArgumentList '/c {command}'")])
+            .status().map_err(|e| format!("{e}"))?;
+        Ok(done.success())
+    }
+
     pub fn neural_voice(host: &str) -> Option<Box<dyn argmind_voice::Speaker>> {
         argmind_env_qwentts::QwenVoice::answering(host)
             .then(|| Box::new(argmind_env_qwentts::QwenVoice::new(crate::speaker::VOICE))
@@ -74,6 +96,25 @@ mod chosen {
     /// **Never.** The synthesiser may well be answering on its port — it is a server and it builds
     /// on all three — but nothing here can play what it sends back. Saying no is the honest
     /// answer; asking the socket and then being unable to make a sound would not be.
+
+    /// **Nothing speaks here.** `speech-dispatcher` on Linux and `AVSpeechSynthesizer` on macOS
+    /// both exist; neither is written. Saying *Windows 음성으로 말합니다* on Ubuntu, which is what
+    /// this replaced, is worse than saying nothing does.
+    pub fn fallback_voice() -> Option<&'static str> {
+        None
+    }
+
+    /// **Refused rather than guessed.** `xdg-open` and `open` exist and would probably work; that
+    /// is not the same as having been run, and nothing here offers a fix that would reach this.
+    pub fn open_url(_url: &str) -> Result<(), String> {
+        Err("이 운영체제에서 페이지를 여는 방법이 아직 확인되지 않았습니다".into())
+    }
+
+    /// There is no tested way to ask this operating system for administrator rights.
+    pub fn run_elevated(_command: &str) -> Result<bool, String> {
+        Err("이 운영체제에서는 관리자 권한 실행이 아직 준비되지 않았습니다".into())
+    }
+
     pub fn neural_voice(_host: &str) -> Option<Box<dyn argmind_voice::Speaker>> {
         None
     }
@@ -99,5 +140,23 @@ pub fn describe() -> &'static str {
 
 /// Can this build see the screen and press things at all?
 pub fn embodied() -> bool {
+    cfg!(all(windows, not(feature = "headless")))
+}
+
+/// Can this build actually carry out the things it offers to do?
+///
+/// **Every fix argmind offers has been run on Windows and none of them anywhere else.** The
+/// installers are `.exe`, the elevation is `powershell -Verb RunAs`, the hash check is `certutil`,
+/// the builds want `mingw32-make` and `objdump`, and the Vulkan SDK arrives through `winget`.
+///
+/// So off Windows the needs are **reported and not offered** — which is a state `needs.rs` already
+/// has a word for, *argmind가 할 수 있는 게 없습니다*, and which is the honest one. Running on
+/// Linux is what made this urgent: the page was offering
+/// `DISM /Online /Add-Capability …` and saying *Windows가 한 번 더 물어봅니다*, on Ubuntu.
+///
+/// **This is a statement about argmind, not about the operating system.** Ollama installs on Linux
+/// and macOS, whisper.cpp builds there, and a Vulkan SDK is a package away. None of it is written
+/// here yet, and a button that has never been run is worse than a sentence saying what to do.
+pub fn can_carry_out_fixes() -> bool {
     cfg!(all(windows, not(feature = "headless")))
 }

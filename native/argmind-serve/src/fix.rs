@@ -308,14 +308,10 @@ pub fn apply(fix: &Fix, say: &mut dyn FnMut(&str)) -> Result<String, String> {
             Ok("목소리 서버가 떴습니다".into())
         }
         Fix::RunElevated { command, .. } => {
-            //: **Windows asks again.** `RunAs` raises the elevation prompt, so a yes here is the
-            //: first of two and the second belongs to the operating system.
-            let done = std::process::Command::new("powershell")
-                .args(["-NoProfile", "-Command",
-                       &format!("Start-Process -Verb RunAs -Wait -FilePath cmd.exe \
-                                 -ArgumentList '/c {command}'")])
-                .status().map_err(|e| format!("{e}"))?;
-            if done.success() {
+            //: **The operating system asks again.** Elevation raises a prompt of its own, so a yes
+            //: here is the first of two and the second one is not argmind's to give.
+            let done = crate::platform::run_elevated(command)?;
+            if done {
                 Ok("실행했습니다".into())
             } else {
                 //: A cancelled elevation prompt lands here, and it is a refusal rather than a
