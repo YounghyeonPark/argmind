@@ -16,13 +16,40 @@
 //!
 //! Nothing here needs the model. It launches its own Character Map and closes it, and the hands are
 //! bound to that process so nothing else on the screen can be touched.
+//!
+//! ## Measured 2026-09-16 — **this is the axis the patterns win**
+//!
+//! Both arms did the thing. The pointer, parked at `(700, 400)` first:
+//!
+//! | arm | via | the check box | the pointer |
+//! |---|---|---|---|
+//! | patterns on | `invoke` | WORKED | `(700, 400) -> (700, 400)` — **unmoved** |
+//! | patterns off | click | WORKED | `(700, 400) -> (130, 459)` — **moved to the widget** |
+//!
+//! **n = 1**, and that is the honest count: the workstation locked between this run and its two
+//! repeats, and `SetCursorPos` then fails while `GetCursorPos` still works. A locked screen is now
+//! told apart from a scaled display in the refusal message, because it was reported as the second
+//! and is the first.
+//!
+//! ## The first version of this measured nothing, and said `unmoved` twice
+//!
+//! `park()` called `cursor_round_trip`, which sends the cursor somewhere, reads it back **and puts
+//! it where it found it** — a probe, not a mover. So no arm was ever parked: each read the position
+//! the previous arm's click had left the pointer in, which is the check box. A click that moves the
+//! pointer to where it already is reads as `unmoved`, and both arms agreed for the same wrong
+//! reason: `(130, 459) -> (130, 459)`, twice, while the header announced a park that never
+//! happened.
+//!
+//! **The note above `where_is` in this file describes exactly this hazard**, and was written when
+//! the same call was found in the *reading* half. It was fixed there and left here. A uniformly
+//! tidy result — both arms unmoved — is evidence the measurement is broken, and it was.
 
 use std::collections::BTreeSet;
 use std::thread::sleep;
 use std::time::Duration;
 
 use argmind_env_windows::hands::Did;
-use argmind_env_windows::{bring_to_front, cursor_now, cursor_round_trip, pointing_is_exact,
+use argmind_env_windows::{bring_to_front, cursor_now, pointing, put_cursor, Pointing,
                           whats_in_front, windows_of, Launched, WindowsEyes};
 
 /// A check box, whose effect is unambiguous and whose pattern (`Invoke`) is one the hands try
@@ -90,7 +117,10 @@ fn attempt(patterns: bool, app: &str, dry: bool) -> Arm {
     }
     hands.max_per_second = 8.0;
 
-    park();
+    if !park() {
+        return Arm { via: "the pointer would not park".into(), before: where_is(),
+                     after: where_is(), worked: false, ok: false };
+    }
     let before_cursor = where_is();
     let before = named(&mut eyes, launched.pid);
     let did = hands.click_button(&widget, "left");
@@ -114,8 +144,20 @@ fn attempt(patterns: bool, app: &str, dry: bool) -> Arm {
           ok: true }
 }
 
-fn park() {
-    let _ = cursor_round_trip(&[PARKED]);
+/// Put the pointer out of the way and **leave it there**.
+///
+/// **This was `cursor_round_trip` and that call puts the cursor back where it found it.** So the
+/// park never happened: each arm read the position the previous arm's click had left the pointer
+/// in, which for the second arm is the check box itself — and a click that moves the pointer to
+/// where it already is reads as `unmoved`. Both arms reported *unmoved*, which is exactly the
+/// failure the note above `where_is` describes, fixed there and left here. Measured before the fix:
+/// `(130, 459) -> (130, 459)` on both arms, with the harness announcing a park to (700, 400) that
+/// never took place.
+///
+/// Returns whether the pointer actually arrived. **A park that silently failed is the same lie
+/// again**, so the caller reports the arm as unrunnable rather than measuring through it.
+fn park() -> bool {
+    put_cursor(PARKED.0, PARKED.1)
 }
 
 fn main() {
@@ -127,9 +169,20 @@ fn run() -> i32 {
     let dry = std::env::args().any(|a| a == "--dry");
     let app = std::env::args().skip(1).find(|a| a.ends_with(".exe"))
         .unwrap_or_else(|| "charmap.exe".into());
-    if !dry && !pointing_is_exact() {
-        println!("  the cursor does not go where it is sent on this display — refusing to click");
-        return 2;
+    //: **Two refusals, told apart.** One is a display setting and one is a locked screen, and
+    //: sending somebody to check their DPI while the machine is merely locked wastes an afternoon.
+    //: This harness hit the second mid-measurement: the first run produced a number and the two
+    //: repeats could not, because the workstation had locked between them.
+    match if dry { Pointing::Exact } else { pointing() } {
+        Pointing::Exact => {}
+        Pointing::Scaled => {
+            println!("  the cursor does not land where it is sent on this display — refusing to click");
+            return 2;
+        }
+        Pointing::Refused => {
+            println!("  the desktop will not take input — the screen is locked, or another desktop has it. Nothing is wrong with the machine; come back when it is unlocked.");
+            return 2;
+        }
     }
 
     println!("  acting on {} {:?}, pointer parked at {:?} first | {}\n",

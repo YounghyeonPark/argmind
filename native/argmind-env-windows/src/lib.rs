@@ -273,10 +273,40 @@ pub fn screen_metrics() -> (i32, i32, i32, i32) {
 /// and then every click is offset by the scaling factor and nothing lands. Two points near the
 /// middle of the primary display, so the probe itself cannot fall off the desktop.
 pub fn pointing_is_exact() -> bool {
+    matches!(pointing(), Pointing::Exact)
+}
+
+/// Why a click would not land, told apart.
+///
+/// **These were one answer and they are two problems.** A scaled write path is a display setting
+/// and the harness should refuse; a desktop that will not take input at all is a locked screen,
+/// and the remedy is to come back later rather than to change anything. Reporting the second as
+/// the first sent somebody looking at DPI while the machine was simply locked — which happened
+/// here, mid-measurement, between one run and its repeat.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum Pointing {
+    /// The cursor goes exactly where it is sent.
+    Exact,
+    /// It moves, and lands somewhere else — a virtualised coordinate.
+    Scaled,
+    /// **`SetCursorPos` failed.** Reading the cursor still works; writing it does not. That is a
+    /// locked workstation or another desktop holding the input — not a display problem.
+    Refused,
+}
+
+pub fn pointing() -> Pointing {
     let (_, _, pw, ph) = screen_metrics();
     let probes = [((pw / 2) as i64, (ph / 2) as i64), ((pw / 2) as i64 + 7, (ph / 2) as i64 + 11)];
     let got = cursor_round_trip(&probes);
-    got.len() == probes.len() && got.iter().all(|(s, g)| s == g)
+    if got.len() != probes.len() {
+        //: `cursor_round_trip` skips a point it could not set, so a short list *is* the refusal.
+        return Pointing::Refused;
+    }
+    if got.iter().all(|(sent, landed)| sent == landed) {
+        Pointing::Exact
+    } else {
+        Pointing::Scaled
+    }
 }
 
 /// Where the pointer is, **without moving it.**
@@ -289,6 +319,25 @@ pub fn cursor_now() -> (i64, i64) {
         let _ = GetCursorPos(&mut at);
     }
     (at.x as i64, at.y as i64)
+}
+
+/// Put the pointer somewhere and **leave it there.** `false` if it did not arrive.
+///
+/// The third of these three, and each one exists because the other two are wrong for the job.
+/// [`cursor_now`] reads and does not move; [`cursor_round_trip`] moves, reads and *puts it back*,
+/// which makes it a probe rather than a mover. **`pointer_theft` parked the cursor with the probe**
+/// and so never parked it at all: every arm read the position the previous arm's click had left it
+/// in, and both arms reported *unmoved* for the same wrong reason — which is the exact mistake the
+/// note above `where_is` in that harness describes, fixed there and not here.
+pub fn put_cursor(x: i64, y: i64) -> bool {
+    unsafe {
+        if SetCursorPos(x as i32, y as i32).is_err() {
+            return false;
+        }
+    }
+    //: **Verified rather than assumed.** A scaled write path virtualises the coordinate, and a park
+    //: that silently landed somewhere else would be the same lie in a new place.
+    cursor_now() == (x, y)
 }
 
 /// Send the pointer to each point and read back where it actually went — **then put it back.**

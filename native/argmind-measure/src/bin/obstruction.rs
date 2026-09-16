@@ -46,6 +46,34 @@
 //! or any of the other ways of taking a foreground nobody offered — would make this a measurement
 //! of a program that seizes the screen, which is not the program.
 //!
+//! ## Measured 2026-09-16 — **24 of 24, and the patterns reach past nothing**
+//!
+//! Three runs, eight arms each, every one agreeing with the prediction written above it:
+//!
+//! | arm | outcome | how |
+//! |---|---|---|
+//! | covered, guarded, patterns off | refused | the guard; the point belonged to the cover |
+//! | covered, guarded, patterns on | refused | the guard, **before either path is chosen** |
+//! | covered, allowed, patterns off | missed | click, and the target gained nothing |
+//! | covered, allowed, patterns on | missed | **click** — the pattern would not resolve |
+//! | stood aside, patterns off | worked | click, `+ ["Character set :", "Go to Unicode :", "Group by :"]` |
+//! | stood aside, patterns on | worked | pattern `invoke` |
+//! | nothing covering, patterns off | worked | click, same three |
+//! | nothing covering, patterns on | worked | pattern `invoke` |
+//!
+//! **The decisive pair is the two pattern rows.** Covered, the pattern path falls back to a click —
+//! `ElementFromPoint` hands it the cover and the walk upwards never meets the check box. Uncovered
+//! or stood aside, the same call resolves and `invoke` runs. So the hope this harness was built to
+//! test is answered: **a control pattern does not reach past an obstruction**, because this one is
+//! aimed at a pixel after all.
+//!
+//! The controls hold, which is what makes the rest mean anything: the uncovered rows do the thing,
+//! and the rows that missed gained *nothing at all* rather than something different.
+//!
+//! **What this does not settle.** It says patterns buy nothing *here*. `pointer-theft` measures the
+//! other axis and the patterns win it — they operate the control without dragging the cursor off
+//! whatever the person was pointing at. This row is one input to that decision and not the decision.
+//!
 //! ## Why the last two rows exist
 //!
 //! **A harness that reports "nothing happened" everywhere might simply be broken**, and a uniformly
@@ -58,7 +86,7 @@ use std::time::Duration;
 
 use argmind_core::contract::Widget;
 use argmind_env_windows::hands::{Did, WindowsHands};
-use argmind_env_windows::{bring_to_front, foreground_is, pointing_is_exact, whats_in_front,
+use argmind_env_windows::{bring_to_front, foreground_is, pointing, Pointing, whats_in_front,
                           windows_of, Cover, Launched, WindowsEyes};
 
 /// The check box, because its effect is unambiguous: the advanced view adds four named things.
@@ -239,9 +267,19 @@ fn run() -> i32 {
 
     //: Asked before anything is clicked: on a scaled write path every click is offset and nothing
     //: lands, which would look exactly like an obstruction that was not there.
-    if !pointing_is_exact() {
-        println!("  the cursor does not go where it is sent on this display — refusing to click");
-        return 2;
+    match pointing() {
+        Pointing::Exact => {}
+        //: **Two refusals, told apart.** One is a display setting and one is a locked screen, and
+        //: sending somebody to check their DPI while the machine is merely locked wastes an
+        //: afternoon.
+        Pointing::Scaled => {
+            println!("  the cursor does not land where it is sent on this display — refusing to click");
+            return 2;
+        }
+        Pointing::Refused => {
+            println!("  the desktop will not take input — the screen is locked, or another desktop has it. Nothing is wrong with the machine; come back when it is unlocked.");
+            return 2;
+        }
     }
     println!("\n  {:?} {} covered by a window of ours, then acted on", TARGET.0, TARGET.1);
     println!("  {app} | {}\n",

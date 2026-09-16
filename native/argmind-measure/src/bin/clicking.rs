@@ -42,7 +42,7 @@ use argmind_core::intent::Trigger;
 use argmind_core::session::Session;
 use argmind_env_ollama::Local;
 use argmind_env_windows::hands::Did;
-use argmind_env_windows::{foreground_is, is_minimised, pointing_is_exact, to_front, windows_of,
+use argmind_env_windows::{foreground_is, is_minimised, pointing, Pointing, to_front, windows_of,
                           Launched, WindowsEyes};
 
 struct Model(Local);
@@ -106,9 +106,19 @@ fn run() -> i32 {
     //: **Asked before anything is clicked.** If the write path is scaled, every click is offset by
     //: the scaling factor and nothing lands — a failure that would look exactly like the model
     //: choosing badly.
-    if !pointing_is_exact() {
-        println!("  the cursor does not go where it is sent on this display — refusing to click");
-        return 2;
+    match pointing() {
+        Pointing::Exact => {}
+        //: **Two refusals, told apart.** One is a display setting and one is a locked screen, and
+        //: sending somebody to check their DPI while the machine is merely locked wastes an
+        //: afternoon.
+        Pointing::Scaled => {
+            println!("  the cursor does not land where it is sent on this display — refusing to click");
+            return 2;
+        }
+        Pointing::Refused => {
+            println!("  the desktop will not take input — the screen is locked, or another desktop has it. Nothing is wrong with the machine; come back when it is unlocked.");
+            return 2;
+        }
     }
 
     let mut launched = Launched::start(&app).expect("could not start it");
