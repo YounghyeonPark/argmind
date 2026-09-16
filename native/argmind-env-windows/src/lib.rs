@@ -19,6 +19,7 @@ pub mod camera;
 pub mod cover;
 pub mod hands;
 pub mod launch;
+pub mod loudspeaker;
 pub mod microphone;
 pub mod patterns;
 pub mod speaker;

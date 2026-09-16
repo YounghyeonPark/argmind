@@ -1,0 +1,302 @@
+//! Putting audio on the speakers, and **stopping it mid-word.**
+//!
+//! `SapiSpeaker` synthesises and plays in one call, so nothing here was needed while the voice was
+//! SAPI's. A neural synthesiser hands back samples instead — `qwentts.cpp` answers with 24 kHz mono
+//! — and something has to take them to the device. This is that something, and it is the mirror of
+//! [`crate::microphone`]: same WASAPI, same shared mode, same mix-format handling, opposite
+//! direction.
+//!
+//! ## Stopping is the requirement, not playing
+//!
+//! Playing audio is easy and is not why this file is careful. **Barge-in is the reason**: a median
+//! reply is about three seconds of speech against a 0.61 s model call, and a voice that cannot be
+//! interrupted turns a conversation into a lecture. `Speaker::stop` means *cut it off now and do
+//! not resume*, so:
+//!
+//! * The device buffer is kept **short on purpose**. Whatever has already been handed to WASAPI is
+//!   going to be heard no matter what this does, so the buffer length is the floor on how fast a
+//!   stop can take effect. Sixty milliseconds is below what anybody notices and still leaves room
+//!   for the feeder thread to miss a beat.
+//! * `stop` clears the queue **and resets the device**, which drops what it is already holding.
+//!   The first version of this file claimed that in a comment and did not do it — it cleared the
+//!   queue and left up to a buffer of speech still to come out, which is a stop that is late by
+//!   exactly the amount nobody would measure.
+//!
+//! ## What it does not do
+//!
+//! **No mixing and no queueing of utterances.** One thing speaks at a time; a new utterance
+//! replaces the old one, which is what barge-in means and also what `SapiSpeaker` already does.
+
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::{Arc, Mutex};
+
+/// How much audio the device is allowed to be holding, in hundred-nanosecond units.
+///
+/// **This is the floor on how quickly speech can stop**, so it is short rather than comfortable:
+/// once samples are in WASAPI's buffer they will be heard. Sixty milliseconds.
+pub const BUFFER: i64 = 600_000;
+
+/// What the synthesiser speaks at. Everything is resampled from this to whatever the device wants.
+pub const FROM_HZ: u32 = 24_000;
+
+#[derive(Default)]
+struct Queue {
+    /// Mono samples at [`FROM_HZ`], oldest first.
+    waiting: Vec<f32>,
+    /// Bumped by `stop` and by each new utterance. **The feeder checks it rather than a flag**, so
+    /// a stop that lands while the thread is mid-buffer cannot be missed and then un-missed by the
+    /// next utterance setting the flag back.
+    generation: u64,
+}
+
+/// A voice's mouth: hand it samples, or cut it off.
+pub struct Loudspeaker {
+    queue: Arc<Mutex<Queue>>,
+    /// Whether the feeder thread is alive. Not whether sound is coming out — see [`Self::speaking`].
+    running: Arc<AtomicBool>,
+    /// The generation the feeder is working on, so `speaking` can tell "still going" from "the
+    /// queue is empty because it finished".
+    playing: Arc<AtomicBool>,
+    generation: Arc<AtomicU64>,
+    /// **`false` when the device could not be opened.** A machine with no output is a fact to
+    /// report, not an error to fail on: the agent still works, it is just quiet.
+    pub available: bool,
+    /// How many utterances were cut off. Counted because barge-in working is a thing to be able to
+    /// show, and because barge-in firing constantly would mean something else is wrong.
+    pub cut_off: u64,
+}
+
+impl Default for Loudspeaker {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl Loudspeaker {
+    pub fn new() -> Self {
+        Loudspeaker {
+            queue: Arc::new(Mutex::new(Queue::default())),
+            running: Arc::new(AtomicBool::new(false)),
+            playing: Arc::new(AtomicBool::new(false)),
+            generation: Arc::new(AtomicU64::new(0)),
+            available: false,
+            cut_off: 0,
+        }
+    }
+
+    /// Speak these samples. **Returns at once**, and replaces whatever was playing.
+    pub fn play(&mut self, samples: &[f32]) {
+        if self.speaking() {
+            self.cut_off += 1;
+        }
+        let generation = {
+            let Ok(mut queue) = self.queue.lock() else { return };
+            queue.generation += 1;
+            queue.waiting.clear();
+            queue.waiting.extend_from_slice(samples);
+            queue.generation
+        };
+        self.generation.store(generation, Ordering::SeqCst);
+        self.start();
+    }
+
+    /// Cut it off now and do not resume. **This is what barge-in is.**
+    ///
+    /// **Returns before the sound has stopped.** It tells the feeder to drop everything, and the
+    /// feeder resets the device on its next pass — a millisecond or two later. `speaking()` is what
+    /// says whether it has actually happened.
+    pub fn stop(&mut self) {
+        if let Ok(mut queue) = self.queue.lock() {
+            queue.generation += 1;
+            queue.waiting.clear();
+            self.generation.store(queue.generation, Ordering::SeqCst);
+        }
+    }
+
+    /// Is sound coming out?
+    ///
+    /// **Set by the feeder thread and by nothing else.** An earlier version had `stop` clear this
+    /// directly, which made *how long does stopping take* a measurement of one line setting a
+    /// boolean: it read 0 ms every time, whatever the device was doing.
+    pub fn speaking(&self) -> bool {
+        self.playing.load(Ordering::SeqCst)
+    }
+
+    /// Let the thread go. Safe to call twice.
+    pub fn release(&mut self) {
+        self.stop();
+        self.running.store(false, Ordering::SeqCst);
+    }
+
+    #[cfg(not(windows))]
+    fn start(&mut self) {}
+
+    #[cfg(windows)]
+    fn start(&mut self) {
+        if self.running.swap(true, Ordering::SeqCst) {
+            //: Already feeding. It will pick up the new generation on its next pass, which is the
+            //: whole reason the queue carries one.
+            return;
+        }
+        let queue = Arc::clone(&self.queue);
+        let running = Arc::clone(&self.running);
+        let playing = Arc::clone(&self.playing);
+        playing.store(true, Ordering::SeqCst);
+        std::thread::spawn(move || {
+            if let Err(e) = feed(&queue, &running, &playing) {
+                eprintln!("  the speaker would not open: {e}");
+            }
+            playing.store(false, Ordering::SeqCst);
+            running.store(false, Ordering::SeqCst);
+        });
+        self.available = true;
+    }
+}
+
+/// Stretch mono samples from [`FROM_HZ`] to the device's rate, and spread them across its channels.
+///
+/// **Linear, like the capture side.** A synthesiser's output is already band-limited and the
+/// destination rate is usually a clean 2:1; the argument for anything better is an argument about
+/// audio that has not been measured to matter here.
+pub fn to_device(samples: &[f32], to_hz: u32, channels: usize) -> Vec<f32> {
+    if samples.is_empty() || to_hz == 0 || channels == 0 {
+        return Vec::new();
+    }
+    let ratio = FROM_HZ as f64 / to_hz as f64;
+    //: **Counted in integers.** `(len / ratio).floor()` loses a frame at 44.1 kHz — 24000 / (24000
+    //: / 44100) comes out as 44099.999… and floors to one short. One frame is nothing to hear and
+    //: the arithmetic being wrong is something to fix.
+    let out_frames = samples.len() * to_hz as usize / FROM_HZ as usize;
+    let mut out = Vec::with_capacity(out_frames * channels);
+    for i in 0..out_frames {
+        let at = i as f64 * ratio;
+        let low = at.floor() as usize;
+        let part = (at - low as f64) as f32;
+        let a = samples.get(low).copied().unwrap_or(0.0);
+        let b = samples.get(low + 1).copied().unwrap_or(a);
+        let value = a + (b - a) * part;
+        for _ in 0..channels {
+            out.push(value);
+        }
+    }
+    out
+}
+
+#[cfg(windows)]
+fn feed(queue: &Mutex<Queue>, running: &AtomicBool, playing: &AtomicBool)
+        -> windows::core::Result<()> {
+    use windows::Win32::Media::Audio::{
+        eConsole, eRender, IAudioClient, IAudioRenderClient, IMMDeviceEnumerator, MMDeviceEnumerator,
+        AUDCLNT_SHAREMODE_SHARED, WAVEFORMATEX, WAVE_FORMAT_PCM,
+    };
+    use windows::Win32::System::Com::{CoCreateInstance, CoInitializeEx, CLSCTX_ALL,
+                                      COINIT_MULTITHREADED};
+
+    unsafe {
+        let _ = CoInitializeEx(None, COINIT_MULTITHREADED);
+        let devices: IMMDeviceEnumerator =
+            CoCreateInstance(&MMDeviceEnumerator, None, CLSCTX_ALL)?;
+        let device = devices.GetDefaultAudioEndpoint(eRender, eConsole)?;
+        let client: IAudioClient = device.Activate(CLSCTX_ALL, None)?;
+        let format = client.GetMixFormat()?;
+        let (channels, rate, bits, tag) = ((*format).nChannels as usize,
+                                           (*format).nSamplesPerSec,
+                                           (*format).wBitsPerSample,
+                                           (*format).wFormatTag);
+        client.Initialize(AUDCLNT_SHAREMODE_SHARED, 0, BUFFER, 0, format, None)?;
+        let render: IAudioRenderClient = client.GetService()?;
+        let total = client.GetBufferSize()?;
+        //: **Not started until there is something to say.** A started client with an empty buffer
+        //: is a glitch waiting for the first utterance, and this one stops and resets between
+        //: utterances anyway.
+        let mut started = false;
+
+        //: What this thread is currently speaking. A change means somebody called `play` or `stop`
+        //: while it was mid-buffer, and everything converted from the old utterance is dropped.
+        let mut mine = 0u64;
+        let mut ours: Vec<f32> = Vec::new();
+        let mut at = 0usize;
+        let mut quiet_passes = 0u32;
+
+        while running.load(Ordering::SeqCst) {
+            {
+                let Ok(mut held) = queue.lock() else { break };
+                if held.generation != mine {
+                    mine = held.generation;
+                    //: **Converted once, here**, rather than per buffer: resampling a whole
+                    //: utterance is a millisecond and doing it in the feed loop would put it in
+                    //: the path of every buffer deadline.
+                    ours = to_device(&held.waiting, rate, channels);
+                    held.waiting.clear();
+                    at = 0;
+                }
+            }
+
+            if at >= ours.len() {
+                //: **The device is reset the moment there is nothing left**, which is what makes a
+                //: stop immediate rather than a buffer late: `Reset` drops the frames WASAPI is
+                //: still holding. Without it, `stop` returns and up to `BUFFER` of speech carries
+                //: on, and nobody hears the difference between that and a slow stop.
+                if playing.load(Ordering::SeqCst) {
+                    let _ = client.Stop();
+                    let _ = client.Reset();
+                    started = false;
+                    //: **After the reset, not before.** The flag is what a caller times against,
+                    //: so dropping it first would report a stop that had not happened yet — the
+                    //: same self-measurement this file already made once.
+                    playing.store(false, Ordering::SeqCst);
+                }
+                //: Nothing to say. **Not an exit**, because the next utterance usually arrives
+                //: within a turn and reopening the device costs more than waiting — but not
+                //: forever either, or an idle agent holds the speakers all day.
+                quiet_passes += 1;
+                if quiet_passes > 300 {
+                    break;
+                }
+                std::thread::sleep(std::time::Duration::from_millis(10));
+                continue;
+            }
+            quiet_passes = 0;
+            if !started {
+                client.Start()?;
+                started = true;
+            }
+            playing.store(true, Ordering::SeqCst);
+
+            let used = client.GetCurrentPadding()?;
+            let room = total.saturating_sub(used) as usize;
+            if room == 0 {
+                std::thread::sleep(std::time::Duration::from_millis(5));
+                continue;
+            }
+            let left = (ours.len() - at) / channels;
+            let frames = room.min(left);
+            if frames == 0 {
+                at = ours.len();
+                continue;
+            }
+            let data = render.GetBuffer(frames as u32)?;
+            let count = frames * channels;
+            //: The mix format is float on every machine seen here, and integer is handled rather
+            //: than assumed away — a wrong guess is noise, which is worse than silence.
+            if tag == WAVE_FORMAT_PCM as u16 && bits == 16 {
+                let out = std::slice::from_raw_parts_mut(data as *mut i16, count);
+                for (i, slot) in out.iter_mut().enumerate() {
+                    *slot = (ours[at + i].clamp(-1.0, 1.0) * 32767.0) as i16;
+                }
+            } else {
+                let out = std::slice::from_raw_parts_mut(data as *mut f32, count);
+                out.copy_from_slice(&ours[at..at + count]);
+            }
+            render.ReleaseBuffer(frames as u32, 0)?;
+            at += count;
+        }
+
+        if started {
+            client.Stop()?;
+        }
+        //: `WAVEFORMATEX` came from `GetMixFormat`, which allocates; releasing it is the caller's.
+        windows::Win32::System::Com::CoTaskMemFree(Some(format as *const WAVEFORMATEX as *const _));
+    }
+    Ok(())
+}

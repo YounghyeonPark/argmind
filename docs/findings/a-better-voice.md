@@ -185,9 +185,35 @@ Not large, and every piece has a precedent in this tree:
    `Speaker::stop` means.
 
 **The number exists now and it says go ahead** — Q8_0, Vulkan, through `tts-server` rather than
-the command line. What is still unmeasured is the second item: nobody has written a line of
-playback, and *how long it takes to get 24 kHz onto the speakers and then stop it mid-word* is
-the number that decides whether barge-in survives the change.
+the command line.
+
+### Playback, and what barge-in costs
+
+Written: `argmind-env-windows/src/loudspeaker.rs`, the mirror of the microphone. Measured with
+`--example bargein`, twice:
+
+| | |
+|---|---|
+| `play()` to sound going out | **3–4 ms** |
+| `stop()` to the device reset | **4–6 ms** |
+| `play()` over something already speaking | **1 ms** to return |
+
+**Bounded rather than exact.** Those are times to the feeder thread having stopped and reset the
+device; what WASAPI does in the microsecond after `Reset` is not measured, and the device buffer
+is 60 ms, so *heard* silence is somewhere under that. Measuring it properly wants loopback
+capture — recording what the speakers actually output — which is the same shape as
+`microphone.rs` and has not been built.
+
+**Two things in that file were wrong before they were measured.** The module comment said `stop`
+tells the device to drop what it is holding; it did not, it only cleared the queue, which is a
+stop that is late by a buffer and that nobody would notice. And `stop` set the `speaking` flag
+itself, so *how long does stopping take* was timing one line setting a boolean — it read 0 ms
+every time, whatever the device was doing. Both are fixed and both are written down where they
+happened.
+
+A third turned up in the suite: the output frame count was `(len / ratio).floor()`, which loses
+a frame at 44.1 kHz because 24000 / (24000/44100) comes out as 44099.999…. Integer arithmetic
+now.
 
 ## Taking the measurement
 
