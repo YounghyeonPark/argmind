@@ -20,10 +20,16 @@ argmind-voice = { path = "../argmind-voice" }
 # `platform.rs` picks when there is no better answer, which on 2026-09-16 is macOS and Linux.
 argmind-env-none = { path = "../argmind-env-none" }
 
-# The window the page lives in. **Only the binary uses it** — the library above is protocol and
+# The window the page lives in. **Only `argmind-app` uses it** — the library is protocol and
 # proposals and has no opinion about how anybody looks at it. It names no platform either: wry
 # picks WebView2, WKWebView or WebKitGTK behind one function.
-argmind-window = { path = "../argmind-window" }
+#
+# **Optional so the rest can be compiled for an operating system whose desktop libraries are not
+# installed here.** On Linux this pulls `libdbus-sys` and `webkit2gtk-sys`, whose build scripts
+# want `pkg-config` and a sysroot; without it `cargo check --target x86_64-unknown-linux-gnu
+# --no-default-features` compiles the whole application for Linux on this machine, which is the
+# only Linux evidence available until there is a Linux.
+argmind-window = { path = "../argmind-window", optional = true }
 
 # Windows only, and by the manifest rather than by a `cfg` inside the code — so a Linux checkout
 # does not even try to compile UI Automation.
@@ -32,8 +38,23 @@ argmind-env-windows = { path = "../argmind-env-windows" }
 argmind-env-qwentts = { path = "../argmind-env-qwentts" }
 
 [features]
-default = []
+default = ["window"]
+# The window, and therefore `argmind-app`. On by default; off is for checking the rest of the
+# application against a target this machine cannot link.
+window = ["dep:argmind-window"]
 # **Build the application as though this were an operating system nobody has ported to.** Not a
 # convenience: it is how a claim about portability is checked on a machine that has one operating
 # system. `tests/portable.rs` runs the whole server this way.
 headless = []
+
+# Declared rather than discovered, because one of them cannot be built without the window and
+# cargo needs telling which.
+[[bin]]
+name = "argmind-app"
+required-features = ["window"]
+
+[[bin]]
+name = "serve"
+
+[[bin]]
+name = "argmind"

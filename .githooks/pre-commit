@@ -57,6 +57,32 @@ if ! cargo test --manifest-path native/Cargo.toml $nowhere --quiet >"$log" 2>&1;
 fi
 echo "pre-commit: it builds and runs with no environment at all."
 
+# --- and it compiles for an operating system that is not this one --------------
+#
+# Stronger than the headless build, which still has `cfg(windows)` true underneath: this
+# takes the other branch of every `cfg` in the tree, including the manifest's
+# `[target.'cfg(windows)'.dependencies]`. The window is left out because on Linux it pulls
+# `libdbus-sys` and `webkit2gtk-sys`, whose build scripts want a sysroot this machine has
+# no reason to have -- `docs/findings/the-window.md` records exactly which packages.
+#
+# **Skipped loudly rather than quietly** where the target is not installed. A check that
+# silently does nothing on most clones is a check that reads green for years.
+
+if rustup target list --installed 2>/dev/null | grep -q '^x86_64-unknown-linux-gnu$'; then
+    echo "pre-commit: compiling for linux..."
+    linux="--target x86_64-unknown-linux-gnu -p argmind-serve --no-default-features"
+    if ! cargo check --manifest-path native/Cargo.toml $linux --quiet >"$log" 2>&1; then
+        echo ""
+        echo "COMMIT BLOCKED: the application no longer compiles for linux."
+        echo ""
+        tail -30 "$log"
+        exit 1
+    fi
+    echo "pre-commit: it compiles for linux."
+else
+    echo "pre-commit: SKIPPED the linux check -- rustup target add x86_64-unknown-linux-gnu"
+fi
+
 # --- the front end is compiled and committed -----------------------------------
 #
 # Everything under `ui/dist/` is `include_str!`d into the server, so a change to the

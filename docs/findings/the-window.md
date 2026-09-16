@@ -164,6 +164,46 @@ and `CLAUDE.md` says so. The difference here is that the claim is a binary fact 
 the application builds and runs against an environment that is not Windows — so the test was
 written first.
 
+### It compiles for Linux, and that is measured rather than argued
+
+**WSL was authorised and could not be installed.** The elevation prompt was cancelled twice; the
+owner was following from another device and a UAC prompt lives on this machine's secure desktop,
+where a remote reader cannot reach it. So the Linux evidence was got another way, and it turned out
+to be most of what WSL would have given for this stage.
+
+`rustup target add x86_64-unknown-linux-gnu` needs no administrator, and `cargo check --target` is
+a real compile — the other branch of every `cfg` in the tree, including the manifest's
+`[target.'cfg(windows)'.dependencies]`, which the `headless` feature does **not** exercise because
+`cfg(windows)` is still true underneath it.
+
+**Six crates compile for Linux unchanged**: `argmind-core`, `argmind-voice`, `argmind-env-none`,
+`argmind-env-ollama`, `argmind-env-whisper`, `argmind-rules`.
+
+**And so does the whole application** — the library and both console binaries — with the window
+left out. `argmind-window` became an optional dependency behind a default-on `window` feature, and
+`argmind-app` carries `required-features = ["window"]`, because only that binary ever used it. On
+Windows nothing changes; with `--no-default-features` the rest compiles for Linux today.
+
+Checked by breaking: a `use argmind_env_windows::` added to `app.rs` compiles fine here and fails
+the Linux check with *unresolved import*. **That is a class the source-reading rule cannot catch**
+— the rule sees names, and only a compiler knows what actually got linked. The pre-commit hook runs
+both, and says so out loud when the Linux target is not installed rather than skipping quietly.
+
+### What Linux still wants, read off the failure rather than guessed
+
+The window is where it stops, and the build script says exactly why:
+
+    pkg_config failed: pkg-config has not been configured to support cross-compilation
+    libdbus-sys ... build.rs:25 panicked
+
+So a Linux machine needs, before `argmind-app` builds there:
+
+    pkg-config  libdbus-1-dev  libgtk-3-dev  libwebkit2gtk-4.1-dev
+    libsoup-3.0-dev  libjavascriptcoregtk-4.1-dev
+
+`libdbus` is the tray's, not the window's — `tray-icon` speaks StatusNotifierItem over D-Bus. The
+rest are wry's WebKitGTK backend.
+
 ### The two things a machine is needed for
 
 **Linux is two targets, not one.** X11 lets a program inject input with XTEST and read other

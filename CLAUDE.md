@@ -171,6 +171,13 @@ has the plan and the measurement that reordered it. The short version: the port 
 types in six files. **That is fixed and checked** — `platform.rs` chooses, `argmind-env-none` is
 what it chooses when there is nothing better, and the application builds and runs against it.
 
+**Six crates and the whole application already compile for Linux** — `cargo check --target
+x86_64-unknown-linux-gnu -p argmind-serve --no-default-features`, which the pre-commit hook runs.
+That is stronger than the headless build, because it takes the other branch of every `cfg`
+including the manifest's. The window is what stops there: on Linux it wants `pkg-config`,
+`libdbus-1-dev`, `libgtk-3-dev`, `libwebkit2gtk-4.1-dev`, `libsoup-3.0-dev` and
+`libjavascriptcoregtk-4.1-dev`, read off the build failure rather than guessed.
+
 **What remains is a real environment for each, and it needs a machine.** Writing one that cannot be
 run produces code that compiles and does not work. Three things are known before that starts:
 **Linux is two targets** — X11 allows XTEST, Wayland routes input and window reading through
