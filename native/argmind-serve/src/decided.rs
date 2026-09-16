@@ -165,6 +165,11 @@ pub fn parse(text: &str) -> BTreeMap<String, Standing> {
 }
 
 pub fn render(all: &BTreeMap<String, Standing>) -> String {
+    //: **Nothing decided is `{}`**, not a pair of braces with a blank line between them. This is a
+    //: file somebody is meant to open and understand, and the tidy empty case is free.
+    if all.is_empty() {
+        return "{}\n".to_string();
+    }
     let rows: Vec<String> = all.iter()
         .map(|(k, v)| format!("  \"{k}\": \"{}\"", v.word()))
         .collect();

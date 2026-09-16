@@ -75,6 +75,9 @@ fn what_is_written_is_what_comes_back() {
     //: It is a file a person is meant to be able to open and understand.
     assert!(text.contains("\"ollama\": \"allowed\""), "{text}");
     assert!(text.contains("\"notice\": \"denied\""), "{text}");
+    //: And nothing decided is nothing, tidily.
+    assert_eq!(render(&std::collections::BTreeMap::new()), "{}\n");
+    assert!(parse("{}\n").is_empty());
 }
 
 /// **A file somebody edited badly asks again**, which is the safe direction.
