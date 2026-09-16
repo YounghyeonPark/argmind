@@ -172,6 +172,48 @@ pub fn orb(side: u32) -> Vec<u8> {
     pixels
 }
 
+/// The icon, its menu, and the two ids the loop compares against.
+///
+/// **Its own function because it has to be allowed to fail without taking the window down**, and
+/// because on Linux it can fail in a way a `Result` does not carry: `libappindicator-sys`
+/// **panics** when `libayatana-appindicator3.so.1` is not installed, from inside a lazy
+/// initialiser. Measured on Ubuntu 26.04 under WSLg, where that library is not a dependency of
+/// anything else and argmind exited before drawing anything.
+///
+/// So the panic is caught. That is not a thing to do casually — a caught panic is a bug somebody
+/// has decided to live with — and the reasoning is that this one is somebody else's library
+/// reporting a missing optional system component, the failure is total and immediate rather than
+/// partway through mutating something, and the alternative is an application that will not start
+/// on a desktop with no system tray. **Plenty of them have none**; that is not a broken machine.
+fn make_tray(side: u32, tooltip: &str)
+             -> Result<(tray_icon::TrayIcon, tray_icon::menu::MenuId, tray_icon::menu::MenuId),
+                       String> {
+    let tooltip = tooltip.to_string();
+    let built = std::panic::catch_unwind(move || -> Result<_, String> {
+        let icon = Icon::from_rgba(orb(side), side, side)
+            .map_err(|e| format!("아이콘을 만들지 못했습니다 ({e})"))?;
+        let menu = Menu::new();
+        let show = MenuItem::new("보이기", true, None);
+        let quit = MenuItem::new("끝내기", true, None);
+        menu.append(&show).map_err(|e| format!("{e}"))?;
+        menu.append(&quit).map_err(|e| format!("{e}"))?;
+        let (show_id, quit_id) = (show.id().clone(), quit.id().clone());
+        let icon = TrayIconBuilder::new()
+            .with_menu(Box::new(menu))
+            .with_tooltip(&tooltip)
+            .with_icon(icon)
+            .build()
+            .map_err(|e| format!("트레이 아이콘을 만들지 못했습니다 ({e})"))?;
+        Ok((icon, show_id, quit_id))
+    });
+    match built {
+        Ok(answer) => answer,
+        //: The panic's own message has already gone to stderr by the time this runs, so this only
+        //: has to say which thing it was.
+        Err(_) => Err("트레이 라이브러리가 없습니다 (libayatana-appindicator3)".into()),
+    }
+}
+
 /// Put the page in the window.
 ///
 /// **The one function that names an operating system**, and it has to: every backend but GTK
@@ -238,27 +280,27 @@ pub fn run(shell: Shell, orders: Option<Receiver<Say>>) -> Result<(), String> {
     const SIDE: u32 = 32;
     let mut show_id = None;
     let mut quit_id = None;
+    //: **Whether there is an icon, rather than whether one was asked for.** They come apart on
+    //: Linux, where plenty of desktops have no tray at all — see [`make_tray`].
+    let mut has_tray = false;
     //: **Held for as long as the loop runs, and dropped before it ends.** An icon that vanishes
     //: while the program is still running is the failure a tray exists to prevent; one that stays
     //: after the program has gone is the other failure, and it is the one this file has to work
     //: for — see `LoopDestroyed` below.
     let mut tray = None;
     if shell.tray {
-        let icon = Icon::from_rgba(orb(SIDE), SIDE, SIDE)
-            .map_err(|e| format!("아이콘을 만들지 못했습니다 ({e})"))?;
-        let menu = Menu::new();
-        let show = MenuItem::new("보이기", true, None);
-        let quit = MenuItem::new("끝내기", true, None);
-        menu.append(&show).map_err(|e| format!("{e}"))?;
-        menu.append(&quit).map_err(|e| format!("{e}"))?;
-        show_id = Some(show.id().clone());
-        quit_id = Some(quit.id().clone());
-        tray = Some(TrayIconBuilder::new()
-            .with_menu(Box::new(menu))
-            .with_tooltip(&shell.tooltip)
-            .with_icon(icon)
-            .build()
-            .map_err(|e| format!("트레이 아이콘을 만들지 못했습니다 ({e})"))?);
+        match make_tray(SIDE, &shell.tooltip) {
+            Ok((icon, show, quit)) => {
+                show_id = Some(show);
+                quit_id = Some(quit);
+                tray = Some(icon);
+                has_tray = true;
+            }
+            //: **Carried on rather than returned.** The window is the program and the icon is a
+            //: convenience; refusing to start because there is nowhere to put an icon would be the
+            //: tail wagging the dog, and on Linux it is the ordinary case rather than a fault.
+            Err(why) => eprintln!("  no tray icon, so the close button will quit: {why}"),
+        }
     }
     let clicks = TrayIconEvent::receiver();
     let menus = MenuEvent::receiver();
@@ -276,7 +318,7 @@ pub fn run(shell: Shell, orders: Option<Receiver<Say>>) -> Result<(), String> {
         match event {
             //: Stated so the reason is in the code: closing is hiding. The program is still there,
             //: it is still listening, and the icon by the clock is what says so.
-            Event::WindowEvent { event: WindowEvent::CloseRequested, .. } if shell.tray =>
+            Event::WindowEvent { event: WindowEvent::CloseRequested, .. } if has_tray =>
                 window.set_visible(false),
             //: **With no tray there is nothing to come back from**, so the close button is the
             //: close button. A window that hid itself with no icon anywhere would be a process
