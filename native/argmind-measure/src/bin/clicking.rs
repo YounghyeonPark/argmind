@@ -116,7 +116,10 @@ fn run() -> i32 {
             return 2;
         }
         Pointing::Refused => {
-            println!("  the desktop will not take input — the screen is locked, or another desktop has it. Nothing is wrong with the machine; come back when it is unlocked.");
+            //: **What is true, and no further.** The first version of this said "the screen is
+            //: locked"; measured, the input desktop was `Default` and `SetCursorPos` still failed
+            //: with `ERROR_INVALID_HANDLE`, so that explanation was invented rather than found.
+            println!("  the desktop will not take input — SetCursorPos is refused. Nothing here can reach the screen until it does; the cause is not established (see Pointing::Refused).");
             return 2;
         }
     }

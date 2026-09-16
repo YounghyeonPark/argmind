@@ -278,19 +278,29 @@ pub fn pointing_is_exact() -> bool {
 
 /// Why a click would not land, told apart.
 ///
-/// **These were one answer and they are two problems.** A scaled write path is a display setting
-/// and the harness should refuse; a desktop that will not take input at all is a locked screen,
-/// and the remedy is to come back later rather than to change anything. Reporting the second as
-/// the first sent somebody looking at DPI while the machine was simply locked — which happened
-/// here, mid-measurement, between one run and its repeat.
+/// **These were one answer and they are two problems.** A scaled write path is a display setting.
+/// A desktop that will not take input at all is something else entirely, and reporting it as the
+/// first sends somebody to check their DPI for a reason that has nothing to do with DPI.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Pointing {
     /// The cursor goes exactly where it is sent.
     Exact,
     /// It moves, and lands somewhere else — a virtualised coordinate.
     Scaled,
-    /// **`SetCursorPos` failed.** Reading the cursor still works; writing it does not. That is a
-    /// locked workstation or another desktop holding the input — not a display problem.
+    /// **`SetCursorPos` failed.** Reading the cursor still works; writing it does not.
+    ///
+    /// **What causes it is not settled, and the first guess written here was wrong.** It said
+    /// *locked workstation*; when it was actually measured, `OpenInputDesktop` succeeded and named
+    /// the input desktop `Default` — not `Winlogon`, not a screen-saver desktop — while
+    /// `SetCursorPos` returned `ERROR_INVALID_HANDLE` for thirty seconds together. A locked session
+    /// does not look like that. What is established is the symptom and that it comes and goes:
+    /// during one afternoon it was `Exact` immediately after the person at the machine used it and
+    /// `Refused` a minute later, repeatedly, and the harness runs themselves disturbed the session
+    /// enough to be a candidate cause rather than an innocent observer.
+    ///
+    /// So the message says what is true — the desktop will not take input — and stops there. A
+    /// remedy invented for a cause nobody has is how somebody spends an afternoon on the wrong
+    /// thing.
     Refused,
 }
 

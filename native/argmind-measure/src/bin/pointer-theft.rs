@@ -26,10 +26,15 @@
 //! | patterns on | `invoke` | WORKED | `(700, 400) -> (700, 400)` — **unmoved** |
 //! | patterns off | click | WORKED | `(700, 400) -> (130, 459)` — **moved to the widget** |
 //!
-//! **n = 1**, and that is the honest count: the workstation locked between this run and its two
-//! repeats, and `SetCursorPos` then fails while `GetCursorPos` still works. A locked screen is now
-//! told apart from a scaled display in the refusal message, because it was reported as the second
-//! and is the first.
+//! **n = 3**, all three identical. They took three attempts to collect, because between runs the
+//! desktop kept refusing input — see the note on [`argmind_env_windows::Pointing::Refused`], where
+//! what that refusal actually means is *not* settled.
+//!
+//! **This is the axis where the patterns earn something.** Task success says nothing either way
+//! (`3 of 3` both) and `obstruction` says nothing either way (24 of 24, neither path reaches past a
+//! cover). Here they differ every time: `invoke` leaves the pointer where the person left it and a
+//! click drags it to the widget. Whether that is worth ninety lines, a second COM client and an
+//! ancestor walk is the owner's call; the measurement is no longer the missing part of it.
 //!
 //! ## The first version of this measured nothing, and said `unmoved` twice
 //!
@@ -180,7 +185,10 @@ fn run() -> i32 {
             return 2;
         }
         Pointing::Refused => {
-            println!("  the desktop will not take input — the screen is locked, or another desktop has it. Nothing is wrong with the machine; come back when it is unlocked.");
+            //: **What is true, and no further.** The first version of this said "the screen is
+            //: locked"; measured, the input desktop was `Default` and `SetCursorPos` still failed
+            //: with `ERROR_INVALID_HANDLE`, so that explanation was invented rather than found.
+            println!("  the desktop will not take input — SetCursorPos is refused. Nothing here can reach the screen until it does; the cause is not established (see Pointing::Refused).");
             return 2;
         }
     }
