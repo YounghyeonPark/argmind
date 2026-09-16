@@ -46,6 +46,12 @@
 //! or any of the other ways of taking a foreground nobody offered — would make this a measurement
 //! of a program that seizes the screen, which is not the program.
 //!
+//! **That advice was half of it.** The console must also not be *inside the session driving the
+//! run*: this takes the foreground away from whatever started it, so a harness launched from the
+//! window somebody is working in interrupts its own caller. See the note in `clicking.rs`, where
+//! three attempts were cut off that way and the wreckage was briefly explained as a locked screen
+//! it was not.
+//!
 //! ## Measured 2026-09-16 — **24 of 24, and the patterns reach past nothing**
 //!
 //! Three runs, eight arms each, every one agreeing with the prediction written above it:

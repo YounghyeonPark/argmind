@@ -108,6 +108,14 @@ impl<E: Eyes, H: Hands, M: Speaks> Session<E, H, M> {
     /// gone. The role is half of the key; among duplicates the one nearest to where a same-named
     /// thing was last seen wins, which assumes a thing moves rather than teleporting past its own
     /// copies.
+    ///
+    /// **Measured 2026-09-16: that assumption does not cover a control with copies, and it cost a
+    /// goal.** Character Map in advanced view has more than one button named `Open` — in basic view
+    /// the single one belongs to the `Font :` combo — and asked for the font list the agent opened
+    /// the character set list instead. The anchor below is found with `.find()`, *the first* match
+    /// in the previous reading, so with duplicates the anchor is itself arbitrary and nearest-to-it
+    /// is arbitrary too. **This disambiguates a control that moved; it cannot disambiguate a
+    /// control that has copies**, and neither can the model, which is shown the same two fields.
     pub fn find(&mut self, name: &str, role: &str) -> Option<Widget> {
         let fresh = self.eyes.foreground();
         let same: Vec<&Widget> = fresh.iter()

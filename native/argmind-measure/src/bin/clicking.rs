@@ -32,6 +32,53 @@
 //!   about the application rather than about the agent**: if Character Map's advanced view exposes
 //!   no control named "Search", this reports a failure that is mine. Both are printed so the two
 //!   cannot be confused.
+//!
+//! ## This cannot be run from the session that is driving it — 2026-09-16
+//!
+//! **The thing being measured is the thing that breaks the measurement.** It takes the foreground
+//! and presses buttons; run from a terminal inside the session that started it, that steals focus
+//! from the window the person is working in, and the run is interrupted by its own first act. Three
+//! attempts from inside such a session were cut off, and an earlier hypothesis that the *screen was
+//! locked* was invented to explain the wreckage — the input desktop was `Default` throughout.
+//!
+//! Open a separate console, give it focus, run the binary, and leave the keyboard alone:
+//!
+//! ```text
+//!   native/target/debug/clicking.exe        run from C:/dev/argmind
+//! ```
+//!
+//! ## Measured 2026-09-16 — **2 of 3, n = 1**
+//!
+//! The Python scored `3 of 3` at n=3 on the same three goals and under the same condition — one
+//! Character Map for all three, so the second goal meets a screen the first has already changed.
+//! **This is one run against three and the model is noisy** (choosing reads 21, 23 and 24 across
+//! runs of one configuration), so it is a number, not a regression.
+//!
+//! | goal | chosen | outcome |
+//! |---|---|---|
+//! | 고급 옵션 켜줘 | `Advanced view` | WORKED — `+ ["Character set :", "Go to Unicode :", "Group by :", "Search"]` |
+//! | 글꼴 목록 열어줘 | `Open` | CHANGED — `+ ["DOS: Arabic", "DOS: Baltic", …]`, which is the **character set** list |
+//! | 이 창 최소화해 | `Minimize` | WORKED — `- ["Close", "Maximize", "Minimize", "System"]` |
+//!
+//! ## What the one miss says, and it is not about the model
+//!
+//! **`name` and `role` together are still not a key.** In basic view Character Map has exactly one
+//! button named `Open`, at `(391, 107)`, immediately beside the `Font :` combo box that spans
+//! `x 86..407` — it is that combo's drop-down. The first goal turned advanced view on, which adds
+//! more combo boxes; the second goal asked for the font list, the model named `Open`, and what
+//! opened was the **character set** list. So advanced view has at least two buttons named `Open`,
+//! and the agent resolved to the wrong one. The delta is what proves which.
+//!
+//! **The model could not have done better.** It is shown `name, role` pairs; three identical
+//! `Open / button` entries give it no way to name the one it means. This is the same defect as the
+//! `text` label reading `Font :` in front of a `combo box` of the same name — the one the `role`
+//! field was added to fix — one level deeper.
+//!
+//! **And the tie-break does not break this tie.** [`argmind_core::session::Session::find`] picks
+//! the candidate nearest to where a same-named widget was last seen, and it finds that anchor with
+//! `.find()` — *the first* match in the previous reading. With duplicates the anchor is itself
+//! arbitrary, so the nearest-to-it is arbitrary too. It disambiguates a control that moved; it
+//! cannot disambiguate a control that has copies.
 
 use std::collections::BTreeSet;
 use std::thread::sleep;
