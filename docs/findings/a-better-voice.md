@@ -126,12 +126,44 @@ obviously fine here. Whatever builds this has to either sit somewhere short or b
 the path it will actually use — and the failure mode is a message about the C compiler, so
 nobody would guess.
 
-## What is not known
+## The GPU is thirty-two times faster and the output is wrong
 
-**Whether the GPU makes it fast enough is unmeasured**, and it is the only question left. A
-0.6B model on a 4090 should be well under real time, but *should* is not a number and this
-document already contains one thing that reasoning got wrong. The measurement costs one
-elevated install and two commands, and it is written out at the end of this file.
+With the SDK installed and both traps cleared, the Vulkan build runs on the right device —
+`NVIDIA GeForce RTX 4090 Laptop GPU ... matrix cores: NV_coopmat2`, the tensor cores.
+
+| backend | RTF | frames | audio from a 40-character sentence |
+|---|---|---|---|
+| CPU | 3.92 | 25, **stops at EOS** | 2.32 s |
+| CPU, same Vulkan-built binary | 4.81 | 33, **stops at EOS** | 2.64 s |
+| **Vulkan** | **0.123** | **2048, the `--max-new` cap** | **163.84 s** |
+
+Eight times faster than real time, from four times slower — a **thirty-two fold** speedup, and
+the number is real throughput. **The synthesis is not.** A forty-character sentence became two
+and a half minutes of audio, because the talker never emitted an end-of-speech token and ran
+until the cap stopped it.
+
+**That flattering number arrived attached to a broken run, which is the shape this project's
+standards exist for.** The RTF would have gone straight into a table if the frame count had not
+been sitting next to it.
+
+### It is the backend, isolated
+
+**The same binary**, with `GGML_VK_VISIBLE_DEVICES=""` so it falls back to CPU, stops at EOS at
+step 33. So it is not the build, not the flags, not the model file and not the text: it is
+`ggml-vulkan` computing something different enough that the EOS logit never wins.
+
+That is a useful shape of bug to know about, because it is silent. Nothing errors, nothing
+warns, and the only visible symptom is that the audio is far too long — which a caller with a
+timeout would report as *slow*.
+
+### What is being tried next
+
+`Q4_K_M` is a K-quant, and K-quant kernels are the most involved path in any backend. `Q8_0` is
+a far simpler one. If Q8_0 on Vulkan stops at EOS then the fault is in the K-quant path and the
+answer is *use Q8_0*, at 993 MB instead of 629 MB. If it does not, the fault is deeper and this
+wants reporting upstream rather than working around.
+
+## What is not known
 
 **Whether a Windows 11 natural voice can be used by an ordinary application here is also
 unmeasured.** None is installed — `Speech_OneCore\Isolated` is empty and the only Korean token
@@ -140,7 +172,7 @@ It is the cheapest thing to try and it costs two clicks: 설정 → 접근성 �
 음성 추가. `speaker.rs` prefers any Korean voice whose name lacks `Desktop`, so a newer one is
 picked up with no code change.
 
-## If the GPU path is taken, the work after it
+## The GPU path is taken. The work after it
 
 Not large, and every piece has a precedent in this tree:
 
@@ -152,8 +184,10 @@ Not large, and every piece has a precedent in this tree:
    `microphone.rs`'s capture — and it has to be interruptible mid-word, because barge-in is what
    `Speaker::stop` means.
 
-**Neither is worth writing until the GPU number exists.** A fix that builds a synthesiser which
-takes thirty seconds to say a sentence is a button that works and should not be pressed.
+**The number exists now and it says go ahead** — Q8_0, Vulkan, through `tts-server` rather than
+the command line. What is still unmeasured is the second item: nobody has written a line of
+playback, and *how long it takes to get 24 kHz onto the speakers and then stop it mid-word* is
+the number that decides whether barge-in survives the change.
 
 ## Taking the measurement
 
@@ -161,17 +195,24 @@ The installer is already fetched and verified at the hash above. It needs admini
 so it is two steps rather than one:
 
 ```text
-# 1. as administrator, once
-vulkan_sdk.exe --root C:\VulkanSDK\1.4.357.0 --accept-licenses --default-answer \
-               --confirm-command install com.lunarg.vulkan.core
+# 1. as administrator, once — the wizard, not the command line: the CLI mode cannot elevate
+vulkan_sdk.exe
 
-# 2. rebuild with the Vulkan backend and say one sentence
-cmake -B build -G "MinGW Makefiles" -DCMAKE_BUILD_TYPE=Release -DGGML_VULKAN=ON \
+# 2. somewhere SHORT. C:/q, not a hundred-character scratch directory
+git clone --recurse-submodules https://github.com/ServeurpersoCom/qwentts.cpp.git C:/q/t
+
+# 3. the toolchain's own bin FIRST on the path, or the shader generator loads the wrong
+#    libstdc++ and dies with 0xC0000139
+export PATH="<winlibs>/mingw64/bin:C:/VulkanSDK/1.4.357.0/Bin:$PATH"
+cmake -B b -G "MinGW Makefiles" -DCMAKE_BUILD_TYPE=Release -DGGML_VULKAN=ON \
       -DCMAKE_CXX_FLAGS=-D_WIN32_WINNT=0x0A00 -DCMAKE_C_FLAGS=-D_WIN32_WINNT=0x0A00
-cmake --build build --config Release -j 8
-build/qwen-tts.exe --model qwen-talker-0.6b-base-Q4_K_M.gguf \
-                   --codec qwen-tokenizer-12hz-Q4_K_M.gguf --lang Korean -o ko.wav < ko.txt
+cmake --build b --config Release -j 8
+
+# 4. say one sentence
+b/qwen-tts.exe --model qwen-talker-0.6b-base-*.gguf \
+               --codec qwen-tokenizer-12hz-*.gguf --lang Korean -o ko.wav < ko.txt
 ```
 
-The number to read is `RTF` on the `[Perf] Total` line. **Under 1.0 and this is worth building;
-over it and the honest answer is that a neural voice does not fit on this machine yet.**
+**Read two numbers, not one.** `RTF` on the `[Perf] Total` line says whether it is fast enough;
+the frame count beside it says whether it is right. A run that hits `--max-new` never found the
+end of the sentence, and its RTF is the throughput of generating nonsense.
