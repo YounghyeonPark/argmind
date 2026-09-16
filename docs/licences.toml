@@ -49,6 +49,42 @@ windows = { licence = "MIT OR Apache-2.0", why = "UI Automation and SAPI, native
 serde_json = { licence = "MIT OR Apache-2.0", why = "replies, and the expectation files" }
 sha2 = { licence = "MIT OR Apache-2.0", why = "the prompt fingerprint, in tests only" }
 
+# **Looked at and refused**, with what was checked. The owner asked on 2026-09-16 whether a better
+# Korean voice could be had for free, because the only one this machine has is `Microsoft Heami
+# Desktop` — a Windows 7-era concatenative voice, and their word for it was 어색함. These are the
+# candidates and why each is or is not available, recorded so nobody re-derives it.
+#
+# **The pattern is worth seeing.** Every open neural TTS with a Korean voice that was checked turns
+# out to be trained on one of two non-commercial datasets. The engines are permissive and the
+# *voices* are not, which is not a distinction a licence list catches unless somebody looks at the
+# model card rather than at the repository.
+[refused-candidates]
+"piper ko_KR-kss-medium" = """
+    The engine is MIT and the voice is not. Piper has exactly one Korean voice out of 176, trained
+    on the Korean Single Speaker dataset, whose model card names
+    creativecommons.org/licenses/by-nc-sa/4.0 — non-commercial, which is already in `refused` above
+    as a field-of-use restriction. Checked 2026-09-16 against the published `voices.json` and the
+    model card, not from memory."""
+"facebook/mms-tts-kor" = """
+    CC-BY-NC-4.0, from the model's own card. Same reason."""
+
+# **Looked at and allowed, and not taken for a different reason.**
+[considered]
+"myshell-ai/MeloTTS-Korean" = { licence = "MIT", why = """
+    Licence-clean and the licence is not the problem. It is Python and PyTorch, and this project
+    deleted its Python on 2026-09-15 — bringing back an interpreter and a deep-learning framework
+    to improve a voice would undo the largest thing done to the tree this month. The shape that
+    would work is the one Ollama and whisper.cpp already have: a separate server spoken to over a
+    local port, so argmind depends on a socket rather than on a runtime. It has no standard server,
+    so that is a project rather than a setting.""" }
+"Windows 11 natural voices" = { licence = "part of Windows", why = """
+    **The free one, and the first to try.** Installed from 설정 → 접근성 → 내레이터 → 자연스러운 음성
+    추가; neural, local, nothing redistributed and nothing new to link against. Not installed on
+    this machine — `Speech_OneCore\\Isolated` is empty and the only Korean token is Heami — so
+    whether an ordinary application can use one here is **unverified**: it is a thing to check after
+    installing, not a thing to assert. `speaker.rs` prefers any Korean voice whose name lacks
+    `Desktop`, so a newer one is used the moment one exists.""" }
+
 # Not dependencies: spoken to over a port, or downloaded by the user at run time. Recorded so a
 # reader knows they were considered rather than missed.
 [external]
