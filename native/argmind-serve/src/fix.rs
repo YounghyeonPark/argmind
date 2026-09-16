@@ -175,7 +175,7 @@ pub fn describe(fix: &Fix) -> String {
              · 그래픽카드에 모델을 올리는 데 몇십 초 걸립니다\n\
              · 서버는 {} 에서만 듣고, argmind를 닫으면 함께 꺼집니다\n\n\
              띄울까요?",
-            commit.get(..12).unwrap_or(commit), argmind_env_qwentts::QWENTTS),
+            commit.get(..12).unwrap_or(commit), crate::speaker::QWENTTS_HOST),
         Fix::BuildSpeaker { repo, commit, why, minutes, .. } => format!(
             "{why}\n\n\
              · {repo} 에서 커밋 {} 하나만 받습니다\n\
@@ -189,7 +189,7 @@ pub fn describe(fix: &Fix) -> String {
              빌드해서 띄울까요?",
             commit.get(..12).unwrap_or(commit),
             crate::speaker::WEIGHTS_MB,
-            argmind_env_qwentts::QWENTTS),
+            crate::speaker::QWENTTS_HOST),
         Fix::RunElevated { command, why } => format!(
             "{why}\n\n\
              · 다음을 관리자 권한으로 실행합니다:\n    {command}\n\

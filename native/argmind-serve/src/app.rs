@@ -52,10 +52,8 @@ use argmind_core::intent::{Effect, Trigger};
 use argmind_core::session::Session;
 use argmind_core::watch::{poll, Looking, Watch};
 use argmind_env_ollama::Local;
-use argmind_env_windows::hands::Did;
 use argmind_env_whisper::Whisper;
-use argmind_env_qwentts::QwenVoice;
-use argmind_env_windows::{Attending, Microphone, SapiSpeaker, Watcher, WindowsHands};
+use crate::platform::{self, Did, Ear, Mouth, Sight, Touch, Watching};
 use argmind_voice::Speaker;
 use crate::decided::{Answer, Standing};
 use crate::proposals::{Answered, Proposal, Proposals};
@@ -73,7 +71,14 @@ const ORB: &str = include_str!("../../../ui/dist/orb.js");
 /// **Public so the list can be asserted.** It is the program's whole unauthenticated surface, and
 /// a route added to it by an edit somewhere else is the kind of change nobody reviews twice.
 pub const SCRIPTS: [(&str, &str); 2] = [("/app.js", SCRIPT), ("/orb.js", ORB)];
-const ADDRESS: &str = "127.0.0.1:7331";
+/// The port argmind listens on, unless something says otherwise.
+pub const PORT: u16 = 7331;
+
+/// Where it listens. **Loopback, checked before the socket opens** — an agent that can press
+/// buttons on your screen has no business accepting a connection from the network.
+pub fn address(port: u16) -> String {
+    format!("127.0.0.1:{port}")
+}
 
 struct Model(Local);
 
@@ -101,7 +106,7 @@ impl Listeners {
 }
 
 struct Desk {
-    session: Session<Attending, WindowsHands, Model>,
+    session: Session<Sight, Touch, Model>,
     proposals: Proposals,
     dry: bool,
     /// **`None` unless asked for.** Speaking makes a noise in a room, which is not something to
@@ -122,7 +127,7 @@ struct Desk {
     /// **`None` unless asked for**, for the same reason and more so: a microphone is not opened
     /// because a program was run. `--hear` turns it on, and even then it opens only while the talk
     /// key is held.
-    ear: Option<(Microphone, Whisper)>,
+    ear: Option<(Ear, Whisper)>,
     /// **Off until somebody switches it on in the page.** With it on, a change of window starts a
     /// thought nobody asked for — and something on screen changes 13 seconds out of 14, so this is
     /// a standing invitation to spend a model call every few seconds.
@@ -569,7 +574,7 @@ fn listen(desk: &mut Desk, out: &Listeners, down: bool) {
         return;
     };
     out.send("busy", "1");
-    let heard = whisper.hear(&clip.samples, argmind_env_windows::microphone::WANT_HZ);
+    let heard = whisper.hear(&clip.samples, platform::WANT_HZ);
     out.send("busy", "0");
     match heard {
         Err(why) => out.send("note", &format!("듣지 못했습니다 — {why}")),
@@ -614,11 +619,14 @@ fn listen(desk: &mut Desk, out: &Listeners, down: bool) {
 /// may be holding. It opens no audio device — [`argmind_env_windows::loudspeaker::Loudspeaker`]
 /// waits until something is said.
 pub fn pick_voice() -> (Option<Box<dyn Speaker>>, &'static str) {
-    if crate::speaker::answering() {
-        eprintln!("  voice: {} on {}", crate::speaker::VOICE, argmind_env_qwentts::QWENTTS);
-        return (Some(Box::new(QwenVoice::new(crate::speaker::VOICE))), "neural");
+    //: **Asked of the platform, not of the socket.** Whether there is a neural voice to prefer
+    //: depends on whether this build can play one at all — the synthesiser is a server that runs
+    //: anywhere, and the loudspeaker that would play it is WASAPI and runs in one place.
+    if let Some(neural) = platform::neural_voice(crate::speaker::QWENTTS_HOST) {
+        eprintln!("  voice: {} on {}", crate::speaker::VOICE, crate::speaker::QWENTTS_HOST);
+        return (Some(neural), "neural");
     }
-    match SapiSpeaker::new() {
+    match Mouth::new() {
         Ok(v) => {
             //: Said once, at startup, rather than discovered when a Korean reply comes out silent.
             if !v.has_korean() {
@@ -646,16 +654,17 @@ neural one instead (the 목소리 row in the page), and Windows 11 can add a new
 /// utterance whether a better voice has appeared, which is a 400 ms connect in the path of every
 /// reply to answer a question whose answer changes once.
 fn adopt_voice(desk: &mut Desk, out: &Listeners) {
-    if !desk.wants_voice || desk.voice_is == "neural" || !crate::speaker::answering() {
+    if !desk.wants_voice || desk.voice_is == "neural" {
         return;
     }
+    let Some(neural) = platform::neural_voice(crate::speaker::QWENTTS_HOST) else { return };
     if let Some(old) = desk.voice.as_mut() {
         //: **Released rather than dropped.** SAPI holds a COM object; letting it go quietly while
         //: it is mid-sentence is how a voice gets talked over by its replacement.
         old.stop();
         old.release();
     }
-    desk.voice = Some(Box::new(QwenVoice::new(crate::speaker::VOICE)));
+    desk.voice = Some(neural);
     desk.voice_is = "neural";
     out.send("note", "이제 신경망 목소리로 말합니다");
 }
@@ -689,6 +698,12 @@ pub struct How {
     pub speak: bool,
     pub hear: bool,
     pub model_name: String,
+    /// **Settable because a test has to be able to have its own.** It was a constant, and
+    /// `tests/portable.rs` — the file whose whole job is to prove the server runs without an
+    /// environment — would have passed by reading a page from a *different* argmind that happened
+    /// to be running. It found nothing and reported success, which is the shape of measurement
+    /// error this project keeps a list of.
+    pub port: u16,
 }
 
 impl How {
@@ -703,6 +718,10 @@ impl How {
             //: Same rule, and it matters more: **a microphone is not opened because a program was
             //: run.** Even with this, it opens only while the talk key is held.
             hear: std::env::args().any(|a| a == "--hear"),
+            //: **Not from the command line.** There is one argmind and it lives on one port; a
+            //: flag for it would be a second copy somebody starts by accident. A test sets it
+            //: because a test must not read another argmind's page and call it a pass.
+            port: PORT,
             model_name: std::env::args().skip(1).find(|a| a.contains(':'))
                 .unwrap_or_else(|| "qwen3:8b".into()),
         }
@@ -724,17 +743,23 @@ impl How {
 
 pub const URL: &str = "http://127.0.0.1:7331/";
 
+/// The page's address for a given port.
+pub fn url(port: u16) -> String {
+    format!("http://127.0.0.1:{port}/")
+}
+
 /// Run the whole thing. **Blocks forever**, so a caller with its own message loop puts it on a
 /// thread.
 pub fn run(how: How) {
 
-    let How { dry, speak, hear, model_name } = how;
+    let How { dry, speak, hear, model_name, port: how_port } = how;
 
     //: **Checked before the socket opens.** An agent that can press buttons on your screen has no
     //: business accepting a connection from the network.
-    assert!(is_loopback(ADDRESS), "{ADDRESS} is not loopback");
+    let at = address(how_port);
+    assert!(is_loopback(&at), "{at} is not loopback");
     let token = mint_token();
-    let listener = TcpListener::bind(ADDRESS).expect("could not bind");
+    let listener = TcpListener::bind(&at).expect("could not bind");
     //: **Nothing is printed here.** One of the two binaries running this has no console at all, so
     //: a banner from the library goes either nowhere or into somebody else's window — and for the
     //: one that does have a console it was being printed twice. The console binary says it; the
@@ -747,7 +772,7 @@ pub fn run(how: How) {
     //: interface that only says so once a turn has happened is one you cannot trust before you
     //: speak. This reads a title and a handle — no UI Automation, so it costs nothing and can run
     //: as often as it likes.
-    let watcher = Watcher::default();
+    let watcher = Watching::default();
     watcher.watch();
     let watching = watcher.clone();
     let watching_out = Arc::clone(&out);
@@ -755,9 +780,9 @@ pub fn run(how: How) {
         let mut said = String::new();
         loop {
             std::thread::sleep(std::time::Duration::from_millis(600));
-            let front = unsafe { argmind_env_windows::foreground_handle_now() };
+            let front = unsafe { platform::foreground_handle_now() };
             let now = match watching.attended(front) {
-                Some(h) => argmind_env_windows::window_title(h),
+                Some(h) => platform::window_title(h),
                 None => String::new(),
             };
             if now != said {
@@ -770,18 +795,18 @@ pub fn run(how: How) {
     let agent_model = model_name.clone();
     //: Everything COM touches lives on this thread and never leaves it.
     std::thread::spawn(move || {
-        let eyes = Attending::new(watcher).expect("UI Automation would not open");
+        let eyes = Sight::new(watcher).expect("the eyes would not open");
         //: Unrestricted, and **the confirm button is what makes that safe** — the same trade
         //: `app.py` makes by inverting the unprompted flag. Dry unless asked otherwise.
         let hands = if dry {
-            WindowsHands::unrestricted()
+            Touch::unrestricted()
         } else {
-            WindowsHands::unrestricted().arm()
+            Touch::unrestricted().arm()
         };
         let mut model = Local::new(&agent_model);
         model.think = Some(false);
         let (voice, voice_is) = if speak { pick_voice() } else { (None, "off") };
-        let ear = hear.then(|| (Microphone::new(), Whisper::default()));
+        let ear = hear.then(|| (Ear::new(), Whisper::default()));
         let mut desk = Desk { session: Session::new(eyes, hands, Model(model)),
                               proposals: Proposals::default(), dry,
                               voice, voice_is, wants_voice: speak, ear,

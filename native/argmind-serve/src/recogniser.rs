@@ -25,7 +25,7 @@ use std::path::PathBuf;
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
-use argmind_env_windows::supervise::Supervised;
+use crate::platform::Supervised;
 
 use crate::building::{self, Recipe};
 use crate::fix::Fix;

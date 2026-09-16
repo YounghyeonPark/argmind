@@ -1,0 +1,13 @@
+[package]
+name = "argmind-env-none"
+version = "0.0.1"
+edition = "2021"
+description = "An environment that can do nothing, and says so. The proof that the seam is real."
+license = "Apache-2.0"
+
+# No dependencies but argmind's own, and **no platform crate on purpose** — that is the whole point
+# of it. `std::process` is the only thing here that touches the operating system, and it is the
+# same on all three.
+[dependencies]
+argmind-core = { path = "../argmind-core" }
+argmind-voice = { path = "../argmind-voice" }

@@ -161,7 +161,7 @@ pub fn every(model: &str) -> Vec<Need> {
 
     //: Built once and dropped. Enumerating voices reads a registry category and opens no audio
     //: device, so this is as quiet as the two checks above it.
-    let korean = argmind_env_windows::SapiSpeaker::new().map(|v| v.has_korean()).unwrap_or(false);
+    let korean = crate::platform::Mouth::new().map(|v| v.has_korean()).unwrap_or(false);
     out.push(Need {
         key: "korean-voice",
         what: "한국어 음성",
@@ -215,12 +215,12 @@ pub fn every(model: &str) -> Vec<Need> {
         required: false,
         present: speaking,
         found: if speaking {
-            format!("{} 응답함", argmind_env_qwentts::QWENTTS)
+            format!("{} 응답함", crate::speaker::QWENTTS_HOST)
         } else {
             //: **What is lost is named, and it is not everything.** Windows still speaks; this is
             //: the difference between Heami and a neural voice, not between sound and silence.
             format!("{} 응답 없음 — Windows 음성으로 말합니다",
-                    argmind_env_qwentts::QWENTTS)
+                    crate::speaker::QWENTTS_HOST)
         },
         how: if vulkan.is_none() {
             "Vulkan SDK를 먼저 설치하세요".into()

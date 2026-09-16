@@ -13,11 +13,27 @@ argmind-core = { path = "../argmind-core" }
 # The binary is the application, so it reaches the environment; the library above it is protocol
 # and proposals only, and depends on neither.
 argmind-env-ollama = { path = "../argmind-env-ollama" }
-argmind-env-qwentts = { path = "../argmind-env-qwentts" }
 argmind-env-whisper = { path = "../argmind-env-whisper" }
-argmind-env-windows = { path = "../argmind-env-windows" }
 argmind-voice = { path = "../argmind-voice" }
 
+# **The environment that can do nothing**, and the only one that builds everywhere. It is what
+# `platform.rs` picks when there is no better answer, which on 2026-09-16 is macOS and Linux.
+argmind-env-none = { path = "../argmind-env-none" }
+
 # The window the page lives in. **Only the binary uses it** — the library above is protocol and
-# proposals and has no opinion about how anybody looks at it.
+# proposals and has no opinion about how anybody looks at it. It names no platform either: wry
+# picks WebView2, WKWebView or WebKitGTK behind one function.
 argmind-window = { path = "../argmind-window" }
+
+# Windows only, and by the manifest rather than by a `cfg` inside the code — so a Linux checkout
+# does not even try to compile UI Automation.
+[target.'cfg(windows)'.dependencies]
+argmind-env-windows = { path = "../argmind-env-windows" }
+argmind-env-qwentts = { path = "../argmind-env-qwentts" }
+
+[features]
+default = []
+# **Build the application as though this were an operating system nobody has ported to.** Not a
+# convenience: it is how a claim about portability is checked on a machine that has one operating
+# system. `tests/portable.rs` runs the whole server this way.
+headless = []

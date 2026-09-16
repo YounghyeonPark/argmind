@@ -50,7 +50,7 @@ fn webview_shed() -> Option<PathBuf> {
 
 /// Say it in a window, because there is no console to say it in.
 fn complain(title: &str, body: &str) {
-    argmind_env_windows::ask::confirm(title, body);
+    argmind_serve::platform::confirm(title, body);
 }
 
 fn main() {

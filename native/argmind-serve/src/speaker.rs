@@ -37,7 +37,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
-use argmind_env_windows::supervise::Supervised;
+use crate::platform::Supervised;
 
 use crate::building::{self, Recipe};
 use crate::fix::Fix;
@@ -53,6 +53,13 @@ pub const TARGET: &str = "tts-server";
 /// What a build needs on the machine before it can start. **The Vulkan SDK is not in this list**
 /// because it cannot be found this way — see [`sdk`].
 pub const TOOLS: [&str; 5] = ["git", "cmake", "g++", "mingw32-make", "objdump"];
+
+/// Where the synthesiser listens.
+///
+/// **Named here rather than reached through the client crate**, which is Windows-only in this
+/// tree — it owns a WASAPI loudspeaker. The address is not: it is a port number, and the server
+/// that answers on it builds on all three operating systems.
+pub const QWENTTS_HOST: &str = "127.0.0.1:8179";
 
 /// The label the server reports at `GET /v1/models`, and what the client asks for.
 ///
@@ -239,8 +246,15 @@ pub fn build(at: &Path, target: &str, say: &mut dyn FnMut(&str)) -> Result<(), S
 static RUNNING: Mutex<Option<Supervised>> = Mutex::new(None);
 
 /// Is a synthesiser answering on the port?
+///
+/// **A connect and nothing else** — it is not asked to synthesise anything, because a check that
+/// made the thing it is checking do work is a check with a side effect. Written here rather than
+/// borrowed from the client crate, which is Windows-only in this tree because it owns a WASAPI
+/// loudspeaker; a TCP connect is not.
 pub fn answering() -> bool {
-    argmind_env_qwentts::QwenVoice::answering(argmind_env_qwentts::QWENTTS)
+    QWENTTS_HOST.parse().is_ok_and(|at| {
+        std::net::TcpStream::connect_timeout(&at, Duration::from_millis(400)).is_ok()
+    })
 }
 
 /// Did *argmind* start the one that is running?
@@ -263,13 +277,13 @@ pub fn serve(say: &mut dyn FnMut(&str)) -> Result<(), String> {
             return Err(format!("{} 이(가) 없습니다", weight.display()));
         }
     }
-    let (host, port) = argmind_env_qwentts::QWENTTS.rsplit_once(':')
+    let (host, port) = QWENTTS_HOST.rsplit_once(':')
         .ok_or("주소가 이상합니다")?;
 
     let log = shed().join("server.log");
     let talker = talker_at().to_string_lossy().to_string();
     let codec = codec_at().to_string_lossy().to_string();
-    say(&format!("목소리 서버를 {} 에 띄웁니다", argmind_env_qwentts::QWENTTS));
+    say(&format!("목소리 서버를 {} 에 띄웁니다", QWENTTS_HOST));
     let mut started = Supervised::start(
         &exe,
         //: **`--lang auto`, which is the default, and it is chosen rather than inherited.** The

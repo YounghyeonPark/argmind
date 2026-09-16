@@ -63,6 +63,8 @@ the two days that built this, three of them flattering.
     native/argmind-voice/       Heard / Listener / Speaker — the seam, and why it is not a contract
     native/argmind-serve/       the application: a server, a page, a tray icon, and `argmind`
     native/argmind-measure/     every harness behind the numbers
+    native/argmind-env-none/    an environment that can do nothing and says so — the proof the
+                                application is separable, and the list a third one must satisfy
     native/argmind-rules/       the rules this repository keeps, by looking at itself
     native/argmind-window/      the window the page lives in, and the icon in the tray
     ui/                         the front end, TypeScript with no dependency but `tsc`
@@ -73,9 +75,15 @@ the two days that built this, three of them flattering.
 **Nothing needs a display, a model, a network, a microphone or a speaker.** Re-derive with
 `cargo test --manifest-path native/Cargo.toml`.
 
-**Three rules are held by reading the source rather than by the compiler**, in `argmind-rules`:
+**Four rules are held by reading the source rather than by the compiler**, in `argmind-rules`:
 the licence record, the core naming no platform and being shown no coordinate, one place calling
-`perform`, and a voice seam that cannot name a `Session`. Each was checked by breaking it.
+`perform`, a voice seam that cannot name a `Session`, and — since 2026-09-16 — **the application
+naming an operating system in one file.** Each was checked by breaking it.
+
+**And one rule is held by the compiler.** `cargo test -p argmind-serve --features headless` builds
+the whole application against `argmind-env-none` and runs the server against it. A `use
+argmind_env_windows::` added to `app.rs` compiles fine on this machine and quietly un-ports the
+program; that build is what catches it, and the pre-commit hook runs it.
 
 ### The invariants a change could break without noticing
 
@@ -156,13 +164,21 @@ cannot be repaired is not.
 
 ## What is NOT built
 
-**No macOS and no Linux, and the window is the only piece that is ready for them.** The owner asked
-on 2026-09-16 for a standalone application on all three, and what exists is `argmind-window`, which
-names an operating system in exactly one function. **That is written for rather than verified** —
-there is no Mac here and no WebKitGTK, and a `cargo check` against absent system libraries is not
-evidence. Everything behind the window is Windows: UI Automation, SendInput, WASAPI, Media
-Foundation, SAPI and the neural voice. On another operating system the window would open onto a
-server that cannot start. A window is the first piece of that port and it is not the port.
+**No macOS and no Linux environment**, and that is the whole of what is missing — the application
+itself is no longer in the way. The owner asked on 2026-09-16 for all three; `docs/findings/the-window.md`
+has the plan and the measurement that reordered it. The short version: the port looks like
+`argmind-env-windows` (1,844 lines) and was actually `argmind-serve` (2,295), which named Windows
+types in six files. **That is fixed and checked** — `platform.rs` chooses, `argmind-env-none` is
+what it chooses when there is nothing better, and the application builds and runs against it.
+
+**What remains is a real environment for each, and it needs a machine.** Writing one that cannot be
+run produces code that compiles and does not work. Three things are known before that starts:
+**Linux is two targets** — X11 allows XTEST, Wayland routes input and window reading through
+`xdg-desktop-portal` with the user's consent, which changes the permission model rather than the
+code; **macOS needs one grant** in System Settings before the Accessibility API answers, which fits
+`Fix::OpenPage`; and **the job object has no equivalent** — Linux has `PR_SET_PDEATHSIG`, macOS has
+neither, so *the recogniser dies with argmind* is a weaker promise there and `Supervised::supervised()`
+already exists to say so out loud.
 
 No phone environment, no robot environment. **Voice is built and is off until switched on**: hold
 F9 in the window, which means you have to be looking at argmind to talk to it.

@@ -33,6 +33,30 @@ if ! cargo test --manifest-path native/Cargo.toml --quiet >"$log" 2>&1; then
 fi
 echo "pre-commit: tests pass."
 
+# --- and the application still builds without an environment -------------------
+#
+# `--features headless` makes `platform.rs` pick `argmind-env-none`, which is what a macOS
+# or Linux checkout would get. It is the only thing standing between "the application is
+# portable" and a sentence in a document: a `use argmind_env_windows::` added to `app.rs`
+# compiles perfectly well on this machine and quietly un-ports the program.
+#
+# A rule test catches the ones it can see by reading the source. This catches the rest,
+# because the compiler is the only thing that knows what really got linked.
+
+echo "pre-commit: building without an environment..."
+nowhere="-p argmind-serve --features headless"
+if ! cargo test --manifest-path native/Cargo.toml $nowhere --quiet >"$log" 2>&1; then
+    echo ""
+    echo "COMMIT BLOCKED: the application no longer builds without an environment."
+    echo ""
+    tail -30 "$log"
+    echo ""
+    echo "Something outside platform.rs now needs Windows. Say platform::Sight and"
+    echo "let that one file choose -- see native/argmind-serve/src/platform.rs."
+    exit 1
+fi
+echo "pre-commit: it builds and runs with no environment at all."
+
 # --- the front end is compiled and committed -----------------------------------
 #
 # Everything under `ui/dist/` is `include_str!`d into the server, so a change to the

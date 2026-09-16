@@ -32,7 +32,7 @@ use argmind_core::intent::Trigger;
 use argmind_core::session::Session;
 use argmind_core::watch::{poll, Looking, Watch, MIN_GAP};
 use argmind_env_ollama::Local;
-use argmind_env_windows::{WindowsEyes, WindowsHands};
+use argmind_serve::platform::{self, Plain, Touch};
 
 struct Model(Local);
 
@@ -74,14 +74,14 @@ fn args() -> (String, Args) {
     })
 }
 
-fn session(a: &Args) -> Session<WindowsEyes, WindowsHands, Model> {
-    let eyes = WindowsEyes::new().expect("UI Automation would not open");
+fn session(a: &Args) -> Session<Plain, Touch, Model> {
+    let eyes = Plain::new().expect("the eyes would not open");
     //: **Two flags, two risks.** `--live` lets it do what it was asked; `--allow-unprompted` lets
     //: it act on something nobody asked for, and without it such an effect becomes a sentence.
     let hands = if a.live {
-        WindowsHands::unrestricted().arm()
+        Touch::unrestricted().arm()
     } else {
-        WindowsHands::unrestricted()
+        Touch::unrestricted()
     };
     let mut model = Local::new(&a.model);
     model.think = Some(false);
@@ -105,7 +105,7 @@ fn show(say: &str, intent: &argmind_core::intent::Intent) {
 }
 
 fn look(a: &Args) -> i32 {
-    let mut eyes = WindowsEyes::new().expect("UI Automation would not open");
+    let mut eyes = Plain::new().expect("the eyes would not open");
     let (widgets, took) = eyes.timed_foreground();
     if widgets.is_empty() {
         //: **A real answer, not a failure.** Canvas content, video, games and custom-drawn
@@ -270,7 +270,7 @@ fn setup(a: &Args) -> i32 {
         //: back what happened, should not have to have seen the window.
         println!("  ── {} ──\n{}\n", need.what,
                  body.lines().map(|l| format!("  {l}")).collect::<Vec<_>>().join("\n"));
-        if !argmind_env_windows::ask::confirm(fix.title(), &body) {
+        if !platform::confirm(fix.title(), &body) {
             println!("  {} — 아니오\n", need.what);
             refused += 1;
             continue;

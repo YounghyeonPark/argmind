@@ -41,6 +41,7 @@ pub mod decided;
 pub mod fetch;
 pub mod fix;
 pub mod needs;
+pub mod platform;
 pub mod proposals;
 pub mod recogniser;
 pub mod speaker;

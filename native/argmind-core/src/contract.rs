@@ -5,6 +5,31 @@
 //! `contract.py` refuses for `attending_title()` and `voice.py` refused for `Ears` — which is why
 //! hearing and speaking are not in this file.
 
+/// What one attempted action did.
+///
+/// **In the core because two environments now have to say the same things**, and a second copy of
+/// this enum is how they would come to mean different ones — the argument `fix.rs` makes about
+/// `apply` and `argmind-window` makes about the tray. It named no platform when it lived in
+/// `argmind-env-windows/src/hands.rs` and it names none here: a process id is not a Windows idea,
+/// and `how` is a string the environment chooses.
+///
+/// **It is not part of the `Hands` trait.** `click` returns nothing; this is the record a caller
+/// may read afterwards to tell a refusal apart from a press that landed and did nothing, which is
+/// a distinction no boolean can carry.
+#[derive(Debug, Clone, PartialEq)]
+pub enum Did {
+    /// Sent. `false` for `live` means the hands were dry and nothing left the process.
+    Sent { live: bool },
+    /// The point belonged to somebody else. **Not an error and not a success** — the caller has to
+    /// be able to tell this apart from a click that landed and did nothing.
+    Elsewhere { owner: Option<u32> },
+    /// Operated through the accessibility layer — **no pixel was aimed at and the cursor did not
+    /// move.** `how` is which mechanism, in the environment's own words.
+    Operated { how: &'static str, live: bool },
+    /// Malformed: an unknown button or an unnamed key.
+    Refused(String),
+}
+
 /// A thing on screen: a name, a role, a rectangle, and the window it belongs to.
 ///
 /// `PartialEq` is name, role and rect — **deliberately not the window**, because `Session::confirm`

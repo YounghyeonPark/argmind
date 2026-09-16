@@ -120,20 +120,9 @@ pub fn owner_at(x: i64, y: i64) -> Option<u32> {
     }
 }
 
-/// What one attempted action did.
-#[derive(Debug, Clone, PartialEq)]
-pub enum Did {
-    /// Sent. `false` for `live` means the hands were dry and nothing left the process.
-    Sent { live: bool },
-    /// The point belonged to somebody else. **Not an error and not a success** — the harness that
-    /// asked has to be able to tell this apart from a click that landed and did nothing.
-    Elsewhere { owner: Option<u32> },
-    /// Operated through a UI Automation pattern — **no pixel was aimed at and the cursor did not
-    /// move.** `how` is which pattern.
-    Operated { how: &'static str, live: bool },
-    /// Malformed: an unknown button or an unnamed key.
-    Refused(String),
-}
+//: **`Did` moved into the core on 2026-09-16**, when a second environment needed to say the same
+//: things. It is re-exported here so every caller that knew it as `hands::Did` still does.
+pub use argmind_core::contract::Did;
 
 pub struct WindowsHands {
     pub reach: Reach,

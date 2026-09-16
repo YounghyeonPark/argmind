@@ -96,6 +96,92 @@ Two things came out of it:
   perfectly good binary over `api-ms-win-*`, which are **API set contract names resolved by the
   kernel and never files on disk.**
 
+## The port, and what was actually blocking it — 2026-09-16
+
+The owner's answer to *should this be Electron* was **아니라고 해도 멀티플랫폼에 대한 대책은
+필요함**: not Electron, but parking it is not a plan either. So the plan was made, and the first
+stage of it is done.
+
+**Measured first, because the intuition was wrong.** The obvious reading is that the port is
+`argmind-env-windows`, 1,844 lines, 15% of the tree. It is not:
+
+| | lines | |
+|---|---|---|
+| `argmind-core` | 655 | names no platform; its only dependency is `serde_json` |
+| `ui/` | 526 | HTML |
+| `argmind-window` | 174 | wry already picks one of three |
+| the three HTTP clients + rules | 644 | text and sockets |
+| Ollama, whisper.cpp, qwentts.cpp | — | separate processes, already build on all three |
+| **`argmind-env-windows`** | **1,844** | the part everyone thinks is the port |
+| **`argmind-serve`** | **2,295** | **the part that actually was** |
+
+`argmind-serve` named Windows types directly — `WindowsHands`, `SapiSpeaker`, `Attending`,
+`Watcher`, `Microphone`, `argmind_env_windows::` — in **six files and twenty-one places**. Adding
+an environment would not have been plugging something in; it would have been rewriting the
+application. **That is what was blocking the port, and it is fixable on Windows.**
+
+### What was done
+
+`platform.rs` is the one file that knows. Everything else says `platform::Sight`, `platform::Touch`
+and does not care. `argmind-env-none` is what it picks when there is no better answer — an
+environment that sees nothing, presses nothing, makes no sound, and **refuses rather than
+pretending**: `confirm` returns `false`, because with no window to ask in nobody agreed, and an
+environment that answered yes would turn *cannot ask* into *said yes for you*.
+
+**`Did` moved into `argmind-core`.** Two environments now have to report what an action did, and a
+second copy of that enum is how they would come to mean different things — the argument this
+project has already made twice this week, about `fix::apply` and about the tray.
+
+### How it is checked without a second machine
+
+This is the part that matters, because a claim about portability made on one operating system is
+worth nothing.
+
+**`--features headless` forces the empty environment even here.** `tests/portable.rs` then starts
+the whole server on a port of its own, fetches the page over the socket, and reads what the build
+says about itself — with no eyes, no hands, no voice and no microphone in the process. Seven tests,
+all passing.
+
+**And the compiler enumerated the interface rather than anybody guessing it.** Switching the
+application over and building headless produced, one error at a time, the list of what an
+environment must provide: not just `Eyes` and `Hands` but a way to know which window a person is
+attending to, a hit test at a point, a microphone with an `available` flag, a supervised child, and
+a yes-or-no question. **Whatever is in `argmind-env-none/src/lib.rs` is that list.**
+
+Three rules hold it: `argmind-rules/tests/the_app_names_no_platform.rs` reads the source, the
+pre-commit hook builds headless, and seven mutations were run against both — **seven caught**,
+including the one that matters most, `confirm` returning `true`.
+
+### What this did not do, said plainly
+
+**It did not port anything.** There is still no macOS or Linux environment, and on those operating
+systems argmind would start, serve its page, see nothing and press nothing. What changed is that
+writing one is now adding a crate rather than rewriting the application.
+
+**And it is the same shape of promise the Rust port made and did not keep.** That rewrite was
+argued from *rules held by the compiler rather than by tests*, the `Listing` type was never built,
+and `CLAUDE.md` says so. The difference here is that the claim is a binary fact a test can check —
+the application builds and runs against an environment that is not Windows — so the test was
+written first.
+
+### The two things a machine is needed for
+
+**Linux is two targets, not one.** X11 lets a program inject input with XTEST and read other
+windows; **Wayland deliberately does not**, and routes both through `xdg-desktop-portal` with the
+user's consent. That changes the permission model rather than the code, and argmind already has a
+four-way permission system to hang it on. Which of the two to support, and what the portal
+actually gives, is not something to decide from here.
+
+**macOS needs one grant** in System Settings before the Accessibility API answers at all — which
+fits `Fix::OpenPage`: open the settings pane, and the person allows it themselves.
+
+**And the job object has no equivalent.** Linux has `PR_SET_PDEATHSIG`; macOS has neither. The
+promise *the recogniser dies with argmind* is weaker off Windows, and `Supervised::supervised()`
+already exists to say the weaker promise out loud — `argmind-env-none` returns `false` from it.
+
+WSL is not installed on this machine and installing it needs administrator rights, so it was not
+done.
+
 ## What is not verified
 
 **macOS and Linux.** There is no Mac here and no WebKitGTK, and a `cargo check` for a target whose
