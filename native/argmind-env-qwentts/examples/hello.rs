@@ -13,17 +13,18 @@ fn main() {
     }
     let mut voice = argmind_env_qwentts::QwenVoice::new(&model);
 
+    //: **The number this whole streaming path exists for**: `say()` to the first sound. Asked of
+    //: the loudspeaker rather than of the voice, because `Speaker::speaking` is true while the
+    //: server is still thinking — which is the right answer for a caller deciding whether to
+    //: interrupt and the wrong one for timing the silence.
     let asked = Instant::now();
     voice.say("안녕하세요. 저는 argmind입니다. 지금 새 목소리로 말하고 있습니다.");
     println!("  say() 가 돌아오기까지: {:.0} ms", asked.elapsed().as_secs_f64() * 1000.0);
-    while !argmind_voice::Speaker::speaking(&voice) {
-        std::thread::sleep(std::time::Duration::from_millis(5));
+    while !voice.making_sound() && asked.elapsed().as_secs_f64() < 30.0 {
+        std::thread::sleep(std::time::Duration::from_millis(1));
     }
-    let mut first = None;
+    println!("  첫 소리까지: {:.0} ms", asked.elapsed().as_secs_f64() * 1000.0);
     while argmind_voice::Speaker::speaking(&voice) {
-        if first.is_none() && asked.elapsed().as_secs_f64() > 0.0 {
-            first = Some(asked.elapsed().as_secs_f64());
-        }
         std::thread::sleep(std::time::Duration::from_millis(10));
     }
     println!("  말이 끝나기까지: {:.1} s", asked.elapsed().as_secs_f64());

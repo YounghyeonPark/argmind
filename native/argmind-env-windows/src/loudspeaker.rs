@@ -26,6 +26,14 @@
 //!
 //! **No mixing and no queueing of utterances.** One thing speaks at a time; a new utterance
 //! replaces the old one, which is what barge-in means and also what `SapiSpeaker` already does.
+//!
+//! ## An utterance arrives in pieces
+//!
+//! The synthesiser streams: it decodes frame by frame and the first audio is ready long before the
+//! last. So [`Self::play`] starts one and [`Self::append`] adds to it, and the feeder keeps going
+//! across a gap between pieces rather than treating an empty queue as the end. **That distinction
+//! is the whole reason [`Self::finished`] exists** — without it the device would be reset between
+//! chunks, which is a click in the middle of every sentence.
 
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
@@ -50,11 +58,15 @@ struct Queue {
     /// a stop that lands while the thread is mid-buffer cannot be missed and then un-missed by the
     /// next utterance setting the flag back.
     generation: u64,
+    /// Whether any more is coming. **An empty queue is not the end of an utterance** while a
+    /// synthesiser is still streaming into it, and resetting the device on one would put a click
+    /// between every pair of chunks.
+    done: bool,
 }
 
 impl Default for Queue {
     fn default() -> Self {
-        Queue { waiting: Vec::new(), hz: FROM_HZ, generation: 0 }
+        Queue { waiting: Vec::new(), hz: FROM_HZ, generation: 0, done: true }
     }
 }
 
@@ -105,10 +117,34 @@ impl Loudspeaker {
             queue.waiting.clear();
             queue.waiting.extend_from_slice(samples);
             queue.hz = hz;
+            //: **Started, not finished.** `finished()` is what says an utterance is complete; until
+            //: then the feeder waits through an empty queue instead of resetting the device.
+            queue.done = false;
             queue.generation
         };
         self.generation.store(generation, Ordering::SeqCst);
         self.start();
+    }
+
+    /// Add to the utterance that is playing. **For a synthesiser that streams**: the first piece
+    /// goes to [`Self::play`] and every piece after it comes here.
+    ///
+    /// Does nothing if nothing is playing — a piece that arrives after a `stop` belongs to an
+    /// utterance nobody is waiting for.
+    pub fn append(&mut self, samples: &[f32], hz: u32) {
+        let Ok(mut queue) = self.queue.lock() else { return };
+        if queue.done {
+            return;
+        }
+        queue.hz = hz;
+        queue.waiting.extend_from_slice(samples);
+    }
+
+    /// No more is coming. **The feeder may reset the device once it runs out.**
+    pub fn finished(&mut self) {
+        if let Ok(mut queue) = self.queue.lock() {
+            queue.done = true;
+        }
     }
 
     /// Cut it off now and do not resume. **This is what barge-in is.**
@@ -120,6 +156,7 @@ impl Loudspeaker {
         if let Ok(mut queue) = self.queue.lock() {
             queue.generation += 1;
             queue.waiting.clear();
+            queue.done = true;
             self.generation.store(queue.generation, Ordering::SeqCst);
         }
     }
@@ -244,19 +281,36 @@ fn feed(queue: &Mutex<Queue>, running: &AtomicBool, playing: &AtomicBool)
         let mut ours: Vec<f32> = Vec::new();
         let mut at = 0usize;
         let mut quiet_passes = 0u32;
+        let mut ended;
 
         while running.load(Ordering::SeqCst) {
             {
                 let Ok(mut held) = queue.lock() else { break };
                 if held.generation != mine {
+                    //: A new utterance, or a stop. Everything converted from the old one goes.
                     mine = held.generation;
-                    //: **Converted once, here**, rather than per buffer: resampling a whole
-                    //: utterance is a millisecond and doing it in the feed loop would put it in
-                    //: the path of every buffer deadline.
-                    ours = to_device(&held.waiting, held.hz, rate, channels);
-                    held.waiting.clear();
+                    ours.clear();
                     at = 0;
                 }
+                ended = held.done;
+                if !held.waiting.is_empty() {
+                    //: **Converted as it arrives**, rather than per output buffer: resampling is
+                    //: cheap and doing it in the buffer path would put it on every deadline.
+                    //:
+                    //: Each piece is resampled on its own, so the interpolation restarts at a chunk
+                    //: boundary — one sample of discontinuity per piece, at a rate ratio that is
+                    //: usually exactly two. Inaudible, and cheaper than carrying state across.
+                    let more = to_device(&held.waiting, held.hz, rate, channels);
+                    ours.extend_from_slice(&more);
+                    held.waiting.clear();
+                }
+            }
+
+            if at >= ours.len() && !ended {
+                //: **Out of audio but not out of utterance.** The synthesiser is still streaming;
+                //: resetting the device here would be a click between every pair of chunks.
+                std::thread::sleep(std::time::Duration::from_millis(5));
+                continue;
             }
 
             if at >= ours.len() {

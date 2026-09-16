@@ -23,6 +23,19 @@
 //! calling thread — `say` must return at once, because a blocking one cannot be interrupted and
 //! barge-in is the whole point — and the second is the speaker's.
 //!
+//! ## Why it streams
+//!
+//! Asking for the whole utterance and then playing it means **1.8 s of silence** after a question —
+//! measured, against SAPI's 4–43 ms — and the model call before it already costs 0.61 s. The server
+//! decodes frame by frame and sends `Transfer-Encoding: chunked` with `X-Accel-Buffering: no`, so
+//! the pieces are there long before the last one. Reading them as they land and handing each to the
+//! speaker is the difference between an agent that answers and one that pauses first.
+//!
+//! **Raw PCM rather than WAV for the streamed path.** A WAV header carries the rate, which is worth
+//! forty-four bytes when the whole file arrives at once; a stream has no length to put in one, and
+//! the rate is then [`HZ`] by agreement. Both paths exist and [`speak`] is still the one that
+//! checks the header — a server that changed its rate would be caught there.
+//!
 //! ## Barge-in across a request
 //!
 //! A cut-off can land while the server is still thinking, and then the reply arrives for something
@@ -120,6 +133,110 @@ pub fn from_wav(bytes: &[u8]) -> Result<(Vec<f32>, u32), String> {
     Err("data 청크가 없습니다".into())
 }
 
+/// Ask for one utterance and hand over each piece as it arrives.
+///
+/// `on_piece` gets mono `f32` at [`HZ`]; returning `false` abandons the request, which is what a
+/// barge-in during synthesis does. The `bool` in the answer is whether it ran to the end.
+pub fn speak_streaming(host: &str, model: &str, text: &str,
+                       on_piece: &mut dyn FnMut(&[f32]) -> bool) -> Result<bool, String> {
+    let body = format!("{{\"model\":\"{}\",\"input\":\"{}\",\"stream\":true}}",
+                       escape(model), escape(text));
+    //: **A sample can straddle a chunk boundary.** The server sends bytes and does not care where
+    //: a sixteen-bit sample begins, so an odd byte at the end of one piece is the first half of a
+    //: sample completed by the next. Dropping it would put a click in every chunk.
+    let mut spare: Option<u8> = None;
+    stream(host, "/v1/audio/speech", &body, &mut |bytes| {
+        let mut samples = Vec::with_capacity(bytes.len() / 2 + 1);
+        let mut from = 0;
+        if let Some(low) = spare.take() {
+            if let Some(high) = bytes.first() {
+                samples.push(i16::from_le_bytes([low, *high]) as f32 / 32768.0);
+                from = 1;
+            } else {
+                spare = Some(low);
+            }
+        }
+        let body = &bytes[from..];
+        let whole = body.len() / 2 * 2;
+        for pair in body[..whole].chunks_exact(2) {
+            samples.push(i16::from_le_bytes([pair[0], pair[1]]) as f32 / 32768.0);
+        }
+        if whole < body.len() {
+            spare = Some(body[whole]);
+        }
+        on_piece(&samples)
+    })
+}
+
+/// One POST, and every piece of the body as it arrives. **Chunked transfer encoding**, which is
+/// what the server uses when it cannot know the length in advance.
+fn stream(host: &str, path: &str, body: &str,
+          on_bytes: &mut dyn FnMut(&[u8]) -> bool) -> Result<bool, String> {
+    let mut socket = TcpStream::connect(host)
+        .map_err(|e| format!("{host} 에 닿지 못했습니다 ({e})"))?;
+    let _ = socket.set_read_timeout(Some(std::time::Duration::from_secs(120)));
+    let (name, port) = host.rsplit_once(':').unwrap_or((host, "80"));
+    write!(socket, "POST {path} HTTP/1.1\r\nHost: {name}:{port}\r\n\
+                    Content-Type: application/json\r\nContent-Length: {}\r\n\
+                    Connection: close\r\n\r\n{body}", body.len())
+        .map_err(|e| format!("{e}"))?;
+
+    let mut reading = BufReader::new(socket);
+    let mut line = String::new();
+    reading.read_line(&mut line).map_err(|e| format!("{e}"))?;
+    let status = line.split_whitespace().nth(1).unwrap_or("").to_string();
+    let mut chunked = false;
+    loop {
+        let mut header = String::new();
+        if reading.read_line(&mut header).map_err(|e| format!("{e}"))? == 0 {
+            break;
+        }
+        if header.trim().is_empty() {
+            break;
+        }
+        if header.to_lowercase().starts_with("transfer-encoding:")
+            && header.to_lowercase().contains("chunked") {
+            chunked = true;
+        }
+    }
+    if status != "200" {
+        let mut out = Vec::new();
+        let _ = reading.read_to_end(&mut out);
+        return Err(format!("{status}: {}", String::from_utf8_lossy(&out).trim()));
+    }
+    if !chunked {
+        //: Not streaming after all — a server that answered in one piece. Handing the whole body
+        //: over once is the same thing with one call.
+        let mut out = Vec::new();
+        reading.read_to_end(&mut out).map_err(|e| format!("{e}"))?;
+        return Ok(on_bytes(&out));
+    }
+
+    loop {
+        let mut size_line = String::new();
+        if reading.read_line(&mut size_line).map_err(|e| format!("{e}"))? == 0 {
+            return Ok(false);
+        }
+        //: A chunk size is hex, and may carry `;extensions` nobody here uses.
+        let size = usize::from_str_radix(
+            size_line.trim().split(';').next().unwrap_or("").trim(), 16)
+            .map_err(|_| format!("길이가 이상합니다: {size_line:?}"))?;
+        if size == 0 {
+            //: The trailer, then the end.
+            return Ok(true);
+        }
+        let mut piece = vec![0u8; size];
+        reading.read_exact(&mut piece).map_err(|e| format!("{e}"))?;
+        let mut crlf = [0u8; 2];
+        reading.read_exact(&mut crlf).map_err(|e| format!("{e}"))?;
+        if !on_bytes(&piece) {
+            //: **Abandoned.** The socket is dropped with the server still writing, which it will
+            //: notice; nothing here waits for the rest of an answer nobody wants.
+            return Ok(false);
+        }
+    }
+}
+
 /// One POST, and the body back. Raw HTTP/1.1, no dependency.
 fn post(host: &str, path: &str, body: &str) -> Result<Vec<u8>, String> {
     let mut socket = TcpStream::connect(host)
@@ -186,6 +303,15 @@ impl QwenVoice {
         }
     }
 
+    /// Is sound actually coming out?
+    ///
+    /// **Narrower than [`argmind_voice::Speaker::speaking`]**, which is also true while the server
+    /// is still thinking. That is the right answer for a caller deciding whether to interrupt and
+    /// the wrong one for measuring how long the silence was.
+    pub fn making_sound(&self) -> bool {
+        self.mouth.speaking()
+    }
+
     /// Is the server answering? A connect and nothing else — **it is not asked to synthesise
     /// anything**, because a check that made the thing it is checking do work is a check with a
     /// side effect.
@@ -216,16 +342,32 @@ impl argmind_voice::Speaker for QwenVoice {
         let thinking = Arc::clone(&self.thinking);
         let mut mouth = self.mouth.clone_handle();
         std::thread::spawn(move || {
-            let answer = speak(&host, &model, &text);
-            //: **Checked after, not before.** A stop that landed while the server was thinking
-            //: leaves a reply nobody is waiting for, and speaking it would talk over whatever came
-            //: next.
-            if generation.load(Ordering::SeqCst) != mine {
-                return;
-            }
+            let mut started = false;
+            let answer = speak_streaming(&host, &model, &text, &mut |samples| {
+                //: **Checked on every piece.** A stop that lands mid-synthesis leaves the rest of
+                //: an utterance nobody is waiting for, and speaking it would talk over whatever
+                //: came next. Returning false drops the connection.
+                if generation.load(Ordering::SeqCst) != mine {
+                    return false;
+                }
+                if samples.is_empty() {
+                    return true;
+                }
+                if started {
+                    mouth.append(samples, HZ);
+                } else {
+                    //: The first piece is what stops the thinking and starts the sound.
+                    thinking.store(0, Ordering::SeqCst);
+                    mouth.play(samples, HZ);
+                    started = true;
+                }
+                true
+            });
             thinking.store(0, Ordering::SeqCst);
             match answer {
-                Ok((samples, hz)) => mouth.play(&samples, hz),
+                //: **Only ours.** A run that was abandoned has already had its audio replaced.
+                Ok(_) if generation.load(Ordering::SeqCst) == mine => mouth.finished(),
+                Ok(_) => {}
                 Err(why) => eprintln!("  the voice did not answer: {why}"),
             }
         });

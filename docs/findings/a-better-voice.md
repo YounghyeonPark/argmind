@@ -205,12 +205,38 @@ command-line tool, which would pay it every time.
 about two and a half seconds after a question. That is noticeable and it is not what this
 project means by real-time interaction.
 
-**Streaming is the answer and it is not measured.** `qwentts.cpp` decodes frame by frame and its
-server takes `stream: true`; time to *first byte* is 30–70 ms either way, but that is the
-response headers, and when the first **audio** bytes arrive was not measured because the client
-reads the body to the end. Reading it incrementally and feeding the loudspeaker as chunks land
-is the work, and the payoff would be first sound at a few hundred milliseconds instead of 1.8 s.
-Until somebody measures it, that is a hypothesis with an argument and not a number.
+### Streaming, and now it is a number
+
+The hypothesis was that reading the body incrementally would put first sound in the hundreds of
+milliseconds instead of 1.8 s. Built and measured, four runs:
+
+| | |
+|---|---|
+| `say()` to **first sound** | **27, 34, 233, 238 ms** |
+| synthesis, whole utterance | 1.30–1.55 s for 8.4–8.7 s of audio |
+| RTF | 0.15–0.18 |
+
+**Eight to sixty times better, and it changes the answer.** With the model call's median of
+0.61 s in front of it, the agent starts speaking about 0.65–0.85 s after a question — against
+SAPI's 0.65 s. The neural voice now costs a couple of hundred milliseconds over the old one at
+worst, and nothing at all once the server is warm.
+
+It also stays ahead: 1.3 s of synthesis for 8.6 s of audio means the generator is six times
+faster than the speaker consumes, so there is no chance of running dry mid-sentence.
+
+**Three things the streaming path needed that the whole-file one did not.**
+
+`Transfer-Encoding: chunked`, because a server that decodes as it goes cannot know the length.
+A chunk decoder, twenty lines, and the `0`-length chunk that ends it.
+
+**A sample can straddle a chunk boundary.** The server sends bytes and does not care where a
+sixteen-bit sample begins, so an odd byte at the end of one piece is the first half of a sample
+completed by the next. Dropping it would be a click in every chunk.
+
+And the loudspeaker had to learn the difference between *out of audio* and *out of utterance*.
+An empty queue mid-stream is the synthesiser still working; resetting the device on it would put
+a click between every pair of pieces. `finished()` is what says the utterance is over, and until
+it is called the feeder waits.
 2. **Playback, which is genuinely new.** SAPI synthesises *and* plays; a neural server hands
    back 24 kHz WAV and something has to put it on the speakers. WASAPI render, mirroring
    `microphone.rs`'s capture — and it has to be interruptible mid-word, because barge-in is what
