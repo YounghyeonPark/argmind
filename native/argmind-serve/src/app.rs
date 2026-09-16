@@ -706,6 +706,13 @@ pub fn run(how: How) {
             //: Said once, at startup, rather than discovered when a Korean reply comes out silent.
             if !v.has_korean() {
                 eprintln!("  a Korean voice is not installed — Korean replies will not be spoken");
+            } else if v.korean_is_old() {
+                //: **Said once, at startup, and not again.** It is a fact about the machine rather
+                //: than about anything argmind did, and a program that mentions it every turn is
+                //: nagging about something it cannot fix.
+                eprintln!("  the Korean voice is Heami Desktop, the old one — Windows 11 can add a \
+newer one under 설정 → 접근성 → 내레이터 → 자연스러운 음성 추가, and argmind prefers it once it \
+is there");
             }
         }
         let ear = hear.then(|| (Microphone::new(), Whisper::default()));

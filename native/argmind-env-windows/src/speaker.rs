@@ -43,6 +43,8 @@ pub fn has_hangul(text: &str) -> bool {
 pub struct SapiSpeaker {
     voice: ISpVoice,
     korean: Option<ISpObjectToken>,
+    /// Whether the Korean voice is one of the old `Desktop` set.
+    korean_is_old: bool,
     default: Option<ISpObjectToken>,
     pub counts: Counts,
 }
@@ -68,7 +70,14 @@ impl SapiSpeaker {
             //: **Enumeration lives on the automation interface, everything else on the low-level
             //: one.** `SpVoice` implements both; one cast is cheaper than reimplementing a token
             //: category walk, and it is the same object the Python reaches through comtypes.
+            //: **The best Korean voice, not the first.** Measured on this machine: the only one
+            //: installed is `Microsoft Heami Desktop`, a concatenative voice from the Windows 7
+            //: era, and the owner's verdict on it was 어색함. Windows 11 can install newer ones
+            //: beside it and **they do not have `Desktop` in the name** — the suffix marks the old
+            //: SAPI5 set. So a newer one is preferred when there is one, and the old one is still
+            //: taken when it is all there is.
             let mut korean = None;
+            let mut korean_is_old = true;
             if let Ok(auto) = voice.cast::<ISpeechVoice>() {
                 #[allow(clippy::needless_borrow)]
                 if let Ok(tokens) = auto.GetVoices(&BSTR::new(), &BSTR::new()) {
@@ -79,19 +88,40 @@ impl SapiSpeaker {
                             .map(|s| s.to_string())
                             .unwrap_or_default();
                         //: The attribute can list several, semicolon separated.
-                        if attr.split(';').any(|part| part.eq_ignore_ascii_case(KOREAN)) {
-                            korean = token.cast::<ISpObjectToken>().ok();
+                        if !attr.split(';').any(|part| part.eq_ignore_ascii_case(KOREAN)) {
+                            continue;
+                        }
+                        let old = token.GetDescription(0).map(|d| d.to_string())
+                            .unwrap_or_default().contains("Desktop");
+                        if korean.is_some() && old {
+                            continue;
+                        }
+                        korean = token.cast::<ISpObjectToken>().ok();
+                        korean_is_old = old;
+                        if !old {
                             break;
                         }
                     }
                 }
             }
-            Ok(SapiSpeaker { voice, korean, default, counts: Counts::default() })
+
+            Ok(SapiSpeaker { voice, korean, korean_is_old, default, counts: Counts::default() })
         }
     }
 
     pub fn has_korean(&self) -> bool {
         self.korean.is_some()
+    }
+
+    /// Is the Korean voice the old concatenative one?
+    ///
+    /// **Worth saying out loud once.** `Microsoft Heami Desktop` is a Windows 7-era voice and it
+    /// sounds like one — the owner's word for it was 어색함 — and a person who does not know a
+    /// better one can be installed will reasonably conclude that this is what the program sounds
+    /// like. Windows 11 installs newer Korean voices from its accessibility settings, and this
+    /// picks a newer one over the old one whenever both are there.
+    pub fn korean_is_old(&self) -> bool {
+        self.korean.is_some() && self.korean_is_old
     }
 
     /// The installed voices, by description. Off the trait, for the reason `contract.py` gives for

@@ -103,6 +103,29 @@ impl Frame {
             .map(|(a, b)| a.abs_diff(*b) as u64).sum();
         total as f64 / self.grey.len() as f64
     }
+
+    /// The part of the change that is **not** the whole picture getting brighter or darker.
+    ///
+    /// **This exists because a measured confound demanded it.** A person sitting in front of a
+    /// monitor is lit by it, so when the screen changes their face changes with it — and that is a
+    /// near-uniform shift of every pixel at once. Measured: ten seconds of somebody deliberately
+    /// holding still produced nine one-second windows around 0.03 and **one at 0.40**, which is
+    /// inside the range that ten seconds of deliberate movement produced (0.33–0.82). The signal
+    /// was sixteen times the noise in the middle and still overlapped at the tail.
+    ///
+    /// Subtracting the mean shift before taking the difference removes exactly that: a screen
+    /// flash relights everything by about the same amount and comes out near zero, while a hand
+    /// moving through part of the frame does not. **Still a scalar** — the asymmetry is used, not
+    /// the location.
+    pub fn moved_from(&self, other: &Frame) -> f64 {
+        if self.grey.len() != other.grey.len() || self.grey.is_empty() {
+            return 0.0;
+        }
+        let shift = self.brightness() - other.brightness();
+        let total: f64 = self.grey.iter().zip(&other.grey)
+            .map(|(a, b)| ((*a as f64 - *b as f64) - shift).abs()).sum();
+        total / self.grey.len() as f64
+    }
 }
 
 /// Reduce a raw BGRA frame to the small grey field, by averaging each block.
