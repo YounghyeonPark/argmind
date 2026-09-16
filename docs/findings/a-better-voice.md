@@ -74,12 +74,33 @@ needs the CUDA toolkit; a Vulkan build needs the Vulkan SDK for its shader compi
 up: redistributing NVIDIA's runtime libraries is governed by NVIDIA's licence rather than an
 open-source one, so **the Vulkan path is the one that redistributes nothing proprietary.**
 
+## The Vulkan SDK needs administrator rights, and that changes the eventual fix
+
+Downloaded and checked: **274 MB**, `sdk.lunarg.com` over TLS,
+`81f474711e9042f4cd22b31b2f7a8870db2e428b21586fb43dd80150be97310d`. It is a Qt Installer
+Framework package and it does install headlessly —
+`--accept-licenses --default-answer --confirm-command install` — **but every component, including
+`com.lunarg.vulkan.core` on its own into a user folder, stops with**
+
+> Cannot elevate access rights while running from command line. Please restart the application as
+> administrator.
+
+So this is not `Fix::Install` when it comes to be offered; it is **`Fix::RunElevated`**, where
+Windows asks a second time and the person answers twice. That is a different grade in
+`fix.rs` and a different sentence in the window, which is exactly why those are separate
+variants.
+
+A no-administrator route was looked at and put down: `glslc` alone from Google's `shaderc` has
+no GitHub release assets, only build-bot URLs that change, and building a fix on those is
+building one that breaks quietly. The headers are fine — Khronos, permissive — but the shader
+compiler is the piece that is hard to get honestly without the SDK.
+
 ## What is not known
 
 **Whether the GPU makes it fast enough is unmeasured**, and it is the only question left. A
 0.6B model on a 4090 should be well under real time, but *should* is not a number and this
-document already contains one thing that reasoning got wrong. The measurement costs an SDK
-install and one command.
+document already contains one thing that reasoning got wrong. The measurement costs one
+elevated install and two commands, and it is written out at the end of this file.
 
 **Whether a Windows 11 natural voice can be used by an ordinary application here is also
 unmeasured.** None is installed — `Speech_OneCore\Isolated` is empty and the only Korean token
@@ -99,3 +120,27 @@ Not large, and every piece has a precedent in this tree:
    back 24 kHz WAV and something has to put it on the speakers. WASAPI render, mirroring
    `microphone.rs`'s capture — and it has to be interruptible mid-word, because barge-in is what
    `Speaker::stop` means.
+
+**Neither is worth writing until the GPU number exists.** A fix that builds a synthesiser which
+takes thirty seconds to say a sentence is a button that works and should not be pressed.
+
+## Taking the measurement
+
+The installer is already fetched and verified at the hash above. It needs administrator rights,
+so it is two steps rather than one:
+
+```text
+# 1. as administrator, once
+vulkan_sdk.exe --root C:\VulkanSDK\1.4.357.0 --accept-licenses --default-answer \
+               --confirm-command install com.lunarg.vulkan.core
+
+# 2. rebuild with the Vulkan backend and say one sentence
+cmake -B build -G "MinGW Makefiles" -DCMAKE_BUILD_TYPE=Release -DGGML_VULKAN=ON \
+      -DCMAKE_CXX_FLAGS=-D_WIN32_WINNT=0x0A00 -DCMAKE_C_FLAGS=-D_WIN32_WINNT=0x0A00
+cmake --build build --config Release -j 8
+build/qwen-tts.exe --model qwen-talker-0.6b-base-Q4_K_M.gguf \
+                   --codec qwen-tokenizer-12hz-Q4_K_M.gguf --lang Korean -o ko.wav < ko.txt
+```
+
+The number to read is `RTF` on the `[Perf] Total` line. **Under 1.0 and this is worth building;
+over it and the honest answer is that a neural voice does not fit on this machine yet.**
