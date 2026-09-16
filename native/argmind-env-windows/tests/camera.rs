@@ -1,0 +1,145 @@
+//! The camera's arithmetic, **with no camera**.
+//!
+//! Opening one turns a light on in front of a person, so a suite must not. What a suite can check
+//! is the part that would be wrong silently: the reduction from a megapixel frame to the small grey
+//! field, and the two scalars everything downstream reads. The device itself is measured by hand —
+//! `cargo run -p argmind-env-windows --example look` — and those numbers are in the module.
+
+use argmind_env_windows::camera::{reduce, Frame, SETTLED, TALL, WIDE};
+
+fn frame(grey: Vec<u8>) -> Frame {
+    Frame { grey, took: 0.0 }
+}
+
+/// A picture of one colour reduces to that grey, whatever size it came in at.
+#[test]
+fn a_flat_frame_reduces_to_a_flat_field() {
+    for (w, h) in [(1920, 1080), (640, 480), (WIDE, TALL), (17, 13)] {
+        //: BGRA. Mid grey in, mid grey out — and the luma weights sum to 256, so a grey stays put
+        //: rather than drifting a level per conversion.
+        let bgra = vec![128u8; w * h * 4];
+        let small = reduce(&bgra, w, h, w * 4);
+        assert_eq!(small.len(), WIDE * TALL, "{w}x{h}");
+        assert!(small.iter().all(|g| (*g as i32 - 128).abs() <= 1),
+                "{w}x{h} gave {:?}…", &small[..4]);
+    }
+}
+
+/// **The green channel carries the detail and the weights say so.**
+///
+/// Weighting the three equally is the easy mistake, and it makes a green shirt and a blue wall the
+/// same grey.
+#[test]
+fn the_channels_are_not_weighted_equally() {
+    let one = |b: u8, g: u8, r: u8| {
+        let mut px = Vec::new();
+        for _ in 0..WIDE * TALL {
+            px.extend_from_slice(&[b, g, r, 255]);
+        }
+        reduce(&px, WIDE, TALL, WIDE * 4)[0]
+    };
+    let (red, green, blue) = (one(0, 0, 255), one(0, 255, 0), one(255, 0, 0));
+    assert!(green > red && red > blue, "green {green}, red {red}, blue {blue}");
+    //: Pure blue is the darkest by a long way — about a ninth of white.
+    assert!(blue < 40, "blue {blue}");
+}
+
+/// **A padded row does not shear the picture.**
+///
+/// A capture buffer's stride is not always the width times four, and reading it as if it were
+/// slides every row sideways by a little more than the last. The symptom is a diagonal smear that
+/// looks like motion, in a still room.
+#[test]
+fn the_stride_is_read_rather_than_assumed() {
+    let (w, h) = (100, 50);
+    let stride = w * 4 + 64;
+    let mut padded = vec![0u8; stride * h];
+    //: The left half bright, the right half dark, with junk in the padding.
+    for y in 0..h {
+        for x in 0..w {
+            let v = if x < w / 2 { 220 } else { 20 };
+            let at = y * stride + x * 4;
+            padded[at] = v;
+            padded[at + 1] = v;
+            padded[at + 2] = v;
+        }
+        for b in 0..64 {
+            padded[y * stride + w * 4 + b] = 255;
+        }
+    }
+    let small = reduce(&padded, w, h, stride);
+    //: Still a clean left/right split — the padding stayed out of it, and every row agrees.
+    for y in 0..TALL {
+        assert!(small[y * WIDE] > 180, "row {y} left");
+        assert!(small[y * WIDE + WIDE - 1] < 60, "row {y} right");
+    }
+}
+
+/// Averaged, not sampled — **the whole reason the small size filters anything.**
+#[test]
+fn a_block_is_averaged_rather_than_sampled() {
+    //: A one-pixel-wide bright stripe every other column. Sampling would give either all bright or
+    //: all dark depending on where it landed; averaging gives the middle.
+    let (w, h) = (WIDE * 4, TALL * 4);
+    let mut striped = vec![0u8; w * h * 4];
+    for y in 0..h {
+        for x in 0..w {
+            if x % 2 == 0 {
+                let at = (y * w + x) * 4;
+                striped[at] = 255;
+                striped[at + 1] = 255;
+                striped[at + 2] = 255;
+            }
+        }
+    }
+    let small = reduce(&striped, w, h, w * 4);
+    assert!(small.iter().all(|g| (90..=165).contains(g)),
+            "a sampled reduction would be 0 or 255, got {:?}…", &small[..6]);
+}
+
+/// The two scalars, and what they refuse to be.
+#[test]
+fn a_difference_is_a_number_and_never_a_place() {
+    let dark = frame(vec![10; WIDE * TALL]);
+    let light = frame(vec![210; WIDE * TALL]);
+    assert_eq!(dark.brightness(), 10.0);
+    assert_eq!(light.differs_from(&dark), 200.0);
+    //: Symmetric, because *how different* has no direction.
+    assert_eq!(dark.differs_from(&light), 200.0);
+    assert_eq!(dark.differs_from(&dark), 0.0);
+
+    //: **A mean, so one changed corner is small.** Where it changed would be a coordinate, and a
+    //: coordinate out of a detector is the thing this whole project refuses to produce — so the
+    //: type has no way to say it.
+    let mut corner = vec![10u8; WIDE * TALL];
+    corner[0] = 255;
+    assert!(frame(corner).differs_from(&dark) < 1.0);
+}
+
+/// Frames of different sizes are not compared. **Zero, not a panic and not a guess.**
+#[test]
+fn two_frames_that_are_not_the_same_size_differ_by_nothing() {
+    assert_eq!(frame(vec![1; 10]).differs_from(&frame(vec![1; 20])), 0.0);
+    assert_eq!(frame(Vec::new()).differs_from(&frame(Vec::new())), 0.0);
+    assert_eq!(frame(Vec::new()).brightness(), 0.0);
+}
+
+/// **The settling threshold sits in the gap that was measured**, and the gap is what makes it a
+/// threshold rather than a preference.
+#[test]
+fn settling_is_above_the_quiet_room_and_below_the_drift() {
+    //: A quiet room read 0.14 to 0.34 in six runs of twenty-five, and up to 2.85 while the exposure
+    //: was still walking. Half a unit is above the first and well below the second.
+    assert!(SETTLED > 0.34, "{SETTLED} would call a quiet room unsettled");
+    assert!(SETTLED < 2.85, "{SETTLED} would call a drifting camera settled");
+}
+
+/// A frame that arrived from nothing is a field of zeroes rather than a panic.
+#[test]
+fn an_empty_buffer_reduces_without_falling_over() {
+    assert_eq!(reduce(&[], 0, 0, 0).len(), WIDE * TALL);
+    assert_eq!(reduce(&[], 1920, 1080, 1920 * 4), vec![0u8; WIDE * TALL]);
+    //: And a buffer that is shorter than its own geometry claims — a truncated capture — is read as
+    //: far as it goes rather than off the end of it.
+    assert_eq!(reduce(&[255u8; 64], 1920, 1080, 1920 * 4).len(), WIDE * TALL);
+}
