@@ -112,7 +112,9 @@ flag deliberately and that is *stronger* — a person confirms each action, and 
 | accepting | a yes one turn after an offer acts in **30 of 39**, up from 15 of 39 — **15 fixed, 0 broken, p = 0.00006**, pre-registered, both controls holding, 104 cases over four screens. A yes *five turns* later, **3 of 12 → 10 of 12**. What it cost is one control case that goes `landed → silent`: the reply word for word identical and the action slot empty |
 | repair | **3 of 4** corrections land (n=4, so it cannot reach p<0.05 under any repair); a question about the past still re-proposes the action **9 times in 23** — the offer wording and then the standing-offer block each moved it, neither significantly (p = 0.0625 and 0.11) and the second only as a control; **Korean in, Korean out 30 of 36 (83%)** with **English in, English out 12 of 12** as the other half. `--think on` gets repair 4 of 4 and **halves Korean to 18 of 36** |
 | a call | **0.61 s** median, mean 1.43 s, and the gap was one tail: **18 of 1,845 turns ran to the 4,096-token ceiling**, 69–71 s each, 47% of the model time in 1% of the turns. The tail is gone — the same sweep now has 0 at the ceiling and costs 1,461 s against 2,671 s — **but not because the stream stops cut it: neither stop fired in that run, and an earlier version of this row credited them anyway.** Replaying 128 recorded replies through the shipped stops gives `stop` 122, `degenerate` 3, `length` 3 and **`closed` 0**: on an ordinary turn this model emits nothing after its closing brace, so the answered stop is unreachable. The stops are insurance that has not been called |
-| clicking | 3 of 3 end to end on a launched window, n=3 |
+| clicking | **3 of 3 on a launched window, n=3 — and that was the Python.** Nobody has run the Rust one end to end; it is the one harness that needs the screen for about a minute with a model call in the middle |
+| obstruction | **24 of 24 arms agreed with the prediction written before the run**, 3 runs of 8. With something covering the target, *neither* path reaches it — the pattern resolves by `ElementFromPoint` and gets the cover, then falls back to a click the reach guard refuses. Stood aside or uncovered, both work. So the one case that could have earned the control patterns does not |
+| the pointer | **the axis the patterns do win, 3 of 3.** Parked at `(700, 400)`: `invoke` leaves it there, a click drags it to the widget at `(130, 459)`, and both press the box. **The first version of this harness measured nothing** — it parked with `cursor_round_trip`, which puts the cursor back where it found it, so every arm read the position the previous arm's click had left and both reported *unmoved* |
 
 **Prompt edits here were 0 for 5.** Each raised a number and lowered another, and three were nearly
 recorded as improvements; the only change that moved a line was a derived limit, `MOST_AT_ONCE = 3`.
@@ -146,11 +148,15 @@ cannot be repaired is not.
 
 No phone environment, no robot environment. **Voice is built and is off until switched on**: hold
 F9 in the window, which means you have to be looking at argmind to talk to it. Speaking is free
-(4–43 ms) and already Korean; hearing is 234 ms and **transcribes silence as words 120 times out of
-120**, so a stray key press is a turn — it cannot act on one, but it will answer it aloud. The two
-instruments that would reject it need a threshold only real recorded speech can set, and **that
-recording does not exist yet**. Whether a confirmed click
-achieves what the person *wanted* is unmeasured beyond n=3. The agent still answers some Korean in
+(4–43 ms) and already Korean; hearing **transcribes silence as words 120 times out of 120**, so a
+stray key press is a turn — it cannot act on one, but it will answer it aloud. **Two of the three
+guards do reject**, with no threshold in either: a transcript of nothing but punctuation is not
+something a person said, and a short cycle repeating inside one is Whisper looping (7 of 7
+reproduced degenerations caught, 0 of 18 strings that had to survive). **The third needs a number
+nobody has** — the only pace measured on this machine is a synthesiser's, 5.69 characters a second,
+which is the wrong denominator for a person, so `pace_limit` ships as `None` and rejects nothing.
+Whether a confirmed click achieves what the person *wanted* is unmeasured beyond n=3, **and that
+n=3 was the Python's**. The agent still answers some Korean in
 English. A question about the past makes it propose the action again 9 times in 23. **It can say the
 right sentence and drop the action** — the `silent` shape, one case in eight, the reply identical to
 one that also clicked. Internal widget indices leak

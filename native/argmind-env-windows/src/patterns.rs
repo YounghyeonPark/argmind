@@ -7,9 +7,28 @@
 //! out would have left two experiments with one arm each, which is the shape this project calls a
 //! measurement that cannot answer its own question.
 //!
-//! **Off by default is the finding acted on.** `obstruction` measured `3 of 3` with patterns and
-//! `3 of 3` without, so nothing has yet earned them a place in the shipped click; they are enabled
-//! by the harness that is measuring them, and by nothing else.
+//! **Both have now answered, and they disagree — 2026-09-16.**
+//!
+//! | axis | with patterns | without | n |
+//! |---|---|---|---|
+//! | task success, ordinary goals | 3 of 3 | 3 of 3 | 3 |
+//! | reaching past something covering the target | missed | missed | 24 arms over 3 runs |
+//! | the mouse pointer | **unmoved** | dragged to the widget | 3 |
+//!
+//! **Obstruction says nothing, and says it for a reason worth knowing**: [`element_for`] starts at
+//! `ElementFromPoint` and walks *upwards*, so a window over the target hands it that window's
+//! ancestors and the pattern falls back to a click. The hope that a control pattern *does not aim
+//! at a pixel* is not true of this one. Whatever else patterns are for, they are not for that.
+//!
+//! **The pointer is the axis they win, every time.** A synthetic click moves the operating system's
+//! cursor to the widget and presses; `Invoke` calls a method and the pointer stays where the person
+//! left it. On a machine somebody is working at, that is the difference between an agent that acts
+//! and one that interrupts.
+//!
+//! **Still off by default**, and now for a narrower reason than before: the shipped click is
+//! confirmed by a person pressing a button, so the cursor was already about to move to something
+//! they chose. What the measurement removes is the old justification — *they buy nothing* — which
+//! was true of the two axes anybody had looked at and false of the third.
 //!
 //! The order is fixed and it matters. `Invoke` first, because a control that offers it means *press
 //! me*; a combo box does not have it and falls through to `ExpandCollapse`, which is the measured

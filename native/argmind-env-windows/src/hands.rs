@@ -137,9 +137,10 @@ pub enum Did {
 
 pub struct WindowsHands {
     pub reach: Reach,
-    /// **Off unless a harness that is measuring them turns them on.** `obstruction` found `3 of 3`
-    /// with and `3 of 3` without, so nothing has earned them a place in the shipped click; see
-    /// [`crate::patterns`].
+    /// **Off unless a harness that is measuring them turns them on.** The table in
+    /// [`crate::patterns`] has what the three harnesses found: nothing on task success, nothing on
+    /// reaching past an obstruction, and **the pointer left where it was, 3 of 3** — which is one
+    /// real benefit rather than none, and is the owner's call rather than this comment's.
     pub patterns: bool,
     /// Made once and only if a pattern is ever wanted.
     automation: Option<IUIAutomation>,
