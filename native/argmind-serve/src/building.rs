@@ -64,7 +64,7 @@ impl Recipe {
     /// `[ 42%]` on stdout, which is exactly the thing to pass on and nothing else is.
     pub fn run(&self, say: &mut dyn FnMut(&str)) -> Result<(), String> {
         say("빌드 준비 중…");
-        let mut configure = Command::new("cmake");
+        let mut configure = crate::platform::child("cmake");
         self.dress(&mut configure);
         configure.args(["-B", &self.into, "-G", "MinGW Makefiles", "-DCMAKE_BUILD_TYPE=Release"]);
         configure.args(&self.defines);
@@ -73,7 +73,7 @@ impl Recipe {
 
         let jobs = std::thread::available_parallelism().map(|n| n.get()).unwrap_or(4);
         say(&format!("컴파일 중 — {jobs}개 동시, 몇 분 걸립니다"));
-        let mut make = Command::new("cmake");
+        let mut make = crate::platform::child("cmake");
         self.dress(&mut make);
         make.args(["--build", &self.into, "--config", "Release",
                    "--target", &self.target, "-j", &jobs.to_string()]);
@@ -171,7 +171,7 @@ pub fn last_few<T>(all: &[T], how_many: usize) -> &[T] {
 }
 
 fn git(at: &Path, args: &[&str]) -> Result<String, String> {
-    let out = Command::new("git").current_dir(at).args(args).stdin(Stdio::null())
+    let out = crate::platform::child("git").current_dir(at).args(args)
         .output().map_err(|e| format!("git을 실행하지 못했습니다 ({e})"))?;
     if !out.status.success() {
         return Err(format!("git {} 실패 — {}", args.join(" "),
@@ -243,7 +243,7 @@ pub fn percent_of(line: &str) -> Option<usize> {
 pub fn missing(tools: &[&'static str]) -> Vec<&'static str> {
     tools.iter().copied()
         .filter(|tool| {
-            Command::new(tool).arg("--version")
+            crate::platform::child(tool).arg("--version")
                 .stdout(Stdio::null()).stderr(Stdio::null()).stdin(Stdio::null())
                 .status().map(|s| !s.success()).unwrap_or(true)
         })
@@ -269,7 +269,7 @@ pub fn machine_env(name: &str) -> Option<String> {
             return Some(mine);
         }
     }
-    let out = Command::new("reg")
+    let out = crate::platform::child("reg")
         .args(["query", r"HKLM\SYSTEM\CurrentControlSet\Control\Session Manager\Environment",
                "/v", name])
         .stdin(Stdio::null()).output().ok()?;
@@ -341,7 +341,7 @@ pub fn bring_runtime(exe: &Path, say: &mut dyn FnMut(&str)) -> Result<usize, Str
 
 /// The DLL names a binary imports, as `objdump -p` reports them.
 pub fn imports_of(binary: &Path) -> Result<Vec<String>, String> {
-    let out = Command::new("objdump").arg("-p").arg(binary).stdin(Stdio::null())
+    let out = crate::platform::child("objdump").arg("-p").arg(binary)
         .output().map_err(|e| format!("objdump를 실행하지 못했습니다 ({e})"))?;
     if !out.status.success() {
         return Err(format!("{}의 의존성을 읽지 못했습니다", binary.display()));
@@ -354,7 +354,7 @@ pub fn imports_of(binary: &Path) -> Result<Vec<String>, String> {
 
 /// The folder the C++ compiler lives in, which is where its runtime lives too.
 pub fn toolchain_dir() -> Option<PathBuf> {
-    let out = Command::new("where").arg("g++.exe").stdin(Stdio::null()).output().ok()?;
+    let out = crate::platform::child("where").arg("g++.exe").output().ok()?;
     if !out.status.success() {
         return None;
     }

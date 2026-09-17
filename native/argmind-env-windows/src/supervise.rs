@@ -81,6 +81,14 @@ impl Supervised {
     pub fn start(exe: &Path, args: &[&str], dir: Option<&Path>, log: Option<&Path>)
                  -> std::io::Result<Self> {
         let mut command = Command::new(exe);
+        //: **No console for it.** A windowed argmind has none of its own, so Windows makes one for
+        //: every console child — and a recogniser started from the tray put a black rectangle on
+        //: the desktop for the life of the program. Its output already goes to the log file below;
+        //: a window would only ever be in the way. `CREATE_NO_WINDOW`.
+        {
+            use std::os::windows::process::CommandExt;
+            command.creation_flags(0x0800_0000);
+        }
         command.args(args).stdin(Stdio::null());
         if let Some(dir) = dir {
             command.current_dir(dir);

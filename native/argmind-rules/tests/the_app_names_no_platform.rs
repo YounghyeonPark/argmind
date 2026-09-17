@@ -74,6 +74,50 @@ fn only_one_file_in_the_application_knows_which_operating_system_this_is() {
              one file choose, or a second environment means rewriting the application: {guilty:#?}");
 }
 
+/// **One place starts a child process, and it starts them quietly.**
+///
+/// A windowed program has no console, so Windows makes one for every console child it starts. The
+/// owner's word for it on 2026-09-17 was 거슬림, and there were nine places to forget: `git`,
+/// `cmake`, `objdump`, `curl.exe`, `certutil`, `reg`, `where`, an installer, and the five
+/// `--version` calls that run every time the page asks what is missing.
+///
+/// Measured rather than assumed, because the first attempt to measure it said there was no
+/// problem: a plain spawn from a `windows_subsystem = "windows"` binary produced
+/// `CASCADIA_HOSTING_WINDOW_CLASS` and `PseudoConsoleWindow`, and the same spawn with
+/// `CREATE_NO_WINDOW` produced neither. **Windows 11 hosts consoles in Windows Terminal**, so a
+/// detector looking for `ConsoleWindowClass` counts zero and reports success.
+///
+/// So the rule is the same shape as the platform one: `platform::child` is the only way, and
+/// remembering to be quiet is not a thing anybody has to do.
+#[test]
+fn only_one_place_starts_a_child_process() {
+    let files = serve_sources();
+    assert!(files.len() >= 8, "only {} sources found", files.len());
+    let mut guilty: Vec<String> = Vec::new();
+    for file in &files {
+        let short = named(file);
+        if short == "platform.rs" {
+            continue;
+        }
+        let source = std::fs::read_to_string(file).expect("a source reads");
+        for (at, line) in code_lines(&source) {
+            if line.contains("Command::new") {
+                guilty.push(format!("{short}:{at}: {}", line.trim()));
+            }
+        }
+    }
+    assert!(guilty.is_empty(),
+            "these start a child process directly — say `platform::child`, or it opens a console              window on Windows every time it runs: {guilty:#?}");
+
+    //: And the one place really does quieten them, rather than just being the only place.
+    let seam = std::fs::read_to_string(
+        root().join("native").join("argmind-serve").join("src").join("platform.rs"))
+        .expect("platform.rs");
+    assert!(seam.contains("pub fn child("), "platform.rs offers no way to start a child");
+    assert!(seam.contains("without_a_console"), "platform::child does not quieten anything");
+    assert!(seam.contains("0x0800_0000"), "CREATE_NO_WINDOW is not set anywhere");
+}
+
 /// **And `platform.rs` really is the seam**, rather than an empty file the rule passes over.
 #[test]
 fn the_one_file_that_knows_offers_both_answers() {

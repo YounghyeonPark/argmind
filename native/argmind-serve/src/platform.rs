@@ -61,16 +61,33 @@ mod chosen {
         Some("Windows 음성")
     }
 
+
+    /// Start this child **without giving it a console window.**
+    ///
+    /// A windowed program has no console, so Windows makes one for any console child it starts —
+    /// and argmind starts a great many: `git`, `cmake`, `objdump`, `curl.exe`, `certutil`, `reg`,
+    /// `where`, and five `--version` calls every time the page asks what is missing. Each one is a
+    /// black rectangle that appears and vanishes. The owner's word for it on 2026-09-17 was
+    /// 거슬림.
+    ///
+    /// `CREATE_NO_WINDOW`, which is `0x0800_0000`. **It does nothing to a program that has a window
+    /// of its own** — an installer still shows its installer — so it is safe on everything here,
+    /// and every child in this program goes through it.
+    pub fn without_a_console(command: &mut std::process::Command) {
+        use std::os::windows::process::CommandExt;
+        command.creation_flags(0x0800_0000);
+    }
+
     /// Hand a URL to whatever the person chose as their browser.
     pub fn open_url(url: &str) -> Result<(), String> {
         //: `explorer` is a shell command, not a downloader — nothing is fetched or run here.
-        std::process::Command::new("explorer").arg(url).spawn()
+        super::child("explorer").arg(url).spawn()
             .map(|_| ()).map_err(|e| format!("{e}"))
     }
 
     /// Run a documented command with administrator rights, so Windows asks as well.
     pub fn run_elevated(command: &str) -> Result<bool, String> {
-        let done = std::process::Command::new("powershell")
+        let done = super::child("powershell")
             .args(["-NoProfile", "-Command",
                    &format!("Start-Process -Verb RunAs -Wait -FilePath cmd.exe                              -ArgumentList '/c {command}'")])
             .status().map_err(|e| format!("{e}"))?;
@@ -110,6 +127,10 @@ mod chosen {
         Err("이 운영체제에서는 관리자 권한 실행이 아직 준비되지 않았습니다".into())
     }
 
+
+    /// Nothing to do: no other operating system invents a terminal for a child that did not ask.
+    pub fn without_a_console(_command: &mut std::process::Command) {}
+
     /// Nothing speaks here yet — `speech-dispatcher` exists and is not written.
     pub fn fallback_voice() -> Option<&'static str> {
         None
@@ -132,6 +153,10 @@ mod chosen {
     /// **Never.** The synthesiser may well be answering on its port — it is a server and it builds
     /// on all three — but nothing here can play what it sends back. Saying no is the honest
     /// answer; asking the socket and then being unable to make a sound would not be.
+
+
+    /// Nothing to do: no other operating system invents a terminal for a child that did not ask.
+    pub fn without_a_console(_command: &mut std::process::Command) {}
 
     /// **Nothing speaks here.** `speech-dispatcher` on Linux and `AVSpeechSynthesizer` on macOS
     /// both exist; neither is written. Saying *Windows 음성으로 말합니다* on Ubuntu, which is what
@@ -157,6 +182,23 @@ mod chosen {
 }
 
 pub use chosen::*;
+
+/// **The only way this crate starts a child process.**
+///
+/// Everything argmind shells out to comes through here — `git`, `cmake`, `objdump`, `curl.exe`,
+/// `certutil`, `reg`, `where`, an installer, five `--version` calls every time the page asks what
+/// is missing — and every one of them used to open a window. A rule in `argmind-rules` keeps
+/// `Command::new` out of the rest of the crate, because *remembering* to be quiet is the same kind
+/// of promise as remembering to say `platform::Sight`.
+///
+/// `stdin` is closed here too. A child that waits on input nobody can give is a build that has
+/// hung, and it looks exactly like a build that is slow.
+pub fn child(program: impl AsRef<std::ffi::OsStr>) -> std::process::Command {
+    let mut command = std::process::Command::new(program);
+    command.stdin(std::process::Stdio::null());
+    without_a_console(&mut command);
+    command
+}
 
 /// What this build can actually do, in one line, for a person reading a log or a page.
 ///

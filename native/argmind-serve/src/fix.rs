@@ -223,9 +223,11 @@ pub fn apply(fix: &Fix, say: &mut dyn FnMut(&str)) -> Result<String, String> {
             Ok("받았습니다".into())
         }
         Fix::OpenPage { url, .. } => {
-            //: `explorer` hands a URL to whatever the person chose as their browser. It is a shell
-            //: command, not a downloader — **nothing is fetched or run here.**
-            std::process::Command::new("explorer").arg(url).spawn().map_err(|e| format!("{e}"))?;
+            //: Through the seam, because how you hand a URL to somebody's browser is one of the
+            //: things every operating system spells differently — and because the one place that
+            //: starts children is the one place that keeps them quiet. **Nothing is fetched or run
+            //: here** whichever way it is spelled.
+            crate::platform::open_url(url)?;
             Ok(format!("{url} 을(를) 열었습니다 — 설치는 직접 하셔야 합니다"))
         }
         Fix::Install { url, file, .. } => {

@@ -1,6 +1,10 @@
 //! What the Linux eyes see, and how long they took.
 //!
-//!     cargo run -p argmind-env-linux --example look
+//! **Named `atspi-look` rather than `look`** because `argmind-env-windows` already has a `look` and
+//! cargo puts every example in one directory: two of them collide, and cargo says that may stop
+//! being a warning.
+//!
+//!     cargo run -p argmind-env-linux --example atspi-look
 //!
 //! The same question `argmind look` asks on Windows, against the accessibility bus. **Reads and
 //! changes nothing** — except that opening the eyes switches accessibility on for the desktop,

@@ -42,7 +42,7 @@ pub fn get(url: &str, into: &Path, sha256: Option<&str>, say: &mut dyn FnMut(&st
     std::fs::create_dir_all(shed()).map_err(|e| format!("{e}"))?;
     say(&format!("받는 중: {url}"));
 
-    let done = std::process::Command::new("curl.exe")
+    let done = crate::platform::child("curl.exe")
         .args(["--fail", "--location", "--silent", "--show-error",
                //: `--proto =https` and `--tlsv1.2` are belt and braces on top of the https check
                //: above: a redirect that tried to step down to plain HTTP is refused by curl
@@ -84,7 +84,7 @@ pub fn get(url: &str, into: &Path, sha256: Option<&str>, say: &mut dyn FnMut(&st
 /// Windows ships `certutil`, so this is one process rather than a hashing crate — the same trade as
 /// `curl`, for the same reason.
 pub fn digest(of: &Path) -> Result<String, String> {
-    let done = std::process::Command::new("certutil")
+    let done = crate::platform::child("certutil")
         .args(["-hashfile"]).arg(of).arg("SHA256")
         .output().map_err(|e| format!("certutil을 실행하지 못했습니다 ({e})"))?;
     if !done.status.success() {
@@ -106,7 +106,7 @@ pub fn digest(of: &Path) -> Result<String, String> {
 /// agreed to, and a reader following an approval should be able to see which one it reached.
 pub fn run(what: &Path, args: &[&str], say: &mut dyn FnMut(&str)) -> Result<(), String> {
     say(&format!("실행: {}", what.display()));
-    let done = std::process::Command::new(what).args(args).status()
+    let done = crate::platform::child(what).args(args).status()
         .map_err(|e| format!("실행하지 못했습니다 ({e})"))?;
     if done.success() {
         return Ok(());
