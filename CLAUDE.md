@@ -180,10 +180,17 @@ can be done in WSL, which was the open question.
 screen rectangles. **The contract survives the port**: `Widget { name, role, rect, window }` is
 exactly what the accessibility bus hands over. `docs/findings/eyes-on-linux.md` has it.
 
-**It has no hands, and that is a permission question before a coding one.** X11 allows XTEST and
-`libxdo` is a small job; Wayland deliberately refuses and routes input through
-`xdg-desktop-portal` with the person granting a session. Not decided from a WSLg session with no
-window manager of its own.
+**And hands, for clicking.** Through `org.a11y.atspi.Action` — the same choice Windows makes with
+UI Automation patterns, for the same measured reason: a pattern leaves the cursor where the person
+left it. Verified against the widget's own state word, `0x43000900 -> 0x43000910`, which is
+`CHECKED` flipping. No new dependency: the eyes' D-Bus connection is all it takes.
+
+**Typing is refused**, because AT-SPI no longer synthesises input — checked by introspection. That
+needs XTEST on X11 or `xdg-desktop-portal` on Wayland, and on Wayland **the system holds the gate,
+not argmind**: the portal shows its own dialog, so `항상 허용` cannot be honoured from argmind's
+settings there. Two gates, and the settings panel only controls one. Not decided from a WSLg
+session with no window manager of its own — which is also why `ACTIVE` is unreliable there, and
+why *which window is in front* has no counterpart that can be tested here.
 
 **No macOS environment at all**, and that is most of what is missing — the application
 itself is no longer in the way. The owner asked on 2026-09-16 for all three; `docs/findings/the-window.md`

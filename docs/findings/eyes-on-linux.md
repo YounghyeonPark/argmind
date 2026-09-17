@@ -70,7 +70,61 @@ answer. Asked for the middle of a button called `Menu`, it said `("", "panel")`.
 at that point.** Followed down now, bounded, with one look inside a nameless node because a
 button's label is often a named child of it. It answers `("Menu", "toggle button")`.
 
-## What is not written: hands
+## Hands, through the same layer
+
+**Measured first, and it decided the design.** A GTK button offers exactly one action, named
+`Click` and described as *Clicks the button*, and `DoAction` answers `true`. So the path Windows
+prefers has an exact counterpart here — `patterns.rs` there records
+`Did::Operated { how, live }`, *no pixel was aimed at and the cursor did not move*, which the
+pointer measurement found is worth 3 of 3 — and the D-Bus connection the eyes already open is all
+it costs. **No new dependency for hands at all.**
+
+Verified against the widget's own state rather than against hope, because a push button that worked
+and one that did nothing look identical from outside:
+
+```text
+dry     Operated { how: "atspi-action", live: false }    0x43000900 -> 0x43000900
+armed   Operated { how: "atspi-action", live: true }     0x43000900 -> 0x43000910
+```
+
+Bit 4 — `CHECKED` — flipped. The toggle toggled.
+
+`find()` re-resolves by name, role and rectangle immediately before acting, which is the invariant
+everything rests on: a listed widget is gone 13 times in 14 over the second a call takes. Name and
+role alone are still not a key, and the tie-break among copies settles nothing — **wrong here in
+exactly the way it is wrong on Windows**, and recorded rather than papered over.
+
+## Two bugs that cost two runs each, and what they were really about
+
+**Announcing twice empties the tree you were announcing to.** `Bus::open()` wrote
+`org.a11y.Status.IsEnabled` on every connection, and one run opens three — eyes, hands, and the
+state read. Every write makes the toolkit bridges re-register, and a re-registering bridge has
+nothing to say. It presented as *the hands cannot find a widget the eyes just listed*, which is a
+long way from the cause. Now: read first, write only if false, once per process, and wait 400 ms
+for the bridges to publish.
+
+**`ACTIVE` needs a window manager and WSLg has not got one.** The frame reported `0x43200100` —
+visible, not active — while plainly on screen. GTK sets `ACTIVE` from the window manager's focus,
+and inside WSLg there is no window manager: Windows is one level up. So `attended()` prefers a
+frame that claims to be active and otherwise takes the largest on screen, **and says which it
+did**. A guess labelled as a guess is usable; a guess presented as a reading is not.
+
+That second one is also a limit on this proving ground, and worth saying plainly: **WSLg cannot
+answer "which window is in front"**, so the part of the Windows design that exists precisely to
+answer that — `Attending`, the watcher, the newest-not-in-front rule — has no counterpart here that
+can be tested. It needs a real desktop.
+
+Reading the enum from memory caused the smaller of the two: the first `state_of` called bit 8
+`CHECKED`, which the frame's own `0x43200100` disproves. It returns the whole state word now, and
+comparing before with after needs no opinion about the enum at all.
+
+## What is still not written: typing
+
+**AT-SPI no longer synthesises input.** `DeviceEventController` used to generate key events and this
+at-spi2-core does not expose it — checked by introspection, not assumed. So `type_text` and `press`
+refuse, and name what it would take.
+
+**On Linux that is a permission question before it is a coding one.**
 
 **On Linux that is a permission question before it is a coding one.**
 
