@@ -46,6 +46,7 @@ pub mod needs;
 pub mod platform;
 pub mod proposals;
 pub mod recogniser;
+pub mod senses;
 pub mod speaker;
 
 use std::collections::hash_map::RandomState;

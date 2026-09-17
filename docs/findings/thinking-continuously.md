@@ -264,3 +264,64 @@ abandon one already running. The tail that cost 10.81 s is reachable, not just t
 
 Still unmeasured: whether the yielding version actually recovers the 1.0 s median in the real agent,
 where a look happens every 30 s rather than back to back. The number to beat is in the table above.
+
+## The blackboard, built (2026-09-17)
+
+**The owner:** 블랙보드 진행바람.
+
+`argmind-serve/src/senses.rs`, and the thinking moved off the thread that answers.
+
+* **`Senses`** — a slot per sense, newest wins, nobody queues. `render` prints each reading with
+  **how old it is**: *카메라 (12초 전): …*. A sense that refreshes on its own is a sense whose answer
+  is always a little old, and *a reading* where *a reading from twelve seconds ago* is the truth is
+  a lie the model cannot catch.
+* **`Turn`** — one bit, shared. `begins()` returns a guard that clears on drop, so an early return
+  or a panic cannot leave every sense standing down for the rest of the session. That is tested
+  both ways, because a guard is exactly the kind of thing that works until it does not.
+* **The thinking thread.** A tick used to run inline, and a model call on the agent thread is a
+  model call during which nothing answers anybody. Now a snapshot goes to a one-deep letterbox — a
+  tick arriving while one waits *replaces* it, because a backlog of thoughts about screens that have
+  gone is worse than no thought — and the new note comes back as `Job::Thought`. The session stays
+  on one thread and nothing it holds is locked while a model call runs.
+* **Both halves of the third rule.** The thinker declines to start while a turn is in flight, and
+  `ask_while` abandons one already running the moment a turn begins.
+
+### What the live runs show, and what they do not
+
+**Rule 2 works, and it works completely.** Driving the running app with `/say` continuously for 60 s
+at a time, with watching on and two ticks due: **zero ticks completed**, in every arm. A sense that
+must stand down during a turn stands down for as long as the turns keep coming.
+
+**Rule 3 fires.** Six deliberate collisions — silent for 30.2 s so a tick starts, then speak. Two of
+the six landed inside a tick, and in both the tick was **abandoned and produced no note at all**,
+which is the signature: an abandoned call returns `reason = "abandoned"` and never reaches
+`Job::Thought`.
+
+**The latency claim is not established, and the first attempt at it was wrong.** Hammering the app
+for 90 s with watching on read a median of **2.57 s**, which looked like the rules failing. It was
+the screen: the prompt carries up to 200 widgets and its size depends on whatever window happens to
+be in front, which nothing in this measurement controlled. With the widget count recorded per turn
+the picture changes completely —
+
+| | median | worst | widgets, median | widgets, range | ticks |
+|---|---|---|---|---|---|
+| watching off | 0.84 s | 2.90 s | 12 | 1–200 | 0 |
+| **watching on** | **0.65 s** | **1.49 s** | 12 | 12–96 | 0 |
+| watching off again | 0.83 s | 2.69 s | 12 | 12–200 | 0 |
+
+— and the earlier 1.43 s against 0.52 s in the same shape was the same confound, the off arms having
+met 200-widget screens. **What holds is the negative: watching on does not cost the conversation.**
+What does not hold is any claim that it is faster, and the six collision trials cannot settle the
+cost of a collision either: 200, 200, 12, 164, 12 and 1 widgets across them, so the times are not
+comparable to each other.
+
+**A measurement of this needs a fixed screen**, which means driving the app against a window whose
+widget count does not move. That does not exist yet and is the next instrument, not a result.
+
+### What is not on it yet
+
+**The camera**, which is the whole reason the blackboard exists. `camera.rs` hands out 64×36 greys
+and has no accessor for anything larger, deliberately, so a photograph leaving it is a different
+call with a different permission — and the blackboard is what it will write into when that is
+decided. Nothing else about the design has to change to add it: a thread, a `saw()`, and it appears
+in the prompt with its age.

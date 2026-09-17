@@ -45,7 +45,7 @@
 use std::io::{BufRead, BufReader, Read, Write};
 use std::net::{TcpListener, TcpStream};
 use std::sync::mpsc::{channel, Sender};
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Condvar, Mutex};
 
 use argmind_core::contract::{Eyes, Speaks, Widget};
 use argmind_core::intent::{Effect, Trigger};
@@ -135,6 +135,9 @@ struct Desk {
     noticing: bool,
     /// When it last revised its own notes, on the same clock `notice` uses.
     thought_at: f64,
+    /// Every sense's latest reading, and whether somebody is being answered. See [`crate::senses`].
+    senses: crate::senses::Senses,
+    turn: crate::senses::Turn,
     /// What the screen looked like last time this checked. **Empty means there is no before**, and
     /// the first look after switching on reports nothing whatever is on screen.
     before: Vec<argmind_core::contract::Widget>,
@@ -167,6 +170,9 @@ enum Job {
     Choose(String, String),
     /// Turn one thinking dial.
     Dial(String, u8),
+    /// The thinking thread finished a note. **The only way a tick reaches the session**, so the
+    /// session stays on one thread and nothing it holds is locked while a model call runs.
+    Thought(argmind_core::thinking::Note),
     /// Write the thinking goal.
     Aim(String),
     /// Open one for a moment and report.
@@ -212,6 +218,11 @@ fn label(effect: &Effect, found: Option<&Widget>) -> String {
 
 /// One turn: ask, say, and turn every effect into a row that waits.
 fn think(desk: &mut Desk, out: &Listeners, text: &str) {
+    //: **Held for the whole turn, and it clears itself.** While this is alive the senses stand
+    //: down: one declines to start and one already running is abandoned mid-call. A guard rather
+    //: than two stores, because an early return that left the flag set would silence every sense
+    //: for the rest of the session.
+    let _answering = desk.turn.begins();
     out.send("busy", "1");
     //: **The last turn's buttons go.** An offer the person never answered and then said something
     //: else about is one they moved on from, and a button whose label describes a screen that has
@@ -646,26 +657,79 @@ fn notice(desk: &mut Desk, out: &Listeners, now: f64) {
 /// this is the slower loop underneath it.
 pub const THINK_EVERY: f64 = 30.0;
 
-/// One tick of argmind thinking about what it is looking at.
+/// What the thinking thread is asked to chew on. **A snapshot, not a borrow** — the session stays
+/// on its own thread and nothing shared has to be locked while a model call runs.
+struct Chew {
+    screen: String,
+    history: Vec<(String, String)>,
+    note: argmind_core::thinking::Note,
+}
+
+/// A one-deep letterbox to the thinking thread.
 ///
-/// **It cannot speak and it cannot act**: `Session::reflect` asks a question whose answer shape has
-/// no `say` and no `do` in it. That is the property that makes a timer safe here — everything else
-/// in this file that runs without being asked had to be argued about, and this one cannot reach the
-/// person at all except through the panel that shows the note.
+/// **Dropped rather than queued.** A `Sender` would pile up thoughts about screens that have gone,
+/// and the oldest of those is the least worth having. This holds at most one and the thinker takes
+/// it when it is free; a tick arriving while one is waiting replaces it.
+#[derive(Clone)]
+struct Letterbox(Arc<Mutex<Option<Chew>>>, Arc<Condvar>);
+
+impl Letterbox {
+    fn new() -> Self {
+        Letterbox(Arc::new(Mutex::new(None)), Arc::new(Condvar::new()))
+    }
+
+    /// Leave one, replacing whatever was there.
+    fn try_send_chew(&self, chew: Chew) {
+        if let Ok(mut slot) = self.0.lock() {
+            *slot = Some(chew);
+            self.1.notify_one();
+        }
+    }
+
+    /// Wait for one. `None` only if the lock is poisoned, which means the program is going down.
+    fn wait(&self) -> Option<Chew> {
+        let mut slot = self.0.lock().ok()?;
+        while slot.is_none() {
+            slot = self.1.wait(slot).ok()?;
+        }
+        slot.take()
+    }
+}
+
+/// Start one tick of argmind thinking about what it is looking at.
+///
+/// **It cannot speak and it cannot act**: the question it asks has no `say` and no `do` in its
+/// answer shape. That is what makes a timer safe here — everything else in this file that runs
+/// unasked had to be argued about, and this one cannot reach the person except through the panel
+/// that shows the note.
 ///
 /// **Tied to watching**, because they are the same permission in substance: both are argmind
 /// spending model calls on a screen nobody pointed at. Switching 지켜보기 off stops both.
-fn reflect(desk: &mut Desk, out: &Listeners, now: f64) {
+///
+/// **And it no longer happens on this thread.** It used to, and a model call there is a model call
+/// during which nothing answers anybody. The snapshot goes to the thinking thread, the note comes
+/// back as a `Job`, and the queue below carries on. See [`crate::senses`] for the two rules that
+/// keep that from costing the conversation.
+fn reflect(desk: &mut Desk, thinking: &Letterbox, now: f64) {
     if !desk.noticing || now - desk.thought_at < THINK_EVERY {
         return;
     }
-    desk.thought_at = now;
-    //: **No `busy` event.** That marks the person waiting for an answer, and nobody is waiting for
-    //: this; flashing 생각 중 twice a minute at somebody who did not ask anything is the noise the
-    //: watch floor exists to prevent, in a second place.
-    if desk.session.reflect() {
-        out.send("note-kept", &note_json(&desk.session.note));
+    //: **Not while somebody is being answered.** The first of the two rules: measured, a sense
+    //: running beside the conversation takes the answer from 1.0 s to 3.2 s.
+    if desk.turn.in_flight() {
+        return;
     }
+    desk.thought_at = now;
+    let listed: Vec<argmind_core::contract::Widget> =
+        desk.session.seen.iter().take(desk.session.limit).cloned().collect();
+    //: **The screen it already has**, not a fresh read: this is the blackboard's own rule applied
+    //: to itself, and `notice` took a reading moments ago on this same tick.
+    let screen = argmind_core::converse::describe_screen(&listed, desk.session.limit);
+    desk.senses.saw("화면", format!("{} 개가 보임", listed.len()), 0.0);
+    //: **Dropped rather than queued when the thinker is busy.** A backlog of thoughts about screens
+    //: that have gone is worse than no thought at all.
+    let _ = thinking.try_send_chew(Chew { screen, history: desk.session.recent(),
+                                          note: desk.session.note.clone() });
 }
 
 /// What it is holding in mind, for the panel that shows it.
@@ -969,6 +1033,53 @@ pub fn run(how: How) {
             }
         }
     });
+    //: **The blackboard and the one bit that keeps it honest**, shared by every thread that senses
+    //: and the one that answers. See `crate::senses`.
+    let senses = crate::senses::Senses::default();
+    let turn = crate::senses::Turn::default();
+
+    //: **Thinking happens here, not on the thread that answers.** It used to be inline, and a model
+    //: call there is a model call during which nobody gets a reply. What comes back is a `Job`.
+    let letters = Letterbox::new();
+    {
+        let (letters, turn, senses, jobs, model_name) =
+            (letters.clone(), turn.clone(), senses.clone(), jobs.clone(), model_name.clone());
+        std::thread::spawn(move || {
+            let mut model = Local::new(&model_name);
+            model.think = Some(false);
+            model.keep_alive = "300s".into();
+            while let Some(chew) = letters.wait() {
+                //: Checked again here: a turn can have begun between the tick and this thread
+                //: waking, and starting anyway would be the rule holding only when it is easy.
+                if turn.in_flight() {
+                    continue;
+                }
+                let others = senses.render("화면").unwrap_or_default();
+                let screen = if others.is_empty() {
+                    chew.screen
+                } else {
+                    format!("{}\n\n{others}", chew.screen)
+                };
+                let prompt = argmind_core::thinking::ask_for_a_note(
+                    &chew.note, &screen, &chew.history, argmind_core::thinking::MOST_CHARS);
+                //: **Abandoned the moment somebody is answered.** Measured: dropping the socket
+                //: frees the card — an answer after abandoning costs 1.09 s against 1.12 s with a
+                //: free card and 3.22 s with a busy one.
+                let carry_on = turn.carry_on();
+                let Ok(reply) = model.ask_while(&prompt, &[], &carry_on, &mut |_| {}) else {
+                    continue;
+                };
+                if reply.reason == "abandoned" {
+                    continue;
+                }
+                let mut note = chew.note;
+                if argmind_core::thinking::read_note(&reply.text, &mut note) {
+                    let _ = jobs.send(Job::Thought(note));
+                }
+            }
+        });
+    }
+
     let agent_out = Arc::clone(&out);
     let agent_model = model_name.clone();
     //: Everything COM touches lives on this thread and never leaves it.
@@ -992,7 +1103,9 @@ pub fn run(how: How) {
                               //: is the change that means *look at this*. `Appeared` and `Vanished`
                               //: need a name to look for and there is nowhere yet to type one.
                               watches: vec![Watch::new(Looking::WindowChanged)],
-                              noticing: false, thought_at: 0.0, before: Vec::new(), noticed: 0 };
+                              noticing: false, thought_at: 0.0,
+                              senses: senses.clone(), turn: turn.clone(),
+                              before: Vec::new(), noticed: 0 };
         //: **On from the start when it is allowed**, which it is by default since 2026-09-17. A
         //: permission that says yes and a program that waits for a button anyway is the defect
         //: this session has already found twice in other places.
@@ -1017,7 +1130,7 @@ pub fn run(how: How) {
                     notice(&mut desk, &agent_out, now);
                     //: **After noticing, not instead of it.** A window change is what a person is
                     //: owed an answer about; revising a note is what happens in the gaps.
-                    reflect(&mut desk, &agent_out, now);
+                    reflect(&mut desk, &letters, now);
                     continue;
                 }
                 Err(_) => break,
@@ -1108,6 +1221,12 @@ pub fn run(how: How) {
                         Err(why) => agent_out.send("note", &why),
                     }
                     agent_out.send("mind", &mind_json(&desk.session.mind));
+                }
+                Job::Thought(note) => {
+                    //: **Nothing is said and nothing is proposed.** A tick reaches the person only
+                    //: through the panel that shows the note.
+                    desk.session.note = note;
+                    agent_out.send("note-kept", &note_json(&desk.session.note));
                 }
                 Job::Forget(key) => {
                     match crate::decided::keep(&key, None) {
