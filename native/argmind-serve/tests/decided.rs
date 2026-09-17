@@ -111,3 +111,44 @@ fn everything_decidable_is_listed_answered_or_not() {
         assert!(!name.is_empty());
     }
 }
+
+
+/// **A thing answered once and for all is never asked again.**
+///
+/// It was, every launch. The page drew the four buttons for anything missing that had a fix, and
+/// the standing answer then acted on it a few seconds later and the question vanished — asking and
+/// then ignoring the answer, which is worse than either alone. The owner noticed:
+/// *권한 물어보는게 앱 실행시마다 물어보는데 이게 맫나*.
+///
+/// The decisions are handed in rather than read, so this cannot overwrite what somebody actually
+/// decided in order to test what happens when they decide it.
+#[test]
+fn a_standing_answer_is_sent_with_the_question_so_the_page_can_stop_asking() {
+    use std::collections::BTreeMap;
+
+    let needs = argmind_serve::needs::every("qwen3:8b");
+    assert!(needs.len() >= 4, "only {} needs", needs.len());
+
+    //: Nothing decided: every row says so, and the page draws its buttons.
+    let plain = argmind_serve::app::needs_as_json(&needs, &BTreeMap::new());
+    assert!(plain.contains("\"standing\":\"\""), "{plain}");
+    assert!(!plain.contains("\"standing\":\"allowed\""));
+
+    //: One of each, on whichever keys this machine actually has.
+    let mut decided = BTreeMap::new();
+    let keys: Vec<&str> = needs.iter().map(|n| n.key).collect();
+    decided.insert(keys[0].to_string(), Standing::Allowed);
+    if keys.len() > 1 {
+        decided.insert(keys[1].to_string(), Standing::Denied);
+    }
+    let answered = argmind_serve::app::needs_as_json(&needs, &decided);
+    assert!(answered.contains("\"standing\":\"allowed\""), "{answered}");
+    if keys.len() > 1 {
+        assert!(answered.contains("\"standing\":\"denied\""), "{answered}");
+    }
+    //: **And a key nobody decided still says nothing**, rather than inheriting a neighbour's
+    //: answer — which is the way a loop over a map gets this wrong.
+    if keys.len() > 2 {
+        assert!(answered.contains("\"standing\":\"\""), "{answered}");
+    }
+}

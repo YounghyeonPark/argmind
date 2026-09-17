@@ -323,7 +323,17 @@ fn act(desk: &mut Desk, out: &Listeners, p: Proposal) {
 
 /// What is missing, as the page needs it: the whole sentence a person reads before deciding.
 fn needs_json(model: &str) -> String {
-    let rows: Vec<String> = crate::needs::every(model).iter().map(|n| {
+    needs_as_json(&crate::needs::every(model), &crate::decided::remembered())
+}
+
+/// The same thing with the decisions handed in rather than read.
+///
+/// **Pure so it can be tested.** The rule it carries — *a thing answered once and for all is never
+/// asked again* — is exactly the sort that rots quietly, and testing it against the real
+/// `decisions.json` would mean a test that overwrites whatever the person actually decided.
+pub fn needs_as_json(needs: &[crate::needs::Need],
+                     decided: &std::collections::BTreeMap<String, Standing>) -> String {
+    let rows: Vec<String> = needs.iter().map(|n| {
         //: **The description travels with the button.** A page that showed only a name and a
         //: button would be asking the vague question this whole design exists to avoid.
         let (offer, plan) = match &n.fix {
@@ -335,9 +345,18 @@ fn needs_json(model: &str) -> String {
         //: nothing at all in a message box — and worse, a rewrite of the sentence could drop it.
         //: `runs_a_stranger()` cannot be dropped by editing a string.
         let stranger = n.fix.as_ref().is_some_and(crate::fix::Fix::runs_a_stranger);
+        //: **What was already answered, sent with the question.** Without this the page drew the
+        //: four buttons for something decided once and for all, every single launch — the standing
+        //: answer then resolved it a few seconds later and the question vanished, which is worse
+        //: than either asking or not: it is asking and then ignoring the answer.
+        let standing = match decided.get(n.key) {
+            Some(Standing::Allowed) => "allowed",
+            Some(Standing::Denied) => "denied",
+            None => "",
+        };
         format!("{{\"key\":\"{}\",\"what\":\"{}\",\"present\":{},\"required\":{},\
                  \"found\":\"{}\",\"how\":\"{}\",\"offer\":{offer},\"stranger\":{stranger},\
-                 \"plan\":\"{}\"}}",
+                 \"standing\":\"{standing}\",\"plan\":\"{}\"}}",
                 escape(n.key), escape(n.what), n.present, n.required,
                 escape(&n.found), escape(&n.how), escape(&plan))
     }).collect();

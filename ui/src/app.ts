@@ -352,6 +352,8 @@ interface Missing {
   // Whether saying yes causes code from somewhere else to run here. It arrives as a flag rather
   // than as emphasis inside `plan`, because a sentence can be rewritten and a property cannot.
   stranger: boolean;
+  /** What was answered once and for all: `"allowed"`, `"denied"`, or `""` for never asked. */
+  standing: string;
   plan: string;
 }
 
@@ -420,6 +422,20 @@ function drawNeeds(rows: Missing[]): void {
       none.className = "need-how";
       none.textContent = n.how;
       box.append(none);
+      setup.append(box);
+      continue;
+    }
+
+    // **Answered once and for all means not asked again.** It used to draw the four buttons every
+    // launch for something already decided, and then act on the standing answer a few seconds
+    // later — asking and then ignoring the answer, which is worse than either alone.
+    if (n.standing) {
+      const settled = document.createElement("div");
+      settled.className = "need-how";
+      settled.textContent = n.standing === "allowed"
+        ? "전에 항상 허용하셨습니다 — 물어보지 않고 진행합니다"
+        : "전에 항상 거부하셨습니다 — 설정에서 되돌릴 수 있습니다";
+      box.append(settled);
       setup.append(box);
       continue;
     }

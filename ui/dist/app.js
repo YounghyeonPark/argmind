@@ -313,6 +313,19 @@ function drawNeeds(rows) {
             setup.append(box);
             continue;
         }
+        // **Answered once and for all means not asked again.** It used to draw the four buttons every
+        // launch for something already decided, and then act on the standing answer a few seconds
+        // later — asking and then ignoring the answer, which is worse than either alone.
+        if (n.standing) {
+            const settled = document.createElement("div");
+            settled.className = "need-how";
+            settled.textContent = n.standing === "allowed"
+                ? "전에 항상 허용하셨습니다 — 물어보지 않고 진행합니다"
+                : "전에 항상 거부하셨습니다 — 설정에서 되돌릴 수 있습니다";
+            box.append(settled);
+            setup.append(box);
+            continue;
+        }
         // The whole plan, before the button and not behind it. `textContent` keeps the newlines the
         // server wrote, and `white-space: pre-wrap` in the stylesheet keeps them on screen.
         const plan = document.createElement("div");
