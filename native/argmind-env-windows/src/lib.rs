@@ -17,6 +17,7 @@ pub mod ask;
 pub mod attending;
 pub mod camera;
 pub mod cover;
+pub mod devices;
 pub mod hands;
 pub mod launch;
 pub mod loudspeaker;

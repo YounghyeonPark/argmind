@@ -117,6 +117,10 @@ pub struct Microphone {
     pub available: bool,
     pub clips: u64,
     pub too_short: u64,
+    /// Which endpoint was asked for. `None` means whichever Windows prefers.
+    want: Option<String>,
+    /// Set by the capture thread when the one that was asked for was not there.
+    fell_back: Arc<AtomicBool>,
 }
 
 impl Default for Microphone {
@@ -126,10 +130,26 @@ impl Default for Microphone {
 }
 
 impl Microphone {
+    /// Whichever one Windows prefers.
     pub fn new() -> Self {
+        Microphone::on(None)
+    }
+
+    /// A particular one, by endpoint id — **or the default when that one has gone.**
+    ///
+    /// An id is remembered rather than a name: a friendly name changes when a driver is updated
+    /// and an endpoint id does not. Unplugging the headset that was chosen should not make argmind
+    /// deaf, so it falls back, and [`Self::fell_back`] is how anybody finds out that it did.
+    pub fn on(want: Option<&str>) -> Self {
         Microphone { shared: Arc::new(Shared::default()), holding: Arc::new(AtomicBool::new(false)),
                      running: Arc::new(AtomicBool::new(false)), available: false, clips: 0,
-                     too_short: 0 }
+                     too_short: 0,
+                     want: want.map(str::to_string), fell_back: Arc::new(AtomicBool::new(false)) }
+    }
+
+    /// Was a device asked for by id and not there?
+    pub fn fell_back(&self) -> bool {
+        self.fell_back.load(Ordering::SeqCst)
     }
 
     /// Hold it down, or let it go. Letting go finishes the clip.
@@ -181,8 +201,9 @@ impl Microphone {
         }
         let (shared, holding, running) =
             (Arc::clone(&self.shared), Arc::clone(&self.holding), Arc::clone(&self.running));
+        let (want, fell_back) = (self.want.clone(), Arc::clone(&self.fell_back));
         std::thread::spawn(move || {
-            let done = capture(&shared, &holding);
+            let done = capture(&shared, &holding, want.as_deref(), &fell_back);
             running.store(false, Ordering::SeqCst);
             if let Err(e) = done {
                 eprintln!("  the microphone stopped: {e}");
@@ -193,19 +214,20 @@ impl Microphone {
 }
 
 #[cfg(windows)]
-fn capture(shared: &Shared, holding: &AtomicBool) -> windows::core::Result<()> {
+fn capture(shared: &Shared, holding: &AtomicBool, want: Option<&str>,
+           fell_back: &AtomicBool) -> windows::core::Result<()> {
     use windows::Win32::Media::Audio::{
-        eCapture, eConsole, IAudioCaptureClient, IAudioClient, IMMDeviceEnumerator,
-        MMDeviceEnumerator, AUDCLNT_SHAREMODE_SHARED, WAVEFORMATEX, WAVE_FORMAT_PCM,
+        eCapture, IAudioCaptureClient, IAudioClient,
+        AUDCLNT_SHAREMODE_SHARED, WAVEFORMATEX, WAVE_FORMAT_PCM,
     };
-    use windows::Win32::System::Com::{CoCreateInstance, CoInitializeEx, CLSCTX_ALL,
-                                      COINIT_MULTITHREADED};
+    use windows::Win32::System::Com::{CoInitializeEx, CLSCTX_ALL, COINIT_MULTITHREADED};
 
     unsafe {
         let _ = CoInitializeEx(None, COINIT_MULTITHREADED);
-        let devices: IMMDeviceEnumerator =
-            CoCreateInstance(&MMDeviceEnumerator, None, CLSCTX_ALL)?;
-        let device = devices.GetDefaultAudioEndpoint(eCapture, eConsole)?;
+        let (device, missed) = crate::devices::open_audio(eCapture, want)
+            .map_err(|e| windows::core::Error::new(windows::Win32::Foundation::E_FAIL,
+                                                   e.as_str()))?;
+        fell_back.store(missed, Ordering::SeqCst);
         let client: IAudioClient = device.Activate(CLSCTX_ALL, None)?;
         let format = client.GetMixFormat()?;
         let (channels, rate, bits, tag) = ((*format).nChannels as usize,

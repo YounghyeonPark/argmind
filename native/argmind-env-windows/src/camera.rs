@@ -235,6 +235,17 @@ fn name_of(source: &IMFActivate) -> String {
 impl Camera {
     /// Open the first camera. **This turns it on.**
     pub fn open() -> Result<Camera, String> {
+        Camera::on(None)
+    }
+
+    /// Open the one with this name, or the first when there is no name or it has gone.
+    ///
+    /// **By name, unlike the audio endpoints, and that is a weaker key.** Media Foundation's stable
+    /// handle is a symbolic link that no person could pick out of a list, and nothing here has
+    /// measured whether a friendly name survives a driver update. So this is the choice with the
+    /// known weakness rather than the one with the unknown one, and falling back to the first
+    /// camera is what happens when the name stops matching.
+    pub fn on(want: Option<&str>) -> Result<Camera, String> {
         started()?;
         unsafe {
             let mut attrs = None;
@@ -248,7 +259,19 @@ impl Camera {
             if count == 0 {
                 return Err("카메라가 없습니다".into());
             }
-            let activate = (*found).as_ref().ok_or("카메라를 열지 못했습니다")?;
+            //: The one that was asked for, else the first. `count` is at least one here.
+            let mut pick = 0isize;
+            if let Some(wanted) = want.filter(|w| !w.is_empty()) {
+                for i in 0..count as isize {
+                    if let Some(one) = (*found.offset(i)).as_ref() {
+                        if name_of(one) == wanted {
+                            pick = i;
+                            break;
+                        }
+                    }
+                }
+            }
+            let activate = (*found.offset(pick)).as_ref().ok_or("카메라를 열지 못했습니다")?;
             let name = name_of(activate);
             let source: IMFMediaSource = activate.ActivateObject()
                 .map_err(|e| format!("카메라를 열지 못했습니다 ({e})"))?;

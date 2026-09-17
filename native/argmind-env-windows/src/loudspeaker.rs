@@ -85,6 +85,10 @@ pub struct Loudspeaker {
     /// How many utterances were cut off. Counted because barge-in working is a thing to be able to
     /// show, and because barge-in firing constantly would mean something else is wrong.
     pub cut_off: u64,
+    /// Which endpoint was asked for. `None` means whichever Windows prefers.
+    want: Option<String>,
+    /// Set by the feeding thread when the one that was asked for was not there.
+    fell_back: Arc<AtomicBool>,
 }
 
 impl Default for Loudspeaker {
@@ -94,7 +98,17 @@ impl Default for Loudspeaker {
 }
 
 impl Loudspeaker {
+    /// Whichever one Windows prefers.
     pub fn new() -> Self {
+        Loudspeaker::on(None)
+    }
+
+    /// A particular one, by endpoint id — **or the default when that one has gone.**
+    ///
+    /// The same bargain the microphone makes: an id survives a driver update where a name does
+    /// not, and a headset that was chosen and then unplugged should leave argmind audible rather
+    /// than silent. [`Self::fell_back`] says when that happened.
+    pub fn on(want: Option<&str>) -> Self {
         Loudspeaker {
             queue: Arc::new(Mutex::new(Queue::default())),
             running: Arc::new(AtomicBool::new(false)),
@@ -102,7 +116,14 @@ impl Loudspeaker {
             generation: Arc::new(AtomicU64::new(0)),
             available: false,
             cut_off: 0,
+            want: want.map(str::to_string),
+            fell_back: Arc::new(AtomicBool::new(false)),
         }
+    }
+
+    /// Was a device asked for by id and not there?
+    pub fn fell_back(&self) -> bool {
+        self.fell_back.load(Ordering::SeqCst)
     }
 
     /// Speak these samples, which are mono at `hz`. **Returns at once**, and replaces whatever
@@ -183,6 +204,8 @@ impl Loudspeaker {
             generation: Arc::clone(&self.generation),
             available: self.available,
             cut_off: 0,
+            want: self.want.clone(),
+            fell_back: Arc::clone(&self.fell_back),
         }
     }
 
@@ -205,9 +228,10 @@ impl Loudspeaker {
         let queue = Arc::clone(&self.queue);
         let running = Arc::clone(&self.running);
         let playing = Arc::clone(&self.playing);
+        let (want, fell_back) = (self.want.clone(), Arc::clone(&self.fell_back));
         playing.store(true, Ordering::SeqCst);
         std::thread::spawn(move || {
-            if let Err(e) = feed(&queue, &running, &playing) {
+            if let Err(e) = feed(&queue, &running, &playing, want.as_deref(), &fell_back) {
                 eprintln!("  the speaker would not open: {e}");
             }
             playing.store(false, Ordering::SeqCst);
@@ -247,20 +271,20 @@ pub fn to_device(samples: &[f32], from_hz: u32, to_hz: u32, channels: usize) -> 
 }
 
 #[cfg(windows)]
-fn feed(queue: &Mutex<Queue>, running: &AtomicBool, playing: &AtomicBool)
-        -> windows::core::Result<()> {
+fn feed(queue: &Mutex<Queue>, running: &AtomicBool, playing: &AtomicBool, want: Option<&str>,
+        fell_back: &AtomicBool) -> windows::core::Result<()> {
     use windows::Win32::Media::Audio::{
-        eConsole, eRender, IAudioClient, IAudioRenderClient, IMMDeviceEnumerator, MMDeviceEnumerator,
+        eRender, IAudioClient, IAudioRenderClient,
         AUDCLNT_SHAREMODE_SHARED, WAVEFORMATEX, WAVE_FORMAT_PCM,
     };
-    use windows::Win32::System::Com::{CoCreateInstance, CoInitializeEx, CLSCTX_ALL,
-                                      COINIT_MULTITHREADED};
+    use windows::Win32::System::Com::{CoInitializeEx, CLSCTX_ALL, COINIT_MULTITHREADED};
 
     unsafe {
         let _ = CoInitializeEx(None, COINIT_MULTITHREADED);
-        let devices: IMMDeviceEnumerator =
-            CoCreateInstance(&MMDeviceEnumerator, None, CLSCTX_ALL)?;
-        let device = devices.GetDefaultAudioEndpoint(eRender, eConsole)?;
+        let (device, missed) = crate::devices::open_audio(eRender, want)
+            .map_err(|e| windows::core::Error::new(windows::Win32::Foundation::E_FAIL,
+                                                   e.as_str()))?;
+        fell_back.store(missed, Ordering::SeqCst);
         let client: IAudioClient = device.Activate(CLSCTX_ALL, None)?;
         let format = client.GetMixFormat()?;
         let (channels, rate, bits, tag) = ((*format).nChannels as usize,
