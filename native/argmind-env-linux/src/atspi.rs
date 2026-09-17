@@ -232,19 +232,43 @@ impl Sight {
 
     /// The name and role of whatever is at a screen point.
     ///
-    /// `GetAccessibleAtPoint` on the active frame, which is AT-SPI's own hit test — and unlike
-    /// walking the tree and comparing rectangles, it respects what is actually on top.
+    /// **`GetAccessibleAtPoint` answers with a direct child, not with the deepest thing there**,
+    /// and the first version of this called it once and believed it. Asked for the middle of a
+    /// button called `Menu` it answered `("", "panel")` — the container the button sits in, which
+    /// is true and useless. So it is followed down until nothing claims the point.
     pub fn at_point(&self, x: i64, y: i64) -> Option<(String, String)> {
         let bus = self.bus.as_ref()?;
         let (frame, _) = self.active_frame()?;
-        let got: Result<((String, Path<'static>),), _> = bus.at(&frame).method_call(
-            COMPONENT,
-            "GetAccessibleAtPoint",
-            (x as i32, y as i32, 0u32),
-        );
-        let hit = got.ok()?.0;
-        (!hit.1.is_empty() && hit.1.as_bytes() != b"/org/a11y/atspi/null")
-            .then(|| (bus.name(&hit), bus.role(&hit)))
+        let mut here = frame;
+        //: Bounded, because a node that answered with itself would otherwise be forever.
+        for _ in 0..DEEPEST {
+            let got: Result<((String, Path<'static>),), _> = bus.at(&here).method_call(
+                COMPONENT,
+                "GetAccessibleAtPoint",
+                (x as i32, y as i32, 0u32),
+            );
+            let Ok((deeper,)) = got else { break };
+            if deeper.1.is_empty() || deeper.1.as_bytes() == b"/org/a11y/atspi/null"
+                || deeper == here {
+                break;
+            }
+            here = deeper;
+        }
+        //: **The name of the deepest thing, or the nearest named thing above it.** A button's label
+        //: is often a child of the button with a name of its own and a role of `label`; answering
+        //: with the label's empty parent would be the same uselessness one level down.
+        let (name, role) = (bus.name(&here), bus.role(&here));
+        if !name.is_empty() {
+            return Some((name, role));
+        }
+        //: One look inside: a nameless container over a single named child is the ordinary shape.
+        for child in bus.children(&here) {
+            let inner = bus.name(&child);
+            if !inner.is_empty() {
+                return Some((inner, bus.role(&child)));
+            }
+        }
+        Some((name, role))
     }
 }
 
