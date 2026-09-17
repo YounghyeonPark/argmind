@@ -127,6 +127,26 @@ impl Local {
     /// did not, and the disagreement would be invisible.
     pub fn ask_with(&self, prompt: &str, pictures: &[String],
                     keep: &mut dyn FnMut(&str)) -> std::io::Result<Reply> {
+        self.ask_while(prompt, pictures, &|| true, keep)
+    }
+
+    /// The same, **abandonable**: `carry_on` is asked before every line, and the moment it says no
+    /// the socket is dropped and whatever arrived so far is returned.
+    ///
+    /// **This is not a nicety, it is the third rule of running senses in parallel.** Measured
+    /// 2026-09-17: a look running beside the conversation takes the answer from a median of 1.0 s
+    /// to 3.2 s, and one answer in ten waits out most of a whole look — 10.81 s. Declining to
+    /// *start* a look while somebody is being answered fixes the median; only abandoning one
+    /// already in flight can fix that tail.
+    ///
+    /// **Whether dropping the socket actually frees the card is a question about ollama, not about
+    /// this function**, and it is measured by `argmind-measure --bin aborting`. If the server keeps
+    /// generating for a reader that has gone, this returns promptly and buys nothing.
+    ///
+    /// The reply carries `reason = "abandoned"`, which is neither a stop nor an answer: a caller
+    /// that treats it as a reply would be quoting a sentence nobody finished.
+    pub fn ask_while(&self, prompt: &str, pictures: &[String], carry_on: &dyn Fn() -> bool,
+                     keep: &mut dyn FnMut(&str)) -> std::io::Result<Reply> {
         let body = self.body_with(prompt, pictures);
         let (host, port) = split_host(&self.host);
         let stream = TcpStream::connect((host.as_str(), port))?;
@@ -140,7 +160,15 @@ impl Local {
         let mut r = BufReader::new(&stream);
         let chunked = read_headers(&mut r)?;
         let mut reading = Reading::new(self.stop_when_answered, self.stop_when_looping);
+        let mut abandoned = false;
         for line in Lines::new(&mut r, chunked) {
+            //: **Asked before the line is used, not after.** Checking at the bottom of the loop
+            //: would still pay for one more line of generation, which on a thinking model is the
+            //: thing being avoided.
+            if !carry_on() {
+                abandoned = true;
+                break;
+            }
             let line = line?;
             keep(&line);
             if line.trim().is_empty() {
@@ -164,7 +192,13 @@ impl Local {
                 break;
             }
         }
-        Ok(reading.finish())
+        //: Dropping `stream` here is the whole mechanism — there is nothing to send, only a reader
+        //: that stops being there.
+        let mut out = reading.finish();
+        if abandoned {
+            out.reason = "abandoned".into();
+        }
+        Ok(out)
     }
 }
 

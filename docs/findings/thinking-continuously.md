@@ -235,3 +235,32 @@ takes. Cached perception is for thinking and describing. Acting reads fresh, alw
 Whether a sense that yields actually recovers the 1.0 s median — the arm above is the heaviest
 version, a look always in flight, and the realistic one is a look every 30 s. The yielding rule has
 to exist before that can be measured, and the number to beat is in the table.
+
+### Dropping the socket does free the card (2026-09-17)
+
+The open question above — *does ollama stop generating for a reader that has gone, or finish the job
+into a closed pipe?* — decides whether the third rule can be *abandon what is running* or only
+*do not start*. Written down before the run: **I did not know which.**
+
+`argmind-measure --bin aborting`, four rounds of three arms, three short answers timed in each:
+
+| arm | the look | median answer |
+|---|---|---|
+| **after** — it ran to completion | finished | **1.12 s** |
+| **abandoned** — dropped after 2 s | socket closed mid-flight | **1.09 s** |
+| **during** — left running | still generating | **3.22 s** |
+
+**Abandoning lands on a free card.** 1.09 s against 1.12 s free and 3.22 s busy, and the same in
+every one of the four rounds — 1.06, 1.09, 1.10, 1.07 against a `during` of 2.80–5.26. All four
+looks came back with `reason = "abandoned"`, so the drop fired rather than the look happening to
+finish first.
+
+`Local::ask_while` is the fix: `carry_on` is asked before every line and the socket is dropped the
+moment it says no. The reply carries `reason = "abandoned"` — neither a stop nor an answer, because
+a caller treating it as a reply would be quoting a sentence nobody finished.
+
+**So the third rule is buildable in full**: decline to start a sense while a turn is in flight, and
+abandon one already running. The tail that cost 10.81 s is reachable, not just the median.
+
+Still unmeasured: whether the yielding version actually recovers the 1.0 s median in the real agent,
+where a look happens every 30 s rather than back to back. The number to beat is in the table above.
