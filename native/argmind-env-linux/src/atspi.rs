@@ -5,7 +5,7 @@
 
 use std::time::{Duration, Instant};
 
-use argmind_core::contract::{Did, Eyes, Widget};
+use argmind_core::contract::{Eyes, Widget};
 use dbus::arg::Variant;
 use dbus::blocking::{Connection, Proxy};
 use dbus::Path;
@@ -60,14 +60,7 @@ impl Bus {
             .method_call("org.a11y.Bus", "GetAddress", ())
             .map_err(|e| format!("접근성 버스 주소를 얻지 못했습니다 ({e})"))?;
 
-        //: **This changes the whole desktop, not just what argmind looks at.** Toolkits publish no
-        //: tree until an assistive technology says it is listening — measured: one node against a
-        //: hundred and twenty-one. Set here, when eyes are opened, rather than at startup.
-        let _: Result<(), _> = ask.method_call::<(), _, _, _>(
-            "org.freedesktop.DBus.Properties",
-            "Set",
-            ("org.a11y.Status", "IsEnabled", Variant(true)),
-        );
+        announce(&ask);
 
         let channel = dbus::channel::Channel::open_private(&address)
             .and_then(|mut c| c.register().map(|_| c))
@@ -179,6 +172,34 @@ pub fn state_of(widget: &Widget) -> Option<bool> {
         layer = next;
     }
     None
+}
+
+/// Say, at most once and only if nobody has said it already, that something is listening.
+///
+/// **This changes the whole desktop, not just what argmind looks at.** Toolkits publish no tree
+/// until an assistive technology announces itself — measured: one node against a hundred and
+/// twenty-one.
+///
+/// **Written only when it is false, and only once per process.** The first version set it on every
+/// connection, and three connections in one second — eyes, hands, and a measurement — left the
+/// tree empty: every write makes the bridges re-register, and a re-registering bridge has nothing
+/// to say. It looked like the hands being unable to find a widget the eyes had just listed, which
+/// is a long way from the cause.
+fn announce(ask: &Proxy<'_, &Connection>) {
+    static SAID: std::sync::Once = std::sync::Once::new();
+    SAID.call_once(|| {
+        let already: Result<(Variant<bool>,), _> = ask.method_call(
+            "org.freedesktop.DBus.Properties", "Get", ("org.a11y.Status", "IsEnabled"));
+        if matches!(already, Ok((Variant(true),))) {
+            return;
+        }
+        let _: Result<(), _> = ask.method_call::<(), _, _, _>(
+            "org.freedesktop.DBus.Properties", "Set",
+            ("org.a11y.Status", "IsEnabled", Variant(true)));
+        //: Bridges need a moment to notice and register. Without this the very next read is of a
+        //: desktop that has not published yet, which is the same empty answer by a different road.
+        std::thread::sleep(Duration::from_millis(400));
+    });
 }
 
 /// Is this a rectangle that exists on a screen?
