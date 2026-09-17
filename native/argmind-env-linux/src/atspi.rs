@@ -244,28 +244,42 @@ impl Bus {
 /// needs it and nothing in the core may ask.
 pub fn text_of(widget: &Widget) -> Option<String> {
     let bus = Bus::open().ok()?;
-    let node = find_like(&bus, widget)?;
+    let node = like(&bus, widget)?;
     let count = bus.characters(&node);
     bus.text(&node, 0, count)
 }
 
-/// The first node with this name and role under the attended frame.
-fn find_like(bus: &Bus, widget: &Widget) -> Option<Node> {
+/// The node this widget is, by name, role **and rectangle**.
+///
+/// **The rectangle is not optional here and the first version left it out.** A window full of text
+/// boxes has a window full of widgets whose name is empty and whose role is `text`, so name and
+/// role alone match the first one every time — and a read-back that lands on a different box than
+/// the one just typed into reports an empty string and looks like the typing failed. It did not;
+/// the reading did. Two runs, again.
+pub(crate) fn like(bus: &Bus, widget: &Widget) -> Option<Node> {
+    let mut loose = None;
     let mut layer = vec![bus.active_frame()?];
     for _ in 0..DEEPEST {
         let mut next = Vec::new();
         for node in &layer {
             if bus.name(node) == widget.name && bus.role(node) == widget.role {
-                return Some(node.clone());
+                let here = bus.extents(node)
+                    .map(|(x, y, w, h)| (x as i64, y as i64, w as i64, h as i64));
+                if here == Some(widget.rect) {
+                    return Some(node.clone());
+                }
+                if loose.is_none() {
+                    loose = Some(node.clone());
+                }
             }
             next.extend(bus.children(node));
         }
         if next.is_empty() {
-            return None;
+            break;
         }
         layer = next;
     }
-    None
+    loose
 }
 
 /// A widget's whole state word, so a press can be shown to have worked.
@@ -280,22 +294,7 @@ fn find_like(bus: &Bus, widget: &Widget) -> Option<Node> {
 /// contract — nothing in `Eyes` or `Hands` needs it and nothing in the core may ask.
 pub fn state_of(widget: &Widget) -> Option<u32> {
     let bus = Bus::open().ok()?;
-    let frame = bus.active_frame()?;
-    let mut layer = vec![frame];
-    for _ in 0..DEEPEST {
-        let mut next = Vec::new();
-        for node in &layer {
-            if bus.name(node) == widget.name && bus.role(node) == widget.role {
-                return bus.states(node);
-            }
-            next.extend(bus.children(node));
-        }
-        if next.is_empty() {
-            break;
-        }
-        layer = next;
-    }
-    None
+    bus.states(&like(&bus, widget)?)
 }
 
 /// Which frame, and whether the choice was confident.
