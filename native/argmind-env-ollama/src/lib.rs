@@ -56,9 +56,25 @@ impl Local {
     /// No `format: "json"`: it silences this model completely — 366 ms, empty output. The shape is
     /// asked for in the prompt and pulled out of the text by the scanner.
     pub fn body(&self, prompt: &str) -> String {
+        self.body_with(prompt, &[])
+    }
+
+    /// The same, with pictures. **Base64 in `images`**, which is where `/api/chat` takes them.
+    ///
+    /// `body` is this with none, so **a call that sends no picture is byte-identical to what
+    /// it was before this existed**. The requests in this tree are compared against recorded
+    /// bytes, and a stray empty `images` would break every one of them while changing nothing
+    /// anybody meant.
+    pub fn body_with(&self, prompt: &str, pictures: &[String]) -> String {
         let mut out = String::from("{");
         out.push_str(&format!("\"model\": {}, ", py_string(&self.model)));
-        out.push_str(&format!("\"messages\": [{{\"role\": \"user\", \"content\": {}}}], ",
+        let images = if pictures.is_empty() {
+            String::new()
+        } else {
+            let each: Vec<String> = pictures.iter().map(|p| format!("\"{p}\"")).collect();
+            format!(", \"images\": [{}]", each.join(", "))
+        };
+        out.push_str(&format!("\"messages\": [{{\"role\": \"user\", \"content\": {}{images}}}], ",
                               py_string(prompt)));
         out.push_str("\"stream\": true, ");
         out.push_str(&format!("\"keep_alive\": {}, ", py_string(&self.keep_alive)));
@@ -81,6 +97,18 @@ impl Local {
         self.ask_into(prompt, &mut |_| {})
     }
 
+    /// Ask about a picture.
+    ///
+    /// **A different call on purpose.** A model that can be handed a photograph should not be
+    /// reachable by accident from the one that answers about the screen — `camera.rs` makes
+    /// the same separation from the other end, where a [`Frame`] is 64×36 greys and there is
+    /// no accessor for anything larger.
+    ///
+    /// [`Frame`]: https://docs.rs/
+    pub fn look_at(&self, prompt: &str, png: &[u8]) -> std::io::Result<Reply> {
+        self.ask_with(prompt, &[base64(png)], &mut |_| {})
+    }
+
     /// The same call, with **every stream line handed to `keep` as the reader takes it.**
     ///
     /// One read loop and not two: a recorder written as a second copy of this loop would agree with
@@ -91,7 +119,15 @@ impl Local {
     ///
     /// It changes nothing about the request: same body, same `num_predict`, same `num_ctx`.
     pub fn ask_into(&self, prompt: &str, keep: &mut dyn FnMut(&str)) -> std::io::Result<Reply> {
-        let body = self.body(prompt);
+        self.ask_with(prompt, &[], keep)
+    }
+
+    /// The one read loop, pictures optional. Everything above funnels here, for the reason
+    /// given on `ask_into`: a second copy of this loop would agree with it until the day it
+    /// did not, and the disagreement would be invisible.
+    pub fn ask_with(&self, prompt: &str, pictures: &[String],
+                    keep: &mut dyn FnMut(&str)) -> std::io::Result<Reply> {
+        let body = self.body_with(prompt, pictures);
         let (host, port) = split_host(&self.host);
         let stream = TcpStream::connect((host.as_str(), port))?;
         let mut w = &stream;
@@ -138,6 +174,25 @@ impl Local {
 /// Python escapes everything outside `0x20..=0x7e` plus `"` and `\`, so `0x7f` goes too — and an
 /// astral character leaves as a **surrogate pair**, which is the part a naive `\u{...}` would get
 /// wrong.
+/// Base64, hand-written.
+///
+/// **No new dependency**, the same reason HTTP and the WAV header in this tree are hand-written:
+/// the licence rule is cheapest to keep when there is nothing new to check. Twenty lines, the
+/// standard alphabet, padding included, because that is what `/api/chat` reads.
+pub fn base64(bytes: &[u8]) -> String {
+    const ABC: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    let mut out = String::with_capacity(bytes.len().div_ceil(3) * 4);
+    for chunk in bytes.chunks(3) {
+        let b = [chunk[0], *chunk.get(1).unwrap_or(&0), *chunk.get(2).unwrap_or(&0)];
+        let n = ((b[0] as u32) << 16) | ((b[1] as u32) << 8) | b[2] as u32;
+        out.push(ABC[(n >> 18) as usize & 63] as char);
+        out.push(ABC[(n >> 12) as usize & 63] as char);
+        out.push(if chunk.len() > 1 { ABC[(n >> 6) as usize & 63] as char } else { '=' });
+        out.push(if chunk.len() > 2 { ABC[n as usize & 63] as char } else { '=' });
+    }
+    out
+}
+
 pub fn py_string(s: &str) -> String {
     let mut out = String::with_capacity(s.len() + 2);
     out.push('"');

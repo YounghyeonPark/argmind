@@ -107,15 +107,76 @@ is more use than a uniform answer:
   a gate in front of the recogniser because Whisper says words for silence 120 times out of 120, and
   the threshold for that gate needs a recording of this room that does not exist yet.
   `argmind-measure --bin listening` makes it in 30 seconds and needs somebody to talk.
-* **카메라** — **not blocked on effort, blocked on there being nothing to send a frame to.** The
-  model is `qwen3:8b`, which is text. A vision model was measured at 24–82 s for a single pixel
-  coordinate and on a dense screen never answered, which is why the whole architecture says the
-  model never emits one. A camera frame has no path into this prompt at all until a vision model is
-  chosen, and that is a decision — which one, its licence, and the VRAM it takes beside the two
-  servers already running.
+* **카메라** — **measured, and the answer is yes at about eight seconds a look.** This bullet
+  originally said it was blocked on there being nothing to send a frame to, and cited the 24–82 s
+  vision measurement. Both halves were wrong: `qwen3-vl:8b` was already on this machine, and that
+  number was about coordinates on a dense screen rather than a caption. See the section below.
 * **키입력** — implementable and **deliberately not implemented.** Reading every keystroke means a
   global keyboard hook, which is a keylogger: it captures passwords, card numbers and messages to
   other people, and it would sit in a program that sends text to a model. What argmind plausibly
   wants from the keyboard is *activity* — that the person is typing, in which application, how fast,
   whether they stopped — and none of that needs the characters. That is a different feature with a
   different permission, and it is the owner's call which one was meant.
+
+## The camera, measured rather than declined (2026-09-17)
+
+**The owner:** 카메라를 fast 하게 vtt해서 text description을 llm에 넣으면 해석할수 있을까?
+
+**The reason this project keeps vision out does not apply here, and saying so first is the honest
+part.** *A vision model took 24–82 s for a pixel and on a dense screen never answered* was asking
+for a coordinate among two hundred small labels. A caption of one scene is a different task with no
+precision and no coordinates, so citing that number here would be using it outside the conditions it
+carries. It does not break the rule everything hangs on either: *the deterministic side says WHERE,
+the probabilistic side says WHAT*, and a description is a WHAT.
+
+`argmind-measure --bin describing` measures the pipeline end to end with **no camera opened** — the
+picture is drawn in code, four coloured quadrants and a dark bar, which answers *how long does a
+picture take to cross this* exactly as well as a photograph and needs nobody's room.
+
+**It works.** `qwen3-vl:8b` is already on this machine, Apache-2.0, and given the card it says: *이
+사진은 상단 왼쪽에 빨간색, 상단 오른쪽에 녹색, 하단 왼쪽에 파란색, 하단 오른쪽에 노란색 사각형이
+검은색 가로줄로 나누어진 두 줄로…* — all four quadrants, their arrangement, and the bar. The
+hand-written PNG and base64 are correct, and the description feeds the text model fine.
+
+### Two guesses, both wrong
+
+**Video memory.** The guess was that a second 6.4 GB model would evict the first and make a glance
+cost two model loads. It does not: both sit on the GPU at once, 12.7 GB of 16, and the answer after
+a look takes **0.2 s** — a text model that never moved.
+
+**Resolution.** This harness was built to sweep it. `prompt_tokens` is **1110 at every size**, from
+640×360 down to 80×46: ollama normalises the image to a fixed patch budget and source resolution
+buys nothing. The first sweep also read 22 s and then 9 s for the same configuration and was
+non-monotone in size — 80×46 *slower* than 160×90 — which was the signal that resolution was not the
+variable at all.
+
+### It is the model thinking
+
+| size | describe | in | out | thought |
+|---|---|---|---|---|
+| 640×360 | 8.3 s | 1110 | 521 | 1,690 chars |
+| 320×180 | 8.7 s | 1110 | 558 | 1,576 chars |
+| 160×90 | **3.5 s** | 1110 | 198 | 467 chars |
+| 80×46 | 8.2 s | 1110 | 474 | 1,264 chars |
+
+Time tracks output tokens at 16–18 ms each, and the output is mostly reasoning about four coloured
+squares. 160×90 was faster only because it happened to think less.
+
+**`qwen3-vl:8b` on ollama ignores `think: false`.** Measured three ways on one image: the field
+false, 8.0 s and 1,270 characters of thought; the field absent, 7.1 s and 1,262; `/no_think` in the
+prompt, **10.1 s and 1,540** — 25% worse. There is no switch here that stops it.
+
+### So: yes, and about eight seconds
+
+* **Too slow for the watch loop**, which reads the screen every 0.7 s and fires at most every 3 s.
+* **Fits the thinking tick**, which is every 30 s — one look would spend 8 of those 30 seconds of
+  GPU, beside a text model that stays resident.
+* **The lever is a non-reasoning vision model**, not a smaller picture. That is a model to try and a
+  download, so it is the owner's call rather than something to do quietly.
+
+**What this does not measure.** Whether a description of a *room* is any good — the test card
+answers whether the bytes crossed correctly, not whether the model understands a person at a desk.
+That needs a real camera, somebody deciding what the right answer was, and the permission
+`camera.rs` says this would need: it hands out 64×36 greys and **has no accessor for anything
+larger**, deliberately, so a photograph leaving that module is a different call, a different
+argument and a different question to be asked.

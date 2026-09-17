@@ -253,9 +253,13 @@ already exists to say so out loud.
 **All the inputs, one at a time**, because the owner asked for 화면 · 카메라 · 음성 · 키입력 and
 they are in very different states. **화면** is done and on by default. **음성** is blocked on one
 measurement whose harness is written — `--bin listening`, 30 seconds and somebody talking.
-**카메라** is blocked on there being nothing to send a frame to: `qwen3:8b` is text, a vision model
-took 24–82 s for one pixel, and choosing one is a decision about licence and VRAM rather than
-effort. **키입력** is implementable and deliberately not implemented — every keystroke means a
+**카메라** is **measured**: `qwen3-vl:8b` was already here, Apache-2.0, and a caption of a drawn
+test card is accurate and takes **about 8 s** — too slow for the 0.7 s watch loop, fine for the 30 s
+tick. The 24–82 s figure does not apply, it was a coordinate on a dense screen. It is not video
+memory (both models sit on the GPU, the answer after a look is 0.2 s) and **not resolution**
+(`prompt_tokens` is 1110 from 640×360 down to 80×46) — it is the model thinking, 467–1,690
+characters of it about four coloured squares, and **`qwen3-vl:8b` ignores `think: false`** three
+ways over. The lever is a non-reasoning vision model. **키입력** is implementable and deliberately not implemented — every keystroke means a
 global hook, which is a keylogger capturing passwords in a program that sends text to a model; what
 argmind plausibly wants is typing *activity*, which needs no characters and is a different feature
 with a different permission.
