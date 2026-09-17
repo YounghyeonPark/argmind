@@ -49,12 +49,20 @@ fn main() {
             });
             let began = Instant::now();
             match voice.synthesise(&said) {
-                Ok(wav) => {
+                Ok(pcm) => {
+                    //: **Raw PCM, not a WAV**, and `synthesise` says so — *return the PCM*. It
+                    //: exists so numbers can be taken without making a sound, and a byte count
+                    //: needs no header. The first version of this example wrote those bytes
+                    //: straight to a `.wav` and produced a file no player would open: the audio
+                    //: was fine and the container was missing.
+                    //:
+                    //: 16 kHz, mono, sixteen bits — `speaker.rs`'s `wave_format`, which is what
+                    //: the stream was told to produce.
                     let at = where_to.join("1-windows.wav");
-                    let _ = std::fs::write(&at, &wav);
-                    println!("    {:.0} ms, {} KB -> {}",
-                             began.elapsed().as_secs_f64() * 1000.0, wav.len() / 1024,
-                             at.display());
+                    let _ = std::fs::write(&at, wav_around(&pcm, 16_000));
+                    let seconds = pcm.len() as f64 / 32_000.0;
+                    println!("    {:.0} ms, {:.1}초치 -> {}",
+                             began.elapsed().as_secs_f64() * 1000.0, seconds, at.display());
                 }
                 Err(e) => println!("    소리를 만들지 못했습니다: {e}"),
             }
@@ -80,7 +88,10 @@ fn main() {
                                      argmind_serve::speaker::VOICE, &said) {
         Ok((samples, hz)) => {
             let at = where_to.join("2-neural.wav");
-            let _ = std::fs::write(&at, wav_of(&samples, hz));
+            let pcm: Vec<u8> = samples.iter()
+                .flat_map(|s| ((s.clamp(-1.0, 1.0) * 32767.0) as i16).to_le_bytes())
+                .collect();
+            let _ = std::fs::write(&at, wav_around(&pcm, hz));
             let took = began.elapsed().as_secs_f64();
             let seconds = samples.len() as f64 / hz as f64;
             println!("    {:.0} ms 만에 {:.1}초치 — RTF {:.2}  -> {}",
@@ -91,11 +102,12 @@ fn main() {
     println!("\n  두 파일을 들어보시고 어느 쪽이 나은지 알려주세요.\n");
 }
 
-/// Mono 16-bit PCM in a WAV, because that is what every player agrees about.
-fn wav_of(samples: &[f32], hz: u32) -> Vec<u8> {
-    let pcm: Vec<u8> = samples.iter()
-        .flat_map(|s| ((s.clamp(-1.0, 1.0) * 32767.0) as i16).to_le_bytes())
-        .collect();
+/// Forty-four bytes of header around mono 16-bit PCM, because that is what every player agrees
+/// about — and because neither voice hands over one.
+///
+/// The synthesiser sends a WAV over HTTP and the client has already thrown the header away to give
+/// back samples; SAPI never had one. Both end up here.
+fn wav_around(pcm: &[u8], hz: u32) -> Vec<u8> {
     let mut out = Vec::with_capacity(pcm.len() + 44);
     out.extend_from_slice(b"RIFF");
     out.extend_from_slice(&(36 + pcm.len() as u32).to_le_bytes());

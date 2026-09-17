@@ -232,7 +232,10 @@ No phone environment, no robot environment. **Voice is built and is off until sw
 F9 in the window, which means you have to be looking at argmind to talk to it.
 
 **Speaking has two voices and picks one at startup.** SAPI is free (4–43 ms), installed, and
-`Microsoft Heami Desktop` — which the owner called 어색함 on 2026-09-16. The other is a neural
+`Microsoft Heami Desktop` — which the owner called 어색함 on 2026-09-16. **The neural one answers
+that: 자연스러움, 2026-09-17**, judged from files of both saying the same three sentences rather
+than from a demo. `cargo run -p argmind-serve --example voices` makes them again and plays
+nothing. The other is a neural
 synthesiser argmind builds from source and runs on the GPU: **27–238 ms to first sound** because
 it streams, RTF 0.15, and it is used whenever it is answering on its port. If it is not, the old
 one speaks rather than nothing. `docs/findings/a-better-voice.md` has the accounting, including

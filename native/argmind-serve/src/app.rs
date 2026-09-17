@@ -884,6 +884,11 @@ pub fn run(how: How) {
                                                 crate::decided::what(&key)));
                         fix(&agent_out, &agent_model, &key);
                     }
+                    //: **And take up the better voice if one of those just started it.** The
+                    //: button path does this and this one did not, so a standing *항상 허용* on
+                    //: the voice started the server and then went on talking in the old voice for
+                    //: the rest of the session — the feature working and appearing not to.
+                    adopt_voice(&mut desk, &agent_out);
                 }
                 Job::Opened(tx) => {
                     let _ = tx.send(sse("hello", &hello(&desk, &agent_model)));

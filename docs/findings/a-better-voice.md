@@ -1,5 +1,17 @@
 # A better voice — what exists, what it costs, 2026-09-16
 
+> **The owner's verdict, 2026-09-17: 자연스러움.** The complaint this whole file exists to answer
+> — 어색함, about `Microsoft Heami Desktop` — is answered. Both voices were rendered to files
+> saying the same three sentences argmind actually produces and sent for judging, because playing
+> them at a machine somebody may not be sitting at is not a comparison. **The question that has
+> been open since 2026-09-16 is closed.**
+>
+> One thing that was not a voice problem: the Heami file would not play at first. `synthesise()`
+> returns *raw PCM* — it says so, and it exists so numbers can be taken without making a sound —
+> and the example wrote those bytes straight into a `.wav`. The audio was fine and the container
+> was missing. Same shape as three other things this week: the thing reported broken was not the
+> thing that was broken.
+
 > 목소리는 어색함.
 
 The owner's verdict on `Microsoft Heami Desktop`, which is the only Korean voice this machine
