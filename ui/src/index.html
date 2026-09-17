@@ -84,8 +84,24 @@
   .ask-buttons .always { margin-left: 14px; }
   .ask-buttons .no { margin-left: auto; }
   #settings { border-bottom: 1px solid var(--edge); font-size: 13px; }
-  #settings > summary, #seeing > summary, #gear > summary { padding: 6px 14px; cursor: pointer;
-                                                           color: var(--dim); }
+  #settings > summary, #seeing > summary, #gear > summary, #aiming > summary {
+    padding: 6px 14px; cursor: pointer; color: var(--dim); }
+  #aiming { border-bottom: 1px solid var(--edge); font-size: 13px; }
+  #thinking { padding: 0 14px 10px; }
+  .goal { display: block; margin-bottom: 8px; }
+  .goal span { color: var(--dim); display: block; margin-bottom: 3px; }
+  #aim { width: 100%; box-sizing: border-box; font: inherit; padding: 5px 7px; resize: vertical;
+         border: 1px solid var(--edge); background: #fff; color: var(--ink); }
+  /* Name, slider, number — the number in a fixed-width cell so the row does not jog as it moves. */
+  .dial { display: flex; gap: 8px; align-items: center; padding: 3px 0; }
+  .dial .name { min-width: 52px; color: var(--dim); }
+  .dial input { flex: 1; min-width: 120px; }
+  .dial .at { min-width: 20px; text-align: right; font-variant-numeric: tabular-nums; }
+  .dial.resting .name, .dial.resting .at { opacity: 0.45; }
+  /* The line as the model will see it. Monospace, wrapped, and gone entirely when there is none. */
+  #whatissent { margin-top: 8px; font-size: 12px; color: var(--dim); white-space: pre-wrap;
+                border-left: 2px solid var(--edge); padding: 4px 0 4px 8px; }
+  #whatissent:empty { display: none; }
   #gear { border-bottom: 1px solid var(--edge); font-size: 13px; }
   #devices { padding: 0 14px 10px; }
   /* Label, list, button, and the answer under all three — so a long device name wraps rather
@@ -151,6 +167,21 @@
   <details id="gear">
     <summary>장치 — 마이크 · 스피커 · 카메라</summary>
     <div id="devices"></div>
+  </details>
+  <!-- What it is trying to be. Folded like the rest, and **the sentence it actually sends is
+       printed under the sliders** — a settings panel that shows four numbers and keeps what they
+       do to itself is asking to be trusted about the one thing it could simply show. Empty when
+       nothing is set, which is the truth: nothing is added to the prompt at all. -->
+  <details id="aiming">
+    <summary>생각 — 목표와 성향</summary>
+    <div id="thinking">
+      <label class="goal">
+        <span>목표</span>
+        <textarea id="aim" rows="2" placeholder="예: 코드 리뷰 중일 때는 놓친 것만 짧게 말해줘"></textarea>
+      </label>
+      <div id="dials"></div>
+      <div id="whatissent"></div>
+    </div>
   </details>
   <!-- What the model was shown, folded away beside the settings for the same reason: it is the
        panel you want on the day you want it. It used to be a column taking a third of the width

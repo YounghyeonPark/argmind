@@ -8,6 +8,7 @@
 use crate::contract::Widget;
 use crate::intent::{Effect, Intent, Trigger};
 use crate::llm::first_object;
+use crate::mind::Mind;
 
 pub const MAX_LISTED: usize = 200;
 /// **Derived, not chosen.** 27 of 28 real requests want one effect or two; spurious ones come in
@@ -60,9 +61,10 @@ pub fn still_open(history: &[(String, String)]) -> Vec<String> {
     open
 }
 
-/// The prompt, exactly. Verified against `r322a4c`.
+/// The prompt, exactly. Verified against `r322a4c` — **and `r322a4c` is what a resting [`Mind`]
+/// still renders**, which is the whole safety of having added one. See [`crate::mind`].
 pub fn render(widgets: &[Widget], trigger: &Trigger, history: &[(String, String)],
-              limit: usize) -> String {
+              limit: usize, mind: &Mind) -> String {
     let listed: Vec<&Widget> = widgets.iter().take(limit).collect();
     let mut lines: Vec<String> = vec![SYSTEM.to_string()];
     if !trigger.asked {
@@ -95,6 +97,18 @@ pub fn render(widgets: &[Widget], trigger: &Trigger, history: &[(String, String)
             lines.push(format!("  {text}"));
         }
         lines.push(STILL_OPEN_TAIL.to_string());
+    }
+
+    //: **What the person set in the settings, and nothing whatsoever when they set nothing.**
+    //: Placed here, next to the trigger, for the only reason this project has a number for: a
+    //: stated rule is obeyed in 36 of 36 probes at a distance of eight lines or less. That is a
+    //: measurement about rules and this is a manner, so the placement is **unargued** — the last
+    //: time a placement was argued from prompt distance the argument was withdrawn by the run that
+    //: confirmed the change. What would settle it is `saying` and `talking` run with the slot at
+    //: the top and here; what is measured below is the prior question, whether it does anything.
+    if let Some(aim) = mind.line() {
+        lines.push(String::new());
+        lines.push(aim);
     }
 
     lines.push(String::new());

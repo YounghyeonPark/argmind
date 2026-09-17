@@ -41,6 +41,7 @@ pub mod chosen;
 pub mod decided;
 pub mod fetch;
 pub mod fix;
+pub mod mind;
 pub mod needs;
 pub mod platform;
 pub mod proposals;
@@ -203,6 +204,10 @@ pub enum Route {
     /// What may be answered *always* is a fixed list in [`crate::decided`] — and a click is not on
     /// it.
     Decide(String, String),
+    /// Turn one thinking dial: its name and where to put it.
+    Dial(String, u8),
+    /// Write the thinking goal — the sentence the dials cannot express. An empty one clears it.
+    Aim(String),
     /// Take back something that was answered once and for all.
     Forget(String),
     /// Use this microphone, speaker or camera from now on. An empty id means *go back to whatever
@@ -290,6 +295,19 @@ pub fn route(request: &Request) -> Route {
         },
         ("POST", p) if p.starts_with("/try/") && p.len() > 5 =>
             Route::Try(p[5..].to_string()),
+        //: `/dial/<name>/<0-10>`. The name arrives percent-encoded because it is Korean, and it is
+        //: checked against the fixed list before anything is written — a dial is not a string the
+        //: page gets to invent, for the same reason a permission is not.
+        ("POST", p) if p.starts_with("/dial/") && p.len() > 6 => match p[6..].rsplit_once('/') {
+            Some((name, n)) if !name.is_empty() => match n.parse::<u8>() {
+                Ok(n) => Route::Dial(decoded(name), n),
+                Err(_) => Route::Unknown,
+            },
+            _ => Route::Unknown,
+        },
+        //: The sentence comes in the body rather than the path: it is prose, it can be long, and a
+        //: path is the wrong place for either.
+        ("POST", "/aim") => Route::Aim(request.body.clone()),
         ("POST", "/notice/on") => Route::Notice(true),
         ("POST", "/notice/off") => Route::Notice(false),
         ("POST", "/look") => Route::Look,

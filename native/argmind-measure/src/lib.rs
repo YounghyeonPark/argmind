@@ -28,11 +28,42 @@ use std::path::{Path, PathBuf};
 use argmind_core::contract::Widget;
 use argmind_core::converse::render;
 use argmind_core::intent::Trigger;
+use argmind_core::mind::{Mind, DIALS, MOST};
 use sha2::{Digest, Sha256};
 
 /// Six characters, which is what every fingerprint in this project is.
 pub fn print6(bytes: &[u8]) -> String {
     format!("{:x}", Sha256::digest(bytes)).chars().take(6).collect()
+}
+
+/// A [`Mind`] off a command line: `"재치=7,유머=5"`, and `목표=...` for the sentence.
+///
+/// **Anything unrecognised is refused rather than ignored.** A harness given a misspelt dial that
+/// quietly ran at rest would write a file claiming a condition it did not have, which is the one
+/// failure mode this whole module exists to prevent.
+pub fn mind_from(spec: &str) -> Mind {
+    let mut mind = Mind::resting();
+    for part in spec.split(',').map(str::trim).filter(|p| !p.is_empty()) {
+        let (name, value) = part.split_once('=')
+            .unwrap_or_else(|| panic!("{part:?} is not name=value"));
+        let (name, value) = (name.trim(), value.trim());
+        if name == "목표" || name == "aim" {
+            mind.aim = value.to_string();
+            continue;
+        }
+        let n: u8 = value.parse().unwrap_or_else(|_| panic!("{value:?} is not a number"));
+        assert!(n <= MOST, "{n} is above {MOST}");
+        assert!(DIALS.iter().any(|(k, _)| *k == name),
+                "no dial called {name:?} — have {:?}", DIALS.map(|(k, _)| k));
+        mind.turn(name, n);
+    }
+    mind
+}
+
+/// `m` plus six characters, or **nothing at all when the mind is at rest** — so a resting run
+/// writes exactly the filename it wrote before any of this existed and stays comparable with it.
+pub fn mind_print(mind: &Mind) -> Option<String> {
+    mind.line().map(|line| format!("m{}", print6(line.as_bytes())))
 }
 
 /// A harness's own source, hashed. `h` in a filename.
@@ -134,7 +165,9 @@ pub fn prompt_record(max_listed: usize, most_at_once: usize) -> String {
     let mut texts = Vec::new();
     for (label, asked, widgets, history) in probes {
         let trigger = Trigger { text: "probe".into(), asked };
-        let text = render(widgets, &trigger, history, max_listed);
+        //: **At rest, and that is the point of the tag.** `r322a4c` surviving the arrival
+        //: of [`Mind`] is the proof that a dial nobody turned changes nothing.
+        let text = render(widgets, &trigger, history, max_listed, &Mind::resting());
         blocks.push(format!("--- {label} ---\n{text}\n"));
         texts.push(text);
     }

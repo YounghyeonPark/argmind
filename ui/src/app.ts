@@ -54,6 +54,24 @@ interface Gear {
   found: Device[];
 }
 
+/** One thinking dial, as the server names it. */
+interface Dial {
+  name: string;
+  /** The words that go into the prompt beside the number — shown here so the slider cannot mean
+   *  one thing on the page and another to the model. */
+  gloss: string;
+  at: number;
+}
+
+/** What argmind is trying to be. */
+interface Aim {
+  most: number;
+  aim: string;
+  /** The exact line added to every prompt, or `""` when nothing is set and nothing is added. */
+  line: string;
+  dials: Dial[];
+}
+
 const token = document.body.dataset.token ?? "";
 
 /** Every request carries the token. Localhost is not a permission: any program you run is on it. */
@@ -702,3 +720,69 @@ function gearRow(g: Gear): HTMLElement {
   row.append(said);
   return row;
 }
+
+
+// --- what it is trying to be -------------------------------------------------------------------
+//
+// Four sliders and a sentence. **The line the model is actually sent is printed underneath**,
+// because a panel of numbers that will not say what it does with them is asking to be believed
+// about the only part it could show. At rest the line is empty and so is the prompt slot: nothing
+// set means the model is sent exactly what it was sent before any of this existed.
+
+const dials = document.getElementById("dials") as HTMLElement;
+const whatissent = document.getElementById("whatissent") as HTMLElement;
+const aimBox = document.getElementById("aim") as HTMLTextAreaElement;
+
+stream.addEventListener("mind", (e) => {
+  const m: Aim = JSON.parse((e as MessageEvent).data);
+  // Never while it is being typed in: replacing the value under the cursor loses what somebody is
+  // halfway through writing, and this event arrives on every dial move as well.
+  if (document.activeElement !== aimBox) {
+    aimBox.value = m.aim;
+  }
+  dials.replaceChildren();
+  for (const d of m.dials) {
+    dials.append(dialRow(d, m.most));
+  }
+  whatissent.textContent = m.line;
+});
+
+function dialRow(d: Dial, most: number): HTMLElement {
+  const row = document.createElement("div");
+  row.className = d.at > 0 ? "dial" : "dial resting";
+
+  const name = document.createElement("span");
+  name.className = "name";
+  name.textContent = d.name;
+  // The gloss is what the model is told, word for word, rather than a tooltip inventing its own
+  // wording that could drift from the prompt.
+  name.title = d.gloss;
+  row.append(name);
+
+  const slider = document.createElement("input");
+  slider.type = "range";
+  slider.min = "0";
+  slider.max = String(most);
+  slider.step = "1";
+  slider.value = String(d.at);
+  const at = document.createElement("span");
+  at.className = "at";
+  at.textContent = String(d.at);
+  // Two events on purpose: the number follows the thumb, the server hears about it once, when the
+  // thumb is let go. Otherwise one drag is eleven writes of a file and eleven prompts rebuilt.
+  slider.oninput = () => {
+    at.textContent = slider.value;
+    row.classList.toggle("resting", slider.value === "0");
+  };
+  slider.onchange = () => {
+    void post(`/dial/${encodeURIComponent(d.name)}/${slider.value}`);
+  };
+  row.append(slider, at);
+  return row;
+}
+
+// Saved when you leave the box, not on every keystroke: a goal is a sentence and half of one is
+// not worth writing to disk, let alone putting in front of the model.
+aimBox.addEventListener("change", () => {
+  void post("/aim", aimBox.value);
+});

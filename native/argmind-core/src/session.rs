@@ -4,6 +4,7 @@
 use crate::contract::{Eyes, Hands, Speaks, Widget};
 use crate::converse::{read_reply, render, MAX_LISTED};
 use crate::intent::{Done, Effect, Exchange, Intent, Trigger};
+use crate::mind::Mind;
 
 pub const REMEMBER_TURNS: i64 = 12;
 pub const NOTHING_DONE: &str = "nothing was done";
@@ -78,13 +79,17 @@ pub struct Session<E: Eyes, H: Hands, M: Speaks> {
     pub may_act_unprompted: bool,
     pub remember_turns: Option<i64>,
     pub limit: usize,
+    /// What it is trying to be, from the settings. **Resting until somebody turns a dial**, and
+    /// resting renders the prompt this program shipped with, byte for byte.
+    pub mind: Mind,
 }
 
 impl<E: Eyes, H: Hands, M: Speaks> Session<E, H, M> {
     pub fn new(eyes: E, hands: H, model: M) -> Self {
         Session { eyes, hands, model, seen: Vec::new(), history: Vec::new(), exchanges: 0,
                   blind: 0, vanished: 0, unknown_keys: 0, may_act_unprompted: false,
-                  remember_turns: Some(REMEMBER_TURNS), limit: MAX_LISTED }
+                  remember_turns: Some(REMEMBER_TURNS), limit: MAX_LISTED,
+                  mind: Mind::resting() }
     }
 
     pub fn observe(&mut self) -> (Vec<Widget>, f64) {
@@ -160,7 +165,7 @@ impl<E: Eyes, H: Hands, M: Speaks> Session<E, H, M> {
             self.observe();
         }
         let listed: Vec<Widget> = self.seen.iter().take(self.limit).cloned().collect();
-        let prompt = render(&listed, trigger, &self.recent(), self.limit);
+        let prompt = render(&listed, trigger, &self.recent(), self.limit, &self.mind);
         let reply = self.model.ask(&prompt);
         let intent = read_reply(&reply, &listed, trigger);
         let before = intent.effects.len();

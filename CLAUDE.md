@@ -52,6 +52,7 @@ the two days that built this, three of them flattering.
     native/argmind-core/        contract.rs  Widget, Eyes, Hands — what an environment must provide
                                 llm.rs       the local model; every setting learned from a silent failure
                                 intent.rs    Trigger, Effect, Intent
+                                mind.rs      the dials and the goal — a slot that is absent at rest
                                 converse.rs  one call: what to say, and what if anything to do
                                 session.rs   observe / decide / perform, separately
                                 watch.rs     a trigger that starts from a change, with its floor
@@ -131,9 +132,15 @@ flag deliberately and that is *stronger* — a person confirms each action, and 
 | accepting | a yes one turn after an offer acts in **30 of 39**, up from 15 of 39 — **15 fixed, 0 broken, p = 0.00006**, pre-registered, both controls holding, 104 cases over four screens. A yes *five turns* later, **3 of 12 → 10 of 12**. What it cost is one control case that goes `landed → silent`: the reply word for word identical and the action slot empty |
 | repair | **3 of 4** corrections land (n=4, so it cannot reach p<0.05 under any repair); a question about the past still re-proposes the action **9 times in 23** — the offer wording and then the standing-offer block each moved it, neither significantly (p = 0.0625 and 0.11) and the second only as a control; **Korean in, Korean out 30 of 36 (83%)** with **English in, English out 12 of 12** as the other half. `--think on` gets repair 4 of 4 and **halves Korean to 18 of 36** |
 | a call | **0.61 s** median, mean 1.43 s, and the gap was one tail: **18 of 1,845 turns ran to the 4,096-token ceiling**, 69–71 s each, 47% of the model time in 1% of the turns. The tail is gone — the same sweep now has 0 at the ceiling and costs 1,461 s against 2,671 s — **but not because the stream stops cut it: neither stop fired in that run, and an earlier version of this row credited them anyway.** Replaying 128 recorded replies through the shipped stops gives `stop` 122, `degenerate` 3, `length` 3 and **`closed` 0**: on an ordinary turn this model emits nothing after its closing brace, so the answered stop is unreachable. The stops are insurance that has not been called |
+| the dials | **the slot's language decides the reply's**, and that is the whole finding. 44 Korean requests: no line 28 of 44 answered in Korean, a content-free **English** sentence in the slot **19**, a content-free **Korean** one **42** and 41 on a repeat. The four dials in English sat at 28–31 — they moved 20–40 of 44 sentences and left the language alone. Korean lines ship, and at x3 the worst arm reads **Korean 39 of 44 against 28, leak 7 of 32 against 5**: +11 bought, 2 discordant cases spent, paid only by somebody who turns a dial. **The first reading was that the dials fixed the leak (5 of 32 → 0 or 1 in all four arms); the placebo fixed it too** |
 | clicking | **2 of 3, n=1** on the Rust, against the Python's 3 of 3 at n=3 on the same goals and the same condition — one Character Map for all three, so the second goal meets a screen the first has changed. One run against three and this model reads 21, 23, 24 across runs of one configuration, so it is a number rather than a regression. **The miss is the interesting part and it is not the model's**: asked for the font list it named `Open`, and advanced view has more than one button called that — what opened was the character set list. `name` and `role` together are still not a key, and the model is shown nothing else |
 | obstruction | **24 of 24 arms agreed with the prediction written before the run**, 3 runs of 8. With something covering the target, *neither* path reaches it — the pattern resolves by `ElementFromPoint` and gets the cover, then falls back to a click the reach guard refuses. Stood aside or uncovered, both work. So the one case that could have earned the control patterns does not |
 | the pointer | **the axis the patterns do win, 3 of 3.** Parked at `(700, 400)`: `invoke` leaves it there, a click drags it to the widget at `(130, 459)`, and both press the box. **The first version of this harness measured nothing** — it parked with `cursor_round_trip`, which puts the cursor back where it found it, so every arm read the position the previous arm's click had left and both reported *unmoved* |
+
+**The one slot that is absent unless somebody asks for it.** `mind.rs` renders nothing at rest, so
+the six probes still hash to `r322a4c` at 5,676 bytes — a tag recorded from the Python before a dial
+existed. A prompt edit nobody has turned on cannot cost anything, which is the only ground on which
+one more was allowed. `docs/findings/what-it-is-trying-to-be.md`.
 
 **Prompt edits here were 0 for 5.** Each raised a number and lowered another, and three were nearly
 recorded as improvements; the only change that moved a line was a derived limit, `MOST_AT_ONCE = 3`.
@@ -228,7 +235,9 @@ code; **macOS needs one grant** in System Settings before the Accessibility API 
 neither, so *the recogniser dies with argmind* is a weaker promise there and `Supervised::supervised()`
 already exists to say so out loud.
 
-No phone environment, no robot environment. **Voice is built and is off until switched on**: hold
+No phone environment, no robot environment. **A thinking goal and four dials are built and are at rest until turned**: 재치 · 유머 · 봉사 · 헌신,
+0–10, and a sentence in the person's own words, in `설정 → 생각`. At rest the prompt is what it
+always was. **Voice is built and is off until switched on**: hold
 F9 in the window, which means you have to be looking at argmind to talk to it.
 
 **Speaking has two voices and picks one at startup.** SAPI is free (4–43 ms), installed, and
@@ -311,6 +320,7 @@ a fact. `docs/findings/porting-the-core.md` has the accounting.
 | `docs/findings/the-window.md` | **a standalone app rather than a browser tab**: why the house style was the wrong answer, the licence sweep across 81 crates, and the DLL failure that only a double-click finds |
 | `docs/findings/eyes-on-linux.md` | **AT-SPI2**: the contract surviving the port, the switch that makes toolkits publish at all, `i32::MIN` for off-screen, the hit test that answered with the container, and why D-Bus was the one wire protocol not hand-written |
 | `docs/findings/a-better-voice.md` | **the voice**: every open Korean TTS checked and its licence, and the measured answer — RTF 3.9 on the CPU, 0.15 on the GPU, and a K-quant that is thirty-two times faster and wrong |
+| `docs/findings/what-it-is-trying-to-be.md` | **the dials**: the rule that made a sixth prompt edit safe, the control that overturned the first reading, and the language of the slot |
 | `docs/findings/harness-pitfalls.md` | **ten ways the model harness lied and seven ways the measuring code did** — the list to check when a measurement reads zero |
 | `docs/findings/porting-the-core.md` | **the move to Rust**: what speed does not decide, the robot answered, the AST rules audited one at a time, what breaks in `measure/`, and the staging |
 | `native/argmind-voice/src/lib.rs` | voice is *interface*, not a contract — and why *"응"* out loud cannot run an action |

@@ -24,11 +24,12 @@ use argmind_core::contract::Widget;
 use argmind_core::converse::{describe_screen, read_reply, render, MAX_LISTED};
 use argmind_core::intent::Trigger;
 use argmind_core::llm::Reply;
+use argmind_core::mind::Mind;
 use argmind_env_ollama::Local;
 use argmind_measure::saying::{answer_verdict, classify, has_number, worst_index, ANSWER_ORDER,
                               LEAK_ORDER};
-use argmind_measure::{data_print, prompt_tag, screen_print, screens, source_print, spend,
-                      Destination, Tables};
+use argmind_measure::{data_print, mind_from, mind_print, prompt_tag, screen_print, screens,
+                      source_print, spend, Destination, Tables};
 use serde_json::{json, Value};
 
 /// The model, with the last prompt kept — the only way `check_numbering` can be honest.
@@ -71,6 +72,9 @@ fn main() {
     let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).parent().unwrap().parent().unwrap()
         .to_path_buf();
     let repeat: usize = std::env::args().nth(1).and_then(|a| a.parse().ok()).unwrap_or(3);
+    //: `saying-run 3 "재치=7"` — the settings dials. Absent is at rest, and the `m`
+    //: component below is absent with it, so a resting run writes the name it always wrote.
+    let mind = std::env::args().nth(2).map(|a| mind_from(&a)).unwrap_or_else(Mind::resting);
     assert!(repeat >= 1, "--repeat must be at least 1: worst-of-N has no meaning at N=0");
     let dir = root.join("measure");
     let loaded = screens(&dir.join("screens"));
@@ -112,9 +116,11 @@ fn main() {
     //: disagreement in `worst_index`.
     let h = source_print(&format!("{}{}", include_str!("saying-run.rs"),
                                   include_str!("../saying.rs")));
-    let out = Destination::new(&dir, "saying", &["rust".into(), prompt_tag(), format!("s{s}"),
-                                                 format!("f{f}"), format!("h{h}"),
-                                                 format!("x{repeat}")]);
+    let mut parts = vec!["rust".to_string(), prompt_tag(), format!("s{s}"),
+                         format!("f{f}"), format!("h{h}")];
+    parts.extend(mind_print(&mind));
+    parts.push(format!("x{repeat}"));
+    let out = Destination::new(&dir, "saying", &parts);
     if let Err(why) = out.refuse_if_taken() {
         println!("\n  ** {why}");
         std::process::exit(3);
@@ -128,6 +134,10 @@ fn main() {
 
     let n_leak = cases.iter().filter(|(k, _)| *k == "leak").count();
     println!("\n  qwen3:8b | thinking off | prompt {} | screens s{s} | cases f{f}", prompt_tag());
+    match mind.line() {
+        Some(line) => println!("  mind {} | {line}", mind_print(&mind).unwrap()),
+        None => println!("  mind at rest"),
+    }
     println!("  harness h{h}");
     println!("  {n_leak} leak-set + {} control-set cases x {repeat} repeats, worst counted | \
               {} fixture screens, nothing clicked\n", cases.len() - n_leak, loaded.len());
@@ -146,7 +156,7 @@ fn main() {
             let trigger = Trigger::said(said);
             //: **No history**, which is this harness's whole blind spot and is declared rather than
             //: forgotten — see the caveat printed at the end.
-            let prompt = render(&listed, &trigger, &[], MAX_LISTED);
+            let prompt = render(&listed, &trigger, &[], MAX_LISTED, &mind);
             let t0 = std::time::Instant::now();
             let raw = model.ask(&prompt);
             let took = t0.elapsed().as_secs_f64();

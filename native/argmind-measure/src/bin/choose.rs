@@ -13,12 +13,17 @@ use argmind_core::converse::{read_reply, render, MAX_LISTED};
 use argmind_core::intent::Trigger;
 use argmind_env_ollama::Local;
 use argmind_measure::choosing::{as_json, goals, score, tally};
-use argmind_measure::{prompt_tag, screen_print, screens, source_print};
+use argmind_core::mind::Mind;
+use argmind_measure::{mind_from, mind_print, prompt_tag, screen_print, screens,
+                      source_print};
 
 fn main() {
     let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).parent().unwrap().parent().unwrap()
         .to_path_buf();
     let repeat: usize = std::env::args().nth(1).and_then(|a| a.parse().ok()).unwrap_or(3);
+    //: The second argument is the settings dials, e.g. `choose 3 "찬의=7"`.
+    //: Absent is at rest, which renders the prompt this harness has always rendered.
+    let mind = std::env::args().nth(2).map(|s| mind_from(&s)).unwrap_or_else(Mind::resting);
     let dir = root.join("measure");
     let loaded = screens(&dir.join("screens"));
     let all = goals(&std::fs::read_to_string(dir.join("goals.json")).expect("goals.json"));
@@ -32,7 +37,11 @@ fn main() {
 
     println!("  qwen3:8b | {} goals x {repeat} | {} screens | prompt {} | screens {}",
              all.len(), loaded.len(), prompt_tag(), screen_print(&dir.join("screens")));
-    println!("  harness {}\n", source_print(include_str!("choose.rs")));
+    println!("  harness {}", source_print(include_str!("choose.rs")));
+    match mind.line() {
+        Some(line) => println!("  mind {} | {line}\n", mind_print(&mind).unwrap()),
+        None => println!("  mind at rest\n"),
+    }
 
     let mut rows = Vec::new();
     let start = std::time::Instant::now();
@@ -42,7 +51,7 @@ fn main() {
         let mut chose = Vec::new();
         for _ in 0..repeat {
             let trigger = Trigger::said(&g.goal);
-            let prompt = render(widgets, &trigger, &[], MAX_LISTED);
+            let prompt = render(widgets, &trigger, &[], MAX_LISTED, &mind);
             let reply = model.ask(&prompt).map(|r| r.text).unwrap_or_default();
             let intent = read_reply(&reply, widgets, &trigger);
             //: The **first** click, as the Python takes it: a reply naming several is one decision
@@ -68,7 +77,8 @@ fn main() {
 
     let counts: BTreeMap<String, usize> =
         loaded.iter().map(|(k, v)| (k.clone(), v.widgets.len())).collect();
-    let out = dir.join(format!("choosing-rust-{}-s{}-x{repeat}.json",
+    let m = mind_print(&mind).map(|t| format!("-{t}")).unwrap_or_default();
+    let out = dir.join(format!("choosing-rust-{}-s{}{m}-x{repeat}.json",
                                prompt_tag(), screen_print(&dir.join("screens"))));
     std::fs::write(&out, serde_json::to_string_pretty(&as_json(&rows, &counts)).unwrap()).unwrap();
     println!("\n  every choice -> {}", out.display());

@@ -15,13 +15,18 @@ use std::path::PathBuf;
 use argmind_core::converse::{read_reply, render, MAX_LISTED};
 use argmind_core::intent::Trigger;
 use argmind_env_ollama::Local;
-use argmind_measure::{prompt_tag, screen_print, screens, source_print};
+use argmind_core::mind::Mind;
+use argmind_measure::{mind_from, mind_print, prompt_tag, screen_print, screens,
+                      source_print};
 use serde_json::Value;
 
 fn main() {
     let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).parent().unwrap().parent().unwrap()
         .to_path_buf();
     let repeat: usize = std::env::args().nth(1).and_then(|a| a.parse().ok()).unwrap_or(2);
+    //: `talk 2 "유머=7"` — absent is at rest, and at rest this renders what it
+    //: always rendered.
+    let mind = std::env::args().nth(2).map(|s| mind_from(&s)).unwrap_or_else(Mind::resting);
     let dir = root.join("measure");
     let loaded = screens(&dir.join("screens"));
     let d: Value = serde_json::from_str(
@@ -39,8 +44,12 @@ fn main() {
     println!("  qwen3:8b | {} things to say x {repeat} | on {} ({} widgets) and {} ({})",
              d["talk"].as_array().unwrap().len(), where_[0], loaded[where_[0]].widgets.len(),
              where_[1], loaded[where_[1]].widgets.len());
-    println!("  prompt {} | screens s{} | harness {}\n", prompt_tag(),
+    println!("  prompt {} | screens s{} | harness {}", prompt_tag(),
              screen_print(&dir.join("screens")), source_print(include_str!("talk.rs")));
+    match mind.line() {
+        Some(line) => println!("  mind {} | {line}\n", mind_print(&mind).unwrap()),
+        None => println!("  mind at rest\n"),
+    }
 
     let mut rows = Vec::new();
     let (mut quiet_total, mut total) = (0usize, 0usize);
@@ -52,7 +61,7 @@ fn main() {
             let mut acted: Vec<Vec<String>> = Vec::new();
             for _ in 0..repeat {
                 let trigger = Trigger::said(line);
-                let prompt = render(widgets, &trigger, &[], MAX_LISTED);
+                let prompt = render(widgets, &trigger, &[], MAX_LISTED, &mind);
                 let reply = model.ask(&prompt).map(|r| r.text).unwrap_or_default();
                 let intent = read_reply(&reply, widgets, &trigger);
                 acted.push(intent.effects.iter()
@@ -93,7 +102,8 @@ fn main() {
              (100 * quiet_total) / total.max(1));
     println!("  the other half of this pair is `choose`, where 28 of 37 goals want one");
 
-    let out = dir.join(format!("talking-rust-{}-s{}-x{repeat}.json", prompt_tag(),
+    let m = mind_print(&mind).map(|t| format!("-{t}")).unwrap_or_default();
+    let out = dir.join(format!("talking-rust-{}-s{}{m}-x{repeat}.json", prompt_tag(),
                                screen_print(&dir.join("screens"))));
     std::fs::write(&out, serde_json::to_string_pretty(&serde_json::json!({
         "model": "qwen3:8b", "repeat": repeat, "prompt": prompt_tag(),

@@ -21,5 +21,6 @@ pub mod contract;
 pub mod converse;
 pub mod intent;
 pub mod llm;
+pub mod mind;
 pub mod session;
 pub mod watch;

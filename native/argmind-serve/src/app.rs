@@ -163,6 +163,10 @@ enum Job {
     Forget(String),
     /// Use this device from now on.
     Choose(String, String),
+    /// Turn one thinking dial.
+    Dial(String, u8),
+    /// Write the thinking goal.
+    Aim(String),
     /// Open one for a moment and report.
     Try(String),
     /// The talk key went down or came up.
@@ -434,6 +438,23 @@ fn devices_json() -> String {
                 escape(picked.as_deref().unwrap_or("")), escape(&trouble), rows.join(","))
     }).collect();
     format!("[{}]", kinds.join(","))
+}
+
+/// The dials, what they are called, where they stand — **and the exact sentence the model will be
+/// shown.**
+///
+/// That last field is the point. A settings panel that renders four sliders and says nothing about
+/// what they do is asking a person to trust a number; showing the line means the interface cannot
+/// quietly stop matching what is sent, because it is the same string. When nothing is set the line
+/// is empty, and that is the truth as well: nothing is added to the prompt at all.
+fn mind_json(mind: &argmind_core::mind::Mind) -> String {
+    let rows: Vec<String> = argmind_core::mind::DIALS.iter().map(|(korean, gloss)| {
+        format!("{{\"name\":\"{}\",\"gloss\":\"{}\",\"at\":{}}}",
+                escape(korean), escape(gloss), mind.of(korean))
+    }).collect();
+    format!("{{\"most\":{},\"aim\":\"{}\",\"line\":\"{}\",\"dials\":[{}]}}",
+            argmind_core::mind::MOST, escape(&mind.aim),
+            escape(&mind.line().unwrap_or_default()), rows.join(","))
 }
 
 fn decisions_json() -> String {
@@ -866,6 +887,10 @@ pub fn run(how: How) {
                               //: need a name to look for and there is nowhere yet to type one.
                               watches: vec![Watch::new(Looking::WindowChanged)],
                               noticing: false, before: Vec::new(), noticed: 0 };
+        //: **Read once, here.** Every turn renders from `desk.session.mind`, so the file is not
+        //: touched on the hot path — and a mind that was never set is a resting one, which renders
+        //: the prompt this program shipped with byte for byte.
+        desk.session.mind = crate::mind::remembered();
         let started = std::time::Instant::now();
         loop {
             //: **A timeout rather than a blocking receive**, so the same thread that answers can
@@ -942,6 +967,30 @@ pub fn run(how: How) {
                         "{{\"kind\":\"{}\",\"worked\":{},\"said\":\"{}\"}}",
                         escape(&kind), tried.worked, escape(&tried.said)));
                 }
+                Job::Dial(name, to) => {
+                    match crate::mind::turn(&name, to) {
+                        Ok(mind) => {
+                            agent_out.send("note", &format!("{name} {to}"));
+                            desk.session.mind = mind;
+                        }
+                        Err(why) => agent_out.send("note", &why),
+                    }
+                    agent_out.send("mind", &mind_json(&desk.session.mind));
+                }
+                Job::Aim(text) => {
+                    match crate::mind::aim(&text) {
+                        Ok(mind) => {
+                            agent_out.send("note", if mind.aim.is_empty() {
+                                "생각 목표를 지웠습니다"
+                            } else {
+                                "생각 목표를 저장했습니다"
+                            });
+                            desk.session.mind = mind;
+                        }
+                        Err(why) => agent_out.send("note", &why),
+                    }
+                    agent_out.send("mind", &mind_json(&desk.session.mind));
+                }
                 Job::Forget(key) => {
                     match crate::decided::keep(&key, None) {
                         Ok(()) => agent_out.send(
@@ -982,6 +1031,9 @@ pub fn run(how: How) {
                     //: property store and opens nothing, but a headset plugged in since boot
                     //: should appear without restarting the program.
                     let _ = tx.send(sse("devices", &devices_json()));
+                    //: **What it is trying to be**, so the sliders and the goal are drawn where
+                    //: they were left rather than at rest.
+                    let _ = tx.send(sse("mind", &mind_json(&desk.session.mind)));
                 }
             }
         }
@@ -1109,6 +1161,19 @@ fn serve_one(mut stream: TcpStream, out: &Listeners, token: &str, jobs: &Sender<
             } else {
                 let _ = stream.write_all(&respond("400 Bad Request", "text/plain", "no"));
             }
+        }
+        //: Checked here as well as in the job, like `/choose` and for the same reason.
+        Route::Dial(name, to) => {
+            if crate::mind::is_a_dial(&name) && to <= argmind_core::mind::MOST {
+                let _ = stream.write_all(&respond("204 No Content", "text/plain", ""));
+                let _ = jobs.send(Job::Dial(name, to));
+            } else {
+                let _ = stream.write_all(&respond("400 Bad Request", "text/plain", "no"));
+            }
+        }
+        Route::Aim(text) => {
+            let _ = stream.write_all(&respond("204 No Content", "text/plain", ""));
+            let _ = jobs.send(Job::Aim(text));
         }
         Route::Forget(key) => {
             if crate::decided::is_decidable(&key) {

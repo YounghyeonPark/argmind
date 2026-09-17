@@ -67,8 +67,13 @@ fn the_prompt_hashes_to_the_shipped_tag() {
             probe["widgets"].as_array().unwrap().iter().map(widget_of).collect();
         let trigger = Trigger { text: probe["text"].as_str().unwrap().into(),
                                 asked: probe["asked"].as_bool().unwrap() };
+        //: **At rest.** This assertion is what makes `mind.rs` safe to have added: the
+        //: bytes and the tag below were recorded from the Python, long before a dial
+        //: existed, so the prompt still hashing to them is a check against an outside
+        //: record rather than against itself.
         let text = render(&widgets, &trigger, &pairs(&probe["history"]),
-                          d["max_listed"].as_u64().unwrap() as usize);
+                          d["max_listed"].as_u64().unwrap() as usize,
+                          &argmind_core::mind::Mind::resting());
         blocks.push(format!("--- {} ---\n{}\n", probe["label"].as_str().unwrap(), text));
         texts.push(text);
     }
