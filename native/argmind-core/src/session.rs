@@ -294,7 +294,12 @@ impl<E: Eyes, H: Hands, M: Speaks> Session<E, H, M> {
         //: was asked, it invented having tidied somebody's browser tabs and carried that for three
         //: revisions.
         self.note.record(&crate::thinking::what_it_did(&self.history, DID_IN_NOTE));
-        let prompt = crate::thinking::ask_for_a_note(&self.note, &screen, &self.recent(),
+        //: **What happened, computed here.** The deterministic side says what changed; the model
+        //: is asked only whether it matters. Without it a tick could not tell a screen that had
+        //: just turned over from one that had sat still for five minutes, and answered *도움을 줄
+        //: 수 있다* to both.
+        let changed = crate::thinking::what_changed(&self.seen, &widgets);
+        let prompt = crate::thinking::ask_for_a_note(&self.note, &screen, &changed, &self.recent(),
                                                      crate::thinking::MOST_CHARS);
         let reply = self.model.ask(&prompt);
         let before = self.note.clone();
@@ -306,8 +311,10 @@ impl<E: Eyes, H: Hands, M: Speaks> Session<E, H, M> {
         //: no-ops would make a stuck note look busy.
         //: `tried` is not compared: it changes when argmind acts, which is not the note being
         //: reconsidered, and counting it would make a click look like a thought.
-        let same = self.note.believes == before.believes && self.note.waiting == before.waiting;
+        let same = self.note.believes == before.believes && self.note.worth == before.worth;
         if same {
+            //: `held` is left as `revise` set it: the belief did come round again, and that is the
+            //: fact the next tick needs even when nothing else moved.
             self.note.revisions = before.revisions;
         }
         !same

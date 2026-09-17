@@ -557,8 +557,10 @@ const note = document.getElementById("note");
 stream.addEventListener("note-kept", (e) => {
     const t = JSON.parse(e.data);
     const rows = [
-        ["믿는 것", t.believes],
-        ["기다리는 것", t.waiting],
+        // The belief carries how long it has held: "he is reading" and "he has been reading for six of
+        // my looks" are the same sentence otherwise, and only the second is worth anything.
+        [t.held > 1 ? `믿는 것 (${t.held}번째 그대로)` : "믿는 것", t.believes],
+        ["할 만한 것", t.worth],
         ["이미 한 것", t.tried],
     ];
     const filled = rows.filter(([, text]) => text.trim() !== "");

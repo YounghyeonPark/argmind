@@ -1,0 +1,223 @@
+{
+  "filled": 0,
+  "harness_print": "9e19c6",
+  "idle_shaped": 0,
+  "idle_words": [
+    "기다리",
+    "말을 걸",
+    "말 걸",
+    "기회를",
+    "지켜보",
+    "대기"
+  ],
+  "model": "qwen3:8b",
+  "read": 16,
+  "rows": [
+    {
+      "believes": "메뉴 항목이 여전히 기본 상태로 보이고, '제목 없음 - 메모장'이 열려 있는 상태이므로, 사용자가 메모장을 여전히 사용 중인 것으로 보인다.",
+      "built": true,
+      "changed": "",
+      "held": 1,
+      "idle": false,
+      "screen": "만든 것 — 대화상자가 뜸",
+      "tick": 0,
+      "worth": ""
+    },
+    {
+      "believes": "메모장은 여전히 열려 있고, 메뉴 항목도 기본 상태로 보여서 사용자가 메모를 작성 중인 것으로 보인다.",
+      "built": true,
+      "changed": "",
+      "held": 1,
+      "idle": false,
+      "screen": "만든 것 — 대화상자가 뜸",
+      "tick": 1,
+      "worth": ""
+    },
+    {
+      "believes": "메모장은 저장되지 않은 상태로 열려 있고, 사용자가 수정 중인 것으로 보인다. 메뉴 항목이 기본 상태이며, '저장하지 않은 변경 내용이 있습니다'라는 메시지가 보인다.",
+      "built": true,
+      "changed": "나타남: 저장, 저장 안 함, 저장하지 않은 변경 내용이 있습니다, 취소",
+      "held": 1,
+      "idle": false,
+      "screen": "만든 것 — 대화상자가 뜸",
+      "tick": 2,
+      "worth": ""
+    },
+    {
+      "believes": "메뉴 항목이 여전히 기본 상태로 보이고, '제목 없음 - 메모장'이 열려 있는 상태이므로, 사용자가 현재 메모장을 열고 작업 중인 것으로 보인다.",
+      "built": true,
+      "changed": "",
+      "held": 1,
+      "idle": false,
+      "screen": "만든 것 — 아무 일도 없음",
+      "tick": 0,
+      "worth": ""
+    },
+    {
+      "believes": "메뉴 항목이 기본 상태로 보이고, '제목 없음 - 메모장'이 열려 있는 상태이므로, 사용자가 현재 메모장을 열고 작업 중인 것으로 보인다.",
+      "built": true,
+      "changed": "",
+      "held": 1,
+      "idle": false,
+      "screen": "만든 것 — 아무 일도 없음",
+      "tick": 1,
+      "worth": ""
+    },
+    {
+      "believes": "메뉴 항목이 기본 상태로 보이고, '제목 없음 - 메모장'이 열려 있는 상태이므로, 사용자가 현재 메모장을 열고 작업 중인 것으로 보인다.",
+      "built": true,
+      "changed": "",
+      "held": 2,
+      "idle": false,
+      "screen": "만든 것 — 아무 일도 없음",
+      "tick": 2,
+      "worth": ""
+    },
+    {
+      "believes": "현재 사용자는 특정 문자를 복사하고자 하는 중이며, 폰트 선택 및 문자 정보 확인을 위한 인터페이스를 사용 중인 것으로 보인다.",
+      "changed": "",
+      "held": 1,
+      "idle": false,
+      "screen": "character-map",
+      "tick": 0,
+      "worth": ""
+    },
+    {
+      "believes": "사용자가 특정 문자를 복사하고자 하며, 현재 'Character Grid' 패널에서 폰트를 선택하고 문자 정보를 확인하고 있는 중이다.",
+      "changed": "",
+      "held": 1,
+      "idle": false,
+      "screen": "character-map",
+      "tick": 1,
+      "worth": ""
+    },
+    {
+      "believes": "사용자가 Chrome Remote Desktop 화면에서 'Character Grid' 패널을 사용 중이었으나, 현재는 해당 패널이 사라지고 다른 설정 메뉴로 이동한 것으로 보인다.",
+      "changed": "창이 \"Chrome Remote Desktop - QVB-FLFM-DEV1\" 로 바뀜 / 나타남: Chrome Remote Desktop - QVB-FLFM-DEV1, Chrome Remote Desktop 맞춤설정 및 제어, Connected, Desktop, QVB-FLFM-DEV1, QVB-FLFM-DEV1 - Y / 사라짐: Advanced view, Character Grid, Characters to copy :, Close, Copy, Font :",
+      "held": 1,
+      "idle": false,
+      "screen": "chrome-remote-desktop---qvb-flfm-dev1",
+      "tick": 2,
+      "worth": ""
+    },
+    {
+      "believes": "사용자가 Chrome Remote Desktop 화면에서 'Character Grid' 패널을 사용 중이었으나, 현재는 해당 패널이 사라지고 다른 설정 메뉴로 이동한 것으로 보인다.",
+      "changed": "",
+      "held": 2,
+      "idle": false,
+      "screen": "chrome-remote-desktop---qvb-flfm-dev1",
+      "tick": 3,
+      "worth": ""
+    },
+    {
+      "believes": "화면에는 원격 데스크톱 세션의 상태가 보이고, 사용자가 연결 상태에서 작업 중인 것으로 보인다.",
+      "changed": "",
+      "held": 1,
+      "idle": false,
+      "screen": "chrome-remote-desktop---qvb-flfm-dev1",
+      "tick": 0,
+      "worth": ""
+    },
+    {
+      "believes": "화면에는 원격 데스크톱 세션이 연결 상태로 유지되고 있으며, 사용자가 작업 중인 것으로 보인다.",
+      "changed": "",
+      "held": 1,
+      "idle": false,
+      "screen": "chrome-remote-desktop---qvb-flfm-dev1",
+      "tick": 1,
+      "worth": ""
+    },
+    {
+      "believes": "화면에는 시스템 정보가 표시되고 있으며, 사용자가 시스템 상태를 확인하고 있는 것으로 보인다.",
+      "changed": "창이 \"System Information\" 로 바뀜 / 나타남: 1.51, 10.0.26200 Build 26200, 12.6 GB, 13th Gen Intel(R) Core(TM) i9-13900HX, 2200 Mhz, 24 Core(s), 32 Logical Processor(s), 3.4, 31.7 GB / 사라짐: Chrome Remote Desktop - QVB-FLFM-DEV1, Chrome Remote Desktop 맞춤설정 및 제어, Connected, Desktop, QVB-FLFM-DEV1, QVB-FLFM-DEV1 - Y",
+      "held": 1,
+      "idle": false,
+      "screen": "system-information",
+      "tick": 2,
+      "worth": ""
+    },
+    {
+      "believes": "사용자가 시스템 요약 정보를 확인하고 있으며, 특히 하드웨어와 소프트웨어 구성 요소에 관심이 있는 것으로 보인다.",
+      "changed": "",
+      "held": 1,
+      "idle": false,
+      "screen": "system-information",
+      "tick": 3,
+      "worth": ""
+    },
+    {
+      "believes": "시스템 요약 정보가 정적 상태로 유지되고 있으며, 하드웨어 및 소프트웨어 구성 요소의 변경 사항이 없어 보인다.",
+      "changed": "",
+      "held": 1,
+      "idle": false,
+      "screen": "system-information",
+      "tick": 0,
+      "worth": ""
+    },
+    {
+      "believes": "시스템 요약 정보가 정적 상태로 유지되고 있으며, 하드웨어 및 소프트웨어 구성 요소의 변경 사항이 없어 보인다.",
+      "changed": "",
+      "held": 2,
+      "idle": false,
+      "screen": "system-information",
+      "tick": 1,
+      "worth": ""
+    },
+    {
+      "believes": "화면에는 Paint 앱의 도구 패널이 열려 있고, 다양한 도구와 색상 선택 옵션, 레イヤ 관리, 줌 기능 등이 보인다. 현재 작업 중인 이미지의 해상도는 1536 × 864px로 설정되어 있으며, 툴바와 메뉴바가 정상적으로 작동하고 있다.",
+      "changed": "창이 \"Untitled - Paint\" 로 바뀜 / 나타남: 1536 × 864px, Black, Blue-gray, Brown, Brushes, Cloud callout / 사라짐: 1.51, 10.0.26200 Build 26200, 12.6 GB, 13th Gen Intel(R) Core(TM) i9-13900HX, 2200 Mhz, 24 Core(s), 32 Logical Processor(s), 3.4, 31.7 GB",
+      "held": 1,
+      "idle": false,
+      "screen": "untitled---paint",
+      "tick": 2,
+      "worth": ""
+    },
+    {
+      "believes": "화면에는 Paint 앱의 도구 패널이 열려 있고, 다양한 도구와 색상 선택 옵션, 레イヤ 관리, 줌 기능 등이 보인다. 현재 작업 중인 이미지의 해상도는 1536 × 864px로 설정되어 있으며, 툴바와 메뉴바가 정상적으로 작동하고 있다.",
+      "changed": "",
+      "held": 2,
+      "idle": false,
+      "screen": "untitled---paint",
+      "tick": 3,
+      "worth": ""
+    },
+    {
+      "believes": "현재 작업 화면은 이미지 편집 도구와 도구 상자, 색상 선택, 층 관리, Copilot 기능 등이 활성화된 상태로, 사용자가 이미지에 다양한 형태와 효과를 적용하고 있는 중인 것으로 보인다.",
+      "changed": "",
+      "held": 1,
+      "idle": false,
+      "screen": "untitled---paint",
+      "tick": 0,
+      "worth": ""
+    },
+    {
+      "believes": "사용자가 이미지 편집 도구를 활용해 다양한 도형과 효과를 추가 중이며, 도구 상자와 층 관리, 색상 선택 기능이 활성화된 상태로 작업 중인 것으로 보인다.",
+      "changed": "",
+      "held": 1,
+      "idle": false,
+      "screen": "untitled---paint",
+      "tick": 1,
+      "worth": ""
+    },
+    {
+      "believes": "사용자가 'Character Map'에서 고급 보기와 문자 그리드를 통해 특정 문자를 선택하고 복사하는 과정 중이며, 폰트 선택 및 도움말 링크를 통해 추가적인 설정을 진행 중인 것으로 보인다.",
+      "changed": "창이 \"Character Map\" 로 바뀜 / 나타남: Advanced view, Character Grid, Characters to copy :, Copy, Font :, Help / 사라짐: 1536 × 864px, Black, Blue-gray, Brown, Brushes, Cloud callout",
+      "held": 1,
+      "idle": false,
+      "screen": "character-map",
+      "tick": 2,
+      "worth": ""
+    },
+    {
+      "believes": "사용자가 'Character Grid' 패널에서 특정 문자를 선택하고, 'Copy' 버튼을 통해 복사하는 과정 중이며, 폰트를 변경하거나 도움말을 참고하는 중인 것으로 보인다.",
+      "changed": "",
+      "held": 1,
+      "idle": false,
+      "screen": "character-map",
+      "tick": 3,
+      "worth": ""
+    }
+  ],
+  "screens_print": "5020f7",
+  "ticks": 4
+}

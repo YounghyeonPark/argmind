@@ -1,0 +1,188 @@
+{
+  "filled": 0,
+  "harness_print": "97f6c6",
+  "idle_shaped": 0,
+  "idle_words": [
+    "기다리",
+    "말을 걸",
+    "말 걸",
+    "기회를",
+    "지켜보",
+    "대기"
+  ],
+  "model": "qwen3:8b",
+  "read": 12,
+  "rows": [
+    {
+      "believes": "메모장에서 파일, 편집, 보기, 도움말 메뉴 항목이 보이고, '제목 없음 - 메모장'이라는 문서가 열려 있는 상태이다.",
+      "built": true,
+      "changed": "",
+      "held": 1,
+      "idle": false,
+      "screen": "만든 것 — 대화상자가 뜸",
+      "tick": 0,
+      "worth": ""
+    },
+    {
+      "believes": "메모장에서 파일, 편집, 보기, 도움말 메뉴 항목이 보이고, '제목 없음 - 메모장'이라는 문서가 열려 있는 상태이다.",
+      "built": true,
+      "changed": "",
+      "held": 2,
+      "idle": false,
+      "screen": "만든 것 — 대화상자가 뜸",
+      "tick": 1,
+      "worth": ""
+    },
+    {
+      "believes": "메모장에서 파일, 편집, 보기, 도움말 메뉴 항목이 보이고, '제목 없음 - 메모장' 문서가 열려 있는 상태이다. 저장하지 않은 변경 내용이 있는 상태로, 저장, 저장 안 함, 취소 버튼이 나타난다.",
+      "built": true,
+      "changed": "나타남: 저장, 저장 안 함, 저장하지 않은 변경 내용이 있습니다, 취소",
+      "held": 1,
+      "idle": false,
+      "screen": "만든 것 — 대화상자가 뜸",
+      "tick": 2,
+      "worth": "저장하지 않은 변경 내용이 있으므로, 사용자가 저장 여부를 결정할 때 도움을 줄 수 있다."
+    },
+    {
+      "believes": "메모장에서 파일, 편집, 보기, 도움말 메뉴 항목이 보이고, '제목 없음 - 메모장'이라는 문서가 열려 있는 상태이다.",
+      "built": true,
+      "changed": "",
+      "held": 1,
+      "idle": false,
+      "screen": "만든 것 — 아무 일도 없음",
+      "tick": 0,
+      "worth": ""
+    },
+    {
+      "believes": "메모장에서 파일, 편집, 보기, 도움말 메뉴 항목이 보이고, '제목 없음 - 메모장'이라는 문서가 열려 있는 상태이다.",
+      "built": true,
+      "changed": "",
+      "held": 2,
+      "idle": false,
+      "screen": "만든 것 — 아무 일도 없음",
+      "tick": 1,
+      "worth": ""
+    },
+    {
+      "believes": "메모장에서 파일, 편집, 보기, 도움말 메뉴 항목이 보이고, '제목 없음 - 메모장'이라는 문서가 열려 있는 상태이다.",
+      "built": true,
+      "changed": "",
+      "held": 3,
+      "idle": false,
+      "screen": "만든 것 — 아무 일도 없음",
+      "tick": 2,
+      "worth": ""
+    },
+    {
+      "believes": "현재 사용자가 문자를 선택하고 복사하는 작업 중이며, 폰트 선택 및 문자 정보 확인이 진행 중이다.",
+      "changed": "",
+      "held": 1,
+      "idle": false,
+      "screen": "character-map",
+      "tick": 0,
+      "worth": ""
+    },
+    {
+      "believes": "사용자가 Chrome Remote Desktop 화면에서 'QVB-FLFM-DEV1'이라는 장치에 연결된 상태로, 복사 및 붙여넣기 기능을 사용 중인 것으로 보인다.",
+      "changed": "창이 \"Chrome Remote Desktop - QVB-FLFM-DEV1\" 로 바뀜 / 나타남: Chrome Remote Desktop - QVB-FLFM-DEV1, Chrome Remote Desktop 맞춤설정 및 제어, Connected, Desktop, QVB-FLFM-DEV1, QVB-FLFM-DEV1 - Y / 사라짐: Advanced view, Character Grid, Characters to copy :, Close, Copy, Font :",
+      "held": 1,
+      "idle": false,
+      "screen": "chrome-remote-desktop---qvb-flfm-dev1",
+      "tick": 1,
+      "worth": ""
+    },
+    {
+      "believes": "사용자가 Chrome Remote Desktop 화면에서 'QVB-FLFM-DEV1' 장치에 연결된 상태로, 복사 및 붙여넣기 기능을 사용 중인 것으로 보인다.",
+      "changed": "",
+      "held": 1,
+      "idle": false,
+      "screen": "chrome-remote-desktop---qvb-flfm-dev1",
+      "tick": 2,
+      "worth": ""
+    },
+    {
+      "believes": "화면에는 Chrome Remote Desktop 연결 상태가 보이고, 사용자가 원격 컴퓨터를 제어하고 있는 중인 것으로 보인다.",
+      "changed": "",
+      "held": 1,
+      "idle": false,
+      "screen": "chrome-remote-desktop---qvb-flfm-dev1",
+      "tick": 0,
+      "worth": ""
+    },
+    {
+      "believes": "화면에는 시스템 정보가 표시되고 있으며, 사용자가 원격 컴퓨터를 제어하고 있는 중인 것으로 보인다.",
+      "changed": "창이 \"System Information\" 로 바뀜 / 나타남: 1.51, 10.0.26200 Build 26200, 12.6 GB, 13th Gen Intel(R) Core(TM) i9-13900HX, 2200 Mhz, 24 Core(s), 32 Logical Processor(s), 3.4, 31.7 GB / 사라짐: Chrome Remote Desktop - QVB-FLFM-DEV1, Chrome Remote Desktop 맞춤설정 및 제어, Connected, Desktop, QVB-FLFM-DEV1, QVB-FLFM-DEV1 - Y",
+      "held": 1,
+      "idle": false,
+      "screen": "system-information",
+      "tick": 1,
+      "worth": ""
+    },
+    {
+      "believes": "화면에는 시스템 정보가 표시되고 있으며, 사용자가 원격 컴퓨터를 제어하고 있는 중인 것으로 보인다.",
+      "changed": "",
+      "held": 2,
+      "idle": false,
+      "screen": "system-information",
+      "tick": 2,
+      "worth": ""
+    },
+    {
+      "believes": "시스템 요약 정보가 정상적으로 표시되고 있으며, 보안 기능인 'Virtualization-based security'가 실행 중인 상태입니다.",
+      "changed": "",
+      "held": 1,
+      "idle": false,
+      "screen": "system-information",
+      "tick": 0,
+      "worth": ""
+    },
+    {
+      "believes": "시스템 요약 정보가 정상적으로 표시되고 있으며, 'Virtualization-based security'가 실행 중인 상태입니다. 화면에는 Paint 앱이 열려 있고, 작업 영역의 크기와 색상 옵션, 도구 모음, 레イヤ 관리 기능 등이 보입니다. 'Cloud callout' 버튼이 활성화된 상태로 보입니다.",
+      "changed": "창이 \"Untitled - Paint\" 로 바뀜 / 나타남: 1536 × 864px, Black, Blue-gray, Brown, Brushes, Cloud callout / 사라짐: 1.51, 10.0.26200 Build 26200, 12.6 GB, 13th Gen Intel(R) Core(TM) i9-13900HX, 2200 Mhz, 24 Core(s), 32 Logical Processor(s), 3.4, 31.7 GB",
+      "held": 1,
+      "idle": false,
+      "screen": "untitled---paint",
+      "tick": 1,
+      "worth": ""
+    },
+    {
+      "believes": "Paint 앱이 열려 있고, 도구 모음과 레イヤ 관리 기능, 색상 옵션, 도구 목록이 정상적으로 표시되고 있으며, 'Cloud callout' 버튼이 활성화된 상태입니다.",
+      "changed": "",
+      "held": 1,
+      "idle": false,
+      "screen": "untitled---paint",
+      "tick": 2,
+      "worth": ""
+    },
+    {
+      "believes": "현재 화면에는 도구 모음과 메뉴 항목이 정리되어 있고, 작업 영역의 크기와 줌 설정이 표시되어 있다. 사용자가 이미지 편집 및 도형 도구를 사용 중인 것으로 보인다.",
+      "changed": "",
+      "held": 1,
+      "idle": false,
+      "screen": "untitled---paint",
+      "tick": 0,
+      "worth": ""
+    },
+    {
+      "believes": "현재 화면은 'Character Map'에서 고급 보기로 설정되어 있고, 사용자가 특정 문자를 선택하고 복사하는 중인 것으로 보인다. 문자 선택 상태와 폰트 선택 상자, 복사 버튼이 보이며, 사용자가 특정 문자를 조작하고 있는 것으로 추정된다.",
+      "changed": "창이 \"Character Map\" 로 바뀜 / 나타남: Advanced view, Character Grid, Characters to copy :, Copy, Font :, Help / 사라짐: 1536 × 864px, Black, Blue-gray, Brown, Brushes, Cloud callout",
+      "held": 1,
+      "idle": false,
+      "screen": "character-map",
+      "tick": 1,
+      "worth": ""
+    },
+    {
+      "believes": "현재 화면은 'Character Map'의 고급 보기 상태로, 사용자가 특정 문자를 선택하고 복사 중인 것으로 보인다. 폰트 선택 상자와 복사 버튼이 보이며, 문자 선택 상태가 유지되고 있다.",
+      "changed": "",
+      "held": 1,
+      "idle": false,
+      "screen": "character-map",
+      "tick": 2,
+      "worth": ""
+    }
+  ],
+  "screens_print": "5020f7",
+  "thinking_prompt": "te672bd",
+  "ticks": 3
+}

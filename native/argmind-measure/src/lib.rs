@@ -284,6 +284,33 @@ pub fn prompt_record(max_listed: usize, most_at_once: usize) -> String {
     blocks.join("\n")
 }
 
+/// The thinking tick's question, hashed. **`t` in a filename.**
+///
+/// Added 2026-09-17 because the harness refused a run and was right to. `judging` had its own source
+/// in the name and the prompt it sends in `argmind-core`, so three rewrites of that prompt would
+/// have written to the same path — or, as it happened, refused the third and said so. **A condition
+/// not in the name is a result nobody can compare with anything**, which is the failure this
+/// directory keeps a list of, met again from a new direction.
+///
+/// Two probes rather than one: a tick with nothing yet and a tick carrying a note and an event, so
+/// a change to either branch of the question moves the tag.
+pub fn thinking_record() -> String {
+    use argmind_core::thinking::{ask_for_a_note, Note, MOST_CHARS};
+    let fresh = Note::blank();
+    let mut held = Note::blank();
+    held.revise("그가 문서를 보고 있다", "");
+    held.record("clicked the button \"Save\"");
+    let screen = "0: button \"one\"\n1: combo box \"two\"";
+    [ask_for_a_note(&fresh, screen, "", &[], MOST_CHARS),
+     ask_for_a_note(&held, screen, "나타남: Eraser",
+                    &[("them".into(), "a".into())], MOST_CHARS)].join("\n--\n")
+}
+
+/// `t` plus six characters.
+pub fn thinking_tag() -> String {
+    format!("t{}", print6(thinking_record().as_bytes()))
+}
+
 /// `r` plus six characters. The letter says the scheme: `p` hashed `converse.py`, `q` hashed three
 /// probes, `r` hashes six.
 pub fn prompt_tag() -> String {

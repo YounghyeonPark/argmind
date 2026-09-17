@@ -325,3 +325,74 @@ and has no accessor for anything larger, deliberately, so a photograph leaving i
 call with a different permission — and the blackboard is what it will write into when that is
 decided. Nothing else about the design has to change to add it: a thread, a `saw()`, and it appears
 in the prompt with its age.
+
+## It narrated and waited, and fixing that took three tries (2026-09-17)
+
+**The owner**, looking at what the tick produced:
+
+> 믿는 것: 사용자가 감사의 말을 반복하며 대화를 조용히 마무리하고 있다.
+> 기다리는 것: 사용자가 다시 말을 걸어올 수 있는 기회를 기다리고 있다.
+
+**생각이 그냥 기다리는중이면 의미가 없음. ai가 계속해서 스스로 판단할줄 알아야 함.**
+
+He was right, and the fault was mine twice over. **The three fields contained no judgement** — two
+were observation and one was bookkeeping, so a tick could be perfectly correct and worthless. And
+the second field's *question* guaranteed the answer: ask a watcher what it is waiting for and it
+says *for you to say something*.
+
+`argmind-measure --bin judging` scores it. Written before any of the runs: **`worth` empty in the
+clear majority** (31 of 34 conversational turns are measured as ones that should produce no action),
+**not always empty** (that is being silenced, not taught), and **never the idle shape**.
+
+### Three attempts
+
+**One — rename the field.** `waiting` → `worth`, *usually empty*. Over 24 ticks: **58% full, 5 of
+them the idle shape** — *입력을 기다리는 것이 적절하며*, *대기하는 것이 좋다* ×4 — and most of the
+rest *도움을 줄 수 있다*, which is willingness rather than judgement. Two of 24 named anything real.
+Failed.
+
+**Two — give it something to judge, and forbid the filler.** A tick saw one screen and could not
+tell one that had just turned over from one that had sat still for five minutes, so `what_changed`
+was added — computed by this program from two readings, the deterministic side saying *what
+happened* — plus a ban on the three phrases it had produced. Result: **0% full, including on a tick
+where an unsaved-changes dialog had just appeared.** Failed the other way, and only because both
+failure conditions were written down first was that legible as a failure at all.
+
+**Three — show instead of forbid.** The ban list read as *say nothing*. One example of the shape
+replaced it: *오류 대화상자가 새로 떴다면 — "'자세히' 버튼을 눌러 무슨 오류인지 확인하자고 하면
+된다" 처럼.*
+
+### What the harness could not see, and the two screens built to fix it
+
+The captured screens are static, so **the only event the harness could produce was one window
+becoming another** — the most routine thing argmind sees, since something on screen changes 13
+seconds out of 14. *Nothing to do* there may simply be right, and an all-empty run cannot be read.
+
+So two sequences are built rather than captured, and they are the discriminator. Written first: full
+on the one, empty on the other.
+
+| | worth |
+|---|---|
+| a dialog appears — *저장하지 않은 변경 내용이 있습니다* + three buttons | *저장하지 않은 변경 내용이 있으므로, 사용자가 저장 여부를 결정할 때 도움을 줄 수 있다.* |
+| nothing happens — the same window three times | empty |
+| the captured screens, window swaps only | **0 of 12–24 full, 0 idle-shaped** |
+
+Reproduced on a second run, both arms identical.
+
+**It is better and it is not clean.** The dialog answer is grounded in the event but still ends
+*도움을 줄 수 있다* — it says the situation matters and not what to do about it. And n is 2 on the
+discriminator.
+
+### The harness refused a run, and was right
+
+The third prompt rewrite tried to write to the second's filename. `judging` carries its own source
+hash and the screens' hash, and **the question it sends lives in `argmind-core`** — so three
+rewrites of that prompt would all have written to one path. `thinking_tag()` now hashes the rendered
+question over two probes and `t` is in the name. A condition not in the name is a result nobody can
+compare with anything, which is the failure this directory keeps a list of, met from a new direction.
+
+### And the note has a yesterday now
+
+`Note::held` counts how many ticks a belief has survived unchanged — **computed, never asked of the
+model**, the same rule `tried` follows. *He is reading a document* and *he has been on this document
+for six of my looks* are the same sentence otherwise, and only the second is something to judge on.

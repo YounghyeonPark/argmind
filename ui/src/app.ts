@@ -754,8 +754,13 @@ function gearRow(g: Gear): HTMLElement {
 
 interface Thought {
   believes: string;
-  waiting: string;
+  /** What argmind judges is worth doing. **Usually empty, and that is right** — 31 of 34
+   *  conversational turns are measured as ones that should produce no action. */
+  worth: string;
   tried: string;
+  /** How many ticks the belief has held unchanged. Counted by the program, never asked of the
+   *  model, for the same reason `tried` is. */
+  held: number;
   /** How many times it has been rewritten. A note that churns and one that settles look the same
    *  in a single reading, and this is the difference. */
   revisions: number;
@@ -767,8 +772,10 @@ const note = document.getElementById("note") as HTMLElement;
 stream.addEventListener("note-kept", (e) => {
   const t: Thought = JSON.parse((e as MessageEvent).data);
   const rows: [string, string][] = [
-    ["믿는 것", t.believes],
-    ["기다리는 것", t.waiting],
+    // The belief carries how long it has held: "he is reading" and "he has been reading for six of
+    // my looks" are the same sentence otherwise, and only the second is worth anything.
+    [t.held > 1 ? `믿는 것 (${t.held}번째 그대로)` : "믿는 것", t.believes],
+    ["할 만한 것", t.worth],
     ["이미 한 것", t.tried],
   ];
   const filled = rows.filter(([, text]) => text.trim() !== "");

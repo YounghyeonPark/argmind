@@ -51,12 +51,12 @@ fn a_blank_note_puts_nothing_in_the_prompt() {
 #[test]
 fn every_field_of_a_note_reaches_the_prompt() {
     let mut note = Note::blank();
-    note.revise("그가 코드 리뷰 중이다", "빌드가 끝나기를");
+    note.revise("그가 코드 리뷰 중이다", "설정 창을 열어주겠다고 제안할 만하다");
     //: `tried` comes from the record, never from the model — so it is set the way the session
     //: sets it.
     note.record("clicked the button \"설정\"");
     let block = note.block().expect("a note with three fields renders nothing");
-    for text in ["그가 코드 리뷰 중이다", "빌드가 끝나기를",
+    for text in ["그가 코드 리뷰 중이다", "설정 창을 열어주겠다고 제안할 만하다",
                  "clicked the button \"설정\""] {
         assert!(block.contains(text), "{text} is missing from {block}");
     }
@@ -75,7 +75,7 @@ fn a_field_with_nothing_in_it_is_not_printed() {
     note.revise("그가 문서를 읽고 있다", "");
     let block = note.block().unwrap();
     assert!(block.contains("믿는 것"), "{block}");
-    assert!(!block.contains("기다리는 것"), "{block}");
+    assert!(!block.contains("할 만한 것"), "{block}");
     assert!(!block.contains("이미 한 것"), "{block}");
 }
 
@@ -104,10 +104,10 @@ fn revising_replaces_what_was_there_and_counts_once() {
 #[test]
 fn an_unusable_reply_does_not_clear_what_was_already_there() {
     let mut note = Note::blank();
-    note.revise("그가 회의 중이다", "회의가 끝나기를");
+    note.revise("그가 회의 중이다", "");
     let before = note.clone();
 
-    for reply in [r#"{"believes": "", "waiting": ""}"#,
+    for reply in [r#"{"believes": "", "worth": ""}"#,
                   "not json at all",
                   "",
                   r#"{"something": "else"}"#] {
@@ -118,9 +118,9 @@ fn an_unusable_reply_does_not_clear_what_was_already_there() {
     //: And a reply with one real field is an update, with the other two cleared — because the model
     //: was asked to replace the note, and a partial merge would make *I no longer believe that*
     //: impossible to say.
-    assert!(read_note(r#"{"believes": "그가 돌아왔다", "waiting": ""}"#, &mut note));
+    assert!(read_note(r#"{"believes": "그가 돌아왔다", "worth": ""}"#, &mut note));
     assert_eq!(note.believes, "그가 돌아왔다");
-    assert_eq!(note.waiting, "");
+    assert_eq!(note.worth, "");
     assert_eq!(note.revisions, before.revisions + 1);
 }
 
@@ -129,11 +129,11 @@ fn an_unusable_reply_does_not_clear_what_was_already_there() {
 fn the_thinking_question_asks_for_no_speech_and_no_action() {
     let mut note = Note::blank();
     note.revise("그가 코드를 보고 있다", "");
-    let asked = ask_for_a_note(&note, "0: button \"one\"", &[], MOST_CHARS);
+    let asked = ask_for_a_note(&note, "0: button \"one\"", "", &[], MOST_CHARS);
 
     //: The two fields it may answer with, and nothing else.
     assert!(asked.contains("\"believes\""), "{asked}");
-    assert!(asked.contains("\"waiting\""), "{asked}");
+    assert!(asked.contains("\"worth\""), "{asked}");
     //: **`tried` is not among them.** It is a record the program keeps, and the one time the
     //: model was asked for it, it invented having tidied somebody's browser tabs.
     assert!(!asked.contains("\"tried\""), "the model was asked what it did: {asked}");
@@ -189,4 +189,119 @@ fn what_it_did_comes_from_the_record_and_holds_only_actions() {
     let quiet: Vec<(String, String)> = vec![("them".into(), "안녕".into()),
                                             ("you".into(), "안녕하세요".into())];
     assert_eq!(what_it_did(&quiet, 3), "");
+}
+
+/// **A thought needs a yesterday, and it is counted rather than asked for.**
+///
+/// The owner, 2026-09-17, looking at what the second field produced: *생각이 그냥 기다리는중이면
+/// 의미가 없음. ai가 계속해서 스스로 판단할줄 알아야 함.* Part of the fault was that each tick saw
+/// only *now* and the previous note, so it could not say *the fourth look at the same thing* —
+/// there was nothing counting. `held` counts, and it is the program's fact, not the model's.
+#[test]
+fn a_belief_that_comes_back_unchanged_is_counted_as_held() {
+    let mut note = Note::blank();
+    note.revise("그가 같은 문서를 보고 있다", "");
+    assert_eq!(note.held, 1);
+    //: The first time it is not worth saying, so it is not rendered.
+    assert!(!note.block().unwrap().contains("번째 그대로"));
+
+    note.revise("그가 같은 문서를 보고 있다", "");
+    note.revise("그가 같은 문서를 보고 있다", "");
+    assert_eq!(note.held, 3);
+    assert!(note.block().unwrap().contains("3번째 그대로"), "{:?}", note.block());
+
+    //: **A different belief starts again at one.** Otherwise the count would be a measure of how
+    //: long argmind has been running rather than of how long anything has been true.
+    note.revise("그가 다른 창으로 옮겼다", "");
+    assert_eq!(note.held, 1);
+    assert!(!note.block().unwrap().contains("번째 그대로"));
+}
+
+/// **An empty `worth` is the ordinary answer, and it is still an answer.**
+///
+/// 31 of 34 conversational turns are measured as ones that should produce no action, so a field
+/// that is always full is a yes-machine and worse than no field. A reply is therefore judged on
+/// `believes` alone — treating *a belief and nothing worth doing* as nothing at all would throw
+/// away the useful half of most ticks.
+#[test]
+fn nothing_worth_doing_is_a_complete_answer() {
+    let mut note = Note::blank();
+    assert!(read_note(r#"{"believes": "그가 뉴스를 읽고 있다", "worth": ""}"#, &mut note));
+    assert_eq!(note.believes, "그가 뉴스를 읽고 있다");
+    assert_eq!(note.worth, "");
+    //: And it renders: the belief is there, the judgement is absent rather than blank.
+    let block = note.block().unwrap();
+    assert!(block.contains("믿는 것"), "{block}");
+    assert!(!block.contains("할 만한 것"), "{block}");
+
+    //: **The question says so out loud**, because a model that is not told will fill the field.
+    //: The exact wording is checked in `the_question_ties_an_empty_judgement_to_nothing_having_    //: happened`; what matters here is that saying nothing is offered as the right answer.
+    let asked = ask_for_a_note(&note, "0: button \"one\"", "", &[], MOST_CHARS);
+    assert!(asked.contains("비어 있는 게"), "{asked}");
+    assert!(asked.contains("할 게 없다고 판단하는 것도 판단이다"), "{asked}");
+}
+
+/// **A judgement needs something to have happened, and what happened is computed here.**
+///
+/// The first rewrite only renamed the field, and the measurement said so: over 24 ticks `worth`
+/// came back *입력을 기다리는 것이 적절하며* and *대기하는 것이 좋다* five times, and most of the
+/// rest was *도움을 줄 수 있다* — willingness, not judgement. It could not tell a screen that had
+/// just turned over from one that had sat still, so those were the only answers available.
+#[test]
+fn what_changed_reports_events_and_says_nothing_when_nothing_happened() {
+    use argmind_core::thinking::{what_changed, MOST_NAMED};
+
+    let before = vec![Widget::new("Save", "button", (0, 0, 1, 1), "Paint"),
+                      Widget::new("Open", "button", (0, 0, 1, 1), "Paint")];
+
+    //: **Nothing happened is the ordinary case**, and it must read as nothing rather than as a
+    //: description of the screen.
+    assert_eq!(what_changed(&before, &before), "");
+
+    //: **The first look has no before.** Reporting the whole screen as newly appeared would open
+    //: every session with a hundred events.
+    assert_eq!(what_changed(&[], &before), "");
+
+    let after = vec![Widget::new("Save", "button", (0, 0, 1, 1), "Paint"),
+                     Widget::new("Eraser", "button", (0, 0, 1, 1), "Paint")];
+    let said = what_changed(&before, &after);
+    assert!(said.contains("Eraser"), "{said}");
+    assert!(said.contains("Open"), "{said}");
+    assert!(said.contains("나타남"), "{said}");
+    assert!(said.contains("사라짐"), "{said}");
+
+    //: A window change is an event in its own right and is named as one.
+    let elsewhere = vec![Widget::new("Save", "button", (0, 0, 1, 1), "Character Map")];
+    assert!(what_changed(&before, &elsewhere).contains("Character Map"));
+
+    //: **A rectangle is never an event.** A widget that moved is not news, and a coordinate is the
+    //: one thing the model may not be shown.
+    let moved = vec![Widget::new("Save", "button", (500, 500, 600, 600), "Paint"),
+                     Widget::new("Open", "button", (500, 500, 600, 600), "Paint")];
+    assert_eq!(what_changed(&before, &moved), "", "a move was reported as an event");
+
+    //: **Bounded.** A window change turns the whole list over, and a hundred names is the same
+    //: event said a hundred times.
+    let many: Vec<Widget> = (0..50)
+        .map(|i| Widget::new(&format!("thing {i}"), "button", (0, 0, 1, 1), "Paint")).collect();
+    let flood = what_changed(&before, &many);
+    assert!(flood.matches("thing ").count() <= MOST_NAMED, "{flood}");
+}
+
+/// The rule the model is given is **conditional on the event**, not on how it feels.
+#[test]
+fn the_question_ties_an_empty_judgement_to_nothing_having_happened() {
+    let note = Note::blank();
+    let quiet = ask_for_a_note(&note, "0: button \"one\"", "", &[], MOST_CHARS);
+    assert!(quiet.contains("달라진 것: 없음"), "{quiet}");
+    assert!(quiet.contains("달라진 것이 없으면 반드시 비워라"), "{quiet}");
+    //: **An example of the shape rather than a list of what to avoid.** The version that listed
+    //: the filler read as *say nothing*: `worth` came back empty on every tick, including one where
+    //: an unsaved-changes dialog had just appeared.
+    assert!(quiet.contains("예를 들어"), "the question shows no example: {quiet}");
+    assert!(quiet.contains("버튼을 눌러"), "the example names no widget: {quiet}");
+
+    let busy = ask_for_a_note(&note, "0: button \"one\"", "나타남: Eraser", &[], MOST_CHARS);
+    assert!(busy.contains("나타남: Eraser"), "{busy}");
+    assert!(!busy.contains("달라진 것: 없음"), "{busy}");
 }

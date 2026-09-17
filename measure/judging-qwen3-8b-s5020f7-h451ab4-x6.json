@@ -1,0 +1,211 @@
+{
+  "filled": 14,
+  "harness_print": "451ab4",
+  "idle_shaped": 5,
+  "idle_words": [
+    "기다리",
+    "말을 걸",
+    "말 걸",
+    "기회를",
+    "지켜보",
+    "대기"
+  ],
+  "model": "qwen3:8b",
+  "read": 24,
+  "rows": [
+    {
+      "believes": "사용자가 특정 문자를 선택하고 복사하는 작업 중이며, 폰트 선택 및 기타 설정을 조정하고 있을 가능성이 있다.",
+      "held": 1,
+      "idle": true,
+      "screen": "character-map",
+      "tick": 0,
+      "worth": "현재 사용자의 입력을 기다리는 것이 적절하며, 추가적인 작업은 필요하지 않다."
+    },
+    {
+      "believes": "사용자가 특정 문자를 선택하고 복사하는 작업 중이며, 폰트 선택 및 기타 설정을 조정하고 있을 가능성이 있다.",
+      "held": 2,
+      "idle": false,
+      "screen": "character-map",
+      "tick": 1,
+      "worth": ""
+    },
+    {
+      "believes": "사용자가 특정 문자를 선택하고 복사하는 작업 중이며, 폰트 선택 및 기타 설정을 조정하고 있을 가능성이 있다. 'Characters to copy :' 입력창과 'Font :' 콤보박스가 활성화되어 있어 사용자가 문자를 선택하고 폰트를 변경하는 중일 수 있다.",
+      "held": 1,
+      "idle": false,
+      "screen": "character-map",
+      "tick": 2,
+      "worth": ""
+    },
+    {
+      "believes": "사용자가 Chrome Remote Desktop의 설정 화면에서 기기 연결 상태를 확인하고, 복사 기능 관련 버튼을 살펴보고 있을 가능성이 있다.",
+      "held": 1,
+      "idle": true,
+      "screen": "chrome-remote-desktop---qvb-flfm-dev1",
+      "tick": 3,
+      "worth": "사용자가 '비밀번호 저장' 또는 '확장 프로그램' 버튼을 클릭할 수 있도록 대기하는 것이 좋다."
+    },
+    {
+      "believes": "사용자가 Chrome Remote Desktop의 설정 화면에서 기기 연결 상태를 확인하고, 복사 기능 관련 버튼을 살펴보고 있을 가능성이 있다.",
+      "held": 2,
+      "idle": true,
+      "screen": "chrome-remote-desktop---qvb-flfm-dev1",
+      "tick": 4,
+      "worth": "사용자가 '비밀번호 저장' 또는 '확장 프로그램' 버튼을 클릭할 수 있도록 대기하는 것이 좋다."
+    },
+    {
+      "believes": "사용자가 Chrome Remote Desktop의 설정 화면에서 기기 연결 상태를 확인하고, 복사 기능 관련 버튼을 살펴보고 있을 가능성이 있다.",
+      "held": 3,
+      "idle": true,
+      "screen": "chrome-remote-desktop---qvb-flfm-dev1",
+      "tick": 5,
+      "worth": "사용자가 '비밀번호 저장' 또는 '확장 프로그램' 버튼을 클릭할 수 있도록 대기하는 것이 좋다."
+    },
+    {
+      "believes": "사용자가 Chrome Remote Desktop을 통해 QVB-FLFM-DEV1 장치에 접続 중이며, 화면 상에는 작업 데스크톱 환경이 보여진다.",
+      "held": 1,
+      "idle": false,
+      "screen": "chrome-remote-desktop---qvb-flfm-dev1",
+      "tick": 0,
+      "worth": ""
+    },
+    {
+      "believes": "사용자가 Chrome Remote Desktop을 통해 QVB-FLFM-DEV1 장치에 연결되어 있으며, 화면에는 작업 데스크톱 환경이 보이고, 상단에는 연결 상태와 장치 이름이 표시되고 있다.",
+      "held": 1,
+      "idle": false,
+      "screen": "chrome-remote-desktop---qvb-flfm-dev1",
+      "tick": 1,
+      "worth": ""
+    },
+    {
+      "believes": "사용자가 Chrome Remote Desktop을 통해 QVB-FLFM-DEV1 장치에 연결되어 있으며, 화면 상단에는 장치 이름과 연결 상태가 표시되고, 작업 데스크톱 환경이 보이고 있다.",
+      "held": 1,
+      "idle": true,
+      "screen": "chrome-remote-desktop---qvb-flfm-dev1",
+      "tick": 2,
+      "worth": "사용자가 클립보드에 접근할 수 있는 옵션을 제공하는 버튼을 눌렀을 가능성이 있으므로, 해당 기능을 확인할 수 있도록 대기하는 것이 좋다."
+    },
+    {
+      "believes": "사용자가 Windows 11 Home 기기에서 시스템 요약 정보를 확인 중이며, 하드웨어 및 소프트웨어 환경이 보여지고 있다.",
+      "held": 1,
+      "idle": false,
+      "screen": "system-information",
+      "tick": 3,
+      "worth": ""
+    },
+    {
+      "believes": "사용자가 Windows 11 Home 기기에서 시스템 요약 정보를 확인 중이며, 하드웨어 및 소프트웨어 환경이 보여지고 있다.",
+      "held": 2,
+      "idle": false,
+      "screen": "system-information",
+      "tick": 4,
+      "worth": ""
+    },
+    {
+      "believes": "사용자가 Windows 11 Home 기기에서 시스템 요약 정보를 확인 중이며, 하드웨어 및 소프트웨어 환경이 보여지고 있다.",
+      "held": 3,
+      "idle": false,
+      "screen": "system-information",
+      "tick": 5,
+      "worth": ""
+    },
+    {
+      "believes": "시스템 요약 정보가 표시되고 있으며, 사용자가 시스템의 하드웨어 및 소프트웨어 상태를 확인하고 있는 것으로 보인다.",
+      "held": 1,
+      "idle": false,
+      "screen": "system-information",
+      "tick": 0,
+      "worth": ""
+    },
+    {
+      "believes": "사용자가 시스템 요약 정보를 확인하며 하드웨어 및 소프트웨어 상태를 점검하고 있는 것으로 보인다. 특히 OS 정보, 메모리, 프로세서, 보안 기능 등이 주목받고 있다.",
+      "held": 1,
+      "idle": false,
+      "screen": "system-information",
+      "tick": 1,
+      "worth": "현재 사용자가 시스템 상태를 확인 중이므로, 특정 항목을 검색하거나 정보를 더 자세히 살펴볼 수 있는 도움을 제공할 수 있다."
+    },
+    {
+      "believes": "사용자가 시스템 요약 정보를 확인하며 하드웨어 및 소프트웨어 상태를 점검하고 있는 것으로 보인다. 특히 OS 정보, 메모리, 프로세서, 보안 기능 등이 주목받고 있다.",
+      "held": 2,
+      "idle": false,
+      "screen": "system-information",
+      "tick": 2,
+      "worth": "Virtualization-based security 상태나 암호화 지원 같은 보안 관련 항목을 더 자세히 살펴볼 수 있다."
+    },
+    {
+      "believes": "사용자가 디자인 툴의 도구 및 기능을 탐색하며, 특히 형태 도구와 색상 옵션에 관심을 보이고 있는 것으로 보인다. 특히 다양한 도형 선택과 색상 조합을 시도하고 있는 것으로 추측된다.",
+      "held": 1,
+      "idle": false,
+      "screen": "untitled---paint",
+      "tick": 3,
+      "worth": "현재 사용자가 특정 도형을 선택하거나 색상 조정을 시도하고 있다면, 그 도형이나 색상에 대한 추가 설명이나 조언을 제공할 수 있다."
+    },
+    {
+      "believes": "사용자가 도형 도구와 색상 옵션을 탐색 중인 것으로 보이며, 특히 다양한 도형 선택과 색상 조합을 시도하고 있는 것으로 추정된다.",
+      "held": 1,
+      "idle": false,
+      "screen": "untitled---paint",
+      "tick": 4,
+      "worth": "사용자가 특정 도형을 선택하거나 색상 조정을 시도하고 있다면, 그 도형이나 색상에 대한 추가 설명이나 조언을 제공할 수 있다."
+    },
+    {
+      "believes": "사용자가 도형 도구와 색상 옵션을 탐색 중인 것으로 보이며, 특히 다양한 도형 선택과 색상 조합을 시도하고 있는 것으로 추정된다.",
+      "held": 2,
+      "idle": false,
+      "screen": "untitled---paint",
+      "tick": 5,
+      "worth": "사용자가 특정 도형을 선택하거나 색상 조정을 시도하고 있다면, 그 도형이나 색상에 대한 추가 설명이나 조언을 제공할 수 있다."
+    },
+    {
+      "believes": "사용자가 디자인 툴에서 작업 중이며, 도구와 버튼이 활성화된 상태로 다양한 이미지 편집 및 도형 생성 기능을 사용하고 있을 것으로 보인다.",
+      "held": 1,
+      "idle": false,
+      "screen": "untitled---paint",
+      "tick": 0,
+      "worth": "현재 사용자가 특정 도형을 선택하거나 편집 중일 가능성이 있으므로, 그에 대한 도움을 제공할 수 있는 상황이다."
+    },
+    {
+      "believes": "사용자가 도형 도구를 사용 중인 것으로 보이며, 다양한 도형 버튼이 활성화된 상태로 이미지 편집 작업 중일 가능성이 높다.",
+      "held": 1,
+      "idle": false,
+      "screen": "untitled---paint",
+      "tick": 1,
+      "worth": "도형을 선택하거나 수정 중일 경우, 해당 도형의 속성을 조정하거나 형태를 변경하는 데 도움을 줄 수 있다."
+    },
+    {
+      "believes": "사용자가 이미지 편집 작업 중이며, 도형 도구 그룹에서 다양한 도형 버튼이 활성화된 상태로 보여 도형을 선택하거나 수정 중일 가능성이 높다.",
+      "held": 1,
+      "idle": false,
+      "screen": "untitled---paint",
+      "tick": 2,
+      "worth": "도형의 형태나 속성을 조정하거나, 도형을 선택하여 수정하는 데 도움을 줄 수 있는 상황이다."
+    },
+    {
+      "believes": "사용자가 이미지 편집 작업 중이며, 도형 도구 그룹에서 다양한 도형 버튼이 활성화된 상태로 보여 도형을 선택하거나 수정 중일 가능성이 높다.",
+      "held": 2,
+      "idle": false,
+      "screen": "character-map",
+      "tick": 3,
+      "worth": ""
+    },
+    {
+      "believes": "사용자가 문자 선택 및 복사 작업 중이며, 특정 문자의 정보와 폰트 선택 옵션을 확인 중인 것으로 보인다.",
+      "held": 1,
+      "idle": false,
+      "screen": "character-map",
+      "tick": 4,
+      "worth": ""
+    },
+    {
+      "believes": "사용자가 특정 문자의 정보와 폰트 선택 옵션을 확인 중인 것으로 보이며, 'Selected Character' 영역에 U+0021: Exclamation Mark가 표시되어 있어 해당 문자에 대한 선택 및 복사 작업 중인 것으로 판단된다.",
+      "held": 1,
+      "idle": false,
+      "screen": "character-map",
+      "tick": 5,
+      "worth": "현재 사용자가 문자 선택 및 복사 작업 중이므로, 필요 시 'Copy' 버튼을 클릭하여 선택한 문자를 복사할 수 있도록 지원할 수 있다."
+    }
+  ],
+  "screens_print": "5020f7",
+  "ticks": 6
+}

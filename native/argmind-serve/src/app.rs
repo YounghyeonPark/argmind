@@ -663,6 +663,9 @@ pub const THINK_EVERY: f64 = 30.0;
 /// on its own thread and nothing shared has to be locked while a model call runs.
 struct Chew {
     screen: String,
+    /// What is different since the last look, computed by this program. **The thing a judgement
+    /// can be about** — see `argmind_core::thinking::what_changed`.
+    changed: String,
     history: Vec<(String, String)>,
     note: argmind_core::thinking::Note,
 }
@@ -730,7 +733,10 @@ fn reflect(desk: &mut Desk, thinking: &Letterbox, now: f64) {
     desk.senses.saw("화면", format!("{} 개가 보임", listed.len()), 0.0);
     //: **Dropped rather than queued when the thinker is busy.** A backlog of thoughts about screens
     //: that have gone is worse than no thought at all.
-    let _ = thinking.try_send_chew(Chew { screen, history: desk.session.recent(),
+    //: `before` is what `notice` last read on this same tick, so the two readings being compared
+    //: are a screen apart rather than a thought apart.
+    let changed = argmind_core::thinking::what_changed(&desk.before, &listed);
+    let _ = thinking.try_send_chew(Chew { screen, changed, history: desk.session.recent(),
                                           note: desk.session.note.clone() });
 }
 
@@ -740,8 +746,9 @@ fn reflect(desk: &mut Desk, thinking: &Letterbox, now: f64) {
 /// the only way anybody notices the note has gone wrong — a belief that is false stays in every
 /// prompt until something replaces it.
 fn note_json(note: &argmind_core::thinking::Note) -> String {
-    format!("{{\"believes\":\"{}\",\"waiting\":\"{}\",\"tried\":\"{}\",\"revisions\":{}}}",
-            escape(&note.believes), escape(&note.waiting), escape(&note.tried), note.revisions)
+    format!("{{\"believes\":\"{}\",\"worth\":\"{}\",\"tried\":\"{}\",\"held\":{},\"revisions\":{}}}",
+            escape(&note.believes), escape(&note.worth), escape(&note.tried),
+            note.held, note.revisions)
 }
 
 /// The talk key, down or up. **Letting go is what starts a turn** — nothing is transcribed while
@@ -1088,7 +1095,8 @@ pub fn run(how: How) {
                     format!("{}\n\n{others}", chew.screen)
                 };
                 let prompt = argmind_core::thinking::ask_for_a_note(
-                    &chew.note, &screen, &chew.history, argmind_core::thinking::MOST_CHARS);
+                    &chew.note, &screen, &chew.changed, &chew.history,
+                    argmind_core::thinking::MOST_CHARS);
                 //: **Abandoned the moment somebody is answered.** Measured: dropping the socket
                 //: frees the card — an answer after abandoning costs 1.09 s against 1.12 s with a
                 //: free card and 3.22 s with a busy one.
