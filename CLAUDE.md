@@ -5,7 +5,7 @@ real-time interaction, actions taken through the OS accessibility layer. Author:
 <ypark.dev@gmail.com>. Apache-2.0. A side project, not a product.
 
 **`argmind-app.exe` with no arguments is everything on**, since 2026-09-17: what it does is read
-out of `%LOCALAPPDATA%rgmind\` — `decisions.json` for hearing, watching and speaking aloud,
+out of `%LOCALAPPDATA%\argmind\` — `decisions.json` for hearing, watching and speaking aloud,
 `devices.json` for which microphone and speaker, `mind.json` for the dials and the goal. The flags
 that remain are `--dry` (press nothing), a model name with a colon, and `--speak`/`--hear` as the
 way to say yes when there is no standing answer to read.
