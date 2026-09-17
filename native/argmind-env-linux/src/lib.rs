@@ -51,17 +51,21 @@
 
 #[cfg(target_os = "linux")]
 mod atspi;
+#[cfg(target_os = "linux")]
+mod hands;
 
 #[cfg(target_os = "linux")]
-pub use atspi::{Attending, Plain, Sight, Watcher};
+pub use atspi::{state_of, Attending, Plain, Sight, Watcher};
+#[cfg(target_os = "linux")]
+pub use hands::Hands;
 
 //: **Not written yet, and borrowed rather than faked.** See the note above.
-pub use argmind_env_none::{ask, supervise, Clip, Deaf, Mute, Still, WANT_HZ};
+pub use argmind_env_none::{ask, supervise, Clip, Deaf, Mute, WANT_HZ};
 pub use argmind_env_none::{foreground_handle_now, window_title};
 
 //: On anything that is not Linux this crate is the empty environment entire, so a `cargo check`
 //: from a Mac does not fall over on a D-Bus binding it has no libraries for.
 #[cfg(not(target_os = "linux"))]
-pub use argmind_env_none::{Attending, Plain, Watcher};
+pub use argmind_env_none::{Attending, Plain, Still as Hands, Watcher};
 #[cfg(not(target_os = "linux"))]
 pub use argmind_env_none::Attending as Sight;

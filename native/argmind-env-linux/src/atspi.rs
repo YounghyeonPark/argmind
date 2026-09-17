@@ -5,7 +5,7 @@
 
 use std::time::{Duration, Instant};
 
-use argmind_core::contract::{Eyes, Widget};
+use argmind_core::contract::{Did, Eyes, Widget};
 use dbus::arg::Variant;
 use dbus::blocking::{Connection, Proxy};
 use dbus::Path;
@@ -21,7 +21,7 @@ const PATIENCE: Duration = Duration::from_millis(1000);
 ///
 /// A GTK window is six or seven deep and a web view can be forty. Nothing in this project needs a
 /// document's interior — it needs the controls — so the walk stops before it becomes a crawl.
-const DEEPEST: usize = 12;
+pub(crate) const DEEPEST: usize = 12;
 
 /// How many widgets to bring back at most.
 ///
@@ -31,12 +31,13 @@ const DEEPEST: usize = 12;
 const MOST: usize = 400;
 
 /// Where a node lives: which program on the bus, and where inside it.
-type Node = (String, Path<'static>);
+pub(crate) type Node = (String, Path<'static>);
 
 const REGISTRY: &str = "org.a11y.atspi.Registry";
 const ROOT: &str = "/org/a11y/atspi/accessible/root";
 const ACCESSIBLE: &str = "org.a11y.atspi.Accessible";
 const COMPONENT: &str = "org.a11y.atspi.Component";
+const ACTION: &str = "org.a11y.atspi.Action";
 
 /// `ATSPI_STATE_ACTIVE`. The frame a person is typing into has it; the others do not.
 const STATE_ACTIVE: u32 = 1;
@@ -78,18 +79,18 @@ impl Bus {
         self.to.with_proxy(&node.0, &node.1, PATIENCE)
     }
 
-    fn children(&self, node: &Node) -> Vec<Node> {
+    pub(crate) fn children(&self, node: &Node) -> Vec<Node> {
         let got: Result<(Vec<(String, Path<'static>)>,), _> =
             self.at(node).method_call(ACCESSIBLE, "GetChildren", ());
         got.map(|(kids,)| kids).unwrap_or_default()
     }
 
-    fn role(&self, node: &Node) -> String {
+    pub(crate) fn role(&self, node: &Node) -> String {
         let got: Result<(String,), _> = self.at(node).method_call(ACCESSIBLE, "GetRoleName", ());
         got.map(|(r,)| r).unwrap_or_default()
     }
 
-    fn name(&self, node: &Node) -> String {
+    pub(crate) fn name(&self, node: &Node) -> String {
         let got: Result<(Variant<Box<dyn dbus::arg::RefArg>>,), _> = self.at(node).method_call(
             "org.freedesktop.DBus.Properties",
             "Get",
@@ -104,21 +105,80 @@ impl Bus {
     ///
     /// `0` is `ATSPI_COORD_TYPE_SCREEN`, which is the only one the core can use — a rectangle
     /// relative to a window is not somewhere a pointer can be put.
-    fn extents(&self, node: &Node) -> Option<(i32, i32, i32, i32)> {
+    pub(crate) fn extents(&self, node: &Node) -> Option<(i32, i32, i32, i32)> {
         let got: Result<((i32, i32, i32, i32),), _> =
             self.at(node).method_call(COMPONENT, "GetExtents", (0u32,));
         got.ok().map(|(r,)| r).filter(|r| sane(*r))
     }
 
-    fn active(&self, node: &Node) -> bool {
+    /// The low word of the state bitset, or nothing if the node would not say.
+    pub(crate) fn states(&self, node: &Node) -> Option<u32> {
         let got: Result<(Vec<u32>,), _> = self.at(node).method_call(ACCESSIBLE, "GetState", ());
-        got.map(|(bits,)| bits.first().is_some_and(|low| low & (1 << STATE_ACTIVE) != 0))
-            .unwrap_or(false)
+        got.ok().and_then(|(bits,)| bits.first().copied())
     }
 
-    fn applications(&self) -> Vec<Node> {
+    pub(crate) fn active(&self, node: &Node) -> bool {
+        self.states(node).is_some_and(|low| low & (1 << STATE_ACTIVE) != 0)
+    }
+
+    /// What this node can be asked to do, by name.
+    ///
+    /// **Measured**: a GTK button offers exactly one, called `Click`, described as *Clicks the
+    /// button*. Asked by name rather than assuming index zero, because a node with several actions
+    /// has no rule that puts the interesting one first.
+    pub(crate) fn actions(&self, node: &Node) -> Vec<String> {
+        let got: Result<(Vec<(String, String, String)>,), _> =
+            self.at(node).method_call(ACTION, "GetActions", ());
+        got.map(|(list,)| list.into_iter().map(|(name, _, _)| name).collect()).unwrap_or_default()
+    }
+
+    /// Do one, and say whether it said it worked.
+    pub(crate) fn act(&self, node: &Node, which: i32) -> bool {
+        let got: Result<(bool,), _> = self.at(node).method_call(ACTION, "DoAction", (which,));
+        got.map(|(ok,)| ok).unwrap_or(false)
+    }
+
+    /// The frame a person is working in: the one with `ATSPI_STATE_ACTIVE`.
+    ///
+    /// **On the bus rather than on the eyes**, because the hands need it too — to look a widget up
+    /// again immediately before operating it, which is the whole point of re-resolving.
+    pub(crate) fn active_frame(&self) -> Option<Node> {
+        self.applications().into_iter()
+            .flat_map(|app| self.children(&app))
+            .find(|frame| self.active(frame))
+    }
+
+    pub(crate) fn applications(&self) -> Vec<Node> {
         self.children(&(REGISTRY.to_string(), Path::new(ROOT).expect("a literal path")))
     }
+}
+
+/// Is a widget currently checked or pressed, if that is a thing it can be?
+///
+/// **Only so that a press can be shown to have worked.** A push button that worked and one that did
+/// nothing look identical from outside; a toggle can be asked. `ATSPI_STATE_CHECKED` is bit 8.
+///
+/// Opens its own short-lived connection, because it is a measurement rather than part of the
+/// contract — nothing in `Eyes` or `Hands` needs it and nothing in the core may ask.
+pub fn state_of(widget: &Widget) -> Option<bool> {
+    const STATE_CHECKED: u32 = 8;
+    let bus = Bus::open().ok()?;
+    let frame = bus.active_frame()?;
+    let mut layer = vec![frame];
+    for _ in 0..DEEPEST {
+        let mut next = Vec::new();
+        for node in &layer {
+            if bus.name(node) == widget.name && bus.role(node) == widget.role {
+                return bus.states(node).map(|low| low & (1 << STATE_CHECKED) != 0);
+            }
+            next.extend(bus.children(node));
+        }
+        if next.is_empty() {
+            break;
+        }
+        layer = next;
+    }
+    None
 }
 
 /// Is this a rectangle that exists on a screen?
@@ -174,23 +234,20 @@ impl Sight {
         Ok(Sight { bus: Some(bus), complained: false, watcher })
     }
 
-    /// The active frame: which program, where inside it, and what it is called.
+    /// The active frame, and what a person would call it.
     fn active_frame(&self) -> Option<(Node, String)> {
         let bus = self.bus.as_ref()?;
-        for app in bus.applications() {
-            for frame in bus.children(&app) {
-                if bus.active(&frame) {
-                    let mut title = bus.name(&frame);
-                    if title.is_empty() {
-                        //: A frame with no name is common; the application's own name is the next
-                        //: best thing and is what a person would call the window.
-                        title = bus.name(&app);
-                    }
-                    return Some((frame, title));
-                }
-            }
+        let frame = bus.active_frame()?;
+        let mut title = bus.name(&frame);
+        if title.is_empty() {
+            //: A frame with no name is common; the application's own name is the next best thing
+            //: and is what a person would call the window.
+            title = bus.applications().into_iter()
+                .find(|app| bus.children(app).contains(&frame))
+                .map(|app| bus.name(&app))
+                .unwrap_or_default();
         }
-        None
+        Some((frame, title))
     }
 
     /// Everything under a node, breadth first, stopping at [`DEEPEST`] and [`MOST`].

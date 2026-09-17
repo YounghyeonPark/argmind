@@ -93,8 +93,8 @@ mod chosen {
     pub use argmind_env_linux::supervise::Supervised;
     pub use argmind_env_linux::WANT_HZ;
     pub use argmind_env_linux::{foreground_handle_now, window_title};
-    pub use argmind_env_linux::{Attending as Sight, Deaf as Ear, Mute as Mouth, Plain,
-                                Still as Touch, Watcher as Watching};
+    pub use argmind_env_linux::{Attending as Sight, Deaf as Ear, Hands as Touch, Mute as Mouth,
+                                Plain, Watcher as Watching};
 
     /// **Not yet.** The synthesiser is a server and runs here; nothing plays what it sends back.
     pub fn neural_voice(_host: &str) -> Option<Box<dyn argmind_voice::Speaker>> {
