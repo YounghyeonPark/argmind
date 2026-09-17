@@ -172,7 +172,7 @@ impl<E: Eyes, H: Hands, M: Speaks> Session<E, H, M> {
         let effects: Vec<Effect> = intent.effects.into_iter()
             .filter(|e| e.kind != "key" || self.knows_key(&e.text)).collect();
         self.unknown_keys += (before - effects.len()) as u32;
-        Intent { say: intent.say, effects }
+        Intent { say: intent.say, effects, parroted: intent.parroted }
     }
 
     pub fn perform(&mut self, effects: &[Effect]) -> (Vec<Done>, Vec<Effect>, Vec<Effect>) {

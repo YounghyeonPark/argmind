@@ -111,3 +111,34 @@ fn the_goal_route_carries_the_sentence_in_the_body() {
     assert_eq!(said("조용히 해줘"), Route::Aim("조용히 해줘".into()));
     assert_eq!(said(""), Route::Aim(String::new()));
 }
+
+// ---- the parrot, where the flag becomes words -------------------------------------------------
+
+/// **The last link: a flag the core raised becomes a sentence a person reads.**
+///
+/// `argmind-core` can tell that the model handed back the person's own words and cannot know how to
+/// say so — it names no language. This is where that is decided, and nothing else tested it: the
+/// core's own tests stop at the flag, and the harness writes its own stand-in.
+#[test]
+fn a_mirrored_reply_is_replaced_by_an_honest_one() {
+    use argmind_core::converse::read_reply;
+    use argmind_serve::app::{spoken, DID_NOT_FOLLOW};
+
+    let screen = vec![argmind_core::contract::Widget::new("Eraser", "button", (0, 0, 1, 1), "")];
+    let trigger = argmind_core::intent::Trigger::said("머해");
+
+    let mirrored = read_reply(r#"{"say": "머해?", "do": []}"#, &screen, &trigger);
+    assert!(mirrored.parroted, "the core did not flag it");
+    assert_eq!(spoken(&mirrored), DID_NOT_FOLLOW);
+    //: **And the model's own words are still there to be found.** Rewriting them in place would
+    //: have made the next report of this undiagnosable.
+    assert_eq!(mirrored.say, "머해?");
+
+    //: An ordinary reply passes through untouched — the case that matters far more often.
+    let ordinary = read_reply(r#"{"say": "시스템 정보를 보고 있어요.", "do": []}"#, &screen, &trigger);
+    assert_eq!(spoken(&ordinary), "시스템 정보를 보고 있어요.");
+
+    //: And an empty one stays empty rather than becoming an apology nobody earned.
+    let quiet = read_reply(r#"{"say": "", "do": []}"#, &screen, &trigger);
+    assert_eq!(spoken(&quiet), "");
+}

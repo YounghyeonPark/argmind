@@ -241,9 +241,13 @@ fn think(desk: &mut Desk, out: &Listeners, text: &str) {
                                widgets.len(), listed.len(), look_s * 1000.0, think_s * 1000.0));
 
     desk.session.history.push(("them".into(), text.to_string()));
-    if !intent.say.is_empty() {
-        desk.session.history.push(("you".into(), intent.say.clone()));
-        out.send("say", &intent.say);
+    //: **The words the person actually gets**, which are the model's own unless it mirrored them.
+    let reply = spoken(&intent);
+    if !reply.is_empty() {
+        //: The substitute goes into the history too, and that is the half that matters more than
+        //: the screen: leaving `머해?` in there got it said again on each of the next two turns.
+        desk.session.history.push(("you".into(), reply.clone()));
+        out.send("say", &reply);
         //: **Only because they asked.** A reply to something typed is an answer; nothing here
         //: fires unprompted yet, and when something does this is the line that must not simply
         //: inherit permission from it — a proposal waits behind a button, a sentence waits behind
@@ -252,7 +256,7 @@ fn think(desk: &mut Desk, out: &Listeners, text: &str) {
             //: Barge-in: a new answer replaces the last one rather than queueing behind ~3.1 s of
             //: speech.
             voice.stop();
-            voice.say(&intent.say);
+            voice.say(&reply);
         }
     } else if intent.effects.is_empty() {
         out.send("say", "…");
@@ -457,6 +461,25 @@ fn mind_json(mind: &argmind_core::mind::Mind) -> String {
             escape(&mind.line().unwrap_or_default()), rows.join(","))
 }
 
+/// What to say when the model gave back the person's own words with a question mark on them.
+///
+/// **Here rather than in the core, because it is Korean.** `argmind-core` names no platform and no
+/// language; it can tell that a mirror happened and cannot know how to admit it. The owner's
+/// screenshot is the case: 머해 → 머해?, 왜 따라해 → 머해?, 왜 반복해 → 머해?.
+///
+/// **An honest sentence rather than a clever one.** The model mirrors when it cannot parse what was
+/// said — `뭐해` is answered and `머해` is mirrored — so *I did not follow that* is not an evasion,
+/// it is the true reading of what just happened, and it invites the one thing that fixes it.
+pub const DID_NOT_FOLLOW: &str = "무슨 말인지 잘 못 알아들었어요. 다시 말해줄래요?";
+
+/// The words a person gets: the model's own, unless it just mirrored them.
+pub fn spoken(intent: &argmind_core::intent::Intent) -> String {
+    if intent.parroted {
+        return DID_NOT_FOLLOW.to_string();
+    }
+    intent.say.clone()
+}
+
 fn decisions_json() -> String {
     let rows: Vec<String> = crate::decided::all().iter().map(|(key, name, how)| {
         let word = match how {
@@ -583,14 +606,17 @@ fn notice(desk: &mut Desk, out: &Listeners, now: f64) {
         let intent = desk.session.decide(&trigger);
         out.send("busy", "0");
         desk.session.history.push(("noticed".into(), trigger.text.clone()));
-        if intent.say.is_empty() {
+        //: A watch cannot be parroted — nobody said anything to mirror — but it goes through the
+        //: same call so there is one place that decides what gets said.
+        let reply = spoken(&intent);
+        if reply.is_empty() {
             //: **Silence is the common answer and it is the right one.** Saying so once would be
             //: information; saying it every three seconds is the noise this whole floor exists to
             //: prevent, so nothing is sent.
             continue;
         }
-        desk.session.history.push(("you".into(), intent.say.clone()));
-        out.send("say", &intent.say);
+        desk.session.history.push(("you".into(), reply.clone()));
+        out.send("say", &reply);
         //: Not spoken aloud. A proposal waits behind a button; a sentence nobody asked for waits
         //: behind nothing, which is why speaking is tied to having been asked.
         for effect in &intent.effects {

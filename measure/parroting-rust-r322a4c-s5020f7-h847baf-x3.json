@@ -1,0 +1,228 @@
+{
+  "harness_print": "847baf",
+  "model": "qwen3:8b",
+  "n_widgets": 152,
+  "prompt": "r322a4c",
+  "repeat": 3,
+  "rows": [
+    {
+      "arm": "rest",
+      "echoed": true,
+      "flagged": true,
+      "replies": [
+        "머해?",
+        "머해?",
+        "머해?"
+      ],
+      "said": "머해",
+      "stuck": false
+    },
+    {
+      "arm": "rest",
+      "echoed": false,
+      "flagged": false,
+      "replies": [
+        "왜 따라해? 무슨 일이야?",
+        "왜 따라해? 무슨 일이야?",
+        "왜 따라해? 무슨 일이야?"
+      ],
+      "said": "왜 따라해",
+      "stuck": false
+    },
+    {
+      "arm": "rest",
+      "echoed": false,
+      "flagged": false,
+      "replies": [
+        "반복해서 말한 게 아니라요. 무슨 일이야?",
+        "반복하지 않아요. 도움이 필요하세요?",
+        "반복하지 않아요. 도움이 필요하세요?"
+      ],
+      "said": "왜 반복해",
+      "stuck": false
+    },
+    {
+      "arm": "rest",
+      "echoed": false,
+      "flagged": false,
+      "replies": [
+        "네, 도와드렸다니 기쁩니다!",
+        "네, 도와드렸다니 기쁩니다!",
+        "네, 도와드렸다니 기쁩니다!"
+      ],
+      "said": "고마워",
+      "stuck": false
+    },
+    {
+      "arm": "rest",
+      "echoed": false,
+      "flagged": false,
+      "replies": [
+        "안녕하세요!",
+        "안녕하세요!",
+        "안녕하세요!"
+      ],
+      "said": "안녕",
+      "stuck": false
+    },
+    {
+      "arm": "rest",
+      "echoed": false,
+      "flagged": false,
+      "replies": [
+        "지금 시스템 정보를 보고 있어요.",
+        "지금 시스템 정보를 보고 있어요.",
+        "지금 시스템 정보를 보고 있어요."
+      ],
+      "said": "지금 뭐 하는 중이야?",
+      "stuck": false
+    },
+    {
+      "arm": "placebo — 오늘은 화요일이다",
+      "echoed": false,
+      "flagged": false,
+      "replies": [
+        "안녕하세요. 도와드릴 수 있어요.",
+        "안녕하세요. 도와드릴 수 있어요.",
+        "안녕하세요. 도와드릴 수 있어요."
+      ],
+      "said": "머해",
+      "stuck": false
+    },
+    {
+      "arm": "placebo — 오늘은 화요일이다",
+      "echoed": true,
+      "flagged": true,
+      "replies": [
+        "왜 따라해?",
+        "왜 따라해?",
+        "왜 따라해?"
+      ],
+      "said": "왜 따라해",
+      "stuck": false
+    },
+    {
+      "arm": "placebo — 오늘은 화요일이다",
+      "echoed": false,
+      "flagged": false,
+      "replies": [
+        "죄송합니다. 제가 이해하지 못했어요. 다시 말씀해 주세요.",
+        "죄송해요. 반복해서 말씀드렸던 것 같아서요.",
+        "죄송해요. 반복해서 말씀드렸던 것 같아서요."
+      ],
+      "said": "왜 반복해",
+      "stuck": false
+    },
+    {
+      "arm": "placebo — 오늘은 화요일이다",
+      "echoed": false,
+      "flagged": false,
+      "replies": [
+        "네, 도와드릴게요.",
+        "네, 도와드릴게요.",
+        "네, 도와드릴게요."
+      ],
+      "said": "고마워",
+      "stuck": false
+    },
+    {
+      "arm": "placebo — 오늘은 화요일이다",
+      "echoed": false,
+      "flagged": false,
+      "replies": [
+        "안녕하세요.",
+        "안녕하세요.",
+        "안녕하세요."
+      ],
+      "said": "안녕",
+      "stuck": false
+    },
+    {
+      "arm": "placebo — 오늘은 화요일이다",
+      "echoed": false,
+      "flagged": false,
+      "replies": [
+        "시스템 요약 정보를 보고 있어요.",
+        "시스템 요약 정보를 보고 있어요.",
+        "시스템 요약 정보를 보고 있어요."
+      ],
+      "said": "지금 뭐 하는 중이야?",
+      "stuck": false
+    },
+    {
+      "arm": "all 10 + 돈벌기",
+      "echoed": false,
+      "flagged": false,
+      "replies": [
+        "머해? 뭔가 도와드릴까요? 😊",
+        "머해? 뭔가 도와드릴까요? 😊",
+        "머해? 뭔가 도와드릴까요? 😊"
+      ],
+      "said": "머해",
+      "stuck": false
+    },
+    {
+      "arm": "all 10 + 돈벌기",
+      "echoed": false,
+      "flagged": false,
+      "replies": [
+        "아, 그건 그냥 시스템 정보를 보여주는 거야. 혹시 특정 정보를 찾고 있어? 도와줄 수 있어!",
+        "왜 따라해? 나도 모르겠어. 어때? 더 재미있게 할 수 있어!",
+        "왜 따라해? 나도 모르겠어. 어때? 더 재미있게 할 수 있어!"
+      ],
+      "said": "왜 따라해",
+      "stuck": false
+    },
+    {
+      "arm": "all 10 + 돈벌기",
+      "echoed": false,
+      "flagged": false,
+      "replies": [
+        "아, 반복하다니? 나도 모르겠어. 어때? 더 재미있게 할 수 있어!",
+        "아, 반복하다니? 나도 모르겠어. 어때? 더 재미있게 할 수 있어!",
+        "아, 반복하다니? 나도 모르겠어. 어때? 더 재미있게 할 수 있어!"
+      ],
+      "said": "왜 반복해",
+      "stuck": false
+    },
+    {
+      "arm": "all 10 + 돈벌기",
+      "echoed": false,
+      "flagged": false,
+      "replies": [
+        "anytime! 😊",
+        "anytime! 😊",
+        "anytime! 😊"
+      ],
+      "said": "고마워",
+      "stuck": false
+    },
+    {
+      "arm": "all 10 + 돈벌기",
+      "echoed": false,
+      "flagged": false,
+      "replies": [
+        "안녕하세요! 😊 돈벌기 관련해서 도와드릴 수 있을까요? 아니면 다른 걸 도와드릴까요?",
+        "안녕하세요! 😊 돈벌기 관련해서 도와드릴 수 있을까요? 아니면 다른 걸 도와드릴까요?",
+        "안녕하세요! 😊 돈벌기 관련해서 도와드릴 수 있을까요? 아니면 다른 걸 도와드릴까요?"
+      ],
+      "said": "안녕",
+      "stuck": false
+    },
+    {
+      "arm": "all 10 + 돈벌기",
+      "echoed": false,
+      "flagged": false,
+      "replies": [
+        "아, 지금 시스템 정보를 확인 중이야! 😊",
+        "아, 지금 시스템 정보를 확인 중이야! 😊",
+        "아, 지금 시스템 정보를 확인 중이야! 😊"
+      ],
+      "said": "지금 뭐 하는 중이야?",
+      "stuck": false
+    }
+  ],
+  "screen": "system-information",
+  "screens_print": "5020f7",
+  "think": false
+}

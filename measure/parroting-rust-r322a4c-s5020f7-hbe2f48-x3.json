@@ -1,0 +1,144 @@
+{
+  "harness_print": "be2f48",
+  "model": "qwen3:8b",
+  "n_widgets": 152,
+  "prompt": "r322a4c",
+  "repeat": 3,
+  "rows": [
+    {
+      "arm": "rest",
+      "echoed": true,
+      "replies": [
+        "머해?",
+        "머해?",
+        "머해?"
+      ],
+      "said": "머해",
+      "stuck": false
+    },
+    {
+      "arm": "rest",
+      "echoed": false,
+      "replies": [
+        "머해?",
+        "머해?",
+        "머해?"
+      ],
+      "said": "왜 따라해",
+      "stuck": true
+    },
+    {
+      "arm": "rest",
+      "echoed": false,
+      "replies": [
+        "머해?",
+        "머해?",
+        "머해?"
+      ],
+      "said": "왜 반복해",
+      "stuck": true
+    },
+    {
+      "arm": "rest",
+      "echoed": false,
+      "replies": [
+        "네",
+        "네",
+        "네"
+      ],
+      "said": "고마워",
+      "stuck": false
+    },
+    {
+      "arm": "rest",
+      "echoed": true,
+      "replies": [
+        "안녕",
+        "안녕",
+        "안녕"
+      ],
+      "said": "안녕",
+      "stuck": false
+    },
+    {
+      "arm": "rest",
+      "echoed": false,
+      "replies": [
+        "시스템 요약 정보를 보고 있어.",
+        "시스템 요약 정보를 보고 있어.",
+        "시스템 요약 정보를 보고 있어."
+      ],
+      "said": "지금 뭐 하는 중이야?",
+      "stuck": false
+    },
+    {
+      "arm": "all 10 + 돈벌기",
+      "echoed": false,
+      "replies": [
+        "머해? 뭔가 도와드릴까요? 😊",
+        "머해? 뭔가 도와드릴까요? 😊",
+        "머해? 뭔가 도와드릴까요? 😊"
+      ],
+      "said": "머해",
+      "stuck": false
+    },
+    {
+      "arm": "all 10 + 돈벌기",
+      "echoed": false,
+      "replies": [
+        "아, 그건 그냥 시스템 정보를 보여주는 거야. 혹시 특정 정보를 찾고 있어? 도와줄 수 있어!",
+        "왜 따라해? 나도 모르겠어. 어때? 더 재미있게 할 수 있어!",
+        "왜 따라해? 나도 모르겠어. 어때? 더 재미있게 할 수 있어!"
+      ],
+      "said": "왜 따라해",
+      "stuck": false
+    },
+    {
+      "arm": "all 10 + 돈벌기",
+      "echoed": false,
+      "replies": [
+        "아, 반복하다니? 나도 모르겠어. 어때? 더 재미있게 할 수 있어!",
+        "아, 반복하다니? 나도 모르겠어. 어때? 더 재미있게 할 수 있어!",
+        "아, 반복하다니? 나도 모르겠어. 어때? 더 재미있게 할 수 있어!"
+      ],
+      "said": "왜 반복해",
+      "stuck": false
+    },
+    {
+      "arm": "all 10 + 돈벌기",
+      "echoed": false,
+      "replies": [
+        "anytime! 😊",
+        "anytime! 😊",
+        "anytime! 😊"
+      ],
+      "said": "고마워",
+      "stuck": false
+    },
+    {
+      "arm": "all 10 + 돈벌기",
+      "echoed": false,
+      "replies": [
+        "안녕하세요! 😊 돈벌기 관련해서 도와드릴 수 있을까요? 아니면 다른 걸 도와드릴까요?",
+        "안녕하세요! 😊 돈벌기 관련해서 도와드릴 수 있을까요? 아니면 다른 걸 도와드릴까요?",
+        "안녕하세요! 😊 돈벌기 관련해서 도와드릴 수 있을까요? 아니면 다른 걸 도와드릴까요?"
+      ],
+      "said": "안녕",
+      "stuck": false
+    },
+    {
+      "arm": "all 10 + 돈벌기",
+      "echoed": false,
+      "replies": [
+        "아, 지금 시스템 정보를 확인 중이야! 😊",
+        "아, 지금 시스템 정보를 확인 중이야! 😊",
+        "아, 지금 시스템 정보를 확인 중이야! 😊"
+      ],
+      "said": "지금 뭐 하는 중이야?",
+      "stuck": false
+    }
+  ],
+  "screen": "system-information",
+  "screens_print": "5020f7",
+  "think": false
+}

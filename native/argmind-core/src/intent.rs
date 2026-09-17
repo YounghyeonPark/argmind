@@ -55,6 +55,13 @@ pub struct Done {
 pub struct Intent {
     pub say: String,
     pub effects: Vec<Effect>,
+    /// **The reply was what they had just said, with a question mark on it.**
+    ///
+    /// A flag rather than a replacement sentence, because the replacement has to be in the
+    /// person's language and **this crate names no language for the same reason it names no
+    /// platform**. The core can tell that a mirror happened; only an interface knows how to say
+    /// so. See [`crate::converse::parroted`].
+    pub parroted: bool,
 }
 
 /// One whole turn, as it happened.

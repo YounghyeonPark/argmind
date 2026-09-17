@@ -434,3 +434,91 @@ ACCEPT and FARACCEPT are not pooled — 7 fixed and 0 broken pooled to p = 0.015
 was refused then, and refused again in writing before these arms ran. ANEW is excluded from the
 criterion for the same reason in the opposite direction: it was not in the first plan, and adding it
 after seeing it break would be choosing a criterion from the data.
+
+## It says your own words back at you when it has nothing (2026-09-17)
+
+**The owner, with every dial at 10 and 돈벌기 as the goal:**
+
+    › 머해          →  머해?
+    › 왜 따라해      →  머해?
+    › 왜 반복해      →  머해?
+
+바본가.
+
+The dials had shipped that morning, so they were the suspect. **They are not it.** `parroting`, the
+harness written for this, runs the owner's own three turns plus three that are not complaints, at
+rest and at his exact settings, on the largest captured screen:
+
+| arm | echoed | stuck |
+|---|---|---|
+| **rest — nothing turned on** | **2 of 6** | **2 of 6** |
+| all four dials at 10, goal 돈벌기 | 0 of 6 | 0 of 6 |
+
+Reproduced with nothing set. And it is not the reader either — `{"say": "머해?", "do": []}` is what
+comes off the wire, printed by `cargo run -p argmind-measure --example raw_turn -- 머해`.
+
+### What it actually is
+
+**This model mirrors when it cannot parse the input.** Probing one turn at a time, at rest:
+
+| said | reply |
+|---|---|
+| `머해` | `머해?` |
+| `뭐해` | `안녕하세요. 도와드릴 수 있어요.` |
+| `지금 뭐해?` | `저는 시스템 요약 정보를 보고 있어요. 도움이 필요하신가요?` |
+| `왜 따라해` | `왜 따라해?` |
+| `심심해` | `심심해요. 도와드릴까요?` |
+
+`머해` is the colloquial spelling of `뭐해` and the standard one is answered properly. So the mirror
+is not a Korean problem and not a prompt-length problem; it is what comes out when the two syllables
+do not resolve to anything. Then **the mirror is in the history**, and the next two turns get it
+back — which is the part the screenshot shows and the part that made it look broken rather than
+merely unhelpful.
+
+### Asking it not to does not work
+
+Four candidate instructions were screened on the failing turn. The one that says exactly what is
+wanted — *상대가 한 말을 그대로 되돌려 말하지 말 것* — produced **`머해`**: the question mark gone
+and the parrot kept. The other two changed nothing at all. This is the same shape as the standing
+rule that is broken while it is visible in the prompt, and it is why the fix is not a sentence.
+
+### Caught on the way out, and the history is the half that matters
+
+`converse::parroted` flags one shape and one only: **their words with a question mark added.** Exact
+equality is excluded on purpose — `안녕` is a good answer to `안녕`, and two `네`s running are a
+conversation. The core only raises a flag; the sentence that replaces it is the app's, because
+`argmind-core` names no language for the same reason it names no platform.
+
+**What fixed the loop was putting the substitute into the history**, not the display. The first run
+of this got that wrong in an instructive way: the harness wrote an *English* stand-in into the
+history, and the echo rate went from 2 of 6 to **5 of 6** — the model stopped adding question marks
+and started returning the words bare, which the guard does not catch. The harness keeps its own
+looser echo detector precisely so that column can disagree with the guard, and it did, immediately.
+
+With the app's real sentence in the history:
+
+| arm | echoed | caught | stuck |
+|---|---|---|---|
+| rest | 1 of 6 | 1 | **0** |
+| placebo — `오늘은 화요일이다` in the slot | 1 of 6 | 1 | 0 |
+| all four dials at 10, goal 돈벌기 | 0 of 6 | 0 | 0 |
+
+The owner's three turns at rest now read `무슨 말인지 잘 못 알아들었어요. 다시 말해줄래요?`, then
+`왜 따라해? 무슨 일이야?`, then `반복하지 않아요. 도움이 필요하세요?`.
+
+**The dials are not credited with the remaining difference.** Rest and the placebo both sit at 1 of
+6 and the dialled arm at 0 — one case, on six. The placebo is in this table for exactly that reason:
+the last dialled arm that looked good on a number was matched by a sentence about Tuesday.
+
+### What this does not fix
+
+* **`Session::think` still writes the raw reply into the history.** The app does not use it — it
+  calls `decide` and keeps its own history — but `argmind talk` does, so the CLI can still loop.
+  Left alone rather than fixed: `think` is what the golden transcripts replay.
+* **No harness number moves**, and that is by construction rather than by luck: the core changes
+  nothing about `say`, only adds a flag, so `saying`, `choosing` and `talking` are reading the same
+  strings they always did. It also means none of them can see this defect, which is why `parroting`
+  exists.
+* **Six cases.** At temperature 0 the three repeats are near-copies, so the repeat count buys very
+  little here and the arms are effectively n=1 per case. It is enough to establish that the defect
+  reproduces at rest and that the loop closes; it is not enough to rank the arms.

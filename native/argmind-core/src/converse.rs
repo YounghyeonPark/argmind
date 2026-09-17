@@ -166,16 +166,52 @@ pub fn effect_of(item: &serde_json::Value, listed: &[Widget], trigger: &Trigger)
     None
 }
 
+/// **Did it just say their own words back at them with a question mark?**
+///
+/// The owner, 2026-09-17: 머해 → 머해?, then 왜 따라해 → 머해?, then 왜 반복해 → 머해?. 바본가.
+///
+/// Reproduced with every dial at rest, so it is not the dials, and the model emits it itself —
+/// `{"say": "머해?", "do": []}` off the wire, so it is not the reader either. **It is what this
+/// model does when it cannot parse the input**: `뭐해` is answered properly and `머해`, the
+/// colloquial spelling of the same two syllables, is mirrored. Then the mirror is in the history
+/// and the next two turns get it again, which is what the screenshot shows.
+///
+/// **Telling it not to do this does not work** — given *상대가 한 말을 그대로 되돌려 말하지 말 것*
+/// in the prompt it replied `머해`, dropping the question mark and keeping the parrot. So this is
+/// caught on the way out, the way `argmind-env-whisper` catches a degenerate transcript rather
+/// than asking Whisper nicely.
+///
+/// ## Why the rule is this narrow
+///
+/// **Only *their words plus a question mark*.** Exact equality is excluded on purpose: `안녕` is a
+/// perfectly good answer to `안녕`, and `네` twice running is a conversation, not a fault. Turning
+/// what somebody said into a question back at them is the one shape with no honest reading.
+pub fn parroted(say: &str, trigger: &Trigger) -> bool {
+    let said = trigger.text.trim();
+    let back = say.trim();
+    if said.is_empty() || back.len() <= said.len() {
+        return false;
+    }
+    //: `?` and the full-width `？` a Korean keyboard can produce, and nothing else — a reply that
+    //: adds a *word* is a reply.
+    let Some(rest) = back.strip_prefix(said) else { return false };
+    rest.chars().all(|c| c == '?' || c == '？' || c.is_whitespace())
+}
+
 /// What a reply means, given what was on screen. An empty `Intent` is a real answer.
 pub fn read_reply(reply: &str, listed: &[Widget], trigger: &Trigger) -> Intent {
     let got = first_object(reply).unwrap_or(serde_json::json!({}));
     let say = got.get("say").and_then(|v| v.as_str()).unwrap_or("").trim().to_string();
     let wanted = got.get("do").and_then(|v| v.as_array()).cloned().unwrap_or_default();
+    //: **Reported, not erased.** The words stay exactly as the model produced them so a transcript
+    //: or a harness can still see what happened; an interface that wants to say something else in
+    //: their place has the flag to know it should.
+    let parroted = parroted(&say, trigger);
     if wanted.len() > MOST_AT_ONCE {
         //: The whole batch goes, not the first three. A reply asking for eight things has
         //: misunderstood, and doing three of them is worse than saying so.
-        return Intent { say, effects: Vec::new() };
+        return Intent { say, effects: Vec::new(), parroted };
     }
     let effects = wanted.iter().filter_map(|item| effect_of(item, listed, trigger)).collect();
-    Intent { say, effects }
+    Intent { say, effects, parroted }
 }
