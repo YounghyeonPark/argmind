@@ -522,3 +522,56 @@ the last dialled arm that looked good on a number was matched by a sentence abou
 * **Six cases.** At temperature 0 the three repeats are near-copies, so the repeat count buys very
   little here and the arms are effectively n=1 per case. It is enough to establish that the defect
   reproduces at rest and that the loop closes; it is not enough to rank the arms.
+
+## Always-on listening: three problems, one of them measurable today (2026-09-17)
+
+**The owner:** 항상 켜진 상태로 듣고 있으면 안되나.
+
+Push-to-talk is not a placeholder. `microphone.rs` says so in its first line and gives three
+reasons, and each of them is a separate thing an open microphone would have to solve:
+
+1. **The recogniser invents words from silence — 120 times out of 120.** Handed room tone, Whisper
+   answers `Thank you.` The talk key is what stops that reaching the model. Open the microphone and
+   there is no gate at all, so argmind would answer a hallucination aloud every few seconds.
+2. **It would hear itself.** The microphone is shut while the agent talks, which is the only reason
+   self-hearing is impossible rather than merely unlikely. Always-on plus a speaker is a loop.
+3. **It could not tell a turn from a phone call in the same room.** The key is what says *this one
+   is for you*. Nothing else in the design does.
+
+Only the first is a measurement. The second is a design with an obvious shape — close the ear while
+speaking, at the cost of barge-in — and the third is a question for the owner, because a wake word,
+a key, and *answer everything you hear* are three different products.
+
+### The gate, and the recording that does not exist
+
+`Clip::peak` was written for exactly this and left deliberately unused:
+
+> Not a gate. The threshold that would make it one needs real recorded speech to set, and that
+> recording does not exist yet; until it does this is reported and nothing is rejected by it.
+
+So the blocking unknown is one number: **on this machine, in this room, is there a level that
+separates an empty room from somebody talking, and what does it cost in each direction?**
+
+`argmind-measure --bin listening` makes that recording. Three phases of ten seconds — quiet, then
+speech, then quiet again — reduced to one peak and one RMS per 30 ms frame inside the process; the
+audio is dropped and only levels are written. **Quiet is measured twice on purpose**: before anybody
+has spoken it is a person sitting still and waiting, and after they have spoken it is the room they
+actually leave behind, which is the one a gate has to live in.
+
+It then sweeps every level from −70 to −10 dBFS and reports **both** error rates at each: how much
+quiet gets through, and how much speech is lost. Both, always — a gate that never opens loses no
+quiet and rejects every word, and a single number would hide that.
+
+**It is the only harness here that opens the microphone**, it announces each phase before it starts,
+and it needs somebody to actually talk into it, so it cannot be run unattended.
+
+### What the answer decides
+
+* **If a level separates them cleanly**, always-on is a gate in front of the recogniser plus a
+  setting, and problems 2 and 3 are next.
+* **If it does not** — if speech and room tone overlap on this hardware — then loudness is the wrong
+  instrument and the next thing to check is whisper.cpp's own voice-activity support, which is a
+  trained classifier rather than a threshold. That would mean moving the pinned commit and
+  downloading a second model, so it is worth knowing the cheap answer first.
+
+Nothing has changed in the application: the talk key is still the only way in.
