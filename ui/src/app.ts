@@ -138,14 +138,33 @@ function voiceReads(d: Hello): string {
   return d.voice === "neural" ? "소리 켜짐 (신경망)" : "소리 켜짐 (Windows)";
 }
 
-stream.addEventListener("hello", (e) => {
-  const d: Hello = JSON.parse((e as MessageEvent).data);
-  header.textContent = d.attending || "(아무 창도 보고 있지 않음)";
+/** The last snapshot, kept so a single line of it can change without a whole new one.
+ *
+ *  The voice can be swapped mid-session — the neural one starts, and the agent takes it up — and
+ *  the header said `소리 켜짐 (Windows)` for the rest of the session while the transcript said
+ *  *이제 신경망 목소리로 말합니다* right above it. The page was not wrong; it had never been told. */
+let lately: Hello | null = null;
+
+function drawStatus(d: Hello): void {
   // Both settings shown, because "it did nothing" and "it said nothing" are the two things
   // a person would otherwise mistake for the agent being broken.
   statusLine.textContent =
     `${d.model}${d.dry ? " · 실행 안 함" : ""} · ${voiceReads(d)}` +
     `${d.hears ? " · 마이크 켜짐" : ""}`;
+}
+
+stream.addEventListener("voice", (e) => {
+  if (!lately) return;
+  lately.voice = (e as MessageEvent).data;
+  lately.speaks = lately.voice !== "off" && lately.voice !== "none";
+  drawStatus(lately);
+});
+
+stream.addEventListener("hello", (e) => {
+  const d: Hello = JSON.parse((e as MessageEvent).data);
+  lately = d;
+  header.textContent = d.attending || "(아무 창도 보고 있지 않음)";
+  drawStatus(d);
   talk.hidden = !d.hears;
   drawNoticing(d.noticing, d.noticed);
   // Rebuilt from the server's own list, so a reload is never a page showing buttons the server

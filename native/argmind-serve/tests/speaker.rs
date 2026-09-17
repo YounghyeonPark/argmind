@@ -265,12 +265,19 @@ fn the_voice_and_the_sdk_are_each_their_own_permission() {
 /// Opens no audio device: the loudspeaker waits until something is said.
 #[test]
 fn the_neural_voice_is_chosen_exactly_when_the_server_is_answering() {
+    //: **Two conditions, not one**, and the second was learned the hard way — on a headless build
+    //: the synthesiser may well be answering, because it is a server and somebody's real argmind
+    //: is running it, and this build still cannot play a note. `platform::neural_voice` says so at
+    //: compile time. The rule got narrower rather than weaker.
+    let possible = argmind_serve::platform::neural_voice(speaker::QWENTTS_HOST).is_some();
     let answering = speaker::answering();
     let (voice, which) = argmind_serve::app::pick_voice();
-    if answering {
+    if possible {
+        assert!(answering, "a neural voice was available with nothing answering");
         assert_eq!(which, "neural", "the synthesiser is up and the old voice was chosen");
     } else {
-        assert_ne!(which, "neural", "nothing is answering on the port and it chose the neural one");
+        assert_ne!(which, "neural",
+                   "chose the neural voice on a build that cannot play one");
         //: Windows still speaks, or it says it cannot. Both are honest; silently claiming to speak
         //: is not.
         assert!(matches!(which, "windows" | "none"), "{which}");

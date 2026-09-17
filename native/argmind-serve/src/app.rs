@@ -667,6 +667,10 @@ fn adopt_voice(desk: &mut Desk, out: &Listeners) {
     desk.voice = Some(neural);
     desk.voice_is = "neural";
     out.send("note", "이제 신경망 목소리로 말합니다");
+    //: **And the header, which is otherwise a session-long lie.** `hello` is sent when a page
+    //: opens and never again, so a voice swapped after that left the status line saying
+    //: `소리 켜짐 (Windows)` directly above a transcript line saying it had changed.
+    out.send("voice", desk.voice_is);
 }
 
 fn hello(desk: &Desk, model: &str) -> String {
