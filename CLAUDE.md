@@ -63,6 +63,7 @@ the two days that built this, three of them flattering.
     native/argmind-voice/       Heard / Listener / Speaker — the seam, and why it is not a contract
     native/argmind-serve/       the application: a server, a page, a tray icon, and `argmind`
     native/argmind-measure/     every harness behind the numbers
+    native/argmind-env-linux/   eyes for Linux: AT-SPI2 over D-Bus. No hands yet
     native/argmind-env-none/    an environment that can do nothing and says so — the proof the
                                 application is separable, and the list a third one must satisfy
     native/argmind-rules/       the rules this repository keeps, by looking at itself
@@ -174,7 +175,17 @@ that cannot be made), every Korean character was a box without `fonts-noto-cjk`,
 still offers `DISM` commands on Linux, and `org.a11y.Bus` is activatable there — so AT-SPI2 work
 can be done in WSL, which was the open question.
 
-**No macOS and no Linux environment**, and that is the whole of what is missing — the application
+**Linux has eyes.** `argmind-env-linux` reads the active window through AT-SPI2 — 146 widgets of
+`gtk3-widget-factory` in **116 ms**, against UI Automation's 41–266 ms, with real names, roles and
+screen rectangles. **The contract survives the port**: `Widget { name, role, rect, window }` is
+exactly what the accessibility bus hands over. `docs/findings/eyes-on-linux.md` has it.
+
+**It has no hands, and that is a permission question before a coding one.** X11 allows XTEST and
+`libxdo` is a small job; Wayland deliberately refuses and routes input through
+`xdg-desktop-portal` with the person granting a session. Not decided from a WSLg session with no
+window manager of its own.
+
+**No macOS environment at all**, and that is most of what is missing — the application
 itself is no longer in the way. The owner asked on 2026-09-16 for all three; `docs/findings/the-window.md`
 has the plan and the measurement that reordered it. The short version: the port looks like
 `argmind-env-windows` (1,844 lines) and was actually `argmind-serve` (2,295), which named Windows
@@ -282,6 +293,7 @@ a fact. `docs/findings/porting-the-core.md` has the accounting.
 | `docs/findings/interaction.md` | the priority, and repair / memory / language / spurious action / the history window |
 | `docs/findings/the-pc-app.md` | the window: self-blindness, pointing, cold start, the withdrawn diagnosis |
 | `docs/findings/the-window.md` | **a standalone app rather than a browser tab**: why the house style was the wrong answer, the licence sweep across 81 crates, and the DLL failure that only a double-click finds |
+| `docs/findings/eyes-on-linux.md` | **AT-SPI2**: the contract surviving the port, the switch that makes toolkits publish at all, `i32::MIN` for off-screen, the hit test that answered with the container, and why D-Bus was the one wire protocol not hand-written |
 | `docs/findings/a-better-voice.md` | **the voice**: every open Korean TTS checked and its licence, and the measured answer — RTF 3.9 on the CPU, 0.15 on the GPU, and a K-quant that is thirty-two times faster and wrong |
 | `docs/findings/harness-pitfalls.md` | **ten ways the model harness lied and seven ways the measuring code did** — the list to check when a measurement reads zero |
 | `docs/findings/porting-the-core.md` | **the move to Rust**: what speed does not decide, the robot answered, the AST rules audited one at a time, what breaks in `measure/`, and the staging |
