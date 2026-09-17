@@ -120,8 +120,18 @@ pub fn outside_dependencies(manifest: &str) -> Vec<String> {
     for line in manifest.lines() {
         let t = line.trim();
         if t.starts_with('[') {
-            inside = t == "[dependencies]" || t == "[dev-dependencies]"
-                || t == "[build-dependencies]";
+            //: **Including the target-conditional tables**, which is not fussiness: adding
+            //: `dbus` under `[target.'cfg(target_os = "linux")'.dependencies]` on 2026-09-17 was
+            //: invisible to this rule, and the rule is the only thing that makes a new dependency
+            //: cost anything. It was noticed because the *other* half of the check complained that
+            //: the record named a crate nothing declared — the record was right and the reader was
+            //: wrong, which is the pleasanter of the two ways round.
+            let table = t.trim_start_matches('[').trim_end_matches(']');
+            inside = matches!(table, "dependencies" | "dev-dependencies" | "build-dependencies")
+                || (table.starts_with("target.")
+                    && (table.ends_with(".dependencies")
+                        || table.ends_with(".dev-dependencies")
+                        || table.ends_with(".build-dependencies")));
             continue;
         }
         if !inside || t.starts_with('#') {

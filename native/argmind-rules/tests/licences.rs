@@ -127,6 +127,37 @@ fn the_reader_understands_the_shapes_it_is_given_and_says_so_when_it_cannot() {
     assert!(recorded("[rust]\nthing = { why = \"no licence here\" }\n").is_err());
 }
 
+/// **A dependency hidden behind a target is still a dependency.**
+///
+/// The reader looked only at `[dependencies]` until 2026-09-17, when `dbus` went in under
+/// `[target.'cfg(target_os = "linux")'.dependencies]` and the rule did not see it. Nothing would
+/// have caught a crate added that way — which makes it the shape of hole worth a test of its own,
+/// rather than a line in the function it was fixed in.
+#[test]
+fn a_dependency_behind_a_target_is_still_seen() {
+    //: A raw string, with every line hard against the margin. The first version of this test
+    //: indented its manifest, and the reader skips indented lines on purpose — a `features = [`
+    //: continuation is not a dependency. The test was wrong and the parser was right.
+    let manifest = r#"[dependencies]
+argmind-core = { path = "../argmind-core" }
+
+[target.'cfg(target_os = "linux")'.dependencies]
+dbus = "0.9"
+
+[target.'cfg(windows)'.dependencies]
+windows = { version = "0.58" }
+argmind-env-windows = { path = "../argmind-env-windows" }
+
+[target.'cfg(unix)'.dev-dependencies]
+nix = "0.29"
+"#;
+    assert_eq!(outside_dependencies(manifest), ["dbus", "nix", "windows"],
+               "a crate behind a target went unseen, and the licence rule is the only thing that \
+                makes a new dependency cost anything");
+    //: And a `[features]` table is still not a dependency table, target or no target.
+    assert!(outside_dependencies("[features]\ndefault = []\nheadless = []\n").is_empty());
+}
+
 /// A manifest's own crates are not third-party anything.
 #[test]
 fn path_dependencies_are_not_demanded_of_the_record() {

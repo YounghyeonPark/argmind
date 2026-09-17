@@ -33,15 +33,27 @@ argmind-window = { path = "../argmind-window", optional = true }
 
 # Windows only, and by the manifest rather than by a `cfg` inside the code — so a Linux checkout
 # does not even try to compile UI Automation.
+# Linux only, same reasoning: a Windows checkout has no D-Bus to bind against.
+#
+# **Optional for the same reason the window is.** It pulls `libdbus-sys`, whose build script wants
+# `pkg-config` and a sysroot, so a cross-check from Windows cannot reach it — and that cross-check
+# is the thing that keeps the application compiling for Linux at all. Off, everything but the eyes
+# is still verified; on, a real Linux build gets them.
+[target.'cfg(target_os = "linux")'.dependencies]
+argmind-env-linux = { path = "../argmind-env-linux", optional = true }
+
 [target.'cfg(windows)'.dependencies]
 argmind-env-windows = { path = "../argmind-env-windows" }
 argmind-env-qwentts = { path = "../argmind-env-qwentts" }
 
 [features]
-default = ["window"]
+default = ["window", "eyes"]
 # The window, and therefore `argmind-app`. On by default; off is for checking the rest of the
 # application against a target this machine cannot link.
 window = ["dep:argmind-window"]
+# The platform's own eyes, where there are any. Same reason for being optional: they need system
+# libraries that only exist on the machine they are for.
+eyes = ["dep:argmind-env-linux"]
 # **Build the application as though this were an operating system nobody has ported to.** Not a
 # convenience: it is how a claim about portability is checked on a machine that has one operating
 # system. `tests/portable.rs` runs the whole server this way.

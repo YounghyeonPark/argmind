@@ -70,6 +70,18 @@ sha2 = { licence = "MIT OR Apache-2.0", why = "the prompt fingerprint, in tests 
 # that it does not follow transitive dependencies.
 wry = { licence = "Apache-2.0 OR MIT", why = "the webview: WebView2, WKWebView, WebKitGTK" }
 tao = { licence = "Apache-2.0", why = "the window and its event loop, on all three" }
+# **The Linux eyes, 2026-09-17.** The accessibility tree is D-Bus and this is the smallest correct
+# way to speak it. Measured rather than assumed: `dbus` resolves to **6 crates**, `zbus` to 85 and
+# `atspi` to 93. It binds `libdbus-1`, which this tree already requires on Linux because the tray
+# speaks StatusNotifierItem over it — so no new system dependency either.
+#
+# Hand-writing the wire protocol was considered and refused, which is the opposite of the usual
+# answer here. It is SASL and then a binary marshaller with alignment and endianness rules, and
+# getting it subtly wrong produces a widget tree that is quietly wrong. **This project treats a
+# silently wrong answer as worse than a crash**, and the GPU K-quant that read RTF 0.123 while
+# generating nonsense is why.
+dbus = { licence = "Apache-2.0 OR MIT", why = "AT-SPI2 is D-Bus; the eyes on Linux" }
+
 tray-icon = { licence = "MIT OR Apache-2.0", why = """
     The icon by the clock, the menu bar or the status area. It replaced a hand-written
     `Shell_NotifyIconW` tray, which was deleted rather than left beside it — two implementations of

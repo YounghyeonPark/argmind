@@ -17,6 +17,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "argmind-env-linux"
+version = "0.0.1"
+dependencies = [
+ "argmind-core",
+ "argmind-env-none",
+ "argmind-voice",
+ "dbus",
+]
+
+[[package]]
 name = "argmind-env-none"
 version = "0.0.1"
 dependencies = [
@@ -77,6 +87,7 @@ name = "argmind-serve"
 version = "0.0.1"
 dependencies = [
  "argmind-core",
+ "argmind-env-linux",
  "argmind-env-none",
  "argmind-env-ollama",
  "argmind-env-qwentts",

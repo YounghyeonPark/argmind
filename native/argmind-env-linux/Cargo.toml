@@ -1,0 +1,28 @@
+[package]
+name = "argmind-env-linux"
+version = "0.0.1"
+edition = "2021"
+description = "Eyes for Linux: AT-SPI2 over D-Bus. The deterministic side, on the other desktop."
+license = "Apache-2.0"
+
+[dependencies]
+argmind-core = { path = "../argmind-core" }
+argmind-voice = { path = "../argmind-voice" }
+
+# **What is not written yet, borrowed rather than faked.** Hands, a voice, a microphone and a
+# yes-or-no question all still answer *no* here, and they answer it with the same code that answers
+# it on macOS. Re-exporting them says which parts of this environment exist; writing a second set of
+# stubs would say they are being worked on.
+argmind-env-none = { path = "../argmind-env-none" }
+
+# The accessibility tree is D-Bus, and this is the smallest correct way to speak it: **6 crates**,
+# against 85 for `zbus` and 93 for `atspi` — measured, not guessed. It binds `libdbus-1`, which is
+# already a required system library here because the tray speaks StatusNotifierItem over it, so it
+# adds no system dependency either.
+#
+# Hand-writing the wire protocol was considered and refused. It is SASL, then a binary marshaller
+# with alignment and endianness rules, and the failure mode of getting it subtly wrong is a widget
+# tree that is quietly wrong — which is the one kind of error this project treats as worse than a
+# crash.
+[target.'cfg(target_os = "linux")'.dependencies]
+dbus = "0.9"

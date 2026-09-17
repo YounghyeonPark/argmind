@@ -84,7 +84,43 @@ mod chosen {
     }
 }
 
-#[cfg(any(not(windows), feature = "headless"))]
+#[cfg(all(target_os = "linux", feature = "eyes", not(feature = "headless")))]
+mod chosen {
+    //: **Eyes, and nothing else yet.** `argmind-env-linux` re-exports the rest from
+    //: `argmind-env-none`, so the hands are still dry and the voice still silent — see that crate
+    //: for why hands on Linux are a permission question before they are a coding one.
+    pub use argmind_env_linux::ask::confirm;
+    pub use argmind_env_linux::supervise::Supervised;
+    pub use argmind_env_linux::WANT_HZ;
+    pub use argmind_env_linux::{foreground_handle_now, window_title};
+    pub use argmind_env_linux::{Attending as Sight, Deaf as Ear, Mute as Mouth, Plain,
+                                Still as Touch, Watcher as Watching};
+
+    /// **Not yet.** The synthesiser is a server and runs here; nothing plays what it sends back.
+    pub fn neural_voice(_host: &str) -> Option<Box<dyn argmind_voice::Speaker>> {
+        None
+    }
+
+    /// `xdg-open` is the right answer and has not been run from here yet.
+    pub fn open_url(_url: &str) -> Result<(), String> {
+        Err("이 운영체제에서 페이지를 여는 방법이 아직 확인되지 않았습니다".into())
+    }
+
+    pub fn run_elevated(_command: &str) -> Result<bool, String> {
+        Err("이 운영체제에서는 관리자 권한 실행이 아직 준비되지 않았습니다".into())
+    }
+
+    /// Nothing speaks here yet — `speech-dispatcher` exists and is not written.
+    pub fn fallback_voice() -> Option<&'static str> {
+        None
+    }
+}
+
+//: Everything else: no environment has been written for it, or this build was asked not to
+//: use the one there is.
+#[cfg(any(feature = "headless",
+          all(not(windows),
+              any(not(target_os = "linux"), not(feature = "eyes")))))]
 mod chosen {
     pub use argmind_env_none::ask::confirm;
     pub use argmind_env_none::supervise::Supervised;
