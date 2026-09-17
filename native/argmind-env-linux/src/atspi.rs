@@ -39,7 +39,9 @@ const ACCESSIBLE: &str = "org.a11y.atspi.Accessible";
 const COMPONENT: &str = "org.a11y.atspi.Component";
 const ACTION: &str = "org.a11y.atspi.Action";
 
-/// `ATSPI_STATE_ACTIVE`. The frame a person is typing into has it; the others do not.
+/// `ATSPI_STATE_ACTIVE`. The frame a person is typing into has it — **where there is a window
+/// manager to say so.** Under WSLg there is not: Windows is the window manager, and a frame there
+/// reported `0x43200100`, visible and not active, while plainly on screen. See [`Bus::active_frame`].
 const STATE_ACTIVE: u32 = 1;
 
 /// A connection to the accessibility bus, which is **not** the session bus.
@@ -131,14 +133,37 @@ impl Bus {
         got.map(|(ok,)| ok).unwrap_or(false)
     }
 
-    /// The frame a person is working in: the one with `ATSPI_STATE_ACTIVE`.
+    /// The frame a person is working in, and how confident that is.
     ///
     /// **On the bus rather than on the eyes**, because the hands need it too — to look a widget up
     /// again immediately before operating it, which is the whole point of re-resolving.
-    pub(crate) fn active_frame(&self) -> Option<Node> {
-        self.applications().into_iter()
+    ///
+    /// **`ACTIVE` is the right answer and is not always available.** It is set from the window
+    /// manager's focus, and under WSLg there is no window manager inside Linux — Windows is one
+    /// level up. A frame plainly on screen reported `0x43200100` there: visible, not active. Two
+    /// runs were spent blaming the hands for that.
+    ///
+    /// So: the active frame if one says it is, else the largest frame that is on screen. The
+    /// fallback is a guess and [`Attended::guessed`] is how the caller knows.
+    pub(crate) fn attended(&self) -> Option<Attended> {
+        let frames: Vec<Node> = self.applications().into_iter()
             .flat_map(|app| self.children(&app))
-            .find(|frame| self.active(frame))
+            .collect();
+        if let Some(frame) = frames.iter().find(|f| self.active(f)) {
+            return Some(Attended { frame: frame.clone(), guessed: false });
+        }
+        //: **Largest on screen**, because a window with no manager to focus it is still a window,
+        //: and the big one is the one somebody is looking at far more often than not. It is a
+        //: guess and it is labelled one.
+        frames.into_iter()
+            .filter_map(|f| self.extents(&f).map(|(_, _, w, h)| (w as i64 * h as i64, f)))
+            .max_by_key(|(area, _)| *area)
+            .map(|(_, frame)| Attended { frame, guessed: true })
+    }
+
+    /// The frame alone, for callers that do not care how it was chosen.
+    pub(crate) fn active_frame(&self) -> Option<Node> {
+        self.attended().map(|a| a.frame)
     }
 
     pub(crate) fn applications(&self) -> Vec<Node> {
@@ -146,15 +171,17 @@ impl Bus {
     }
 }
 
-/// Is a widget currently checked or pressed, if that is a thing it can be?
+/// A widget's whole state word, so a press can be shown to have worked.
 ///
-/// **Only so that a press can be shown to have worked.** A push button that worked and one that did
-/// nothing look identical from outside; a toggle can be asked. `ATSPI_STATE_CHECKED` is bit 8.
+/// **The whole word rather than one bit**, and that is the point. A push button that worked and one
+/// that did nothing look identical from outside; a toggle changes state, and comparing the raw word
+/// before and after needs no opinion about which bit `CHECKED` is — an opinion the first version
+/// had and got wrong, calling bit 8 `CHECKED` when the frame's own `0x43200100` had it set and was
+/// not checked at all.
 ///
 /// Opens its own short-lived connection, because it is a measurement rather than part of the
 /// contract — nothing in `Eyes` or `Hands` needs it and nothing in the core may ask.
-pub fn state_of(widget: &Widget) -> Option<bool> {
-    const STATE_CHECKED: u32 = 8;
+pub fn state_of(widget: &Widget) -> Option<u32> {
     let bus = Bus::open().ok()?;
     let frame = bus.active_frame()?;
     let mut layer = vec![frame];
@@ -162,7 +189,7 @@ pub fn state_of(widget: &Widget) -> Option<bool> {
         let mut next = Vec::new();
         for node in &layer {
             if bus.name(node) == widget.name && bus.role(node) == widget.role {
-                return bus.states(node).map(|low| low & (1 << STATE_CHECKED) != 0);
+                return bus.states(node);
             }
             next.extend(bus.children(node));
         }
@@ -172,6 +199,14 @@ pub fn state_of(widget: &Widget) -> Option<bool> {
         layer = next;
     }
     None
+}
+
+/// Which frame, and whether the choice was confident.
+pub(crate) struct Attended {
+    pub frame: Node,
+    /// **True when no frame claimed to be active** and the largest one was taken instead. The page
+    /// says so rather than presenting a guess as a reading.
+    pub guessed: bool,
 }
 
 /// Say, at most once and only if nobody has said it already, that something is listening.
@@ -255,10 +290,14 @@ impl Sight {
         Ok(Sight { bus: Some(bus), complained: false, watcher })
     }
 
-    /// The active frame, and what a person would call it.
+    /// The attended frame, and what a person would call it.
     fn active_frame(&self) -> Option<(Node, String)> {
         let bus = self.bus.as_ref()?;
-        let frame = bus.active_frame()?;
+        let Attended { frame, guessed } = bus.attended()?;
+        if guessed && !self.complained {
+            //: Once. A desktop with no window manager will say this every time otherwise.
+            eprintln!("  no window says it is active — taking the largest one");
+        }
         let mut title = bus.name(&frame);
         if title.is_empty() {
             //: A frame with no name is common; the application's own name is the next best thing

@@ -37,14 +37,14 @@ fn main() {
 
     //: **What it looked like before**, so afterwards is a comparison rather than a hope.
     let before = argmind_env_linux::state_of(&target);
-    println!("  누르기 전 checked: {before:?}");
+    println!("  누르기 전 상태: {}", before.map(|s| format!("0x{s:08x}")).unwrap_or("?".into()));
 
     hands.click(&target);
     println!("  결과: {:?}", hands.done.last());
 
     std::thread::sleep(std::time::Duration::from_millis(400));
     let after = argmind_env_linux::state_of(&target);
-    println!("  누른 뒤 checked: {after:?}");
+    println!("  누른 뒤 상태: {}", after.map(|s| format!("0x{s:08x}")).unwrap_or("?".into()));
 
     match (armed, before, after) {
         (true, Some(a), Some(b)) if a != b => println!("\n  바뀌었습니다 — 진짜로 눌렸습니다."),
