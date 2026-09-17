@@ -471,3 +471,35 @@ The third is the one that is actually will, and it is also the one with a cost t
 document has been measuring all day: something that starts on its own spends model calls and
 interrupts. `MOST_AT_ONCE`, the confirm button and the 31-of-34 number are all there because acting
 unasked is the expensive direction.
+
+## Will: three attempts at an intention, all reverted (2026-09-17)
+
+**The owner:** 의지가 있어야 하지 않나. Three things had to exist — an intention held across turns,
+a read on whether it is getting closer, and a reason to start rather than to answer. The first two
+were built and measured three times. **None of the three survived, and the field is out.**
+
+`Note` gained `trying` (what it is trying to bring about, held across ticks) and `stuck` (how many
+ticks it has been held with nothing moving — counted by the program, like `held`, since that is the
+only thing that makes an intention different from a second belief). The goal from 설정 was passed
+into the thinking question, which until then was a line in the *answering* prompt that nothing
+pursued.
+
+| attempt | what came back |
+|---|---|
+| described — *what you are trying to bring about* | *하던 일이 막히면 먼저 알려줘라는 요청을 기다리고 있다* — **the goal restated as waiting.** The idle shape, in a new field, on the day it was added |
+| the detector was pointed at `worth` only, so it **could not see that** — fixed to read both fields | — |
+| shown — one example of the shape, the fix `worth` needed | the example, **copied verbatim, every tick, on both arms** — including the one where nothing happens |
+
+The second attempt did make it persist: `stuck` climbed 1 → 2 → 3, which is the mechanism working.
+**What persisted was my sentence, not argmind's.**
+
+**And it cost the field that was working.** `worth` filled correctly on the built dialog before
+`trying` existed and was empty on it in every run after. Three fields the model writes is evidently
+one too many for this model: each addition made the others worse.
+
+So `trying` and `stuck` are reverted. What stands is the measurement and the pattern behind it —
+**describe a field and it produces filler; show an example and it produces the example.** Both are
+recorded in `judging`, whose detector now reads every field the model writes rather than one.
+
+**The third piece was never reached**, and it is the one that is actually will: a reason to start
+rather than to answer. It depends on there being an intention to start *for*, so it waits.
