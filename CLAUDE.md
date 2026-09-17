@@ -4,6 +4,12 @@
 real-time interaction, actions taken through the OS accessibility layer. Author: Younghyeon Park
 <ypark.dev@gmail.com>. Apache-2.0. A side project, not a product.
 
+**`argmind-app.exe` with no arguments is everything on**, since 2026-09-17: what it does is read
+out of `%LOCALAPPDATA%rgmind\` — `decisions.json` for hearing, watching and speaking aloud,
+`devices.json` for which microphone and speaker, `mind.json` for the dials and the goal. The flags
+that remain are `--dry` (press nothing), a model name with a colon, and `--speak`/`--hear` as the
+way to say yes when there is no standing answer to read.
+
 Windows, PowerShell primary. **Rust, since 2026-09-15** — the Python is at
 `python-before-removal-2026-09-15` and is not coming back. **`rust-toolchain.toml` pins
 `channel = "stable"`**, which rustup resolves against the *host* — MSVC on Windows, where
@@ -271,8 +277,11 @@ with a different permission.
 
 No phone environment, no robot environment. **A thinking goal and four dials are built and are at rest until turned**: 재치 · 유머 · 봉사 · 헌신,
 0–10, and a sentence in the person's own words, in `설정 → 생각`. At rest the prompt is what it
-always was. **Voice is built and is off until switched on**: hold
-F9 in the window, which means you have to be looking at argmind to talk to it. **The settings
+always was. **Voice is built and is off until switched on** — the switch is `소리 내어 말하기` in
+설정, not `--speak`, since 2026-09-17. **`speaker` and `aloud` are two keys because they are two
+questions**: may argmind build the synthesiser, and may it make a noise in the room. The first was
+allowed and argmind still would not speak without a flag. Hearing is
+F9 held in the window, which means you have to be looking at argmind to talk to it. **The settings
 decide whether it listens, not the command line** — a standing `microphone: allowed` turns hearing
 on with no `--hear`, and a standing 거부 turns it off with one. Two places were reporting a
 standing answer and not honouring it: that, and the installs behind 항상 허용, which ran only when

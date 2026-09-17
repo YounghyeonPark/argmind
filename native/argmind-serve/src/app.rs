@@ -170,6 +170,8 @@ enum Job {
     Choose(String, String),
     /// Turn one thinking dial.
     Dial(String, u8),
+    /// Speak out loud from now on, or stop.
+    Aloud(bool),
     /// The thinking thread finished a note. **The only way a tick reaches the session**, so the
     /// session stays on one thread and nothing it holds is locked while a model call runs.
     Thought(argmind_core::thinking::Note),
@@ -921,6 +923,29 @@ pub struct How {
     pub port: u16,
 }
 
+/// Does argmind make a sound?
+///
+/// **The settings decide and the flag fills the gap**, the same arrangement as [`hearing`] and for
+/// the same reason: an answer written down is an answer, and a program that reads it and then asks
+/// for a command-line flag anyway has made the setting decorative.
+///
+/// **Off unless something says otherwise**, which is unchanged. Everything measured about this
+/// voice was measured at volume zero into a memory stream so that a desktop somebody was using
+/// stayed quiet; making a noise in a room is a thing to be asked for, not assumed.
+pub fn aloud(flag: bool) -> bool {
+    aloud_from(flag, crate::decided::standing("aloud"))
+}
+
+/// The same with the answer handed in. **Pure so it can be tested** without overwriting what the
+/// person actually decided.
+pub fn aloud_from(flag: bool, standing: Option<Standing>) -> bool {
+    match standing {
+        Some(Standing::Allowed) => true,
+        Some(Standing::Denied) => false,
+        None => flag,
+    }
+}
+
 /// Does argmind listen on the talk key?
 ///
 /// **The standing answer wins in both directions**, and a refusal wins over the flag on purpose: a
@@ -949,8 +974,10 @@ impl How {
             dry: std::env::args().any(|a| a == "--dry"),
             //: **Off by default, and that is not a style choice.** Everything measured about this
             //: voice was measured at volume zero into a memory stream so a desktop somebody was
-            //: using stayed quiet; making a sound is a thing to ask for.
-            speak: std::env::args().any(|a| a == "--speak"),
+            //: using stayed quiet; making a sound is a thing to ask for. **Asked for in the
+            //: settings since 2026-09-17**, with the flag left as the way to say yes when there is
+            //: no standing answer to read.
+            speak: aloud(std::env::args().any(|a| a == "--speak")),
             //: Same rule, and it matters more: **a microphone is not opened because a program was
             //: run.** Even with this, it opens only while the talk key is held.
             //:
@@ -1222,6 +1249,36 @@ pub fn run(how: How) {
                     }
                     agent_out.send("mind", &mind_json(&desk.session.mind));
                 }
+                Job::Aloud(on) => {
+                    let how = if on { Standing::Allowed } else { Standing::Denied };
+                    if let Err(why) = crate::decided::keep("aloud", Some(how)) {
+                        agent_out.send("note", &why);
+                    }
+                    desk.wants_voice = on;
+                    if on {
+                        //: **Picked now, not at the next launch.** The whole complaint behind this
+                        //: was a setting that was recorded and then not honoured until a restart.
+                        let (voice, is) = pick_voice();
+                        desk.voice = voice;
+                        desk.voice_is = is;
+                    } else if let Some(old) = desk.voice.as_mut() {
+                        //: **Released rather than dropped**, and stopped first: SAPI holds a COM
+                        //: object and letting it go mid-sentence is how a voice talks over itself.
+                        old.stop();
+                        old.release();
+                        desk.voice = None;
+                        desk.voice_is = "off";
+                    }
+                    agent_out.send("note", if desk.voice.is_some() {
+                        "이제 소리 내어 말합니다"
+                    } else if on {
+                        "소리를 낼 수 없습니다 — 목소리가 없습니다"
+                    } else {
+                        "이제 소리를 내지 않습니다"
+                    });
+                    agent_out.send("voice", desk.voice_is);
+                    agent_out.send("decisions", &decisions_json());
+                }
                 Job::Thought(note) => {
                     //: **Nothing is said and nothing is proposed.** A tick reaches the person only
                     //: through the panel that shows the note.
@@ -1459,6 +1516,10 @@ fn serve_one(mut stream: TcpStream, out: &Listeners, token: &str, jobs: &Sender<
         Route::Look => {
             let _ = stream.write_all(&respond("204 No Content", "text/plain", ""));
             let _ = jobs.send(Job::Look);
+        }
+        Route::Aloud(on) => {
+            let _ = stream.write_all(&respond("204 No Content", "text/plain", ""));
+            let _ = jobs.send(Job::Aloud(on));
         }
         Route::Notice(on) => {
             let _ = stream.write_all(&respond("204 No Content", "text/plain", ""));

@@ -217,6 +217,10 @@ pub enum Route {
     /// Open one for a moment and say what happened. **The only thing in this program that turns a
     /// device on because somebody asked rather than because a turn needed it.**
     Try(String),
+    /// Say answers out loud, or stop. **Written down as a standing answer** rather than held in
+    /// memory, because a switch a person flips and then loses on the next launch is the defect this
+    /// replaced.
+    Aloud(bool),
     /// Watch the screen and think when it changes, or stop.
     ///
     /// **Off until asked for**, and the reason is a measured one: something on screen changes 13
@@ -309,6 +313,8 @@ pub fn route(request: &Request) -> Route {
         //: The sentence comes in the body rather than the path: it is prose, it can be long, and a
         //: path is the wrong place for either.
         ("POST", "/aim") => Route::Aim(request.body.clone()),
+        ("POST", "/aloud/on") => Route::Aloud(true),
+        ("POST", "/aloud/off") => Route::Aloud(false),
         ("POST", "/notice/on") => Route::Notice(true),
         ("POST", "/notice/off") => Route::Notice(false),
         ("POST", "/look") => Route::Look,

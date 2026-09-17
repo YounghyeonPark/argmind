@@ -98,13 +98,13 @@ impl Standing {
 /// **A fixed list rather than any string the page sends.** A key is what a stored *yes* is attached
 /// to, so a page that could invent one could invent a permission the program never asks about — and
 /// a typo would silently create a second, always-unanswered copy of a real one.
-pub const DECIDABLE: [&str; 8] = [
+pub const DECIDABLE: [&str; 9] = [
     //: The needs from `needs.rs`. `korean-voice` and `vulkan` are elevation, the rest change the
     //: machine.
     "ollama", "model", "whisper", "korean-voice", "vulkan", "speaker",
-    //: Switched on, and then it keeps going: a model call every few seconds, and a device that
-    //: opens while a key is held.
-    "notice", "microphone",
+    //: Switched on, and then it keeps going: a model call every few seconds, a device that opens
+    //: while a key is held, and a program that makes a noise in a room.
+    "notice", "microphone", "aloud",
 ];
 
 /// What to call it in the window that asks.
@@ -116,6 +116,11 @@ pub fn what(key: &str) -> &'static str {
         "korean-voice" => "한국어 음성 설치",
         "vulkan" => "Vulkan SDK 설치",
         "speaker" => "목소리 서버",
+        //: **Not the same thing as `speaker`, which is permission to build the server.** This is
+        //: whether argmind makes a sound in the room, and the two were conflated exactly once: the
+        //: server was allowed and argmind still needed `--speak` on the command line, which is the
+        //: shape of defect the owner has now pointed at twice.
+        "aloud" => "소리 내어 말하기",
         "notice" => "화면 지켜보기",
         "microphone" => "마이크",
         _ => "알 수 없는 권한",

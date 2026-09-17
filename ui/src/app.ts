@@ -194,6 +194,9 @@ stream.addEventListener("voice", (e) => {
   lately.voice = (e as MessageEvent).data;
   lately.speaks = lately.voice !== "off" && lately.voice !== "none";
   drawStatus(lately);
+  // **The box follows the server**, including when it says no: asking for a voice that cannot be
+  // found leaves the switch off, which is the truth.
+  aloud.checked = lately.speaks;
 });
 
 stream.addEventListener("hello", (e) => {
@@ -202,6 +205,7 @@ stream.addEventListener("hello", (e) => {
   header.textContent = d.attending || "(아무 창도 보고 있지 않음)";
   drawStatus(d);
   talk.hidden = !d.hears;
+  aloud.checked = d.speaks;
   drawNoticing(d.noticing, d.noticed);
   // Rebuilt from the server's own list, so a reload is never a page showing buttons the server
   // has forgotten — or missing ones it still holds.
@@ -295,6 +299,15 @@ function drawNoticing(on: boolean, count: number): void {
   noticing.hidden = !on;
   noticing.textContent = count > 0 ? `지켜보는 중 · ${count}회` : "지켜보는 중";
 }
+
+// Whether argmind makes a sound. **A setting since 2026-09-17**, where it used to be `--speak` on
+// the command line — a switch you can see is a switch you can turn off when somebody walks in.
+const aloud = document.getElementById("aloud") as HTMLInputElement;
+aloud.onchange = () => {
+  // The server confirms with its own `voice` event and can fail to find a voice at all, so this
+  // does not draw the new state itself.
+  void post(aloud.checked ? "/aloud/on" : "/aloud/off");
+};
 
 notice.onchange = () => {
   // The server confirms with its own `noticing` event and can refuse — a standing 거부 turns the

@@ -50,14 +50,18 @@ fn nothing_that_performs_an_action_can_be_answered_always() {
         //: And every one of them has a name a person would recognise in a window.
         assert_ne!(what(allowed), "알 수 없는 권한", "{allowed} has no name");
     }
-    assert_eq!(DECIDABLE.len(), 8);
+    assert_eq!(DECIDABLE.len(), 9);
 }
 
-/// The six needs and the two switches, and no third kind smuggled in by a typo.
+/// The six needs and the three switches, and no fourth kind smuggled in by a typo.
+///
+/// **`speaker` and `aloud` are both here and they are different questions**: may argmind build the
+/// synthesiser, and may it make a noise in the room. They were conflated until 2026-09-17, when the
+/// first was allowed and argmind still would not speak without a command-line flag.
 #[test]
-fn the_list_is_the_needs_and_the_two_switches() {
+fn the_list_is_the_needs_and_the_three_switches() {
     assert_eq!(DECIDABLE, ["ollama", "model", "whisper", "korean-voice", "vulkan", "speaker",
-                           "notice", "microphone"]);
+                           "notice", "microphone", "aloud"]);
     //: Every need `needs::every` can report is decidable, or it is a question with no way to
     //: answer it for good.
     for need in argmind_serve::needs::every("qwen3:8b") {
@@ -208,4 +212,44 @@ fn the_watch_is_allowed_by_default_and_the_file_still_says_nothing() {
         Some(answer) => assert_eq!(standing(key), Some(answer)),
         None => assert_eq!(standing(key), Some(Standing::Allowed)),
     }
+}
+
+/// **Making a noise in a room is a setting, not a command-line flag.**
+///
+/// The owner, 2026-09-17: speak도 설정으로 넘겨. It was `--speak`, and `speaker: allowed` in the
+/// settings did not turn it on — because that key is permission to *build the synthesiser*, which
+/// is a different thing from whether argmind makes a sound. Two keys, two questions.
+#[test]
+fn speaking_aloud_is_decided_in_the_settings_and_the_flag_fills_the_gap() {
+    use argmind_serve::app::aloud_from;
+    use argmind_serve::decided::{is_decidable, what, ALLOWED_UNLESS_REFUSED};
+
+    assert!(is_decidable("aloud"));
+    assert_ne!(what("aloud"), what("speaker"), "the two switches read the same in the page");
+
+    //: **Not defaulted on.** Everything measured about this voice was measured at volume zero so a
+    //: desktop somebody was using stayed quiet; a program that starts making noise because it was
+    //: run is the thing that reasoning was against.
+    assert!(!ALLOWED_UNLESS_REFUSED.contains(&"aloud"));
+    assert!(!aloud_from(false, None), "silence is what an unanswered machine does");
+    assert!(aloud_from(true, None), "the flag still says yes when nothing was answered");
+
+    //: Answered either way, the answer wins over the flag — including the refusal, so a shortcut
+    //: with `--speak` on it cannot override somebody who turned it off this morning.
+    assert!(aloud_from(false, Some(Standing::Allowed)));
+    assert!(aloud_from(true, Some(Standing::Allowed)));
+    assert!(!aloud_from(true, Some(Standing::Denied)));
+    assert!(!aloud_from(false, Some(Standing::Denied)));
+}
+
+/// The switch is its own route, because it **is** the setting rather than a question about one.
+#[test]
+fn the_aloud_route_is_a_switch_with_two_positions() {
+    use argmind_serve::{route, Request, Route};
+    let said = |p: &str| route(&Request { method: "POST".into(), path: p.into(),
+                                          token: None, body: String::new() });
+    assert_eq!(said("/aloud/on"), Route::Aloud(true));
+    assert_eq!(said("/aloud/off"), Route::Aloud(false));
+    assert_eq!(said("/aloud/maybe"), Route::Unknown);
+    assert_eq!(said("/aloud"), Route::Unknown);
 }
