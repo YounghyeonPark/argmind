@@ -126,12 +126,23 @@ refuse, and name what it would take.
 
 **On Linux that is a permission question before it is a coding one.**
 
-**On Linux that is a permission question before it is a coding one.**
-
 - **X11** lets any client inject input with XTEST. `libxdo` is installed and the work is small.
 - **Wayland** deliberately does not. The sanctioned route is `xdg-desktop-portal`'s RemoteDesktop
-  interface, where the person grants a session — so what changes is the permission model, not the
-  implementation, and argmind's four-way permission has somewhere to go.
+  interface, where the person grants a session in a dialog belonging to the *system*.
+
+**And that last point changes something argmind promised.** Its four-way permission remembers a
+decision in `decisions.json` and does not ask again; on Wayland the portal decides whether to
+re-ask, and revocation happens in the system rather than in argmind's settings panel. So *항상
+허용* cannot be honoured from inside the application there, and *항상거부하면 세팅창에서 바꿀수
+있게 할것* is only half true. The honest model is **two gates** — argmind's, and the system's where
+there is one — and the settings panel manages only the first.
+
+Three platforms hold the gate in three different places, which is worth having written down
+somewhere: on **Windows** `SendInput` needs no permission at all, so argmind's dialog is the only
+gate and is a discipline it imposes on itself; on **X11** XTEST is open to any client and there is
+no gate; on **macOS** the OS grants Accessibility once, in System Settings; on **Wayland** the
+portal grants per session. Only the first two of those are measured here — the macOS and Wayland
+rows are knowledge, not measurement, and this machine has no portal installed to check against.
 
 Which of the two to support, and what the portal actually gives, is not something to decide from a
 WSLg session that has no window manager of its own. Nothing is written until it is decided against
