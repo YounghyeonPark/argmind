@@ -177,3 +177,35 @@ fn the_settings_decide_whether_it_listens_and_the_flag_only_fills_a_gap() {
     assert!(!hearing_from(true, Some(Standing::Denied)));
     assert!(!hearing_from(false, Some(Standing::Denied)));
 }
+
+/// **Watching is allowed unless it was refused, and a default is not an answer.**
+///
+/// The owner, 2026-09-17: 지켜보기허용을 기본값으로 하고, 설정에서 토글하도록 하자. The cost that
+/// kept it off is unchanged — a model call every three seconds at most for as long as it is on —
+/// and is now printed under the switch rather than asked about.
+#[test]
+fn the_watch_is_allowed_by_default_and_the_file_still_says_nothing() {
+    use argmind_serve::decided::{written, ALLOWED_UNLESS_REFUSED, standing};
+
+    assert!(ALLOWED_UNLESS_REFUSED.contains(&"notice"));
+    //: Every defaulted key must be a key that can be decided at all, or 설정 could never undo it.
+    for key in ALLOWED_UNLESS_REFUSED {
+        assert!(argmind_serve::decided::is_decidable(key), "{key} cannot be turned off");
+    }
+    //: **Nothing else got a default by accident.** A permission that installs something or opens a
+    //: microphone is not on this list, and this is what would catch it being added quietly.
+    for key in argmind_serve::decided::DECIDABLE {
+        if key != "notice" {
+            assert!(!ALLOWED_UNLESS_REFUSED.contains(&key),
+                    "{key} became allowed without anybody being asked");
+        }
+    }
+    //: `standing` fills the default in; `written` never does. The settings panel needs the second
+    //: one — a row reading 항상 허용 with a 되돌리기 button that removes nothing is a lie.
+    let key = "notice";
+    match written(key) {
+        //: On a machine where somebody has actually answered, the answer wins either way.
+        Some(answer) => assert_eq!(standing(key), Some(answer)),
+        None => assert_eq!(standing(key), Some(Standing::Allowed)),
+    }
+}

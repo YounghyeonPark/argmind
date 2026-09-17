@@ -53,6 +53,7 @@ the two days that built this, three of them flattering.
                                 llm.rs       the local model; every setting learned from a silent failure
                                 intent.rs    Trigger, Effect, Intent
                                 mind.rs      the dials and the goal — a slot that is absent at rest
+                                thinking.rs  a note it writes for itself, revised on a timer
                                 converse.rs  one call: what to say, and what if anything to do
                                 session.rs   observe / decide / perform, separately
                                 watch.rs     a trigger that starts from a change, with its floor
@@ -103,7 +104,17 @@ same-named widget in the previous reading, so among copies it settles nothing, a
 name the one it means either.
 
 **A watch carries a floor** (`MIN_GAP = 3.0`). Perception changes 13 seconds in 14; a call costs
-0.3–2 s.
+0.3–2 s. **Watching is on by default since 2026-09-17** — the owner's decision, the cost
+unchanged and now printed under the switch in 설정 rather than asked about. `notice` is the one key
+in `ALLOWED_UNLESS_REFUSED`; a default is not an answer, so nothing is written to `decisions.json`
+and 거부 still wins.
+
+**A thought outlives the turn that produced it, and only just.** `thinking.rs` holds three fields —
+믿는 것 / 기다리는 것 / 이미 한 것 — revised every 30 s by **a call whose answer shape has no `say`
+and no `do` in it**, which is what makes a timer safe. It runs only while watching. **The model is
+not asked what it did**: asked once, it invented having tidied somebody's browser tabs and carried
+it for three revisions, so `tried` is read off `remember_doing`'s own record instead. A blank note
+renders nothing and the six probes still hash to `r322a4c`.
 
 **History is bounded in TURNS, not lines** (`remember_turns = 12`). A turn costs 2.11 lines and the
 old line-based slice landed **inside a turn in 10.7% of prompts** — 7.6% opening on a reply whose
@@ -133,6 +144,8 @@ flag deliberately and that is *stronger* — a person confirms each action, and 
 | accepting | a yes one turn after an offer acts in **30 of 39**, up from 15 of 39 — **15 fixed, 0 broken, p = 0.00006**, pre-registered, both controls holding, 104 cases over four screens. A yes *five turns* later, **3 of 12 → 10 of 12**. What it cost is one control case that goes `landed → silent`: the reply word for word identical and the action slot empty |
 | repair | **3 of 4** corrections land (n=4, so it cannot reach p<0.05 under any repair); a question about the past still re-proposes the action **9 times in 23** — the offer wording and then the standing-offer block each moved it, neither significantly (p = 0.0625 and 0.11) and the second only as a control; **Korean in, Korean out 30 of 36 (83%)** with **English in, English out 12 of 12** as the other half. `--think on` gets repair 4 of 4 and **halves Korean to 18 of 36** |
 | a call | **0.61 s** median, mean 1.43 s, and the gap was one tail: **18 of 1,845 turns ran to the 4,096-token ceiling**, 69–71 s each, 47% of the model time in 1% of the turns. The tail is gone — the same sweep now has 0 at the ceiling and costs 1,461 s against 2,671 s — **but not because the stream stops cut it: neither stop fired in that run, and an earlier version of this row credited them anyway.** Replaying 128 recorded replies through the shipped stops gives `stop` 122, `degenerate` 3, `length` 3 and **`closed` 0**: on an ordinary turn this model emits nothing after its closing brace, so the answered stop is unreachable. The stops are insurance that has not been called |
+| the note | **it invents what it did, if you let it.** Asked for all three fields from a session in which argmind had done nothing: *이미 메모리 사용량이 높은 탭들을 목록으로 정리해두고…* — it had not, and it carried that for three revisions. `tried` is now a record rather than a question and the re-run leaves it empty for 100 s, correctly. It also **anchored** (a file manager on `C:` still read as *exploring files related to Younghyeon Park*) and **wrote in English**; both addressed, both re-run. **`waiting` is still generic** and nothing measures whether one is ever met |
+| the watch was reading argmind | **4 of 8 notices over 150 s said `the window changed to 'argmind'`** — a model call each, spent on its own transcript. `attending.rs` had written the prediction and left it: *nothing here fires on a watch yet; when something does, this is the thing to revisit.* The old rule excluded whatever was in front, so working in Chrome after coming from argmind read argmind. Now `app.py`'s original: **the newest window that is not ours**, available again since the page moved into a window this process owns. **Predicted zero before the change; the re-run gave zero** |
 | the dials | **the slot's language decides the reply's**, and that is the whole finding. 44 Korean requests: no line 28 of 44 answered in Korean, a content-free **English** sentence in the slot **19**, a content-free **Korean** one **42** and 41 on a repeat. The four dials in English sat at 28–31 — they moved 20–40 of 44 sentences and left the language alone. Korean lines ship, and at x3 the worst arm reads **Korean 39 of 44 against 28, leak 7 of 32 against 5**: +11 bought, 2 discordant cases spent, paid only by somebody who turns a dial. **The first reading was that the dials fixed the leak (5 of 32 → 0 or 1 in all four arms); the placebo fixed it too** |
 | parroting | **it says your own words back when it cannot parse them.** 머해 → `머해?`, then the mirror is in the history and the next two turns get it again. Reproduced **at rest** — 2 of 6 echoed and 2 stuck with every dial off — so it is not the dials, and `{"say": "머해?"}` is what comes off the wire, so it is not the reader. `뭐해` is answered properly; `머해` is the colloquial spelling of it. **Asking it not to does not work**: told 상대가 한 말을 그대로 되돌려 말하지 말 것 it replied `머해`. Caught on the way out — *their words plus a question mark*, never plain equality, because `안녕` is a good answer to `안녕` — and **the substitute goes into the history**, which is the half that closed the loop: 2 stuck → 0 |
 | clicking | **2 of 3, n=1** on the Rust, against the Python's 3 of 3 at n=3 on the same goals and the same condition — one Character Map for all three, so the second goal meets a screen the first has changed. One run against three and this model reads 21, 23, 24 across runs of one configuration, so it is a number rather than a regression. **The miss is the interesting part and it is not the model's**: asked for the font list it named `Open`, and advanced view has more than one button called that — what opened was the character set list. `name` and `role` together are still not a key, and the model is shown nothing else |
@@ -237,6 +250,16 @@ code; **macOS needs one grant** in System Settings before the Accessibility API 
 neither, so *the recogniser dies with argmind* is a weaker promise there and `Supervised::supervised()`
 already exists to say so out loud.
 
+**All the inputs, one at a time**, because the owner asked for 화면 · 카메라 · 음성 · 키입력 and
+they are in very different states. **화면** is done and on by default. **음성** is blocked on one
+measurement whose harness is written — `--bin listening`, 30 seconds and somebody talking.
+**카메라** is blocked on there being nothing to send a frame to: `qwen3:8b` is text, a vision model
+took 24–82 s for one pixel, and choosing one is a decision about licence and VRAM rather than
+effort. **키입력** is implementable and deliberately not implemented — every keystroke means a
+global hook, which is a keylogger capturing passwords in a program that sends text to a model; what
+argmind plausibly wants is typing *activity*, which needs no characters and is a different feature
+with a different permission.
+
 No phone environment, no robot environment. **A thinking goal and four dials are built and are at rest until turned**: 재치 · 유머 · 봉사 · 헌신,
 0–10, and a sentence in the person's own words, in `설정 → 생각`. At rest the prompt is what it
 always was. **Voice is built and is off until switched on**: hold
@@ -327,6 +350,7 @@ a fact. `docs/findings/porting-the-core.md` has the accounting.
 | `docs/findings/the-window.md` | **a standalone app rather than a browser tab**: why the house style was the wrong answer, the licence sweep across 81 crates, and the DLL failure that only a double-click finds |
 | `docs/findings/eyes-on-linux.md` | **AT-SPI2**: the contract surviving the port, the switch that makes toolkits publish at all, `i32::MIN` for off-screen, the hit test that answered with the container, and why D-Bus was the one wire protocol not hand-written |
 | `docs/findings/a-better-voice.md` | **the voice**: every open Korean TTS checked and its licence, and the measured answer — RTF 3.9 on the CPU, 0.15 on the GPU, and a K-quant that is thirty-two times faster and wrong |
+| `docs/findings/thinking-continuously.md` | **the note**: what a turn never carried, the three things the first run got wrong, and the watch that was reading argmind itself |
 | `docs/findings/what-it-is-trying-to-be.md` | **the dials**: the rule that made a sixth prompt edit safe, the control that overturned the first reading, and the language of the slot |
 | `docs/findings/harness-pitfalls.md` | **ten ways the model harness lied and seven ways the measuring code did** — the list to check when a measurement reads zero |
 | `docs/findings/porting-the-core.md` | **the move to Rust**: what speed does not decide, the robot answered, the AST rules audited one at a time, what breaks in `measure/`, and the staging |

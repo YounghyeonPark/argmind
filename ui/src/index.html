@@ -54,8 +54,13 @@
   .line.noticed { color: var(--warn); font-size: 13px; }
   .line.noticed::before { content: "◦ "; }
 
-  #notice { font-size: 12px; padding: 2px 10px; }
-  #notice.on { border-color: var(--warn); background: #fdf3ea; }
+  #noticing { font-size: 12px; color: var(--warn); white-space: nowrap; }
+  .switch { display: grid; grid-template-columns: auto 1fr; gap: 2px 8px;
+            padding: 8px 14px 10px; cursor: pointer; }
+  .switch input { margin: 2px 0 0; }
+  .switch .what { font-size: 13px; }
+  .switch .cost { grid-column: 2; font-size: 12px; color: var(--dim); }
+  .switch.refused .what { color: var(--warn); }
 
   #setup { border-bottom: 1px solid var(--edge); padding: 10px 14px; background: #fdfcfa; }
   .setup-head { display: flex; gap: 8px; align-items: baseline; font-weight: 600;
@@ -87,6 +92,13 @@
   #settings > summary, #seeing > summary, #gear > summary, #aiming > summary {
     padding: 6px 14px; cursor: pointer; color: var(--dim); }
   #aiming { border-bottom: 1px solid var(--edge); font-size: 13px; }
+  #holding { border-bottom: 1px solid var(--edge); font-size: 13px; background: #fdfcfa; }
+  #holding > summary { padding: 6px 14px; cursor: pointer; color: var(--dim); }
+  #note { padding: 0 14px 10px; }
+  .thought { display: grid; grid-template-columns: auto 1fr; gap: 3px 8px; }
+  .thought .label { color: var(--dim); white-space: nowrap; }
+  .thought .text { color: var(--ink); }
+  #revisions { margin-top: 6px; font-size: 11px; color: var(--dim); }
   #thinking { padding: 0 14px 10px; }
   .goal { display: block; margin-bottom: 8px; }
   .goal span { color: var(--dim); display: block; margin-bottom: 3px; }
@@ -145,7 +157,10 @@
 <body data-token="__TOKEN__">
   <header>
     <span id="attending">…</span>
-    <button type="button" id="notice">지켜보기</button>
+    <!-- State, not a control: the switch lives in 설정 since 2026-09-17, because watching is on
+         by default now and a header button for something already on is a button that only ever
+         gets pressed by accident. -->
+    <span id="noticing" hidden></span>
     <span id="status"></span>
   </header>
   <div id="spent"></div>
@@ -158,7 +173,15 @@
   <!-- What has been answered once and for all, and how to take it back. Folded away, because it
        is the panel you want on the day you want it and never otherwise. -->
   <details id="settings">
-    <summary>설정 — 기억한 권한</summary>
+    <summary>설정 — 지켜보기와 기억한 권한</summary>
+    <!-- The one switch a person actually reaches for, above the permissions it depends on. It says
+         what it costs rather than asking to be trusted: a model call every three seconds at most,
+         for as long as it is on. -->
+    <label class="switch">
+      <input type="checkbox" id="notice">
+      <span class="what">화면 지켜보기</span>
+      <span class="cost">창이 바뀌면 먼저 말을 겁니다 — 최대 3초에 한 번 모델 호출</span>
+    </label>
     <div id="decisions"></div>
   </details>
   <!-- Which microphone, speaker and camera, and a button that uses each one for a moment so the
@@ -167,6 +190,14 @@
   <details id="gear">
     <summary>장치 — 마이크 · 스피커 · 카메라</summary>
     <div id="devices"></div>
+  </details>
+  <!-- What it currently holds to be true. **Shown because a thought nobody can read cannot be
+       told from no thought** — and because a belief that is wrong sits in every prompt until
+       something replaces it, so the only way anybody catches that is by reading it. Hidden
+       entirely until there is one; it fills in on its own within half a minute of watching. -->
+  <details id="holding" hidden>
+    <summary>지금 생각하고 있는 것</summary>
+    <div id="note"></div>
   </details>
   <!-- What it is trying to be. Folded like the rest, and **the sentence it actually sends is
        printed under the sliders** — a settings panel that shows four numbers and keeps what they

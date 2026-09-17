@@ -2,11 +2,15 @@
 //! runs, it is something decided.**
 
 use crate::contract::{Eyes, Hands, Speaks, Widget};
-use crate::converse::{read_reply, render, MAX_LISTED};
+use crate::converse::{read_reply, MAX_LISTED};
 use crate::intent::{Done, Effect, Exchange, Intent, Trigger};
 use crate::mind::Mind;
+use crate::thinking::Note;
 
 pub const REMEMBER_TURNS: i64 = 12;
+/// How many of argmind's own actions the note carries. **Three, matching `MOST_AT_ONCE`** — the
+/// longest sequence it can perform in one turn, so the note holds the last thing it did whole.
+pub const DID_IN_NOTE: usize = 3;
 pub const NOTHING_DONE: &str = "nothing was done";
 pub const TURN_OPENS: [&str; 2] = ["them", "noticed"];
 pub const PAST: usize = 0;
@@ -82,6 +86,9 @@ pub struct Session<E: Eyes, H: Hands, M: Speaks> {
     /// What it is trying to be, from the settings. **Resting until somebody turns a dial**, and
     /// resting renders the prompt this program shipped with, byte for byte.
     pub mind: Mind,
+    /// What it has worked out, which is the only thing here that argmind wrote for itself.
+    /// **Blank until something revises it**, and blank renders nothing.
+    pub note: Note,
 }
 
 impl<E: Eyes, H: Hands, M: Speaks> Session<E, H, M> {
@@ -89,7 +96,7 @@ impl<E: Eyes, H: Hands, M: Speaks> Session<E, H, M> {
         Session { eyes, hands, model, seen: Vec::new(), history: Vec::new(), exchanges: 0,
                   blind: 0, vanished: 0, unknown_keys: 0, may_act_unprompted: false,
                   remember_turns: Some(REMEMBER_TURNS), limit: MAX_LISTED,
-                  mind: Mind::resting() }
+                  mind: Mind::resting(), note: Note::blank() }
     }
 
     pub fn observe(&mut self) -> (Vec<Widget>, f64) {
@@ -165,7 +172,8 @@ impl<E: Eyes, H: Hands, M: Speaks> Session<E, H, M> {
             self.observe();
         }
         let listed: Vec<Widget> = self.seen.iter().take(self.limit).cloned().collect();
-        let prompt = render(&listed, trigger, &self.recent(), self.limit, &self.mind);
+        let prompt = crate::converse::render_with(&listed, trigger, &self.recent(),
+                                                  self.limit, &self.mind, &self.note);
         let reply = self.model.ask(&prompt);
         let intent = read_reply(&reply, &listed, trigger);
         let before = intent.effects.len();
@@ -266,5 +274,42 @@ impl<E: Eyes, H: Hands, M: Speaks> Session<E, H, M> {
 
     pub fn exchange(&mut self, heard: &str) -> Exchange {
         self.think(&Trigger::said(heard))
+    }
+
+    /// **One tick of thinking that cannot speak and cannot act.**
+    ///
+    /// A separate call from [`Self::decide`], asking only for the three fields of a
+    /// [`Note`] — there is no `say` and no `do` in the shape it asks for, which is what makes it
+    /// safe to run on a timer. Returns whether the note actually changed.
+    ///
+    /// **It reads the screen and does not write `seen`.** A tick must not make the next real turn
+    /// think it has already looked, because a reading from thirty seconds ago is exactly the
+    /// staleness the rest of this file is built to avoid.
+    pub fn reflect(&mut self) -> bool {
+        let widgets = self.eyes.foreground();
+        let listed: Vec<Widget> = widgets.iter().take(self.limit).cloned().collect();
+        let screen = crate::converse::describe_screen(&listed, self.limit);
+        //: **The record, before the question.** What argmind did is a fact it already holds, and
+        //: asking a model to recall it is the wrong side of this project's line — the one time it
+        //: was asked, it invented having tidied somebody's browser tabs and carried that for three
+        //: revisions.
+        self.note.record(&crate::thinking::what_it_did(&self.history, DID_IN_NOTE));
+        let prompt = crate::thinking::ask_for_a_note(&self.note, &screen, &self.recent(),
+                                                     crate::thinking::MOST_CHARS);
+        let reply = self.model.ask(&prompt);
+        let before = self.note.clone();
+        if !crate::thinking::read_note(&reply, &mut self.note) {
+            return false;
+        }
+        //: **A revision that says the same thing is not a revision.** The count is what a
+        //: measurement would use to ask whether a note settles or churns, and inflating it with
+        //: no-ops would make a stuck note look busy.
+        //: `tried` is not compared: it changes when argmind acts, which is not the note being
+        //: reconsidered, and counting it would make a click look like a thought.
+        let same = self.note.believes == before.believes && self.note.waiting == before.waiting;
+        if same {
+            self.note.revisions = before.revisions;
+        }
+        !same
     }
 }

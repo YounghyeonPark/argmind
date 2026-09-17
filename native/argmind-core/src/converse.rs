@@ -9,6 +9,7 @@ use crate::contract::Widget;
 use crate::intent::{Effect, Intent, Trigger};
 use crate::llm::first_object;
 use crate::mind::Mind;
+use crate::thinking::Note;
 
 pub const MAX_LISTED: usize = 200;
 /// **Derived, not chosen.** 27 of 28 real requests want one effect or two; spurious ones come in
@@ -65,6 +66,13 @@ pub fn still_open(history: &[(String, String)]) -> Vec<String> {
 /// still renders**, which is the whole safety of having added one. See [`crate::mind`].
 pub fn render(widgets: &[Widget], trigger: &Trigger, history: &[(String, String)],
               limit: usize, mind: &Mind) -> String {
+    render_with(widgets, trigger, history, limit, mind, &Note::blank())
+}
+
+/// The same, plus what it had already worked out. **A blank [`Note`] renders nothing**, so this is
+/// `render` — see [`crate::thinking`] for why that guarantee is the price of adding a slot at all.
+pub fn render_with(widgets: &[Widget], trigger: &Trigger, history: &[(String, String)],
+                   limit: usize, mind: &Mind, note: &Note) -> String {
     let listed: Vec<&Widget> = widgets.iter().take(limit).collect();
     let mut lines: Vec<String> = vec![SYSTEM.to_string()];
     if !trigger.asked {
@@ -76,6 +84,14 @@ pub fn render(widgets: &[Widget], trigger: &Trigger, history: &[(String, String)
         for (who, text) in history {
             lines.push(format!("  {who}: {text}"));
         }
+        lines.push(String::new());
+    }
+    //: **What it was thinking before this moment**, above the screen rather than below it: the
+    //: screen is the largest block in the prompt and a slot underneath it is a slot behind two
+    //: hundred widget names. Placement is unargued, like the dials' — what is measured is only
+    //: that an empty note changes nothing.
+    if let Some(block) = note.block() {
+        lines.push(block);
         lines.push(String::new());
     }
     lines.push("On screen now:".to_string());

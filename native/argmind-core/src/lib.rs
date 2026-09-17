@@ -23,4 +23,5 @@ pub mod intent;
 pub mod llm;
 pub mod mind;
 pub mod session;
+pub mod thinking;
 pub mod watch;

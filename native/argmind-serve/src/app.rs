@@ -133,6 +133,8 @@ struct Desk {
     /// a standing invitation to spend a model call every few seconds.
     watches: Vec<Watch>,
     noticing: bool,
+    /// When it last revised its own notes, on the same clock `notice` uses.
+    thought_at: f64,
     /// What the screen looked like last time this checked. **Empty means there is no before**, and
     /// the first look after switching on reports nothing whatever is on screen.
     before: Vec<argmind_core::contract::Widget>,
@@ -481,15 +483,19 @@ pub fn spoken(intent: &argmind_core::intent::Intent) -> String {
 }
 
 fn decisions_json() -> String {
-    let rows: Vec<String> = crate::decided::all().iter().map(|(key, name, how)| {
-        let word = match how {
-            Some(Standing::Allowed) => "allowed",
-            Some(Standing::Denied) => "denied",
-            None => "",
-        };
-        format!("{{\"key\":\"{}\",\"what\":\"{}\",\"standing\":\"{word}\"}}",
-                escape(key), escape(name))
-    }).collect();
+    let rows: Vec<String> = crate::decided::all_with_defaults().iter()
+        .map(|(key, name, how, by_default)| {
+            let word = match how {
+                Some(Standing::Allowed) => "allowed",
+                Some(Standing::Denied) => "denied",
+                None => "",
+            };
+            //: **`standing` is what was written and `default` is what happens when nothing was.**
+            //: Collapsing them would put *항상 허용* beside a 잊어버려 button that removes nothing.
+            format!("{{\"key\":\"{}\",\"what\":\"{}\",\"standing\":\"{word}\",\
+                     \"default\":{by_default}}}",
+                    escape(key), escape(name))
+        }).collect();
     format!("[{}]", rows.join(","))
 }
 
@@ -545,6 +551,10 @@ fn carry_out(desk: &mut Desk, out: &Listeners, model: &str, key: &str) {
 /// code the button does.
 fn switch_noticing(desk: &mut Desk, out: &Listeners, on: bool) {
     desk.noticing = on;
+    //: **Switching on thinks at the next tick rather than thirty seconds later.** Nothing has been
+    //: thought about this screen yet, so waiting out a timer that started before the switch is a
+    //: panel that stays empty for no reason.
+    desk.thought_at = 0.0;
     //: **Cleared on the way in, not on the way out.** Switching on with an old `before` would
     //: compare against a screen from ten minutes ago and report the whole desktop as newly changed.
     desk.before.clear();
@@ -623,6 +633,49 @@ fn notice(desk: &mut Desk, out: &Listeners, now: f64) {
             propose(desk, out, effect.clone());
         }
     }
+}
+
+/// How often argmind revises its own notes, in seconds.
+///
+/// **Thirty, and it is a cost rather than a taste.** A tick is one model call — 0.61 s median — so
+/// this is two calls a minute for as long as argmind is open, on top of whatever watching spends.
+/// Three seconds would be four hundred an hour to watch somebody read a document.
+///
+/// It is also the floor on how stale a thought may be. A person who switches to their editor and
+/// types for twenty seconds has not yet been noticed by this; the *watch* sees that in three, and
+/// this is the slower loop underneath it.
+pub const THINK_EVERY: f64 = 30.0;
+
+/// One tick of argmind thinking about what it is looking at.
+///
+/// **It cannot speak and it cannot act**: `Session::reflect` asks a question whose answer shape has
+/// no `say` and no `do` in it. That is the property that makes a timer safe here — everything else
+/// in this file that runs without being asked had to be argued about, and this one cannot reach the
+/// person at all except through the panel that shows the note.
+///
+/// **Tied to watching**, because they are the same permission in substance: both are argmind
+/// spending model calls on a screen nobody pointed at. Switching 지켜보기 off stops both.
+fn reflect(desk: &mut Desk, out: &Listeners, now: f64) {
+    if !desk.noticing || now - desk.thought_at < THINK_EVERY {
+        return;
+    }
+    desk.thought_at = now;
+    //: **No `busy` event.** That marks the person waiting for an answer, and nobody is waiting for
+    //: this; flashing 생각 중 twice a minute at somebody who did not ask anything is the noise the
+    //: watch floor exists to prevent, in a second place.
+    if desk.session.reflect() {
+        out.send("note-kept", &note_json(&desk.session.note));
+    }
+}
+
+/// What it is holding in mind, for the panel that shows it.
+///
+/// **Shown, because a thought nobody can read is indistinguishable from no thought.** It is also
+/// the only way anybody notices the note has gone wrong — a belief that is false stays in every
+/// prompt until something replaces it.
+fn note_json(note: &argmind_core::thinking::Note) -> String {
+    format!("{{\"believes\":\"{}\",\"waiting\":\"{}\",\"tried\":\"{}\",\"revisions\":{}}}",
+            escape(&note.believes), escape(&note.waiting), escape(&note.tried), note.revisions)
 }
 
 /// The talk key, down or up. **Letting go is what starts a turn** — nothing is transcribed while
@@ -939,7 +992,13 @@ pub fn run(how: How) {
                               //: is the change that means *look at this*. `Appeared` and `Vanished`
                               //: need a name to look for and there is nowhere yet to type one.
                               watches: vec![Watch::new(Looking::WindowChanged)],
-                              noticing: false, before: Vec::new(), noticed: 0 };
+                              noticing: false, thought_at: 0.0, before: Vec::new(), noticed: 0 };
+        //: **On from the start when it is allowed**, which it is by default since 2026-09-17. A
+        //: permission that says yes and a program that waits for a button anyway is the defect
+        //: this session has already found twice in other places.
+        if crate::decided::standing("notice") == Some(Standing::Allowed) {
+            switch_noticing(&mut desk, &agent_out, true);
+        }
         //: **Read once, here.** Every turn renders from `desk.session.mind`, so the file is not
         //: touched on the hot path — and a mind that was never set is a resting one, which renders
         //: the prompt this program shipped with byte for byte.
@@ -954,7 +1013,11 @@ pub fn run(how: How) {
             let job = match inbox.recv_timeout(std::time::Duration::from_millis(700)) {
                 Ok(job) => job,
                 Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {
-                    notice(&mut desk, &agent_out, started.elapsed().as_secs_f64());
+                    let now = started.elapsed().as_secs_f64();
+                    notice(&mut desk, &agent_out, now);
+                    //: **After noticing, not instead of it.** A window change is what a person is
+                    //: owed an answer about; revising a note is what happens in the gaps.
+                    reflect(&mut desk, &agent_out, now);
                     continue;
                 }
                 Err(_) => break,
@@ -1048,10 +1111,22 @@ pub fn run(how: How) {
                 }
                 Job::Forget(key) => {
                     match crate::decided::keep(&key, None) {
-                        Ok(()) => agent_out.send(
-                            "note", &format!("{} — 다음에 다시 물어봅니다",
-                                             crate::decided::what(&key))),
+                        //: **What it goes back to, which is not always a question.** A key with a
+                        //: default returns to the default; saying *다음에 다시 물어봅니다* there
+                        //: would promise a step that no longer happens.
+                        Ok(()) => agent_out.send("note", &format!(
+                            "{} — {}", crate::decided::what(&key),
+                            if crate::decided::ALLOWED_UNLESS_REFUSED.contains(&key.as_str()) {
+                                "기본값(허용)으로 돌아갑니다"
+                            } else {
+                                "다음에 다시 물어봅니다"
+                            })),
                         Err(why) => agent_out.send("note", &why),
+                    }
+                    //: And a default that is allowed means it starts again now, rather than at the
+                    //: next launch — the same rule the rest of this file learned the hard way.
+                    if crate::decided::standing(&key) == Some(Standing::Allowed) && key == "notice" {
+                        switch_noticing(&mut desk, &agent_out, true);
                     }
                     agent_out.send("decisions", &decisions_json());
                 }
@@ -1110,6 +1185,9 @@ pub fn run(how: How) {
                     //: **What it is trying to be**, so the sliders and the goal are drawn where
                     //: they were left rather than at rest.
                     let _ = tx.send(sse("mind", &mind_json(&desk.session.mind)));
+                    //: **And what it currently thinks**, so a page opened halfway through a session
+                    //: shows the thought rather than an empty panel that fills in thirty seconds.
+                    let _ = tx.send(sse("note-kept", &note_json(&desk.session.note)));
                 }
             }
         }

@@ -179,8 +179,33 @@ pub fn render(all: &BTreeMap<String, Standing>) -> String {
     format!("{{\n{}\n}}\n", rows.join(",\n"))
 }
 
-/// What has been decided about this, if anything.
+/// **What is allowed without being asked.**
+///
+/// The owner, 2026-09-17: 지켜보기허용을 기본값으로 하고, 설정에서 토글하도록 하자.
+///
+/// Watching was off until asked for and the reason was a cost, not a risk: something on screen
+/// changes 13 seconds out of 14, so it is a standing invitation to spend a model call every three
+/// seconds for as long as it is on. **That is the owner's bill and the owner has decided to pay
+/// it.** The cost is unchanged and is still what the settings row says out loud.
+///
+/// **A default is not an answer.** Nothing is written to `decisions.json` by being on this list, so
+/// 거부 in the settings is still a decision that is recorded and still wins — and taking a key off
+/// this list later turns it back into a question rather than into a silent no.
+pub const ALLOWED_UNLESS_REFUSED: [&str; 1] = ["notice"];
+
+/// What has been decided about this, if anything — **or the default, for the keys that have one.**
 pub fn standing(key: &str) -> Option<Standing> {
+    remembered().get(key).copied().or_else(|| {
+        ALLOWED_UNLESS_REFUSED.contains(&key).then_some(Standing::Allowed)
+    })
+}
+
+/// What is actually written down, with no default filled in.
+///
+/// **The settings panel needs this and `standing` would lie to it**: a row reading *항상 허용* for
+/// something nobody ever answered, with a 잊어버려 button that removes nothing, is an interface
+/// describing a decision that was never made.
+pub fn written(key: &str) -> Option<Standing> {
     remembered().get(key).copied()
 }
 
@@ -215,4 +240,12 @@ pub fn keep(key: &str, how: Option<Standing>) -> Result<(), String> {
 pub fn all() -> Vec<(&'static str, &'static str, Option<Standing>)> {
     let kept = remembered();
     DECIDABLE.iter().map(|k| (*k, what(k), kept.get(*k).copied())).collect()
+}
+
+/// The same, plus **whether an unanswered row is nevertheless allowed.** Four states rather than
+/// three, because *허용해 둠* and *기본값으로 허용* are different things to be told.
+pub fn all_with_defaults() -> Vec<(&'static str, &'static str, Option<Standing>, bool)> {
+    all().into_iter()
+        .map(|(k, what, how)| (k, what, how, ALLOWED_UNLESS_REFUSED.contains(&k)))
+        .collect()
 }

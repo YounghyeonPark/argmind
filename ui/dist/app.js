@@ -198,21 +198,21 @@ form.onsubmit = (e) => {
 // seconds out of 14, so this is a standing invitation to spend a model call every few seconds —
 // and how often that is on *your* desktop is a thing to watch rather than guess.
 const notice = document.getElementById("notice");
+const noticing = document.getElementById("noticing");
 let noticedSoFar = 0;
+// The switch is in 설정 and the header only reports. **Two elements for one fact**, which is worth
+// it here: watching is on by default now, so the thing a person needs at a glance is *is it
+// looking right now*, and the thing they need occasionally is *make it stop*.
 function drawNoticing(on, count) {
     noticedSoFar = count;
-    notice.classList.toggle("on", on);
-    notice.textContent = on ? `지켜보는 중 · ${count}회` : "지켜보기";
-    notice.title = on
-        ? "화면이 바뀌면 먼저 말을 겁니다. 알아챌 때마다 모델 호출 한 번."
-        : "켜면 창이 바뀔 때 먼저 말을 겁니다.";
+    notice.checked = on;
+    noticing.hidden = !on;
+    noticing.textContent = count > 0 ? `지켜보는 중 · ${count}회` : "지켜보는 중";
 }
-notice.onclick = () => {
-    const turningOn = !notice.classList.contains("on");
-    // Drawn at once rather than waiting for the round trip: the server confirms with its own event,
-    // and a button that does nothing for a moment is a button people press twice.
-    drawNoticing(turningOn, noticedSoFar);
-    void post(turningOn ? "/notice/on" : "/notice/off");
+notice.onchange = () => {
+    // The server confirms with its own `noticing` event and can refuse — a standing 거부 turns the
+    // box straight back off — so this does not draw the new state itself.
+    void post(notice.checked ? "/notice/on" : "/notice/off");
 };
 stream.addEventListener("noticing", (e) => {
     drawNoticing(e.data === "1", noticedSoFar);
@@ -394,13 +394,20 @@ function drawDecisions(rows) {
         // **Unanswered is a state and it is shown.** A settings panel that lists only what was decided
         // cannot tell you what you will be asked about next.
         standing.textContent =
-            d.standing === "allowed" ? "항상 허용" : d.standing === "denied" ? "항상 거부" : "아직 안 물음";
+            d.standing === "allowed" ? "항상 허용"
+                : d.standing === "denied" ? "항상 거부"
+                    // **A default is not an answer**, and the two read differently on purpose: one of them is
+                    // something you chose and the other is something nobody has had to choose yet.
+                    : d.default ? "기본값 — 허용" : "아직 안 물음";
         box.append(standing);
         if (d.standing !== "") {
             const forget = document.createElement("button");
             forget.type = "button";
             forget.textContent = "되돌리기";
-            forget.title = "다음에 다시 물어봅니다";
+            // **What it goes back to, not what it always went back to.** A key with a default does not
+            // become a question again; saying it would is the interface describing a step that no longer
+            // happens.
+            forget.title = d.default ? "기본값(허용)으로 돌아갑니다" : "다음에 다시 물어봅니다";
             forget.onclick = () => void post(`/forget/${encodeURIComponent(d.key)}`);
             box.append(forget);
         }
@@ -533,6 +540,38 @@ function gearRow(g) {
     row.append(said);
     return row;
 }
+const thinking = document.getElementById("holding");
+const note = document.getElementById("note");
+stream.addEventListener("note-kept", (e) => {
+    const t = JSON.parse(e.data);
+    const rows = [
+        ["믿는 것", t.believes],
+        ["기다리는 것", t.waiting],
+        ["이미 한 것", t.tried],
+    ];
+    const filled = rows.filter(([, text]) => text.trim() !== "");
+    // A fold that opens onto nothing is worse than no fold — the same rule 모델이 본 것 keeps.
+    thinking.hidden = filled.length === 0;
+    if (filled.length === 0)
+        return;
+    note.replaceChildren();
+    const grid = document.createElement("div");
+    grid.className = "thought";
+    for (const [label, text] of filled) {
+        const l = document.createElement("span");
+        l.className = "label";
+        l.textContent = label;
+        const v = document.createElement("span");
+        v.className = "text";
+        v.textContent = text;
+        grid.append(l, v);
+    }
+    note.append(grid);
+    const n = document.createElement("div");
+    n.id = "revisions";
+    n.textContent = `${t.revisions}번째 고쳐 씀`;
+    note.append(n);
+});
 // --- what it is trying to be -------------------------------------------------------------------
 //
 // Four sliders and a sentence. **The line the model is actually sent is printed underneath**,
