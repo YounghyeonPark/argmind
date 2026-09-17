@@ -161,6 +161,10 @@ enum Job {
     Decide(String, Answer),
     /// Take back a standing answer, from the settings.
     Forget(String),
+    /// Use this device from now on.
+    Choose(String, String),
+    /// Open one for a moment and report.
+    Try(String),
     /// The talk key went down or came up.
     Listen(bool),
     /// A page opened: send it the snapshot it needs to draw itself.
@@ -389,6 +393,30 @@ fn asking_json(key: &str) -> String {
 }
 
 /// Every decidable thing and what is decided about it, for the settings panel.
+/// Every device of every kind, which one is chosen, and which the machine would pick anyway.
+///
+/// **Enumerating opens nothing.** It reads a device list and a property store, so this is as quiet
+/// as asking what is missing — and unlike the tests below it, nothing here records, plays or looks.
+fn devices_json() -> String {
+    let kinds: Vec<String> = crate::chosen::KINDS.iter().map(|kind| {
+        let picked = crate::chosen::chosen(kind);
+        let (found, trouble) = match crate::platform::devices(kind) {
+            Ok(list) => (list, String::new()),
+            Err(why) => (Vec::new(), why),
+        };
+        let rows: Vec<String> = found.iter().map(|d| format!(
+            "{{\"id\":\"{}\",\"name\":\"{}\",\"default\":{}}}",
+            escape(&d.id), escape(&d.name), d.default)).collect();
+        //: **`chosen` is reported even when it is not in the list.** A headset that is unplugged
+        //: right now is still the one that was picked, and the page says so rather than silently
+        //: showing the default as though nobody had ever chosen.
+        format!("{{\"kind\":\"{}\",\"what\":\"{}\",\"chosen\":\"{}\",\"trouble\":\"{}\",\"found\":[{}]}}",
+                escape(kind), escape(crate::chosen::what(kind)),
+                escape(picked.as_deref().unwrap_or("")), escape(&trouble), rows.join(","))
+    }).collect();
+    format!("[{}]", kinds.join(","))
+}
+
 fn decisions_json() -> String {
     let rows: Vec<String> = crate::decided::all().iter().map(|(key, name, how)| {
         let word = match how {
@@ -867,6 +895,34 @@ pub fn run(how: How) {
                 Job::Fix(key) => fix(&agent_out, &agent_model, &key),
                 Job::Decide(key, answer) => decide(&mut desk, &agent_out, &agent_model, &key,
                                                    answer),
+                Job::Choose(kind, id) => {
+                    let pick = (!id.is_empty()).then_some(id.as_str());
+                    match crate::chosen::keep(&kind, pick) {
+                        Ok(()) => {
+                            agent_out.send("note", &format!(
+                                "{} — {}", crate::chosen::what(&kind),
+                                match pick {
+                                    Some(_) => "골랐습니다. 다음 사용부터 적용됩니다",
+                                    None => "기본 장치로 되돌렸습니다",
+                                }));
+                            //: **Next use, not now.** The microphone and the speaker are opened
+                            //: when they are wanted, and a device swapped underneath a sentence
+                            //: that is being spoken would cut it off — which is a worse surprise
+                            //: than waiting for the next one.
+                        }
+                        Err(why) => agent_out.send("note", &why),
+                    }
+                    agent_out.send("devices", &devices_json());
+                }
+                Job::Try(kind) => {
+                    agent_out.send("busy", "1");
+                    let tried = crate::platform::try_device(
+                        &kind, crate::chosen::chosen(&kind).as_deref());
+                    agent_out.send("busy", "0");
+                    agent_out.send("tried", &format!(
+                        "{{\"kind\":\"{}\",\"worked\":{},\"said\":\"{}\"}}",
+                        escape(&kind), tried.worked, escape(&tried.said)));
+                }
                 Job::Forget(key) => {
                     match crate::decided::keep(&key, None) {
                         Ok(()) => agent_out.send(
@@ -903,6 +959,10 @@ pub fn run(how: How) {
                     //: **And what has already been answered**, so the settings panel is drawn
                     //: without anybody having to press 다시 확인 to find out what they agreed to.
                     let _ = tx.send(sse("decisions", &decisions_json()));
+                    //: **Listed when a page opens rather than at startup.** Enumerating reads a
+                    //: property store and opens nothing, but a headset plugged in since boot
+                    //: should appear without restarting the program.
+                    let _ = tx.send(sse("devices", &devices_json()));
                 }
             }
         }
@@ -1012,6 +1072,25 @@ fn serve_one(mut stream: TcpStream, out: &Listeners, token: &str, jobs: &Sender<
                 let _ = stream.write_all(&respond("400 Bad Request", "text/plain", "no"));
             }
         },
+        //: **The kind is checked here and not only in the job.** A route that reaches the agent
+        //: thread with a name nobody recognises is a bad request, and answering 400 says so at the
+        //: moment it can still mean something.
+        Route::Choose(kind, id) => {
+            if crate::chosen::is_a_kind(&kind) {
+                let _ = stream.write_all(&respond("204 No Content", "text/plain", ""));
+                let _ = jobs.send(Job::Choose(kind, id));
+            } else {
+                let _ = stream.write_all(&respond("400 Bad Request", "text/plain", "no"));
+            }
+        }
+        Route::Try(kind) => {
+            if crate::chosen::is_a_kind(&kind) {
+                let _ = stream.write_all(&respond("204 No Content", "text/plain", ""));
+                let _ = jobs.send(Job::Try(kind));
+            } else {
+                let _ = stream.write_all(&respond("400 Bad Request", "text/plain", "no"));
+            }
+        }
         Route::Forget(key) => {
             if crate::decided::is_decidable(&key) {
                 let _ = stream.write_all(&respond("204 No Content", "text/plain", ""));

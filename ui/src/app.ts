@@ -36,6 +36,24 @@ interface Hello {
   waiting: Proposal[];
 }
 
+/** One microphone, speaker or camera, as the server lists it. */
+interface Device {
+  id: string;
+  name: string;
+  default: boolean;
+}
+
+/** All of one kind, and which is chosen. */
+interface Gear {
+  kind: string;
+  what: string;
+  /** What was picked, which may not be in `found` — an unplugged headset is still the choice. */
+  chosen: string;
+  /** Why the list is empty, where it is. */
+  trouble: string;
+  found: Device[];
+}
+
 const token = document.body.dataset.token ?? "";
 
 /** Every request carries the token. Localhost is not a permission: any program you run is on it. */
@@ -574,3 +592,97 @@ stream.addEventListener("hearing", (e) => {
 });
 
 input.focus();
+
+
+// --- which microphone, which speaker, which camera -------------------------------------------
+//
+// Three rows, each a list and a button. The button **uses** the device — a tone, a second of
+// recording, one frame — because a person checking their microphone wants to know whether it hears
+// them, and a settings panel that only lists names cannot answer that.
+
+const gear = document.getElementById("gear") as HTMLDetailsElement;
+const devices = document.getElementById("devices") as HTMLElement;
+
+stream.addEventListener("devices", (e) => {
+  const kinds: Gear[] = JSON.parse((e as MessageEvent).data);
+  devices.replaceChildren();
+  for (const g of kinds) {
+    devices.append(gearRow(g));
+  }
+  // Nothing to show is not worth a fold that opens onto nothing.
+  gear.hidden = kinds.length === 0;
+});
+
+stream.addEventListener("tried", (e) => {
+  const r = JSON.parse((e as MessageEvent).data) as
+    { kind: string; worked: boolean; said: string };
+  const said = devices.querySelector(`[data-said="${r.kind}"]`);
+  if (said) {
+    said.textContent = r.said;
+    said.classList.toggle("bad", !r.worked);
+  }
+});
+
+function gearRow(g: Gear): HTMLElement {
+  const row = document.createElement("div");
+  row.className = "gear-row";
+  const line = document.createElement("div");
+  line.className = "line";
+
+  const what = document.createElement("span");
+  what.className = "what";
+  what.textContent = g.what;
+  line.append(what);
+
+  const pick = document.createElement("select");
+  // **The first option is the machine's own preference, not a device.** Choosing it forgets the
+  // choice rather than pinning whatever happens to be default today.
+  const auto = document.createElement("option");
+  auto.value = "";
+  auto.textContent = "자동 (기본 장치)";
+  pick.append(auto);
+  for (const d of g.found) {
+    const o = document.createElement("option");
+    o.value = d.id;
+    o.textContent = d.default ? `${d.name}  (기본)` : d.name;
+    pick.append(o);
+  }
+  // A chosen device that is not in the list is unplugged, and saying so beats quietly showing 자동.
+  if (g.chosen && !g.found.some((d) => d.id === g.chosen)) {
+    const gone = document.createElement("option");
+    gone.value = g.chosen;
+    gone.textContent = "고른 장치 — 지금 없음";
+    pick.append(gone);
+  }
+  pick.value = g.chosen;
+  pick.onchange = () => {
+    void post(`/choose/${encodeURIComponent(g.kind)}/${encodeURIComponent(pick.value)}`);
+  };
+  line.append(pick);
+
+  const test = document.createElement("button");
+  test.type = "button";
+  test.textContent = "시험";
+  test.onclick = () => {
+    const said = row.querySelector(`[data-said="${g.kind}"]`) as HTMLElement;
+    said.classList.remove("bad");
+    // Said before it happens, because each of these makes a sound, records, or looks — and a
+    // button that goes quiet for two seconds while a microphone is open is a button nobody trusts.
+    said.textContent = g.kind === "speaker" ? "소리를 냅니다…"
+      : g.kind === "microphone" ? "2초 동안 듣습니다 — 말해보세요…"
+      : "한 장 찍습니다…";
+    void post(`/try/${encodeURIComponent(g.kind)}`);
+  };
+  line.append(test);
+  row.append(line);
+
+  const said = document.createElement("div");
+  said.className = "said";
+  said.dataset.said = g.kind;
+  if (g.trouble) {
+    said.textContent = g.trouble;
+    said.classList.add("bad");
+  }
+  row.append(said);
+  return row;
+}

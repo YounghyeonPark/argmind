@@ -37,6 +37,7 @@
 
 pub mod app;
 pub mod building;
+pub mod chosen;
 pub mod decided;
 pub mod fetch;
 pub mod fix;
@@ -204,6 +205,12 @@ pub enum Route {
     Decide(String, String),
     /// Take back something that was answered once and for all.
     Forget(String),
+    /// Use this microphone, speaker or camera from now on. An empty id means *go back to whatever
+    /// the operating system prefers*.
+    Choose(String, String),
+    /// Open one for a moment and say what happened. **The only thing in this program that turns a
+    /// device on because somebody asked rather than because a turn needed it.**
+    Try(String),
     /// Watch the screen and think when it changes, or stop.
     ///
     /// **Off until asked for**, and the reason is a measured one: something on screen changes 13
@@ -221,6 +228,32 @@ pub enum Route {
     Listen(bool),
     /// Anything else, named so a front end that asked wrongly is told rather than ignored.
     Unknown,
+}
+
+/// Per cent escapes back to bytes.
+///
+/// **A WASAPI endpoint id is `{0.0.1.00000000}.{b264…}`** — braces and dots, which survive a URL
+/// untouched — but a camera's name is whatever its driver called it and can hold a space, a comma
+/// or a bracket. The page encodes it; this undoes that, and anything malformed is left as it was
+/// rather than guessed at.
+pub fn decoded(raw: &str) -> String {
+    let bytes = raw.as_bytes();
+    let mut out: Vec<u8> = Vec::with_capacity(bytes.len());
+    let mut i = 0;
+    while i < bytes.len() {
+        if bytes[i] == b'%' && i + 2 < bytes.len() {
+            let pair = std::str::from_utf8(&bytes[i + 1..i + 3]).ok()
+                .and_then(|h| u8::from_str_radix(h, 16).ok());
+            if let Some(byte) = pair {
+                out.push(byte);
+                i += 3;
+                continue;
+            }
+        }
+        out.push(bytes[i]);
+        i += 1;
+    }
+    String::from_utf8_lossy(&out).to_string()
 }
 
 pub fn route(request: &Request) -> Route {
@@ -247,6 +280,16 @@ pub fn route(request: &Request) -> Route {
         },
         ("POST", p) if p.starts_with("/forget/") && p.len() > 8 =>
             Route::Forget(p[8..].to_string()),
+        //: `/choose/<kind>/<id>` and `/choose/<kind>` for none. The kind is checked against a fixed
+        //: list before anything happens; the id is opaque and is only ever handed back to Windows.
+        ("POST", p) if p.starts_with("/choose/") && p.len() > 8 => match p[8..].split_once('/') {
+            Some((kind, id)) if !kind.is_empty() =>
+                Route::Choose(kind.to_string(), decoded(id)),
+            None => Route::Choose(p[8..].to_string(), String::new()),
+            _ => Route::Unknown,
+        },
+        ("POST", p) if p.starts_with("/try/") && p.len() > 5 =>
+            Route::Try(p[5..].to_string()),
         ("POST", "/notice/on") => Route::Notice(true),
         ("POST", "/notice/off") => Route::Notice(false),
         ("POST", "/look") => Route::Look,

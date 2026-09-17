@@ -56,6 +56,137 @@ mod chosen {
     /// there is nothing to prefer and the question is answered at compile time rather than by a
     /// socket timeout.
 
+
+    /// Everything of one kind this machine has.
+    pub fn devices(kind: &str) -> Result<Vec<super::Device>, String> {
+        let found = match kind {
+            "microphone" => argmind_env_windows::devices::microphones()?,
+            "speaker" => argmind_env_windows::devices::speakers()?,
+            "camera" => {
+                //: Cameras come back as names with no id, so the name is both — see
+                //: `argmind-env-windows/src/devices.rs` for why that asymmetry is deliberate.
+                return Ok(argmind_env_windows::camera::cameras()?.into_iter().enumerate()
+                    .map(|(i, name)| super::Device { id: name.clone(), name, default: i == 0 })
+                    .collect());
+            }
+            _ => return Err(format!("{kind} 라는 장치 종류는 없습니다")),
+        };
+        Ok(found.into_iter()
+            .map(|d| super::Device { id: d.id, name: d.name, default: d.default })
+            .collect())
+    }
+
+    /// **Use one, briefly, and say what happened.**
+    ///
+    /// The one place in this program that opens a device because somebody asked it to, rather than
+    /// because a turn needed it. Every one of these makes a sound, records, or looks — which is
+    /// the point of pressing the button, and is why nothing here happens without one being pressed.
+    pub fn try_device(kind: &str, id: Option<&str>) -> super::Tried {
+        match kind {
+            "speaker" => try_speaker(id),
+            "microphone" => try_microphone(id),
+            "camera" => try_camera(id),
+            _ => super::Tried { worked: false, said: format!("{kind} 는 시험할 수 없습니다") },
+        }
+    }
+
+    /// A second of a quiet tone, faded at both ends so the start and the end are not clicks.
+    fn try_speaker(id: Option<&str>) -> super::Tried {
+        use argmind_env_windows::loudspeaker::{Loudspeaker, FROM_HZ};
+        let n = FROM_HZ as usize;
+        let fade = n / 20;
+        let tone: Vec<f32> = (0..n).map(|i| {
+            let t = i as f64 / FROM_HZ as f64;
+            let level = 0.12 * (i.min(fade) as f64 / fade as f64)
+                .min((n - i).min(fade) as f64 / fade as f64);
+            (level * (t * 440.0 * std::f64::consts::TAU).sin()) as f32
+        }).collect();
+
+        let mut mouth = Loudspeaker::on(id);
+        mouth.play(&tone, FROM_HZ);
+        let began = std::time::Instant::now();
+        while !mouth.speaking() && began.elapsed().as_secs_f64() < 2.0 {
+            std::thread::sleep(std::time::Duration::from_millis(5));
+        }
+        let started = mouth.speaking();
+        std::thread::sleep(std::time::Duration::from_millis(1200));
+        let missed = mouth.fell_back();
+        mouth.release();
+        super::Tried {
+            worked: started,
+            said: if !started {
+                "소리를 내지 못했습니다".into()
+            } else if missed {
+                "삐 소리를 냈습니다 — 고른 장치가 없어서 기본 장치로 냈습니다".into()
+            } else {
+                "삐 소리를 1초 냈습니다 — 들리셨나요?".into()
+            },
+        }
+    }
+
+    /// **Listen for a moment and report the loudest thing heard**, as a number.
+    ///
+    /// Not a transcription. What a person is checking is whether this device hears them at all,
+    /// and a peak answers that without a model, a language or a wait.
+    fn try_microphone(id: Option<&str>) -> super::Tried {
+        use argmind_env_windows::Microphone;
+        let mut ear = Microphone::on(id);
+        ear.hold(true);
+        std::thread::sleep(std::time::Duration::from_millis(1800));
+        ear.hold(false);
+        std::thread::sleep(std::time::Duration::from_millis(250));
+        let clip = ear.take();
+        let missed = ear.fell_back();
+        ear.release();
+
+        let Some(clip) = clip else {
+            return super::Tried { worked: false, said: "아무것도 녹음되지 않았습니다".into() };
+        };
+        let peak = clip.peak();
+        let seconds = clip.samples.len() as f64
+            / argmind_env_windows::microphone::WANT_HZ as f64;
+        //: **A floor, not a judgement.** Below this is indistinguishable from a quiet room, and
+        //: saying so is more useful than a number nobody can interpret.
+        let heard = peak > 0.02;
+        super::Tried {
+            worked: heard,
+            said: format!("{seconds:.1}초 녹음, 가장 큰 소리 {:.0}%{}{}", peak * 100.0,
+                          if heard { " — 들립니다" }
+                          else { " — 너무 조용합니다. 말하면서 눌러보세요" },
+                          if missed { " (고른 장치가 없어 기본 장치로 녹음했습니다)" }
+                          else { "" }),
+        }
+    }
+
+    /// **One frame, and how bright it was.** Enough to tell a covered lens from a working one.
+    fn try_camera(name: Option<&str>) -> super::Tried {
+        use argmind_env_windows::camera::Camera;
+        let mut eye = match Camera::on(name) {
+            Ok(eye) => eye,
+            Err(why) => return super::Tried { worked: false, said: why },
+        };
+        //: **The first frame is often black** while the sensor is still setting its exposure, so a
+        //: few are taken and the last one is the answer. Measured when the presence harness was
+        //: written and true of this camera.
+        let mut last = None;
+        for _ in 0..5 {
+            last = eye.look().ok();
+            std::thread::sleep(std::time::Duration::from_millis(120));
+        }
+        match last {
+            Some(frame) => {
+                let light = frame.brightness();
+                super::Tried {
+                    worked: light > 2.0,
+                    said: format!("한 장 찍었습니다 — 밝기 {light:.0}/255{}",
+                                  if light > 2.0 { "" }
+                                  else { " — 거의 검습니다. 렌즈 덮개를 확인해보세요" }),
+                }
+            }
+            None => super::Tried { worked: false, said: "화면을 받지 못했습니다".into() },
+        }
+    }
+
     /// What speaks when the neural voice is not there, in the words a person would recognise.
     pub fn fallback_voice() -> Option<&'static str> {
         Some("Windows 음성")
@@ -131,6 +262,18 @@ mod chosen {
     /// Nothing to do: no other operating system invents a terminal for a child that did not ask.
     pub fn without_a_console(_command: &mut std::process::Command) {}
 
+
+    /// **Nothing to list.** An environment with no eyes has no cameras either, and refusing is
+    /// better than an empty list, which reads as a machine with no hardware.
+    pub fn devices(_kind: &str) -> Result<Vec<super::Device>, String> {
+        Err("이 운영체제에서는 장치 목록을 읽지 못합니다".into())
+    }
+
+    pub fn try_device(kind: &str, _id: Option<&str>) -> super::Tried {
+        super::Tried { worked: false,
+                       said: format!("이 운영체제에서는 {kind} 를 시험할 수 없습니다") }
+    }
+
     /// Nothing speaks here yet — `speech-dispatcher` exists and is not written.
     pub fn fallback_voice() -> Option<&'static str> {
         None
@@ -158,6 +301,18 @@ mod chosen {
     /// Nothing to do: no other operating system invents a terminal for a child that did not ask.
     pub fn without_a_console(_command: &mut std::process::Command) {}
 
+
+    /// **Nothing to list.** An environment with no eyes has no cameras either, and refusing is
+    /// better than an empty list, which reads as a machine with no hardware.
+    pub fn devices(_kind: &str) -> Result<Vec<super::Device>, String> {
+        Err("이 운영체제에서는 장치 목록을 읽지 못합니다".into())
+    }
+
+    pub fn try_device(kind: &str, _id: Option<&str>) -> super::Tried {
+        super::Tried { worked: false,
+                       said: format!("이 운영체제에서는 {kind} 를 시험할 수 없습니다") }
+    }
+
     /// **Nothing speaks here.** `speech-dispatcher` on Linux and `AVSpeechSynthesizer` on macOS
     /// both exist; neither is written. Saying *Windows 음성으로 말합니다* on Ubuntu, which is what
     /// this replaced, is worse than saying nothing does.
@@ -182,6 +337,28 @@ mod chosen {
 }
 
 pub use chosen::*;
+
+
+/// One thing that can record, play or see, as the page needs to show it.
+///
+/// **Not the environment's own type**, because there are three environments and only one of them
+/// has a `devices` module. A name, whatever opens it, and whether the operating system would have
+/// picked it anyway.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Device {
+    pub id: String,
+    pub name: String,
+    pub default: bool,
+}
+
+/// What a test of one device found.
+///
+/// **A number and a sentence**, because *it worked* is not a measurement and a number on its own
+/// is not an answer.
+pub struct Tried {
+    pub worked: bool,
+    pub said: String,
+}
 
 /// **The only way this crate starts a child process.**
 ///

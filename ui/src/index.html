@@ -84,8 +84,19 @@
   .ask-buttons .always { margin-left: 14px; }
   .ask-buttons .no { margin-left: auto; }
   #settings { border-bottom: 1px solid var(--edge); font-size: 13px; }
-  #settings > summary, #seeing > summary { padding: 6px 14px; cursor: pointer;
-                                           color: var(--dim); }
+  #settings > summary, #seeing > summary, #gear > summary { padding: 6px 14px; cursor: pointer;
+                                                           color: var(--dim); }
+  #gear { border-bottom: 1px solid var(--edge); font-size: 13px; }
+  #devices { padding: 0 14px 10px; }
+  /* Label, list, button, and the answer under all three — so a long device name wraps rather
+     than pushing the button off a 520 px window. */
+  .gear-row { padding: 6px 0; }
+  .gear-row .line { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .gear-row .what { min-width: 52px; color: var(--dim); }
+  .gear-row select { flex: 1; min-width: 140px; font: inherit; padding: 3px 4px;
+                     border: 1px solid var(--edge); background: #fff; color: var(--ink); }
+  .gear-row .said { font-size: 12px; color: var(--dim); padding: 4px 0 0 60px; }
+  .gear-row .said.bad { color: var(--warn); }
   #decisions { padding: 0 14px 10px; }
   .decision { display: flex; gap: 8px; align-items: baseline; padding: 3px 0; }
   .decision .standing { color: var(--dim); }
@@ -133,6 +144,13 @@
   <details id="settings">
     <summary>설정 — 기억한 권한</summary>
     <div id="decisions"></div>
+  </details>
+  <!-- Which microphone, speaker and camera, and a button that uses each one for a moment so the
+       answer is heard or seen rather than believed. Folded, like everything else here that is
+       wanted on the day it is wanted. -->
+  <details id="gear">
+    <summary>장치 — 마이크 · 스피커 · 카메라</summary>
+    <div id="devices"></div>
   </details>
   <!-- What the model was shown, folded away beside the settings for the same reason: it is the
        panel you want on the day you want it. It used to be a column taking a third of the width
