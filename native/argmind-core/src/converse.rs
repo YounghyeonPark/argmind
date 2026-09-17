@@ -240,6 +240,74 @@ pub fn parroted(say: &str, trigger: &Trigger) -> bool {
     rest.chars().all(|c| c == '?' || c == '？' || c.is_whitespace())
 }
 
+/// How much of the shorter of two sentences is one run of text they share, 0.0..=1.0.
+///
+/// **The first attempt removed the trigger's words from the reply and compared what was left.** It
+/// does not work: a watch says *the window changed to 'Taskbar'* and the reply says *태스크바로
+/// 넘어왔어요* — the name is **translated**, so the trigger's letters are not in the reply to remove.
+/// Nor does comparing the tail, which was the attempt before that and worked only while the name
+/// happened to come first.
+///
+/// What survives translation is that the two remarks *are the same sentence*. The longest run they
+/// share needs no vocabulary, no name extraction and no assumption about word order:
+///
+/// | | shared run |
+/// |---|---|
+/// | *태스크바로 넘어왔어요. 도움이 필요하시면 언제든 말씀해주세요!* against the same for another window | most of it |
+/// | the same against *지우개가 22번 버튼입니다.* | a few characters |
+pub fn overlap(a: &str, b: &str) -> f64 {
+    let (x, y): (Vec<char>, Vec<char>) = (a.chars().collect(), b.chars().collect());
+    if x.is_empty() || y.is_empty() {
+        return 0.0;
+    }
+    //: One row at a time: these are sentences, and a full table of a screenful would be the only
+    //: thing here that ever allocated seriously.
+    let mut prev = vec![0usize; y.len() + 1];
+    let mut best = 0usize;
+    for i in 1..=x.len() {
+        let mut row = vec![0usize; y.len() + 1];
+        for j in 1..=y.len() {
+            if x[i - 1] == y[j - 1] {
+                row[j] = prev[j - 1] + 1;
+                best = best.max(row[j]);
+            }
+        }
+        prev = row;
+    }
+    best as f64 / x.len().min(y.len()) as f64
+}
+
+/// How much two remarks may share before they are the same remark.
+///
+/// **0.6, chosen with the margin shown rather than tuned.** The pair that started this shares about
+/// four fifths of the shorter sentence; two remarks that are actually about different things share
+/// a few characters of a dozen. Nothing between 0.4 and 0.8 would change the verdict on either, and
+/// the tests pin both sides so a later move has to break one of them.
+pub const SAME_REMARK: f64 = 0.6;
+
+/// **Has argmind already said this, in all but the name?**
+///
+/// Measured 2026-09-17: over eight window changes it spoke **8 times out of 8**, and **6 of those
+/// were one sentence with the window name swapped** — *Chrome 데스크탑으로 넘어왔어요. 도움이
+/// 필요하시면 언제든 말씀해주세요!*, then the same for the taskbar, then for the next window. A
+/// person alt-tabs all day, so with watching on that was most of what argmind said.
+///
+/// **Telling it not to did not work.** Making silence the stated default in `UNPROMPTED` bought no
+/// silence at all and started it wanting to click things, 0 of 8 to 2 of 8. This is the other
+/// answer, the one that worked for the parrot: catch it on the way out.
+///
+/// **The first time is said and the repeats are not.** A window change genuinely worth remarking on
+/// is remarked on once; the rule is against the fourth identical remark, not against the first.
+pub fn said_before(say: &str, lately: &[String]) -> bool {
+    let now = say.trim();
+    //: **Too short to judge on.** Two four-character remarks overlap by accident, and this rule is
+    //: about repetition rather than about brevity.
+    if now.chars().count() < 8 {
+        return false;
+    }
+    lately.iter().any(|before| overlap(now, before.trim()) >= SAME_REMARK)
+}
+
 /// What a reply means, given what was on screen. An empty `Intent` is a real answer.
 pub fn read_reply(reply: &str, listed: &[Widget], trigger: &Trigger) -> Intent {
     let got = first_object(reply).unwrap_or(serde_json::json!({}));

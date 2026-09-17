@@ -149,6 +149,23 @@ fn main() {
         }
     }
 
+    //: **What a person would actually have heard**, replayed through the shipped guard with the
+    //: same ring the app keeps. Not a second implementation of the rule — `said_before` is the one
+    //: that runs.
+    let mut ring: Vec<String> = Vec::new();
+    let mut heard = 0;
+    for r in &rows {
+        let said = r["said"].as_str().unwrap();
+        if said.is_empty() || argmind_core::converse::said_before(said, &ring) {
+            continue;
+        }
+        heard += 1;
+        ring.push(said.to_string());
+        if ring.len() > 6 {
+            ring.remove(0);
+        }
+    }
+
     let spoke: Vec<&Value> = rows.iter()
         .filter(|r| !r["said"].as_str().unwrap().is_empty()).collect();
     let acted = rows.iter().filter(|r| r["effects"].as_u64().unwrap_or(0) > 0).count();
@@ -169,6 +186,7 @@ fn main() {
 
     println!("\n  {n} unprompted window changes");
     println!("    말을 함        {:>3} / {n}", spoke.len());
+    println!("    가드 뒤에 들림   {heard:>3} / {n}   (반복을 지우고 사람이 실제로 듣는 것)");
     println!("    행동하려 함     {acted:>3} / {n}   (통제군 — 침묵을 행동으로 바꿔 산 건 아닌지)");
     println!("    같은 모양       {boiler:>3} / {}   (다른 창인데 이름만 빼면 같은 문장)",
              spoke.len());
@@ -178,7 +196,8 @@ fn main() {
     std::fs::write(&out.path, serde_json::to_string_pretty(&json!({
         "model": "qwen3:8b", "prompt": prompt_tag(), "screens_print": s, "harness_print": h,
         "repeat": repeat, "unprompted": true, "filler_words": FILLER, "rows": rows,
-        "spoke": spoke.len(), "acted": acted, "same_shape": boiler, "thin": thin,
+        "spoke": spoke.len(), "heard_after_guard": heard,
+        "acted": acted, "same_shape": boiler, "thin": thin,
         "filler": filler})).unwrap()).unwrap();
     println!("\n  every reply -> {}", out.path.display());
 }

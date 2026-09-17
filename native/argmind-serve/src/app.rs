@@ -141,6 +141,9 @@ struct Desk {
     /// What the screen looked like last time this checked. **Empty means there is no before**, and
     /// the first look after switching on reports nothing whatever is on screen.
     before: Vec<argmind_core::contract::Widget>,
+    /// The last few unprompted remarks, with each one's own subject removed. **The ring the
+    /// repetition guard compares against** — see `argmind_core::converse::said_before`.
+    lately_noticed: Vec<String>,
     /// How many thoughts started without being asked for, and how many of those said something.
     /// **Counted where a person can see it**, because "how often does this happen on your desktop"
     /// is the question that decides whether it is worth having on.
@@ -638,6 +641,19 @@ fn notice(desk: &mut Desk, out: &Listeners, now: f64) {
             //: prevent, so nothing is sent.
             continue;
         }
+        //: **The fourth identical remark is not made.** Measured: over eight window changes it
+        //: spoke 8 times out of 8 and 6 of those were one sentence with the name swapped. Telling
+        //: it to be quiet in the prompt bought no silence and started it wanting to click things,
+        //: so this is caught on the way out — the answer that worked for the parrot.
+        if argmind_core::converse::said_before(&reply, &desk.lately_noticed) {
+            continue;
+        }
+        desk.lately_noticed.push(reply.clone());
+        //: **A short ring.** A person who comes back to a window ten minutes later should hear it
+        //: again; the rule is against a run of them, not against ever saying it twice.
+        if desk.lately_noticed.len() > REMARKS_REMEMBERED {
+            desk.lately_noticed.remove(0);
+        }
         desk.session.history.push(("you".into(), reply.clone()));
         out.send("say", &reply);
         //: Not spoken aloud. A proposal waits behind a button; a sentence nobody asked for waits
@@ -658,6 +674,13 @@ fn notice(desk: &mut Desk, out: &Listeners, now: f64) {
 /// types for twenty seconds has not yet been noticed by this; the *watch* sees that in three, and
 /// this is the slower loop underneath it.
 pub const THINK_EVERY: f64 = 30.0;
+
+/// How many unprompted remarks are remembered for the repetition guard.
+///
+/// **Six**, which at a floor of three seconds is about twenty seconds of alt-tabbing. Long enough
+/// to cover the run of identical remarks that started this, short enough that coming back to a
+/// window after a while hears about it again.
+pub const REMARKS_REMEMBERED: usize = 6;
 
 /// What the thinking thread is asked to chew on. **A snapshot, not a borrow** — the session stays
 /// on its own thread and nothing shared has to be locked while a model call runs.
@@ -1140,7 +1163,7 @@ pub fn run(how: How) {
                               watches: vec![Watch::new(Looking::WindowChanged)],
                               noticing: false, thought_at: 0.0,
                               senses: senses.clone(), turn: turn.clone(),
-                              before: Vec::new(), noticed: 0 };
+                              before: Vec::new(), lately_noticed: Vec::new(), noticed: 0 };
         //: **On from the start when it is allowed**, which it is by default since 2026-09-17. A
         //: permission that says yes and a program that waits for a button anyway is the defect
         //: this session has already found twice in other places.

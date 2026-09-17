@@ -93,3 +93,92 @@ fn it_is_not_a_korean_rule() {
     assert!(!caught("hello", "hello"));
     assert!(!caught("hi", "hi there, what can I do?"));
 }
+
+// ---- the fourth identical remark ---------------------------------------------------------------
+
+/// **Saying the same thing about every window is not noticing, it is narrating.**
+///
+/// The owner's transcript, with watching on by default:
+///
+/// ```text
+///   • the window changed to 'Chrome Remote Desktop - QVB-FLFM-DEV1'
+///   Chrome 데스크탑으로 넘어왔어요. 도움이 필요하시면 언제든 말씀해주세요!
+///   • the window changed to 'Taskbar'
+///   태스크바로 넘어왔어요. 도움이 필요하시면 언제든 말씀해주세요!
+/// ```
+///
+/// Measured over eight window changes: it spoke **8 of 8**, and **6 of those shared one shape**.
+/// Telling it to be quiet in the prompt bought no silence and started it wanting to click things,
+/// so this is caught on the way out — the answer that worked for the parrot.
+#[test]
+fn the_same_remark_about_a_different_window_is_caught() {
+    use argmind_core::converse::said_before;
+
+    let one = "태스크바로 넘어왔어요. 도움이 필요하시면 언제든 말씀해주세요!";
+    let two = "Chrome 데스크탑으로 넘어왔어요. 도움이 필요하시면 언제든 말씀해주세요!";
+    let three = "Snipping Tool로 넘어왔어요. 도움이 필요하시면 언제든 말씀해주세요!";
+
+    //: **The first one is said.** The rule is against the fourth identical remark, not the first.
+    let mut lately: Vec<String> = Vec::new();
+    assert!(!said_before(one, &lately));
+    lately.push(one.to_string());
+
+    //: The rest are the same sentence with a different noun in it, and the name being translated —
+    //: `Taskbar` arriving as 태스크바 — is exactly what broke the two attempts before this one.
+    assert!(said_before(two, &lately));
+    assert!(said_before(three, &lately));
+}
+
+/// **A different observation still gets through**, which is the whole reason the watch exists.
+#[test]
+fn something_new_about_a_new_window_is_not_suppressed() {
+    use argmind_core::converse::said_before;
+    let lately = vec!["태스크바로 넘어왔어요. 도움이 필요하시면 언제든 말씀해주세요!".to_string()];
+
+    assert!(!said_before("지우개가 22번 버튼입니다.", &lately));
+    assert!(!said_before("저장하지 않은 그림이 열려 있어요.", &lately));
+    assert!(!said_before("빌드가 실패한 것 같습니다 — 오류 창이 떠 있어요.", &lately));
+}
+
+/// The threshold, pinned from both sides. **0.6 with the margin shown** — the pair that started
+/// this shares four fifths of the shorter sentence and two real remarks share a few characters of a
+/// dozen, so nothing between 0.4 and 0.8 changes either verdict.
+#[test]
+fn the_overlap_separates_the_two_cases_with_room() {
+    use argmind_core::converse::{overlap, SAME_REMARK};
+
+    let boilerplate = overlap("태스크바로 넘어왔어요. 도움이 필요하시면 언제든 말씀해주세요!",
+                              "Chrome 데스크탑으로 넘어왔어요. 도움이 필요하시면 언제든 말씀해주세요!");
+    let different = overlap("태스크바로 넘어왔어요. 도움이 필요하시면 언제든 말씀해주세요!",
+                            "지우개가 22번 버튼입니다.");
+    assert!(boilerplate > 0.75, "the same sentence scored {boilerplate}");
+    assert!(different < 0.4, "two different remarks scored {different}");
+    assert!(different < SAME_REMARK && SAME_REMARK < boilerplate);
+
+    //: It is a ratio of the shorter one, so a long remark containing a short one entirely still
+    //: counts as the same — which is what a model padding its own boilerplate does.
+    assert_eq!(overlap("넘어왔어요", "지금 막 넘어왔어요, 무엇을 도와드릴까요"), 1.0);
+    //: And nothing in common is nothing.
+    assert_eq!(overlap("abc", "xyz"), 0.0);
+    assert_eq!(overlap("", "abc"), 0.0);
+}
+
+/// **Almost nothing to compare is not a match.** Two very short remarks overlap by accident, and
+/// the rule is about repetition rather than about brevity.
+#[test]
+fn a_remark_with_almost_nothing_of_its_own_is_left_alone() {
+    use argmind_core::converse::said_before;
+    let lately = vec!["네".to_string(), "그렇군요".to_string()];
+    assert!(!said_before("네", &lately));
+    assert!(!said_before("그렇군요", &lately), "too short to be judged a repeat");
+}
+
+/// English, because the whole reason for comparing overlap rather than removing names is that it
+/// cannot be a rule about one language.
+#[test]
+fn the_repetition_rule_is_not_a_korean_rule() {
+    use argmind_core::converse::said_before;
+    let lately = vec!["You switched to the Taskbar. Let me know if you need anything!".to_string()];
+    assert!(said_before("You switched to Paint. Let me know if you need anything!", &lately));
+    assert!(!said_before("The eraser is button 22.", &lately));
+}
