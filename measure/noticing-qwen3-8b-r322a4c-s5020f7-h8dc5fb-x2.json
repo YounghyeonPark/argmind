@@ -1,0 +1,68 @@
+{
+  "acted": 0,
+  "filler": 0,
+  "filler_words": [
+    "도움이 필요하시면",
+    "말씀해주세요",
+    "언제든",
+    "도와드릴"
+  ],
+  "harness_print": "8dc5fb",
+  "model": "qwen3:8b",
+  "prompt": "r322a4c",
+  "repeat": 2,
+  "rows": [
+    {
+      "effects": 0,
+      "filler": false,
+      "said": "The window changed to 'character-map'.",
+      "to": "character-map"
+    },
+    {
+      "effects": 0,
+      "filler": false,
+      "said": "The window changed to 'character-map'.",
+      "to": "character-map"
+    },
+    {
+      "effects": 0,
+      "filler": false,
+      "said": "The window changed to 'chrome-remote-desktop---qvb-flfm-dev1'.",
+      "to": "chrome-remote-desktop---qvb-flfm-dev1"
+    },
+    {
+      "effects": 0,
+      "filler": false,
+      "said": "The window changed to 'chrome-remote-desktop---qvb-flfm-dev1'.",
+      "to": "chrome-remote-desktop---qvb-flfm-dev1"
+    },
+    {
+      "effects": 0,
+      "filler": false,
+      "said": "The window has changed to 'system-information'.",
+      "to": "system-information"
+    },
+    {
+      "effects": 0,
+      "filler": false,
+      "said": "The window has changed to 'system-information'.",
+      "to": "system-information"
+    },
+    {
+      "effects": 0,
+      "filler": false,
+      "said": "The window changed to 'untitled---paint'.",
+      "to": "untitled---paint"
+    },
+    {
+      "effects": 0,
+      "filler": false,
+      "said": "The window changed to 'untitled---paint'.",
+      "to": "untitled---paint"
+    }
+  ],
+  "same_shape": 0,
+  "screens_print": "5020f7",
+  "spoke": 8,
+  "unprompted": true
+}

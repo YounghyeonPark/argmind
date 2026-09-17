@@ -1,0 +1,85 @@
+{
+  "acted": 2,
+  "filler": 0,
+  "filler_words": [
+    "도움이 필요하시면",
+    "말씀해주세요",
+    "언제든",
+    "도와드릴"
+  ],
+  "harness_print": "286c4b",
+  "model": "qwen3:8b",
+  "prompt": "r9d5af7",
+  "repeat": 2,
+  "rows": [
+    {
+      "beyond": "Thewindowchangedto",
+      "effects": 0,
+      "filler": false,
+      "said": "The window changed to 'character-map'.",
+      "thin": false,
+      "to": "character-map"
+    },
+    {
+      "beyond": "Thewindowchangedto",
+      "effects": 0,
+      "filler": false,
+      "said": "The window changed to 'character-map'.",
+      "thin": false,
+      "to": "character-map"
+    },
+    {
+      "beyond": "창으로전환되었습니다",
+      "effects": 1,
+      "filler": false,
+      "said": "Chrome Remote Desktop 창으로 전환되었습니다.",
+      "thin": true,
+      "to": "chrome-remote-desktop---qvb-flfm-dev1"
+    },
+    {
+      "beyond": "창으로전환되었습니다",
+      "effects": 1,
+      "filler": false,
+      "said": "Chrome Remote Desktop 창으로 전환되었습니다.",
+      "thin": true,
+      "to": "chrome-remote-desktop---qvb-flfm-dev1"
+    },
+    {
+      "beyond": "Thewindowhaschangedto",
+      "effects": 0,
+      "filler": false,
+      "said": "The window has changed to 'system-information'.",
+      "thin": false,
+      "to": "system-information"
+    },
+    {
+      "beyond": "Thewindowhaschangedto",
+      "effects": 0,
+      "filler": false,
+      "said": "The window has changed to 'system-information'.",
+      "thin": false,
+      "to": "system-information"
+    },
+    {
+      "beyond": "Thewindowchangedto",
+      "effects": 0,
+      "filler": false,
+      "said": "The window changed to 'untitled---paint'.",
+      "thin": false,
+      "to": "untitled---paint"
+    },
+    {
+      "beyond": "Thewindowchangedto",
+      "effects": 0,
+      "filler": false,
+      "said": "The window changed to 'untitled---paint'.",
+      "thin": false,
+      "to": "untitled---paint"
+    }
+  ],
+  "same_shape": 4,
+  "screens_print": "5020f7",
+  "spoke": 8,
+  "thin": 2,
+  "unprompted": true
+}

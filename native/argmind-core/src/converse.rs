@@ -25,6 +25,32 @@ If they asked you to do something and the listed things can do it, name the numb
 just talking, or the thing they want is not listed, say so and do nothing: a wrong click is worse
 than an honest "I can't see that here"."#;
 
+/// What an unprompted turn is told, and **the line that made argmind narrate.**
+///
+/// It used to read *Mentioning it is usually enough.* That was written about the action slot — *do
+/// not act, say something instead* — and the model read it as an instruction to mention. Measured
+/// 2026-09-17 over eight window changes: **it spoke 8 times out of 8, and 6 of those were the same
+/// sentence with the window name swapped.** With watching on by default that is most of what
+/// argmind says, and the owner's transcript is four of them in a row.
+///
+/// ## The edit that was tried, and what it cost — **reverted**
+///
+/// Making silence the stated default — *Most of the time there is nothing worth saying: leave "say"
+/// empty* — was measured at `r9d5af7` against this text at `r322a4c`:
+///
+/// | | spoke | wanted to act | same shape |
+/// |---|---|---|---|
+/// | this text | 8 of 8 | **0 of 8** | 6 of 8 |
+/// | telling it to be silent | 8 of 8 | **2 of 8** | 4 of 8 |
+///
+/// **It bought no silence at all and started wanting to click things.** The action count was put in
+/// as the control precisely because a prompt edit can buy quiet by acting instead; here it bought
+/// neither. Reverted, and **prompt edits in this project are now 0 for 6.**
+///
+/// What that leaves: the model fills `say` whichever way it is asked, so the lever is probably not
+/// the prompt. `noticing`'s own `beyond_the_name` is mechanical and already separates *it added
+/// something* from *it restated the trigger*, which is the shape of a guard on the way out — the
+/// same answer `parroted` reached after being told not to echo did not work either.
 pub const UNPROMPTED: &str = "Nobody asked you anything — you noticed this yourself. Mentioning it is usually\nenough. Only propose doing something if it is clearly wanted, and expect to be asked first.";
 
 pub const STILL_OPEN: &str = "Still open, from earlier:";

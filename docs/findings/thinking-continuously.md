@@ -396,3 +396,78 @@ compare with anything, which is the failure this directory keeps a list of, met 
 `Note::held` counts how many ticks a belief has survived unchanged — **computed, never asked of the
 model**, the same rule `tried` follows. *He is reading a document* and *he has been on this document
 for six of my looks* are the same sentence otherwise, and only the second is something to judge on.
+
+## It narrates every window change, and the prompt edit to stop it failed (2026-09-17)
+
+**The owner**, with watching on by default:
+
+```text
+  • the window changed to 'Chrome Remote Desktop - QVB-FLFM-DEV1'
+  Chrome 데스크탑으로 넘어왔어요. 도움이 필요하시면 언제든 말씀해주세요!
+  • the window changed to 'Taskbar'
+  태스크바로 넘어왔어요. 도움이 필요하시면 언제든 말씀해주세요!
+```
+
+**생각은 여전히 보는것에 대한 인지만 함.** A person alt-tabs all day, so with watching on this is
+most of what argmind says.
+
+`argmind-measure --bin noticing` sends the trigger a `Watch` actually produces, unprompted, over the
+captured screens, and counts three things — **spoke**, **wanted to act** (the control: an edit that
+buys quiet by acting instead has bought nothing), and **same shape**, two different windows getting
+one sentence once each window's own name is removed.
+
+**The instrument was wrong first, and read zero.** `same_shape` compared the last twelve characters,
+which was written from a Korean transcript where the name comes first, and met English replies where
+it comes last. Removing the name instead works either way and is the question anyway: *what did it
+add, beyond repeating which window this is?* With that: **8 of 8 spoke, 6 of 8 the same shape.**
+
+### The suspect was one line, and it was not the fix
+
+`UNPROMPTED` read *Nobody asked you anything — you noticed this yourself.* **Mentioning it is usually
+enough.** That was written about the action slot — *do not act, say something instead* — and reads
+as an instruction to mention.
+
+| | spoke | wanted to act | same shape |
+|---|---|---|---|
+| `r322a4c`, the shipped line | 8 of 8 | **0 of 8** | 6 of 8 |
+| `r9d5af7`, silence as the default | 8 of 8 | **2 of 8** | 4 of 8 |
+
+**No silence bought, and it started wanting to click things.** Reverted. **Prompt edits here are now
+0 for 6.**
+
+One fact worth keeping: **`saying`, `choosing` and `talking` never see this line at all** — all
+three send `asked = true` triggers, so `UNPROMPTED` is not in their prompts. An edit here is cheap
+to try and only `noticing` can see it, which is why this harness had to exist before the edit could
+be judged either way.
+
+### Where that points
+
+The model fills `say` whichever way it is asked, so the lever is probably not the prompt. That is
+the same place `parroted` ended up: telling it not to echo produced `머해` with the question mark
+removed, and what worked was catching it on the way out. `noticing`'s `beyond_the_name` is already
+the mechanical half of such a guard — *it added something* against *it restated the trigger* — and
+building it is the next step rather than a result.
+
+## What is still missing is will, and this does not have it
+
+**The owner:** 의지가 있어야 하지 않나.
+
+Everything above is perception with a judgement bolted on. argmind believes things about what is on
+screen, and since this afternoon it will say when something is worth doing about a change it just
+saw. **Nothing in it wants anything.** The 목표 in 설정 — 돈벌기 — is a line in a prompt, read afresh
+every turn and pursued by nothing.
+
+What would have to exist, named so it can be argued with:
+
+* **Something it is trying to bring about**, held across turns the way `Note::believes` is held, and
+  revised for the same reason. `mind.aim` is the goal; there is no *intention* between the goal and
+  the turn.
+* **A read on whether it is getting closer.** Without this an intention is a second belief. `held`
+  counts how long a belief has survived; nothing counts whether anything has moved.
+* **A reason to start rather than to answer.** `Watch` fires on a change in the world. Nothing in
+  argmind ever fires because *it* decided the moment had come.
+
+The third is the one that is actually will, and it is also the one with a cost the rest of this
+document has been measuring all day: something that starts on its own spends model calls and
+interrupts. `MOST_AT_ONCE`, the confirm button and the 31-of-34 number are all there because acting
+unasked is the expensive direction.
