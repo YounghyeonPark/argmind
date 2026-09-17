@@ -11,11 +11,16 @@
 //!
 //! ## What is missing, and it is not laziness
 //!
-//! **Typing is not here, because AT-SPI no longer synthesises input.** `DeviceEventController` used
-//! to generate key events; this at-spi2-core does not expose it — checked by introspection rather
-//! than assumed. So `type_text` and `press` need XTEST on X11 or `xdg-desktop-portal` on Wayland,
-//! and those are the permission question that has not been settled against a real desktop. Until
-//! then they refuse, and say which of the two it would take.
+//! **Typing does not need a keystroke either.** `EditableText.InsertText` writes into a control
+//! directly, so there is no input synthesis, no XTEST and no portal — it works the same on X11 and
+//! on Wayland, and asks nobody for anything. `DeviceEventController`, which used to synthesise key
+//! events, is not exposed by this at-spi2-core at all; checked by introspection rather than
+//! assumed, and it turned out not to be needed.
+//!
+//! **`press` still refuses.** A named key is not text: `Enter` on a form does something the form
+//! decides, and there is no honest way to spell that through this interface. It needs XTEST on X11
+//! or `xdg-desktop-portal` on Wayland, and that is the permission question still not settled
+//! against a real desktop.
 //!
 //! **And there is no `Reach` here.** The Windows hands can be bound to one process so a measurement
 //! harness cannot touch what it did not start. Nothing here can do that yet, so it is unrestricted
@@ -23,9 +28,9 @@
 
 use argmind_core::contract::{Did, Widget};
 
-use crate::atspi::{Bus, Node, DEEPEST};
+use crate::atspi::{Bus, Node, DEEPEST, STATE_FOCUSED};
 
-/// Said the same way in both places, because it is one fact.
+/// Why a named key cannot be sent.
 const NO_SYNTHESIS: &str =
     "이 운영체제에서는 아직 키를 보낼 수 없습니다 (X11은 XTEST, Wayland는 포털 동의가 필요합니다)";
 
@@ -97,6 +102,32 @@ impl Hands {
         }
         loose
     }
+
+    /// The focused editable widget in the attended frame, if there is one.
+    ///
+    /// **Focused rather than "the first text box"**, because a window with three fields would
+    /// otherwise always be typed into at the top. Where nothing is focused there is nowhere honest
+    /// to put the text, and `type_text` says so rather than choosing.
+    fn focused_editable(&self, bus: &Bus) -> Option<Node> {
+        let frame = bus.active_frame()?;
+        let mut layer = vec![frame];
+        for _ in 0..DEEPEST {
+            if layer.is_empty() {
+                return None;
+            }
+            let mut next = Vec::new();
+            for node in &layer {
+                let focused = bus.states(node)
+                    .is_some_and(|low| low & (1 << STATE_FOCUSED) != 0);
+                if focused && bus.interfaces(node).iter().any(|i| i.ends_with("EditableText")) {
+                    return Some(node.clone());
+                }
+                next.extend(bus.children(node));
+            }
+            layer = next;
+        }
+        None
+    }
 }
 
 impl argmind_core::contract::Hands for Hands {
@@ -113,6 +144,20 @@ impl argmind_core::contract::Hands for Hands {
             return;
         };
         let Some(bus) = self.bus.as_ref() else { return };
+
+        //: **A text box wants the focus, not a press** — and it is asked first, because an entry
+        //: often has no action at all and would otherwise be refused before getting here. Its
+        //: `Click` action, where it has one, does not put the caret in it, and the sequence this
+        //: program performs is click, type, enter.
+        if bus.interfaces(&node).iter().any(|i| i.ends_with("EditableText")) {
+            if !self.armed {
+                self.done.push(Did::Operated { how: "atspi-focus", live: false });
+                return;
+            }
+            let took = bus.grab_focus(&node);
+            self.done.push(Did::Operated { how: "atspi-focus", live: took });
+            return;
+        }
 
         //: **By name, not by index.** `Click` is what GTK calls it. A node with one unnamed action
         //: is taken at its word; a node with none cannot be operated this way at all, and saying so
@@ -141,8 +186,40 @@ impl argmind_core::contract::Hands for Hands {
         });
     }
 
-    fn type_text(&mut self, _text: &str) {
-        self.done.push(Did::Refused(NO_SYNTHESIS.into()));
+    /// Put text where the caret is, in whatever is focused.
+    ///
+    /// **No keystroke is synthesised**, which is why this works on Wayland as well as X11 and asks
+    /// nobody for permission. What it costs is that it goes to the widget rather than through the
+    /// keyboard, so an application watching for key events will not see any — the same trade the
+    /// Windows side makes when it uses a UI Automation pattern instead of a click.
+    fn type_text(&mut self, text: &str) {
+        if text.is_empty() {
+            return;
+        }
+        let Some(bus) = self.bus.as_ref() else {
+            self.done.push(Did::Refused("접근성 버스가 없습니다".into()));
+            return;
+        };
+        let Some(node) = self.focused_editable(bus) else {
+            self.done.push(Did::Refused(
+                "글자를 넣을 곳이 없습니다 — 먼저 입력란을 눌러야 합니다".into()));
+            return;
+        };
+        if !self.armed {
+            self.done.push(Did::Operated { how: "atspi-insert", live: false });
+            return;
+        }
+        //: At the caret, and at the end when there is not one — which is where a person typing
+        //: would expect it either way.
+        let at = match bus.caret(&node) {
+            n if n >= 0 => n,
+            _ => bus.characters(&node),
+        };
+        self.done.push(if bus.insert(&node, at, text) {
+            Did::Operated { how: "atspi-insert", live: true }
+        } else {
+            Did::Refused("입력란이 글자를 받지 않았습니다".into())
+        });
     }
 
     fn press(&mut self, _key: &str) {

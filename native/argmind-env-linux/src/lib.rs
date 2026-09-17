@@ -55,7 +55,7 @@ mod atspi;
 mod hands;
 
 #[cfg(target_os = "linux")]
-pub use atspi::{state_of, Attending, Plain, Sight, Watcher};
+pub use atspi::{state_of, text_of, Attending, Plain, Sight, Watcher};
 #[cfg(target_os = "linux")]
 pub use hands::Hands;
 

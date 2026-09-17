@@ -38,6 +38,17 @@ const ROOT: &str = "/org/a11y/atspi/accessible/root";
 const ACCESSIBLE: &str = "org.a11y.atspi.Accessible";
 const COMPONENT: &str = "org.a11y.atspi.Component";
 const ACTION: &str = "org.a11y.atspi.Action";
+const EDITABLE: &str = "org.a11y.atspi.EditableText";
+const TEXT: &str = "org.a11y.atspi.Text";
+
+/// `ATSPI_STATE_FOCUSED`, bit 12.
+///
+/// **Checked rather than remembered.** An entry's state word read `0x900` before a toggle and
+/// `0x910` after — bits 8 and 11 throughout, which are `ENABLED` and `FOCUSABLE`, and bit 4
+/// appearing is `CHECKED`. That is the enum confirming itself against this machine, which is the
+/// only reason a bit number is written down here at all: an earlier version guessed `CHECKED` was
+/// bit 8 and was wrong.
+pub(crate) const STATE_FOCUSED: u32 = 12;
 
 /// `ATSPI_STATE_ACTIVE`. The frame a person is typing into has it — **where there is a window
 /// manager to say so.** Under WSLg there is not: Windows is the window manager, and a frame there
@@ -166,9 +177,95 @@ impl Bus {
         self.attended().map(|a| a.frame)
     }
 
+    /// Which interfaces a node offers, so a caller can ask before it asks.
+    pub(crate) fn interfaces(&self, node: &Node) -> Vec<String> {
+        let got: Result<(Vec<String>,), _> =
+            self.at(node).method_call(ACCESSIBLE, "GetInterfaces", ());
+        got.map(|(list,)| list).unwrap_or_default()
+    }
+
+    /// Put text into an editable widget, **without synthesising a keystroke.**
+    ///
+    /// **`length` is bytes, not characters**, and that is the single most important line in this
+    /// file. Measured: inserting `안녕하세요` with length 5 — its character count — put `안` in and
+    /// nothing else, because five bytes is one Korean character and two thirds of another. With
+    /// length 15, its UTF-8 length, all five characters arrived. ASCII agrees either way, which is
+    /// exactly how this would have shipped: working in every test somebody wrote in English, and
+    /// dropping all but the first letter of an interface that is entirely Korean.
+    pub(crate) fn insert(&self, node: &Node, at: i32, text: &str) -> bool {
+        let got: Result<(bool,), _> = self.at(node).method_call(
+            EDITABLE, "InsertText", (at, text, text.len() as i32));
+        got.map(|(ok,)| ok).unwrap_or(false)
+    }
+
+    /// Where the caret is, so text goes where a person would expect it.
+    pub(crate) fn caret(&self, node: &Node) -> i32 {
+        let got: Result<(Variant<Box<dyn dbus::arg::RefArg>>,), _> = self.at(node).method_call(
+            "org.freedesktop.DBus.Properties", "Get", (TEXT, "CaretOffset"));
+        got.ok().and_then(|(v,)| v.0.as_i64()).map(|n| n as i32).unwrap_or(0)
+    }
+
+    /// How many characters are in it. **Characters here, unlike `InsertText`'s length.**
+    pub(crate) fn characters(&self, node: &Node) -> i32 {
+        let got: Result<(Variant<Box<dyn dbus::arg::RefArg>>,), _> = self.at(node).method_call(
+            "org.freedesktop.DBus.Properties", "Get", (TEXT, "CharacterCount"));
+        got.ok().and_then(|(v,)| v.0.as_i64()).map(|n| n as i32).unwrap_or(0)
+    }
+
+    /// The characters between two offsets.
+    ///
+    /// **`-1` for "to the end" is what the interface documents and is not used here**, because the
+    /// probe that found the byte-length bug could not pass it — `busctl` reads a leading minus as
+    /// one of its own options. The character count says the same thing and needs no argument
+    /// nobody can type.
+    pub(crate) fn text(&self, node: &Node, from: i32, to: i32) -> Option<String> {
+        let got: Result<(String,), _> = self.at(node).method_call(TEXT, "GetText", (from, to));
+        got.ok().map(|(s,)| s)
+    }
+
+    /// Give a widget the keyboard focus, so that what is typed next goes to it.
+    pub(crate) fn grab_focus(&self, node: &Node) -> bool {
+        let got: Result<(bool,), _> = self.at(node).method_call(COMPONENT, "GrabFocus", ());
+        got.map(|(ok,)| ok).unwrap_or(false)
+    }
+
     pub(crate) fn applications(&self) -> Vec<Node> {
         self.children(&(REGISTRY.to_string(), Path::new(ROOT).expect("a literal path")))
     }
+}
+
+/// What a text widget currently holds, for checking that typing worked.
+///
+/// **Reads it back rather than trusting the answer.** `InsertText` returns `true` whether five
+/// characters went in or one — which is exactly how the byte-versus-character mistake stayed
+/// invisible until a character count was compared.
+///
+/// A measurement rather than part of the contract, like [`state_of`]: nothing in `Eyes` or `Hands`
+/// needs it and nothing in the core may ask.
+pub fn text_of(widget: &Widget) -> Option<String> {
+    let bus = Bus::open().ok()?;
+    let node = find_like(&bus, widget)?;
+    let count = bus.characters(&node);
+    bus.text(&node, 0, count)
+}
+
+/// The first node with this name and role under the attended frame.
+fn find_like(bus: &Bus, widget: &Widget) -> Option<Node> {
+    let mut layer = vec![bus.active_frame()?];
+    for _ in 0..DEEPEST {
+        let mut next = Vec::new();
+        for node in &layer {
+            if bus.name(node) == widget.name && bus.role(node) == widget.role {
+                return Some(node.clone());
+            }
+            next.extend(bus.children(node));
+        }
+        if next.is_empty() {
+            return None;
+        }
+        layer = next;
+    }
+    None
 }
 
 /// A widget's whole state word, so a press can be shown to have worked.
