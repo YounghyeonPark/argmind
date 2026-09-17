@@ -118,11 +118,58 @@ Reading the enum from memory caused the smaller of the two: the first `state_of`
 `CHECKED`, which the frame's own `0x43200100` disproves. It returns the whole state word now, and
 comparing before with after needs no opinion about the enum at all.
 
-## What is still not written: typing
+## Typing, also without a keystroke
 
-**AT-SPI no longer synthesises input.** `DeviceEventController` used to generate key events and this
-at-spi2-core does not expose it — checked by introspection, not assumed. So `type_text` and `press`
-refuse, and name what it would take.
+`EditableText.InsertText` writes into a control directly. **No XTEST, no portal, no permission
+question, and it works the same on Wayland as on X11** — so typing came free from the same layer as
+clicking, and the permission problem that looked unavoidable turned out to apply only to named
+keys.
+
+```text
+dry     Operated { how: "atspi-focus", live: false }   Operated { how: "atspi-insert", live: false }   ""
+armed   Operated { how: "atspi-focus", live: true }    Operated { how: "atspi-insert", live: true }    "안녕하세요"
+```
+
+Read back out of the widget, not taken from the return value.
+
+### `length` is bytes, and that would have shipped
+
+Inserting `안녕하세요` with length **5**, its character count, put `안` in and stopped. With length
+**15**, its UTF-8 length, all five arrived. `InsertText` answered `true` both times.
+
+**ASCII agrees either way.** That is the whole danger: it would have passed every test anybody wrote
+in English and dropped all but the first letter of an interface that is entirely Korean.
+
+### A text box is asked before the action list
+
+An entry often has no action at all, so asking `GetActions` first refused it before it could be
+focused. `GrabFocus` and `Did::Operated { how: "atspi-focus" }` now come first for anything
+implementing `EditableText`.
+
+### `press` still refuses
+
+A named key is not text. `Enter` on a form does what the form decides, and there is no honest way to
+spell that through this interface. **That** is what still needs XTEST on X11 or the portal on
+Wayland — a much smaller hole than it looked.
+
+## The same mistake three times, which is the thing worth writing down
+
+Three separate occasions in this session where **the write worked and the reading was broken**, and
+all three presented as the write being broken:
+
+1. Announcing on every connection emptied the tree — *the hands cannot find what the eyes listed*.
+2. `ACTIVE` unset with no window manager — *there is no active window*.
+3. The read-back matched name and role only, on a window full of nameless text boxes, and found a
+   different one — *the text did not go in*.
+
+Two runs each. The common shape: an operation returned success, a separate read disagreed, and the
+operation got the blame. **`b true` from D-Bus means the call was dispatched**, and nothing more.
+
+## What is still not written elsewhere
+
+`DeviceEventController`, which used to synthesise key events, is not exposed by this at-spi2-core at
+all — checked by introspection. It turned out not to be needed for text, and to be exactly what is
+needed for keys.
 
 **On Linux that is a permission question before it is a coding one.**
 

@@ -185,9 +185,15 @@ UI Automation patterns, for the same measured reason: a pattern leaves the curso
 left it. Verified against the widget's own state word, `0x43000900 -> 0x43000910`, which is
 `CHECKED` flipping. No new dependency: the eyes' D-Bus connection is all it takes.
 
-**Typing is refused**, because AT-SPI no longer synthesises input — checked by introspection. That
-needs XTEST on X11 or `xdg-desktop-portal` on Wayland, and on Wayland **the system holds the gate,
-not argmind**: the portal shows its own dialog, so `항상 허용` cannot be honoured from argmind's
+**And typing**, through `EditableText.InsertText` — also without a keystroke, so it works the same
+on Wayland as on X11 and asks nobody for anything. Verified by reading `안녕하세요` back out of the
+widget. **Its `length` is bytes, not characters**: passing the character count put one Korean
+letter in and stopped, while ASCII agreed either way — the shape of bug that passes every English
+test and breaks the whole interface.
+
+**Only named keys are refused** now. `Enter` does what a form decides and there is no honest way to
+spell it here; that needs XTEST on X11 or `xdg-desktop-portal` on Wayland, and on Wayland **the
+system holds the gate, not argmind**: the portal shows its own dialog, so `항상 허용` cannot be honoured from argmind's
 settings there. Two gates, and the settings panel only controls one. Not decided from a WSLg
 session with no window manager of its own — which is also why `ACTIVE` is unreliable there, and
 why *which window is in front* has no counterpart that can be tested here.
