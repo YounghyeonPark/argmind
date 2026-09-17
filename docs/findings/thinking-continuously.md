@@ -180,3 +180,58 @@ That needs a real camera, somebody deciding what the right answer was, and the p
 `camera.rs` says this would need: it hands out 64×36 greys and **has no accessor for anything
 larger**, deliberately, so a photograph leaving that module is a different call, a different
 argument and a different question to be asked.
+
+## Senses in parallel: the right shape, and the half the measurement adds (2026-09-17)
+
+**The owner:** 각각의 인지를 병렬로 구동하고, 계속 리프레시하면 생각하는 부분이 그때그때 처리된걸
+읽어오면 더 빠르지 않을까.
+
+**The shape is right, and for the camera it is close to mandatory.** One thread owns the session
+because COM says so, and a look costs about 8 s — eight seconds in which nothing answers anybody.
+A sense that refreshes on its own thread and leaves its latest reading where the thinking can pick
+it up is how that stops being true.
+
+**But nothing becomes faster by being parallel.** A look still takes 8 s; it stops *blocking*. And
+the thread was never the scarce thing — the graphics card is, and a queue is a queue whichever
+thread put the work in it.
+
+### What a sense costs the conversation
+
+`argmind-measure --bin overlapping`. Ten short answers from `qwen3:8b`, twice: alone, and while a
+second thread keeps `qwen3-vl:8b` looking at a drawn card back to back. No camera is opened.
+
+| | alone | beside a look |
+|---|---|---|
+| run 1 | median **1.04 s**, worst 2.30 s | median **3.19 s**, worst **10.81 s** |
+| run 2 | median **0.97 s**, worst 4.67 s | median **2.76 s**, worst **8.87 s** |
+
+Reproduced: **the answer costs about three times as much, and one answer in ten waits out most of a
+whole look.** That is the number the owner's own priority points at — *중요한건 상호작용 및
+의사소통임* — being spent on a camera nobody asked about.
+
+And the looks did not get their money either: **1 and 2 finished** while ten answers ran, where
+taking turns would have fitted three or so. Both sides are slower, so the two are not sharing the
+card, they are getting in each other's way.
+
+### So the design is parallel structure and serial GPU
+
+Three parts, and the third is the one the proposal did not have:
+
+1. **Each sense on its own thread**, writing its latest reading into a shared slot. Yes — this is
+   what stops an 8 s look freezing the conversation, and it is the only way the camera is usable at
+   all.
+2. **Every reading carries when it was taken.** A sense that refreshes on its own is a sense whose
+   answer is always a little old, and a stale reading presented as current is a lie. The thinking
+   reads *a reading from 12 seconds ago*, not *a reading*.
+3. **A sense stands down while a turn is in flight.** Measured above: without this, parallelism
+   spends the interaction budget to fill a panel. The conversation preempts; the senses get the gaps.
+
+**And one thing must not move onto the slots: resolving a click.** `find()` re-reads the screen
+immediately before acting because a listed widget is gone **13 times in 14** over the second a call
+takes. Cached perception is for thinking and describing. Acting reads fresh, always.
+
+### What is still unmeasured
+
+Whether a sense that yields actually recovers the 1.0 s median — the arm above is the heaviest
+version, a look always in flight, and the realistic one is a look every 30 s. The yielding rule has
+to exist before that can be measured, and the number to beat is in the table.

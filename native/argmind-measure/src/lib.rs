@@ -66,6 +66,108 @@ pub fn mind_print(mind: &Mind) -> Option<String> {
     mind.line().map(|line| format!("m{}", print6(line.as_bytes())))
 }
 
+// ---- a picture, for the harnesses that send one ------------------------------------------------
+//
+// **Here rather than in one bin**, because two of them now draw the same card and a second copy
+// would drift: `describing` times the pipeline with it and `overlapping` keeps the vision model
+// busy with it, and a card that differed between them would make the two results
+// incomparable without anybody noticing.
+
+/// A picture, drawn rather than photographed.
+///
+/// **Something a description can be checked against without anybody's judgement**: four coloured
+/// quadrants and a dark bar, so a caption either mentions colours in the right arrangement or it
+/// does not. Not a test of whether the model understands a room — a test of whether the bytes
+/// arrived as a picture at all, which is the failure a wrong encoder gives and which would
+/// otherwise look like a bad model.
+pub fn test_card(w: usize, h: usize) -> Vec<u8> {
+    let mut rgb = vec![0u8; w * h * 3];
+    for y in 0..h {
+        for x in 0..w {
+            let i = (y * w + x) * 3;
+            let (r, g, b) = match (x < w / 2, y < h / 2) {
+                (true, true) => (220, 40, 40),
+                (false, true) => (40, 160, 60),
+                (true, false) => (40, 70, 200),
+                (false, false) => (230, 200, 40),
+            };
+            //: A dark band across the middle third, so a caption has something to get wrong that is
+            //: not a colour name.
+            let dark = y > h * 7 / 16 && y < h * 9 / 16;
+            rgb[i] = if dark { 20 } else { r };
+            rgb[i + 1] = if dark { 20 } else { g };
+            rgb[i + 2] = if dark { 20 } else { b };
+        }
+    }
+    png(&rgb, w, h)
+}
+
+/// A PNG, hand-written, with **deflate's stored blocks** — no compression and no dependency.
+///
+/// The same argument as the rest of the wire code here: HTTP, D-Bus and the WAV header are all
+/// hand-written because the licence rule is cheapest to keep when there is nothing new to check.
+/// Stored blocks make the file about as large as the pixels, which for a frame this size is tens of
+/// kilobytes over a loopback socket.
+pub fn png(rgb: &[u8], w: usize, h: usize) -> Vec<u8> {
+    //: Each row is prefixed with a filter byte of 0 — "no filter" — which is what makes the
+    //: uncompressed path legal rather than merely small.
+    let mut raw = Vec::with_capacity(h * (1 + w * 3));
+    for y in 0..h {
+        raw.push(0);
+        raw.extend_from_slice(&rgb[y * w * 3..(y + 1) * w * 3]);
+    }
+
+    let mut z = vec![0x78, 0x01];
+    for (i, part) in raw.chunks(65_535).enumerate() {
+        let last = (i + 1) * 65_535 >= raw.len();
+        z.push(if last { 1 } else { 0 });
+        z.extend_from_slice(&(part.len() as u16).to_le_bytes());
+        z.extend_from_slice(&(!(part.len() as u16)).to_le_bytes());
+        z.extend_from_slice(part);
+    }
+    z.extend_from_slice(&adler32(&raw).to_be_bytes());
+
+    let mut out = vec![0x89, b'P', b'N', b'G', 0x0d, 0x0a, 0x1a, 0x0a];
+    let mut ihdr = Vec::new();
+    ihdr.extend_from_slice(&(w as u32).to_be_bytes());
+    ihdr.extend_from_slice(&(h as u32).to_be_bytes());
+    ihdr.extend_from_slice(&[8, 2, 0, 0, 0]);
+    chunk(&mut out, b"IHDR", &ihdr);
+    chunk(&mut out, b"IDAT", &z);
+    chunk(&mut out, b"IEND", &[]);
+    out
+}
+
+fn chunk(out: &mut Vec<u8>, kind: &[u8; 4], data: &[u8]) {
+    out.extend_from_slice(&(data.len() as u32).to_be_bytes());
+    out.extend_from_slice(kind);
+    out.extend_from_slice(data);
+    let mut crc = Vec::with_capacity(4 + data.len());
+    crc.extend_from_slice(kind);
+    crc.extend_from_slice(data);
+    out.extend_from_slice(&crc32(&crc).to_be_bytes());
+}
+
+fn crc32(data: &[u8]) -> u32 {
+    let mut c = 0xffff_ffffu32;
+    for b in data {
+        c ^= *b as u32;
+        for _ in 0..8 {
+            c = if c & 1 != 0 { 0xedb8_8320 ^ (c >> 1) } else { c >> 1 };
+        }
+    }
+    !c
+}
+
+fn adler32(data: &[u8]) -> u32 {
+    let (mut a, mut b) = (1u32, 0u32);
+    for x in data {
+        a = (a + *x as u32) % 65_521;
+        b = (b + a) % 65_521;
+    }
+    (b << 16) | a
+}
+
 /// A harness's own source, hashed. `h` in a filename.
 ///
 /// **The one condition a harness did not record about itself**, until two arms of one comparison
