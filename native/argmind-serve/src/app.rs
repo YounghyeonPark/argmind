@@ -804,6 +804,27 @@ pub struct How {
     pub port: u16,
 }
 
+/// Does argmind listen on the talk key?
+///
+/// **The standing answer wins in both directions**, and a refusal wins over the flag on purpose: a
+/// person who answered 항상 거부 in the settings has said something more deliberate than whatever
+/// is on the shortcut they clicked, and a launcher that could override it would make 거부 mean
+/// *until the next time somebody edits a shortcut*.
+pub fn hearing(flag: bool) -> bool {
+    hearing_from(flag, crate::decided::standing("microphone"))
+}
+
+/// The same with the answer handed in rather than read. **Pure so it can be tested** — testing it
+/// against the real `decisions.json` would mean a test that overwrites what the person decided in
+/// order to check that deciding works, which is the reason `needs_as_json` is split the same way.
+pub fn hearing_from(flag: bool, standing: Option<Standing>) -> bool {
+    match standing {
+        Some(Standing::Allowed) => true,
+        Some(Standing::Denied) => false,
+        None => flag,
+    }
+}
+
 impl How {
     /// Read from the command line. `--dry`, `--speak`, `--hear`, and a model name with a colon.
     pub fn from_args() -> Self {
@@ -815,7 +836,13 @@ impl How {
             speak: std::env::args().any(|a| a == "--speak"),
             //: Same rule, and it matters more: **a microphone is not opened because a program was
             //: run.** Even with this, it opens only while the talk key is held.
-            hear: std::env::args().any(|a| a == "--hear"),
+            //:
+            //: **But a standing 항상 허용 is an answer, not a note.** The owner had answered
+            //: `microphone: allowed` in the settings and argmind still would not listen without the
+            //: flag, which makes the setting decorative — the same complaint they raised about
+            //: being asked again every launch, in a second place. The settings decide and the flag
+            //: is how you say yes when there is no standing answer to read.
+            hear: hearing(std::env::args().any(|a| a == "--hear")),
             //: **Not from the command line.** There is one argmind and it lives on one port; a
             //: flag for it would be a second copy somebody starts by accident. A test sets it
             //: because a test must not read another argmind's page and call it a pass.
@@ -917,6 +944,8 @@ pub fn run(how: How) {
         //: touched on the hot path — and a mind that was never set is a resting one, which renders
         //: the prompt this program shipped with byte for byte.
         desk.session.mind = crate::mind::remembered();
+        //: Whether the standing answers have been acted on yet this run. See `Job::Opened`.
+        let mut caught_up = false;
         let started = std::time::Instant::now();
         loop {
             //: **A timeout rather than a blocking receive**, so the same thread that answers can
@@ -1046,6 +1075,27 @@ pub fn run(how: How) {
                 }
                 Job::Opened(tx) => {
                     let _ = tx.send(sse("hello", &hello(&desk, &agent_model)));
+                    //: **What 항상 허용 buys, without anybody pressing 다시 확인.**
+                    //:
+                    //: It only happened on `Job::Look`, which is the button — so after every
+                    //: restart the page drew *전에 항상 허용하셨습니다 — 물어보지 않고 진행합니다*
+                    //: beside a recogniser that was not running and never would be. The standing
+                    //: answer was being reported and not honoured, which is worse than either.
+                    //:
+                    //: **On the first page rather than at startup**, because a fix can be a
+                    //: three-minute build and its progress has to go somewhere a person can see;
+                    //: at startup there is no page connected and the notes would go nowhere. Once
+                    //: per process, so a second window cannot start a second build.
+                    if !caught_up {
+                        caught_up = true;
+                        for key in standing_yes_and_missing(&agent_model) {
+                            agent_out.send("note",
+                                           &format!("{} — 전에 항상 허용하셨으므로 진행합니다",
+                                                    crate::decided::what(&key)));
+                            fix(&agent_out, &agent_model, &key);
+                        }
+                        adopt_voice(&mut desk, &agent_out);
+                    }
                     //: **Checked when a page opens, not at startup.** Checking once at boot would
                     //: mean a server left running overnight still telling you about something you
                     //: installed an hour ago.

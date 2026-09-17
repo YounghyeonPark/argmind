@@ -240,7 +240,12 @@ already exists to say so out loud.
 No phone environment, no robot environment. **A thinking goal and four dials are built and are at rest until turned**: 재치 · 유머 · 봉사 · 헌신,
 0–10, and a sentence in the person's own words, in `설정 → 생각`. At rest the prompt is what it
 always was. **Voice is built and is off until switched on**: hold
-F9 in the window, which means you have to be looking at argmind to talk to it.
+F9 in the window, which means you have to be looking at argmind to talk to it. **The settings
+decide whether it listens, not the command line** — a standing `microphone: allowed` turns hearing
+on with no `--hear`, and a standing 거부 turns it off with one. Two places were reporting a
+standing answer and not honouring it: that, and the installs behind 항상 허용, which ran only when
+somebody pressed 다시 확인 — so after every restart the page said *물어보지 않고 진행합니다* beside
+a recogniser that was not running. They now run on the first page open, once per process.
 
 **Speaking has two voices and picks one at startup.** SAPI is free (4–43 ms), installed, and
 `Microsoft Heami Desktop` — which the owner called 어색함 on 2026-09-16. **The neural one answers

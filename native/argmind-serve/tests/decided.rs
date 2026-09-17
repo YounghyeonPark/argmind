@@ -152,3 +152,28 @@ fn a_standing_answer_is_sent_with_the_question_so_the_page_can_stop_asking() {
         assert!(answered.contains("\"standing\":\"\""), "{answered}");
     }
 }
+
+/// **A standing answer about the microphone is the answer, not a note beside the real one.**
+///
+/// The owner had `microphone: allowed` in the settings and argmind still would not listen: hearing
+/// was a command-line flag and nothing read the file. The page said *전에 항상 허용하셨습니다 —
+/// 물어보지 않고 진행합니다* next to a microphone that was switched off, which is the same defect as
+/// asking again every launch, in a second place.
+#[test]
+fn the_settings_decide_whether_it_listens_and_the_flag_only_fills_a_gap() {
+    use argmind_serve::app::hearing_from;
+
+    //: Nothing answered: the flag is all there is, and off is the safe direction.
+    assert!(!hearing_from(false, None));
+    assert!(hearing_from(true, None));
+
+    //: Answered 항상 허용: it listens, flag or no flag. This is the case that was broken.
+    assert!(hearing_from(false, Some(Standing::Allowed)));
+    assert!(hearing_from(true, Some(Standing::Allowed)));
+
+    //: **Answered 항상 거부 beats the flag**, deliberately. A refusal in the settings is a more
+    //: considered thing than whatever is on the shortcut somebody clicked, and a launcher that
+    //: could override it would make 거부 mean *until the next time a shortcut is edited*.
+    assert!(!hearing_from(true, Some(Standing::Denied)));
+    assert!(!hearing_from(false, Some(Standing::Denied)));
+}
