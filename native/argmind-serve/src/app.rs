@@ -767,6 +767,55 @@ fn reflect(desk: &mut Desk, thinking: &Letterbox, now: f64) {
                                           note: desk.session.note.clone() });
 }
 
+/// **The one turn that starts because argmind decided the moment had come.**
+///
+/// The owner, 2026-09-17: 의지가 있어야 하지 않나. A `Watch` fires because a window changed — the
+/// world moved and argmind reacted. This fires because a judgement has stood for `RAISE_AFTER`
+/// looks and nobody has done anything about it, which is a reason that comes from argmind's own
+/// state and from nowhere else.
+///
+/// **Everything that makes an unprompted turn safe still applies.** `asked = false`, so an effect
+/// is downgraded to a proposal behind the confirm button, nothing is spoken aloud, and the
+/// repetition guard stands in front of the sentence. What is new is only *why* the turn began.
+///
+/// **And it happens once.** The judgement is put down the moment it is raised, so a thing brought
+/// up and ignored is not brought up again thirty seconds later — the defect this file has found in
+/// three other shapes already.
+fn raise_it(desk: &mut Desk, out: &Listeners) {
+    if desk.turn.in_flight() {
+        return;
+    }
+    let Some(worth) = desk.session.note.worth_raising().cloned() else { return };
+    //: **Put down before the turn, not after.** A model call takes a second or two and the tick
+    //: that follows must not find it still standing and raise it twice.
+    desk.session.note.let_go();
+    out.send("note-kept", &note_json(&desk.session.note));
+
+    let trigger = Trigger::perceived(&argmind_core::thinking::raising(&worth));
+    out.send("noticed", &trigger.text);
+    let _answering = desk.turn.begins();
+    out.send("busy", "1");
+    let intent = desk.session.decide(&trigger);
+    out.send("busy", "0");
+    desk.session.history.push(("noticed".into(), trigger.text.clone()));
+
+    let reply = spoken(&intent);
+    if reply.is_empty() || argmind_core::converse::said_before(&reply, &desk.lately_noticed) {
+        return;
+    }
+    desk.lately_noticed.push(reply.clone());
+    if desk.lately_noticed.len() > REMARKS_REMEMBERED {
+        desk.lately_noticed.remove(0);
+    }
+    desk.session.history.push(("you".into(), reply.clone()));
+    out.send("say", &reply);
+    //: Not spoken aloud, and every effect waits behind a button. A turn argmind started itself is
+    //: the last place to relax either of those.
+    for effect in &intent.effects {
+        propose(desk, out, effect.clone());
+    }
+}
+
 /// What it is holding in mind, for the panel that shows it.
 ///
 /// **Shown, because a thought nobody can read is indistinguishable from no thought.** It is also
@@ -1322,10 +1371,12 @@ pub fn run(how: How) {
                     agent_out.send("decisions", &decisions_json());
                 }
                 Job::Thought(note) => {
-                    //: **Nothing is said and nothing is proposed.** A tick reaches the person only
-                    //: through the panel that shows the note.
+                    //: **A tick reaches the person through the panel, and one other way.** See
+                    //: `raise_it` — the only turn in this program that begins because argmind has
+                    //: been holding something rather than because the world moved.
                     desk.session.note = note;
                     agent_out.send("note-kept", &note_json(&desk.session.note));
+                    raise_it(&mut desk, &agent_out);
                 }
                 Job::Forget(key) => {
                     match crate::decided::keep(&key, None) {

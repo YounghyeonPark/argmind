@@ -13,7 +13,8 @@ use argmind_core::contract::Widget;
 use argmind_core::converse::{render, render_with, MAX_LISTED};
 use argmind_core::intent::Trigger;
 use argmind_core::mind::Mind;
-use argmind_core::thinking::{ask_for_a_note, read_note, what_changed, worth_of, Note, Worth,
+use argmind_core::thinking::{ask_for_a_note, read_note, what_changed, worth_of, Judged,
+                             Note, Worth,
                              MOST_CHARS};
 
 fn screen() -> Vec<Widget> {
@@ -41,7 +42,7 @@ fn a_blank_note_puts_nothing_in_the_prompt() {
     //: Whitespace in every field is still blank — otherwise a model that answers with three spaces
     //: turns the slot on for the rest of the session.
     let mut spaces = Note::blank();
-    spaces.revise("  ", None);
+    spaces.revise("  ", Judged::Nothing);
     spaces.record(" \t ");
     assert!(spaces.empty());
     assert_eq!(prompt(&spaces), prompt(&Note::blank()));
@@ -53,7 +54,7 @@ fn a_blank_note_puts_nothing_in_the_prompt() {
 fn every_field_of_a_note_reaches_the_prompt() {
     let mut note = Note::blank();
     note.revise("그가 코드 리뷰 중이다",
-                Some(Worth { name: "설정".into(), role: "button".into() }));
+                Judged::This(Worth { name: "설정".into(), role: "button".into() }));
     //: `tried` comes from the record, never from the model — so it is set the way the session
     //: sets it.
     note.record("clicked the button \"설정\"");
@@ -74,7 +75,7 @@ fn every_field_of_a_note_reaches_the_prompt() {
 #[test]
 fn a_field_with_nothing_in_it_is_not_printed() {
     let mut note = Note::blank();
-    note.revise("그가 문서를 읽고 있다", None);
+    note.revise("그가 문서를 읽고 있다", Judged::Nothing);
     let block = note.block().unwrap();
     assert!(block.contains("믿는 것"), "{block}");
     assert!(!block.contains("할 만한 것"), "{block}");
@@ -86,16 +87,16 @@ fn a_field_with_nothing_in_it_is_not_printed() {
 #[test]
 fn revising_replaces_what_was_there_and_counts_once() {
     let mut note = Note::blank();
-    note.revise("첫 번째", None);
+    note.revise("첫 번째", Judged::Nothing);
     assert_eq!(note.revisions, 1);
-    note.revise("두 번째", None);
+    note.revise("두 번째", Judged::Nothing);
     assert_eq!(note.revisions, 2);
     assert_eq!(note.believes, "두 번째");
     assert!(!note.block().unwrap().contains("첫 번째"));
 
     //: **Capped.** A field longer than the limit is cut rather than carried, because a prompt that
     //: grows without bound is a prompt the model stops reading.
-    note.revise(&"가".repeat(MOST_CHARS * 3), None);
+    note.revise(&"가".repeat(MOST_CHARS * 3), Judged::Nothing);
     assert_eq!(note.believes.chars().count(), MOST_CHARS);
 }
 
@@ -106,7 +107,7 @@ fn revising_replaces_what_was_there_and_counts_once() {
 #[test]
 fn an_unusable_reply_does_not_clear_what_was_already_there() {
     let mut note = Note::blank();
-    note.revise("그가 회의 중이다", None);
+    note.revise("그가 회의 중이다", Judged::Nothing);
     let before = note.clone();
 
     for reply in [r#"{"believes": "", "worth": null}"#,
@@ -130,7 +131,7 @@ fn an_unusable_reply_does_not_clear_what_was_already_there() {
 #[test]
 fn the_thinking_question_asks_for_no_speech_and_no_action() {
     let mut note = Note::blank();
-    note.revise("그가 코드를 보고 있다", None);
+    note.revise("그가 코드를 보고 있다", Judged::Nothing);
     let asked = ask_for_a_note(&note, "0: button \"one\"", "", &[], MOST_CHARS);
 
     //: The two fields it may answer with, and nothing else.
@@ -202,19 +203,19 @@ fn what_it_did_comes_from_the_record_and_holds_only_actions() {
 #[test]
 fn a_belief_that_comes_back_unchanged_is_counted_as_held() {
     let mut note = Note::blank();
-    note.revise("그가 같은 문서를 보고 있다", None);
+    note.revise("그가 같은 문서를 보고 있다", Judged::Nothing);
     assert_eq!(note.held, 1);
     //: The first time it is not worth saying, so it is not rendered.
     assert!(!note.block().unwrap().contains("번째 그대로"));
 
-    note.revise("그가 같은 문서를 보고 있다", None);
-    note.revise("그가 같은 문서를 보고 있다", None);
+    note.revise("그가 같은 문서를 보고 있다", Judged::Nothing);
+    note.revise("그가 같은 문서를 보고 있다", Judged::Nothing);
     assert_eq!(note.held, 3);
     assert!(note.block().unwrap().contains("3번째 그대로"), "{:?}", note.block());
 
     //: **A different belief starts again at one.** Otherwise the count would be a measure of how
     //: long argmind has been running rather than of how long anything has been true.
-    note.revise("그가 다른 창으로 옮겼다", None);
+    note.revise("그가 다른 창으로 옮겼다", Judged::Nothing);
     assert_eq!(note.held, 1);
     assert!(!note.block().unwrap().contains("번째 그대로"));
 }
@@ -352,12 +353,12 @@ fn a_judgement_that_goes_unoffered_is_counted() {
     let save = Worth { name: "Save".into(), role: "button".into() };
     let mut note = Note::blank();
 
-    note.revise("그가 나가려 한다", Some(save.clone()));
+    note.revise("그가 나가려 한다", Judged::This(save.clone()));
     assert_eq!(note.stuck, 1);
     assert!(!note.block().unwrap().contains("아무 일도 없음"));
 
-    note.revise("그가 나가려 한다", Some(save.clone()));
-    note.revise("그가 나가려 한다", Some(save.clone()));
+    note.revise("그가 나가려 한다", Judged::This(save.clone()));
+    note.revise("그가 나가려 한다", Judged::This(save.clone()));
     assert_eq!(note.stuck, 3);
     let block = note.block().unwrap();
     assert!(block.contains("3번째인데 아무 일도 없음"), "{block}");
@@ -367,9 +368,10 @@ fn a_judgement_that_goes_unoffered_is_counted() {
     assert!(block.contains("Save"), "{block}");
 
     //: A different widget starts again; dropping the judgement leaves nothing to count.
-    note.revise("그가 나가려 한다", Some(Worth { name: "Cancel".into(), role: "button".into() }));
+    note.revise("그가 나가려 한다",
+                Judged::This(Worth { name: "Cancel".into(), role: "button".into() }));
     assert_eq!(note.stuck, 1);
-    note.revise("그가 나가려 한다", None);
+    note.revise("그가 나가려 한다", Judged::Nothing);
     assert_eq!(note.stuck, 0);
     assert!(!note.block().unwrap().contains("할 만한 것"));
 }
@@ -402,4 +404,70 @@ fn a_judgement_needs_an_event_and_the_reader_enforces_it() {
     let mut spaces = Note::blank();
     assert!(read_note(picked, &mut spaces, &listed, "   \n "));
     assert_eq!(spaces.worth, None);
+}
+
+// ---- a reason to start, rather than to answer ---------------------------------------------------
+
+/// **A quiet look does not erase a standing judgement.**
+///
+/// The first version of the event gate cleared `worth` whenever nothing had changed, and that made
+/// `stuck` unable to reach 2: a judgement could not survive one quiet look, so there was never
+/// anything for argmind to bring up of its own accord. *Nothing happened* is a reason not to form a
+/// new judgement; it is not a reason to forget the one already standing.
+#[test]
+fn a_standing_judgement_survives_a_quiet_look_and_counts_it() {
+    let save = Worth { name: "저장".into(), role: "button".into() };
+    let mut note = Note::blank();
+
+    note.revise("그가 나가려 한다", Judged::This(save.clone()));
+    assert_eq!(note.stuck, 1);
+
+    //: Two quiet looks. It still stands, and each one is counted against it.
+    note.revise("그가 나가려 한다", Judged::NotAsked);
+    note.revise("그가 나가려 한다", Judged::NotAsked);
+    assert_eq!(note.worth.as_ref(), Some(&save), "a quiet look erased what was standing");
+    assert_eq!(note.stuck, 3);
+
+    //: **Something happened and argmind judged there was nothing to do** — that is what clears it,
+    //: because that is an answer rather than an absence of one.
+    note.revise("그가 돌아왔다", Judged::Nothing);
+    assert_eq!(note.worth, None);
+    assert_eq!(note.stuck, 0);
+
+    //: And a quiet look with nothing standing stays nothing rather than counting up from zero.
+    note.revise("그가 돌아왔다", Judged::NotAsked);
+    assert_eq!(note.stuck, 0);
+}
+
+/// **The one thing that starts a turn from argmind's own state.**
+///
+/// A `Watch` fires because the world moved. This fires because a judgement has stood for
+/// `RAISE_AFTER` looks and nobody has done anything about it.
+#[test]
+fn a_judgement_becomes_worth_raising_only_after_it_has_stood_a_while() {
+    use argmind_core::thinking::{raising, RAISE_AFTER};
+    let save = Worth { name: "저장".into(), role: "button".into() };
+    let mut note = Note::blank();
+
+    //: Nothing standing is never worth interrupting somebody over.
+    assert!(note.worth_raising().is_none());
+
+    note.revise("그가 나가려 한다", Judged::This(save.clone()));
+    for look in 1..RAISE_AFTER {
+        assert!(note.worth_raising().is_none(), "raised after only {look} look(s)");
+        note.revise("그가 나가려 한다", Judged::NotAsked);
+    }
+    assert_eq!(note.worth_raising(), Some(&save));
+
+    //: **Raised once.** Putting it down is what stops a thing brought up and ignored coming back
+    //: thirty seconds later, which is the defect this project has found in three other shapes.
+    note.let_go();
+    assert!(note.worth_raising().is_none());
+    assert_eq!(note.stuck, 0);
+
+    //: The sentence is the program's and carries the widget's own words — the model wrote none of
+    //: it, which is the whole reason the field stopped being prose.
+    let said = raising(&save);
+    assert!(said.contains("저장"), "{said}");
+    assert!(said.contains("button"), "{said}");
 }

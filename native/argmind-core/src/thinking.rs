@@ -100,6 +100,24 @@
 //! That is the whole difference between *he is reading a document* and *he has been on this
 //! document for four of my looks*, and only the second is something to judge on.
 //!
+//! ## A reason to start rather than to answer
+//!
+//! **The owner, 2026-09-17: 의지가 있어야 하지 않나.** Three things had to exist — something held
+//! across turns, a read on whether it is getting anywhere, and a reason to begin. The first two are
+//! [`Note::worth`] and [`Note::stuck`]. The third is [`Note::worth_raising`], and it is the only
+//! thing in this program that starts a turn **from argmind's own state rather than from the
+//! world**. A `Watch` fires because a window changed; this fires because argmind has been holding
+//! the same judgement for a while and nobody has done anything about it.
+//!
+//! **It is a sentence, not an action**, and everything that makes an unprompted turn safe still
+//! applies: the effect slot is downgraded to a proposal behind the confirm button, nothing is
+//! spoken aloud, and the repetition guard stands in front of it. What is new is only *why* the turn
+//! began.
+//!
+//! **And it happens once.** `let_go` puts the judgement down the moment it is raised, so a thing
+//! brought up and ignored is not brought up again three seconds later — which is the defect this
+//! whole file keeps finding in other shapes.
+//!
 //! ## The rule it inherits
 //!
 //! **An empty note renders nothing, and the prompt is then byte-for-byte what it was.** The same
@@ -121,6 +139,22 @@
 /// everything it has ever believed.
 pub const MOST_CHARS: usize = 240;
 
+/// How many looks a judgement stands for before argmind brings it up itself.
+///
+/// **Three, chosen and not measured**, which at a 30 s tick is a minute and a half. It is the floor
+/// on the one thing here that interrupts without being asked, and it errs shy for the same reason
+/// `MIN_GAP` does: something on screen changes 13 seconds out of 14, and an agent that speaks
+/// whenever it has an opinion is the noise every other guard in this program exists to stop.
+pub const RAISE_AFTER: u32 = 3;
+
+/// How a raised judgement is put to the person, with the widget's own words in it.
+///
+/// **The program writes this sentence.** The model chose a widget and nothing else; four attempts
+/// at letting it write the prose gave filler, silence, and a copy of the example.
+pub fn raising(w: &Worth) -> String {
+    format!("아까부터 {} \"{}\" 가 눈에 걸린다 — 아직 아무 일도 없다", w.role, w.name)
+}
+
 /// The header the note renders under, when it renders at all.
 ///
 /// **Korean, like the rest of what a person reads here** — and by the same measurement that
@@ -140,6 +174,23 @@ pub const THINKING: &str = "지금까지 네가 생각하고 있던 것:";
 pub struct Worth {
     pub name: String,
     pub role: String,
+}
+
+/// What one tick concluded about whether there is anything to do.
+///
+/// **Three outcomes, not two, and the third is the one that was missing.** *Nothing happened* is a
+/// reason not to form a new judgement; it is not a reason to forget the one already standing. The
+/// first version collapsed those two and a judgement could not survive a quiet look — which made
+/// [`Note::stuck`] unable to climb past 1 and left nothing for argmind to ever bring up on its own.
+#[derive(Debug, Clone, PartialEq)]
+pub enum Judged {
+    /// **Nothing happened, so nothing was judged.** What stands, stands, and it has now gone one
+    /// more look without anybody acting on it.
+    NotAsked,
+    /// Something happened and argmind judged there was nothing to do about it.
+    Nothing,
+    /// Something happened and this is what it named.
+    This(Worth),
 }
 
 /// What argmind currently holds to be the case. **Empty is the state this program shipped in.**
@@ -186,22 +237,55 @@ impl Note {
     ///
     /// Revising rather than appending is the whole design: the model is handed the previous note
     /// and asked for the note that should replace it.
-    pub fn revise(&mut self, believes: &str, worth: Option<Worth>) {
+    pub fn revise(&mut self, believes: &str, judged: Judged) {
         let believes = clipped(believes);
         //: **A belief that came back the same has held one tick longer.** Counted rather than
         //: asked, so the model cannot flatter itself about how long it has been sure.
         self.held = if believes == self.believes { self.held.saturating_add(1) } else { 1 };
-        //: **And a judgement that came back the same has gone unoffered one tick longer.** The same
-        //: arithmetic and the opposite meaning: `held` rising is a belief being confirmed, `stuck`
-        //: rising is a judgement nobody has acted on.
-        self.stuck = match (&worth, &self.worth) {
-            (Some(now), Some(before)) if now == before => self.stuck.saturating_add(1),
-            (Some(_), _) => 1,
-            (None, _) => 0,
-        };
+        //: **And a judgement that nobody acted on has stood one tick longer.** The same arithmetic
+        //: as `held` and the opposite meaning: a belief coming back is confirmation, a judgement
+        //: coming back is an offer nobody made.
+        match judged {
+            //: **A quiet look does not erase what is standing.** It is one more look in which
+            //: nothing was done about it, which is the number `stuck` is for.
+            Judged::NotAsked => {
+                if self.worth.is_some() {
+                    self.stuck = self.stuck.saturating_add(1);
+                }
+            }
+            Judged::Nothing => {
+                self.worth = None;
+                self.stuck = 0;
+            }
+            Judged::This(now) => {
+                self.stuck = if self.worth.as_ref() == Some(&now) {
+                    self.stuck.saturating_add(1)
+                } else {
+                    1
+                };
+                self.worth = Some(now);
+            }
+        }
         self.believes = believes;
-        self.worth = worth;
         self.revisions += 1;
+    }
+
+    /// **Has this been standing long enough to be worth interrupting somebody over?**
+    ///
+    /// The only thing in this program that starts a turn from argmind's own state. `RAISE_AFTER` is
+    /// chosen rather than measured — at a 30 s tick it is a minute and a half of the same judgement
+    /// going unacted-on — and it is deliberately on the shy side: everything here that fires unasked
+    /// has a floor behind it, and 31 of 34 conversational turns are measured as ones that should
+    /// produce nothing.
+    pub fn worth_raising(&self) -> Option<&Worth> {
+        self.worth.as_ref().filter(|_| self.stuck >= RAISE_AFTER)
+    }
+
+    /// Put a judgement down, because it has been raised or acted on. **Not a revision** — nothing
+    /// was reconsidered, it simply stopped standing.
+    pub fn let_go(&mut self) {
+        self.worth = None;
+        self.stuck = 0;
     }
 
     /// Set `tried` from what actually happened. **Not a revision** — nothing was reconsidered.
@@ -433,14 +517,29 @@ pub fn read_note(reply: &str, into: &mut Note, listed: &[crate::contract::Widget
     //: says 달라진 것이 없으면 worth 는 반드시 null and the model ignored it on **6 of 8** such
     //: ticks, naming a window title and a browser menu button. A rule in a prompt is not a rule;
     //: this program computes whether anything changed, so it is the program's to hold.
-    let worth = if changed.trim().is_empty() { None } else { worth_of(got.get("worth"), listed) };
+    //: **Nothing happened, so nothing is judged — enforced here, not asked for.** The prompt says
+    //: 달라진 것이 없으면 worth 는 반드시 null and the model ignored it on **6 of 8** such ticks,
+    //: naming a window title and a browser menu button. A rule in a prompt is not a rule; this
+    //: program computes whether anything changed, so it is the program's to hold.
+    //:
+    //: **And it leaves a standing judgement standing.** Clearing it here was the first version and
+    //: it made `stuck` unable to reach 2 — a judgement could not survive one quiet look, so there
+    //: was never anything for argmind to bring up of its own accord.
+    let judged = if changed.trim().is_empty() {
+        Judged::NotAsked
+    } else {
+        match worth_of(got.get("worth"), listed) {
+            Some(w) => Judged::This(w),
+            None => Judged::Nothing,
+        }
+    };
     //: **Nothing worth doing is an answer**, so a reply is judged on `believes` alone: the ordinary
     //: outcome of a quiet minute is a belief and no judgement, and treating that as nothing at all
     //: would throw away the useful half.
     if believes.trim().is_empty() {
         return false;
     }
-    into.revise(&believes, worth);
+    into.revise(&believes, judged);
     true
 }
 

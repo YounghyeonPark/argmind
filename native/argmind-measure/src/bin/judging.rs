@@ -118,9 +118,14 @@ fn main() {
                       ("저장 안 함", "button"), ("취소", "button")] {
         asking.push(argmind_core::contract::Widget::new(n, role, (0, 0, 1, 1), "메모장"));
     }
-    let built: [(&str, Vec<Vec<argmind_core::contract::Widget>>); 2] = [
+    //: **A third sequence, and it is what the raising rule turns on.** The dialog appears and then
+    //: nothing changes for four more looks — which is the only way a judgement can stand long
+    //: enough to be worth interrupting somebody over, and the only way to find out whether it does.
+    let built: [(&str, Vec<Vec<argmind_core::contract::Widget>>); 3] = [
         ("만든 것 — 대화상자가 뜸", vec![plain.clone(), plain.clone(), asking.clone()]),
         ("만든 것 — 아무 일도 없음", vec![plain.clone(), plain.clone(), plain.clone()]),
+        ("만든 것 — 뜨고 나서 가만히", vec![plain.clone(), asking.clone(), asking.clone(),
+                                          asking.clone(), asking.clone(), asking.clone()]),
     ];
     let mut rows: Vec<Value> = Vec::new();
     for (label, sequence) in &built {
@@ -141,13 +146,20 @@ fn main() {
             let worth = note.worth.as_ref()
                 .map(|w| format!("{} \"{}\"", w.role, w.name)).unwrap_or_default();
             let idle = IDLE.iter().any(|w| worth.contains(w));
-            println!("    {tick:>2}  {:<7} {}",
-                     if changed.is_empty() { "그대로" } else { "달라짐" },
+            println!("    {tick:>2}  {:<7} stuck {:>2} {:<8} {}",
+                     if changed.is_empty() { "그대로" } else { "달라짐" }, note.stuck,
+                     if note.worth_raising().is_some() { "<- 꺼냄" } else { "" },
                      if worth.is_empty() { "비어 있음".to_string() }
                      else { worth.chars().take(52).collect::<String>() });
+            let raising = note.worth_raising().is_some();
             rows.push(json!({"screen": label, "tick": tick, "built": true, "held": note.held,
-                             "changed": changed, "believes": note.believes,
-                             "worth": worth, "idle": idle}));
+                             "changed": changed, "believes": note.believes, "stuck": note.stuck,
+                             "raising": raising, "worth": worth, "idle": idle}));
+            //: **Raised once, then put down**, exactly as `app.rs` does it — a harness that left it
+            //: standing would report it raised on every remaining tick and call that persistence.
+            if raising {
+                note.let_go();
+            }
         }
         println!();
     }
@@ -186,7 +198,7 @@ fn main() {
                      if changed.is_empty() { "그대로" } else { "달라짐" },
                      worth.chars().take(36).collect::<String>());
             rows.push(json!({"screen": showing, "tick": tick, "held": note.held,
-                             "changed": changed,
+                             "changed": changed, "stuck": note.stuck,
                              "believes": note.believes, "worth": worth, "idle": idle}));
         }
         println!();
@@ -200,6 +212,11 @@ fn main() {
     };
     let on_dialog = last_of("만든 것 — 대화상자가 뜸");
     let on_nothing = last_of("만든 것 — 아무 일도 없음");
+    //: **Did anything ever stand long enough to be raised?** The machinery is checked without a
+    //: model in `argmind-core`; what this asks is whether a real sequence ever gets there.
+    let raised = rows.iter().filter(|r| r["raising"] == true).count();
+    let longest = rows.iter().filter_map(|r| r["stuck"].as_u64()).max().unwrap_or(0);
+    println!("  가장 오래 선 판단: {longest}번  |  스스로 꺼낸 횟수: {raised}");
     println!("  대화상자가 떴을 때: {}", if on_dialog.is_empty() {
         "비어 있음  <-- 침묵당한 것".to_string() } else { on_dialog.clone() });
     println!("  아무 일도 없을 때: {}", if on_nothing.is_empty() {

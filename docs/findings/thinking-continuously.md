@@ -550,3 +550,66 @@ it named the dialog both times.
 That is the project's own rule working rather than a model that learned judgement, and the
 difference matters for what to expect next: a screen full of buttons that changes will always
 produce a judgement, whether or not one is warranted.
+
+## A reason to start rather than to answer (2026-09-19)
+
+The third piece of 의지, and the one that was never reached before: **a turn that begins because
+argmind has been holding something, not because the world moved.** A `Watch` fires on a window
+change — the world moved and argmind reacted. `Note::worth_raising` fires because a judgement has
+stood for three looks and nobody has done anything about it.
+
+### The gate that had just been added made it impossible, and the instrument could not see that
+
+`read_note` was dropping the judgement whenever nothing had changed. That is right for forming a
+*new* judgement and wrong for keeping a standing one: **a quiet look is not a reason to forget.**
+With it, `stuck` could never reach 2 and there was never anything to raise.
+
+**And `judging` was not recording `stuck` at all**, so the runs that passed yesterday said nothing
+about it — every value read 0 because the field was absent, not because it was zero. The gap was
+found by reading the code rather than the data, which is the wrong way round.
+
+So a tick now concludes one of three things rather than two:
+
+| | |
+|---|---|
+| `NotAsked` | nothing happened, so nothing was judged. **What stands, stands**, and has gone one more look unacted-on |
+| `Nothing` | something happened and argmind judged there was nothing to do |
+| `This(w)` | something happened and this is the widget it named |
+
+### What it does, measured
+
+A third built sequence: the dialog appears, then **nothing changes for four more looks** — the only
+shape in which a judgement can stand long enough to be worth interrupting somebody over.
+
+| tick | screen | stuck | worth |
+|---|---|---|---|
+| 0 | quiet | 0 | — |
+| 1 | the dialog appears | 1 | `button "저장"` |
+| 2 | nothing changes | 2 | `button "저장"` |
+| 3 | nothing changes | **3 → raised** | `button "저장"` |
+| 4 | nothing changes | 0 | — |
+| 5 | nothing changes | 0 | — |
+
+**Reproduced on a second run, tick for tick.** It stands through quiet looks, reaches the floor,
+is raised exactly once, and is put down — a thing brought up and ignored does not come back thirty
+seconds later, which is the defect this file has found in three other shapes.
+
+`RAISE_AFTER = 3` is **chosen, not measured**: at a 30 s tick it is a minute and a half. It errs shy
+for the reason `MIN_GAP` does — something on screen changes 13 seconds out of 14, and an agent that
+speaks whenever it has an opinion is the noise every other guard here exists to stop.
+
+### What is safe about it, and what is not new
+
+Everything that makes an unprompted turn safe still applies, unchanged: `asked = false`, so an
+effect is downgraded to a proposal behind the confirm button; nothing is spoken aloud; the
+repetition guard stands in front of the sentence; and the sense stands down while a turn is in
+flight. **What is new is only why the turn began.** The sentence itself is the program's, built from
+the widget the model named — four attempts at letting the model write that prose produced filler,
+silence, and a copy of the example.
+
+### One number changed meaning underneath the measurement
+
+`할 만한 것이 차 있던 것` read 33% before this and 50% after, on both runs. **That is not more
+judgements; it is the same judgement standing.** A metric counting *ticks with something in the
+field* stopped being a metric of *how often it picks something* the moment a pick could persist.
+Written down because the number is still printed and would otherwise be read as a regression.
