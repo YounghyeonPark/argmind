@@ -503,3 +503,50 @@ recorded in `judging`, whose detector now reads every field the model writes rat
 
 **The third piece was never reached**, and it is the one that is actually will: a reason to start
 rather than to answer. It depends on there being an intention to start *for*, so it waits.
+
+## The judgement became a choice, and the decline became the program's (2026-09-19)
+
+Four attempts at `worth` as a sentence had produced, in order: **58% full with five idle shapes**;
+**0%, silent even when a dialog appeared**; a fourth field that **copied the example**; all reverted.
+The pattern was not going to yield to a fifth wording — *describe a field and it produces filler;
+show it an example and it produces the example.*
+
+So the field stopped being a sentence. **`worth` is a widget, chosen by number out of the list the
+model is already looking at** — the one thing `choosing` measures it good at, 28 of 37 correct
+decisions with 7 of 9 of them declines. The number becomes a name and a role in `worth_of` and never
+travels further, exactly as `converse::effect_of` does it, and the sentence in the panel is built by
+the program from the resolved widget. **There is no room left for *도움을 줄 수 있다* because there
+is no prose in the field at all.**
+
+### Two more things had to happen, and only one was a prompt change
+
+**The decline needed a cost.** Told only that `null` was allowed, the model picked a widget on
+**12 ticks out of 12**, including a window title on the arm where nothing had happened. `choosing`
+gets its declines by saying *why* — *a wrong click is worse than an honest "I can't see that here"*
+— so the same shape went in: 엉뚱한 걸 고르는 것은 아무것도 안 고르는 것보다 나쁘다. **100% → 75%.**
+
+**And 75% was still a failure by the threshold written before any of these runs.** Checking which
+ticks: the prompt says 달라진 것이 없으면 worth 는 반드시 null, and **6 of 8 unchanged ticks broke
+it** — `button "Copy"`, `button "Chrome Remote Desktop 맞춤설정 및 제어"`. A rule in a prompt is not
+a rule, which this repository already says in two other places. `what_changed` is computed by this
+program, so the gate belongs with it: **`read_note` drops the judgement when nothing happened.**
+
+| | filled | idle | dialog arm | quiet arm |
+|---|---|---|---|---|
+| prose, four attempts | 58% → 0% → copied | 5, then 0, then 3 | mixed | mixed |
+| a widget, null merely allowed | **100%** | 0 | 저장 button | **noise** |
+| …with a cost on picking wrong | 75% | 0 | the dialog | empty |
+| **…with the event gate in the reader** | **33%, and 25% on a repeat** | **0** | **the dialog** | **empty** |
+
+**Both arms of the discriminator pass, reproduced.** It is the first time on this axis.
+
+### What is honest about it
+
+**The decline is the program's, not the model's.** On ticks where something *did* change it filled
+**5 of 5, in both runs** — it never once declined when it was allowed to. The useful behaviour comes
+from the deterministic gate; what the model contributes is *which* widget, and on the built dialog
+it named the dialog both times.
+
+That is the project's own rule working rather than a model that learned judgement, and the
+difference matters for what to expect next: a screen full of buttons that changes will always
+produce a judgement, whether or not one is warranted.

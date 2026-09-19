@@ -298,7 +298,10 @@ pub fn thinking_record() -> String {
     use argmind_core::thinking::{ask_for_a_note, Note, MOST_CHARS};
     let fresh = Note::blank();
     let mut held = Note::blank();
-    held.revise("그가 문서를 보고 있다", "");
+    //: A judgement as the note now carries one — a resolved widget, never a sentence.
+    held.revise("그가 문서를 보고 있다",
+                Some(argmind_core::thinking::Worth { name: "Save".into(),
+                                                     role: "button".into() }));
     held.record("clicked the button \"Save\"");
     let screen = "0: button \"one\"\n1: combo box \"two\"";
     [ask_for_a_note(&fresh, screen, "", &[], MOST_CHARS),

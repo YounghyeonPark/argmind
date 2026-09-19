@@ -560,7 +560,8 @@ stream.addEventListener("note-kept", (e) => {
         // The belief carries how long it has held: "he is reading" and "he has been reading for six of
         // my looks" are the same sentence otherwise, and only the second is worth anything.
         [t.held > 1 ? `믿는 것 (${t.held}번째 그대로)` : "믿는 것", t.believes],
-        ["할 만한 것", t.worth],
+        // A judgement nobody acted on says how long it has waited — the number the next tick sees.
+        [t.stuck > 1 ? `할 만한 것 (${t.stuck}번째인데 아무 일도 없음)` : "할 만한 것", t.worth],
         ["이미 한 것", t.tried],
     ];
     const filled = rows.filter(([, text]) => text.trim() !== "");

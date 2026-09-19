@@ -686,6 +686,9 @@ pub const REMARKS_REMEMBERED: usize = 6;
 /// on its own thread and nothing shared has to be locked while a model call runs.
 struct Chew {
     screen: String,
+    /// The widgets the screen text was rendered from. **`worth` is a number into this list**, so
+    /// the reply has to be resolved against the very same reading rather than a fresher one.
+    listed: Vec<argmind_core::contract::Widget>,
     /// What is different since the last look, computed by this program. **The thing a judgement
     /// can be about** — see `argmind_core::thinking::what_changed`.
     changed: String,
@@ -759,7 +762,8 @@ fn reflect(desk: &mut Desk, thinking: &Letterbox, now: f64) {
     //: `before` is what `notice` last read on this same tick, so the two readings being compared
     //: are a screen apart rather than a thought apart.
     let changed = argmind_core::thinking::what_changed(&desk.before, &listed);
-    let _ = thinking.try_send_chew(Chew { screen, changed, history: desk.session.recent(),
+    let _ = thinking.try_send_chew(Chew { screen, changed, listed,
+                                          history: desk.session.recent(),
                                           note: desk.session.note.clone() });
 }
 
@@ -769,9 +773,15 @@ fn reflect(desk: &mut Desk, thinking: &Letterbox, now: f64) {
 /// the only way anybody notices the note has gone wrong — a belief that is false stays in every
 /// prompt until something replaces it.
 fn note_json(note: &argmind_core::thinking::Note) -> String {
-    format!("{{\"believes\":\"{}\",\"worth\":\"{}\",\"tried\":\"{}\",\"held\":{},\"revisions\":{}}}",
-            escape(&note.believes), escape(&note.worth), escape(&note.tried),
-            note.held, note.revisions)
+    //: **The sentence around the judgement is the program's.** The model chose a widget; the
+    //: wording is not its to write, which is what leaves no room for *도움을 줄 수 있다*.
+    let worth = note.worth.as_ref()
+        .map(|w| format!("{} \"{}\"", w.role, w.name))
+        .unwrap_or_default();
+    format!("{{\"believes\":\"{}\",\"worth\":\"{}\",\"tried\":\"{}\",\"
+             held\":{},\"stuck\":{},\"revisions\":{}}}",
+            escape(&note.believes), escape(&worth), escape(&note.tried),
+            note.held, note.stuck, note.revisions)
 }
 
 /// The talk key, down or up. **Letting go is what starts a turn** — nothing is transcribed while
@@ -1131,7 +1141,8 @@ pub fn run(how: How) {
                     continue;
                 }
                 let mut note = chew.note;
-                if argmind_core::thinking::read_note(&reply.text, &mut note) {
+                //: The same list the model was shown — `worth` is a number into it.
+                if argmind_core::thinking::read_note(&reply.text, &mut note, &chew.listed, &chew.changed) {
                     let _ = jobs.send(Job::Thought(note));
                 }
             }

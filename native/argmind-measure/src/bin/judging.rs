@@ -133,11 +133,13 @@ fn main() {
             last_seen = listed.clone();
             let prompt = ask_for_a_note(&note, &screen, &changed, &[], MOST_CHARS);
             let reply = model.ask(&prompt).map(|r| r.text).unwrap_or_default();
-            if !read_note(&reply, &mut note) {
+            if !read_note(&reply, &mut note, listed, &changed) {
                 println!("    {tick:>2}  (읽을 수 없는 답)");
                 continue;
             }
-            let worth = note.worth.trim().to_string();
+            //: **A widget, not a sentence.** What is scored is whether it named something and what.
+            let worth = note.worth.as_ref()
+                .map(|w| format!("{} \"{}\"", w.role, w.name)).unwrap_or_default();
             let idle = IDLE.iter().any(|w| worth.contains(w));
             println!("    {tick:>2}  {:<7} {}",
                      if changed.is_empty() { "그대로" } else { "달라짐" },
@@ -169,12 +171,14 @@ fn main() {
             last_seen = listed.clone();
             let prompt = ask_for_a_note(&note, &screen, &changed, &[], MOST_CHARS);
             let reply = model.ask(&prompt).map(|r| r.text).unwrap_or_default();
-            if !read_note(&reply, &mut note) {
+            if !read_note(&reply, &mut note, &listed, &changed) {
                 println!("    {tick:>2}  (읽을 수 없는 답)");
                 rows.push(json!({"screen": showing, "tick": tick, "unreadable": true}));
                 continue;
             }
-            let worth = note.worth.trim().to_string();
+            //: **A widget, not a sentence.** What is scored is whether it named something and what.
+            let worth = note.worth.as_ref()
+                .map(|w| format!("{} \"{}\"", w.role, w.name)).unwrap_or_default();
             let idle = IDLE.iter().any(|w| worth.contains(w));
             let mark = if worth.is_empty() { "비어 있음" }
                        else if idle { "IDLE 모양 " } else { "판단      " };

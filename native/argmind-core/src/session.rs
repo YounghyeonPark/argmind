@@ -303,7 +303,9 @@ impl<E: Eyes, H: Hands, M: Speaks> Session<E, H, M> {
                                                      crate::thinking::MOST_CHARS);
         let reply = self.model.ask(&prompt);
         let before = self.note.clone();
-        if !crate::thinking::read_note(&reply, &mut self.note) {
+        //: **The same list the model was shown**, because `worth` is a number into it and an index
+        //: resolved against a different reading is the staleness `find` exists to avoid.
+        if !crate::thinking::read_note(&reply, &mut self.note, &listed, &changed) {
             return false;
         }
         //: **A revision that says the same thing is not a revision.** The count is what a

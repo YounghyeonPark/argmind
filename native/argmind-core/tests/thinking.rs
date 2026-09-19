@@ -13,7 +13,8 @@ use argmind_core::contract::Widget;
 use argmind_core::converse::{render, render_with, MAX_LISTED};
 use argmind_core::intent::Trigger;
 use argmind_core::mind::Mind;
-use argmind_core::thinking::{ask_for_a_note, read_note, Note, MOST_CHARS};
+use argmind_core::thinking::{ask_for_a_note, read_note, what_changed, worth_of, Note, Worth,
+                             MOST_CHARS};
 
 fn screen() -> Vec<Widget> {
     vec![Widget::new("one", "button", (0, 0, 1, 1), ""),
@@ -40,7 +41,7 @@ fn a_blank_note_puts_nothing_in_the_prompt() {
     //: Whitespace in every field is still blank — otherwise a model that answers with three spaces
     //: turns the slot on for the rest of the session.
     let mut spaces = Note::blank();
-    spaces.revise("  ", "\n");
+    spaces.revise("  ", None);
     spaces.record(" \t ");
     assert!(spaces.empty());
     assert_eq!(prompt(&spaces), prompt(&Note::blank()));
@@ -51,12 +52,13 @@ fn a_blank_note_puts_nothing_in_the_prompt() {
 #[test]
 fn every_field_of_a_note_reaches_the_prompt() {
     let mut note = Note::blank();
-    note.revise("그가 코드 리뷰 중이다", "설정 창을 열어주겠다고 제안할 만하다");
+    note.revise("그가 코드 리뷰 중이다",
+                Some(Worth { name: "설정".into(), role: "button".into() }));
     //: `tried` comes from the record, never from the model — so it is set the way the session
     //: sets it.
     note.record("clicked the button \"설정\"");
     let block = note.block().expect("a note with three fields renders nothing");
-    for text in ["그가 코드 리뷰 중이다", "설정 창을 열어주겠다고 제안할 만하다",
+    for text in ["그가 코드 리뷰 중이다", "button \"설정\"",
                  "clicked the button \"설정\""] {
         assert!(block.contains(text), "{text} is missing from {block}");
     }
@@ -72,7 +74,7 @@ fn every_field_of_a_note_reaches_the_prompt() {
 #[test]
 fn a_field_with_nothing_in_it_is_not_printed() {
     let mut note = Note::blank();
-    note.revise("그가 문서를 읽고 있다", "");
+    note.revise("그가 문서를 읽고 있다", None);
     let block = note.block().unwrap();
     assert!(block.contains("믿는 것"), "{block}");
     assert!(!block.contains("할 만한 것"), "{block}");
@@ -84,16 +86,16 @@ fn a_field_with_nothing_in_it_is_not_printed() {
 #[test]
 fn revising_replaces_what_was_there_and_counts_once() {
     let mut note = Note::blank();
-    note.revise("첫 번째", "a");
+    note.revise("첫 번째", None);
     assert_eq!(note.revisions, 1);
-    note.revise("두 번째", "c");
+    note.revise("두 번째", None);
     assert_eq!(note.revisions, 2);
     assert_eq!(note.believes, "두 번째");
     assert!(!note.block().unwrap().contains("첫 번째"));
 
     //: **Capped.** A field longer than the limit is cut rather than carried, because a prompt that
     //: grows without bound is a prompt the model stops reading.
-    note.revise(&"가".repeat(MOST_CHARS * 3), "");
+    note.revise(&"가".repeat(MOST_CHARS * 3), None);
     assert_eq!(note.believes.chars().count(), MOST_CHARS);
 }
 
@@ -104,23 +106,23 @@ fn revising_replaces_what_was_there_and_counts_once() {
 #[test]
 fn an_unusable_reply_does_not_clear_what_was_already_there() {
     let mut note = Note::blank();
-    note.revise("그가 회의 중이다", "");
+    note.revise("그가 회의 중이다", None);
     let before = note.clone();
 
-    for reply in [r#"{"believes": "", "worth": ""}"#,
+    for reply in [r#"{"believes": "", "worth": null}"#,
                   "not json at all",
                   "",
                   r#"{"something": "else"}"#] {
-        assert!(!read_note(reply, &mut note), "{reply:?} was accepted");
+        assert!(!read_note(reply, &mut note, &screen(), "나타남: Eraser"), "{reply:?} was accepted");
         assert_eq!(note, before, "{reply:?} changed the note");
     }
 
     //: And a reply with one real field is an update, with the other two cleared — because the model
     //: was asked to replace the note, and a partial merge would make *I no longer believe that*
     //: impossible to say.
-    assert!(read_note(r#"{"believes": "그가 돌아왔다", "worth": ""}"#, &mut note));
+    assert!(read_note(r#"{"believes": "그가 돌아왔다", "worth": null}"#, &mut note, &screen(), "나타남: Eraser"));
     assert_eq!(note.believes, "그가 돌아왔다");
-    assert_eq!(note.worth, "");
+    assert_eq!(note.worth, None);
     assert_eq!(note.revisions, before.revisions + 1);
 }
 
@@ -128,7 +130,7 @@ fn an_unusable_reply_does_not_clear_what_was_already_there() {
 #[test]
 fn the_thinking_question_asks_for_no_speech_and_no_action() {
     let mut note = Note::blank();
-    note.revise("그가 코드를 보고 있다", "");
+    note.revise("그가 코드를 보고 있다", None);
     let asked = ask_for_a_note(&note, "0: button \"one\"", "", &[], MOST_CHARS);
 
     //: The two fields it may answer with, and nothing else.
@@ -200,19 +202,19 @@ fn what_it_did_comes_from_the_record_and_holds_only_actions() {
 #[test]
 fn a_belief_that_comes_back_unchanged_is_counted_as_held() {
     let mut note = Note::blank();
-    note.revise("그가 같은 문서를 보고 있다", "");
+    note.revise("그가 같은 문서를 보고 있다", None);
     assert_eq!(note.held, 1);
     //: The first time it is not worth saying, so it is not rendered.
     assert!(!note.block().unwrap().contains("번째 그대로"));
 
-    note.revise("그가 같은 문서를 보고 있다", "");
-    note.revise("그가 같은 문서를 보고 있다", "");
+    note.revise("그가 같은 문서를 보고 있다", None);
+    note.revise("그가 같은 문서를 보고 있다", None);
     assert_eq!(note.held, 3);
     assert!(note.block().unwrap().contains("3번째 그대로"), "{:?}", note.block());
 
     //: **A different belief starts again at one.** Otherwise the count would be a measure of how
     //: long argmind has been running rather than of how long anything has been true.
-    note.revise("그가 다른 창으로 옮겼다", "");
+    note.revise("그가 다른 창으로 옮겼다", None);
     assert_eq!(note.held, 1);
     assert!(!note.block().unwrap().contains("번째 그대로"));
 }
@@ -226,19 +228,23 @@ fn a_belief_that_comes_back_unchanged_is_counted_as_held() {
 #[test]
 fn nothing_worth_doing_is_a_complete_answer() {
     let mut note = Note::blank();
-    assert!(read_note(r#"{"believes": "그가 뉴스를 읽고 있다", "worth": ""}"#, &mut note));
+    assert!(read_note(r#"{"believes": "그가 뉴스를 읽고 있다", "worth": null}"#,
+                      &mut note, &screen(), "나타남: Eraser"));
     assert_eq!(note.believes, "그가 뉴스를 읽고 있다");
-    assert_eq!(note.worth, "");
+    assert_eq!(note.worth, None);
     //: And it renders: the belief is there, the judgement is absent rather than blank.
     let block = note.block().unwrap();
     assert!(block.contains("믿는 것"), "{block}");
     assert!(!block.contains("할 만한 것"), "{block}");
 
     //: **The question says so out loud**, because a model that is not told will fill the field.
-    //: The exact wording is checked in `the_question_ties_an_empty_judgement_to_nothing_having_    //: happened`; what matters here is that saying nothing is offered as the right answer.
+    //: The exact wording is checked in the next test; what matters here is that saying nothing
+    //: is offered as the right answer.
     let asked = ask_for_a_note(&note, "0: button \"one\"", "", &[], MOST_CHARS);
-    assert!(asked.contains("비어 있는 게"), "{asked}");
+    assert!(asked.contains("대개는 null 이 맞다"), "{asked}");
     assert!(asked.contains("할 게 없다고 판단하는 것도 판단이다"), "{asked}");
+    //: **A number, and told so.** Prose in this field failed three times.
+    assert!(asked.contains("설명은 쓰지 마라, 번호만"), "{asked}");
 }
 
 /// **A judgement needs something to have happened, and what happened is computed here.**
@@ -294,14 +300,106 @@ fn the_question_ties_an_empty_judgement_to_nothing_having_happened() {
     let note = Note::blank();
     let quiet = ask_for_a_note(&note, "0: button \"one\"", "", &[], MOST_CHARS);
     assert!(quiet.contains("달라진 것: 없음"), "{quiet}");
-    assert!(quiet.contains("달라진 것이 없으면 반드시 비워라"), "{quiet}");
+    assert!(quiet.contains("달라진 것이 없으면 worth 는 반드시 null"), "{quiet}");
     //: **An example of the shape rather than a list of what to avoid.** The version that listed
     //: the filler read as *say nothing*: `worth` came back empty on every tick, including one where
     //: an unsaved-changes dialog had just appeared.
     assert!(quiet.contains("예를 들어"), "the question shows no example: {quiet}");
-    assert!(quiet.contains("버튼을 눌러"), "the example names no widget: {quiet}");
+    //: **The example is a number.** The version that showed a sentence got the sentence back,
+    //: every tick, on the arm where nothing had happened as well as the one where something did.
+    assert!(quiet.contains("worth 는 12 다"), "the example is not a number: {quiet}");
 
     let busy = ask_for_a_note(&note, "0: button \"one\"", "나타남: Eraser", &[], MOST_CHARS);
     assert!(busy.contains("나타남: Eraser"), "{busy}");
     assert!(!busy.contains("달라진 것: 없음"), "{busy}");
+}
+
+/// **A judgement is a widget, and a number that names nothing is nothing.**
+///
+/// Prose in this field failed three times: filler on 58% of ticks, then silence even when a dialog
+/// appeared, then a verbatim copy of the example it was shown. So the model picks a number out of
+/// the list it is already looking at — the one thing `choosing` measures it good at — and the
+/// number becomes a name and a role here, exactly as `converse::effect_of` does it.
+#[test]
+fn a_judgement_that_names_nothing_real_is_nothing() {
+    let listed = screen();
+    let at = |v: serde_json::Value| worth_of(Some(&v), &listed);
+
+    assert_eq!(at(serde_json::json!(0)), Some(Worth { name: "one".into(),
+                                                      role: "button".into() }));
+    assert_eq!(at(serde_json::json!(1)), Some(Worth { name: "two".into(),
+                                                      role: "combo box".into() }));
+    //: A model that writes the number as a string still meant the number.
+    assert_eq!(at(serde_json::json!("1")).unwrap().name, "two");
+
+    //: **Everything else is nothing**, and the last of these is the whole point of the field: a
+    //: sentence where a number was asked for buys no judgement at all.
+    for bad in [serde_json::json!(null), serde_json::json!(2), serde_json::json!(-1),
+                serde_json::json!("도와줄 수 있다"), serde_json::json!(true),
+                serde_json::json!(["one"])] {
+        assert_eq!(at(bad.clone()), None, "{bad} was read as a judgement");
+    }
+    assert_eq!(worth_of(None, &listed), None);
+    //: And nothing on screen means nothing can be named, whatever number comes back.
+    assert_eq!(worth_of(Some(&serde_json::json!(0)), &[]), None);
+}
+
+/// **A judgement that nobody acts on is counted against itself.** The same arithmetic as `held` and
+/// the opposite meaning: a belief coming back is confirmation, a judgement coming back is an offer
+/// nobody made.
+#[test]
+fn a_judgement_that_goes_unoffered_is_counted() {
+    let save = Worth { name: "Save".into(), role: "button".into() };
+    let mut note = Note::blank();
+
+    note.revise("그가 나가려 한다", Some(save.clone()));
+    assert_eq!(note.stuck, 1);
+    assert!(!note.block().unwrap().contains("아무 일도 없음"));
+
+    note.revise("그가 나가려 한다", Some(save.clone()));
+    note.revise("그가 나가려 한다", Some(save.clone()));
+    assert_eq!(note.stuck, 3);
+    let block = note.block().unwrap();
+    assert!(block.contains("3번째인데 아무 일도 없음"), "{block}");
+    //: **The sentence around it is the program's**, which is what leaves no room for filler: the
+    //: model chose a widget and never wrote a word.
+    assert!(block.contains("button"), "{block}");
+    assert!(block.contains("Save"), "{block}");
+
+    //: A different widget starts again; dropping the judgement leaves nothing to count.
+    note.revise("그가 나가려 한다", Some(Worth { name: "Cancel".into(), role: "button".into() }));
+    assert_eq!(note.stuck, 1);
+    note.revise("그가 나가려 한다", None);
+    assert_eq!(note.stuck, 0);
+    assert!(!note.block().unwrap().contains("할 만한 것"));
+}
+
+/// **Nothing happened, so there is no judgement — and the program holds that, not the prompt.**
+///
+/// The question says 달라진 것이 없으면 worth 는 반드시 null. The model ignored it on **6 of 8**
+/// such ticks, naming a window title and a browser menu button. A rule in a prompt is not a rule,
+/// which this project has written down twice already; `what_changed` is computed here, so whether
+/// anything happened is the program's fact and the gate belongs with it.
+#[test]
+fn a_judgement_needs_an_event_and_the_reader_enforces_it() {
+    let listed = screen();
+    let picked = r#"{"believes": "무언가 하고 있다", "worth": 0}"#;
+
+    //: Something happened: the choice stands.
+    let mut moved = Note::blank();
+    assert!(read_note(picked, &mut moved, &listed, "나타남: Eraser"));
+    assert_eq!(moved.worth.as_ref().map(|w| w.name.clone()), Some("one".into()));
+
+    //: Nothing happened: the same reply, and the judgement is dropped rather than argued with.
+    let mut still = Note::blank();
+    assert!(read_note(picked, &mut still, &listed, ""));
+    assert_eq!(still.worth, None, "a judgement got through with no event behind it");
+    //: **The belief still lands.** Dropping the judgement must not throw away the useful half of a
+    //: quiet tick, which is what the note is mostly made of.
+    assert_eq!(still.believes, "무언가 하고 있다");
+
+    //: Whitespace is not an event either — a change report of spaces is a change report of nothing.
+    let mut spaces = Note::blank();
+    assert!(read_note(picked, &mut spaces, &listed, "   \n "));
+    assert_eq!(spaces.worth, None);
 }

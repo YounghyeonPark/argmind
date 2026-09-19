@@ -21,9 +21,9 @@
 //!
 //! * **believes** — what it takes to be true about what the person is doing. Wrong beliefs are
 //!   readable and can be contradicted.
-//! * **worth** — what, if anything, is worth doing about it. **Usually empty, and that is the
-//!   point**: 31 of 34 conversational turns are measured as ones that should produce no action, so
-//!   a field that is always full is a yes-machine rather than a judgement.
+//! * **worth** — what, if anything, is worth doing about it, **as a thing on screen rather than a
+//!   sentence**. Usually nothing, and that is the point: 31 of 34 conversational turns are measured
+//!   as ones that should produce no action.
 //! * **tried** — what it already did or already offered, so it stops offering the same thing. The
 //!   re-offer defect is measured at 9 times in 23 and lives exactly here. **The model does not
 //!   write this one.** See below.
@@ -56,6 +56,24 @@
 //! — two sentences of narration and no conclusion. **Nothing in the three fields was a judgement.**
 //! Two were observation and one was bookkeeping, so a tick could be perfectly correct and still
 //! worthless.
+//!
+//! ## The judgement is a choice, because prose was three failures
+//!
+//! `worth` was a sentence for three attempts and produced, in order: **58% full with five of them
+//! the idle shape** and most of the rest *도움을 줄 수 있다*; then **0%, silent even when a dialog
+//! appeared**, because a list of banned phrases reads as *say nothing*; then a fourth field that
+//! **copied the example** it was shown, every tick, on the arm where nothing happened as well as the
+//! one where something did.
+//!
+//! **Describe a field and it produces filler; show it an example and it produces the example.**
+//! That is three runs and it is not going to be fixed by a fourth wording.
+//!
+//! So it is not a sentence. **`worth` is a widget, chosen by number from the list already in front
+//! of it** — which is the one thing this model is measured to be good at: 28 of 37 correct decisions
+//! on `choosing`, 7 of 9 of them declines. The number becomes a name and a role here and never
+//! travels further, exactly as `converse::effect_of` does it, so the rule holds: **the model picks
+//! WHAT and the program says everything else.** There is no room left in the field for *도움을 줄 수
+//! 있다*, because there is no prose in it at all.
 //!
 //! ## And the judgement had nothing to judge
 //!
@@ -111,13 +129,34 @@ pub const MOST_CHARS: usize = 240;
 /// labels the panel shows, so the page and the prompt cannot come to word it differently.
 pub const THINKING: &str = "지금까지 네가 생각하고 있던 것:";
 
+/// A thing on screen argmind judges is worth offering to act on.
+///
+/// **Name and role, never a rectangle and never an index.** The same key an `Effect` carries and
+/// for the same reason: a listed widget is gone 13 times in 14 over the second a call takes, so the
+/// index is resolved the moment it arrives and never stored. The role is the other half of the key,
+/// because a `text` label reading `Font :` in front of a `combo box` of that name took a click once
+/// and did nothing.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct Worth {
+    pub name: String,
+    pub role: String,
+}
+
 /// What argmind currently holds to be the case. **Empty is the state this program shipped in.**
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct Note {
     /// What it takes to be true about what the person is doing.
     pub believes: String,
-    /// What is worth doing about it, in argmind's judgement. **Empty is the ordinary answer.**
-    pub worth: String,
+    /// What is worth doing about it: **a thing on screen, or nothing.** `None` is the ordinary
+    /// answer. See [`Worth`] and the note at the top of this module for the three sentences that
+    /// were tried in this field first.
+    pub worth: Option<Worth>,
+    /// How many ticks the same judgement has been held **without being offered to anybody.**
+    ///
+    /// Counted here, never asked of the model, like [`Note::held`]. A judgement that has sat on the
+    /// same widget for ten looks and never become an offer is one to drop, and nothing else in the
+    /// note would ever say so.
+    pub stuck: u32,
     /// How many ticks the current belief has survived unchanged. **Counted here, never asked of
     /// the model** — how long something has been true is a fact this program holds, and asking a
     /// model to recall it is the same mistake `tried` was.
@@ -139,9 +178,7 @@ impl Note {
 
     /// Is there nothing here? Then nothing goes in the prompt.
     pub fn empty(&self) -> bool {
-        self.believes.trim().is_empty()
-            && self.worth.trim().is_empty()
-            && self.tried.trim().is_empty()
+        self.believes.trim().is_empty() && self.worth.is_none() && self.tried.trim().is_empty()
     }
 
     /// Replace the two fields the model writes, **trimmed and capped, and counted as one
@@ -149,13 +186,21 @@ impl Note {
     ///
     /// Revising rather than appending is the whole design: the model is handed the previous note
     /// and asked for the note that should replace it.
-    pub fn revise(&mut self, believes: &str, worth: &str) {
+    pub fn revise(&mut self, believes: &str, worth: Option<Worth>) {
         let believes = clipped(believes);
         //: **A belief that came back the same has held one tick longer.** Counted rather than
         //: asked, so the model cannot flatter itself about how long it has been sure.
         self.held = if believes == self.believes { self.held.saturating_add(1) } else { 1 };
+        //: **And a judgement that came back the same has gone unoffered one tick longer.** The same
+        //: arithmetic and the opposite meaning: `held` rising is a belief being confirmed, `stuck`
+        //: rising is a judgement nobody has acted on.
+        self.stuck = match (&worth, &self.worth) {
+            (Some(now), Some(before)) if now == before => self.stuck.saturating_add(1),
+            (Some(_), _) => 1,
+            (None, _) => 0,
+        };
         self.believes = believes;
-        self.worth = clipped(worth);
+        self.worth = worth;
         self.revisions += 1;
     }
 
@@ -175,8 +220,14 @@ impl Note {
             return None;
         }
         let mut lines = vec![THINKING.to_string()];
+        //: **The sentence is the program's, built from the resolved widget.** The model chose a
+        //: number; the wording around it is not its to write, which is what leaves no room for
+        //: *도움을 줄 수 있다*.
+        let worth = self.worth.as_ref()
+            .map(|w| format!("{} \"{}\" 를 두고 뭔가 해줄 만하다", w.role, w.name))
+            .unwrap_or_default();
         for (label, text) in [("믿는 것", &self.believes),
-                              ("할 만한 것", &self.worth),
+                              ("할 만한 것", &worth),
                               ("이미 한 것", &self.tried)] {
             let text = text.trim();
             if text.is_empty() {
@@ -187,6 +238,10 @@ impl Note {
             //: the same sentence — only the second is something to judge on.
             if label == "믿는 것" && self.held > 1 {
                 lines.push(format!("  {label} ({}번째 그대로): {text}", self.held));
+            } else if label == "할 만한 것" && self.stuck > 1 {
+                //: **And how long it has gone unoffered.** A judgement nobody acted on for many
+                //: looks is one to drop, and the number is the only thing that could say so.
+                lines.push(format!("  {label} ({}번째인데 아무 일도 없음): {text}", self.stuck));
             } else {
                 lines.push(format!("  {label}: {text}"));
             }
@@ -294,7 +349,7 @@ pub fn ask_for_a_note(note: &Note, screen: &str, changed: &str,
     //: **Revise, not append**, said in the instruction as well as enforced by the shape: three
     //: fields come back and three fields replace what was there.
     lines.push(
-        r#"JSON만으로 답하라: {"believes": "...", "worth": "..."} — 앞의 메모에"#
+        r#"JSON만으로 답하라: {"believes": "...", "worth": <번호 또는 null>} — 앞의 메모에"#
             .to_string());
     lines.push(
         "덧붙이지 말고 갈아치워라. 각각 짧은 한 문장까지, 쓸 게 없으면 빈 문자열로 두어라. \
@@ -303,26 +358,36 @@ pub fn ask_for_a_note(note: &Note, screen: &str, changed: &str,
     //: argmind was *waiting for*, and a watcher asked that answers *for you to say something* —
     //: narration with no conclusion in it. 생각이 그냥 기다리는중이면 의미가 없음.
     lines.push(
-        "believes 는 지금 무슨 일이 벌어지고 있다고 보는지 — 화면에서 근거를 대라. worth 는 \
-         지금 네가 할 만한 일이 있는지, 네 판단으로.".to_string());
-    //: **Told to be empty, with the number behind it.** 31 of 34 conversational turns are measured
-    //: as ones that should produce no action at all, so a `worth` that is always full is a
-    //: yes-machine and worse than no field. `judging` counts how often it is empty.
+        "believes 는 지금 무슨 일이 벌어지고 있다고 보는지 — 화면에서 근거를 대라.".to_string());
+    //: **A number, not a sentence.** Three attempts at prose here produced, in order: filler on
+    //: 58% of ticks; then silence even when a dialog appeared, because a list of banned phrases
+    //: reads as *say nothing*; then a copy of the example it was shown. The one thing this model is
+    //: measured good at is picking from the list already in front of it — 28 of 37 correct
+    //: decisions on `choosing`, 7 of 9 of them declines.
+    lines.push(
+        "worth 는 위 목록에서 지금 뭔가 해줄 만한 것 하나의 번호다. 없으면 null 이라고 써라. \
+         설명은 쓰지 마라, 번호만.".to_string());
     //: **Tied to the event, not to willingness.** Told only to be empty "usually", the model wrote
-    //: *도움을 줄 수 있다* on every tick — true, useless, and not a judgement. The rule now has a
-    //: condition it can check.
+    //: *도움을 줄 수 있다* on every tick — true, useless, and not a judgement. The rule has a
+    //: condition it can check, and now a field it cannot write prose into either.
     lines.push(
-        "worth 는 달라진 것이 없으면 반드시 비워라. 달라진 것이 있어도 대개는 비어 있는 게 \
-         맞다 — 할 게 없다고 판단하는 것도 판단이다.".to_string());
-    //: **Shown rather than forbidden.** The version before this listed the filler it did not want
-    //: — 도와줄 수 있다, 기다린다, 대기하는 것이 좋다 — and the model read the list as *say
-    //: nothing*: `worth` came back empty on every tick including one where an unsaved-changes
-    //: dialog had just appeared. A prohibition tells a model what not to write and leaves it with
-    //: nothing; one example of the shape tells it what to write.
+        "달라진 것이 없으면 worth 는 반드시 null 이다. 달라진 것이 있어도 대개는 null 이 맞다 \
+         — 할 게 없다고 판단하는 것도 판단이다.".to_string());
+    //: **The decline needs a cost, not merely permission.** Told only that null was allowed, the
+    //: model picked a widget on 12 ticks out of 12, including a window title on the arm where
+    //: nothing had happened. `choosing` gets 7 of 9 declines right and its prompt says *why*
+    //: declining is better — *a wrong click is worse than an honest "I can't see that here"*. Same
+    //: shape, same reason, and it is the only wording in this program measured to buy a refusal.
     lines.push(
-        "쓸 거라면 지금 화면에 이름이 있는 것을 걸고 한 문장으로 써라. 예를 들어 오류 \
-         대화상자가 새로 떴다면: \"'자세히' 버튼을 눌러 무슨 오류인지 확인하자고 하면 된다\" \
-         처럼. 무엇을 도와줄 수 있다는 식의 막연한 말은 판단이 아니다.".to_string());
+        "엉뚱한 걸 고르는 것은 아무것도 안 고르는 것보다 나쁘다. 그 사람이 지금 하려는 일과 \
+         분명히 상관있는 것이 아니면 null 이다.".to_string());
+    //: **An example of the choice, which is a number.** The version before this gave an example
+    //: sentence and the model copied the sentence, every tick, on the arm where nothing happened as
+    //: well as the one where something did. A number cannot be copied into meaning something it
+    //: does not.
+    lines.push(
+        "예를 들어 저장 여부를 묻는 대화상자가 새로 떴고 그 안의 '자세히' 가 12번이라면 \
+         worth 는 12 다.".to_string());
     //: **And it is told not to claim it did anything**, because the one time it was asked it
     //: invented having tidied the person's browser tabs. What it did is shown to it above,
     //: from the record, and it is not asked to add to that.
@@ -358,20 +423,47 @@ pub fn what_it_did(history: &[(String, String)], most: usize) -> String {
 /// Read a note back. **Anything unreadable leaves the note exactly as it was** — a tick that
 /// produced nothing usable must not erase what the last one worked out.
 ///
-/// Two fields, not three: `tried` is a record and [`what_it_did`] writes it.
-pub fn read_note(reply: &str, into: &mut Note) -> bool {
+/// Two fields, not three: `tried` is a record and [`what_it_did`] writes it. And `worth` is a
+/// number resolved against `listed` rather than a sentence — see [`worth_of`].
+pub fn read_note(reply: &str, into: &mut Note, listed: &[crate::contract::Widget],
+                 changed: &str) -> bool {
     let Some(got) = crate::llm::first_object(reply) else { return false };
-    let field = |k: &str| got.get(k).and_then(|v| v.as_str()).unwrap_or("").to_string();
-    let (believes, worth) = (field("believes"), field("worth"));
-    //: **Both empty is not an update.** The model saying nothing at all is the ordinary outcome of
-    //: a quiet minute, and it should leave the previous note standing rather than quietly clearing
-    //: it.
-    //: **An empty `worth` is an answer**, so a reply is judged on `believes` alone: the ordinary
-    //: outcome of a quiet minute is a belief and nothing worth doing, and treating that as nothing
-    //: at all would throw away the useful half.
+    let believes = got.get("believes").and_then(|v| v.as_str()).unwrap_or("").to_string();
+    //: **Nothing happened, so there is no judgement — enforced here, not asked for.** The prompt
+    //: says 달라진 것이 없으면 worth 는 반드시 null and the model ignored it on **6 of 8** such
+    //: ticks, naming a window title and a browser menu button. A rule in a prompt is not a rule;
+    //: this program computes whether anything changed, so it is the program's to hold.
+    let worth = if changed.trim().is_empty() { None } else { worth_of(got.get("worth"), listed) };
+    //: **Nothing worth doing is an answer**, so a reply is judged on `believes` alone: the ordinary
+    //: outcome of a quiet minute is a belief and no judgement, and treating that as nothing at all
+    //: would throw away the useful half.
     if believes.trim().is_empty() {
         return false;
     }
-    into.revise(&believes, &worth);
+    into.revise(&believes, worth);
     true
+}
+
+/// The widget a `worth` number names, or nothing.
+///
+/// **The number becomes a name and a role here and never travels further**, which is the line
+/// `converse::effect_of` is built around and the same reason: an index into a list that goes stale
+/// is not a thing, and a rectangle is not something the model may be shown.
+///
+/// Out of range, negative, absent, `null`, or a sentence where a number was asked for — all of them
+/// are *nothing*. **A judgement that does not name something real is not a judgement**, and this is
+/// the field where three attempts at prose went wrong.
+pub fn worth_of(v: Option<&serde_json::Value>, listed: &[crate::contract::Widget]) -> Option<Worth> {
+    let index = match v? {
+        serde_json::Value::Number(n) => n.as_i64()?,
+        //: A model that writes `"12"` meant twelve; one that writes `"도와줄 수 있다"` meant nothing
+        //: and gets nothing, which is the whole point of the field being a number.
+        serde_json::Value::String(s) => s.trim().parse::<i64>().ok()?,
+        _ => return None,
+    };
+    if index < 0 || index as usize >= listed.len() {
+        return None;
+    }
+    let w = &listed[index as usize];
+    Some(Worth { name: w.name.clone(), role: w.role.clone() })
 }
