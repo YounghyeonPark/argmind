@@ -172,6 +172,7 @@ flag deliberately and that is *stronger* — a person confirms each action, and 
 | clicking | **2 of 3, n=1** on the Rust, against the Python's 3 of 3 at n=3 on the same goals and the same condition — one Character Map for all three, so the second goal meets a screen the first has changed. One run against three and this model reads 21, 23, 24 across runs of one configuration, so it is a number rather than a regression. **The miss is the interesting part and it is not the model's**: asked for the font list it named `Open`, and advanced view has more than one button called that — what opened was the character set list. `name` and `role` together are still not a key, and the model is shown nothing else |
 | obstruction | **24 of 24 arms agreed with the prediction written before the run**, 3 runs of 8. With something covering the target, *neither* path reaches it — the pattern resolves by `ElementFromPoint` and gets the cover, then falls back to a click the reach guard refuses. Stood aside or uncovered, both work. So the one case that could have earned the control patterns does not |
 | which voice | **it was a different person every sentence, and nothing had chosen one.** The talker is a *base* model, so it has no speakers — `/v1/audio/voices` is empty and every name is `unknown voice`, `default` included — and what decides the timbre is the sampler, whose `seed` defaults to `-1`, the server's word for *choose for me*. argmind had never sent one. Unseeded: **4 of 4** different, over a 21% spread in length. `seed = 7`: **1 of 4**, byte-identical. Both on the streamed path too, which is the one that ships. The control — four distinct seeds, **4 of 4** different — was written down beforehand as what would withdraw the reading, because *four identical answers* also fits *this server is deterministic and the owner was hearing something else* |
+| starting up | **it reinstalled both servers on every launch, and two correct decisions made it.** They die with argmind — a job object, on purpose — and `present` for a server means *answering on its port*, so every launch finds them missing and hands each to its **build** fix. The offer already knew better: `title()` reads 띄울까요? when `built` is true and 빌드할까요? when it is not, so the question distinguished the two cases and the carry-out did not. Cold launch, nothing changed on the machine: **21.8 s → 7.5 s** to a voice and 8.4 → 4.8 to the recogniser, with `cmake` (4.0 s), `mingw32-make`, a `git` fetch and `glslc` regenerating Vulkan shaders (4.7 s) all gone. **What makes skipping safe was already there for another reason** — `remember_build` is written last, so a stamp means the clone, the build and the runtime all finished; that is now asserted rather than relied on |
 | the pointer | **the axis the patterns do win, 3 of 3.** Parked at `(700, 400)`: `invoke` leaves it there, a click drags it to the widget at `(130, 459)`, and both press the box. **The first version of this harness measured nothing** — it parked with `cursor_round_trip`, which puts the cursor back where it found it, so every arm read the position the previous arm's click had left and both reported *unmoved* |
 
 **The one slot that is absent unless somebody asks for it.** `mind.rs` renders nothing at rest, so
@@ -298,6 +299,14 @@ on with no `--hear`, and a standing 거부 turns it off with one. Two places wer
 standing answer and not honouring it: that, and the installs behind 항상 허용, which ran only when
 somebody pressed 다시 확인 — so after every restart the page said *물어보지 않고 진행합니다* beside
 a recogniser that was not running. They now run on the first page open, once per process.
+
+**Already built means start it, not build it again — since 2026-09-21.** `can_just_start` sits at
+the top of both build fixes, above the compiler check and the SDK check, because starting something
+already built needs neither. **The same shape is still live one row over and is not fixed**: `ollama`
+is *present* when it answers on 11434 and its fix is a 700 MB installer, so a standing 항상 허용 with
+Ollama installed but stopped would reinstall it every launch. Nobody has hit it, and the clean fix
+needs argmind to tell *installed* from *running* and then start it, which `argmind-env-ollama`
+cannot do either.
 
 **Speaking has two voices and picks one at startup.** SAPI is free (4–43 ms), installed, and
 `Microsoft Heami Desktop` — which the owner called 어색함 on 2026-09-16. **The neural one answers

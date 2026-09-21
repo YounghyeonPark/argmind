@@ -247,3 +247,74 @@ to test the window drove it with synthetic keystrokes from another process; Wind
 foreground change, and the text went to whatever window actually had focus — a line of Korean typed
 into a Chrome Remote Desktop session. Harmless, and the reason the app is now driven through its own
 queue in `scratchpad/drive_app.py` instead. **Do not test a GUI with SendInput.**
+
+---
+
+## 2026-09-21 — 앱이 실행될때마다 서버를 매번 설치하는것 같은데
+
+The owner's question, and the answer was yes.
+
+### Two facts that were each right and together were wrong
+
+**The servers die with argmind.** A job object, chosen deliberately, so *the recogniser dies with
+argmind* is the operating system's promise rather than a destructor's.
+
+**`present` for a server means *answering on its port*.** Also right: what a person needs to know is
+whether there is a voice, not whether there is a binary somewhere.
+
+Put together, every launch finds both servers *missing*, and `standing_yes_and_missing` hands each
+one to `apply(Fix::Build…)` — which clones, configures, compiles, copies the runtime, stamps the
+tree and *then* starts the server. Only the last step was wanted.
+
+The offer already knew better. `Fix::BuildSpeaker` carries `built: bool`, and `title()` reads
+**목소리 서버를 띄울까요?** when it is true and **빌드할까요?** when it is false. The question
+distinguished the two cases and the carry-out did not.
+
+### What it cost, measured
+
+A cold launch on a machine where nothing had changed, watching for build processes by name:
+
+| | before | after |
+|---|---|---|
+| launch → 받아쓰기 서버 | 8.4 s | **4.8 s** |
+| launch → 목소리 서버 | 21.8 s | **7.5 s** |
+| `cmake` | 4.0 s | — |
+| `mingw32-make` | ran | — |
+| `git` fetch | ran | — |
+| `glslc` (Vulkan shaders) | 4.7 s | — |
+
+Not one of those four produced a byte that was not already on disk. A `g++ --version` and a
+`mingw32-make --version` still appear a couple of seconds *after* both servers are up: those are
+`missing_tools()` probing for the page's 없는 것 list, which is five `--version` calls and not a
+build.
+
+### The fix, and where it had to go
+
+`can_just_start(exe, commit, weights)` — the stamp says the tree was compiled from the commit that
+was agreed to, `weights` says there is anything for it to load. Both, because a gigabyte deleted to
+free disk space is the ordinary way they come apart, and the honest answer to that is to fetch it
+again rather than to start a server that cannot open its model.
+
+**It goes above the tool check, not below it.** Below, the build is still skipped and an
+already-built server still refuses to start on a machine with no compiler — which is exactly the
+machine that does not need one. Same for the Vulkan SDK.
+
+**What makes skipping safe is an ordering that was already there for another reason**:
+`remember_build` is written *last*, after the clone, the build and the runtime, so a stamp for this
+commit means all three finished. A build interrupted halfway leaves no stamp and goes the long way
+round. That assumption is now asserted rather than relied on.
+
+`tests/starting.rs` holds it four ways, and each was checked by breaking it: deleting the short
+circuit (caught), moving it below the tool check (caught), removing its `return` (caught), stamping
+the tree before the build (caught). The decision was split out of `apply` for the only reason that
+matters here — `apply` spends fifteen minutes and a network, and could not otherwise be tested at
+all.
+
+### The same shape, one row over, not fixed
+
+**Ollama.** `present` is *responding on 11434*; the fix is `Fix::Install`, a 700 MB download and an
+installer. So a standing 항상 허용 on `ollama`, with Ollama installed but not running, reinstalls it
+on every launch. Nobody has hit this — the owner's `decisions.json` has no `ollama` key, and Ollama
+normally starts itself — and the clean fix is not the same one: argmind would have to tell
+*installed* from *running*, and then start it, and `argmind-env-ollama::manage` can do neither. It is
+written down here rather than half-fixed.

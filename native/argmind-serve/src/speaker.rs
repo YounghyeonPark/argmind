@@ -136,6 +136,16 @@ pub fn talker_at() -> PathBuf {
     crate::needs::model_shed().join("qwen-talker-0.6b-base-Q8_0.gguf")
 }
 
+/// Both weights on disk.
+///
+/// **Part of *already built*, and not the same question as [`ready`].** The binary and the commit
+/// stamp say the tree was compiled; these say there is anything for it to load. A gigabyte deleted
+/// to make room is the ordinary way the two come apart, and the honest answer to that is to fetch
+/// it again rather than to start a server that will fail.
+pub fn weights_here() -> bool {
+    talker_at().is_file() && codec_at().is_file()
+}
+
 pub fn codec_at() -> PathBuf {
     crate::needs::model_shed().join("qwen-tokenizer-12hz-Q4_K_M.gguf")
 }

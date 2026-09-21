@@ -103,6 +103,26 @@ impl Fix {
     }
 }
 
+/// **Is this server ready to simply be started?**
+///
+/// The two build fixes are also the two *start* paths, because the servers die with argmind — a job
+/// object, on purpose — and so at every launch they are *not answering*, which is what `present`
+/// means for them. Until 2026-09-21 that ran the whole arm again: measured on a machine where
+/// nothing had changed, **22 s from launch to a voice**, spent on `cmake` (4.0 s), `mingw32-make`,
+/// a `git` fetch and `glslc` regenerating Vulkan shaders (4.7 s), producing not one byte that was
+/// not already there. With this it is **7.1 s** and none of those four run at all.
+///
+/// **Both halves, and they are different questions.** The stamp says the tree was compiled from
+/// the commit that was agreed to; `weights` says there is anything for it to load. A gigabyte
+/// deleted to make room is the ordinary way they come apart, and the honest answer to that is to
+/// fetch it again rather than to start a server that cannot open its model.
+///
+/// It is safe to skip everything behind this because `remember_build` is written **last** — a
+/// stamp for this commit means the clone, the build and the runtime all finished.
+pub fn can_just_start(exe: &std::path::Path, commit: &str, weights: bool) -> bool {
+    weights && crate::building::ready(exe, commit)
+}
+
 /// **Exactly what will happen, in the sentence the person reads before it does.**
 ///
 /// Every one of these names the thing, the size where there is one, and the words *this machine* or
@@ -251,6 +271,25 @@ pub fn apply(fix: &Fix, say: &mut dyn FnMut(&str)) -> Result<String, String> {
             Ok(format!("{into} 에 받았습니다"))
         }
         Fix::BuildRecogniser { repo, commit, .. } => {
+            //: **Already built at this commit: start it, do not build it again.**
+            //:
+            //: These servers die with argmind — a job object, on purpose — so at every launch they
+            //: are *not answering*, which is what `present` means for them, which puts them on the
+            //: standing-yes list and runs this whole arm again. Measured 2026-09-21 on a machine
+            //: where nothing had changed: **22 s from launch to a voice**, spent on `cmake` (4.0 s),
+            //: `mingw32-make`, a `git` fetch, and `glslc` regenerating Vulkan shaders (4.7 s) — none
+            //: of which produced a byte that was not already there.
+            //:
+            //: **Checked here rather than trusted from `built`**, which was computed when the offer
+            //: was made and may be minutes old — the same discipline as the tools check below. And
+            //: it is safe to skip everything under it because `remember_build` is written *last*:
+            //: a stamp for this commit means the clone, the build and the runtime all finished.
+            //: The weights are asked about separately because a deleted one leaves the tree built
+            //: and the server unable to start.
+            if can_just_start(&crate::recogniser::server_exe(), commit, crate::recogniser::model_at().is_file()) {
+                crate::recogniser::serve(say)?;
+                return Ok("받아쓰기 서버가 떴습니다".into());
+            }
             //: **Checked again here**, not only where the offer was made. Between the two, minutes
             //: of downloading and an approval — and a build that discovers halfway through that
             //: there is no compiler has already spent somebody's evening.
@@ -277,6 +316,25 @@ pub fn apply(fix: &Fix, say: &mut dyn FnMut(&str)) -> Result<String, String> {
             Ok("받아쓰기 서버가 떴습니다".into())
         }
         Fix::BuildSpeaker { repo, commit, .. } => {
+            //: **Already built at this commit: start it, do not build it again.**
+            //:
+            //: These servers die with argmind — a job object, on purpose — so at every launch they
+            //: are *not answering*, which is what `present` means for them, which puts them on the
+            //: standing-yes list and runs this whole arm again. Measured 2026-09-21 on a machine
+            //: where nothing had changed: **22 s from launch to a voice**, spent on `cmake` (4.0 s),
+            //: `mingw32-make`, a `git` fetch, and `glslc` regenerating Vulkan shaders (4.7 s) — none
+            //: of which produced a byte that was not already there.
+            //:
+            //: **Checked here rather than trusted from `built`**, which was computed when the offer
+            //: was made and may be minutes old — the same discipline as the tools check below. And
+            //: it is safe to skip everything under it because `remember_build` is written *last*:
+            //: a stamp for this commit means the clone, the build and the runtime all finished.
+            //: The weights are asked about separately because a deleted one leaves the tree built
+            //: and the server unable to start.
+            if can_just_start(&crate::speaker::server_exe(), commit, crate::speaker::weights_here()) {
+                crate::speaker::serve(say)?;
+                return Ok("목소리 서버가 떴습니다".into());
+            }
             //: **Checked again here**, not only where the offer was made — between the two there
             //: are minutes of downloading and an approval.
             let missing = crate::speaker::missing_tools();
@@ -285,7 +343,9 @@ pub fn apply(fix: &Fix, say: &mut dyn FnMut(&str)) -> Result<String, String> {
             }
             //: **And the SDK, separately.** It is the one thing here that a person may have
             //: installed in the minute since the window opened, and the one thing this process
-            //: cannot learn about by looking at its own environment.
+            //: cannot learn about by looking at its own environment. **Asked after the short
+            //: circuit above**: a compiler and a shader toolchain are what building needs, and
+            //: starting something already built needs neither.
             if crate::speaker::sdk().is_none() {
                 return Err("Vulkan SDK가 없어 빌드할 수 없습니다".into());
             }
