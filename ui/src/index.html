@@ -193,6 +193,16 @@
       <span class="what">소리 내어 말하기</span>
       <span class="cost">답을 소리로 냅니다 — 먼저 말을 건 답만, 알아챈 것은 조용히</span>
     </label>
+    <!-- The one switch that changes what argmind may *do* rather than what it may know. Its cost
+         is the model's accuracy and the window that asks prints the measurements: 28 of 37 correct
+         decisions, a spurious action on 9% of conversational turns, and one recorded case of the
+         right name on the wrong button. Off by default, and off is written down — there is no
+         runtime behind this, only the standing answer. -->
+    <label class="switch">
+      <input type="checkbox" id="acting">
+      <span class="what">확인 없이 실행</span>
+      <span class="cost">제안을 버튼 없이 바로 실행합니다 — 두 번째 의견이 다르면 그때는 물어봅니다</span>
+    </label>
     <div id="decisions"></div>
   </details>
   <!-- Which microphone, speaker and camera, and a button that uses each one for a moment so the

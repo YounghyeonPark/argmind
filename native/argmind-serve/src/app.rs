@@ -165,6 +165,8 @@ enum Job {
     Decline(u64),
     /// Watch the screen, or stop.
     Notice(bool),
+    /// Act without waiting for the button, or go back to asking.
+    Acting(bool),
     /// An answer to a permission question: which thing, and which of the four buttons.
     Decide(String, Answer),
     /// Take back a standing answer, from the settings.
@@ -319,16 +321,44 @@ fn propose(desk: &mut Desk, out: &Listeners, effect: Effect) {
     //: **In the conversation, not only on the screen.** An offer the person then argues with —
     //: *"not that one"* — has to be something the next turn can see.
     desk.session.remember_doing(&[], &[], std::slice::from_ref(&effect), &[]);
-    desk.proposals.offer(effect, text, hint);
+    let doubt = !hint.is_empty();
+    let token = desk.proposals.offer(effect, text, hint);
     if let Some(p) = desk.proposals.waiting().last() {
         out.send("propose", &as_json(p));
+    }
+    //: **The offer is made either way, and then taken.**
+    //:
+    //: Going straight to `act` would be a second path to the only thing in this program that
+    //: presses anything, and `Proposals` is what makes a stale token unable to confirm a later
+    //: action. So an automatic run is the same two steps a person's button is, pressed here.
+    //:
+    //: **And the second opinion becomes a gate, only here.** With a person reading the row,
+    //: *그 지점에는 link Cargo.lock* is information and the button is the decision; with nobody
+    //: reading it, it is the last thing between a wrong resolution and a click. It stays a note
+    //: when somebody is going to press the button themselves, because the hit test disagrees with
+    //: a correct pixel about three times in ten and a gate would refuse those.
+    if !doubt && crate::decided::standing("acting") == Some(Standing::Allowed) {
+        if let Answered::Run(p) = desk.proposals.confirm(token) {
+            act(desk, out, p);
+        }
     }
 }
 
 /// **The only place in this program that performs anything.**
 fn act(desk: &mut Desk, out: &Listeners, p: Proposal) {
-    let (did, _proposed, refused) = desk.session.perform(std::slice::from_ref(&p.effect));
+    let (did, downgraded, refused) = desk.session.perform(std::slice::from_ref(&p.effect));
     desk.session.remember_doing(&did, &refused, &[], &[]);
+    //: **The core refused because nobody asked for this**, which is a different outcome from
+    //: *done* and from *gone*, and until 2026-09-22 it was reported as `ran`. That was a lie
+    //: nobody could see while every action needed a button — you had to press 실행 on something
+    //: argmind had thought of by itself to reach it. With 확인 없이 실행 the same path runs on its
+    //: own, so the lie would be in the transcript on every watch that proposed anything.
+    if !downgraded.is_empty() {
+        out.send("gone",
+                 &format!("{{\"token\":{},\"what\":\"{}\"}}", p.token, escape(&p.effect.target)));
+        out.send("note", "먼저 말을 건 생각이라 누르지 않고 말로만 두었습니다");
+        return;
+    }
     if let Some(Did::Elsewhere { owner }) = desk.session.hands.done.last() {
         out.send("note",
                  &format!("그 지점은 다른 프로그램({owner:?})의 것이라 누르지 않았습니다"));
@@ -408,7 +438,7 @@ fn standing_yes_and_missing(model: &str) -> Vec<String> {
 /// **The same discipline as [`crate::fix::describe`] and for the same reason.** A question reading
 /// *"allow watching?"* is answered yes by everybody and tells them nothing; what they need is the
 /// cost, in this case a model call every few seconds for as long as it is on.
-fn plan_for(key: &str) -> String {
+pub fn plan_for(key: &str) -> String {
     match key {
         "notice" => String::from(
             "화면이 바뀌면 argmind가 먼저 말을 겁니다.\n\n\
@@ -417,6 +447,17 @@ fn plan_for(key: &str) -> String {
              · 스스로 시작한 생각은 말로만 나옵니다. 클릭은 여전히 버튼을 거칩니다\n\
              · 끄기 전까지 계속 돌아갑니다\n\n\
              지켜볼까요?"),
+        //: **The cost is the model's accuracy, so the numbers are in the window.** A question
+        //: reading *"act automatically?"* is answered yes by everybody; what a person needs is how
+        //: often this model is right, which is measured and is not very often.
+        "acting" => String::from(
+            "제안을 버튼 없이 바로 실행합니다.\n\n\
+             · 지금까지: 고를 수 있는 요청 28/37만 맞게 판단했습니다\n\
+             · 대화만 하는 turn의 9%에서 하지 않아도 될 행동을 제안합니다\n\
+             · 이름과 역할이 같은 버튼이 여럿이면 엉뚱한 것을 누릅니다 — 실제로 한 번 그랬습니다\n\
+             · 먼저 말을 건 생각은 여전히 말로만 나옵니다. 이 설정은 사람이 시킨 것에만 적용됩니다\n\
+             · 두 번째 의견이 다른 위젯을 가리키면 그때는 그래도 물어봅니다\n\n\
+             버튼 없이 실행할까요?"),
         "microphone" => String::from(
             "말한 것을 받아쓰려면 마이크를 엽니다.\n\n\
              · 스페이스를 **누르고 있는 동안에만** 열립니다 — 켜 두는 것이 아닙니다\n\
@@ -571,6 +612,13 @@ fn carry_out(desk: &mut Desk, out: &Listeners, model: &str, key: &str) {
         "microphone" => {
             out.send("note", "마이크를 쓸 수 있습니다 — 말하는 동안 스페이스를 누르고 계세요");
             out.send("mic-allowed", "1");
+        }
+        //: **Nothing starts and nothing installs.** The standing answer *is* the state, so all this
+        //: does is tell the page the switch is on — which is why `Job::Acting` writes a 거부 when
+        //: it is turned off rather than flipping a field: there is no field.
+        "acting" => {
+            out.send("acting", "1");
+            out.send("note", "이제 확인 없이 실행합니다 — 설정에서 되돌릴 수 있습니다");
         }
         //: Everything else is a need with a fix, and `fix` re-reads what is missing before acting.
         _ => {
@@ -831,8 +879,10 @@ fn raise_it(desk: &mut Desk, out: &Listeners) {
     }
     desk.session.history.push(("you".into(), reply.clone()));
     out.send("say", &reply);
-    //: Not spoken aloud, and every effect waits behind a button. A turn argmind started itself is
-    //: the last place to relax either of those.
+    //: Not spoken aloud, and nothing here presses anything — **not because of the button**,
+    //: which 확인 없이 실행 can take away, but because `perform` downgrades an effect that nobody
+    //: asked for. A turn argmind started itself is the last place to relax either of those, and
+    //: after 2026-09-22 only one of the two is still a button.
     for effect in &intent.effects {
         propose(desk, out, effect.clone());
     }
@@ -1015,6 +1065,9 @@ fn hello(desk: &Desk, model: &str) -> String {
         format!("\"voice\":\"{}\"", desk.voice_is),
         format!("\"hears\":{}", desk.ear.is_some()),
         format!("\"noticing\":{}", desk.noticing),
+        //: Read rather than held: the standing answer is the state.
+        format!("\"acts\":{}",
+                crate::decided::standing("acting") == Some(Standing::Allowed)),
         format!("\"noticed\":{}", desk.noticed),
         format!("\"attending\":\"{}\"", escape(&desk.session.eyes.window().1)),
         format!("\"waiting\":[{}]", waiting.join(",")),
@@ -1314,6 +1367,29 @@ pub fn run(how: How) {
                     (true, None) => {
                         agent_out.send("noticing", "0");
                         agent_out.send("asking", &asking_json("notice"));
+                    }
+                },
+                Job::Acting(on) => match (on, crate::decided::standing("acting")) {
+                    //: **Off is written down, not just obeyed.** Unlike 지켜보기 there is no
+                    //: runtime flag behind this — the standing answer is the whole of it — so a
+                    //: switch turned off that wrote nothing would be on again at the next launch.
+                    (false, _) => {
+                        if let Err(why) = crate::decided::keep("acting", Some(Standing::Denied)) {
+                            agent_out.send("note", &why);
+                        }
+                        agent_out.send("acting", "0");
+                        agent_out.send("note", "다시 확인을 받고 실행합니다");
+                        agent_out.send("decisions", &decisions_json());
+                    }
+                    (true, Some(Standing::Allowed)) => agent_out.send("acting", "1"),
+                    //: **A previous 거부 is re-asked here rather than refused**, which is the one
+                    //: place this differs from 지켜보기. That one is a standing cost; this is a
+                    //: thing somebody turns on for an hour of clicking and off again afterwards,
+                    //: and sending them to the settings panel to undo their own last answer would
+                    //: be a switch that only works once.
+                    (true, _) => {
+                        agent_out.send("acting", "0");
+                        agent_out.send("asking", &asking_json("acting"));
                     }
                 },
                 Job::Fix(key) => fix(&agent_out, &agent_model, &key),
@@ -1694,6 +1770,10 @@ fn serve_one(mut stream: TcpStream, out: &Listeners, token: &str, jobs: &Sender<
         Route::Notice(on) => {
             let _ = stream.write_all(&respond("204 No Content", "text/plain", ""));
             let _ = jobs.send(Job::Notice(on));
+        }
+        Route::Acting(on) => {
+            let _ = stream.write_all(&respond("204 No Content", "text/plain", ""));
+            let _ = jobs.send(Job::Acting(on));
         }
         Route::Listen(down) => {
             let _ = stream.write_all(&respond("204 No Content", "text/plain", ""));

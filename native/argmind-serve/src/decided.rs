@@ -98,13 +98,17 @@ impl Standing {
 /// **A fixed list rather than any string the page sends.** A key is what a stored *yes* is attached
 /// to, so a page that could invent one could invent a permission the program never asks about — and
 /// a typo would silently create a second, always-unanswered copy of a real one.
-pub const DECIDABLE: [&str; 9] = [
+pub const DECIDABLE: [&str; 10] = [
     //: The needs from `needs.rs`. `korean-voice` and `vulkan` are elevation, the rest change the
     //: machine.
     "ollama", "model", "whisper", "korean-voice", "vulkan", "speaker",
     //: Switched on, and then it keeps going: a model call every few seconds, a device that opens
     //: while a key is held, and a program that makes a noise in a room.
     "notice", "microphone", "aloud",
+    //: **And the one that presses buttons.** Everything above this line changes what argmind may
+    //: *know* or *say*; this changes what it may *do*, and it was deliberately not on the list
+    //: until the owner asked for it on 2026-09-22. See [`what`] for what it does not cover.
+    "acting",
 ];
 
 /// What to call it in the window that asks.
@@ -128,6 +132,10 @@ pub fn what(key: &str) -> &'static str {
         "aloud" => "소리 내어 말하기",
         "notice" => "화면 지켜보기",
         "microphone" => "마이크",
+        //: **확인 without 없이 would read as the opposite.** The thing being allowed is the
+        //: *absence* of the button, so the name has to carry that and not sound like a promise to
+        //: keep asking.
+        "acting" => "확인 없이 실행",
         _ => "알 수 없는 권한",
     }
 }

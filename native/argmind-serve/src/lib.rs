@@ -203,8 +203,10 @@ pub enum Route {
     ///
     /// **Four rather than two**, because *yes* and *no* leave a program asking the same question
     /// every morning, and that is how people learn to press the first button without reading it.
-    /// What may be answered *always* is a fixed list in [`crate::decided`] — and a click is not on
-    /// it.
+    /// What may be answered *always* is a fixed list in [`crate::decided`] — and until 2026-09-22
+    /// *a click is not on it* was written here. It is now, as `acting`, at the owner's asking; what
+    /// that key permits is the absence of the button, not the absence of every gate. See
+    /// [`Route::Acting`].
     Decide(String, String),
     /// Turn one thinking dial: its name and where to put it.
     Dial(String, u8),
@@ -229,6 +231,13 @@ pub enum Route {
     /// memory, because a switch a person flips and then loses on the next launch is the defect this
     /// replaced.
     Aloud(bool),
+    /// Carry out what was proposed without waiting for 실행, or go back to asking.
+    ///
+    /// **The one route that changes what argmind may do rather than what it may know.** Everything
+    /// else in this enum turns a sense on, writes a preference, or answers a question; this decides
+    /// whether [`Route::Confirm`] is still the only way an action happens. See
+    /// `app::propose` for the one case it still does not cover.
+    Acting(bool),
     /// Watch the screen and think when it changes, or stop.
     ///
     /// **Off until asked for**, and the reason is a measured one: something on screen changes 13
@@ -326,6 +335,8 @@ pub fn route(request: &Request) -> Route {
         ("POST", "/aim") => Route::Aim(request.body.clone()),
         ("POST", "/aloud/on") => Route::Aloud(true),
         ("POST", "/aloud/off") => Route::Aloud(false),
+        ("POST", "/acting/on") => Route::Acting(true),
+        ("POST", "/acting/off") => Route::Acting(false),
         ("POST", "/notice/on") => Route::Notice(true),
         ("POST", "/notice/off") => Route::Notice(false),
         ("POST", "/look") => Route::Look,

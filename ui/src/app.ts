@@ -26,6 +26,8 @@ interface Hello {
   model: string;
   dry: boolean;
   speaks: boolean;
+  /** Whether a proposal is carried out without the button. */
+  acts: boolean;
   /** Which voice: "neural", "windows", "none" or "off". Named rather than a flag, because the
    *  difference between the two that speak is the whole reason the neural one was built. */
   voice: string;
@@ -206,6 +208,7 @@ stream.addEventListener("hello", (e) => {
   drawStatus(d);
   talk.hidden = !d.hears;
   aloud.checked = d.speaks;
+  acting.checked = d.acts;
   drawNoticing(d.noticing, d.noticed);
   // Rebuilt from the server's own list, so a reload is never a page showing buttons the server
   // has forgotten — or missing ones it still holds.
@@ -302,6 +305,21 @@ function drawNoticing(on: boolean, count: number): void {
 
 // Whether argmind makes a sound. **A setting since 2026-09-17**, where it used to be `--speak` on
 // the command line — a switch you can see is a switch you can turn off when somebody walks in.
+// Whether argmind presses the button itself. **The checkbox is not the state** — the server owns
+// it as a standing answer and can refuse, so this asks and then waits to be told, exactly like
+// 지켜보기. Turning it on with nothing answered raises the four-button window; the checkbox goes
+// back off until that window is answered, which is why it is set from the event and not here.
+const acting = document.getElementById("acting") as HTMLInputElement;
+acting.onchange = () => {
+  const want = acting.checked;
+  acting.checked = false;
+  void post(want ? "/acting/on" : "/acting/off");
+};
+
+stream.addEventListener("acting", (e) => {
+  acting.checked = (e as MessageEvent).data === "1";
+});
+
 const aloud = document.getElementById("aloud") as HTMLInputElement;
 aloud.onchange = () => {
   // The server confirms with its own `voice` event and can fail to find a voice at all, so this

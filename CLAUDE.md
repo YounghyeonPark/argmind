@@ -140,8 +140,18 @@ silently meant *everything*.
 in threes, fours and an eight. Three is the documented sequence — click, type, enter.
 
 **An unprompted effect without standing permission is downgraded to speech.** The app inverts the
-flag deliberately and that is *stronger* — a person confirms each action, and one AST test keeps
-`perform` reachable from exactly one place there.
+flag deliberately and that is *stronger*, and one AST test keeps `perform` reachable from exactly
+one place there. **The other half of that sentence went on 2026-09-22**: *a person confirms each
+action* is now a setting. 확인 없이 실행 in 설정, off by default, off written down when it is turned
+off — and the owner's, asked for after watching three buttons pile up in one transcript. **The two
+gates are different questions and only one moved**: *may argmind act without being asked* is in the
+core, is still shut, and is what stops a watch pressing anything; *may it act without being
+confirmed* is the new one and covers only turns a person started. With it on, a proposal still goes
+through `Proposals` and gets a token the same way — and **the second opinion becomes a gate.** While
+somebody reads the row, *그 지점에는 link Cargo.lock* is information and the button is the decision;
+with nobody reading it, it is the last thing between a wrong resolution and a click, so a proposal
+carrying one still waits. It stays a note otherwise, because the hit test disagrees with a correct
+pixel about three times in ten.
 
 **One call, not two.** A round trip is the budget: 0.45 s warm, 4.7 s and 5.9 s for the first two.
 

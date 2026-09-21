@@ -352,3 +352,58 @@ not argmind's.
 capturing parent even with all three of its own streams set to null. It is a property of being run
 under a pipe, not of the spawn — `argmind-app.exe` has no console and no such parent — and the same
 example run as a binary exits cleanly.
+
+---
+
+## 2026-09-22 — 실행여부를 물어보는데 그냥 자동으로 수행해도 됨
+
+The owner, with a screenshot of three proposals waiting. It is a reversal of a constraint they had
+set themselves — *설치·권한 and 지켜보기/마이크, explicitly not click and type* — so what follows
+records the cost before the change rather than after.
+
+### What the button was doing, and which half survives
+
+Two jobs, and only one of them was the person checking the model:
+
+1. **A person checked the widget was the right one.** `choosing` is 28 of 37 correct decisions,
+   `talking` produces a spurious action on 9% of conversational turns, and `clicking` has one
+   recorded case of the right name on the wrong button — Character Map's advanced view has more
+   than one `Open`. This is what is being given up, knowingly.
+2. **A person read the second opinion.** When the hit test at the resolved centre names a different
+   widget, the row says *그 지점에는 link Cargo.lock*. Two of the three proposals in the owner's
+   screenshot carried one.
+
+The second is not given up. **With nobody reading the row, the second opinion becomes the gate it
+is not allowed to be while somebody is** — a proposal carrying one still waits for a button. It
+stays a note otherwise, because a widget's own centre resolves back to itself about seven times in
+ten and gating on it unconditionally would refuse the other three.
+
+### The two gates were never one
+
+*May argmind act without being asked* and *may it act without being confirmed* look like one
+permission and are not. The first is `may_act_unprompted` in the core, it is false, and it is what
+stops a watch or a raised judgement pressing anything — `perform` downgrades those to speech before
+the button is ever reached. Only the second moved. A test asserts the first is still there and that
+nothing in the application turns it on, because the obvious refactor after this change is to read
+them as one and delete the older.
+
+**And that found a lie that had been safe.** `act` threw away `perform`'s downgraded list and
+reported `ran`. You could only reach it by pressing 실행 on something argmind had thought of by
+itself, so nobody had. Automatic, the same path runs on its own and the transcript would have said
+*ran* on every watch that proposed anything. It now says it left it as speech.
+
+### What is checked, and what is not
+
+`tests/acting.rs` holds four things, each broken to see it caught: dropping the second-opinion
+check (caught), loosening what `doubt` means (caught), reaching `act` without going through
+`Proposals` (caught), and switching on unprompted acting (caught).
+
+**What is not checked is whether an automatic click lands where it should.** That is what `clicking`
+measures — 2 of 3, n=1 — and it cannot run from the session driving it, because a harness that
+takes the foreground cannot be started by the thing it would steal it from. Nothing about that
+number changed today; what changed is that nobody is now standing between it and the screen.
+
+The switch is in 설정, off by default, and **off is written down** — there is no runtime flag behind
+it, so a switch turned off that wrote nothing would be on again at the next launch. A previous 거부
+is re-asked from the switch rather than refused, which is the one place it differs from 지켜보기:
+that is a standing cost, this is something turned on for an hour of clicking and off afterwards.

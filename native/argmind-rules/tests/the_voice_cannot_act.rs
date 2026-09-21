@@ -80,7 +80,11 @@ fn the_core_has_no_ears_and_no_mouth() {
 /// **Only these reach an action, and each is here for a stated reason.**
 #[test]
 fn nothing_outside_the_core_performs_except_the_three_that_may() {
-    //: `app.rs` — one call, behind 실행, which is the application's whole safety argument.
+    //: `app.rs` — one call. **It used to be behind 실행 and since 2026-09-22 it is behind 실행
+    //: *or* a standing 확인 없이 실행**, the owner's decision after watching the buttons pile up.
+    //: What the one call still buys is that there is one place to read: `Proposals` hands out the
+    //: token either way, the core still downgrades anything nobody asked for, and the second
+    //: opinion becomes a gate when no person is reading it. `argmind-serve/tests/acting.rs`.
     //: `argmind.rs` — the command line, behind `--live`, driven from a keyboard by a developer.
     //: `clicking.rs` — the harness whose entire subject is whether a confirmed click does the
     //: thing, launched against an application it started itself and dry unless told otherwise.

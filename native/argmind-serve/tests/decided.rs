@@ -50,18 +50,24 @@ fn nothing_that_performs_an_action_can_be_answered_always() {
         //: And every one of them has a name a person would recognise in a window.
         assert_ne!(what(allowed), "알 수 없는 권한", "{allowed} has no name");
     }
-    assert_eq!(DECIDABLE.len(), 9);
+    assert_eq!(DECIDABLE.len(), 10);
 }
 
-/// The six needs and the three switches, and no fourth kind smuggled in by a typo.
+/// The six needs, the three switches and the one that acts — and no fifth kind smuggled in by a
+/// typo.
 ///
 /// **`speaker` and `aloud` are both here and they are different questions**: may argmind build the
 /// synthesiser, and may it make a noise in the room. They were conflated until 2026-09-17, when the
 /// first was allowed and argmind still would not speak without a command-line flag.
+///
+/// **`acting` is the last one and the different one.** Every other key decides what argmind may
+/// know or say; this decides whether `Route::Confirm` is still the only way anything is pressed.
+/// It was deliberately not on this list — *a click is not on it* was written here — until the
+/// owner asked for it on 2026-09-22, having watched the buttons pile up.
 #[test]
-fn the_list_is_the_needs_and_the_three_switches() {
+fn the_list_is_the_needs_the_switches_and_the_one_that_acts() {
     assert_eq!(DECIDABLE, ["ollama", "model", "whisper", "korean-voice", "vulkan", "speaker",
-                           "notice", "microphone", "aloud"]);
+                           "notice", "microphone", "aloud", "acting"]);
     //: Every need `needs::every` can report is decidable, or it is a question with no way to
     //: answer it for good.
     for need in argmind_serve::needs::every("qwen3:8b") {
