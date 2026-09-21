@@ -1,4 +1,4 @@
-//! Which microphone, which speaker, which camera — remembered between runs.
+//! Which microphone, which speaker, which camera, which voice — remembered between runs.
 //!
 //! **The same shape as [`crate::decided`] and deliberately a different file.** A permission is a
 //! yes or a no about something argmind may do; this is a preference about which piece of hardware
@@ -24,6 +24,26 @@ use std::path::PathBuf;
 /// with a typo should be ignored rather than carry a setting nobody can name.
 pub const KINDS: [&str; 3] = ["microphone", "speaker", "camera"];
 
+/// The fourth thing this file holds, and **it is not a device.**
+///
+/// The neural talker is a base model with no speakers of its own, so which voice comes out is
+/// decided by the sampler's seed — measured 2026-09-21, unseeded it was four different voices in
+/// four calls, and seeded it was the same bytes four times. That makes the seed a preference about
+/// how argmind sounds, which is what this file is for, and it is kept out of [`KINDS`] because
+/// there is no hardware to enumerate and nothing to open and test the way a microphone is tested.
+pub const VOICE: &str = "voice";
+
+/// Everything this file may hold. `KINDS` is what the page offers a list for; this is what
+/// [`parse`] will read back.
+pub const KEYS: [&str; 4] = ["microphone", "speaker", "camera", VOICE];
+
+/// The voice argmind uses when nobody has chosen one.
+///
+/// **An arbitrary draw made permanent, and that is the whole of its justification.** Any seed is as
+/// principled as any other — what matters is that it is the *same* one on every run, and a program
+/// that rolled a fresh one at startup would be the defect this constant exists to remove.
+pub const A_VOICE: i64 = 7;
+
 /// What to call it in the page.
 pub fn what(kind: &str) -> &'static str {
     match kind {
@@ -36,6 +56,29 @@ pub fn what(kind: &str) -> &'static str {
 
 pub fn is_a_kind(kind: &str) -> bool {
     KINDS.contains(&kind)
+}
+
+/// Is this something the file may hold? Wider than [`is_a_kind`] by exactly [`VOICE`].
+pub fn is_a_key(key: &str) -> bool {
+    KEYS.contains(&key)
+}
+
+/// Which voice, as a seed. **Never `None`** — a missing or unreadable one is [`A_VOICE`], because
+/// the one answer this must not give is *whatever the sampler feels like*.
+pub fn voice() -> i64 {
+    voice_in(&remembered())
+}
+
+/// The same, over a map somebody hands in. **Split out so it can be tested without a file**, the
+/// way `attended_where` is: the interesting part is what a hand-edited or missing value falls back
+/// to, and reaching it through `devices.json` would mean a test that writes the owner's settings.
+pub fn voice_in(all: &BTreeMap<String, String>) -> i64 {
+    all.get(VOICE).and_then(|s| s.trim().parse().ok()).unwrap_or(A_VOICE)
+}
+
+/// Remember a voice. Written as a decimal string, because this file holds strings.
+pub fn keep_voice(seed: i64) -> Result<(), String> {
+    keep(VOICE, Some(&seed.to_string()))
 }
 
 /// Where the file lives — beside the decisions, and not in it.
@@ -70,7 +113,7 @@ pub fn parse(text: &str) -> BTreeMap<String, String> {
         let line = line.trim().trim_end_matches(',');
         let Some((left, right)) = line.split_once(':') else { continue };
         let kind = left.trim().trim_matches('"');
-        if !is_a_kind(kind) {
+        if !is_a_key(kind) {
             continue;
         }
         let right = right.trim();
@@ -100,8 +143,8 @@ fn escape(s: &str) -> String {
 
 /// Choose one, or `None` to go back to whatever the operating system prefers.
 pub fn keep(kind: &str, id: Option<&str>) -> Result<(), String> {
-    if !is_a_kind(kind) {
-        return Err(format!("{kind} 라는 장치 종류는 없습니다"));
+    if !is_a_key(kind) {
+        return Err(format!("{kind} 라는 설정은 없습니다"));
     }
     let mut all = remembered();
     match id.filter(|i| !i.is_empty()) {

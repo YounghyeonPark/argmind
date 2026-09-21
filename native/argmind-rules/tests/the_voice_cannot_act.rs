@@ -151,29 +151,64 @@ fn the_command_line_has_no_microphone() {
 /// itself — a watch firing while its owner is in a meeting — appears in the page and **is not said
 /// out loud**. Both places in `app.rs` say this in a comment, which is the sentence rather than the
 /// fact: `think` speaks and `notice` does not, and one copied line would end it silently.
+///
+/// ## The one exception, added 2026-09-21, and why it is not a hole
+///
+/// Choosing a voice means hearing it. The neural talker is a base model with no speakers of its
+/// own, so which voice comes out is a sampler seed — a number, and a number cannot be judged by
+/// reading it. `Job::Voice` therefore speaks, and it is a second place in this file.
+///
+/// **What keeps that from being the copied line this rule exists to catch is *what* it may say.**
+/// The exception is written against the argument, not the caller: a second `voice.say` is allowed
+/// only if it says [`A_SAMPLE`] — one fixed constant with no model output anywhere near it. A
+/// `voice.say(intent.say)` or a `voice.say(&note.believes)` added to `notice` still fails, which is
+/// the failure that matters. Widening by a caller name would not have held: the job loop's nearest
+/// enclosing `fn` is `hello`, several hundred lines up, so the owner this scanner reports for
+/// anything inside it is an accident of layout.
 #[test]
 fn only_a_reply_that_was_asked_for_is_spoken_aloud() {
     let app = read("argmind-serve/src/app.rs");
     let lines: Vec<&str> = app.lines().collect();
-    let mut speaking = Vec::new();
+    let (mut turns, mut samples) = (Vec::new(), Vec::new());
     for (n, line) in lines.iter().enumerate() {
-        if !line.split("//").next().unwrap_or("").contains("voice.say(") {
+        let code = line.split("//").next().unwrap_or("");
+        //: **Any receiver, not one called `voice`.** Written as `voice.say(` until 2026-09-21,
+        //: which is a rule about a local variable's name: breaking it with
+        //: `if let Some(v) = desk.voice.as_mut() { v.say(&desk.session.note.believes) }` was waved
+        //: straight through. Nothing else in this file has a `say` method, so the wider match costs
+        //: nothing and stops the rule being evaded by a rename.
+        if !code.contains(".say(") {
+            continue;
+        }
+        //: **A fixed sentence, named rather than written out.** A literal here would be a second
+        //: copy of the sample and could drift from the one that is said.
+        if code.contains(".say(A_SAMPLE)") {
+            samples.push(n + 1);
             continue;
         }
         let owner = lines[..n].iter().rev()
             .find_map(|l| l.trim_start().strip_prefix("fn ")
                       .map(|r| r.split('(').next().unwrap_or("").to_string()))
             .unwrap_or_default();
-        speaking.push((n + 1, owner));
+        turns.push((n + 1, owner));
     }
-    assert_eq!(speaking.len(), 1, "more than one place speaks: {speaking:?}");
-    assert_eq!(speaking[0].1, "think",
+    assert_eq!(turns.len(), 1, "more than one place speaks a turn: {turns:?}");
+    assert_eq!(turns[0].1, "think",
                "app.rs:{} speaks from {:?}; only a turn somebody started may become sound",
-               speaking[0].0, speaking[0].1);
+               turns[0].0, turns[0].1);
+    //: **At most one demonstration**, so the exception cannot itself be copied.
+    assert!(samples.len() <= 1, "more than one place says the sample: {samples:?}");
 
     //: And the unprompted path is still there to be wrong about — a rule about `notice` means
     //: nothing if `notice` has gone.
     assert!(app.contains("fn notice("), "the unprompted path has moved; recheck this rule");
+
+    //: **The exception is checked by breaking it**, like the other four rules here. If the sample
+    //: were ever anything but a constant this test would be waved through by the line above, so
+    //: what `A_SAMPLE` *is* gets asserted where it is declared: `tests/voice.rs` requires one short
+    //: Korean sentence, and this requires that it is a `const` rather than something computed.
+    assert!(app.contains("pub const A_SAMPLE: &str = \""),
+            "A_SAMPLE is no longer a fixed string; the exception above rests on it being one");
 }
 
 /// The files being read are the ones meant. **A rule checked against nothing passes forever.**

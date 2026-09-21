@@ -73,6 +73,7 @@ version = "0.0.1"
 dependencies = [
  "argmind-core",
  "argmind-env-ollama",
+ "argmind-env-qwentts",
  "argmind-env-windows",
  "serde_json",
  "sha2",

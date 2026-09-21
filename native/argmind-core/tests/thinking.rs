@@ -13,7 +13,7 @@ use argmind_core::contract::Widget;
 use argmind_core::converse::{render, render_with, MAX_LISTED};
 use argmind_core::intent::Trigger;
 use argmind_core::mind::Mind;
-use argmind_core::thinking::{ask_for_a_note, read_note, what_changed, worth_of, Judged,
+use argmind_core::thinking::{ask_for_a_note, read_note, worth_of, Judged,
                              Note, Worth,
                              MOST_CHARS};
 

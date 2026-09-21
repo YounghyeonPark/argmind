@@ -225,9 +225,13 @@ mod chosen {
         Ok(done.success())
     }
 
+    /// **The seed is read here rather than passed in**, and that is deliberate: this is the one
+    /// place a neural voice is built, so *which voice* is decided in one place too. A caller that
+    /// could pass a different one is a caller that could pass none.
     pub fn neural_voice(host: &str) -> Option<Box<dyn argmind_voice::Speaker>> {
         argmind_env_qwentts::QwenVoice::answering(host)
-            .then(|| Box::new(argmind_env_qwentts::QwenVoice::new(crate::speaker::VOICE))
+            .then(|| Box::new(argmind_env_qwentts::QwenVoice::new(crate::speaker::MODEL,
+                                                                 crate::chosen::voice()))
                 as Box<dyn argmind_voice::Speaker>)
     }
 }

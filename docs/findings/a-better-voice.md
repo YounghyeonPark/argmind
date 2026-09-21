@@ -369,3 +369,106 @@ b/qwen-tts.exe --model qwen-talker-0.6b-base-*.gguf \
 **Read two numbers, not one.** `RTF` on the `[Perf] Total` line says whether it is fast enough;
 the frame count beside it says whether it is right. A run that hits `--max-new` never found the
 end of the sentence, and its RTF is the throughput of generating nonsense.
+
+---
+
+## 2026-09-21 — 음성이 매번 바뀜
+
+The owner's report, and it was exact: a different person answered each time. Not drift, not the
+engine swapping — **a new speaker per sentence.**
+
+### The talker is a base model, and a base model has no speakers
+
+`qwen-talker-0.6b-base-Q8_0` is the one this tree fetches, chosen for its licence and its size. The
+server knows about voices — `tools/tts-server.cpp` keeps a name-keyed registry, and the client's
+error path already carried the evidence in a comment, `unknown voice 'default'`. What it has for
+*this* model is nothing:
+
+```text
+GET /v1/audio/voices   ->  {"voices":[]}
+"voice":"Chelsie"      ->  400 unknown voice 'chelsie'     (and Ethan, Cherry, Serena,
+"voice":"alloy"        ->  400 unknown voice 'alloy'        Dylan, Jada, Sunny, default,
+"voice":""             ->  200                              speaker0, f1, 0 — all of them)
+tts-server --help      ->  no --voice, no --seed
+```
+
+`qt_n_speakers` fills the list from the model, and a base model reports none. Registration exists —
+`POST /v1/audio/voices` extracts latents from a WAV — and the source says in as many words that it
+is *only valid for base models*, so cloning a reference recording is available and is a different
+job with a licence question attached.
+
+**What decides the timbre without one is the sampler.** The request takes `seed`, and its default
+is `-1`, which is the server's word for *choose for me*. argmind had never sent one.
+
+### The measurement
+
+`argmind-measure --bin voicing`, five arms, the same sentence each time, fingerprinting the samples
+rather than the file so the two request paths can be compared at all:
+
+| arm | 서로 다른 목소리 |
+|---|---|
+| unseeded, whole-file | **4 of 4** |
+| `seed = 7`, whole-file | **1 of 4** |
+| seeds 8, 9, 10, 11 — the control | **4 of 4** |
+| unseeded, streamed | **4 of 4** |
+| `seed = 7`, streamed | **1 of 4** |
+
+Byte-identical under a seed, not merely similar. The unseeded arm also spread **21%** in length —
+6.32 s to 7.36 s for one sentence — which is the part a person notices before they notice the
+timbre.
+
+**The control is why the second row is readable.** Four identical answers is equally consistent
+with *the seed pinned the voice* and with *this server is deterministic and the owner was hearing
+something else*, and a uniformly tidy result is this project's standing reason to suspect the
+instrument. It was written down before the run as the condition that would withdraw the reading.
+The two streamed arms are there because the streamed path is the one that ships and `speak` is the
+one every measurement goes through — a fix that held only in the second would be a fix for the
+instrument.
+
+### What shipped
+
+`seed` is now in **both** request bodies, and they are one body: `asking()` builds it and the two
+callers pass only their last field. `nothing_else_writes_a_request_body` reads the source and
+refuses a second one, because the compiler is perfectly happy with a second format string and a
+second format string is exactly how one of the two paths loses its seed.
+
+The number lives in `devices.json` beside the microphone and the camera — the fourth thing that
+file holds and the first that is not a device. Missing, unreadable or hand-edited to nonsense, it
+is `A_VOICE`; the one answer it must never give is *whatever the sampler feels like*.
+
+`설정 → 장치와 목소리` has the row. **Every press speaks**, because a number cannot be judged by
+reading it: 다른 목소리 draws a fresh seed, remembers it and says one sentence in it, and you press
+until it sounds right. With SAPI answering the row greys out and says so — a seed chooses a speaker
+for the neural synthesiser and for nothing else, and a button that appears to work and does not is
+worse than no button.
+
+### The rule this needed, and what it cost
+
+*The room stays quiet unless somebody asked* is one of the four rules `argmind-rules` holds by
+reading the source: exactly one place in `app.rs` may speak, and it must be `think`. A demonstration
+button is a second place, so the rule had to be widened — **and the widening is written against what
+may be said, not against who says it.** A second `say` is allowed only if its argument is
+`A_SAMPLE`, one fixed constant; `say(&note.believes)` added to `notice` still fails, which is the
+failure the rule exists for.
+
+Broken four ways to check it holds: a second sample (caught), the note said aloud under a different
+variable name (caught), the same under the name `voice` (caught), `A_SAMPLE` made into something
+computed (caught). Reverted, and it passes.
+
+**Two of those four would have walked straight through the old rule**, which matched the literal
+text `voice.say(` — a rule about a local variable's name. It matches any receiver now. Nothing else
+in `app.rs` has a `say` method, so that cost nothing and was simply an oversight standing since the
+rule was written.
+
+### What is not fixed
+
+**The engine still changes once per launch.** The synthesiser dies with argmind — a job object, on
+purpose — so at startup there is no server and `pick_voice` takes SAPI; the page opening starts the
+server and `adopt_voice` swaps to neural. Anything said in that first moment is Heami, and the
+transcript says *이제 신경망 목소리로 말합니다* on every launch as though something had changed.
+Honest, and noise. Fixing it means either blocking startup on a gigabyte reaching the GPU or
+staying silent until it has, and neither is obviously right.
+
+**Which voice #7 is, is nobody's judgement yet.** The default is an arbitrary draw made permanent,
+and the whole of its justification is that it is the *same* draw every run. Eight samples were
+written to `%LOCALAPPDATA%\argmind\voices\seed-*.wav` for the owner to choose from.

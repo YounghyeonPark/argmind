@@ -80,12 +80,13 @@ fn main() {
         }
     }
     println!("\n  신경망 음성: {} @ {}",
-             argmind_serve::speaker::VOICE, argmind_serve::speaker::QWENTTS_HOST);
+             argmind_serve::speaker::MODEL, argmind_serve::speaker::QWENTTS_HOST);
     let began = Instant::now();
     //: The WAV the server sends, written out whole rather than decoded and re-encoded — fewer
     //: chances to change what it sounds like on the way to the file.
     match argmind_env_qwentts::speak(argmind_serve::speaker::QWENTTS_HOST,
-                                     argmind_serve::speaker::VOICE, &said) {
+                                     argmind_serve::speaker::MODEL, &said,
+                                     argmind_serve::chosen::voice()) {
         Ok((samples, hz)) => {
             let at = where_to.join("2-neural.wav");
             let pcm: Vec<u8> = samples.iter()

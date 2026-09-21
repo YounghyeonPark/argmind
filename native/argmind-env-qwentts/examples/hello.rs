@@ -1,6 +1,10 @@
 //! Say one Korean sentence with the neural voice, and interrupt a second one. **Makes a sound.**
 //!
-//!     cargo run -p argmind-env-qwentts --example hello
+//!     cargo run -p argmind-env-qwentts --example hello [model] [seed]
+//!
+//! **The seed is which voice.** This crate's talker is a base model with no speakers, so the
+//! sampler decides the timbre and an unseeded call is a different person each time — see
+//! `tests/seeded.rs`. Passing one here is how you listen to a candidate before it is remembered.
 use argmind_voice::Speaker;
 use std::time::Instant;
 
@@ -11,7 +15,9 @@ fn main() {
         println!("  {} 에 서버가 없습니다", argmind_env_qwentts::QWENTTS);
         return;
     }
-    let mut voice = argmind_env_qwentts::QwenVoice::new(&model);
+    let seed: i64 = std::env::args().nth(2).and_then(|n| n.parse().ok()).unwrap_or(7);
+    println!("  목소리 #{seed}");
+    let mut voice = argmind_env_qwentts::QwenVoice::new(&model, seed);
 
     //: **The number this whole streaming path exists for**: `say()` to the first sound. Asked of
     //: the loudspeaker rather than of the voice, because `Speaker::speaking` is true while the

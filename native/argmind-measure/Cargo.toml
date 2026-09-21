@@ -11,5 +11,7 @@ argmind-env-ollama = { path = "../argmind-env-ollama" }
 # The harness layer uses a capability; the capability never uses the harness.
 # measure/capture.py imports argmind.env.windows for the same reason, in the same direction.
 argmind-env-windows = { path = "../argmind-env-windows" }
+# `voicing` only, and it brings no new third party: the client is raw HTTP/1.1 like the others.
+argmind-env-qwentts = { path = "../argmind-env-qwentts" }
 serde_json = "1"
 sha2 = "0.10"

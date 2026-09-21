@@ -124,6 +124,10 @@
   .gear-row select { flex: 1; min-width: 140px; font: inherit; padding: 3px 4px;
                      border: 1px solid var(--edge); background: #fff; color: var(--ink); }
   .gear-row .said { font-size: 12px; color: var(--dim); padding: 4px 0 0 60px; }
+  /* Greyed rather than hidden when the seed does nothing: a row that vanishes when SAPI is
+     speaking looks like a missing feature, and the reason it is inert is worth reading. */
+  .gear-row.inert { opacity: .55; }
+  .gear-row .seed { font-variant-numeric: tabular-nums; min-width: 46px; }
   .gear-row .said.bad { color: var(--warn); }
   #decisions { padding: 0 14px 10px; }
   .decision { display: flex; gap: 8px; align-items: baseline; padding: 3px 0; }
@@ -196,8 +200,13 @@
        answer is heard or seen rather than believed. Folded, like everything else here that is
        wanted on the day it is wanted. -->
   <details id="gear">
-    <summary>장치 — 마이크 · 스피커 · 카메라</summary>
+    <summary>장치와 목소리</summary>
     <div id="devices"></div>
+    <!-- Which voice, which is a sampler seed because the neural talker is a base model and has no
+         speakers of its own. **Every press speaks**, and that is the whole interaction: a number
+         means nothing until you have heard it, so there is no *apply* and no preview — you press
+         until it sounds right and what you last heard is what is remembered. -->
+    <div id="voice"></div>
   </details>
   <!-- What it currently holds to be true. **Shown because a thought nobody can read cannot be
        told from no thought** — and because a belief that is wrong sits in every prompt until

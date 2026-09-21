@@ -65,7 +65,12 @@ pub const QWENTTS_HOST: &str = "127.0.0.1:8179";
 ///
 /// **The server does not check it** — it is a name for the one pair of weights that are loaded, not
 /// a selector. Passed anyway, so the two ends say the same word and `/v1/models` is readable.
-pub const VOICE: &str = "qwen3-tts";
+///
+/// **Called `MODEL` rather than `VOICE`, since 2026-09-21.** It was named for the thing a person
+/// hears, and then a real voice setting arrived — [`crate::chosen::VOICE`], the sampler seed that
+/// actually decides who is speaking. Two constants called `VOICE`, one of which has nothing to do
+/// with the voice, is the sort of thing that gets the wrong one passed.
+pub const MODEL: &str = "qwen3-tts";
 
 /// The talker: the model that turns text into codec frames.
 pub const TALKER_URL: &str = "https://huggingface.co/Serveurperso/Qwen3-TTS-GGUF/\
@@ -292,7 +297,7 @@ pub fn serve(say: &mut dyn FnMut(&str)) -> Result<(), String> {
         //: ones in Korean. An unknown name is fatal at startup, which is the other reason not to
         //: pass one.
         &["--model", &talker, "--codec", &codec,
-          "--host", host, "--port", port, "--alias", VOICE],
+          "--host", host, "--port", port, "--alias", MODEL],
         Some(&shed()),
         Some(&log),
     ).map_err(|e| format!("서버를 시작하지 못했습니다 ({e})"))?;

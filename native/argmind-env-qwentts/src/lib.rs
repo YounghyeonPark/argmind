@@ -31,6 +31,16 @@
 //! the pieces are there long before the last one. Reading them as they land and handing each to the
 //! speaker is the difference between an agent that answers and one that pauses first.
 //!
+//! ## Why every request carries a seed
+//!
+//! **The talker is a *base* model, so it has no speakers** — `GET /v1/audio/voices` answers with an
+//! empty list and every name offered to `voice` comes back `unknown voice`. What it has instead is
+//! a sampler, and the timbre is whatever that sampler drew: measured 2026-09-21, four calls with
+//! the same text gave four different voices and a 21% spread in length, while `seed = 7` gave the
+//! **same bytes four times out of four**. So a seed is not a tuning knob here, it is the only
+//! handle on *which voice this is*, and [`speak`] and [`speak_streaming`] take one rather than
+//! defaulting — a call that did not decide would be a different person answering.
+//!
 //! **Raw PCM rather than WAV for the streamed path.** A WAV header carries the rate, which is worth
 //! forty-four bytes when the whole file arrives at once; a stream has no length to put in one, and
 //! the rate is then [`HZ`] by agreement. Both paths exist and [`speak`] is still the one that
@@ -58,11 +68,22 @@ pub const HZ: u32 = 24_000;
 ///
 /// **WAV rather than raw PCM**, which costs forty-four bytes and buys the rate being read rather
 /// than assumed. A server that changed what it emits would otherwise be a voice that got faster.
-pub fn speak(host: &str, model: &str, text: &str) -> Result<(Vec<f32>, u32), String> {
-    let body = format!("{{\"model\":\"{}\",\"input\":\"{}\",\"response_format\":\"wav\"}}",
-                       escape(model), escape(text));
+pub fn speak(host: &str, model: &str, text: &str, seed: i64)
+             -> Result<(Vec<f32>, u32), String> {
+    let body = asking(model, text, seed, "\"response_format\":\"wav\"");
     let answer = post(host, "/v1/audio/speech", &body)?;
     from_wav(&answer)
+}
+
+/// The body both paths send, differing only in the last field.
+///
+/// **One function because the seed has to be in both.** The streamed path is the one that ships and
+/// the whole-file one is what every measurement of the voice goes through, so a seed carried by
+/// only one of them would make every finding about the voice a finding about a voice nobody hears.
+/// Written as one string rather than two because that is a mistake you cannot make twice.
+pub fn asking(model: &str, text: &str, seed: i64, and: &str) -> String {
+    format!("{{\"model\":\"{}\",\"input\":\"{}\",\"seed\":{},{}}}",
+            escape(model), escape(text), seed, and)
 }
 
 /// JSON string escaping — the same set `argmind-serve` writes, for the same reason.
@@ -137,10 +158,9 @@ pub fn from_wav(bytes: &[u8]) -> Result<(Vec<f32>, u32), String> {
 ///
 /// `on_piece` gets mono `f32` at [`HZ`]; returning `false` abandons the request, which is what a
 /// barge-in during synthesis does. The `bool` in the answer is whether it ran to the end.
-pub fn speak_streaming(host: &str, model: &str, text: &str,
+pub fn speak_streaming(host: &str, model: &str, text: &str, seed: i64,
                        on_piece: &mut dyn FnMut(&[f32]) -> bool) -> Result<bool, String> {
-    let body = format!("{{\"model\":\"{}\",\"input\":\"{}\",\"stream\":true}}",
-                       escape(model), escape(text));
+    let body = asking(model, text, seed, "\"stream\":true");
     //: **A sample can straddle a chunk boundary.** The server sends bytes and does not care where
     //: a sixteen-bit sample begins, so an odd byte at the end of one piece is the first half of a
     //: sample completed by the next. Dropping it would put a click in every chunk.
@@ -277,6 +297,9 @@ fn post(host: &str, path: &str, body: &str) -> Result<Vec<u8>, String> {
 pub struct QwenVoice {
     pub host: String,
     pub model: String,
+    /// **Which voice.** See the module note: without it the speaker changes between one sentence
+    /// and the next.
+    pub seed: i64,
     mouth: argmind_env_windows::loudspeaker::Loudspeaker,
     /// Bumped by every `say` and every `stop`. **A reply that comes back for an old generation is
     /// dropped**, because a cut-off that lands while the server is still thinking must not be
@@ -291,10 +314,11 @@ pub struct QwenVoice {
 impl QwenVoice {
     /// **Does not open the device and does not ask the server anything.** Whether either works is
     /// found out when something is said, and reported then.
-    pub fn new(model: &str) -> Self {
+    pub fn new(model: &str, seed: i64) -> Self {
         QwenVoice {
             host: QWENTTS.to_string(),
             model: model.to_string(),
+            seed,
             mouth: argmind_env_windows::loudspeaker::Loudspeaker::new(),
             generation: Arc::new(AtomicU64::new(0)),
             thinking: Arc::new(AtomicU64::new(0)),
@@ -338,12 +362,13 @@ impl argmind_voice::Speaker for QwenVoice {
         self.mouth.stop();
 
         let (host, model, text) = (self.host.clone(), self.model.clone(), text.to_string());
+        let seed = self.seed;
         let generation = Arc::clone(&self.generation);
         let thinking = Arc::clone(&self.thinking);
         let mut mouth = self.mouth.clone_handle();
         std::thread::spawn(move || {
             let mut started = false;
-            let answer = speak_streaming(&host, &model, &text, &mut |samples| {
+            let answer = speak_streaming(&host, &model, &text, seed, &mut |samples| {
                 //: **Checked on every piece.** A stop that lands mid-synthesis leaves the rest of
                 //: an utterance nobody is waiting for, and speaking it would talk over whatever
                 //: came next. Returning false drops the connection.

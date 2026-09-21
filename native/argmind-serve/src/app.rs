@@ -182,6 +182,8 @@ enum Job {
     Aim(String),
     /// Open one for a moment and report.
     Try(String),
+    /// Remember which voice, and say something in it.
+    Voice(i64),
     /// The talk key went down or came up.
     Listen(bool),
     /// A page opened: send it the snapshot it needs to draw itself.
@@ -461,6 +463,26 @@ fn devices_json() -> String {
     }).collect();
     format!("[{}]", kinds.join(","))
 }
+
+/// Which voice, and whether the number means anything right now.
+///
+/// **`matters` is the honest half.** A seed only chooses a speaker for the neural synthesiser; with
+/// SAPI answering, or with nothing speaking at all, the row is a number that does nothing, and a
+/// settings panel that offered it anyway would be lying about what the button does.
+pub fn voice_json(voice_is: &str) -> String {
+    format!("{{\"seed\":{},\"most\":{},\"is\":\"{}\",\"matters\":{}}}",
+            crate::chosen::voice(), MOST_VOICE, escape(voice_is), voice_is == "neural")
+}
+
+/// The largest seed the page may send.
+///
+/// **A readable number rather than the server's range.** `tts-server` takes any `i64` and one draw
+/// is as good as another, so the only thing the bound decides is whether a person can read their
+/// own setting back. Ten thousand voices is more than anybody will press through.
+pub const MOST_VOICE: i64 = 9_999;
+
+/// One short sentence, said whenever the voice changes, so a number becomes something heard.
+pub const A_SAMPLE: &str = "안녕하세요. 저는 이 목소리로 말합니다.";
 
 /// The dials, what they are called, where they stand — **and the exact sentence the model will be
 /// shown.**
@@ -929,7 +951,8 @@ pub fn pick_voice() -> (Option<Box<dyn Speaker>>, &'static str) {
     //: depends on whether this build can play one at all — the synthesiser is a server that runs
     //: anywhere, and the loudspeaker that would play it is WASAPI and runs in one place.
     if let Some(neural) = platform::neural_voice(crate::speaker::QWENTTS_HOST) {
-        eprintln!("  voice: {} on {}", crate::speaker::VOICE, crate::speaker::QWENTTS_HOST);
+        eprintln!("  voice: {} seed {} on {}", crate::speaker::MODEL,
+                 crate::chosen::voice(), crate::speaker::QWENTTS_HOST);
         return (Some(neural), "neural");
     }
     match Mouth::new() {
@@ -977,6 +1000,9 @@ fn adopt_voice(desk: &mut Desk, out: &Listeners) {
     //: opens and never again, so a voice swapped after that left the status line saying
     //: `소리 켜짐 (Windows)` directly above a transcript line saying it had changed.
     out.send("voice", desk.voice_is);
+    //: **And the seed row, whose `matters` is false for SAPI and true for this.** The engine and
+    //: *whether the voice number does anything* are one fact, so they are sent together.
+    out.send("voice-seed", &voice_json(desk.voice_is));
 }
 
 fn hello(desk: &Desk, model: &str) -> String {
@@ -1320,6 +1346,39 @@ pub fn run(how: How) {
                         "{{\"kind\":\"{}\",\"worked\":{},\"said\":\"{}\"}}",
                         escape(&kind), tried.worked, escape(&tried.said)));
                 }
+                //: **Rebuilt rather than re-seeded.** `QwenVoice` is handed its seed at
+                //: construction and the one place that builds one reads the setting, so changing
+                //: the voice is the same act as adopting one — stop, release, build. A setter
+                //: would be a second place that decides which voice, which is the thing the
+                //: previous version of this got wrong by having none at all.
+                Job::Voice(seed) => {
+                    if let Err(why) = crate::chosen::keep_voice(seed) {
+                        agent_out.send("note", &why);
+                    }
+                    match desk.voice_is {
+                        "neural" => {
+                            if let Some(fresh) =
+                                crate::platform::neural_voice(crate::speaker::QWENTTS_HOST) {
+                                if let Some(old) = desk.voice.as_mut() {
+                                    old.stop();
+                                    old.release();
+                                }
+                                desk.voice = Some(fresh);
+                            }
+                            //: The sample is the point of the press, so it is said even though
+                            //: nobody asked a question — this is the one utterance in the program
+                            //: that is a demonstration rather than an answer.
+                            if let Some(voice) = desk.voice.as_mut() {
+                                voice.say(A_SAMPLE);
+                            }
+                        }
+                        "windows" => agent_out.send(
+                            "note", "지금은 Windows 목소리로 말하고 있어서 이 번호는 쓰이지 않습니다"),
+                        _ => agent_out.send(
+                            "note", "소리 내어 말하기가 꺼져 있습니다 — 켜면 이 목소리로 말합니다"),
+                    }
+                    agent_out.send("voice-seed", &voice_json(desk.voice_is));
+                }
                 Job::Dial(name, to) => {
                     match crate::mind::turn(&name, to) {
                         Ok(mind) => {
@@ -1458,6 +1517,9 @@ pub fn run(how: How) {
                     //: **What it is trying to be**, so the sliders and the goal are drawn where
                     //: they were left rather than at rest.
                     let _ = tx.send(sse("mind", &mind_json(&desk.session.mind)));
+                    //: **After `adopt_voice` above**, so `matters` is drawn against the voice that
+                    //: is actually speaking rather than the one this process started with.
+                    let _ = tx.send(sse("voice-seed", &voice_json(desk.voice_is)));
                     //: **And what it currently thinks**, so a page opened halfway through a session
                     //: shows the thought rather than an empty panel that fills in thirty seconds.
                     let _ = tx.send(sse("note-kept", &note_json(&desk.session.note)));
@@ -1594,6 +1656,16 @@ fn serve_one(mut stream: TcpStream, out: &Listeners, token: &str, jobs: &Sender<
             if crate::mind::is_a_dial(&name) && to <= argmind_core::mind::MOST {
                 let _ = stream.write_all(&respond("204 No Content", "text/plain", ""));
                 let _ = jobs.send(Job::Dial(name, to));
+            } else {
+                let _ = stream.write_all(&respond("400 Bad Request", "text/plain", "no"));
+            }
+        }
+        //: Range-checked here, like `/dial`, so a page that asked for something absurd is told
+        //: at the moment it can still mean something.
+        Route::Voice(seed) => {
+            if (0..=crate::app::MOST_VOICE).contains(&seed) {
+                let _ = stream.write_all(&respond("204 No Content", "text/plain", ""));
+                let _ = jobs.send(Job::Voice(seed));
             } else {
                 let _ = stream.write_all(&respond("400 Bad Request", "text/plain", "no"));
             }

@@ -745,6 +745,77 @@ function gearRow(g: Gear): HTMLElement {
 }
 
 
+// --- which voice ---------------------------------------------------------------------------------
+
+// The neural talker is a *base* model: it has no speakers, `GET /v1/audio/voices` is empty, and the
+// timbre is whatever the sampler drew. Measured 2026-09-21 — four unseeded calls gave four
+// different voices; `seed = 7` gave the same bytes four times. So this row is one number, and the
+// only honest way to set it is to hear it, which is why every press speaks.
+
+interface Voice {
+  seed: number;
+  most: number;
+  /** "neural" | "windows" | "off" | "none" — what is speaking right now. */
+  is: string;
+  /** Whether the seed changes anything. False for SAPI, which has one voice and no sampler. */
+  matters: boolean;
+}
+
+const voiceRow = document.getElementById("voice") as HTMLElement;
+
+stream.addEventListener("voice-seed", (e) => {
+  const v: Voice = JSON.parse((e as MessageEvent).data);
+  voiceRow.replaceChildren(drawVoice(v));
+});
+
+function drawVoice(v: Voice): HTMLElement {
+  const row = document.createElement("div");
+  row.className = v.matters ? "gear-row" : "gear-row inert";
+
+  const line = document.createElement("div");
+  line.className = "line";
+  const what = document.createElement("span");
+  what.className = "what";
+  what.textContent = "목소리";
+  const seed = document.createElement("span");
+  seed.className = "seed";
+  seed.textContent = `#${v.seed}`;
+
+  const another = document.createElement("button");
+  another.type = "button";
+  another.textContent = "다른 목소리";
+  const again = document.createElement("button");
+  again.type = "button";
+  again.textContent = "다시 듣기";
+
+  // A fresh draw, never the one already set — pressing 다른 목소리 and hearing the same person is
+  // the button appearing not to work.
+  another.onclick = () => {
+    let next = v.seed;
+    while (next === v.seed) {
+      next = Math.floor(Math.random() * (v.most + 1));
+    }
+    void post(`/voice/${next}`);
+  };
+  again.onclick = () => void post(`/voice/${v.seed}`);
+  for (const b of [another, again]) {
+    b.disabled = !v.matters;
+  }
+
+  line.append(what, seed, another, again);
+  row.append(line);
+
+  const said = document.createElement("span");
+  said.className = "said";
+  said.textContent = v.matters
+    ? "누를 때마다 이 목소리로 한 문장 말합니다 — 마음에 드는 것이 나오면 그만 누르면 됩니다"
+    : v.is === "windows"
+      ? "지금은 Windows 목소리로 말하고 있어서 번호는 쓰이지 않습니다"
+      : "소리 내어 말하기가 꺼져 있습니다";
+  row.append(said);
+  return row;
+}
+
 // --- what it is holding in mind ------------------------------------------------------------------
 //
 // One panel, three lines, revised by argmind itself every half minute while it is watching. **It is

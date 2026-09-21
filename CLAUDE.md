@@ -92,6 +92,13 @@ the licence record, the core naming no platform and being shown no coordinate, o
 `perform`, a voice seam that cannot name a `Session`, and — since 2026-09-16 — **the application
 naming an operating system in one file.** Each was checked by breaking it.
 
+**One of them has an exception now, and the exception is written against what may be said.** *The
+room stays quiet unless somebody asked* allowed exactly one `say` in `app.rs`; choosing a voice
+means hearing it, so there is a second, and it may say only the one fixed constant `A_SAMPLE`. A
+`say(&note.believes)` added to `notice` still fails. Two of the four breaks used to check it would
+have walked through the **old** rule, which matched the literal text `voice.say(` — a rule about a
+local variable's name.
+
 **And one rule is held by the compiler.** `cargo test -p argmind-serve --features headless` builds
 the whole application against `argmind-env-none` and runs the server against it. A `use
 argmind_env_windows::` added to `app.rs` compiles fine on this machine and quietly un-ports the
@@ -164,6 +171,7 @@ flag deliberately and that is *stronger* — a person confirms each action, and 
 | a reason to start | **the one turn that begins from argmind own state.** A judgement that has stood three looks with nobody acting on it is raised by argmind itself. The gate added the day before made that impossible — it dropped a standing judgement on any quiet look, so stuck could never reach 2 — and judging was not recording stuck at all, so the runs that passed said nothing about it. A tick now concludes one of three things: nothing happened so nothing was judged and what stands stands; something happened and there is nothing to do; something happened and here is the widget. Measured on a built sequence where a dialog appears and then nothing changes: stuck 1, 2, **3 and raised**, then put down and not raised again — reproduced tick for tick. RAISE_AFTER = 3 is chosen, not measured |
 | clicking | **2 of 3, n=1** on the Rust, against the Python's 3 of 3 at n=3 on the same goals and the same condition — one Character Map for all three, so the second goal meets a screen the first has changed. One run against three and this model reads 21, 23, 24 across runs of one configuration, so it is a number rather than a regression. **The miss is the interesting part and it is not the model's**: asked for the font list it named `Open`, and advanced view has more than one button called that — what opened was the character set list. `name` and `role` together are still not a key, and the model is shown nothing else |
 | obstruction | **24 of 24 arms agreed with the prediction written before the run**, 3 runs of 8. With something covering the target, *neither* path reaches it — the pattern resolves by `ElementFromPoint` and gets the cover, then falls back to a click the reach guard refuses. Stood aside or uncovered, both work. So the one case that could have earned the control patterns does not |
+| which voice | **it was a different person every sentence, and nothing had chosen one.** The talker is a *base* model, so it has no speakers — `/v1/audio/voices` is empty and every name is `unknown voice`, `default` included — and what decides the timbre is the sampler, whose `seed` defaults to `-1`, the server's word for *choose for me*. argmind had never sent one. Unseeded: **4 of 4** different, over a 21% spread in length. `seed = 7`: **1 of 4**, byte-identical. Both on the streamed path too, which is the one that ships. The control — four distinct seeds, **4 of 4** different — was written down beforehand as what would withdraw the reading, because *four identical answers* also fits *this server is deterministic and the owner was hearing something else* |
 | the pointer | **the axis the patterns do win, 3 of 3.** Parked at `(700, 400)`: `invoke` leaves it there, a click drags it to the widget at `(130, 459)`, and both press the box. **The first version of this harness measured nothing** — it parked with `cursor_round_trip`, which puts the cursor back where it found it, so every arm read the position the previous arm's click had left and both reported *unmoved* |
 
 **The one slot that is absent unless somebody asks for it.** `mind.rs` renders nothing at rest, so
@@ -301,6 +309,17 @@ it streams, RTF 0.15, and it is used whenever it is answering on its port. If it
 one speaks rather than nothing. `docs/findings/a-better-voice.md` has the accounting, including
 why the talker is Q8_0 and why the Vulkan SDK is asked for separately.
 
+**And which voice, since 2026-09-21, is a number that is always sent.** The base model has no
+speakers, so the seed is the whole of *who is speaking*; it lives in `devices.json` as the fourth
+thing that file holds and the first that is not a device, and a missing or nonsense one is
+`A_VOICE` rather than a fresh draw. `설정 → 장치와 목소리` has the row and **every press speaks** —
+a number cannot be judged by reading it, so 다른 목소리 draws, remembers and says one sentence, and
+you press until it sounds right. With SAPI answering the row greys out, because a seed chooses a
+speaker for the neural synthesiser and for nothing else. **Which voice the default is, is nobody's
+judgement**: it is an arbitrary draw made permanent, and being the *same* draw every run is the
+whole of its justification. **The engine still changes once per launch** — the synthesiser dies
+with argmind, so startup finds no server, takes SAPI, and swaps when the page opens one.
+
 Hearing **transcribes silence as words 120 times out of 120**, so a stray key press is a turn —
 it cannot act on one, but it will answer it aloud. **Two of the three
 guards do reject**, with no threshold in either: a transcript of nothing but punctuation is not
@@ -370,7 +389,7 @@ a fact. `docs/findings/porting-the-core.md` has the accounting.
 | `docs/findings/the-pc-app.md` | the window: self-blindness, pointing, cold start, the withdrawn diagnosis |
 | `docs/findings/the-window.md` | **a standalone app rather than a browser tab**: why the house style was the wrong answer, the licence sweep across 81 crates, and the DLL failure that only a double-click finds |
 | `docs/findings/eyes-on-linux.md` | **AT-SPI2**: the contract surviving the port, the switch that makes toolkits publish at all, `i32::MIN` for off-screen, the hit test that answered with the container, and why D-Bus was the one wire protocol not hand-written |
-| `docs/findings/a-better-voice.md` | **the voice**: every open Korean TTS checked and its licence, and the measured answer — RTF 3.9 on the CPU, 0.15 on the GPU, and a K-quant that is thirty-two times faster and wrong |
+| `docs/findings/a-better-voice.md` | **the voice**: every open Korean TTS checked and its licence, the measured answer — RTF 3.9 on the CPU, 0.15 on the GPU, and a K-quant that is thirty-two times faster and wrong — and **which voice**: the base model with no speakers, the seed that pins it, and the quiet-room rule widened by one sentence and broken four ways to check |
 | `docs/findings/thinking-continuously.md` | **the note**: what a turn never carried, the three things the first run got wrong, and the watch that was reading argmind itself |
 | `docs/findings/what-it-is-trying-to-be.md` | **the dials**: the rule that made a sixth prompt edit safe, the control that overturned the first reading, and the language of the slot |
 | `docs/findings/harness-pitfalls.md` | **ten ways the model harness lied and seven ways the measuring code did** — the list to check when a measurement reads zero |
