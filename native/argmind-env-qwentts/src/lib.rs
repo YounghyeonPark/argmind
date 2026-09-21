@@ -31,15 +31,34 @@
 //! the pieces are there long before the last one. Reading them as they land and handing each to the
 //! speaker is the difference between an agent that answers and one that pauses first.
 //!
-//! ## Why every request carries a seed
+//! ## Why every request carries a seed, and why that was not enough
 //!
-//! **The talker is a *base* model, so it has no speakers** — `GET /v1/audio/voices` answers with an
-//! empty list and every name offered to `voice` comes back `unknown voice`. What it has instead is
-//! a sampler, and the timbre is whatever that sampler drew: measured 2026-09-21, four calls with
+//! **The talker is a *base* model, so it ships with no speakers** — `GET /v1/audio/voices` starts
+//! empty and every built-in name offered to `voice` comes back `unknown voice`. What it has instead
+//! is a sampler, and the timbre is whatever that sampler drew: measured 2026-09-21, four calls with
 //! the same text gave four different voices and a 21% spread in length, while `seed = 7` gave the
-//! **same bytes four times out of four**. So a seed is not a tuning knob here, it is the only
-//! handle on *which voice this is*, and [`speak`] and [`speak_streaming`] take one rather than
-//! defaulting — a call that did not decide would be a different person answering.
+//! **same bytes four times out of four**. So every request carries a seed, and [`speak`] and
+//! [`speak_streaming`] take one rather than defaulting.
+//!
+//! **And then that turned out to fix one recording rather than one person.** Re-measured the same
+//! day across four different sentences: a seed held to within 119 Hz of itself while *different*
+//! seeds on one sentence spanned 137 Hz — a ratio of 1.2, which is no ratio at all. A long-term
+//! average spectrum said the same with no notion of pitch in it: 0.821 alike within a seed against
+//! 0.813 across seeds, with the same-seed-same-text control at exactly 1.000. Since every reply is
+//! a different sentence, a seed alone leaves the voice changing on every turn, which was the
+//! complaint. That reading is recorded rather than quietly replaced: it was the flattering one.
+//!
+//! ## What does hold a person: a cloned voice
+//!
+//! The registry the base model starts empty is one this can fill. [`register_voice`] extracts
+//! speaker latents from a reference recording, and the reference can come from **the model itself**
+//! — draw one sentence at a fixed seed, hand that recording back, and every later sentence is
+//! spoken by the person in it. Nothing is downloaded and nobody else's voice is involved.
+//!
+//! Measured over twenty references: the clone's pitch tracks the reference's at **+0.99**, the
+//! range is 119–270 Hz, and a clone holds to a median **26 Hz** across sentences where a seed
+//! managed 119. It costs **0.69 s** to make — 0.53 s to synthesise the reference, 0.16 s to
+//! extract — and it lives in the server's memory, so it goes again after a restart.
 //!
 //! **Raw PCM rather than WAV for the streamed path.** A WAV header carries the rate, which is worth
 //! forty-four bytes when the whole file arrives at once; a stream has no length to put in one, and
@@ -68,11 +87,19 @@ pub const HZ: u32 = 24_000;
 ///
 /// **WAV rather than raw PCM**, which costs forty-four bytes and buys the rate being read rather
 /// than assumed. A server that changed what it emits would otherwise be a voice that got faster.
-pub fn speak(host: &str, model: &str, text: &str, seed: i64)
+pub fn speak(host: &str, model: &str, text: &str, voice: &Voice)
              -> Result<(Vec<f32>, u32), String> {
-    let body = asking(model, text, seed, "\"response_format\":\"wav\"");
-    let answer = post(host, "/v1/audio/speech", &body)?;
-    from_wav(&answer)
+    from_wav(&speak_wav(host, model, text, voice)?)
+}
+
+/// The same, as the bytes that came off the wire.
+///
+/// **Separate because a reference recording has to stay a file.** [`register_voice`] sends a WAV
+/// back to the server, and rebuilding one out of `f32` samples would be a second writer of a format
+/// this crate already receives correctly.
+pub fn speak_wav(host: &str, model: &str, text: &str, voice: &Voice) -> Result<Vec<u8>, String> {
+    post(host, "/v1/audio/speech",
+         &asking(model, text, voice, "\"response_format\":\"wav\""))
 }
 
 /// The body both paths send, differing only in the last field.
@@ -81,9 +108,33 @@ pub fn speak(host: &str, model: &str, text: &str, seed: i64)
 /// the whole-file one is what every measurement of the voice goes through, so a seed carried by
 /// only one of them would make every finding about the voice a finding about a voice nobody hears.
 /// Written as one string rather than two because that is a mistake you cannot make twice.
-pub fn asking(model: &str, text: &str, seed: i64, and: &str) -> String {
-    format!("{{\"model\":\"{}\",\"input\":\"{}\",\"seed\":{},{}}}",
-            escape(model), escape(text), seed, and)
+pub fn asking(model: &str, text: &str, voice: &Voice, and: &str) -> String {
+    format!("{{\"model\":\"{}\",\"input\":\"{}\",{}{}}}",
+            escape(model), escape(text), voice.field(), and)
+}
+
+/// Who is speaking, as the two things this server understands.
+///
+/// **Two variants rather than an `Option<String>`**, because the fallback is not *no voice* — it is
+/// a seed, which holds one recording and not one person, and a caller that let the field go absent
+/// would be back to a different speaker every sentence. See the module note.
+#[derive(Debug, Clone, PartialEq)]
+pub enum Voice {
+    /// A voice registered with [`register_voice`]. Holds a person across sentences.
+    Cloned(String),
+    /// A sampler seed. **Reproducible for one text and not a speaker** — what argmind falls back to
+    /// when registration did not work, because the same voice per sentence beats a fresh draw.
+    Drawn(i64),
+}
+
+impl Voice {
+    /// The JSON field, with its trailing comma, ready to go in front of the rest.
+    pub fn field(&self) -> String {
+        match self {
+            Voice::Cloned(name) => format!("\"voice\":\"{}\",", escape(name)),
+            Voice::Drawn(seed) => format!("\"seed\":{seed},"),
+        }
+    }
 }
 
 /// JSON string escaping — the same set `argmind-serve` writes, for the same reason.
@@ -158,9 +209,9 @@ pub fn from_wav(bytes: &[u8]) -> Result<(Vec<f32>, u32), String> {
 ///
 /// `on_piece` gets mono `f32` at [`HZ`]; returning `false` abandons the request, which is what a
 /// barge-in during synthesis does. The `bool` in the answer is whether it ran to the end.
-pub fn speak_streaming(host: &str, model: &str, text: &str, seed: i64,
+pub fn speak_streaming(host: &str, model: &str, text: &str, voice: &Voice,
                        on_piece: &mut dyn FnMut(&[f32]) -> bool) -> Result<bool, String> {
-    let body = asking(model, text, seed, "\"stream\":true");
+    let body = asking(model, text, voice, "\"stream\":true");
     //: **A sample can straddle a chunk boundary.** The server sends bytes and does not care where
     //: a sixteen-bit sample begins, so an odd byte at the end of one piece is the first half of a
     //: sample completed by the next. Dropping it would put a click in every chunk.
@@ -292,14 +343,52 @@ fn post(host: &str, path: &str, body: &str) -> Result<Vec<u8>, String> {
     Ok(out)
 }
 
+/// Teach the server a voice, from a recording of somebody saying `ref_text`.
+///
+/// **Only base models can do this**, which is the one place this tree's choice of weights pays off
+/// twice: the base talker has no speakers of its own *and* is the only kind that can be given one.
+/// The server answers `voice registration is only valid for base models` otherwise.
+///
+/// **It lives in the server's memory.** There is no endpoint that hands the extracted latents back,
+/// so nothing can be cached and this runs again after every restart — 0.16 s on top of whatever the
+/// reference cost to make.
+pub fn register_voice(host: &str, name: &str, wav: &[u8], ref_text: &str) -> Result<(), String> {
+    let body = format!("{{\"name\":\"{}\",\"ref_text\":\"{}\",\"wav_b64\":\"{}\"}}",
+                       escape(name), escape(ref_text), encoded(wav));
+    post(host, "/v1/audio/voices", &body).map(|_| ())
+}
+
+/// Standard base64, written out because this crate takes no third-party dependency.
+///
+/// **Public so it can be checked against values a person can verify by hand.** A hand-written
+/// encoder is exactly the kind of thing that works on ASCII and drops a byte at the tail, and a
+/// reference recording is neither ASCII nor a multiple of three.
+pub fn encoded(bytes: &[u8]) -> String {
+    const ABC: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    let mut out = String::with_capacity(bytes.len().div_ceil(3) * 4);
+    for lot in bytes.chunks(3) {
+        let b = [lot[0], *lot.get(1).unwrap_or(&0), *lot.get(2).unwrap_or(&0)];
+        let n = ((b[0] as u32) << 16) | ((b[1] as u32) << 8) | b[2] as u32;
+        for i in 0..4 {
+            //: The tail is padded with `=` for exactly the bytes that were not there.
+            if i <= lot.len() {
+                out.push(ABC[((n >> (18 - 6 * i)) & 0x3f) as usize] as char);
+            } else {
+                out.push('=');
+            }
+        }
+    }
+    out
+}
+
 /// A neural voice: [`argmind_voice::Speaker`], with the server doing the work and the loudspeaker
 /// doing the talking.
 pub struct QwenVoice {
     pub host: String,
     pub model: String,
-    /// **Which voice.** See the module note: without it the speaker changes between one sentence
-    /// and the next.
-    pub seed: i64,
+    /// **Which voice.** See the module note: a cloned one holds a person across sentences, a
+    /// drawn one holds only the sentence it is saying.
+    pub voice: Voice,
     mouth: argmind_env_windows::loudspeaker::Loudspeaker,
     /// Bumped by every `say` and every `stop`. **A reply that comes back for an old generation is
     /// dropped**, because a cut-off that lands while the server is still thinking must not be
@@ -314,11 +403,11 @@ pub struct QwenVoice {
 impl QwenVoice {
     /// **Does not open the device and does not ask the server anything.** Whether either works is
     /// found out when something is said, and reported then.
-    pub fn new(model: &str, seed: i64) -> Self {
+    pub fn new(model: &str, voice: Voice) -> Self {
         QwenVoice {
             host: QWENTTS.to_string(),
             model: model.to_string(),
-            seed,
+            voice,
             mouth: argmind_env_windows::loudspeaker::Loudspeaker::new(),
             generation: Arc::new(AtomicU64::new(0)),
             thinking: Arc::new(AtomicU64::new(0)),
@@ -362,13 +451,13 @@ impl argmind_voice::Speaker for QwenVoice {
         self.mouth.stop();
 
         let (host, model, text) = (self.host.clone(), self.model.clone(), text.to_string());
-        let seed = self.seed;
+        let voice = self.voice.clone();
         let generation = Arc::clone(&self.generation);
         let thinking = Arc::clone(&self.thinking);
         let mut mouth = self.mouth.clone_handle();
         std::thread::spawn(move || {
             let mut started = false;
-            let answer = speak_streaming(&host, &model, &text, seed, &mut |samples| {
+            let answer = speak_streaming(&host, &model, &text, &voice, &mut |samples| {
                 //: **Checked on every piece.** A stop that lands mid-synthesis leaves the rest of
                 //: an utterance nobody is waiting for, and speaking it would talk over whatever
                 //: came next. Returning false drops the connection.

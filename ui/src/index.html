@@ -124,10 +124,9 @@
   .gear-row select { flex: 1; min-width: 140px; font: inherit; padding: 3px 4px;
                      border: 1px solid var(--edge); background: #fff; color: var(--ink); }
   .gear-row .said { font-size: 12px; color: var(--dim); padding: 4px 0 0 60px; }
-  /* Greyed rather than hidden when the seed does nothing: a row that vanishes when SAPI is
+  /* Greyed rather than hidden when the choice does nothing: a row that vanishes when SAPI is
      speaking looks like a missing feature, and the reason it is inert is worth reading. */
   .gear-row.inert { opacity: .55; }
-  .gear-row .seed { font-variant-numeric: tabular-nums; min-width: 46px; }
   .gear-row .said.bad { color: var(--warn); }
   #decisions { padding: 0 14px 10px; }
   .decision { display: flex; gap: 8px; align-items: baseline; padding: 3px 0; }
@@ -202,10 +201,11 @@
   <details id="gear">
     <summary>장치와 목소리</summary>
     <div id="devices"></div>
-    <!-- Which voice, which is a sampler seed because the neural talker is a base model and has no
-         speakers of its own. **Every press speaks**, and that is the whole interaction: a number
-         means nothing until you have heard it, so there is no *apply* and no preview — you press
-         until it sounds right and what you last heard is what is remembered. -->
+    <!-- Which voice. The neural talker is a base model with no speakers of its own, so each of
+         these is one argmind cloned for itself: a reference sentence drawn at a fixed seed and
+         registered with the server, which holds the same person across sentences where a bare seed
+         does not. Ordered by measured pitch, and the measurement is shown. **Choosing speaks**,
+         because a name and a number in a list are not a voice until you have heard one. -->
     <div id="voice"></div>
   </details>
   <!-- What it currently holds to be true. **Shown because a thought nobody can read cannot be

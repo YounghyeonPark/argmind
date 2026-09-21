@@ -218,13 +218,13 @@ pub enum Route {
     /// Open one for a moment and say what happened. **The only thing in this program that turns a
     /// device on because somebody asked rather than because a turn needed it.**
     Try(String),
-    /// Which voice the neural synthesiser speaks in, as a sampler seed — **and say a sentence in
-    /// it**, because that is the only way to find out what a number sounds like.
+    /// Which of [`crate::speaker::PRESETS`] the synthesiser speaks in — **and say a sentence in
+    /// it**, because a name and a number in a list are not a voice until you have heard one.
     ///
-    /// One route rather than a *set* and a *preview*, since the interaction is pressing until it
-    /// sounds right: every press both remembers and speaks. The seed is the whole choice because
-    /// the talker is a base model with no speakers of its own; see [`crate::chosen::VOICE`].
-    Voice(i64),
+    /// One route rather than a *set* and a *preview*: choosing and hearing are the same act here.
+    /// The key is checked against the fixed list before anything happens, like a dial's name and
+    /// unlike a device id.
+    Voice(String),
     /// Say answers out loud, or stop. **Written down as a standing answer** rather than held in
     /// memory, because a switch a person flips and then loses on the next launch is the defect this
     /// replaced.
@@ -308,11 +308,9 @@ pub fn route(request: &Request) -> Route {
         },
         ("POST", p) if p.starts_with("/try/") && p.len() > 5 =>
             Route::Try(p[5..].to_string()),
-        //: `/voice/<n>`. Parsed here and range-checked at the far end, like `/dial`.
-        ("POST", p) if p.starts_with("/voice/") && p.len() > 7 => match p[7..].parse() {
-            Ok(n) => Route::Voice(n),
-            Err(_) => Route::Unknown,
-        },
+        //: `/voice/<key>`. Checked against the fixed list at the far end, like `/dial`.
+        ("POST", p) if p.starts_with("/voice/") && p.len() > 7 && !p[7..].contains('/') =>
+            Route::Voice(p[7..].to_string()),
         //: `/dial/<name>/<0-10>`. The name arrives percent-encoded because it is Korean, and it is
         //: checked against the fixed list before anything is written — a dial is not a string the
         //: page gets to invent, for the same reason a permission is not.

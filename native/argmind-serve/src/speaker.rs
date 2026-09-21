@@ -72,6 +72,97 @@ pub const QWENTTS_HOST: &str = "127.0.0.1:8179";
 /// with the voice, is the sort of thing that gets the wrong one passed.
 pub const MODEL: &str = "qwen3-tts";
 
+// ---- which voice ---------------------------------------------------------------------------------
+
+/// The sentence a reference recording says.
+///
+/// **Long enough to carry a person and short enough to cost half a second.** The extractor is given
+/// one utterance and has to find a speaker in it; measured at 0.53 s to synthesise and 0.16 s to
+/// extract, with clones that track their reference's pitch at +0.99.
+pub const REFERENCE: &str = "안녕하세요. 만나서 반갑습니다. 오늘은 무엇을 도와드릴까요?";
+
+/// One voice argmind can speak in.
+///
+/// **A preset is a seed plus what was measured about it**, not a name somebody made up. Every
+/// number here is a reading, and they are in the struct so the page can show them: a person
+/// choosing a voice is entitled to see what the ordering rests on, and to catch it being wrong.
+pub struct Preset {
+    /// What goes in `devices.json` and on the wire as the registered voice's name.
+    pub key: &'static str,
+    /// What the page calls it.
+    ///
+    /// **Numbered rather than described, and that is the finding rather than laziness.** Three of
+    /// the five sit within 22 Hz of each other and are told apart by timbre, not by pitch — see
+    /// `apart` — so calling one 낮은 and the next 조금 낮은 would be a distinction the measurement
+    /// does not support. The Hz goes beside the name in the page and carries what is real.
+    pub what: &'static str,
+    /// The seed the reference is drawn at. Reproducible: a seed and a text give the same bytes
+    /// every time, which is the one thing a seed turned out to be good for.
+    pub seed: i64,
+    /// Median f0 of the clone over six sentences, in Hz. Measured 2026-09-21.
+    pub hz: u32,
+    /// How far that moved between the six.
+    ///
+    /// **Bigger than it first looked, and the first look is why this is n=6.** Over three sentences
+    /// these read 4–19 Hz and the same seeds read 16–33 over six: a max-minus-min of three samples
+    /// underestimates a range, and a preset list chosen on the small numbers had two pairs in it
+    /// that are the same person.
+    pub wobble: u32,
+    /// **How far this voice is from its nearest neighbour, as a speaker**, in thousandths.
+    ///
+    /// Long-term average spectra, which have no notion of pitch in them: the mean correlation
+    /// between this voice's renditions and another's, subtracted from the mean within each. A clone
+    /// is 0.955–0.982 like itself across sentences, so anything near zero here is two names for one
+    /// person. This is the number that chose the list — of seven candidates that passed a
+    /// pitch-gap rule, two pairs measured **+0.016** and **−0.004** and were dropped.
+    pub apart: u32,
+}
+
+/// Five, and the list is what survived being measured rather than what was drawn.
+///
+/// Seventy-two seeds were cloned and measured. A pitch-gap rule — neighbours further apart than
+/// they wobble — cut that to seven, and then the wobble turned out to be an n=3 artefact and the
+/// rule turned out to be the wrong question: **two voices can share a pitch and still be two
+/// people, and two voices can differ in pitch and be one.** Asking the right question, whether the
+/// spectra separate, dropped two of the seven and kept these.
+///
+/// The weakest pair here is +0.042 (the two lowest), against 0.979 within either. Whether +0.042 is
+/// *audibly* two people is not something a correlation can say — which is why choosing one speaks.
+pub const PRESETS: [Preset; 5] = [
+    Preset { key: "one",   what: "목소리 1", seed: 20, hz: 105, wobble: 21, apart: 42 },
+    Preset { key: "two",   what: "목소리 2", seed: 35, hz: 119, wobble: 16, apart: 42 },
+    Preset { key: "three", what: "목소리 3", seed: 59, hz: 127, wobble: 21, apart: 68 },
+    Preset { key: "four",  what: "목소리 4", seed: 56, hz: 177, wobble: 27, apart: 46 },
+    Preset { key: "five",  what: "목소리 5", seed: 64, hz: 209, wobble: 33, apart: 46 },
+];
+
+/// Below this, two presets are one voice under two names.
+///
+/// **Not a threshold anybody derived** — it is the weakest pair that was kept, written down so the
+/// list cannot quietly grow a pair worse than the ones already rejected at +0.016 and −0.004.
+pub const LEAST_APART: u32 = 40;
+
+/// The one used when nobody has chosen.
+///
+/// **Arbitrary among five, and that is the whole of its justification** — what matters is that it
+/// is the same one on every run. The middle of the range rather than an end, so a first impression
+/// is not of an extreme.
+pub const A_VOICE: &str = "four";
+
+pub fn preset(key: &str) -> Option<&'static Preset> {
+    PRESETS.iter().find(|p| p.key == key)
+}
+
+/// The preset for a remembered key, falling back rather than failing.
+///
+/// **A key nobody knows is the default, not an error.** `devices.json` is hand-editable, and until
+/// 2026-09-21 this setting held a *seed* — a bare number — so every file written by the version
+/// before this one lands here. That is the migration: an old seed is not a preset, and the honest
+/// thing is the default voice rather than a guess at which preset the number was nearest.
+pub fn preset_or_default(key: &str) -> &'static Preset {
+    preset(key).or_else(|| preset(A_VOICE)).expect("A_VOICE names a preset")
+}
+
 /// The talker: the model that turns text into codec frames.
 pub const TALKER_URL: &str = "https://huggingface.co/Serveurperso/Qwen3-TTS-GGUF/\
                               resolve/main/qwen-talker-0.6b-base-Q8_0.gguf";

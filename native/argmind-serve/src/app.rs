@@ -183,7 +183,7 @@ enum Job {
     /// Open one for a moment and report.
     Try(String),
     /// Remember which voice, and say something in it.
-    Voice(i64),
+    Voice(String),
     /// The talk key went down or came up.
     Listen(bool),
     /// A page opened: send it the snapshot it needs to draw itself.
@@ -470,16 +470,16 @@ fn devices_json() -> String {
 /// SAPI answering, or with nothing speaking at all, the row is a number that does nothing, and a
 /// settings panel that offered it anyway would be lying about what the button does.
 pub fn voice_json(voice_is: &str) -> String {
-    format!("{{\"seed\":{},\"most\":{},\"is\":\"{}\",\"matters\":{}}}",
-            crate::chosen::voice(), MOST_VOICE, escape(voice_is), voice_is == "neural")
+    let chosen = crate::chosen::voice();
+    //: **The measurements go to the page with the names.** A person choosing a voice is entitled to
+    //: see the number the ordering rests on — and to catch it being wrong, which is the part a
+    //: label alone makes impossible.
+    let rows: Vec<String> = crate::speaker::PRESETS.iter().map(|p| format!(
+        "{{\"key\":\"{}\",\"what\":\"{}\",\"hz\":{},\"wobble\":{}}}",
+        escape(p.key), escape(p.what), p.hz, p.wobble)).collect();
+    format!("{{\"chosen\":\"{}\",\"is\":\"{}\",\"matters\":{},\"presets\":[{}]}}",
+            escape(chosen.key), escape(voice_is), voice_is == "neural", rows.join(","))
 }
-
-/// The largest seed the page may send.
-///
-/// **A readable number rather than the server's range.** `tts-server` takes any `i64` and one draw
-/// is as good as another, so the only thing the bound decides is whether a person can read their
-/// own setting back. Ten thousand voices is more than anybody will press through.
-pub const MOST_VOICE: i64 = 9_999;
 
 /// One short sentence, said whenever the voice changes, so a number becomes something heard.
 pub const A_SAMPLE: &str = "안녕하세요. 저는 이 목소리로 말합니다.";
@@ -951,8 +951,9 @@ pub fn pick_voice() -> (Option<Box<dyn Speaker>>, &'static str) {
     //: depends on whether this build can play one at all — the synthesiser is a server that runs
     //: anywhere, and the loudspeaker that would play it is WASAPI and runs in one place.
     if let Some(neural) = platform::neural_voice(crate::speaker::QWENTTS_HOST) {
-        eprintln!("  voice: {} seed {} on {}", crate::speaker::MODEL,
-                 crate::chosen::voice(), crate::speaker::QWENTTS_HOST);
+        let chosen = crate::chosen::voice();
+        eprintln!("  voice: {} / {} ({} Hz) on {}", crate::speaker::MODEL, chosen.key, chosen.hz,
+                  crate::speaker::QWENTTS_HOST);
         return (Some(neural), "neural");
     }
     match Mouth::new() {
@@ -1351,8 +1352,8 @@ pub fn run(how: How) {
                 //: the voice is the same act as adopting one — stop, release, build. A setter
                 //: would be a second place that decides which voice, which is the thing the
                 //: previous version of this got wrong by having none at all.
-                Job::Voice(seed) => {
-                    if let Err(why) = crate::chosen::keep_voice(seed) {
+                Job::Voice(key) => {
+                    if let Err(why) = crate::chosen::keep_voice(&key) {
                         agent_out.send("note", &why);
                     }
                     match desk.voice_is {
@@ -1660,12 +1661,12 @@ fn serve_one(mut stream: TcpStream, out: &Listeners, token: &str, jobs: &Sender<
                 let _ = stream.write_all(&respond("400 Bad Request", "text/plain", "no"));
             }
         }
-        //: Range-checked here, like `/dial`, so a page that asked for something absurd is told
-        //: at the moment it can still mean something.
-        Route::Voice(seed) => {
-            if (0..=crate::app::MOST_VOICE).contains(&seed) {
+        //: Checked against the fixed list here, like `/dial`, so a page that asked for a voice
+        //: nobody has is told at the moment it can still mean something.
+        Route::Voice(key) => {
+            if crate::speaker::preset(&key).is_some() {
                 let _ = stream.write_all(&respond("204 No Content", "text/plain", ""));
-                let _ = jobs.send(Job::Voice(seed));
+                let _ = jobs.send(Job::Voice(key));
             } else {
                 let _ = stream.write_all(&respond("400 Bad Request", "text/plain", "no"));
             }

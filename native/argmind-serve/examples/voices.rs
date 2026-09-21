@@ -86,7 +86,8 @@ fn main() {
     //: chances to change what it sounds like on the way to the file.
     match argmind_env_qwentts::speak(argmind_serve::speaker::QWENTTS_HOST,
                                      argmind_serve::speaker::MODEL, &said,
-                                     argmind_serve::chosen::voice()) {
+                                     &argmind_env_qwentts::Voice::Drawn(
+                                         argmind_serve::chosen::voice().seed)) {
         Ok((samples, hz)) => {
             let at = where_to.join("2-neural.wav");
             let pcm: Vec<u8> = samples.iter()

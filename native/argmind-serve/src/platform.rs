@@ -225,14 +225,48 @@ mod chosen {
         Ok(done.success())
     }
 
-    /// **The seed is read here rather than passed in**, and that is deliberate: this is the one
-    /// place a neural voice is built, so *which voice* is decided in one place too. A caller that
-    /// could pass a different one is a caller that could pass none.
+    /// **The voice is read and *taught* here**, and that is deliberate: this is the one place a
+    /// neural voice is built, so *which voice* is decided in one place too. A caller that could
+    /// pass a different one is a caller that could pass none.
+    ///
+    /// **Teaching costs 0.69 s and happens here rather than on the way to a reply** — 0.53 s to
+    /// draw the reference and 0.16 s to extract the speaker out of it, measured. It has to happen
+    /// at all because the server keeps registered voices in memory and hands back no latents to
+    /// cache, so a restart forgets them.
+    ///
+    /// **A failure falls back rather than going quiet.** A seed does not hold a person across
+    /// sentences — that is the whole reason for the clone — but it holds each sentence, which beats
+    /// a fresh draw every turn, and it beats silence by more.
     pub fn neural_voice(host: &str) -> Option<Box<dyn argmind_voice::Speaker>> {
-        argmind_env_qwentts::QwenVoice::answering(host)
-            .then(|| Box::new(argmind_env_qwentts::QwenVoice::new(crate::speaker::MODEL,
-                                                                 crate::chosen::voice()))
-                as Box<dyn argmind_voice::Speaker>)
+        if !argmind_env_qwentts::QwenVoice::answering(host) {
+            return None;
+        }
+        let chosen = crate::chosen::voice();
+        //: **The reference comes from the model itself**, drawn at the preset's seed — which makes
+        //: it the same recording on every machine and every run, since a seed fixes one recording
+        //: exactly. That is the thing a seed turned out to be good for once it was clear it does
+        //: not fix a person.
+        //:
+        //: **Written here rather than in `speaker.rs`, and a rule said so.** That file holds the
+        //: presets and the addresses and deliberately names no environment crate — it is compiled
+        //: into the headless build, where there is no synthesiser at all. A first draft put this
+        //: beside the presets and both `the_app_names_no_platform` and the `--features headless`
+        //: build refused it within a minute of each other.
+        let teach = || -> Result<(), String> {
+            let reference = argmind_env_qwentts::speak_wav(
+                host, crate::speaker::MODEL, crate::speaker::REFERENCE,
+                &argmind_env_qwentts::Voice::Drawn(chosen.seed))?;
+            argmind_env_qwentts::register_voice(host, chosen.key, &reference,
+                                                crate::speaker::REFERENCE)
+        };
+        let who = match teach() {
+            Ok(()) => argmind_env_qwentts::Voice::Cloned(chosen.key.to_string()),
+            Err(why) => {
+                eprintln!("  voice: {} 를 등록하지 못해 씨앗으로 돌아갑니다 ({why})", chosen.key);
+                argmind_env_qwentts::Voice::Drawn(chosen.seed)
+            }
+        };
+        Some(Box::new(argmind_env_qwentts::QwenVoice::new(crate::speaker::MODEL, who)))
     }
 }
 

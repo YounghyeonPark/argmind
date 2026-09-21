@@ -472,3 +472,126 @@ staying silent until it has, and neither is obviously right.
 **Which voice #7 is, is nobody's judgement yet.** The default is an arbitrary draw made permanent,
 and the whole of its justification is that it is the *same* draw every run. Eight samples were
 written to `%LOCALAPPDATA%\argmind\voices\seed-*.wav` for the owner to choose from.
+
+---
+
+## 2026-09-22 — the fix from yesterday was for one sentence
+
+**The seed row above is true and does not answer the complaint.** It was measured by saying *one
+sentence* repeatedly. Every reply is a different sentence.
+
+Re-measured across four:
+
+| | |
+|---|---|
+| one seed, four sentences | f0 spread **119 Hz** |
+| four seeds, one sentence | f0 spread **137 Hz** |
+| ratio | **1.2x** |
+
+And with a second instrument that has no notion of pitch in it — the long-term average spectrum,
+band-normalised and compared by correlation:
+
+| | |
+|---|---|
+| same seed, different sentences | **0.821** |
+| different seeds, same sentence | **0.813** |
+| same seed, same sentence (control) | **1.000** |
+
+No gap. **A seed fixes one recording of one text. It does not name a speaker.** So what shipped
+yesterday made each sentence reproducible and left the voice changing on every turn, which is the
+thing the owner reported.
+
+### The suspicion that had to be cleared first
+
+The f0 pairs looked like octaves — 117/245, 108/240, 267/122, 216/125, all near 2x. Autocorrelation
+halving and doubling is the classic way that estimator lies, and *a uniformly tidy result is
+evidence the measurement is broken* applies to a tidy **negative** as much as a flattering one. So
+the estimator was given octave correction — walk down to the shortest sub-multiple whose
+correlation is still within 90% of the best — and the reading did not move: 119 against 137, 1.2x.
+The spectral instrument, which cannot make that mistake, agreed. That is the only reason the
+negative is believed.
+
+### What does hold a person
+
+`POST /v1/audio/voices` extracts speaker latents from a reference recording, and the source says it
+is *only valid for base models* — which is the one place this tree's choice of weights pays twice:
+the base talker has no speakers **and** is the only kind that can be given one.
+
+**The reference comes from the model itself.** One sentence drawn at a fixed seed, handed straight
+back. Nothing is downloaded, no third party's voice is involved, and it is byte-reproducible, so
+the same machine makes the same voice on every run.
+
+| | |
+|---|---|
+| clone's pitch against its reference's, over twenty | **+0.99** |
+| clone across five sentences | **30 Hz** — against the seed's 121 |
+| clone against itself, spectrally | **0.955–0.982** |
+| to make one | **0.69 s** — 0.53 s to draw, 0.16 s to extract |
+
+It lives in the server's memory and there is no endpoint that hands the latents back, so nothing
+can be cached and it happens at every launch.
+
+### Five presets, and the rule that chose them was the wrong one
+
+Seventy-two seeds cloned and measured. The first rule — *neighbours must be further apart in pitch
+than they wobble* — cut it to seven. Two things then went wrong with it, in the right order:
+
+**The wobble was an n=3 artefact.** Over three sentences those seven read 4–19 Hz of movement; over
+six, 16–33. A max-minus-min of three samples underestimates a range. On the honest numbers every
+neighbouring pair failed.
+
+**And the rule asked the wrong question.** Two voices can share a pitch and be two people; two can
+differ in pitch and be one. What settles it is whether the spectra separate. Against a
+within-voice 0.955–0.982, two of the seven pairs measured **+0.016** and **−0.004** — one person
+under two names — and the rest ran +0.040 to +0.220. Dropping those two leaves five, weakest pair
++0.042.
+
+**The first list shipped and failed its own test within a minute**: `low` at 120 Hz and `lowmid` at
+136, sixteen apart with a wobble of seventeen. The test had been written before the list was
+chosen, which is the only reason that was caught rather than released.
+
+They are numbered rather than described. Three of the five sit within 22 Hz of each other and are
+told apart by timbre, so 낮은 and 조금 낮은 would be a distinction the measurement does not support;
+the Hz goes beside the name and carries what is real.
+
+### There is nothing to tune, in three different ways
+
+Asked for, because the owner asked whether there was a fine adjustment to add.
+
+* **`speed` is accepted and ignored.** Five values from 0.5 to 2.0 gave one byte-identical file, and
+  `src/tts-server.h` says why in its own words: `float speed; // OAI speed, parsed then ignored (no
+  time stretch in the ABI)`.
+* **`instructions` is refused**: `--instruct is not supported for base models`. No prose control of
+  delivery, on this model.
+* **The sampling knobs move nothing nameable.** `temperature`, `top_p`, `top_k`,
+  `repetition_penalty` and the whole `subtalker_*` family change the bytes and leave f0 within 6 Hz
+  at a fixed seed, and leave voiced fraction and spectral flatness where speech already was. They
+  are a re-roll of detail, not a dial.
+
+So no dial was shipped. Five that move nothing would be worse than none.
+
+### It can say 멍멍; it cannot bark
+
+Also asked for. Nine candidates in the shipped cloned voice, against ordinary speech in the same
+voice as the baseline:
+
+| | voiced | flatness |
+|---|---|---|
+| ordinary speech | 94–99% | 0.054–0.057 |
+| 멍멍 · 야옹 · 음메 · 꼬끼오 · 짹짹 · 어흥 · 으르렁 | 92–100% | 0.039–0.069 |
+| `Woof!` · `Meow~` | 100% | 0.031–0.045 |
+
+A bark is short and broadband; these are sustained and harmonic, which is what a person reading a
+syllable sounds like. **The one case that looked different was an artefact of not having chosen a
+voice**: English `Woof!` at an unseeded draw read 71% voiced and 0.330 flat, and went to 100% and
+0.031 once it was the voice argmind actually uses — the clone is anchored to a human reference, so
+it pulls everything further *towards* speech.
+
+The files are in `%LOCALAPPDATA%\argmind\voices\animals\` for the owner's ears, since a number
+cannot say whether something sounds like a dog. What would be needed is a reference recording of an
+animal to clone, which is an external asset with a licence question, and an extractor that expects
+speech.
+
+**One hazard found on the way.** `<dog barking>` as input ran to the token ceiling and produced
+**163.84 seconds** of audio from three words. Nothing in argmind sends text like that, but the
+length stop exists for exactly this and this is the first thing seen to reach it.

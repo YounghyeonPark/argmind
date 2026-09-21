@@ -747,18 +747,36 @@ function gearRow(g: Gear): HTMLElement {
 
 // --- which voice ---------------------------------------------------------------------------------
 
-// The neural talker is a *base* model: it has no speakers, `GET /v1/audio/voices` is empty, and the
-// timbre is whatever the sampler drew. Measured 2026-09-21 — four unseeded calls gave four
-// different voices; `seed = 7` gave the same bytes four times. So this row is one number, and the
-// only honest way to set it is to hear it, which is why every press speaks.
+// The neural talker is a *base* model: it ships with no speakers, and the timbre is whatever the
+// sampler drew. A seed fixes that draw — measured 2026-09-21, four unseeded calls gave four
+// different voices and `seed = 7` gave the same bytes four times — but only for *one sentence*:
+// across four different sentences a seed held to 119 Hz of itself while different seeds spanned
+// 137 Hz, which is no ratio at all. Since every reply is a different sentence, a seed alone is a
+// different person every turn.
+//
+// What holds a person is a cloned voice: argmind draws one reference sentence at a fixed seed and
+// registers it with the server, and the clone then tracks that reference at +0.99 and holds to a
+// median 26 Hz across sentences. So this is a list of five of those, ordered by measured pitch —
+// and the measurement is printed beside each one, because a person choosing a voice is entitled to
+// see the number the ordering rests on. **Every change speaks**, since a name and a number in a
+// list are not a voice until you have heard one.
+
+interface Preset {
+  key: string;
+  what: string;
+  /** Median f0 of the clone over three sentences, Hz. */
+  hz: number;
+  /** How far that moved between them — the honest limit of the label. */
+  wobble: number;
+}
 
 interface Voice {
-  seed: number;
-  most: number;
+  chosen: string;
   /** "neural" | "windows" | "off" | "none" — what is speaking right now. */
   is: string;
-  /** Whether the seed changes anything. False for SAPI, which has one voice and no sampler. */
+  /** Whether the choice changes anything. False for SAPI, which has one voice and no registry. */
   matters: boolean;
+  presets: Preset[];
 }
 
 const voiceRow = document.getElementById("voice") as HTMLElement;
@@ -777,40 +795,38 @@ function drawVoice(v: Voice): HTMLElement {
   const what = document.createElement("span");
   what.className = "what";
   what.textContent = "목소리";
-  const seed = document.createElement("span");
-  seed.className = "seed";
-  seed.textContent = `#${v.seed}`;
 
-  const another = document.createElement("button");
-  another.type = "button";
-  another.textContent = "다른 목소리";
+  const pick = document.createElement("select");
+  for (const p of v.presets) {
+    const o = document.createElement("option");
+    o.value = p.key;
+    // The Hz is in the label rather than a tooltip: it is the ordering, and an ordering nobody can
+    // see is one nobody can catch being wrong.
+    o.textContent = `${p.what} — ${p.hz} Hz`;
+    o.title = `문장에 따라 ±${p.wobble} Hz 움직입니다`;
+    o.selected = p.key === v.chosen;
+    pick.append(o);
+  }
+  pick.disabled = !v.matters;
+  // Choosing is hearing: the server remembers it and says one sentence in it, so the list is
+  // pressed through rather than read.
+  pick.onchange = () => void post(`/voice/${encodeURIComponent(pick.value)}`);
+
   const again = document.createElement("button");
   again.type = "button";
   again.textContent = "다시 듣기";
+  again.disabled = !v.matters;
+  again.onclick = () => void post(`/voice/${encodeURIComponent(pick.value)}`);
 
-  // A fresh draw, never the one already set — pressing 다른 목소리 and hearing the same person is
-  // the button appearing not to work.
-  another.onclick = () => {
-    let next = v.seed;
-    while (next === v.seed) {
-      next = Math.floor(Math.random() * (v.most + 1));
-    }
-    void post(`/voice/${next}`);
-  };
-  again.onclick = () => void post(`/voice/${v.seed}`);
-  for (const b of [another, again]) {
-    b.disabled = !v.matters;
-  }
-
-  line.append(what, seed, another, again);
+  line.append(what, pick, again);
   row.append(line);
 
   const said = document.createElement("span");
   said.className = "said";
   said.textContent = v.matters
-    ? "누를 때마다 이 목소리로 한 문장 말합니다 — 마음에 드는 것이 나오면 그만 누르면 됩니다"
+    ? "고르면 그 목소리로 한 문장 말합니다 — 숫자는 잰 음높이입니다"
     : v.is === "windows"
-      ? "지금은 Windows 목소리로 말하고 있어서 번호는 쓰이지 않습니다"
+      ? "지금은 Windows 목소리로 말하고 있어서 이 목록은 쓰이지 않습니다"
       : "소리 내어 말하기가 꺼져 있습니다";
   row.append(said);
   return row;

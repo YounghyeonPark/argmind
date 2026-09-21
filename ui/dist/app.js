@@ -565,36 +565,34 @@ function drawVoice(v) {
     const what = document.createElement("span");
     what.className = "what";
     what.textContent = "목소리";
-    const seed = document.createElement("span");
-    seed.className = "seed";
-    seed.textContent = `#${v.seed}`;
-    const another = document.createElement("button");
-    another.type = "button";
-    another.textContent = "다른 목소리";
+    const pick = document.createElement("select");
+    for (const p of v.presets) {
+        const o = document.createElement("option");
+        o.value = p.key;
+        // The Hz is in the label rather than a tooltip: it is the ordering, and an ordering nobody can
+        // see is one nobody can catch being wrong.
+        o.textContent = `${p.what} — ${p.hz} Hz`;
+        o.title = `문장에 따라 ±${p.wobble} Hz 움직입니다`;
+        o.selected = p.key === v.chosen;
+        pick.append(o);
+    }
+    pick.disabled = !v.matters;
+    // Choosing is hearing: the server remembers it and says one sentence in it, so the list is
+    // pressed through rather than read.
+    pick.onchange = () => void post(`/voice/${encodeURIComponent(pick.value)}`);
     const again = document.createElement("button");
     again.type = "button";
     again.textContent = "다시 듣기";
-    // A fresh draw, never the one already set — pressing 다른 목소리 and hearing the same person is
-    // the button appearing not to work.
-    another.onclick = () => {
-        let next = v.seed;
-        while (next === v.seed) {
-            next = Math.floor(Math.random() * (v.most + 1));
-        }
-        void post(`/voice/${next}`);
-    };
-    again.onclick = () => void post(`/voice/${v.seed}`);
-    for (const b of [another, again]) {
-        b.disabled = !v.matters;
-    }
-    line.append(what, seed, another, again);
+    again.disabled = !v.matters;
+    again.onclick = () => void post(`/voice/${encodeURIComponent(pick.value)}`);
+    line.append(what, pick, again);
     row.append(line);
     const said = document.createElement("span");
     said.className = "said";
     said.textContent = v.matters
-        ? "누를 때마다 이 목소리로 한 문장 말합니다 — 마음에 드는 것이 나오면 그만 누르면 됩니다"
+        ? "고르면 그 목소리로 한 문장 말합니다 — 숫자는 잰 음높이입니다"
         : v.is === "windows"
-            ? "지금은 Windows 목소리로 말하고 있어서 번호는 쓰이지 않습니다"
+            ? "지금은 Windows 목소리로 말하고 있어서 이 목록은 쓰이지 않습니다"
             : "소리 내어 말하기가 꺼져 있습니다";
     row.append(said);
     return row;

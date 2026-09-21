@@ -2,9 +2,9 @@
 //!
 //!     cargo run -p argmind-env-qwentts --example hello [model] [seed]
 //!
-//! **The seed is which voice.** This crate's talker is a base model with no speakers, so the
-//! sampler decides the timbre and an unseeded call is a different person each time — see
-//! `tests/seeded.rs`. Passing one here is how you listen to a candidate before it is remembered.
+//! **The second argument is who speaks.** A number is a sampler seed, which fixes one recording
+//! and not one person; anything else is the name of a voice already registered on the server. See
+//! `tests/seeded.rs` for why those are different, and `--example cloning` for making one.
 use argmind_voice::Speaker;
 use std::time::Instant;
 
@@ -15,9 +15,15 @@ fn main() {
         println!("  {} 에 서버가 없습니다", argmind_env_qwentts::QWENTTS);
         return;
     }
-    let seed: i64 = std::env::args().nth(2).and_then(|n| n.parse().ok()).unwrap_or(7);
-    println!("  목소리 #{seed}");
-    let mut voice = argmind_env_qwentts::QwenVoice::new(&model, seed);
+    let who = match std::env::args().nth(2) {
+        Some(a) => match a.parse::<i64>() {
+            Ok(seed) => argmind_env_qwentts::Voice::Drawn(seed),
+            Err(_) => argmind_env_qwentts::Voice::Cloned(a),
+        },
+        None => argmind_env_qwentts::Voice::Drawn(7),
+    };
+    println!("  목소리: {who:?}");
+    let mut voice = argmind_env_qwentts::QwenVoice::new(&model, who);
 
     //: **The number this whole streaming path exists for**: `say()` to the first sound. Asked of
     //: the loudspeaker rather than of the voice, because `Speaker::speaking` is true while the
