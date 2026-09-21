@@ -95,6 +95,7 @@ dependencies = [
  "argmind-env-windows",
  "argmind-voice",
  "argmind-window",
+ "serde_json",
 ]
 
 [[package]]

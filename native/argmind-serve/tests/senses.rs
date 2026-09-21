@@ -137,3 +137,84 @@ fn every_thread_sees_the_same_bit() {
     drop(answering);
     assert!(saw_it.load(Ordering::SeqCst), "a sense on another thread never saw the turn");
 }
+
+// ---- what the page is actually sent ------------------------------------------------------------
+
+/// **Every hand-written JSON string in this program is one nobody parses until a page does.**
+///
+/// `note_json` shipped for two commits with a real newline inside a key name — `\"` where a Rust
+/// line-continuation `\` was meant — so `{"tried":"","\n             held":1}` went out and the
+/// page's `JSON.parse` threw on every note. The 지금 생각하고 있는 것 panel was simply dead, and
+/// nothing in the suite noticed because nothing read what this function produces.
+#[test]
+fn the_note_the_page_receives_is_json_a_page_can_read() {
+    use argmind_core::thinking::{Note, Worth};
+    use argmind_serve::app::note_json;
+
+    let mut note = Note::blank();
+    let parsed = |n: &Note| -> serde_json::Value {
+        let text = note_json(n);
+        serde_json::from_str(&text).unwrap_or_else(|e| panic!("the page cannot read {text:?}: {e}"))
+    };
+
+    //: A blank note, which is what a page opening mid-session usually gets.
+    let d = parsed(&note);
+    assert_eq!(d["believes"], "");
+    assert_eq!(d["worth"], "");
+    assert_eq!(d["held"], 0);
+
+    //: And a full one. **The awkward characters are the point** — a window title with a quote and a
+    //: backslash in it is an ordinary Tuesday, and `escape` is the only thing standing between that
+    //: and a broken panel.
+    note.revise("그가 \"저장\" 대화상자를 보고 있다 \\ C:\\dev",
+                argmind_core::thinking::Judged::This(
+                    Worth { name: "저장 \"안 함\"".into(), role: "button".into() }));
+    note.record("clicked the button \"Save\"\nand waited");
+    let d = parsed(&note);
+    assert!(d["believes"].as_str().unwrap().contains("C:\\dev"));
+    assert!(d["worth"].as_str().unwrap().contains("저장"));
+    assert_eq!(d["stuck"], 1);
+
+    //: **Every key the page reads is present and spelled the way it reads it.** The bug was a key
+    //: name, not a value, so a test that only checked the values would have passed.
+    for key in ["believes", "worth", "tried", "held", "stuck", "revisions"] {
+        assert!(d.get(key).is_some(), "the page asks for {key} and it is not in {d}");
+    }
+}
+
+/// **The same check over every payload the page parses.**
+///
+/// The note was the one that broke, but nothing about the mistake was particular to it: this crate
+/// writes JSON by hand everywhere, and `escape` plus a format string is all that stands between an
+/// awkward window title and a panel that silently stops drawing. One bug in the class is reason to
+/// cover the class.
+///
+/// `devices_json` is not here — it asks the platform for real hardware, and this file runs with
+/// none.
+#[test]
+fn every_payload_the_page_parses_is_json_a_page_can_read() {
+    use argmind_core::mind::Mind;
+    use argmind_serve::app::{asking_json, decisions_json, mind_json, needs_as_json};
+
+    let reads = |what: &str, text: String| {
+        serde_json::from_str::<serde_json::Value>(&text)
+            .unwrap_or_else(|e| panic!("the page cannot read {what}: {e}\n  {text}"))
+    };
+
+    //: **The dials, with the awkward characters a person can actually type into the goal box.**
+    let mut mind = Mind::resting();
+    mind.turn("재치", 7);
+    mind.aim = "이렇게: \"놓친 것\"만 — C:\\dev\\argmind 볼 때".into();
+    let d = reads("mind_json", mind_json(&mind));
+    assert!(d["line"].as_str().unwrap().contains("놓친 것"));
+    assert_eq!(d["dials"].as_array().unwrap().len(), argmind_core::mind::DIALS.len());
+
+    reads("mind_json at rest", mind_json(&Mind::resting()));
+    //: Reads the real decisions file, which is a read and nothing else.
+    reads("decisions_json", decisions_json());
+    reads("asking_json", asking_json("microphone"));
+    //: An unknown key still has to produce something a page can read rather than half an object.
+    reads("asking_json for a key nobody knows", asking_json("무엇"));
+    reads("needs_as_json", needs_as_json(&argmind_serve::needs::every("qwen3:8b"),
+                                         &std::collections::BTreeMap::new()));
+}

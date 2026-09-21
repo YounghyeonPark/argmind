@@ -204,7 +204,7 @@ fn escape(s: &str) -> String {
     out
 }
 
-fn as_json(p: &Proposal) -> String {
+pub fn as_json(p: &Proposal) -> String {
     format!("{{\"token\":{},\"label\":\"{}\",\"hint\":\"{}\"}}",
             p.token, escape(&p.label), escape(&p.hint))
 }
@@ -430,7 +430,7 @@ fn plan_for(key: &str) -> String {
 }
 
 /// One permission question, for the page to draw four buttons under.
-fn asking_json(key: &str) -> String {
+pub fn asking_json(key: &str) -> String {
     let stranger = crate::needs::by_key("qwen3:8b", key).and_then(|n| n.fix)
         .is_some_and(|f| f.runs_a_stranger());
     format!("{{\"key\":\"{}\",\"what\":\"{}\",\"stranger\":{stranger},\"plan\":\"{}\"}}",
@@ -469,7 +469,7 @@ fn devices_json() -> String {
 /// what they do is asking a person to trust a number; showing the line means the interface cannot
 /// quietly stop matching what is sent, because it is the same string. When nothing is set the line
 /// is empty, and that is the truth as well: nothing is added to the prompt at all.
-fn mind_json(mind: &argmind_core::mind::Mind) -> String {
+pub fn mind_json(mind: &argmind_core::mind::Mind) -> String {
     let rows: Vec<String> = argmind_core::mind::DIALS.iter().map(|(korean, gloss)| {
         format!("{{\"name\":\"{}\",\"gloss\":\"{}\",\"at\":{}}}",
                 escape(korean), escape(gloss), mind.of(korean))
@@ -498,7 +498,7 @@ pub fn spoken(intent: &argmind_core::intent::Intent) -> String {
     intent.say.clone()
 }
 
-fn decisions_json() -> String {
+pub fn decisions_json() -> String {
     let rows: Vec<String> = crate::decided::all_with_defaults().iter()
         .map(|(key, name, how, by_default)| {
             let word = match how {
@@ -821,14 +821,18 @@ fn raise_it(desk: &mut Desk, out: &Listeners) {
 /// **Shown, because a thought nobody can read is indistinguishable from no thought.** It is also
 /// the only way anybody notices the note has gone wrong — a belief that is false stays in every
 /// prompt until something replaces it.
-fn note_json(note: &argmind_core::thinking::Note) -> String {
+pub fn note_json(note: &argmind_core::thinking::Note) -> String {
     //: **The sentence around the judgement is the program's.** The model chose a widget; the
     //: wording is not its to write, which is what leaves no room for *도움을 줄 수 있다*.
     let worth = note.worth.as_ref()
         .map(|w| format!("{} \"{}\"", w.role, w.name))
         .unwrap_or_default();
-    format!("{{\"believes\":\"{}\",\"worth\":\"{}\",\"tried\":\"{}\",\"
-             held\":{},\"stuck\":{},\"revisions\":{}}}",
+    //: **A real newline landed inside a key name here** — `\"` where a line-continuation `\` was
+    //: meant — and the page's `JSON.parse` threw on every note for two commits, so the panel was
+    //: simply dead. Nothing caught it because nothing parsed what this function produces; a test
+    //: now does, which is the only reason to write a JSON string by hand at all.
+    format!("{{\"believes\":\"{}\",\"worth\":\"{}\",\"tried\":\"{}\",\
+             \"held\":{},\"stuck\":{},\"revisions\":{}}}",
             escape(&note.believes), escape(&worth), escape(&note.tried),
             note.held, note.stuck, note.revisions)
 }

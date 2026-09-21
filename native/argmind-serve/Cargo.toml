@@ -70,3 +70,11 @@ name = "serve"
 
 [[bin]]
 name = "argmind"
+
+# **Tests only, and the reason is a bug that shipped.** This crate writes its JSON by hand and takes
+# no third-party dependency to do it — which is fine right up until a `\"` lands where a line
+# continuation was meant and every note the page receives fails to parse. Nothing in the suite could
+# notice, because nothing read what those functions produce. A real parser in the tests is the only
+# honest way to ask *can a page read this*; `sha2` is here on the same footing.
+[dev-dependencies]
+serde_json = "1"
