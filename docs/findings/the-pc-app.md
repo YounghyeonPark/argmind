@@ -310,11 +310,45 @@ the tree before the build (caught). The decision was split out of `apply` for th
 matters here — `apply` spends fifteen minutes and a network, and could not otherwise be tested at
 all.
 
-### The same shape, one row over, not fixed
+### The same shape, one row over
 
-**Ollama.** `present` is *responding on 11434*; the fix is `Fix::Install`, a 700 MB download and an
-installer. So a standing 항상 허용 on `ollama`, with Ollama installed but not running, reinstalls it
-on every launch. Nobody has hit this — the owner's `decisions.json` has no `ollama` key, and Ollama
-normally starts itself — and the clean fix is not the same one: argmind would have to tell
-*installed* from *running*, and then start it, and `argmind-env-ollama::manage` can do neither. It is
-written down here rather than half-fixed.
+**Ollama.** `present` is *responding on 11434*; the fix was `Fix::Install`, a 700 MB download and an
+installer. So a standing 항상 허용 on `ollama`, with Ollama installed but not running, would
+reinstall it on every launch. Nobody had hit it — the owner's `decisions.json` has no `ollama` key,
+and Ollama normally starts itself — and it was written down rather than half-fixed, in the paragraph
+this one replaces. Then fixed.
+
+**Two fixes behind one key, chosen by what is actually wrong.** `Fix::StartOllama` where it is
+installed and stopped, `Fix::Install` where it is not there. The need's sentence has three states
+instead of two, because *응답 없음* alone sends somebody to ollama.com for something already on
+their disk:
+
+| | |
+|---|---|
+| answering | `127.0.0.1:11434 응답함` |
+| installed, stopped | `설치되어 있지만 실행 중이 아닙니다` |
+| not here | `응답 없음 — 설치되어 있지 않습니다` |
+
+**Installed is a spawn that worked, not an exit code that was zero**, and that is why
+`ollama::here()` is written out rather than reusing `building::missing`. For a compiler, *exits
+non-zero* means *not usable*. For Ollama it means almost nothing: `ollama --version` with no server
+to reach prints two warnings and — 0.34.2, measured — still exits 0, but there is no promise it
+always will, and an exit code about a server that is admittedly down is not evidence about a file on
+disk. A spawn that fails at all is the honest signal.
+
+**And it is not supervised, which is the decision rather than the omission.** The recogniser and the
+synthesiser go in a job object so they die with argmind; this one must not, because somebody
+installed it before argmind existed and other things may be talking to it. `argmind-serve/src/
+ollama.rs` is a module rather than two lines in `needs.rs` mostly so that this has somewhere to be
+written down.
+
+Measured end to end, which meant stopping the owner's Ollama and putting it back: **5.4 s** from
+`serve()` to answering, and it outlived the process that started it — the starter exited, the server
+did not. The tray application was restarted afterwards, since killing it was the harness's doing and
+not argmind's.
+
+**One harness artifact worth knowing.** Run under `cargo run`, the example that does this leaves
+`cargo` waiting after it exits: the detached `ollama serve` inherits a pipe handle from the
+capturing parent even with all three of its own streams set to null. It is a property of being run
+under a pipe, not of the spawn — `argmind-app.exe` has no console and no such parent — and the same
+example run as a binary exits cleanly.

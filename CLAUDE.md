@@ -302,11 +302,17 @@ a recogniser that was not running. They now run on the first page open, once per
 
 **Already built means start it, not build it again — since 2026-09-21.** `can_just_start` sits at
 the top of both build fixes, above the compiler check and the SDK check, because starting something
-already built needs neither. **The same shape is still live one row over and is not fixed**: `ollama`
-is *present* when it answers on 11434 and its fix is a 700 MB installer, so a standing 항상 허용 with
-Ollama installed but stopped would reinstall it every launch. Nobody has hit it, and the clean fix
-needs argmind to tell *installed* from *running* and then start it, which `argmind-env-ollama`
-cannot do either.
+already built needs neither. **The same shape was live one row over and is fixed too**: `ollama` is
+*present* when it answers on 11434 and its fix was a 700 MB installer, so a standing 항상 허용 with
+Ollama installed but stopped would have reinstalled it every launch. Now two fixes sit behind that
+one key — `Fix::StartOllama` when it is installed and stopped, `Fix::Install` when it is not there —
+and the need says which of **three** states it is in rather than two. **`ollama.rs` is not
+supervised and that is the decision**: the other two servers die with argmind by job object, and
+this one is somebody else's program, installed before argmind and outliving it. **Installed is a
+spawn that worked, not an exit code that was zero** — `ollama --version` with nothing to connect to
+prints two warnings and still exits 0 on 0.34.2, which is not evidence about a file on disk.
+Measured: **5.4 s** from `serve()` to answering, and the server outlived the process that started
+it.
 
 **Speaking has two voices and picks one at startup.** SAPI is free (4–43 ms), installed, and
 `Microsoft Heami Desktop` — which the owner called 어색함 on 2026-09-16. **The neural one answers

@@ -97,25 +97,52 @@ fn by_hand(how: &str) -> String {
 pub fn every(model: &str) -> Vec<Need> {
     let mut out = Vec::new();
 
-    let ollama_up = argmind_env_ollama::manage::awake(argmind_env_ollama::OLLAMA);
+    let ollama_up = crate::ollama::awake();
+    //: **Asked only when it is not answering**, because it spawns a process to find out and a
+    //: running server has already answered the question. See [`crate::ollama`] for why *installed*
+    //: and *running* had to become two questions: they were one, `present` meant the second, and
+    //: the fix offered against it was a 700 MB installer — so a standing 항상 허용 with Ollama
+    //: merely stopped reinstalled it on every launch.
+    let ollama_here = ollama_up || crate::ollama::here();
     out.push(Need {
         key: "ollama",
         what: "Ollama",
         required: true,
         present: ollama_up,
-        found: if ollama_up { "127.0.0.1:11434 응답함".into() } else { "응답 없음".into() },
-        how: by_hand("https://ollama.com 에서 설치한 뒤 실행해 두세요"),
+        found: if ollama_up {
+            "127.0.0.1:11434 응답함".into()
+        } else if ollama_here {
+            //: **The distinction a person can act on.** *응답 없음* alone sends somebody to
+            //: ollama.com for something that is already on their disk.
+            "설치되어 있지만 실행 중이 아닙니다".into()
+        } else {
+            "응답 없음 — 설치되어 있지 않습니다".into()
+        },
+        how: if ollama_here {
+            by_hand("실행해 두면 됩니다 — 또는 ollama serve")
+        } else {
+            by_hand("https://ollama.com 에서 설치한 뒤 실행해 두세요")
+        },
         //: **Downloaded and run, on one approval.** The earlier version opened a page and refused
         //: to fetch anybody's executable; the owner's decision is that the window should ask and
         //: the agent should then do the whole thing. What makes that approval worth having is
         //: naming the source and verifying the certificate — recorded here because *"a file nobody
         //: had seen, from a name nobody had checked"* was the objection, and this is the part of
         //: it that is answered rather than overruled.
-        fix: offered(Some(Fix::Install {
-            url: "https://ollama.com/download/OllamaSetup.exe".into(),
-            file: "OllamaSetup.exe".into(),
-            why: "Ollama가 있어야 argmind가 동작합니다.".into(),
-            about_mb: 700,
+        //: **Two fixes behind one key, chosen by what is actually wrong.** Offering the installer
+        //: to somebody who has Ollama is not merely wasteful — under a standing yes it is a 700 MB
+        //: download and an installer run every time argmind opens.
+        fix: offered(Some(if ollama_here {
+            Fix::StartOllama {
+                why: "Ollama가 설치되어 있는데 실행 중이 아닙니다.".into(),
+            }
+        } else {
+            Fix::Install {
+                url: "https://ollama.com/download/OllamaSetup.exe".into(),
+                file: "OllamaSetup.exe".into(),
+                why: "Ollama가 있어야 argmind가 동작합니다.".into(),
+                about_mb: 700,
+            }
         })),
     });
 

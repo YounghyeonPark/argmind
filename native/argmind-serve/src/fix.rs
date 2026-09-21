@@ -59,6 +59,12 @@ pub enum Fix {
     /// `built` means a server compiled from this same commit is already sitting there, so the
     /// window can ask the **shorter, truer question** in the ordinary case.
     BuildSpeaker { repo: String, commit: String, why: String, minutes: u64, built: bool },
+    /// **Start the Ollama that is already on this machine.** Not the same thing as installing
+    /// one, and the distinction is the whole variant: *not answering* is not *not there*.
+    ///
+    /// See [`crate::ollama`] for why it is not supervised — it is somebody else's program, and it
+    /// outlives argmind on purpose.
+    StartOllama { why: String },
     /// A documented Windows command that needs administrator rights, run through the elevation
     /// prompt so Windows asks as well.
     RunElevated { command: String, why: String },
@@ -78,6 +84,7 @@ impl Fix {
             Fix::BuildRecogniser { .. } => "argmind — 받아쓰기 서버를 빌드할까요?",
             Fix::BuildSpeaker { built: true, .. } => "argmind — 목소리 서버를 띄울까요?",
             Fix::BuildSpeaker { .. } => "argmind — 목소리 서버를 빌드할까요?",
+            Fix::StartOllama { .. } => "argmind — Ollama를 실행할까요?",
             Fix::RunElevated { .. } => "argmind — 관리자 권한이 필요합니다",
         }
     }
@@ -99,7 +106,13 @@ impl Fix {
         //: **Building it yourself does not make it yours.** The compiler turned somebody else's
         //: instructions into bytes on this machine and then those bytes run — which is the thing
         //: being agreed to, whoever pressed the compile button.
-        matches!(self, Fix::Install { .. } | Fix::BuildRecogniser { .. } | Fix::BuildSpeaker { .. })
+        //: **Starting Ollama is on this side of the line, and it is the close call here.** The
+        //: person installed it themselves and argmind talks to it on every turn, so in one sense
+        //: nothing new happens. But the question this predicate asks is whether saying yes causes
+        //: somebody else's program to execute, and the answer is plainly yes — so it is answered
+        //: yes, and the sentence carries what makes it milder rather than the flag hiding it.
+        matches!(self, Fix::Install { .. } | Fix::BuildRecogniser { .. } | Fix::BuildSpeaker { .. }
+                     | Fix::StartOllama { .. })
     }
 }
 
@@ -210,6 +223,16 @@ pub fn describe(fix: &Fix) -> String {
             commit.get(..12).unwrap_or(commit),
             crate::speaker::WEIGHTS_MB,
             crate::speaker::QWENTTS_HOST),
+        //: **What makes this milder than installing is said, not assumed.** Nothing is
+        //: downloaded and nothing new arrives on the machine; what changes is that a program
+        //: already sitting on this disk starts running. And it keeps running — argmind does not
+        //: take it down, because it did not put it there.
+        Fix::StartOllama { why } => format!(
+            "{why}\n\n\
+             · 이미 설치된 Ollama를 실행합니다 — `ollama serve`\n\
+             · 내려받는 것은 없습니다\n\
+             · argmind를 닫아도 계속 실행됩니다. argmind가 설치한 것이 아니므로 끄지도 않습니다\n\n\
+             실행할까요?"),
         Fix::RunElevated { command, why } => format!(
             "{why}\n\n\
              · 다음을 관리자 권한으로 실행합니다:\n    {command}\n\
@@ -269,6 +292,12 @@ pub fn apply(fix: &Fix, say: &mut dyn FnMut(&str)) -> Result<String, String> {
             }
             crate::fetch::get(url, &at, sha256.as_deref(), say)?;
             Ok(format!("{into} 에 받았습니다"))
+        }
+        //: **No approval is spent twice here.** If it came up between the window opening and
+        //: the button being pressed, `serve` says so and does nothing.
+        Fix::StartOllama { .. } => {
+            crate::ollama::serve(say)?;
+            Ok("Ollama가 응답합니다".into())
         }
         Fix::BuildRecogniser { repo, commit, .. } => {
             //: **Already built at this commit: start it, do not build it again.**

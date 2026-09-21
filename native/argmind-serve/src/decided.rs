@@ -110,7 +110,12 @@ pub const DECIDABLE: [&str; 9] = [
 /// What to call it in the window that asks.
 pub fn what(key: &str) -> &'static str {
     match key {
-        "ollama" => "Ollama 설치",
+        //: **Not "Ollama 설치".** Since 2026-09-21 saying yes to this key can mean *install it*
+        //: or *start the one that is already here*, and a settings row that named only the first
+        //: would be describing a standing answer by one of the two things it permits — the same
+        //: shape of mislabelling as `speaker` against `aloud`, one row down. `whisper` and
+        //: `speaker` were already neutral for the same reason.
+        "ollama" => "Ollama",
         "model" => "모델 받기",
         "whisper" => "받아쓰기 서버",
         "korean-voice" => "한국어 음성 설치",

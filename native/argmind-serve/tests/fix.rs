@@ -139,3 +139,103 @@ fn the_body_ends_on_the_question() {
         assert!(said.lines().filter(|l| !l.trim().is_empty()).count() >= 4, "{said}");
     }
 }
+
+// ---- every variant, not the three that happened to get a helper -----------------------------------
+
+/// One of each, **and the list is the test**.
+///
+/// The rules below were written against three variants named one at a time, so `StartOllama`
+/// arriving on 2026-09-21 was checked by none of them — a new kind of question could have shipped
+/// with a title that did not say argmind, or a body that trailed off instead of asking. Anything
+/// added to `Fix` now has to appear here or the compiler complains, and then it has to pass.
+fn one_of_each() -> Vec<Fix> {
+    let all = vec![
+        pull(), page(), elevated(),
+        Fix::Install { url: "https://ollama.com/download/OllamaSetup.exe".into(),
+                       file: "OllamaSetup.exe".into(),
+                       why: "Ollama가 있어야 argmind가 동작합니다.".into(), about_mb: 700 },
+        Fix::Fetch { url: "https://huggingface.co/x/y".into(), into: "C:/models/x.bin".into(),
+                     why: "받아쓰기 모델".into(), about_mb: 141, sha256: None },
+        Fix::BuildRecogniser { repo: "https://github.com/ggml-org/whisper.cpp.git".into(),
+                               commit: "8a9a".repeat(10), why: "받아쓰기".into(),
+                               minutes: 10, built: false },
+        Fix::BuildSpeaker { repo: "https://github.com/ServeurpersoCom/qwentts.cpp.git".into(),
+                            commit: "90ef".repeat(10), why: "목소리".into(),
+                            minutes: 15, built: false },
+        Fix::StartOllama { why: "Ollama가 설치되어 있는데 실행 중이 아닙니다.".into() },
+    ];
+    //: **Exhaustive by construction.** A variant added to the enum and not to the list above makes
+    //: this fail to compile, which is the only way a list like this stays a list of everything.
+    for fix in &all {
+        match fix {
+            Fix::PullModel { .. } | Fix::OpenPage { .. } | Fix::Install { .. }
+            | Fix::Fetch { .. } | Fix::BuildRecogniser { .. } | Fix::BuildSpeaker { .. }
+            | Fix::StartOllama { .. } | Fix::RunElevated { .. } => {}
+        }
+    }
+    all
+}
+
+/// **Every window asks, names itself, and says more than one thing.**
+#[test]
+fn every_kind_of_question_is_a_question() {
+    for fix in one_of_each() {
+        let said = describe(&fix);
+        assert!(said.trim_end().ends_with("까요?"), "{:?}\n{said}", fix.title());
+        assert!(said.lines().filter(|l| !l.trim().is_empty()).count() >= 4,
+                "{} is a one-line dialog:\n{said}", fix.title());
+        assert!(fix.title().contains("argmind"), "{}", fix.title());
+    }
+}
+
+/// **Starting something already here is not installing it**, and the window has to be the one that
+/// makes that difference legible — the two live behind the same standing answer.
+#[test]
+fn starting_ollama_says_that_nothing_is_downloaded() {
+    let start = Fix::StartOllama { why: "Ollama가 설치되어 있는데 실행 중이 아닙니다.".into() };
+    let said = describe(&start);
+    assert!(said.contains("이미 설치된"), "{said}");
+    assert!(said.contains("내려받는 것은 없습니다"), "{said}");
+    //: **And that it outlives argmind**, which is the one surprising consequence: argmind takes its
+    //: own two servers down with it and deliberately does not take this one.
+    assert!(said.contains("계속 실행됩니다"), "{said}");
+    assert!(!said.contains("MB"), "a start should not be quoting a download size: {said}");
+
+    //: It runs somebody else's program, so it is flagged as that — the flag is a property of the
+    //: variant, and the sentence is where the mitigation goes.
+    assert!(start.runs_a_stranger());
+    assert!(start.changes_the_machine());
+
+    //: **Its own title**, because a person who reads only the title must not think they are about
+    //: to download 700 MB, nor the other way round.
+    let install = Fix::Install { url: "https://ollama.com/download/OllamaSetup.exe".into(),
+                                 file: "OllamaSetup.exe".into(), why: "x".into(), about_mb: 700 };
+    assert_ne!(start.title(), install.title());
+}
+
+/// **The need picks the fix from what is actually wrong**, which is the defect this variant exists
+/// for: *not answering* is not *not installed*, and offering the installer against the first is a
+/// 700 MB download on every launch under a standing yes.
+///
+/// Machine-dependent by nature, so it asserts whichever branch this machine is on and says which.
+#[test]
+fn an_installed_ollama_is_offered_a_start_and_not_an_installer() {
+    let need = argmind_serve::needs::by_key("qwen3:8b", "ollama").expect("ollama is not a need");
+    let here = argmind_serve::ollama::awake() || argmind_serve::ollama::here();
+    match (here, need.fix) {
+        (true, Some(Fix::StartOllama { .. })) => {}
+        (false, Some(Fix::Install { .. })) => {}
+        //: Off Windows nothing is offered at all, which is `offered`'s doing and not this rule's.
+        (_, None) => assert!(!argmind_serve::platform::can_carry_out_fixes()),
+        (here, other) => panic!("ollama here={here} was offered {:?}", other.map(|f| f.title())),
+    }
+    //: **Three states, not two**, and the sentence has to tell them apart: answering, installed
+    //: and stopped, or not here at all. The middle one is the whole point — *응답 없음* on its own
+    //: sends somebody to ollama.com for something already on their disk.
+    let want = match (need.present, here) {
+        (true, _) => "응답함",
+        (false, true) => "설치되어 있지만 실행 중이 아닙니다",
+        (false, false) => "설치되어 있지 않습니다",
+    };
+    assert!(need.found.contains(want), "expected {want:?} in {:?}", need.found);
+}
