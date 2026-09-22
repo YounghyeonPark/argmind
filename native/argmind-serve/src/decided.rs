@@ -98,7 +98,7 @@ impl Standing {
 /// **A fixed list rather than any string the page sends.** A key is what a stored *yes* is attached
 /// to, so a page that could invent one could invent a permission the program never asks about — and
 /// a typo would silently create a second, always-unanswered copy of a real one.
-pub const DECIDABLE: [&str; 10] = [
+pub const DECIDABLE: [&str; 11] = [
     //: The needs from `needs.rs`. `korean-voice` and `vulkan` are elevation, the rest change the
     //: machine.
     "ollama", "model", "whisper", "korean-voice", "vulkan", "speaker",
@@ -109,6 +109,11 @@ pub const DECIDABLE: [&str; 10] = [
     //: *know* or *say*; this changes what it may *do*, and it was deliberately not on the list
     //: until the owner asked for it on 2026-09-22. See [`what`] for what it does not cover.
     "acting",
+    //: **And the one that leaves a light on.** The microphone opens while a key is held; this stays
+    //: open for as long as it is allowed, which is the owner's choice of 2026-09-22 over blinking
+    //: every half minute — a light that is on means a camera that is on, and a blinking one says
+    //: *mostly off*, which would not be true.
+    "camera",
 ];
 
 /// What to call it in the window that asks.
@@ -136,6 +141,9 @@ pub fn what(key: &str) -> &'static str {
         //: *absence* of the button, so the name has to carry that and not sound like a promise to
         //: keep asking.
         "acting" => "확인 없이 실행",
+        //: **Not 카메라 사용**, which would read as *may it take a picture*. What is allowed is a
+        //: camera that stays on; what leaves the module is never a picture.
+        "camera" => "카메라로 사람 알아보기",
         _ => "알 수 없는 권한",
     }
 }

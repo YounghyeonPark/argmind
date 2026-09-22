@@ -237,6 +237,70 @@ mod chosen {
     /// **A failure falls back rather than going quiet.** A seed does not hold a person across
     /// sentences — that is the whole reason for the clone — but it holds each sentence, which beats
     /// a fresh draw every turn, and it beats silence by more.
+    /// Keep the camera open and say, every few seconds, whether anybody moved.
+    ///
+    /// **The light stays on for as long as this runs, and that is the owner's choice** — 2026-09-22,
+    /// against opening and closing on a timer. Opening costs 2.3–4.4 s of settling to take 3 s of
+    /// readings, and a light that blinks every half minute suggests a camera that is mostly off,
+    /// which would not be true. A light that is on means a camera that is on.
+    ///
+    /// **The threshold lives here rather than in the caller.** `camera.rs` publishes
+    /// [`argmind_env_windows::camera::MOVING`] and the scalar to compare against it and decides
+    /// nothing itself; the application may not name a platform at all. This file is the one that
+    /// may, so the comparison is here and what crosses the seam is a yes or a no.
+    ///
+    /// `carry_on` is asked before every look, so switching the setting off closes the device within
+    /// about one frame and `Drop` puts the light out.
+    ///
+    /// **It does not stand down for a turn**, which every other sense does. That rule exists
+    /// because a look and an answer contend for one graphics card; this never speaks to the model.
+    pub fn watch_movement(want: Option<&str>, carry_on: &dyn Fn() -> bool,
+                          saw: &mut dyn FnMut(bool, f64)) -> Result<(), String> {
+        use argmind_env_windows::camera::{Camera, ENOUGH_TO_JUDGE, MOVING, MOVING_WINDOW};
+        let mut camera = Camera::on(want)?;
+        let mut before = None;
+        let mut window: Vec<f64> = Vec::new();
+        let mut began = std::time::Instant::now();
+        //: A camera unplugged mid-run answers nothing for ever, and a loop that shrugged at that
+        //: would spin a core reporting a person who left.
+        let mut empty_handed = 0u32;
+        while carry_on() {
+            match camera.look() {
+                Ok(now) => {
+                    empty_handed = 0;
+                    if let Some(last) = &before {
+                        //: **The mean shift removed**, the statistic that measured 6.8x and 8.6x
+                        //: against the plain one's 6.2x and 7.4x — a monitor relighting a face
+                        //: moves every pixel by about the same amount and cancels here.
+                        window.push(now.moved_from(last));
+                    }
+                    before = Some(now);
+                }
+                Err(_) => {
+                    empty_handed += 1;
+                    if empty_handed > 50 {
+                        return Err("카메라가 더 이상 화면을 주지 않습니다".into());
+                    }
+                    continue;
+                }
+            }
+            if began.elapsed().as_secs_f64() < MOVING_WINDOW {
+                continue;
+            }
+            let so_far = began.elapsed().as_secs_f64();
+            began = std::time::Instant::now();
+            if window.len() < ENOUGH_TO_JUDGE {
+                window.clear();
+                continue;
+            }
+            window.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+            let middle = window[window.len() / 2];
+            window.clear();
+            saw(middle >= MOVING, so_far);
+        }
+        Ok(())
+    }
+
     pub fn neural_voice(host: &str) -> Option<Box<dyn argmind_voice::Speaker>> {
         if !argmind_env_qwentts::QwenVoice::answering(host) {
             return None;
@@ -313,6 +377,12 @@ mod chosen {
     }
 
     /// Nothing speaks here yet — `speech-dispatcher` exists and is not written.
+    /// **No camera, so nothing to watch.** Refusing is not failing — see `argmind-env-none`.
+    pub fn watch_movement(_want: Option<&str>, _carry_on: &dyn Fn() -> bool,
+                          _saw: &mut dyn FnMut(bool, f64)) -> Result<(), String> {
+        Err("이 운영체제에서는 카메라를 쓸 수 없습니다".into())
+    }
+
     pub fn fallback_voice() -> Option<&'static str> {
         None
     }
@@ -354,6 +424,12 @@ mod chosen {
     /// **Nothing speaks here.** `speech-dispatcher` on Linux and `AVSpeechSynthesizer` on macOS
     /// both exist; neither is written. Saying *Windows 음성으로 말합니다* on Ubuntu, which is what
     /// this replaced, is worse than saying nothing does.
+    /// **No camera, so nothing to watch.** Refusing is not failing — see `argmind-env-none`.
+    pub fn watch_movement(_want: Option<&str>, _carry_on: &dyn Fn() -> bool,
+                          _saw: &mut dyn FnMut(bool, f64)) -> Result<(), String> {
+        Err("이 운영체제에서는 카메라를 쓸 수 없습니다".into())
+    }
+
     pub fn fallback_voice() -> Option<&'static str> {
         None
     }

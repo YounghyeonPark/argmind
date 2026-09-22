@@ -34,9 +34,14 @@ fn function(name: &str) -> String {
 fn it_is_a_permission_like_the_others() {
     assert!(is_decidable("acting"));
     assert_ne!(what("acting"), "알 수 없는 권한");
-    //: **Last in the list on purpose.** The ordering in `DECIDABLE` is needs, then switches, then
-    //: this — and it reads as a statement about what kind of thing it is.
-    assert_eq!(DECIDABLE.last(), Some(&"acting"));
+    //: **After everything that only changes what argmind knows or says**, which is the ordering in
+    //: `DECIDABLE` saying what kind of thing this is: needs, then the switches, then the two that
+    //: cost something outside the program. `camera` joined it below on the same day.
+    let at = |k| DECIDABLE.iter().position(|x| *x == k).unwrap_or(usize::MAX);
+    for quieter in ["ollama", "model", "whisper", "korean-voice", "vulkan", "speaker",
+                    "notice", "microphone", "aloud"] {
+        assert!(at("acting") > at(quieter), "acting is listed before {quieter}");
+    }
 }
 
 /// **The window says what it costs, in numbers rather than in adjectives.**

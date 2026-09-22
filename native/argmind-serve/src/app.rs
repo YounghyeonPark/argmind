@@ -44,6 +44,8 @@
 
 use std::io::{BufRead, BufReader, Read, Write};
 use std::net::{TcpListener, TcpStream};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::time::Instant;
 use std::sync::mpsc::{channel, Sender};
 use std::sync::{Arc, Condvar, Mutex};
 
@@ -133,6 +135,27 @@ struct Desk {
     /// a standing invitation to spend a model call every few seconds.
     watches: Vec<Watch>,
     noticing: bool,
+    /// **Whether the camera should be on**, which the watching thread reads before every look, so
+    /// switching off closes the device and puts the light out within about a frame.
+    want_eyes: Arc<AtomicBool>,
+    /// **Whether it actually is**, which is a different fact: a device that fails to open leaves
+    /// the wish true and this false, and the page is told this one.
+    eyeing: Arc<AtomicBool>,
+    /// When movement was last seen, **shared with the thread that sees it**.
+    ///
+    /// The blackboard carries the same fact as a sentence for the prompt; this is the same fact as
+    /// a time, for the one place that has to compare it with a number. Reading it back out of
+    /// *마지막 움직임 12초 전* would be parsing a string this program wrote, which is the kind of
+    /// round trip that works until somebody improves the wording.
+    ///
+    /// **Set when the camera opens**, not left empty: *nothing has moved since we started looking*
+    /// is an answer that should age like any other, and an empty one would make a camera that had
+    /// been on for two seconds indistinguishable from an empty room.
+    moved_at: Arc<Mutex<Option<Instant>>>,
+    /// How to speak to every open page, for the one thing here that outlives the call that started
+    /// it. **Every other path is handed an `out` by its caller**; the camera thread has no caller
+    /// left by the time it has something to say.
+    speaks_to: Arc<Listeners>,
     /// When it last revised its own notes, on the same clock `notice` uses.
     thought_at: f64,
     /// Every sense's latest reading, and whether somebody is being answered. See [`crate::senses`].
@@ -167,6 +190,8 @@ enum Job {
     Notice(bool),
     /// Act without waiting for the button, or go back to asking.
     Acting(bool),
+    /// Keep the camera on and watch for movement, or switch it off.
+    Camera(bool),
     /// An answer to a permission question: which thing, and which of the four buttons.
     Decide(String, Answer),
     /// Take back a standing answer, from the settings.
@@ -447,6 +472,19 @@ pub fn plan_for(key: &str) -> String {
              · 스스로 시작한 생각은 말로만 나옵니다. 클릭은 여전히 버튼을 거칩니다\n\
              · 끄기 전까지 계속 돌아갑니다\n\n\
              지켜볼까요?"),
+        //: **What it can and cannot tell, and that the light stays on.** The temptation here
+        //: is to say *argmind can see you*, which is both alarming and false: nothing larger than
+        //: 64x36 greys leaves the module and no picture is ever sent anywhere.
+        "camera" => String::from(
+            "카메라를 켜 두고 앞에 움직임이 있는지 봅니다.\n\n\
+             · 켜 두는 동안 **카메라 불이 계속 켜져 있습니다** — 켜진 불이 곧 켜진 카메라입니다\n\
+             · 화면은 64x36 회색으로 줄여서만 봅니다. 사진은 모듈 밖으로 나가지 않고 저장도, \
+전송도 하지 않습니다\n\
+             · 알 수 있는 것은 *마지막 움직임이 몇 초 전인가* 뿐입니다. 누구인지도, 무엇을 \
+하는지도 아닙니다\n\
+             · 가만히 앉아 책을 읽는 사람은 빈 의자와 구별되지 않습니다 — 잰 것은 움직임입니다\n\
+             · 한 번 보는 데 32 ms, 3초마다 한 번 판단합니다\n\n\
+             카메라를 켜 둘까요?"),
         //: **The cost is the model's accuracy, so the numbers are in the window.** A question
         //: reading *"act automatically?"* is answered yes by everybody; what a person needs is how
         //: often this model is right, which is measured and is not very often.
@@ -613,6 +651,7 @@ fn carry_out(desk: &mut Desk, out: &Listeners, model: &str, key: &str) {
             out.send("note", "마이크를 쓸 수 있습니다 — 말하는 동안 스페이스를 누르고 계세요");
             out.send("mic-allowed", "1");
         }
+        "camera" => switch_camera(desk, out, true),
         //: **Nothing starts and nothing installs.** The standing answer *is* the state, so all this
         //: does is tell the page the switch is on — which is why `Job::Acting` writes a 거부 when
         //: it is turned off rather than flipping a field: there is no field.
@@ -652,6 +691,76 @@ fn switch_noticing(desk: &mut Desk, out: &Listeners, on: bool) {
     });
 }
 
+/// Turn the camera on or off, and own the thread that keeps it open.
+///
+/// **The light is the interface.** The owner chose a camera that stays on over one that blinks
+/// every half minute — opening costs 2.3–4.4 s of settling to take 3 s of readings, and a blinking
+/// light says *mostly off*, which would not be true. So this starts one thread and it holds the
+/// device until the wish goes false.
+///
+/// **What reaches the blackboard is an age, not a verdict.** `camera::MOVING` separates a person
+/// moving from a still room by 6.8x, measured twice — but a person reading without shifting is
+/// below it and so is an empty chair, so what can honestly be said is *movement was last seen N
+/// seconds ago*. How long somebody sits still is not a number anybody here has, and inventing one
+/// is how *waiting* became generic in the note.
+fn switch_camera(desk: &mut Desk, out: &Listeners, on: bool) {
+    if !on {
+        desk.want_eyes.store(false, Ordering::SeqCst);
+        out.send("camera", "0");
+        out.send("note", "카메라를 껐습니다 — 불도 꺼집니다");
+        return;
+    }
+    //: Already running: say so and start nothing. Two threads on one device is two lights' worth
+    //: of nothing.
+    if desk.eyeing.load(Ordering::SeqCst) {
+        out.send("camera", "1");
+        return;
+    }
+    desk.want_eyes.store(true, Ordering::SeqCst);
+    let (want_eyes, eyeing) = (Arc::clone(&desk.want_eyes), Arc::clone(&desk.eyeing));
+    let moved_at = Arc::clone(&desk.moved_at);
+    let senses = desk.senses.clone();
+    let out = Arc::clone(&desk.speaks_to);
+    let chosen = crate::chosen::chosen("camera");
+    std::thread::spawn(move || {
+        eyeing.store(true, Ordering::SeqCst);
+        out.send("camera", "1");
+        out.send("note", "카메라를 켰습니다 — 끌 때까지 불이 켜져 있습니다");
+        let carry_on = || want_eyes.load(Ordering::SeqCst);
+        //: **Held across the whole run**, so *nobody has moved yet* and *nobody has moved for two
+        //: minutes* are different sentences rather than both being silence.
+        let began = Instant::now();
+        *moved_at.lock().unwrap_or_else(|e| e.into_inner()) = Some(began);
+        let mut last_moved: Option<Instant> = None;
+        let outcome = crate::platform::watch_movement(
+            chosen.as_deref(), &carry_on,
+            &mut |moved, took| {
+                if moved {
+                    last_moved = Some(Instant::now());
+                    *moved_at.lock().unwrap_or_else(|e| e.into_inner()) = last_moved;
+                }
+                let what = match &last_moved {
+                    Some(at) => format!("마지막 움직임 {:.0}초 전", at.elapsed().as_secs_f64()),
+                    None => format!("{:.0}초째 아무 움직임 없음", began.elapsed().as_secs_f64()),
+                };
+                senses.saw("카메라", what, took);
+            });
+        eyeing.store(false, Ordering::SeqCst);
+        out.send("camera", "0");
+        if let Err(why) = outcome {
+            //: **The wish is cleared too.** A device that cannot be opened would otherwise leave
+            //: the switch looking on with nothing behind it, and every page open would say so.
+            want_eyes.store(false, Ordering::SeqCst);
+            out.send("note", &format!("카메라를 계속 볼 수 없습니다 — {why}"));
+        }
+        //: Whatever it last saw is stale the moment the device closes, and a reading with an age
+        //: that only grows is worse than none. **Both copies of the fact**, or the gate would go on
+        //: answering from a camera that is off.
+        senses.forget("카메라");
+        *moved_at.lock().unwrap_or_else(|e| e.into_inner()) = None;
+    });
+}
+
 /// Install one thing, because somebody pressed the button that said what it would do.
 fn fix(out: &Listeners, model: &str, key: &str) {
     //: **Re-taken rather than remembered.** A page open for an hour holds an hour-old list, and
@@ -685,8 +794,52 @@ fn fix(out: &Listeners, model: &str, key: &str) {
 ///
 /// **Nothing here is asked for**, so whatever the model decides comes back as a sentence rather
 /// than as a click — `may_act_unprompted` is false and stays false.
+/// How long without movement before argmind stops speaking up by itself.
+///
+/// **Chosen, not measured** — the same footing as `RAISE_AFTER`. What *is* measured is the signal:
+/// `camera::MOVING` separates a person moving from a still room by 6.8x, twice. What nobody has is
+/// how long a present person can go without moving, and this is not that number; it is a length
+/// chosen because being wrong at it is cheap in one direction and not the other.
+///
+/// **Too short and argmind goes quiet while you are sitting there** — a feature that looks broken,
+/// recovered the moment you move. **Too long and it says something to an empty room**, which is
+/// exactly what it does today with no camera at all. So it is biased long: five minutes is well
+/// past any stillness a person at a keyboard plausibly holds, and the failure it leaves is the one
+/// already being lived with.
+pub const AWAY_AFTER: f64 = 300.0;
+
+/// **Has anybody moved lately, as far as the camera knows?**
+///
+/// `None` whenever there is nothing to go on — the camera off, refused, just started, or failing —
+/// and `None` never stops anything. A gate that fired on the absence of evidence would turn a
+/// camera nobody switched on into a reason for silence.
+fn somebody_about(desk: &Desk) -> Option<bool> {
+    if !desk.eyeing.load(Ordering::SeqCst) {
+        return None;
+    }
+    //: **The blackboard's own age is checked as well as the movement's.** The sense reports every
+    //: three seconds; a thread that stalled would otherwise leave a true answer standing for ever,
+    //: and *nobody is here* is the one this must not get stuck on.
+    let fresh = desk.senses.of("카메라")
+        .is_some_and(|r| r.taken.elapsed().as_secs_f64() < AWAY_AFTER);
+    if !fresh {
+        return None;
+    }
+    let at = desk.moved_at.lock().ok()?;
+    Some(at.is_some_and(|t| t.elapsed().as_secs_f64() < AWAY_AFTER))
+}
+
 fn notice(desk: &mut Desk, out: &Listeners, now: f64) {
     if !desk.noticing {
+        return;
+    }
+    //: **Nobody there, nothing to say.** The whole reason the camera earns its light: watching the
+    //: screen is on a timer and will happily talk to an empty chair, and this is the one place that
+    //: was true of. It returns before `poll`, so an empty room costs no model call at all rather
+    //: than a call whose answer is thrown away.
+    if somebody_about(desk) == Some(false) {
+        //: The screen is still read on the next tick, so coming back to the machine does not need
+        //: the watch to be reset — it needs a person to move.
         return;
     }
     let after = desk.session.eyes.foreground();
@@ -1068,6 +1221,9 @@ fn hello(desk: &Desk, model: &str) -> String {
         //: Read rather than held: the standing answer is the state.
         format!("\"acts\":{}",
                 crate::decided::standing("acting") == Some(Standing::Allowed)),
+        //: **Held rather than read**, unlike `acts`: a standing 허용 says the camera *may* be on
+        //: and this says it *is*, and they come apart when the device fails to open.
+        format!("\"watching_you\":{}", desk.eyeing.load(Ordering::SeqCst)),
         format!("\"noticed\":{}", desk.noticed),
         format!("\"attending\":\"{}\"", escape(&desk.session.eyes.window().1)),
         format!("\"waiting\":[{}]", waiting.join(",")),
@@ -1306,6 +1462,10 @@ pub fn run(how: How) {
                               //: need a name to look for and there is nowhere yet to type one.
                               watches: vec![Watch::new(Looking::WindowChanged)],
                               noticing: false, thought_at: 0.0,
+                              want_eyes: Arc::new(AtomicBool::new(false)),
+                              eyeing: Arc::new(AtomicBool::new(false)),
+                              moved_at: Arc::new(Mutex::new(None)),
+                              speaks_to: Arc::clone(&agent_out),
                               senses: senses.clone(), turn: turn.clone(),
                               before: Vec::new(), lately_noticed: Vec::new(), noticed: 0 };
         //: **On from the start when it is allowed**, which it is by default since 2026-09-17. A
@@ -1367,6 +1527,20 @@ pub fn run(how: How) {
                     (true, None) => {
                         agent_out.send("noticing", "0");
                         agent_out.send("asking", &asking_json("notice"));
+                    }
+                },
+                Job::Camera(on) => match (on, crate::decided::standing("camera")) {
+                    //: **Switching off never asks**, the same as 지켜보기: a permission question
+                    //: in front of somebody turning a camera off is a program arguing with them.
+                    (false, _) => switch_camera(&mut desk, &agent_out, false),
+                    (true, Some(Standing::Allowed)) => switch_camera(&mut desk, &agent_out, true),
+                    (true, Some(Standing::Denied)) => {
+                        agent_out.send("camera", "0");
+                        agent_out.send("note", "카메라는 거부되어 있습니다 — 설정에서 바꿀 수 있습니다");
+                    }
+                    (true, None) => {
+                        agent_out.send("camera", "0");
+                        agent_out.send("asking", &asking_json("camera"));
                     }
                 },
                 Job::Acting(on) => match (on, crate::decided::standing("acting")) {
@@ -1579,6 +1753,15 @@ pub fn run(how: How) {
                             fix(&agent_out, &agent_model, &key);
                         }
                         adopt_voice(&mut desk, &agent_out);
+                        //: **A standing 허용 turns the camera on without being asked again**, the
+                        //: same arrangement the microphone and the installs already have. Two
+                        //: places used to report a standing answer and not honour it, and the page
+                        //: then said *물어보지 않고 진행합니다* beside something that was not
+                        //: running; this is the third and it is wired the same way rather than
+                        //: differently.
+                        if crate::decided::standing("camera") == Some(Standing::Allowed) {
+                            switch_camera(&mut desk, &agent_out, true);
+                        }
                     }
                     //: **Checked when a page opens, not at startup.** Checking once at boot would
                     //: mean a server left running overnight still telling you about something you
@@ -1774,6 +1957,10 @@ fn serve_one(mut stream: TcpStream, out: &Listeners, token: &str, jobs: &Sender<
         Route::Acting(on) => {
             let _ = stream.write_all(&respond("204 No Content", "text/plain", ""));
             let _ = jobs.send(Job::Acting(on));
+        }
+        Route::Camera(on) => {
+            let _ = stream.write_all(&respond("204 No Content", "text/plain", ""));
+            let _ = jobs.send(Job::Camera(on));
         }
         Route::Listen(down) => {
             let _ = stream.write_all(&respond("204 No Content", "text/plain", ""));

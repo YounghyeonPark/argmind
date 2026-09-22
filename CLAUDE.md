@@ -320,8 +320,22 @@ values across both runs and both statistics land between 0.05 and 0.06 while the
 happened to move. So `camera::MOVING` is **0.15**, the geometric middle of the gap, on
 three-second windows with the mean shift removed. **It says movement, not presence**: a person
 reading without shifting is below it, and so is an empty chair, so what a caller may say is
-*movement was last seen N seconds ago*. **Nothing is wired to it yet** — a sense needs the camera
-open, which is a light left on and a permission nobody has been asked for. *(A caution written here off the null control — that
+*movement was last seen N seconds ago*. **And it is wired**, since the owner chose a light that stays on over one that
+blinks every half minute: `camera` is the eleventh decidable key and the only one that leaves a
+device running, `설정 → 카메라로 사람 알아보기` is the switch, a standing 허용 turns it on at the
+first page open like the microphone and the installs, and `platform::watch_movement` holds the
+device and reports every three seconds. **It does not stand down for a turn**, which every other
+sense does — that rule is about two things contending for one graphics card and this never speaks
+to the model. What reaches the blackboard is an age, *마지막 움직임 N초 전*, because the threshold
+measures movement and a person reading without shifting is below it.
+
+**The payoff is a gate rather than a prompt line.** The blackboard is read in one place, the
+thinking tick, and the thing that talks to an empty chair is `notice` — so `somebody_about` sits
+in front of it and an empty room costs **no model call at all**, rather than a call whose answer is
+thrown away. `AWAY_AFTER = 300 s` is **chosen, not measured**, and biased long on purpose: too short
+and argmind goes quiet while you are sitting there, too long and it says something to an empty room,
+which is what it already does. **No camera never means silence** — off, refused, failing or stalled
+all read *no evidence*, and a test breaks the gate two ways to keep it so. *(A caution written here off the null control — that
 the still floor moves between runs, so a constant threshold looked unlikely — is withdrawn: nobody
 had checked the room was empty, and its author not moving is not the same thing.)* **키입력** is implementable and deliberately not implemented — every keystroke means a
 global hook, which is a keylogger capturing passwords in a program that sends text to a model; what

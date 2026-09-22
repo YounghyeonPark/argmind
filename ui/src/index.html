@@ -198,6 +198,15 @@
          decisions, a spurious action on 9% of conversational turns, and one recorded case of the
          right name on the wrong button. Off by default, and off is written down — there is no
          runtime behind this, only the standing answer. -->
+    <!-- The only switch that leaves a device running. The microphone opens while a key is held;
+         this stays on until it is turned off, and the light is the honest part of the design — the
+         owner chose that over blinking every half minute, because a blinking light says *mostly
+         off* and that would not be true. What it can tell is movement, not who or what. -->
+    <label class="switch">
+      <input type="checkbox" id="camera">
+      <span class="what">카메라로 사람 알아보기</span>
+      <span class="cost">켜 두는 동안 카메라 불이 켜져 있습니다 — 64x36 회색만 보고, 아는 것은 마지막 움직임이 몇 초 전인가뿐</span>
+    </label>
     <label class="switch">
       <input type="checkbox" id="acting">
       <span class="what">확인 없이 실행</span>

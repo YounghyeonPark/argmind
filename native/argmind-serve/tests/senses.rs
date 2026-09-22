@@ -218,3 +218,56 @@ fn every_payload_the_page_parses_is_json_a_page_can_read() {
     reads("needs_as_json", needs_as_json(&argmind_serve::needs::every("qwen3:8b"),
                                          &std::collections::BTreeMap::new()));
 }
+
+// ---- the camera, and the one thing it is allowed to stop -----------------------------------------
+
+/// **A sense that has stopped is forgotten, not left with a growing age.**
+///
+/// A blank reading is not rendered but it stays in the map; that is right for a sense that saw
+/// nothing and wrong for one that is no longer looking. *마지막 움직임 3초 전* about a camera that
+/// has been off for an hour is a lie with a timestamp on it, and the gate in `notice` reads exactly
+/// that kind of sentence.
+#[test]
+fn a_sense_that_stopped_is_forgotten_rather_than_left_stale() {
+    let senses = Senses::default();
+    senses.saw("카메라", "마지막 움직임 3초 전".into(), 3.0);
+    assert!(senses.of("카메라").is_some());
+    assert!(senses.render("화면").unwrap().contains("마지막 움직임"));
+
+    senses.forget("카메라");
+    assert!(senses.of("카메라").is_none(), "the camera is still on the blackboard");
+    assert!(senses.render("화면").is_none(), "a camera that is off is still in the prompt");
+
+    //: Forgetting one leaves the others. The screen is written on every look and must not vanish
+    //: because a camera was switched off.
+    senses.saw("화면", "12 개가 보임".into(), 0.0);
+    senses.saw("카메라", "마지막 움직임 1초 전".into(), 3.0);
+    senses.forget("카메라");
+    assert!(senses.of("화면").is_some());
+    //: And forgetting what was never there is not an error.
+    senses.forget("없는감각");
+}
+
+/// **The absence of a camera never makes argmind quiet.**
+///
+/// `somebody_about` is the gate on the one path that speaks without being spoken to, and the rule
+/// it has to keep is that *no evidence* is not *nobody*. A camera switched off, refused, or failing
+/// to open must leave the watch exactly as it was — otherwise not owning a webcam would be a reason
+/// for the agent to stop working.
+#[test]
+fn no_camera_is_not_an_empty_room() {
+    let source = include_str!("../src/app.rs");
+    let from = source.find("fn somebody_about(").expect("the gate is gone");
+    let body = &source[from..from + 900];
+    //: Every path out of it that is not a real reading has to be `None`.
+    assert!(body.contains("if !desk.eyeing.load"), "the gate does not check the camera is on");
+    assert!(body.matches("return None").count() >= 2, "{body}");
+
+    //: And the caller acts on `Some(false)` only — never on `None`, and never on the absence of a
+    //: value by way of `unwrap_or`.
+    let at = source.find("somebody_about(desk) == Some(false)")
+        .expect("the watch does not gate on an explicit `nobody`");
+    assert!(at > from || at < from, "found at {at}");
+    assert!(!source.contains("somebody_about(desk).unwrap_or"),
+            "the gate's `no evidence` was turned into a decision by unwrap_or");
+}

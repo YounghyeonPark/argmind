@@ -28,6 +28,8 @@ interface Hello {
   speaks: boolean;
   /** Whether a proposal is carried out without the button. */
   acts: boolean;
+  /** Whether the camera is open right now — the fact, not the permission. */
+  watching_you: boolean;
   /** Which voice: "neural", "windows", "none" or "off". Named rather than a flag, because the
    *  difference between the two that speak is the whole reason the neural one was built. */
   voice: string;
@@ -209,6 +211,7 @@ stream.addEventListener("hello", (e) => {
   talk.hidden = !d.hears;
   aloud.checked = d.speaks;
   acting.checked = d.acts;
+  camera.checked = d.watching_you;
   drawNoticing(d.noticing, d.noticed);
   // Rebuilt from the server's own list, so a reload is never a page showing buttons the server
   // has forgotten — or missing ones it still holds.
@@ -309,6 +312,20 @@ function drawNoticing(on: boolean, count: number): void {
 // it as a standing answer and can refuse, so this asks and then waits to be told, exactly like
 // 지켜보기. Turning it on with nothing answered raises the four-button window; the checkbox goes
 // back off until that window is answered, which is why it is set from the event and not here.
+// The camera. **The checkbox follows the device, not the permission** — a standing 허용 with a
+// camera that will not open leaves the first true and the second false, and the switch has to show
+// the second or it is telling you a light is on when it is not.
+const camera = document.getElementById("camera") as HTMLInputElement;
+camera.onchange = () => {
+  const want = camera.checked;
+  camera.checked = false;
+  void post(want ? "/camera/on" : "/camera/off");
+};
+
+stream.addEventListener("camera", (e) => {
+  camera.checked = (e as MessageEvent).data === "1";
+});
+
 const acting = document.getElementById("acting") as HTMLInputElement;
 acting.onchange = () => {
   const want = acting.checked;

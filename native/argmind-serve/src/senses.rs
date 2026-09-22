@@ -67,6 +67,18 @@ impl Senses {
 
     /// Everything, with each reading's age in seconds. **Never waits**: a sense that is mid-refresh
     /// hands back what it had, which is the whole point of the arrangement.
+    /// Drop a sense's reading entirely.
+    ///
+    /// **Not the same as reporting nothing.** A blank reading is not rendered, but it stays in the
+    /// map with an age that keeps growing; this is for a sense that has *stopped*, where the last
+    /// thing it saw is no longer a fact about now and saying *마지막 움직임 3초 전* about a camera
+    /// that has been off for an hour would be a lie with a timestamp on it.
+    pub fn forget(&self, sense: &str) {
+        if let Ok(mut all) = self.0.lock() {
+            all.remove(sense);
+        }
+    }
+
     pub fn latest(&self) -> Vec<(String, Reading, f64)> {
         let now = Instant::now();
         self.0.lock().map(|all| {

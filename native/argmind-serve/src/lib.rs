@@ -231,6 +231,12 @@ pub enum Route {
     /// memory, because a switch a person flips and then loses on the next launch is the defect this
     /// replaced.
     Aloud(bool),
+    /// Keep the camera on and notice whether anybody is moving, or switch it off.
+    ///
+    /// **The one route that leaves a device running.** `/listen` opens the microphone while a key
+    /// is held and closes it on the way up; this one is on until it is turned off, which is why the
+    /// window that asks says so and why the light is the honest part of the design.
+    Camera(bool),
     /// Carry out what was proposed without waiting for 실행, or go back to asking.
     ///
     /// **The one route that changes what argmind may do rather than what it may know.** Everything
@@ -335,6 +341,8 @@ pub fn route(request: &Request) -> Route {
         ("POST", "/aim") => Route::Aim(request.body.clone()),
         ("POST", "/aloud/on") => Route::Aloud(true),
         ("POST", "/aloud/off") => Route::Aloud(false),
+        ("POST", "/camera/on") => Route::Camera(true),
+        ("POST", "/camera/off") => Route::Camera(false),
         ("POST", "/acting/on") => Route::Acting(true),
         ("POST", "/acting/off") => Route::Acting(false),
         ("POST", "/notice/on") => Route::Notice(true),
