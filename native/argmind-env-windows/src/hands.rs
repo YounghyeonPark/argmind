@@ -12,14 +12,33 @@
 //! up, and a click that would land anywhere else is refused rather than sent.** Refusals are
 //! counted, because a harness that silently skipped half its clicks would report a clean number.
 //!
-//! **Control patterns are deliberately not ported, and the reason is measured on both sides.**
-//! `measure/obstruction.py` asked whether they land better and found `3 of 3` with and `3 of 3`
-//! without, so they bought nothing there — against about ninety lines, a second COM client, an
-//! ancestor walk on every click and four ways to fail. `measure/pointer_theft.py` asked the other
-//! question and found the thing they *do* buy: a pattern calls a method on the control and never
-//! moves the cursor, where a synthetic click yanks the pointer out from under whoever is using the
-//! machine. Neither result is settled at n=3, so the path is left out rather than carried forward
-//! unexamined, and this note is where the decision is recorded.
+//! **Control patterns are on for clicking, since 2026-09-22.** They were measured in 2026-09-16 and
+//! left off, and the reason written down then was *the shipped click is confirmed by a person
+//! pressing a button, so the cursor was already about to move to something they chose.* 확인 없이
+//! 실행 landed the day before and nobody is pressing. What the measurement says, n=3 throughout:
+//! task success **3 of 3 either way**, reaching past a cover **missed either way**, the pointer
+//! **unmoved against dragged to the widget, 3 of 3**. One axis, and it is the one that matters on a
+//! machine somebody is working at. `platform::hands` is where that is asked for; see
+//! [`crate::patterns`].
+//!
+//! ## **Typing still goes through the keyboard, and UI Automation has no answer for it**
+//!
+//! [`WindowsHands::type_string`] sends `KEYEVENTF_UNICODE` events, so the text lands in whatever has
+//! focus — the same collision a click has with the pointer, one device over. The obvious fix is the
+//! one Linux already uses: `argmind-env-linux` types through `EditableText.InsertText` and touches
+//! no key at all.
+//!
+//! **They are not the same operation.** AT-SPI inserts *at an offset*; UI Automation's
+//! `ValuePattern::SetValue` replaces the whole value, and there is no insert anywhere in UIA —
+//! `TextPattern` reads and does not edit. So keystroke-free typing on Windows means *replace this
+//! field*, which would delete whatever a person had already put in it. The asymmetry is the same
+//! shape as the one already recorded on the other side, where `InsertText`'s length is in bytes and
+//! not characters: two accessibility APIs that look alike and are not.
+//!
+//! The shape that could work is narrow and is **not implemented, because it is not measured**: read
+//! `CurrentValue`, use `SetValue` only when it is empty, fall back to keys otherwise. Measuring it
+//! needs a harness that launches a window of its own, and a harness that takes the foreground
+//! cannot be started from the session that would lose it.
 
 use std::time::{Duration, Instant};
 

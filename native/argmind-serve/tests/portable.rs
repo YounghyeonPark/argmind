@@ -223,3 +223,45 @@ mod without_an_environment {
         Ok(body)
     }
 }
+
+/// **How the hands are built is the seam's business, not the application's.**
+///
+/// Until 2026-09-22 `app.rs` and `argmind.rs` each said `Touch::unrestricted()` and then `.arm()`,
+/// which is fine until one platform wants something the others have no word for. Windows does:
+/// control patterns, which call a method on the control instead of aiming a synthetic click at a
+/// pixel and so leave the pointer where the person put it — measured unmoved 3 of 3 against dragged
+/// to the widget. That is a fact about Windows, and putting `with_patterns()` in the application
+/// would have meant teaching `argmind-env-none` a Windows notion to keep the build alive.
+#[test]
+fn the_application_does_not_build_its_own_hands() {
+    for file in ["../src/app.rs", "../src/bin/argmind.rs"] {
+        let source = match file {
+            "../src/app.rs" => include_str!("../src/app.rs"),
+            _ => include_str!("../src/bin/argmind.rs"),
+        };
+        let code: String = source.lines()
+            .map(|l| l.split("//").next().unwrap_or("")).collect::<Vec<_>>().join("\n");
+        assert!(!code.contains("Touch::unrestricted()"),
+                "{file} builds its own hands; `platform::hands` is where that is decided");
+        assert!(code.contains("platform::hands("), "{file} does not go through the seam");
+    }
+}
+
+/// **Patterns are on where they can be and absent where the word means nothing.**
+///
+/// The reason they were off is in `patterns.rs` and it expired: *the shipped click is confirmed by
+/// a person pressing a button, so the cursor was already about to move to something they chose.*
+/// 확인 없이 실행 landed the day before and nobody is pressing.
+#[test]
+fn the_seam_asks_for_patterns_only_where_there_are_any() {
+    let source = include_str!("../src/platform.rs");
+    let windows = source.find("#[cfg(all(windows")
+        .expect("the windows block is gone");
+    let next = source[windows + 10..].find("#[cfg(").map(|i| i + windows + 10)
+        .unwrap_or(source.len());
+    let block = &source[windows..next];
+    assert!(block.contains("Touch::unrestricted().with_patterns()"),
+            "the windows hands no longer ask for patterns");
+    //: And nowhere else, because nowhere else has them.
+    assert_eq!(source.matches("with_patterns()").count(), 1, "patterns asked for outside windows");
+}

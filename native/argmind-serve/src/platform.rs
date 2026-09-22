@@ -254,6 +254,26 @@ mod chosen {
     ///
     /// **It does not stand down for a turn**, which every other sense does. That rule exists
     /// because a look and an answer contend for one graphics card; this never speaks to the model.
+    /// The hands the application uses. **Patterns on, since 2026-09-22.**
+    ///
+    /// `patterns.rs` measured them in 2026-09-16 and left them off, for a reason it wrote down:
+    /// *the shipped click is confirmed by a person pressing a button, so the cursor was already
+    /// about to move to something they chose.* **확인 없이 실행 removed that reason the day before
+    /// this** — nobody is pressing, so nobody chose to have the pointer taken.
+    ///
+    /// What the measurement says, three runs each: task success **3 of 3 either way**, reaching
+    /// past something covering the target **missed either way** (the pattern resolves by
+    /// `ElementFromPoint` and walks up, so a cover hands it the cover), and the pointer **unmoved
+    /// against dragged to the widget, 3 of 3**. One axis, and it is the one that matters on a
+    /// machine somebody is working at. n=3 on all of it.
+    ///
+    /// **It is not a second path past the guard**: `click_button` checks `may_touch` before it
+    /// chooses a path, and falls back to a click when no pattern fits.
+    pub fn hands(dry: bool) -> Touch {
+        let hands = Touch::unrestricted().with_patterns();
+        if dry { hands } else { hands.arm() }
+    }
+
     pub fn watch_movement(want: Option<&str>, carry_on: &dyn Fn() -> bool,
                           saw: &mut dyn FnMut(bool, f64)) -> Result<(), String> {
         use argmind_env_windows::camera::{Camera, ENOUGH_TO_JUDGE, MOVING, MOVING_WINDOW};
@@ -378,6 +398,14 @@ mod chosen {
 
     /// Nothing speaks here yet — `speech-dispatcher` exists and is not written.
     /// **No camera, so nothing to watch.** Refusing is not failing — see `argmind-env-none`.
+    /// The hands the application uses. **No control patterns here** — that is a Windows notion,
+    /// and `argmind-env-none` is the list a third environment must satisfy rather than a place to
+    /// put one platform's optimisation.
+    pub fn hands(dry: bool) -> Touch {
+        let hands = Touch::unrestricted();
+        if dry { hands } else { hands.arm() }
+    }
+
     pub fn watch_movement(_want: Option<&str>, _carry_on: &dyn Fn() -> bool,
                           _saw: &mut dyn FnMut(bool, f64)) -> Result<(), String> {
         Err("이 운영체제에서는 카메라를 쓸 수 없습니다".into())
@@ -425,6 +453,14 @@ mod chosen {
     /// both exist; neither is written. Saying *Windows 음성으로 말합니다* on Ubuntu, which is what
     /// this replaced, is worse than saying nothing does.
     /// **No camera, so nothing to watch.** Refusing is not failing — see `argmind-env-none`.
+    /// The hands the application uses. **No control patterns here** — that is a Windows notion,
+    /// and `argmind-env-none` is the list a third environment must satisfy rather than a place to
+    /// put one platform's optimisation.
+    pub fn hands(dry: bool) -> Touch {
+        let hands = Touch::unrestricted();
+        if dry { hands } else { hands.arm() }
+    }
+
     pub fn watch_movement(_want: Option<&str>, _carry_on: &dyn Fn() -> bool,
                           _saw: &mut dyn FnMut(bool, f64)) -> Result<(), String> {
         Err("이 운영체제에서는 카메라를 쓸 수 없습니다".into())

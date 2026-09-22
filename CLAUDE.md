@@ -193,7 +193,7 @@ pixel about three times in ten.
 | tuning a voice | **there is nothing to tune, and three different kinds of nothing.** `speed` is accepted and does nothing — five values from 0.5 to 2.0 gave one byte-identical file, and the server's own header says so: `float speed; // OAI speed, parsed then ignored (no time stretch in the ABI)`. `instructions` is refused outright: `--instruct is not supported for base models`. And the sampling knobs — `temperature`, `top_p`, `top_k`, `repetition_penalty`, `subtalker_*` — change the bytes and leave the speaker where it was, f0 moving 264→270 Hz at a fixed seed, which is noise. So the only adjustable thing is *which voice*, and no dial was shipped rather than five that move nothing |
 | animal noises | **it can say 멍멍; it cannot bark.** Nine candidates in the shipped cloned voice — 멍멍, 야옹, 음메, 꼬끼오, 짹짹, 어흥, 으르렁, `Woof!`, `Meow~` — measure **92–100% voiced** at a spectral flatness of **0.031–0.069**, against ordinary speech in the same voice at 99–94% and 0.054–0.057. A bark is short and broadband; these are sustained and harmonic, which is what a person reading a syllable is. The one case that looked different, English `Woof!` at 71% voiced and 0.330 flat, was an unseeded draw and went back to 100% and 0.031 once it was the actual voice. **And `<dog barking>` ran to the token ceiling: 163.84 seconds of audio** from three words |
 | starting up | **it reinstalled both servers on every launch, and two correct decisions made it.** They die with argmind — a job object, on purpose — and `present` for a server means *answering on its port*, so every launch finds them missing and hands each to its **build** fix. The offer already knew better: `title()` reads 띄울까요? when `built` is true and 빌드할까요? when it is not, so the question distinguished the two cases and the carry-out did not. Cold launch, nothing changed on the machine: **21.8 s → 7.5 s** to a voice and 8.4 → 4.8 to the recogniser, with `cmake` (4.0 s), `mingw32-make`, a `git` fetch and `glslc` regenerating Vulkan shaders (4.7 s) all gone. **What makes skipping safe was already there for another reason** — `remember_build` is written last, so a stamp means the clone, the build and the runtime all finished; that is now asserted rather than relied on |
-| the pointer | **the axis the patterns do win, 3 of 3.** Parked at `(700, 400)`: `invoke` leaves it there, a click drags it to the widget at `(130, 459)`, and both press the box. **The first version of this harness measured nothing** — it parked with `cursor_round_trip`, which puts the cursor back where it found it, so every arm read the position the previous arm's click had left and both reported *unmoved* |
+| the pointer | **the axis the patterns do win, 3 of 3 — and they are on now.** Parked at `(700, 400)`: `invoke` leaves it there, a click drags it to the widget at `(130, 459)`, and both press the box. **The first version of this harness measured nothing** — it parked with `cursor_round_trip`, which puts the cursor back where it found it, so every arm read the position the previous arm's click had left and both reported *unmoved* |
 
 **The one slot that is absent unless somebody asks for it.** `mind.rs` renders nothing at rest, so
 the six probes still hash to `r322a4c` at 5,676 bytes — a tag recorded from the Python before a dial
@@ -418,6 +418,18 @@ into the speech — *"3, 122"*, *"지우개는 22번 버튼입니다"*. **Whethe
 measured now, and only just**: `parroting` is the one harness on that axis and it has six cases. Every turn is framed by a prompt about picking widgets even when the person says
 *"고마워"*. **A standing rule is broken while it is visible in the prompt**, so that one is not a
 memory problem.
+
+**Control patterns ship, since 2026-09-22, and typing does not.** A pattern calls a method on the
+control and leaves the pointer where the person put it; a synthetic click drags it to the widget,
+measured 3 of 3. They were off because *the shipped click is confirmed by a person pressing a
+button, so the cursor was already about to move to something they chose* — and 확인 없이 실행
+removed that reason the day before. `platform::hands` asks for them, which is also the seam that
+stopped the application building its own hands. **Typing is the half with no answer**: it is
+`KEYEVENTF_UNICODE`, so it lands in whatever has focus, and UI Automation has no insert —
+`ValuePattern::SetValue` replaces the whole value where AT-SPI's `EditableText.InsertText` inserts
+at an offset. Keystroke-free typing on Windows would mean *replace this field*. The narrow shape —
+`SetValue` only into an empty one — is written down and not built, because measuring it needs a
+harness that takes the foreground.
 
 **Streaming was measured and declined**: warm, the first token lands at 36 ms and `say` completes at
 232 ms of a 478 ms reply, so it buys ~250 ms at the cost of extracting a string from partial JSON.
