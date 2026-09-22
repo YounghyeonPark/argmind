@@ -47,18 +47,32 @@ use argmind_core::contract::{Eyes, Hands, Widget};
 use argmind_env_windows::launch::{foreground_is, to_front, Launched};
 use argmind_env_windows::{open_automation, WindowsEyes};
 
-/// Something with a plain edit box that Windows has had for twenty years.
-const APP: &str = "notepad.exe";
+/// Something with a plain edit box, **and a classic Win32 one on purpose.**
+///
+/// The first version said `notepad.exe` and the run reported *no window*. On Windows 11 Notepad is
+/// a packaged application: the exe under `System32` is a launcher that hands the job to a different
+/// process, so the pid this harness started owns nothing and `Reach::OnlyProcess` would refuse to
+/// touch the window that did appear — correctly, since it is somebody else's.
+///
+/// Character Map is the one `clicking` already drives for the same reason, and its *복사할 문자*
+/// box is an ordinary edit control in the default view.
+const APP: &str = "charmap.exe";
 
 /// **Korean and ASCII**, because the two paths carry text differently: `SetValue` hands over a
 /// `BSTR` and the keyboard hands over UTF-16 code units one at a time. A test in English would pass
 /// on a path that mangles the thing this program mostly says.
 const SAYS: [&str; 2] = ["hello", "안녕하세요 반갑습니다"];
 
+/// The first editable box on the window in front. **`edit` before `document`**, because a
+/// document is usually the whole canvas and an edit is the field somebody types into.
 fn edit_in(eyes: &mut WindowsEyes, pid: u32) -> Option<Widget> {
-    eyes.foreground().into_iter()
-        .find(|w| w.role == "edit" || w.role == "document")
-        .filter(|_| foreground_is(pid))
+    if !foreground_is(pid) {
+        return None;
+    }
+    let seen = eyes.foreground();
+    seen.iter().find(|w| w.role == "edit")
+        .or_else(|| seen.iter().find(|w| w.role == "document"))
+        .cloned()
 }
 
 fn main() {
@@ -67,19 +81,25 @@ fn main() {
 
 fn run() -> i32 {
     let live = std::env::args().any(|a| a == "--live");
+    let app = std::env::args().skip(1).find(|a| a.ends_with(".exe"))
+        .unwrap_or_else(|| APP.into());
     println!("\n  키를 누르지 않고 글자를 넣을 수 있는가 — {}",
              if live { "LIVE, 실제로 씁니다" } else { "DRY, 아무것도 쓰지 않습니다" });
     println!("  이 하네스가 직접 띄운 창에만 씁니다. 앞면을 가져갑니다.\n");
 
-    let launched = match Launched::start(APP) {
+    let launched = match Launched::start(&app) {
         Ok(l) => l,
         Err(e) => {
-            println!("  {APP} 를 띄우지 못했습니다 ({e})");
+            println!("  {app} 를 띄우지 못했습니다 ({e})");
             return 2;
         }
     };
     let Some(window) = launched.window(Duration::from_secs(6)) else {
-        println!("  {APP} 가 창을 열지 않았습니다");
+        //: **Say which of the two it is.** *No window* and *a window in another process* look the
+        //: same from here and need different answers, and the first run of this lost twenty minutes
+        //: to the difference.
+        println!("  {app} 가 이 프로세스(pid {})에 창을 열지 않았습니다.", launched.pid);
+        println!("  패키지 앱이면 다른 프로세스로 넘깁니다 — 그 창은 우리 것이 아니므로 Reach::OnlyProcess 가 옳게 거절합니다. System32 의 고전 Win32 앱을 인자로 주세요.");
         return 2;
     };
     let pid = launched.pid;
@@ -191,6 +211,6 @@ fn run() -> i32 {
     }
     //: Notepad is left with text in it on purpose: nothing here saves, and a window closed by the
     //: harness would take the evidence with it.
-    println!("\n  메모장은 열어 둡니다. 저장하지 않았으니 그냥 닫으시면 됩니다.");
+    println!("\n  창은 열어 둡니다. 아무것도 저장하지 않았으니 그냥 닫으시면 됩니다.");
     0
 }
