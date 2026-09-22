@@ -56,6 +56,34 @@
 //! the same reason.
 //!
 //! **It takes the foreground**, so it cannot be run from the session driving it.
+//!
+//! ## What it said — 2026-09-22, Character Map
+//!
+//! | path | ascii | Korean | a box with something in it |
+//! |---|---|---|---|
+//! | keys | right, 4 ms | right, 7 ms | — |
+//! | `ValuePattern` | right, 6 ms | right, 14 ms | **fell back to keys**: `"먼저"` → `"먼저추가"` |
+//!
+//! No warnings fired: every new window started empty and the value at the box matched the value at
+//! the focused element in all four cases, so the text went where it was aimed. The narrow condition
+//! held — a box that already held something was appended to and not replaced. The milliseconds are
+//! the call returning rather than the text appearing, and at four to fourteen they decide nothing.
+//!
+//! **And it is not switched on, because of what the measurement makes plain about the design.**
+//! `set_value` writes to the **focused** element, and getting focus onto the right control means
+//! clicking it — which is the pointer collision this was supposed to be the answer to. What it
+//! actually buys is narrower than the reason for wanting it:
+//!
+//! * the text arrives **at once**, so a person typing during argmind's twenty characters does not
+//!   get them interleaved;
+//! * no synthetic keys, so no IME in the middle of a Korean string.
+//!
+//! Both real, neither the point. **The version worth having writes to the element without focusing
+//! it at all** — `ValuePattern` does not require focus — but a `type` effect carries no target:
+//! the reply shape is `{"type": "<text>"}` and the model never says where. The hands would have to
+//! remember the widget they last clicked, which is a small change in `WindowsHands` and needs no
+//! prompt edit. That is the next thing to build and measure, and turning this on before it would be
+//! shipping the part that does not answer the question.
 
 use std::thread::sleep;
 use std::time::{Duration, Instant};
