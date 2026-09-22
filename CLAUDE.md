@@ -308,13 +308,15 @@ purely by which phase ran first. `settle()` returned on the first consecutive pa
 which a warming camera offers within about five frames — it reported **329–352 ms** on every open
 while the picture went on moving for most of ten seconds. **The harness's own conclusion about the
 statistic had never been carried across to the settle check.** It now takes the median of a
-one-second window, twice in a row, and reports **2006 ms**; the control then reads null — still 0.36
-against 0.48, with the sign flipping between the two, which is noise and not an order effect.
-**So the 2026-09-16 reading — still 0.03, moving 0.49, tails overlapping on one still second at
-0.40 — was taken on a camera the code had called ready and was not, and may be recoverable.** One
-thing the control found separately: **the still floor moves between runs** — 0.07, 0.12, 0.22 and
-0.53 on three-second medians of the same empty room — so a threshold that is a constant looks
-unlikely, and 0.49 is inside the range a still room has reached. **키입력** is implementable and deliberately not implemented — every keystroke means a
+one-second window, twice in a row, and reports **2006 ms**; the control then reads null.
+**And the measurement it was blocking separates.** Ten seconds each with a person doing it on
+purpose: three-second windows give still **0.05** against moving **0.38**, a **7.4x** margin, and
+**8.6x** with the mean shift removed. **The centre did not move and the tail did** — the still
+median was 0.03 on 2026-09-16 and 0.03 again, while the still *maximum* went 0.40 → 0.12, which is
+the one second that had made the tails touch. **The earlier *the camera cannot do it* was the
+instrument.** One run, no threshold named yet. *(A caution written here off the null control — that
+the still floor moves between runs, so a constant threshold looked unlikely — is withdrawn: nobody
+had checked the room was empty, and its author not moving is not the same thing.)* **키입력** is implementable and deliberately not implemented — every keystroke means a
 global hook, which is a keylogger capturing passwords in a program that sends text to a model; what
 argmind plausibly wants is typing *activity*, which needs no characters and is a different feature
 with a different permission.

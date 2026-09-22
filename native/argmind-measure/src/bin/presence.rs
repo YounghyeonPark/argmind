@@ -91,13 +91,35 @@
 //! and the *sign flips between them*, which is what noise looks like and what an order effect does
 //! not. Settling reports 2006 ms where it used to report 329.
 //!
-//! **And one thing the control found that has nothing to do with the bug: the floor moves between
-//! runs.** Three-second still medians read 0.07, 0.12, 0.22 and 0.53 across four runs of the same
-//! empty room, with the frame rate wandering between 17 and 30 a second. Only the within-run
-//! comparison means anything, and **a threshold that is a constant in this file looks unlikely** —
-//! the moving phase on 2026-09-16 read 0.49, which is inside the range a still room has since
-//! reached. That is a reason to take the measurement, not a reason to skip it: it is exactly the
-//! question this harness exists to answer.
+//! **And a caution written off the control that has been withdrawn.** It said the still floor moves
+//! between runs — 0.07, 0.12, 0.22, 0.53 on three-second medians — and therefore a constant
+//! threshold looked unlikely. **Nobody had checked whether the room was empty.** The control ran
+//! with its author not moving, which is not the same as nobody moving, and there is no way to tell
+//! after the fact. Those four numbers found the order confound and are worth nothing as a floor.
+//!
+//! ## And then it separated — 2026-09-22, a person doing it on purpose
+//!
+//! Ten seconds each, with the fixed settle:
+//!
+//! | | still | moving | between | margin |
+//! |---|---|---|---|---|
+//! | plain, 1 s windows | max **0.12** | min **0.31** | 0.19 | 2.6x |
+//! | plain, 3 s windows | max **0.05** | min **0.38** | 0.14 | **7.4x** |
+//! | mean-shift removed, 1 s | max 0.15 | min 0.37 | 0.24 | 2.4x |
+//! | mean-shift removed, 3 s | max **0.05** | min **0.46** | 0.16 | **8.6x** |
+//!
+//! **The centre did not move and the tail did.** Still medians read 0.03 on 2026-09-16 and 0.03
+//! again here; what changed is the still *maximum*, 0.40 down to 0.12 — which is exactly the
+//! warm-up residue the settle fix removed, and exactly the one second that made the tails touch.
+//! The earlier conclusion was the instrument.
+//!
+//! Three-second windows beat one-second ones three to one on margin, which is what the reasoning
+//! above predicted: a monitor flash lasts a fraction of a second and a person moving lasts seconds.
+//! Removing the mean shift buys a little more on top, 8.6x against 7.4x — the confound it was aimed
+//! at is real and small.
+//!
+//! **One run. No threshold is named yet** — ten windows is few for a tail, and this harness's own
+//! last line says to run it again before using it.
 //!
 //! Nothing is written to disk, nothing is sent anywhere, and the picture never leaves the 64×36
 //! greys `camera.rs` reduces it to — see the note there about what that size can and cannot be.
