@@ -39,10 +39,89 @@ use windows::core::Interface;
 use windows::Win32::UI::Accessibility::{
     IUIAutomation, IUIAutomationElement, IUIAutomationExpandCollapsePattern,
     IUIAutomationInvokePattern, IUIAutomationSelectionItemPattern, IUIAutomationTogglePattern,
-    UIA_ExpandCollapsePatternId, UIA_InvokePatternId, UIA_SelectionItemPatternId,
-    UIA_TogglePatternId,
+    IUIAutomationValuePattern, UIA_ExpandCollapsePatternId, UIA_InvokePatternId,
+    UIA_SelectionItemPatternId, UIA_TogglePatternId, UIA_ValuePatternId,
 };
 use windows::Win32::Foundation::POINT;
+
+/// What a typing attempt did.
+#[derive(Debug, Clone, PartialEq)]
+pub enum Typed {
+    /// Set through `ValuePattern`. No key was pressed and the focus did not move.
+    Set,
+    /// It would have been, on hands that are armed.
+    WouldSet,
+    /// Use the keyboard, and here is why this could not.
+    Keys(String),
+}
+
+/// What the focused control holds right now, if it holds anything readable.
+///
+/// **Here rather than in the harness**, which has no `windows` crate and should not grow one: a
+/// measurement that spoke COM itself would be a second client with its own apartment rules, and
+/// the one thing every harness in this tree has in common is that it borrows a capability rather
+/// than reimplementing it. It is also how `set_value`'s narrow condition gets checked from the
+/// outside — the harness reads the box before and after instead of believing the return value.
+pub fn focused_value(automation: &IUIAutomation) -> Option<String> {
+    unsafe {
+        let focused = automation.GetFocusedElement().ok()?;
+        let raw = focused.GetCurrentPattern(UIA_ValuePatternId).ok()?;
+        let value = raw.cast::<IUIAutomationValuePattern>().ok()?;
+        Some(value.CurrentValue().ok()?.to_string())
+    }
+}
+
+/// Put text into the focused control without touching the keyboard.
+///
+/// **This is not the same operation as typing and that is the whole of the design.**
+/// `argmind-env-linux` types through `EditableText.InsertText`, which inserts *at an offset*. UI
+/// Automation has no insert anywhere: `ValuePattern::SetValue` replaces the entire value and
+/// `TextPattern` only reads. So the honest use of it is narrow — **only into a control that is
+/// empty** — and everything else falls back to keys. Typing into a box that already holds something
+/// is the case where the two APIs stop looking alike, and it is the case this refuses.
+///
+/// **The reach guard applies here too, from the element rather than from a point.** A click is
+/// checked against whatever owns the window under the pixel; there is no pixel here, so the focused
+/// element's own process is what is compared. Without that, a harness restricted to its own windows
+/// could still type into somebody else's — the guard would hold for one hand and not the other.
+///
+/// `live` false does everything except the write, which is what makes the dry arm of a harness
+/// worth having.
+pub fn set_value(automation: &IUIAutomation, text: &str, live: bool,
+                 allowed: &dyn Fn(Option<u32>) -> bool) -> Typed {
+    unsafe {
+        let Ok(focused) = automation.GetFocusedElement() else {
+            return Typed::Keys("focus could not be resolved".into());
+        };
+        let owner = focused.CurrentProcessId().ok().map(|p| p as u32);
+        if !allowed(owner) {
+            return Typed::Keys(format!("focus belongs to {owner:?}"));
+        }
+        let Ok(raw) = focused.GetCurrentPattern(UIA_ValuePatternId) else {
+            return Typed::Keys("no value pattern".into());
+        };
+        let Ok(value) = raw.cast::<IUIAutomationValuePattern>() else {
+            return Typed::Keys("no value pattern".into());
+        };
+        //: **Read-only is a refusal and not a failure.** A label carries a value pattern and will
+        //: not take one, and finding that out by writing would be finding it out too late.
+        if value.CurrentIsReadOnly().map(|r| r.as_bool()).unwrap_or(true) {
+            return Typed::Keys("read only".into());
+        }
+        //: **The narrow case.** Anything already in the box means `SetValue` would delete it.
+        let already = value.CurrentValue().map(|v| v.to_string()).unwrap_or_default();
+        if !already.is_empty() {
+            return Typed::Keys(format!("{} characters already there", already.chars().count()));
+        }
+        if !live {
+            return Typed::WouldSet;
+        }
+        match value.SetValue(&windows::core::BSTR::from(text)) {
+            Ok(()) => Typed::Set,
+            Err(e) => Typed::Keys(format!("SetValue failed ({e})")),
+        }
+    }
+}
 
 /// What a pattern attempt did.
 #[derive(Debug, Clone, PartialEq)]

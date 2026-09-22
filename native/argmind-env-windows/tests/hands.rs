@@ -193,3 +193,43 @@ fn the_pattern_arm_and_the_click_arm_are_separate_tallies() {
     assert!(hands.why.is_empty());
     assert_eq!((hands.by_pattern, hands.by_click), (0, 1));
 }
+
+/// **Typing through a pattern is a second switch, not the same one.**
+///
+/// Clicking through a pattern does what a click does and leaves the pointer where the person put
+/// it. Typing through one *replaces the field* where keys insert at the caret — `ValuePattern` has
+/// no insert and neither does anything else in UI Automation. So turning the measured one on must
+/// not carry the unmeasured one with it.
+#[test]
+fn clicking_patterns_do_not_turn_typing_patterns_on() {
+    let both = WindowsHands::unrestricted();
+    assert!(!both.patterns && !both.typing_patterns, "something is on by default");
+
+    let clicking = WindowsHands::unrestricted().with_patterns();
+    assert!(clicking.patterns);
+    assert!(!clicking.typing_patterns, "with_patterns turned typing on as well");
+
+    let typing = WindowsHands::unrestricted().with_typing_patterns();
+    assert!(typing.typing_patterns);
+    assert!(!typing.patterns, "with_typing_patterns turned clicking on as well");
+
+    //: And arming is a third thing again — a harness that is dry still chooses a path, which is
+    //: the only reason its dry arm is worth reading.
+    assert!(!WindowsHands::unrestricted().with_typing_patterns().live());
+    assert!(WindowsHands::unrestricted().with_typing_patterns().arm().live());
+    assert!(!WindowsHands::unrestricted().arm().typing_patterns);
+}
+
+/// **What ships, and the one place that decides it.**
+///
+/// The application asks `platform::hands` for its hands; that asks for clicking patterns and not
+/// for typing ones. If this ever fails because typing patterns were switched on, the thing to check
+/// first is whether `--bin typing` has been run — the numbers, not the intent.
+#[test]
+fn the_shipped_hands_click_through_patterns_and_type_through_keys() {
+    let source = include_str!("../../argmind-serve/src/platform.rs");
+    assert!(source.contains("Touch::unrestricted().with_patterns()"),
+            "the application no longer asks for clicking patterns");
+    assert!(!source.contains("with_typing_patterns"),
+            "typing patterns ship, and `--bin typing` has no recorded run to justify it");
+}

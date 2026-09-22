@@ -35,17 +35,25 @@
 //! shape as the one already recorded on the other side, where `InsertText`'s length is in bytes and
 //! not characters: two accessibility APIs that look alike and are not.
 //!
-//! The shape that could work is narrow and is **not implemented, because it is not measured**: read
-//! `CurrentValue`, use `SetValue` only when it is empty, fall back to keys otherwise. Measuring it
-//! needs a harness that launches a window of its own, and a harness that takes the foreground
-//! cannot be started from the session that would lose it.
+//! The shape that could work is narrow and is **built, off by default, and unmeasured**:
+//! [`crate::patterns::set_value`] reads `CurrentValue`, writes only into an empty control, and
+//! falls back to keys for everything else — read-only, no pattern, or a box that already holds
+//! something. `WindowsHands::with_typing_patterns` is the switch and it is a **second** switch:
+//! turning clicking patterns on must not carry this with it, because one of the two is measured.
+//!
+//! **Built rather than deferred, which is this crate's own precedent.** `patterns.rs` says it:
+//! *this path is off by default and exists so it can be measured... the earlier decision to leave
+//! it out would have left two experiments with one arm each, which is the shape this project calls
+//! a measurement that cannot answer its own question.* `argmind-measure --bin typing` is the
+//! harness, with an arm on each side, and it takes the foreground — so it cannot be run from the
+//! session that would lose it, which is why there is no number here yet.
 
 use std::time::{Duration, Instant};
 
 use argmind_core::contract::{Hands, Widget};
 use windows::Win32::UI::Accessibility::IUIAutomation;
 
-use crate::patterns::Operated;
+use crate::patterns::{Operated, Typed};
 use windows::Win32::Foundation::{HWND, POINT};
 use windows::Win32::UI::Input::KeyboardAndMouse::{
     SendInput, INPUT, INPUT_0, INPUT_KEYBOARD, INPUT_MOUSE, KEYBDINPUT, KEYBD_EVENT_FLAGS,
@@ -150,6 +158,13 @@ pub struct WindowsHands {
     /// reaching past an obstruction, and **the pointer left where it was, 3 of 3** — which is one
     /// real benefit rather than none, and is the owner's call rather than this comment's.
     pub patterns: bool,
+    /// **A second flag, and not the same question.** Clicking through a pattern does what a click
+    /// does and leaves the pointer alone; typing through one *replaces the field* where keys insert
+    /// at the caret. Turning the first on must not quietly turn the second on, so they are switched
+    /// and counted separately — and this one is off, because it has not been measured.
+    pub typing_patterns: bool,
+    /// How many times text went in through `ValuePattern` rather than through the keyboard.
+    pub by_value: u32,
     /// Made once and only if a pattern is ever wanted.
     automation: Option<IUIAutomation>,
     pub by_pattern: u64,
@@ -185,7 +200,8 @@ impl WindowsHands {
     }
 
     fn with(reach: Reach) -> Self {
-        WindowsHands { reach, patterns: false, automation: None, by_pattern: 0, by_click: 0,
+        WindowsHands { reach, patterns: false, typing_patterns: false, by_value: 0,
+                       automation: None, by_pattern: 0, by_click: 0,
                        why: String::new(), live: false, max_per_second: 4.0, clicked: 0,
                        refused: 0, elsewhere: 0, done: Vec::new(), last: None }
     }
@@ -201,6 +217,14 @@ impl WindowsHands {
     ///
     /// **For the harnesses that measure this path**, and for nothing else — see
     /// [`crate::patterns`] for why it is not on by default.
+    /// Type through `ValuePattern` where the control is empty and takes one. **Off by default and
+    /// unmeasured** — see [`crate::patterns::set_value`] for why it is narrow, and
+    /// `argmind-measure --bin typing` for the harness with an arm on each side.
+    pub fn with_typing_patterns(mut self) -> Self {
+        self.typing_patterns = true;
+        self
+    }
+
     pub fn with_patterns(mut self) -> Self {
         self.patterns = true;
         self
@@ -292,6 +316,26 @@ impl WindowsHands {
     }
 
     pub fn type_string(&mut self, text: &str) -> Did {
+        //: **Tried before the dry check, not after.** A dry run that went straight to
+        //: `Sent { live: false }` would report the keyboard arm on a machine where the pattern arm
+        //: is what would have happened, and a harness comparing the two would be comparing one.
+        self.why = String::new();
+        if self.typing_patterns {
+            if self.automation.is_none() {
+                self.automation = crate::open_automation().ok();
+            }
+            if let Some(automation) = &self.automation {
+                let reach = self.reach;
+                match crate::patterns::set_value(automation, text, self.live,
+                                                 &|owner| may_touch(reach, owner)) {
+                    Typed::Set | Typed::WouldSet => {
+                        self.by_value += 1;
+                        return self.record(Did::Sent { live: self.live });
+                    }
+                    Typed::Keys(why) => self.why = why,
+                }
+            }
+        }
         if !self.live {
             return self.record(Did::Sent { live: false });
         }

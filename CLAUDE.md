@@ -427,9 +427,14 @@ removed that reason the day before. `platform::hands` asks for them, which is al
 stopped the application building its own hands. **Typing is the half with no answer**: it is
 `KEYEVENTF_UNICODE`, so it lands in whatever has focus, and UI Automation has no insert —
 `ValuePattern::SetValue` replaces the whole value where AT-SPI's `EditableText.InsertText` inserts
-at an offset. Keystroke-free typing on Windows would mean *replace this field*. The narrow shape —
-`SetValue` only into an empty one — is written down and not built, because measuring it needs a
-harness that takes the foreground.
+at an offset. Keystroke-free typing on Windows would mean *replace this field*. **The narrow shape is built and
+off**: `patterns::set_value` writes only into a control that is empty, takes a value pattern and is
+not read-only, and falls back to keys otherwise — behind `with_typing_patterns`, a **second** switch
+so that turning the measured one on does not carry the unmeasured one with it. `argmind-measure
+--bin typing` has an arm on each side and answers four things: does it land, is it the same text in
+Korean as in ASCII, does it refuse a box that already holds something, and what does it cost. **It
+takes the foreground, so it cannot be run from the session driving it** — the same constraint
+`clicking` has, and the reason there is no number yet.
 
 **Streaming was measured and declined**: warm, the first token lands at 36 ms and `say` completes at
 232 ms of a 478 ms reply, so it buys ~250 ms at the cost of extracting a string from partial JSON.
