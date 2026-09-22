@@ -289,13 +289,32 @@ already exists to say so out loud.
 **All the inputs, one at a time**, because the owner asked for 화면 · 카메라 · 음성 · 키입력 and
 they are in very different states. **화면** is done and on by default. **음성** is blocked on one
 measurement whose harness is written — `--bin listening`, 30 seconds and somebody talking.
-**카메라** is **measured**: `qwen3-vl:8b` was already here, Apache-2.0, and a caption of a drawn
-test card is accurate and takes **about 8 s** — too slow for the 0.7 s watch loop, fine for the 30 s
-tick. The 24–82 s figure does not apply, it was a coordinate on a dense screen. It is not video
+**카메라 is off, and what it is blocked on is not a model.** Nothing opens it except the 시험
+button in 설정; there is no `camera` key in `DECIDABLE`, and the only sense on the blackboard is
+화면. The captioning route was measured — `qwen3-vl:8b`, Apache-2.0, a caption of **a drawn test
+card** in **about 8 s**, too slow for the 0.7 s watch loop and fine for the 30 s tick; not video
 memory (both models sit on the GPU, the answer after a look is 0.2 s) and **not resolution**
-(`prompt_tokens` is 1110 from 640×360 down to 80×46) — it is the model thinking, 467–1,690
-characters of it about four coloured squares, and **`qwen3-vl:8b` ignores `think: false`** three
-ways over. The lever is a non-reasoning vision model. **키입력** is implementable and deliberately not implemented — every keystroke means a
+(`prompt_tokens` is 1110 from 640×360 down to 80×46) but the model thinking, 467–1,690 characters
+about four coloured squares, with **`think: false` ignored** three ways over. **But that is the
+wrong route.** `camera.rs` reduces every frame to 64×36 greys and returns nothing larger *as a
+property of the type*, because what a camera can honestly supply is **whether somebody is there** —
+the fact argmind most needs and does not have, since watching the screen will happily talk to an
+empty chair. One look is **32 ms**, not 8 s.
+
+**That is blocked on twenty seconds of the owner's time, and until 2026-09-22 it was blocked on a
+broken instrument.** `measure/presence` asks a person to hold still and then move; run with nobody
+moving in either phase it separated them **2.17 against 0.65**, three to one in the wrong direction,
+purely by which phase ran first. `settle()` returned on the first consecutive pair under `SETTLED`,
+which a warming camera offers within about five frames — it reported **329–352 ms** on every open
+while the picture went on moving for most of ten seconds. **The harness's own conclusion about the
+statistic had never been carried across to the settle check.** It now takes the median of a
+one-second window, twice in a row, and reports **2006 ms**; the control then reads null — still 0.36
+against 0.48, with the sign flipping between the two, which is noise and not an order effect.
+**So the 2026-09-16 reading — still 0.03, moving 0.49, tails overlapping on one still second at
+0.40 — was taken on a camera the code had called ready and was not, and may be recoverable.** One
+thing the control found separately: **the still floor moves between runs** — 0.07, 0.12, 0.22 and
+0.53 on three-second medians of the same empty room — so a threshold that is a constant looks
+unlikely, and 0.49 is inside the range a still room has reached. **키입력** is implementable and deliberately not implemented — every keystroke means a
 global hook, which is a keylogger capturing passwords in a program that sends text to a model; what
 argmind plausibly wants is typing *activity*, which needs no characters and is a different feature
 with a different permission.

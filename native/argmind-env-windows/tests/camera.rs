@@ -143,3 +143,45 @@ fn an_empty_buffer_reduces_without_falling_over() {
     //: far as it goes rather than off the end of it.
     assert_eq!(reduce(&[255u8; 64], 1920, 1080, 1920 * 4).len(), WIDE * TALL);
 }
+
+/// **One quiet pair is not a settled camera**, which is the defect this replaced.
+///
+/// `settle` used to return on the first consecutive pair under [`SETTLED`]. A warming camera offers
+/// one within about five frames — measured 2026-09-22, it reported 329–352 ms on every open while
+/// one-second windows went on reading 0.57–2.84 for most of ten seconds. Everything measured in
+/// that window was measured on a camera the code had called ready, and `measure/presence` was
+/// separating its two phases by *which one ran first*: 2.17 against 0.65 with nobody moving in
+/// either, collapsing to 0.22 when the camera was already warm.
+#[test]
+fn a_single_quiet_frame_does_not_settle_a_drifting_camera() {
+    use argmind_env_windows::camera::{quiet_enough, ENOUGH_TO_JUDGE};
+
+    //: The shape that broke it: loud, with one quiet sample in the middle. The old rule returned
+    //: `true` on that sample; a median does not notice it.
+    let mut drifting = vec![2.8, 3.1, 0.2, 2.4, 1.9, 2.2, 3.0];
+    assert_eq!(quiet_enough(&mut drifting), Some(false), "one quiet frame settled a drift");
+
+    //: And the opposite has to still work, or the camera never reports settled at all.
+    let mut quiet = vec![0.10, 0.12, 0.14, 0.11, 0.13, 0.12, 4.9];
+    assert_eq!(quiet_enough(&mut quiet), Some(true), "one spike unsettled a quiet room");
+
+    //: **Too few is not an answer.** Four frames say nothing, and returning `false` for them would
+    //: be indistinguishable from a camera that is genuinely moving.
+    let mut few = vec![0.1; ENOUGH_TO_JUDGE - 1];
+    assert_eq!(quiet_enough(&mut few), None);
+    let mut just_enough = vec![0.1; ENOUGH_TO_JUDGE];
+    assert_eq!(quiet_enough(&mut just_enough), Some(true));
+}
+
+/// **The limit has to be able to contain the wait it is now limiting.**
+///
+/// Four seconds was the limit for a check that returned in 330 ms, so it never mattered. Cold, the
+/// picture was still moving between three and seven seconds after opening and quiet by ten — n=1,
+/// two runs — so a limit under that would report *never settled* on a camera that settles.
+#[test]
+fn the_limit_outlasts_the_settling_it_was_measured_against() {
+    use argmind_env_windows::camera::{SETTLE_LIMIT, SETTLE_WINDOW};
+    assert!(SETTLE_LIMIT > 10.0, "{SETTLE_LIMIT} s cannot contain a ten second settle");
+    //: And it is enough windows to be a sequence of judgements rather than one.
+    assert!(SETTLE_LIMIT / SETTLE_WINDOW >= 5.0);
+}

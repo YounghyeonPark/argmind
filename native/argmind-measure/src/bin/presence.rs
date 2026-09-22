@@ -64,6 +64,41 @@
 //! not. Both statistics and two window lengths are reported from one run, so the next attempt does
 //! not cost another ten seconds of somebody sitting still twice.
 //!
+//! ## The control nobody had run — 2026-09-22
+//!
+//! **Both phases with nobody moving in either.** It should read null; it did not. Cold, four
+//! seconds a phase: still **2.17**, moving **0.65** — separated three to one, in the wrong
+//! direction, by nothing but which phase ran first.
+//!
+//! The prediction written before the next run was that this is the sensor still adapting, so a
+//! second run with the camera warm would collapse the first phase. It read **0.22**, a tenth.
+//!
+//! **The cause is in `camera.rs` and it is one line.** `settle()` returned on the first consecutive
+//! pair under `SETTLED`, and a warming camera offers one within about five frames — it reported
+//! 329–352 ms on every open while one-second windows went on reading 0.57–2.84 for most of ten
+//! seconds. *This harness's own conclusion about the statistic applied to the settle check and
+//! nobody had carried it across*: one sample of a distribution that is almost always nothing with
+//! rare enormous spikes says nothing in either direction.
+//!
+//! So `settle` now takes the median of a one-second window, and two of them in a row. **What that
+//! means for the 2026-09-16 result above is that its still phase was taken on a camera that had
+//! been called ready and was not** — and the one still second at 0.40 that made the tails overlap
+//! is the most likely casualty. The overlap may not be real. It has not been re-run with a person,
+//! and until it is, neither the old conclusion nor its withdrawal is worth anything.
+//!
+//! **The control passes now.** Cold, ten seconds a phase, nobody moving in either: still 0.36
+//! against 0.48 on one-second medians and 0.53 against 0.44 on three-second ones — overlapping,
+//! and the *sign flips between them*, which is what noise looks like and what an order effect does
+//! not. Settling reports 2006 ms where it used to report 329.
+//!
+//! **And one thing the control found that has nothing to do with the bug: the floor moves between
+//! runs.** Three-second still medians read 0.07, 0.12, 0.22 and 0.53 across four runs of the same
+//! empty room, with the frame rate wandering between 17 and 30 a second. Only the within-run
+//! comparison means anything, and **a threshold that is a constant in this file looks unlikely** —
+//! the moving phase on 2026-09-16 read 0.49, which is inside the range a still room has since
+//! reached. That is a reason to take the measurement, not a reason to skip it: it is exactly the
+//! question this harness exists to answer.
+//!
 //! Nothing is written to disk, nothing is sent anywhere, and the picture never leaves the 64×36
 //! greys `camera.rs` reduces it to — see the note there about what that size can and cannot be.
 

@@ -174,8 +174,61 @@ pub fn reduce(bgra: &[u8], width: usize, height: usize, stride: usize) -> Vec<u8
 /// own*; it says nothing about whether anybody is there.
 pub const SETTLED: f64 = 0.5;
 
-/// How long to wait for that before giving up and saying so. Measured: it takes about 1.4 s.
-pub const SETTLE_LIMIT: f64 = 4.0;
+/// How long to wait for that before giving up and saying so.
+///
+/// **Four seconds until 2026-09-22, and it was four seconds for a settle check that could not
+/// spend them.** The old one returned on the first consecutive pair under [`SETTLED`], and a
+/// warming camera produces those constantly — frame-level median 1.50 with a ninetieth of 4.72
+/// still has a quiet pair every few frames. It reported 329–352 ms every time and the picture went
+/// on moving for most of ten seconds afterwards. With a window instead of a pair the wait is real,
+/// so the limit has to be long enough to contain it.
+///
+/// **Fifteen, from two runs and not from a measurement of the settle time itself.** Cold, one-second
+/// windows read 0.57–2.84 between three and seven seconds after opening and 0.39–0.72 between ten
+/// and fourteen; warm, 0.10–0.28 from the start. So it is done somewhere between seven and ten
+/// seconds cold, n=1, and fifteen is that with room rather than a number anybody derived.
+pub const SETTLE_LIMIT: f64 = 15.0;
+
+/// How long a stretch has to be quiet before the camera counts as settled.
+///
+/// **A window, because a pair is not a statistic** — `measure/presence` reached that conclusion
+/// about this same signal and for the same reason: the distribution is *almost always nothing with
+/// rare enormous spikes*, so one sample says nothing in either direction. A second of it cannot be
+/// crossed by a single flash and cannot be faked by a camera that is still walking its exposure.
+pub const SETTLE_WINDOW: f64 = 1.0;
+
+/// Fewer differences than this in a window and it is not a median of anything. This camera has
+/// been seen at 13–16 frames a second and at 30, so a second holds between fourteen and thirty.
+pub const ENOUGH_TO_JUDGE: usize = 6;
+
+/// How many quiet windows in a row before the camera counts as settled.
+///
+/// **Two, because one was still not enough and the run said so.** With a single quiet window the
+/// check reported 1030 ms on a cold open and `presence`'s first phase then read a median of 0.22
+/// with a **2.99** in it, against 0.07 in the phase ten seconds later with nobody moving in either.
+/// Cold, quiet seconds alternate with drifting ones, so one of them is a coin landing the right way
+/// up. Two in a row is the same criterion asked twice rather than a longer sleep — this file
+/// refuses fixed waits, and a guessed ten seconds is what that would be.
+pub const SETTLE_RUNS: usize = 2;
+
+/// Is a window of consecutive differences quiet enough to call the camera settled?
+///
+/// `None` when there are too few to judge — **which is not the same as *not settled***, and saying
+/// so is the point of the type. The caller waits for another window rather than concluding
+/// anything from four frames.
+///
+/// **Public and pure so the defect it replaced can be written down as a test.** The old check was
+/// `one pair < SETTLED`, and the reason that fails is a property of the numbers rather than of the
+/// code: a warming camera's differences are *almost always nothing with rare enormous spikes*, so a
+/// quiet pair arrives within a few frames of opening while the picture is still walking. A median
+/// cannot be moved by one sample in either direction, which is the whole reason to take one.
+pub fn quiet_enough(window: &mut Vec<f64>) -> Option<bool> {
+    if window.len() < ENOUGH_TO_JUDGE {
+        return None;
+    }
+    window.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+    Some(window[window.len() / 2] < SETTLED)
+}
 
 /// An open camera. **The light is on while this exists.**
 pub struct Camera {
@@ -310,17 +363,49 @@ impl Camera {
     ///
     /// **Not a sleep.** A fixed wait is a guess that is too long on one machine and too short on
     /// the next; this watches the thing it is waiting for and stops when it has happened.
+    ///
+    /// **And not one pair, since 2026-09-22.** The first version returned as soon as any two
+    /// consecutive looks differed by less than [`SETTLED`], which a warming camera offers within
+    /// about five frames — it reported 329–352 ms on every open while the picture went on moving
+    /// ten times the settled floor for most of ten seconds. Everything measured in that window was
+    /// measured on a camera this function had called ready.
+    ///
+    /// **Found by a control nobody had run**: `measure/presence` asks a person to hold still and
+    /// then move, and its still phase goes first. Run with nobody moving in either phase it
+    /// separated them 2.17 against 0.65 — three times, in the wrong direction — and running it
+    /// again with the camera warm collapsed the first phase to 0.22. The prediction was written
+    /// before that second run.
     fn settle(&mut self) -> Option<f64> {
         let began = Instant::now();
         let mut before: Option<Frame> = None;
+        let mut window: Vec<f64> = Vec::new();
+        let mut ends = SETTLE_WINDOW;
+        let mut in_a_row = 0usize;
         while began.elapsed().as_secs_f64() < SETTLE_LIMIT {
             let Ok(now) = self.look() else { continue };
             if let Some(last) = &before {
-                if now.differs_from(last) < SETTLED {
-                    return Some(began.elapsed().as_secs_f64());
-                }
+                window.push(now.differs_from(last));
             }
             before = Some(now);
+            //: **Cut by the clock rather than by a count**, the same as `presence`: this camera has
+            //: been measured at 32 ms a look and at 111 ms, so a window of *n* frames is a window
+            //: of between half a second and a second and a half depending on the day.
+            let so_far = began.elapsed().as_secs_f64();
+            if so_far < ends {
+                continue;
+            }
+            ends += SETTLE_WINDOW;
+            match quiet_enough(&mut window) {
+                //: **A loud window resets the count**, so the two have to be consecutive — two
+                //: quiet seconds either side of a drifting one is a drifting camera.
+                Some(true) => in_a_row += 1,
+                Some(false) => in_a_row = 0,
+                None => {}
+            }
+            window.clear();
+            if in_a_row >= SETTLE_RUNS {
+                return Some(so_far);
+            }
         }
         None
     }
