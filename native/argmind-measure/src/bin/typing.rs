@@ -1,8 +1,9 @@
 //! Can argmind put text in a box without touching the keyboard?
 //!
 //! ```text
-//!   typing              dry — resolves and reports, writes nothing
-//!   typing --live       actually puts the text in
+//!   typing                    dry — resolves and reports, writes nothing
+//!   typing --live             actually puts the text in
+//!   typing --live mspaint.exe some other classic Win32 application
 //! ```
 //!
 //! **Why this is not settled by the clicking answer.** Control patterns ship for clicking since
@@ -17,62 +18,86 @@
 //! that could be honest is narrow: **set only into a control that is empty**, keys otherwise. That
 //! is what `patterns::set_value` does and what this measures.
 //!
-//! ## The four things it has to answer, and two arms so it can
+//! ## A fresh window for every case, and the first version is why
+//!
+//! The first version typed four times into one box and cleared it between arms with `ctrl+a` and
+//! `delete`. **`ctrl+a` is not a named key** — `KEY_NAMES` is fifteen single keys, listed rather
+//! than guessed precisely so an agent cannot invent `alt+F4` — so the clear was refused, every arm
+//! after the first ran on a dirty box, and the run read:
+//!
+//! ```text
+//!   키보드        ascii   맞음   "hello\r"
+//!   키보드        한글    다름   "hello안녕하세요 반갑습니다\r"      <- never cleared
+//! ```
+//!
+//! and then reported that the narrow condition had failed. **It had not; the harness had.** So
+//! there is no clearing here at all: each case gets its own application, launched and killed, and
+//! an empty box is a property of a new window rather than of a step that can be refused.
+//!
+//! ## What it answers
 //!
 //! | | |
 //! |---|---|
-//! | **does it land** | is the text in the box afterwards, read back out of the control |
-//! | **is it the same text** | `SetValue` takes a string; keys take UTF-16 units. Korean is the case |
-//! | **does it refuse the case it must** | a box with something in it already: keys, never `SetValue` |
-//! | **does it cost the keyboard** | what had focus before, and what has it after |
-//!
-//! Both arms on the same box, one after the other, so the comparison is not against a remembered
-//! number from another day.
+//! | **does it land** | read back out of the control, by point rather than by focus |
+//! | **is it the same text** | `SetValue` takes a `BSTR`, keys take UTF-16 units. Korean is the case |
+//! | **where did it go** | the widget's value *and* the focused element's, because those coming apart is the one way `set_value` could write somewhere nobody looked |
+//! | **does it refuse what it must** | a box with something in it already: keys, never `SetValue` |
 //!
 //! ## What it will not do
 //!
-//! **It types only into a window it launched itself.** `Launched::hands()` is `Reach::OnlyProcess`,
+//! **It types only into a window it launched itself.** `Launched::hands()` is `Reach::OnlyProcess`
 //! and `set_value` is given the same guard from the focused element's own process rather than from
-//! a pixel — without that a harness restricted to its own windows could still write into somebody
+//! a pixel — without that, a harness restricted to its own windows could still write into somebody
 //! else's, and the rule would hold for one hand and not the other.
 //!
-//! **It takes the foreground**, so it cannot be run from the session driving it. That is the same
-//! constraint `clicking` has and the same reason: a program cannot steal focus from the thing that
-//! would lose it and still measure what happened.
+//! **Notepad will not do.** On Windows 11 `System32\notepad.exe` is a launcher for a packaged
+//! application, so the pid this starts owns no window and the reach guard would correctly refuse
+//! the one that appears. Character Map is a classic Win32 application and `clicking` drives it for
+//! the same reason.
+//!
+//! **It takes the foreground**, so it cannot be run from the session driving it.
 
 use std::thread::sleep;
 use std::time::{Duration, Instant};
 
 use argmind_core::contract::{Eyes, Hands, Widget};
 use argmind_env_windows::launch::{foreground_is, to_front, Launched};
+use argmind_env_windows::patterns::{focused_value, value_at};
 use argmind_env_windows::{open_automation, WindowsEyes};
 
-/// Something with a plain edit box, **and a classic Win32 one on purpose.**
-///
-/// The first version said `notepad.exe` and the run reported *no window*. On Windows 11 Notepad is
-/// a packaged application: the exe under `System32` is a launcher that hands the job to a different
-/// process, so the pid this harness started owns nothing and `Reach::OnlyProcess` would refuse to
-/// touch the window that did appear — correctly, since it is somebody else's.
-///
-/// Character Map is the one `clicking` already drives for the same reason, and its *복사할 문자*
-/// box is an ordinary edit control in the default view.
+/// A classic Win32 application with an ordinary edit box in its default view.
 const APP: &str = "charmap.exe";
 
 /// **Korean and ASCII**, because the two paths carry text differently: `SetValue` hands over a
-/// `BSTR` and the keyboard hands over UTF-16 code units one at a time. A test in English would pass
-/// on a path that mangles the thing this program mostly says.
+/// `BSTR` and the keyboard hands over UTF-16 code units one at a time. A test in English alone
+/// would pass on a path that mangles the thing this program mostly says.
 const SAYS: [&str; 2] = ["hello", "안녕하세요 반갑습니다"];
 
-/// The first editable box on the window in front. **`edit` before `document`**, because a
-/// document is usually the whole canvas and an edit is the field somebody types into.
-fn edit_in(eyes: &mut WindowsEyes, pid: u32) -> Option<Widget> {
-    if !foreground_is(pid) {
+/// One application, opened and ready, with the box to type into.
+struct Fresh {
+    app: Launched,
+    box_: Widget,
+}
+
+fn fresh(exe: &str, eyes: &mut WindowsEyes) -> Option<Fresh> {
+    let app = Launched::start(exe).ok()?;
+    let window = app.window(Duration::from_secs(8))?;
+    to_front(window);
+    sleep(Duration::from_millis(600));
+    if !foreground_is(app.pid) {
         return None;
     }
+    //: `edit` before `document`: a document is usually the whole canvas and an edit is the field
+    //: somebody types into.
     let seen = eyes.foreground();
-    seen.iter().find(|w| w.role == "edit")
-        .or_else(|| seen.iter().find(|w| w.role == "document"))
-        .cloned()
+    let box_ = seen.iter().find(|w| w.role == "edit")
+        .or_else(|| seen.iter().find(|w| w.role == "document"))?
+        .clone();
+    Some(Fresh { app, box_ })
+}
+
+fn tidy(s: &str) -> String {
+    s.trim_end_matches(['\r', '\n']).to_string()
 }
 
 fn main() {
@@ -81,28 +106,12 @@ fn main() {
 
 fn run() -> i32 {
     let live = std::env::args().any(|a| a == "--live");
-    let app = std::env::args().skip(1).find(|a| a.ends_with(".exe"))
+    let exe = std::env::args().skip(1).find(|a| a.ends_with(".exe"))
         .unwrap_or_else(|| APP.into());
     println!("\n  키를 누르지 않고 글자를 넣을 수 있는가 — {}",
              if live { "LIVE, 실제로 씁니다" } else { "DRY, 아무것도 쓰지 않습니다" });
-    println!("  이 하네스가 직접 띄운 창에만 씁니다. 앞면을 가져갑니다.\n");
+    println!("  {exe} 를 경우마다 새로 띄웁니다. 앞면을 가져가고, 끝나면 닫습니다.\n");
 
-    let launched = match Launched::start(&app) {
-        Ok(l) => l,
-        Err(e) => {
-            println!("  {app} 를 띄우지 못했습니다 ({e})");
-            return 2;
-        }
-    };
-    let Some(window) = launched.window(Duration::from_secs(6)) else {
-        //: **Say which of the two it is.** *No window* and *a window in another process* look the
-        //: same from here and need different answers, and the first run of this lost twenty minutes
-        //: to the difference.
-        println!("  {app} 가 이 프로세스(pid {})에 창을 열지 않았습니다.", launched.pid);
-        println!("  패키지 앱이면 다른 프로세스로 넘깁니다 — 그 창은 우리 것이 아니므로 Reach::OnlyProcess 가 옳게 거절합니다. System32 의 고전 Win32 앱을 인자로 주세요.");
-        return 2;
-    };
-    let pid = launched.pid;
     let Ok(automation) = open_automation() else {
         println!("  UI Automation 이 열리지 않았습니다");
         return 2;
@@ -115,102 +124,109 @@ fn run() -> i32 {
         }
     };
 
-    let mut rows: Vec<(&str, &str, bool, String, f64)> = Vec::new();
+    println!("  {:<13} {:<7} {:>8}   {:<6} {}",
+             "경로", "글자", "걸림", "판정", "상자에서 읽은 것");
+    let mut rows: Vec<(&str, bool)> = Vec::new();
     for arm in ["키보드", "ValuePattern"] {
         for said in SAYS {
-            to_front(window);
-            sleep(Duration::from_millis(500));
-            if !foreground_is(pid) {
-                println!("  건너뜀  {arm:<12} 다른 창이 앞으로 왔습니다");
-                continue;
-            }
-            let Some(box_) = edit_in(&mut eyes, pid) else {
-                println!("  건너뜀  {arm:<12} 편집 상자를 찾지 못했습니다");
+            let Some(mut it) = fresh(&exe, &mut eyes) else {
+                println!("  {arm:<13} {:<7} 창을 띄우지 못했습니다 — 패키지 앱이면 다른 \
+프로세스로 넘깁니다. System32 의 고전 Win32 앱을 인자로 주세요.",
+                         if said.is_ascii() { "ascii" } else { "한글" });
                 continue;
             };
-            //: **Emptied between arms through the same hands**, so the second arm meets the
-            //: condition `set_value` requires rather than whatever the first left behind.
-            let mut hands = launched.hands();
-            if live {
-                hands = hands.arm();
-            }
-            hands.click(&box_);
-            sleep(Duration::from_millis(200));
-            if live {
-                hands.press("ctrl+a");
-                hands.press("delete");
-                sleep(Duration::from_millis(200));
-            }
-
-            let mut hands = launched.hands();
+            let (cx, cy) = it.box_.centre();
+            let mut hands = it.app.hands();
             if arm == "ValuePattern" {
                 hands = hands.with_typing_patterns();
             }
             if live {
                 hands = hands.arm();
             }
-            hands.click(&box_);
-            sleep(Duration::from_millis(200));
+            hands.click(&it.box_);
+            sleep(Duration::from_millis(250));
+            //: **Empty because the window is new**, and reported rather than assumed — a box that
+            //: started with something in it would send the pattern arm down the fallback and the
+            //: two arms would quietly be one.
+            let started = tidy(&value_at(&automation, cx, cy).unwrap_or_default());
             let began = Instant::now();
             hands.type_text(said);
             let took = began.elapsed().as_secs_f64() * 1000.0;
-            sleep(Duration::from_millis(300));
+            sleep(Duration::from_millis(350));
 
-            let landed = argmind_env_windows::patterns::focused_value(&automation).unwrap_or_default();
-            let ok = !live || landed.trim() == said;
-            println!("  {arm:<12} {:<12} {:>6.0} ms  {}  읽어보니 {:?}",
-                     if said.is_ascii() { "ascii" } else { "한글" }, took,
-                     if ok { "맞음" } else { "다름" }, landed.chars().take(24).collect::<String>());
-            rows.push((arm, said, ok, landed, took));
+            let in_box = tidy(&value_at(&automation, cx, cy).unwrap_or_default());
+            let in_focus = tidy(&focused_value(&automation).unwrap_or_default());
+            let ok = !live || in_box == said;
+            rows.push((arm, ok));
+            println!("  {arm:<13} {:<7} {took:>6.0} ms   {:<6} {:?}{}{}",
+                     if said.is_ascii() { "ascii" } else { "한글" },
+                     if ok { "맞음" } else { "다름" },
+                     in_box.chars().take(28).collect::<String>(),
+                     if started.is_empty() { "" } else { "   ** 새 창인데 비어 있지 않았음" },
+                     if in_box == in_focus { String::new() } else {
+                         format!("   ** 포커스에는 {:?}",
+                                 in_focus.chars().take(20).collect::<String>())
+                     });
+            it.app.close();
+            sleep(Duration::from_millis(250));
         }
     }
 
-    //: **The case it has to refuse**, and the one that would delete somebody's work if it did not.
+    //: **The case that would delete somebody's work.** A fresh window, something put in with the
+    //: keyboard — which appends — and then the pattern arm on top of it.
     println!();
-    to_front(window);
-    sleep(Duration::from_millis(400));
-    if let Some(box_) = edit_in(&mut eyes, pid) {
-        let mut hands = launched.hands().with_typing_patterns();
-        if live {
-            hands = hands.arm();
-        }
-        hands.click(&box_);
-        sleep(Duration::from_millis(200));
-        //: Whatever the last arm left in the box is what makes this the *already has something*
-        //: case; if the box is empty the question has not been asked.
-        let before = argmind_env_windows::patterns::focused_value(&automation).unwrap_or_default();
-        hands.type_text("추가");
-        sleep(Duration::from_millis(300));
-        let after = argmind_env_windows::patterns::focused_value(&automation).unwrap_or_default();
-        if before.is_empty() {
-            println!("  상자가 비어 있어 '이미 뭔가 있을 때' 를 묻지 못했습니다");
-        } else if after.contains(&before) {
-            println!("  이미 있던 것을 지우지 않음 — 키보드로 넘어갔습니다 (앞 {:?})",
-                     before.chars().take(16).collect::<String>());
-        } else {
-            println!("  **이미 있던 것이 사라졌습니다** — 좁은 조건이 지켜지지 않았습니다");
+    match fresh(&exe, &mut eyes) {
+        None => println!("  '이미 뭔가 있을 때' 를 묻지 못했습니다 — 창이 뜨지 않았습니다"),
+        Some(mut it) => {
+            let (cx, cy) = it.box_.centre();
+            let mut keys = it.app.hands();
+            if live {
+                keys = keys.arm();
+            }
+            keys.click(&it.box_);
+            sleep(Duration::from_millis(250));
+            keys.type_text("먼저");
+            sleep(Duration::from_millis(350));
+            let before = tidy(&value_at(&automation, cx, cy).unwrap_or_default());
+
+            let mut pattern = it.app.hands().with_typing_patterns();
+            if live {
+                pattern = pattern.arm();
+            }
+            pattern.click(&it.box_);
+            sleep(Duration::from_millis(250));
+            pattern.type_text("추가");
+            sleep(Duration::from_millis(350));
+            let after = tidy(&value_at(&automation, cx, cy).unwrap_or_default());
+
+            if !live {
+                println!("  DRY 라 '이미 뭔가 있을 때' 는 묻지 못합니다 — --live 가 필요합니다");
+            } else if before.is_empty() {
+                println!("  키보드가 아무것도 넣지 못해 이 질문을 못 했습니다");
+            } else if after.contains(&before) {
+                println!("  이미 있던 것을 지우지 않았습니다 — 키보드로 넘어갔습니다. \
+{before:?} -> {after:?}");
+            } else {
+                println!("  **이미 있던 것이 사라졌습니다** — 좁은 조건이 지켜지지 않았습니다. \
+{before:?} -> {after:?}");
+            }
+            it.app.close();
         }
     }
 
     println!();
     println!("  ── 읽기 ──");
-    let by = |arm: &str| rows.iter().filter(|r| r.0 == arm).collect::<Vec<_>>();
     for arm in ["키보드", "ValuePattern"] {
-        let mine = by(arm);
+        let mine: Vec<_> = rows.iter().filter(|r| r.0 == arm).collect();
         if mine.is_empty() {
-            println!("  {arm:<12} 잰 것이 없습니다");
+            println!("  {arm:<13} 잰 것이 없습니다");
             continue;
         }
-        let right = mine.iter().filter(|r| r.2).count();
-        let mean = mine.iter().map(|r| r.4).sum::<f64>() / mine.len() as f64;
-        println!("  {arm:<12} {right}/{} 맞음, 평균 {mean:.0} ms", mine.len());
+        println!("  {arm:<13} {}/{} 맞음", mine.iter().filter(|r| r.1).count(), mine.len());
     }
     if !live {
-        println!("\n  DRY 였으므로 '맞음' 은 글자가 들어갔다는 뜻이 아닙니다 — 경로가 골라졌다는 \
-뜻입니다. 숫자를 쓰려면 --live 로 다시 돌리세요.");
+        println!("\n  DRY 였으므로 '맞음' 은 글자가 들어갔다는 뜻이 아니라 경로가 골라졌다는 \
+뜻입니다. 숫자를 쓰려면 --live 로 돌리세요.");
     }
-    //: Notepad is left with text in it on purpose: nothing here saves, and a window closed by the
-    //: harness would take the evidence with it.
-    println!("\n  창은 열어 둡니다. 아무것도 저장하지 않았으니 그냥 닫으시면 됩니다.");
     0
 }

@@ -55,6 +55,24 @@ pub enum Typed {
     Keys(String),
 }
 
+/// What the control at a point holds right now.
+///
+/// **By point rather than by focus, and the difference is the measurement.** `set_value` writes to
+/// whatever has focus; a harness that also *read* by focus could not tell *the text went into the
+/// box* from *the text went somewhere and the box is empty*. Reading both is how those come apart.
+///
+/// Resolved with `ElementFromPoint` and no ancestor walk — the point is a widget's own centre,
+/// which resolves back to itself about seven times in ten, and a walk upwards would hand back a
+/// container whose value is something else entirely.
+pub fn value_at(automation: &IUIAutomation, x: i64, y: i64) -> Option<String> {
+    unsafe {
+        let at = automation.ElementFromPoint(POINT { x: x as i32, y: y as i32 }).ok()?;
+        let raw = at.GetCurrentPattern(UIA_ValuePatternId).ok()?;
+        let value = raw.cast::<IUIAutomationValuePattern>().ok()?;
+        Some(value.CurrentValue().ok()?.to_string())
+    }
+}
+
 /// What the focused control holds right now, if it holds anything readable.
 ///
 /// **Here rather than in the harness**, which has no `windows` crate and should not grow one: a
