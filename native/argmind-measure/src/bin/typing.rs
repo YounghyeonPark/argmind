@@ -69,28 +69,30 @@
 //! held — a box that already held something was appended to and not replaced. The milliseconds are
 //! the call returning rather than the text appearing, and at four to fourteen they decide nothing.
 //!
-//! **And it is not switched on, because of what the measurement makes plain about the design.**
-//! `set_value` writes to the **focused** element, and getting focus onto the right control means
-//! clicking it — which is the pointer collision this was supposed to be the answer to. What it
-//! actually buys is narrower than the reason for wanting it:
+//! **That run also made plain that the first design answered nothing.** `set_value` wrote to
+//! `GetFocusedElement`, and getting focus onto the right control means clicking it — the collision
+//! the path was supposed to avoid. So it now writes **at the point of the widget argmind just
+//! clicked**: `WindowsHands` remembers the click, `type_string` takes it once, and an aim older
+//! than `AIM_LASTS` is no aim. No prompt edit was needed, because the target was never in the
+//! reply — it was in the effect before it.
 //!
-//! * the text arrives **at once**, so a person typing during argmind's twenty characters does not
-//!   get them interleaved;
-//! * no synthetic keys, so no IME in the middle of a Korean string.
+//! **What that buys, stated no wider than it is.** The click still happens, so the pointer still
+//! moves; what changes is where the *text* goes. Between argmind's click and its typing there are
+//! 250 ms, and in that time a person can click into a box of their own — the keyboard would put
+//! argmind's sentence in theirs and this puts it in the one argmind aimed at. On top of that the
+//! text arrives at once rather than character by character, and no IME sits in the middle of a
+//! Korean string.
 //!
-//! Both real, neither the point. **The version worth having writes to the element without focusing
-//! it at all** — `ValuePattern` does not require focus — but a `type` effect carries no target:
-//! the reply shape is `{"type": "<text>"}` and the model never says where. The hands would have to
-//! remember the widget they last clicked, which is a small change in `WindowsHands` and needs no
-//! prompt edit. That is the next thing to build and measure, and turning this on before it would be
-//! shipping the part that does not answer the question.
+//! **A second column says which path actually ran**, counted by the hands rather than inferred:
+//! both arms produce the same text when both work, so a fallback nobody noticed would read as the
+//! pattern arm succeeding.
 
 use std::thread::sleep;
 use std::time::{Duration, Instant};
 
 use argmind_core::contract::{Eyes, Hands, Widget};
 use argmind_env_windows::launch::{foreground_is, to_front, Launched};
-use argmind_env_windows::patterns::{focused_value, value_at};
+use argmind_env_windows::patterns::value_at;
 use argmind_env_windows::{open_automation, WindowsEyes};
 
 /// A classic Win32 application with an ordinary edit box in its default view.
@@ -152,8 +154,8 @@ fn run() -> i32 {
         }
     };
 
-    println!("  {:<13} {:<7} {:>8}   {:<6} {}",
-             "경로", "글자", "걸림", "판정", "상자에서 읽은 것");
+    println!("  {:<13} {:<7} {:>8}   {:<6} {:<16} {}",
+             "경로", "글자", "걸림", "판정", "실제 경로", "상자에서 읽은 것");
     let mut rows: Vec<(&str, bool)> = Vec::new();
     for arm in ["키보드", "ValuePattern"] {
         for said in SAYS {
@@ -180,21 +182,21 @@ fn run() -> i32 {
             let began = Instant::now();
             hands.type_text(said);
             let took = began.elapsed().as_secs_f64() * 1000.0;
+            let used = hands.by_value;
             sleep(Duration::from_millis(350));
 
             let in_box = tidy(&value_at(&automation, cx, cy).unwrap_or_default());
-            let in_focus = tidy(&focused_value(&automation).unwrap_or_default());
             let ok = !live || in_box == said;
+            //: **Which path actually ran**, counted by the hands rather than inferred from the
+            //: result: the two arms produce the same text when both work, so a fallback nobody
+            //: noticed would read as the pattern arm succeeding.
+            let how = if used > 0 { "패턴" } else { "키보드로 내려감" };
             rows.push((arm, ok));
-            println!("  {arm:<13} {:<7} {took:>6.0} ms   {:<6} {:?}{}{}",
+            println!("  {arm:<13} {:<7} {took:>6.0} ms   {:<6} {:<16} {:?}{}",
                      if said.is_ascii() { "ascii" } else { "한글" },
-                     if ok { "맞음" } else { "다름" },
-                     in_box.chars().take(28).collect::<String>(),
-                     if started.is_empty() { "" } else { "   ** 새 창인데 비어 있지 않았음" },
-                     if in_box == in_focus { String::new() } else {
-                         format!("   ** 포커스에는 {:?}",
-                                 in_focus.chars().take(20).collect::<String>())
-                     });
+                     if ok { "맞음" } else { "다름" }, how,
+                     in_box.chars().take(24).collect::<String>(),
+                     if started.is_empty() { "" } else { "   ** 새 창인데 비어 있지 않았음" });
             it.app.close();
             sleep(Duration::from_millis(250));
         }

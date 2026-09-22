@@ -233,3 +233,43 @@ fn the_shipped_hands_click_through_patterns_and_type_through_keys() {
     assert!(!source.contains("with_typing_patterns"),
             "typing patterns ship, and `--bin typing` has no recorded run to justify it");
 }
+
+/// **A click aims the type that follows it, once.**
+///
+/// A `type` effect names no target — the reply shape is `{"type": "<text>"}` — so the only thing
+/// that knows which box is meant is the click just before. Writing to `GetFocusedElement` instead
+/// was the first design and measuring it showed it answered nothing: focus is where argmind's own
+/// click put it, so writing there is writing wherever the person's last click went if they clicked
+/// in between.
+///
+/// Three properties, and each is a way the aim could go stale into somebody's work.
+#[test]
+fn a_click_aims_one_type_and_then_stops() {
+    use argmind_env_windows::hands::AIM_LASTS;
+
+    //: **Shorter than a model round trip**, which is the thing an aim must not survive: 0.61 s
+    //: median. Effects inside one `perform` are 250 ms apart at `max_per_second` 4, so a real
+    //: click-then-type is always well inside.
+    assert!(AIM_LASTS >= std::time::Duration::from_millis(500), "{AIM_LASTS:?} is inside the pacing");
+    assert!(AIM_LASTS <= std::time::Duration::from_secs(2), "{AIM_LASTS:?} outlives a model call");
+
+    //: **Taken rather than read**, held by reading the source because the compiler is happy either
+    //: way and `take()` is the whole of *one click grants one type*.
+    let source = include_str!("../src/hands.rs");
+    assert!(source.contains("let aim = self.aimed.take();"),
+            "the aim is no longer consumed; a second type would reuse the first click");
+    //: And it is set where a click happens and nowhere else.
+    assert_eq!(source.matches("self.aimed = Some(").count(), 1,
+               "something other than a click sets the aim");
+
+    //: **No aim is keys, not focus.** Falling back to `GetFocusedElement` is exactly the design
+    //: that was measured and rejected, so it must not come back as a convenience.
+    //:
+    //: **Code, not comments.** The first version of this read the whole file and caught the
+    //: sentence in the module note that explains why focus was abandoned — a rule that forbids
+    //: writing down the thing it forbids is a rule nobody can document.
+    let code: String = source.lines()
+        .map(|l| l.split("//").next().unwrap_or("")).collect::<Vec<_>>().join("
+");
+    assert!(!code.contains("GetFocusedElement"), "typing fell back to focus again");
+}

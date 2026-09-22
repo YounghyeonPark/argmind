@@ -35,6 +35,11 @@
 //! shape as the one already recorded on the other side, where `InsertText`'s length is in bytes and
 //! not characters: two accessibility APIs that look alike and are not.
 //!
+//! **It aims at the widget argmind just clicked, not at the focus.** The first version wrote to
+//! `GetFocusedElement` and a run showed that answered nothing — focus is where argmind's own click
+//! put it, so writing there is writing wherever anybody's last click went. A `type` effect names no
+//! target, but the click before it does, so [`AIM_LASTS`] holds one for one type and no longer.
+//!
 //! The shape that could work is narrow and is **built, off by default, and unmeasured**:
 //! [`crate::patterns::set_value`] reads `CurrentValue`, writes only into an empty control, and
 //! falls back to keys for everything else — read-only, no pattern, or a box that already holds
@@ -63,6 +68,14 @@ use windows::Win32::UI::Input::KeyboardAndMouse::{
 };
 use windows::Win32::UI::WindowsAndMessaging::{GetWindowThreadProcessId, SetCursorPos,
                                               WindowFromPoint};
+
+/// How long a click stays an aim for the typing that follows it.
+///
+/// **A second, and the number it has to beat is the model's.** Effects inside one `perform` are
+/// 250 ms apart at `max_per_second` 4, so a click and its type are always well inside this; a round
+/// trip to the model is 0.61 s median, which is what an aim must not survive. Past this the
+/// keyboard takes over, which is what happened before any of this existed.
+pub const AIM_LASTS: Duration = Duration::from_secs(1);
 
 /// The named keys, **listed rather than guessed**.
 ///
@@ -165,6 +178,14 @@ pub struct WindowsHands {
     pub typing_patterns: bool,
     /// How many times text went in through `ValuePattern` rather than through the keyboard.
     pub by_value: u32,
+    /// Where the last click landed, and when. **Taken once and never reused.**
+    ///
+    /// A `type` effect names no target — the reply shape is `{"type": "<text>"}` and the model
+    /// never says where — so the only thing that knows which box is meant is the click immediately
+    /// before it. `MOST_AT_ONCE = 3` is *click, type, enter* and the three arrive in one `perform`
+    /// a quarter of a second apart, which is what makes remembering one safe where remembering a
+    /// rectangle across a model call would not be.
+    aimed: Option<((i64, i64), Instant)>,
     /// Made once and only if a pattern is ever wanted.
     automation: Option<IUIAutomation>,
     pub by_pattern: u64,
@@ -200,7 +221,7 @@ impl WindowsHands {
     }
 
     fn with(reach: Reach) -> Self {
-        WindowsHands { reach, patterns: false, typing_patterns: false, by_value: 0,
+        WindowsHands { reach, patterns: false, typing_patterns: false, by_value: 0, aimed: None,
                        automation: None, by_pattern: 0, by_click: 0,
                        why: String::new(), live: false, max_per_second: 4.0, clicked: 0,
                        refused: 0, elsewhere: 0, done: Vec::new(), last: None }
@@ -257,6 +278,10 @@ impl WindowsHands {
             return self.record(Did::Refused(format!("unknown button {button:?}")));
         };
         let (x, y) = widget.centre();
+        //: **Remembered for the type that may follow**, and only for it — see `aimed`. Set before
+        //: the guard rather than after, because a click that was refused still tells the next
+        //: effect where argmind was aiming, and `set_value` runs the same guard again anyway.
+        self.aimed = Some(((x, y), Instant::now()));
         //: **Checked immediately before acting, not when the widget was chosen.** A listed widget
         //: is gone 13 times in 14 over the second a call takes, and a window that arrived in front
         //: in that second is exactly what this refuses.
@@ -320,19 +345,34 @@ impl WindowsHands {
         //: `Sent { live: false }` would report the keyboard arm on a machine where the pattern arm
         //: is what would have happened, and a harness comparing the two would be comparing one.
         self.why = String::new();
+        //: **Taken, so one click grants one type.** A second `type` after the same click, or a type
+        //: in a later turn whose own click never happened, falls back to the keyboard rather than
+        //: writing into a box somebody chose a minute ago.
+        let aim = self.aimed.take();
         if self.typing_patterns {
-            if self.automation.is_none() {
-                self.automation = crate::open_automation().ok();
-            }
-            if let Some(automation) = &self.automation {
-                let reach = self.reach;
-                match crate::patterns::set_value(automation, text, self.live,
-                                                 &|owner| may_touch(reach, owner)) {
-                    Typed::Set | Typed::WouldSet => {
-                        self.by_value += 1;
-                        return self.record(Did::Sent { live: self.live });
+            match aim {
+                //: **A stale aim is no aim.** Effects in one `perform` are 250 ms apart at
+                //: `max_per_second` 4, so a second is generous; a model round trip is 0.61 s
+                //: median, which is the thing this must not span.
+                Some((_, when)) if when.elapsed() > AIM_LASTS => {
+                    self.why = format!("the click was {:.1} s ago", when.elapsed().as_secs_f64());
+                }
+                None => self.why = "nothing was clicked first".into(),
+                Some(((x, y), _)) => {
+                    if self.automation.is_none() {
+                        self.automation = crate::open_automation().ok();
                     }
-                    Typed::Keys(why) => self.why = why,
+                    if let Some(automation) = &self.automation {
+                        let reach = self.reach;
+                        match crate::patterns::set_value(automation, x, y, text, self.live,
+                                                         &|owner| may_touch(reach, owner)) {
+                            Typed::Set | Typed::WouldSet => {
+                                self.by_value += 1;
+                                return self.record(Did::Sent { live: self.live });
+                            }
+                            Typed::Keys(why) => self.why = why,
+                        }
+                    }
                 }
             }
         }

@@ -89,33 +89,45 @@ pub fn focused_value(automation: &IUIAutomation) -> Option<String> {
     }
 }
 
-/// Put text into the focused control without touching the keyboard.
+/// Put text into the control at a point, without touching the keyboard.
+///
+/// **At a point rather than at the focus, and that is the whole difference.** The first version
+/// wrote to `GetFocusedElement`, and measuring it made plain that this answered nothing: getting
+/// focus onto the right control means clicking it, which is the collision the path was supposed to
+/// avoid. Writing to the widget argmind *just chose* is a different promise — if a person clicks
+/// somewhere else in the quarter second between argmind's click and its typing, the keyboard would
+/// put the text in **their** box and this puts it in the one argmind aimed at.
 ///
 /// **This is not the same operation as typing and that is the whole of the design.**
 /// `argmind-env-linux` types through `EditableText.InsertText`, which inserts *at an offset*. UI
 /// Automation has no insert anywhere: `ValuePattern::SetValue` replaces the entire value and
 /// `TextPattern` only reads. So the honest use of it is narrow — **only into a control that is
 /// empty** — and everything else falls back to keys. Typing into a box that already holds something
-/// is the case where the two APIs stop looking alike, and it is the case this refuses.
+/// is where the two APIs stop looking alike, and it is the case this refuses.
 ///
-/// **The reach guard applies here too, from the element rather than from a point.** A click is
-/// checked against whatever owns the window under the pixel; there is no pixel here, so the focused
-/// element's own process is what is compared. Without that, a harness restricted to its own windows
-/// could still type into somebody else's — the guard would hold for one hand and not the other.
+/// **The reach guard applies here too, from the element rather than from a point's window.** A
+/// click is checked against whatever owns the window under the pixel; here the element resolved at
+/// the point is what will be written to, so its own process is what is compared. Without that, a
+/// harness restricted to its own windows could still write into somebody else's, and the rule would
+/// hold for one hand and not the other.
+///
+/// **No ancestor walk.** The point is a widget's own centre, which resolves back to itself about
+/// seven times in ten; walking upwards would hand back a container whose value is something else
+/// entirely, and writing to that would be the quiet version of the failure this refuses loudly.
 ///
 /// `live` false does everything except the write, which is what makes the dry arm of a harness
 /// worth having.
-pub fn set_value(automation: &IUIAutomation, text: &str, live: bool,
+pub fn set_value(automation: &IUIAutomation, x: i64, y: i64, text: &str, live: bool,
                  allowed: &dyn Fn(Option<u32>) -> bool) -> Typed {
     unsafe {
-        let Ok(focused) = automation.GetFocusedElement() else {
-            return Typed::Keys("focus could not be resolved".into());
+        let Ok(at) = automation.ElementFromPoint(POINT { x: x as i32, y: y as i32 }) else {
+            return Typed::Keys("nothing resolved at that point".into());
         };
-        let owner = focused.CurrentProcessId().ok().map(|p| p as u32);
+        let owner = at.CurrentProcessId().ok().map(|p| p as u32);
         if !allowed(owner) {
-            return Typed::Keys(format!("focus belongs to {owner:?}"));
+            return Typed::Keys(format!("that point belongs to {owner:?}"));
         }
-        let Ok(raw) = focused.GetCurrentPattern(UIA_ValuePatternId) else {
+        let Ok(raw) = at.GetCurrentPattern(UIA_ValuePatternId) else {
             return Typed::Keys("no value pattern".into());
         };
         let Ok(value) = raw.cast::<IUIAutomationValuePattern>() else {
