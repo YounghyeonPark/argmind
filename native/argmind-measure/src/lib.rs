@@ -14,6 +14,7 @@
 pub mod capture;
 pub mod choosing;
 pub mod conversation;
+pub mod crowding;
 pub mod drive;
 pub mod repair;
 pub mod replies;
