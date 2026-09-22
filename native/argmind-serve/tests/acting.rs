@@ -126,28 +126,45 @@ fn doubt_still_asks_even_when_acting_is_allowed() {
             "doubt is no longer *the hit test disagreed*:\n{propose}");
 }
 
-/// **A thought argmind had by itself still cannot press anything**, whatever this setting says.
+/// **A thought argmind had by itself waits for a person, and 확인 없이 실행 does not cover it.**
 ///
-/// That gate is in the core and this one is in the application, and they are different questions:
-/// *may argmind act without being asked* and *may it act without being confirmed*. Allowing the
-/// second must not quietly allow the first, which is what would happen if somebody read them as
-/// one permission and deleted the older.
+/// **This test said the opposite yesterday and it was wrong about the design, not about the code.**
+/// It asserted that nothing in the application turns `may_act_unprompted` on — which was true, and
+/// which is why the 실행 button beside a self-started proposal did nothing at all. `session.rs` says
+/// what that flag is for in as many words: *an interface with a confirm button turns this on and
+/// gates with the button instead, which is stronger than the flag.* This application has the
+/// button. It had not turned it on. So the button was drawn, could be pressed, and silently did
+/// nothing — and until the day before this it reported `ran` while doing it.
+///
+/// So the rule being kept is not *argmind may never act on its own idea*. It is:
+///
+/// * **a person pressing 실행 is a permission**, for that one action, whoever thought of it;
+/// * **a standing 확인 없이 실행 is not** — it was given in advance to *the thing I just asked
+///   for*, and extending it to what argmind thought of by itself would be reading one permission
+///   as another. That is the distinction the whole `because_asked` field exists to carry.
 #[test]
-fn the_unprompted_gate_is_a_different_gate_and_is_still_shut() {
+fn argmind_own_idea_needs_a_person_and_not_a_standing_yes() {
     let core = include_str!("../../argmind-core/src/session.rs");
-    assert!(core.contains("may_act_unprompted"),
-            "the unprompted gate has gone from the core");
     assert!(core.contains("effect.unprompted() && !self.may_act_unprompted"),
-            "the core no longer downgrades an unprompted effect");
-    //: And the application never turns it on. **Searched in the whole crate**, not just `app.rs`,
-    //: because the point is that nothing anywhere does it.
-    for file in ["../src/app.rs", "../src/lib.rs", "../src/platform.rs"] {
-        let source = match file {
-            "../src/app.rs" => include_str!("../src/app.rs"),
-            "../src/lib.rs" => include_str!("../src/lib.rs"),
-            _ => include_str!("../src/platform.rs"),
-        };
-        assert!(!source.contains("may_act_unprompted = true"),
-                "{file} switches on unprompted acting");
-    }
+            "the core no longer downgrades an unprompted effect at all");
+
+    let source = include_str!("../src/app.rs");
+    //: **The button's half.** Turned on once, where the `Desk` is built, and nowhere else — a
+    //: second place that set it would be a second answer to who the permission came from.
+    assert_eq!(source.matches("may_act_unprompted = true").count(), 1,
+               "the flag is set in more than one place");
+
+    //: **The switch's half, and the one a refactor would drop.** The automatic path has to refuse
+    //: an effect argmind proposed to itself, and it has to do it by asking whether the effect was
+    //: asked for rather than by any looser test.
+    let propose = function("propose");
+    assert!(propose.contains("let its_own_idea = effect.unprompted();"),
+            "propose no longer reads whose idea it was:
+{propose}");
+    let guard = propose.lines()
+        .find(|l| l.contains("crate::decided::standing(\"acting\")"))
+        .unwrap_or_else(|| panic!("the standing answer is not consulted:
+{propose}"));
+    assert!(guard.contains("!its_own_idea"),
+            "확인 없이 실행 would carry out a turn argmind began itself: {guard}");
 }

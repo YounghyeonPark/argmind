@@ -347,6 +347,10 @@ fn propose(desk: &mut Desk, out: &Listeners, effect: Effect) {
     //: *"not that one"* — has to be something the next turn can see.
     desk.session.remember_doing(&[], &[], std::slice::from_ref(&effect), &[]);
     let doubt = !hint.is_empty();
+    //: **Whose idea it was**, read before the effect is handed over. `unprompted()` is `Some(false)`
+    //: for anything a watch or a raised judgement produced, and it is the one thing the automatic
+    //: path below is not allowed to carry out.
+    let its_own_idea = effect.unprompted();
     let token = desk.proposals.offer(effect, text, hint);
     if let Some(p) = desk.proposals.waiting().last() {
         out.send("propose", &as_json(p));
@@ -362,7 +366,11 @@ fn propose(desk: &mut Desk, out: &Listeners, effect: Effect) {
     //: reading it, it is the last thing between a wrong resolution and a click. It stays a note
     //: when somebody is going to press the button themselves, because the hit test disagrees with
     //: a correct pixel about three times in ten and a gate would refuse those.
-    if !doubt && crate::decided::standing("acting") == Some(Standing::Allowed) {
+    //: **확인 없이 실행 covers what you asked for and not what argmind thought of.** The button
+    //: is a permission a person gave to *this* action; the standing answer is a permission given
+    //: once, in advance, to a kind of action — and the kind it was given to is *the thing I just
+    //: asked for*. A turn argmind began itself waits, however the switch is set.
+    if !doubt && !its_own_idea && crate::decided::standing("acting") == Some(Standing::Allowed) {
         if let Answered::Run(p) = desk.proposals.confirm(token) {
             act(desk, out, p);
         }
@@ -374,10 +382,14 @@ fn act(desk: &mut Desk, out: &Listeners, p: Proposal) {
     let (did, downgraded, refused) = desk.session.perform(std::slice::from_ref(&p.effect));
     desk.session.remember_doing(&did, &refused, &[], &[]);
     //: **The core refused because nobody asked for this**, which is a different outcome from
-    //: *done* and from *gone*, and until 2026-09-22 it was reported as `ran`. That was a lie
-    //: nobody could see while every action needed a button — you had to press 실행 on something
-    //: argmind had thought of by itself to reach it. With 확인 없이 실행 the same path runs on its
-    //: own, so the lie would be in the transcript on every watch that proposed anything.
+    //: *done* and from *gone*, and until 2026-09-22 it was reported as `ran`.
+    //:
+    //: **This cannot fire in this application any more and it is kept anyway.** `perform` downgrades
+    //: an unprompted effect only while `may_act_unprompted` is off, and the application now turns it
+    //: on — because it has a button, which is what `session.rs` says that flag is for. A caller that
+    //: turned it back off would need this branch, and the alternative to keeping it is the silent
+    //: `ran` that was here before: a lie nobody could see, because reaching it meant pressing 실행
+    //: on something argmind had thought of by itself, which did nothing.
     if !downgraded.is_empty() {
         out.send("gone",
                  &format!("{{\"token\":{},\"what\":\"{}\"}}", p.token, escape(&p.effect.target)));
@@ -1468,6 +1480,16 @@ pub fn run(how: How) {
                               speaks_to: Arc::clone(&agent_out),
                               senses: senses.clone(), turn: turn.clone(),
                               before: Vec::new(), lately_noticed: Vec::new(), noticed: 0 };
+        //: **The button is the permission, which is what this flag is for** — `session.rs`:
+        //: *an interface with a confirm button turns this on and gates with the button instead*.
+        //: This application has the button and did not turn it on, so `perform` refused every
+        //: effect a watch or a raised judgement produced and the 실행 beside it did nothing. It was
+        //: drawn, it was pressed, and until 2026-09-22 it did not even say so.
+        //:
+        //: **It is not a relaxation, because the automatic path refuses what this allows.** 확인
+        //: 없이 실행 carries out what somebody asked for; a turn argmind began itself still waits
+        //: for a person, however that switch is set. See `propose`.
+        desk.session.may_act_unprompted = true;
         //: **On from the start when it is allowed**, which it is by default since 2026-09-17. A
         //: permission that says yes and a program that waits for a button anyway is the defect
         //: this session has already found twice in other places.

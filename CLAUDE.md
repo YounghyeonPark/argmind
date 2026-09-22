@@ -139,9 +139,16 @@ silently meant *everything*.
 **`MOST_AT_ONCE = 3`, derived.** 27 of 28 real requests want one effect or two; spurious ones come
 in threes, fours and an eight. Three is the documented sequence — click, type, enter.
 
-**An unprompted effect without standing permission is downgraded to speech.** The app inverts the
-flag deliberately and that is *stronger*, and one AST test keeps `perform` reachable from exactly
-one place there. **The other half of that sentence went on 2026-09-22**: *a person confirms each
+**An unprompted effect without standing permission is downgraded to speech**, and one AST test
+keeps `perform` reachable from exactly one place in the app. **The app had not turned the flag on,
+and `session.rs` says it should have** — *an interface with a confirm button turns this on and gates
+with the button instead, which is stronger than the flag.* This one has the button and left the flag
+off, so `perform` refused every effect a watch or a raised judgement produced and the 실행 beside it
+did nothing at all; it was drawn, it could be pressed, and it reported `ran`. Fixed 2026-09-22: the
+flag is on, set in one place, **and the automatic path refuses what the button now allows** — 확인
+없이 실행 was given in advance to *the thing I just asked for*, so a turn argmind began itself still
+waits for a person however that switch is set. **So argmind can now act on its own idea, and only
+with a press.** **The other half of that sentence went on 2026-09-22**: *a person confirms each
 action* is now a setting. 확인 없이 실행 in 설정, off by default, off written down when it is turned
 off — and the owner's, asked for after watching three buttons pile up in one transcript. **The two
 gates are different questions and only one moved**: *may argmind act without being asked* is in the
