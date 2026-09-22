@@ -314,7 +314,14 @@ purpose: three-second windows give still **0.05** against moving **0.38**, a **7
 **8.6x** with the mean shift removed. **The centre did not move and the tail did** — the still
 median was 0.03 on 2026-09-16 and 0.03 again, while the still *maximum* went 0.40 → 0.12, which is
 the one second that had made the tails touch. **The earlier *the camera cannot do it* was the
-instrument.** One run, no threshold named yet. *(A caution written here off the null control — that
+instrument.** **Reproduced**: a second run gives still 0.06 against moving 0.41, 6.8x, and the four still
+values across both runs and both statistics land between 0.05 and 0.06 while the moving ones span
+0.33–0.46 — the still floor is the camera and the room, the moving one is how much a person
+happened to move. So `camera::MOVING` is **0.15**, the geometric middle of the gap, on
+three-second windows with the mean shift removed. **It says movement, not presence**: a person
+reading without shifting is below it, and so is an empty chair, so what a caller may say is
+*movement was last seen N seconds ago*. **Nothing is wired to it yet** — a sense needs the camera
+open, which is a light left on and a permission nobody has been asked for. *(A caution written here off the null control — that
 the still floor moves between runs, so a constant threshold looked unlikely — is withdrawn: nobody
 had checked the room was empty, and its author not moving is not the same thing.)* **키입력** is implementable and deliberately not implemented — every keystroke means a
 global hook, which is a keylogger capturing passwords in a program that sends text to a model; what

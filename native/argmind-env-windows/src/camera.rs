@@ -174,6 +174,35 @@ pub fn reduce(bgra: &[u8], width: usize, height: usize, stride: usize) -> Vec<u8
 /// own*; it says nothing about whether anybody is there.
 pub const SETTLED: f64 = 0.5;
 
+/// Above this, somebody moved. **Measured on a person doing it on purpose, twice** — 2026-09-22.
+///
+/// Ten seconds holding still and ten seconds moving, read as the median of a three-second window
+/// with the mean shift removed ([`Frame::moved_from`]):
+///
+/// | | run 1 | run 2 |
+/// |---|---|---|
+/// | highest still window | 0.05 | 0.06 |
+/// | lowest moving window | 0.46 | 0.41 |
+///
+/// **The still side is the tight one** — four values across two runs, 0.05 to 0.06 — and the moving
+/// side is the loose one, which is what varies: how much a person moves. So the room to leave is on
+/// the moving side, and this sits at the geometric middle of the gap, **2.5x above the highest
+/// still window and 2.7x below the lowest moving one.**
+///
+/// **It says movement, and movement is not presence.** A person reading a screen without shifting
+/// is below this, and so is an empty chair. What the caller may say from it is *movement was last
+/// seen N seconds ago* — the number, with its age — and not *somebody is there*. This file reports
+/// scalars and decides nothing; that has been its rule since it was written and it is not relaxed
+/// by finally having a floor.
+///
+/// **Three-second windows, not one.** One-second ones separate too, at 3.1x and 3.3x against 6.2x
+/// and 6.8x — a monitor changing what it shows lasts a fraction of a second and a person moving
+/// lasts seconds, which is what `measure/presence` predicted before it was run.
+pub const MOVING: f64 = 0.15;
+
+/// The window [`MOVING`] is a threshold on. A median over anything shorter is a different number.
+pub const MOVING_WINDOW: f64 = 3.0;
+
 /// How long to wait for that before giving up and saying so.
 ///
 /// **Four seconds until 2026-09-22, and it was four seconds for a settle check that could not

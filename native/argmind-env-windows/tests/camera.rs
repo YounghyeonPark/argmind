@@ -185,3 +185,33 @@ fn the_limit_outlasts_the_settling_it_was_measured_against() {
     //: And it is enough windows to be a sequence of judgements rather than one.
     assert!(SETTLE_LIMIT / SETTLE_WINDOW >= 5.0);
 }
+
+/// **The movement floor sits in the gap that was measured, and the gap is two runs wide.**
+///
+/// Ten seconds still and ten seconds moving, twice, read as three-second medians with the mean
+/// shift removed: the highest still window was 0.05 then 0.06, the lowest moving one 0.46 then
+/// 0.41. A floor outside that is not a floor, and one chosen to make something pass is the failure
+/// the standard of evidence here exists against.
+#[test]
+fn the_movement_floor_is_inside_the_measured_gap() {
+    use argmind_env_windows::camera::{MOVING, MOVING_WINDOW, SETTLED};
+
+    assert!(MOVING > 0.06, "{MOVING} would call a still room moving");
+    assert!(MOVING < 0.41, "{MOVING} would call a moving person still");
+
+    //: **Room on the side that varies.** The still readings sit in 0.01 of each other across two
+    //: runs; the moving ones span 0.05. So the threshold is asked to be no closer to the moving
+    //: edge than to the still one, in ratio — which is what putting it at the geometric middle
+    //: means and what a midpoint would not have given.
+    assert!(0.41 / MOVING >= MOVING / 0.06,
+            "{MOVING} leaves less room on the moving side than on the still one");
+
+    //: **The window is part of the number.** A median over one second is a different statistic and
+    //: separated by half as much — 3.1x against 6.2x — so a threshold read against it would be a
+    //: threshold against something else.
+    assert_eq!(MOVING_WINDOW, 3.0);
+
+    //: And it is well under the settling floor: a camera that has not settled moves more than a
+    //: person does, which is why one is waited out before the other is believed.
+    assert!(MOVING < SETTLED, "movement cannot be judged above the settling floor");
+}

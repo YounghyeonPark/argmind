@@ -118,8 +118,22 @@
 //! Removing the mean shift buys a little more on top, 8.6x against 7.4x — the confound it was aimed
 //! at is real and small.
 //!
-//! **One run. No threshold is named yet** — ten windows is few for a tail, and this harness's own
-//! last line says to run it again before using it.
+//! ## Run again, as this harness's own last line asks
+//!
+//! | 3 s windows, mean shift removed | run 1 | run 2 |
+//! |---|---|---|
+//! | highest still | 0.05 | **0.06** |
+//! | lowest moving | 0.46 | **0.41** |
+//! | margin | 8.6x | **6.8x** |
+//!
+//! **Reproduced, and the two sides behave differently.** Four still values across the two runs and
+//! both statistics land between 0.05 and 0.06; the moving ones span 0.33 to 0.46. The still floor
+//! is a property of the camera and the room, the moving one is a property of how much a person
+//! happened to move — so the room to leave is on the moving side.
+//!
+//! `camera::MOVING` is **0.15**, the geometric middle: 2.5x above the highest still window and 2.7x
+//! below the lowest moving one. It says *movement*, which is not *presence* — a person reading
+//! without shifting is below it, and so is an empty chair.
 //!
 //! Nothing is written to disk, nothing is sent anywhere, and the picture never leaves the 64×36
 //! greys `camera.rs` reduces it to — see the note there about what that size can and cannot be.
