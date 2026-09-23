@@ -9,13 +9,26 @@
 //!
 //! ## What leaves this module, and what cannot
 //!
-//! **A frame is reduced to 64×36 greys before anything else sees it, and the full picture is never
-//! returned.** That is a property of the type rather than a promise in a comment: [`Frame`] holds
-//! [`WIDE`]×[`TALL`] bytes and there is no accessor for anything larger. At that size a room is
-//! light and shadow and movement — enough to answer *is somebody there*, and not a photograph of
-//! anybody's living room. If a vision model is ever wanted it will need a different call, a
-//! different permission and a different argument, which is exactly the shape that decision should
-//! have.
+//! **A frame is reduced to 64×36 greys, and until 2026-09-23 that was all this module could
+//! produce.** [`Frame`] holds [`WIDE`]×[`TALL`] bytes and has no accessor for anything larger; at
+//! that size a room is light and shadow and movement — enough to answer *is somebody there*, and
+//! not a photograph of anybody's living room. That is still the only thing [`Camera::look`] gives
+//! and the only thing the movement sense uses.
+//!
+//! ## The second call, and what it costs to have one
+//!
+//! This file used to say: *if a vision model is ever wanted it will need a different call, a
+//! different permission and a different argument.* The owner asked for one on 2026-09-23, so
+//! [`Camera::photograph`] exists. **It takes the size as an argument**, which is deliberate: there
+//! is no call that hands back *whatever the sensor had*, so the caller always states, in the code,
+//! how much of a room it is asking for.
+//!
+//! **Be plain about what was given up.** It was impossible to get a picture out of here; now it is
+//! possible and gated by something weaker than a type. What stands in that place is a rule read off
+//! the source — **the application cannot take a photograph at all**, only a harness a person runs
+//! on purpose, and `argmind-rules` checks it. When the application does want one it will need the
+//! permission this note has always said it would, and moving that rule will be a deliberate act
+//! rather than a drift.
 //!
 //! ## It is not opened until it is asked for
 //!
@@ -159,6 +172,56 @@ pub fn reduce(bgra: &[u8], width: usize, height: usize, stride: usize) -> Vec<u8
             }
             if seen > 0 {
                 out[ty * WIDE + tx] = (sum / seen) as u8;
+            }
+        }
+    }
+    out
+}
+
+/// A picture, at a size the caller asked for. **RGB, three bytes a pixel, row by row.**
+pub struct Photo {
+    pub rgb: Vec<u8>,
+    pub wide: usize,
+    pub tall: usize,
+    /// How long the capture took, in seconds.
+    pub took: f64,
+}
+
+/// Box-average a BGRA buffer down to `wide`×`tall` RGB.
+///
+/// **The same shape as [`reduce`] and deliberately not the same function.** That one produces one
+/// byte a block and this produces three, and it sits on the three-second movement path that
+/// `MOVING = 0.15` was measured against — rewriting it in terms of this would put a measured
+/// constant behind a refactor nobody asked for.
+pub fn shrink(bgra: &[u8], width: usize, height: usize, stride: usize,
+              wide: usize, tall: usize) -> Vec<u8> {
+    let mut out = vec![0u8; wide * tall * 3];
+    if width == 0 || height == 0 || wide == 0 || tall == 0 {
+        return out;
+    }
+    for ty in 0..tall {
+        for tx in 0..wide {
+            let x0 = tx * width / wide;
+            let x1 = (((tx + 1) * width) / wide).max(x0 + 1).min(width);
+            let y0 = ty * height / tall;
+            let y1 = (((ty + 1) * height) / tall).max(y0 + 1).min(height);
+            let (mut r, mut g, mut b, mut seen) = (0u64, 0u64, 0u64, 0u64);
+            for y in y0..y1 {
+                for x in x0..x1 {
+                    let at = y * stride + x * 4;
+                    let (Some(bb), Some(gg), Some(rr)) =
+                        (bgra.get(at), bgra.get(at + 1), bgra.get(at + 2)) else { continue };
+                    b += *bb as u64;
+                    g += *gg as u64;
+                    r += *rr as u64;
+                    seen += 1;
+                }
+            }
+            if seen > 0 {
+                let at = (ty * wide + tx) * 3;
+                out[at] = (r / seen) as u8;
+                out[at + 1] = (g / seen) as u8;
+                out[at + 2] = (b / seen) as u8;
             }
         }
     }
@@ -454,8 +517,36 @@ impl Camera {
         Err("카메라가 화면을 주지 않았습니다".into())
     }
 
+    /// Take one picture, at the size asked for. **The light is already on** — this does not open
+    /// the device, it reads from one that [`Camera::on`] opened and settled.
+    ///
+    /// **The size is an argument and there is no call without one.** See the module note: the point
+    /// is that the caller says in its own source how much of a room it wants, so the question can be
+    /// answered by reading the code rather than by running it.
+    pub fn photograph(&mut self, wide: usize, tall: usize) -> Result<Photo, String> {
+        let began = Instant::now();
+        for _ in 0..12 {
+            if let Some(rgb) = self.one_with(&mut |bgra, w, h, stride| {
+                shrink(bgra, w, h, stride, wide, tall)
+            })? {
+                return Ok(Photo { rgb, wide, tall, took: began.elapsed().as_secs_f64() });
+            }
+        }
+        Err("카메라가 화면을 주지 않았습니다".into())
+    }
+
     /// One `ReadSample`, reduced. `None` when the reader had nothing ready yet.
     fn one(&mut self) -> Result<Option<Vec<u8>>, String> {
+        self.one_with(&mut |bgra, w, h, stride| reduce(bgra, w, h, stride))
+    }
+
+    /// One `ReadSample`, handed to whoever is reducing it.
+    ///
+    /// **One place talks to Media Foundation and two things reduce what it gives.** A second copy
+    /// of this would be a second place to get the buffer lifetime wrong, and the `Unlock` at the
+    /// end of it is the whole reason that matters.
+    fn one_with<T>(&mut self, reduce_it: &mut dyn FnMut(&[u8], usize, usize, usize) -> T)
+                   -> Result<Option<T>, String> {
         unsafe {
             let mut flags = 0u32;
             let mut sample = None;
@@ -471,7 +562,7 @@ impl Camera {
             //: The stride the buffer actually has, rather than the one the width implies: a row can
             //: be padded, and reading it as if it were not shears the picture.
             let stride = if self.height > 0 { len as usize / self.height } else { 0 };
-            let small = reduce(raw, self.width, self.height, stride);
+            let small = reduce_it(raw, self.width, self.height, stride);
             let _ = buffer.Unlock();
             Ok(Some(small))
         }
