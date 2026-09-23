@@ -89,6 +89,22 @@ pub fn focused_value(automation: &IUIAutomation) -> Option<String> {
     }
 }
 
+/// Is there nothing in this box that a person put there?
+///
+/// **Whitespace only counts as nothing, and that is a loosening with a reason.** The first version
+/// asked `is_empty()` and Character Map's edit control answered *1 character* on a box nobody had
+/// typed into — a lone `\r`, which is the control reporting its own line terminator as its value.
+/// A rule that treats that as somebody's work refuses every empty box on the system, which is not
+/// caution, it is the feature never running.
+///
+/// **What it must not become is a floor lowered to make something pass.** Trimming loses deliberate
+/// whitespace and nothing else; `--bin typing` keeps the case that matters — a box holding `먼저` is
+/// appended to and never replaced — and that check is what says this went far enough and no
+/// further.
+pub fn blank(value: &str) -> bool {
+    value.trim().is_empty()
+}
+
 /// Put text into the control at a point, without touching the keyboard.
 ///
 /// **At a point rather than at the focus, and that is the whole difference.** The first version
@@ -151,8 +167,12 @@ pub fn set_value(automation: &IUIAutomation, x: i64, y: i64, text: &str, live: b
         }
         //: **The narrow case.** Anything already in the box means `SetValue` would delete it.
         let already = value.CurrentValue().map(|v| v.to_string()).unwrap_or_default();
-        if !already.is_empty() {
-            return Typed::Keys(format!("{} characters already there", already.chars().count()));
+        if !blank(&already) {
+            //: **Shown rather than counted.** *1 characters already there* was the answer four runs
+            //: in a row and it took a guess to work out which character — printing it turns a
+            //: guess into a reading.
+            return Typed::Keys(format!("{} characters already there: {already:?}",
+                                       already.chars().count()));
         }
         if !live {
             return Typed::WouldSet;

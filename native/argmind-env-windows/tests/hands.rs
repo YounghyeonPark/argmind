@@ -273,3 +273,23 @@ fn a_click_aims_one_type_and_then_stops() {
 ");
     assert!(!code.contains("GetFocusedElement"), "typing fell back to focus again");
 }
+
+/// **A control's own line terminator is not somebody's work.**
+///
+/// `set_value` writes only into an empty box, because `SetValue` replaces. Asking `is_empty()` made
+/// that never fire: Character Map's edit control reports `"\r"` as the value of a box nobody has
+/// touched, and four runs read *1 characters already there* before the character was printed.
+///
+/// **The loosening stops at whitespace.** Anything a person typed still refuses, which is the half
+/// `--bin typing` checks live with a box holding `먼저`.
+#[test]
+fn an_untouched_box_is_blank_and_a_used_one_is_not() {
+    use argmind_env_windows::patterns::blank;
+
+    for nothing in ["", "\r", "\n", "\r\n", "   ", " \t\r\n "] {
+        assert!(blank(nothing), "{nothing:?} would refuse every empty box on the system");
+    }
+    for something in ["먼저", "a", " a ", "0", "\ru"] {
+        assert!(!blank(something), "{something:?} would be replaced and lost");
+    }
+}
