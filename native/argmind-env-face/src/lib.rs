@@ -27,6 +27,21 @@
 //! double-click with `0xC0000135` and no message, for want of one DLL. ONNX Runtime is a DLL beside
 //! the executable. `tract` is pure Rust and there is nothing to ship.
 //!
+//! ## The one thing that is not portable, and it is not this code
+//!
+//! **This crate has no `cfg` in it and cannot be cross-checked for Linux from here.**
+//! `cargo check --target x86_64-unknown-linux-gnu -p argmind-env-face` fails with *failed to find
+//! tool "x86_64-linux-gnu-gcc"*: `tract-linalg` builds assembly kernels through `cc`, and that
+//! wants a Linux compiler this machine does not have. No feature turns it off —
+//! `default-features = false` was tried and changes nothing.
+//!
+//! So `argmind-serve` takes this dependency inside `[target.'cfg(windows)'.dependencies]`, beside
+//! `argmind-env-windows`. **That gate is true for a second reason and only the second one is about
+//! the code**: the thing that feeds a face detector is a camera, and the only camera in this tree
+//! is `argmind-env-windows::camera`. But the honest statement is the first one — *the cross-check
+//! cannot reach it*, not *it is Windows-only* — and it is written here so that whoever brings a
+//! Linux camera does not read the manifest as a claim about this crate.
+//!
 //! ## What this crate will not tell you
 //!
 //! **It does not name anybody and it cannot describe a room.** It gives a rectangle, five points and

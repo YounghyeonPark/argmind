@@ -98,7 +98,7 @@ impl Standing {
 /// **A fixed list rather than any string the page sends.** A key is what a stored *yes* is attached
 /// to, so a page that could invent one could invent a permission the program never asks about — and
 /// a typo would silently create a second, always-unanswered copy of a real one.
-pub const DECIDABLE: [&str; 11] = [
+pub const DECIDABLE: [&str; 12] = [
     //: The needs from `needs.rs`. `korean-voice` and `vulkan` are elevation, the rest change the
     //: machine.
     "ollama", "model", "whisper", "korean-voice", "vulkan", "speaker",
@@ -114,6 +114,12 @@ pub const DECIDABLE: [&str; 11] = [
     //: every half minute — a light that is on means a camera that is on, and a blinking one says
     //: *mostly off*, which would not be true.
     "camera",
+    //: **And the one that writes something down about a person.** `camera` is a light that stays
+    //: on; this is a row in a file that outlives the session. They are two questions and the
+    //: second is the heavier one — allowing a camera to be open is not agreeing that what it sees
+    //: is kept — so it is a key of its own and off until it is asked for. What is kept is 128
+    //: numbers and two dates; `people.rs` has what that is and is not.
+    "faces",
 ];
 
 /// What to call it in the window that asks.
@@ -144,6 +150,10 @@ pub fn what(key: &str) -> &'static str {
         //: **Not 카메라 사용**, which would read as *may it take a picture*. What is allowed is a
         //: camera that stays on; what leaves the module is never a picture.
         "camera" => "카메라로 사람 알아보기",
+        //: **Not 얼굴 인식**, which would say argmind knows who somebody is. It knows that two
+        //: faces are the same face; a name is something a person types, and this row's own note
+        //: says so where it is switched on.
+        "faces" => "본 얼굴 기억하기",
         _ => "알 수 없는 권한",
     }
 }

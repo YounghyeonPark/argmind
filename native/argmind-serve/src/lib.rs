@@ -44,6 +44,7 @@ pub mod fix;
 pub mod mind;
 pub mod needs;
 pub mod ollama;
+pub mod people;
 pub mod platform;
 pub mod proposals;
 pub mod recogniser;
