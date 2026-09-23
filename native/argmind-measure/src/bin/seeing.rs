@@ -3,6 +3,8 @@
 //! ```text
 //!   cargo run -p argmind-measure --bin seeing --release
 //!   cargo run -p argmind-measure --bin seeing --release -- 320x180
+//!   cargo run -p argmind-measure --bin seeing --release -- --repeat 3
+//!   cargo run -p argmind-measure --bin seeing --release -- --control
 //! ```
 //!
 //! **From `native/`** — the workspace manifest is there and not at the repository root. `--release`
@@ -38,6 +40,19 @@
 //! sensor's full size, and shrunk for each arm — so four captions cost one picture rather than
 //! four, and every arm is looking at the same instant.
 //!
+//! ## The control, and why the first run needed one
+//!
+//! The first run answered every arm correctly — *a person at a monitor, looking at the screen, and a
+//! yellow cup.* **Most of that sentence is guessable without a picture.** The question names the
+//! things to look for, and in front of a webcam *somebody is there and facing the screen* is the
+//! answer a model would give whether or not it can see anything. `--control` is what separates
+//! those: the same question about pictures with **no room in them at all** — flat grey, uniform
+//! noise, and the four-coloured-square test card the 8 s figure came from. **It opens no camera.**
+//! If a person appears in those captions, the prompt is doing the talking.
+//!
+//! `--repeat N` re-asks every size on **the same photograph**, which is what decides whether a
+//! spread like 4.0 / 5.1 / 6.5 s at an identical token count is a size effect or sampling.
+//!
 //! **Stop argmind first if you want the times to mean anything.** It holds `qwen3:8b` on the card,
 //! and `crowding` lost thirty-five minutes to exactly that: a second model does not get the
 //! graphics card to itself, and *a look costs the answer about 3x* was measured from the other
@@ -67,7 +82,13 @@ fn main() {
 }
 
 fn run() -> i32 {
-    let only: Option<(usize, usize)> = std::env::args().skip(1).find_map(|a| {
+    let args: Vec<String> = std::env::args().skip(1).collect();
+    if args.iter().any(|a| a == "--control") {
+        return control();
+    }
+    let repeat: usize = args.iter().position(|a| a == "--repeat")
+        .and_then(|i| args.get(i + 1)).and_then(|n| n.parse().ok()).unwrap_or(1);
+    let only: Option<(usize, usize)> = args.iter().find_map(|a| {
         let (w, h) = a.split_once('x')?;
         Some((w.parse().ok()?, h.parse().ok()?))
     });
@@ -134,7 +155,7 @@ fn run() -> i32 {
     model.think = Some(false);
     model.keep_alive = "300s".into();
 
-    println!("  {:>10} {:>8} {:>8} {:>7}   {}", "크기", "PNG", "토큰", "걸림", "뭐라고 하는가");
+    println!("  {:>10} {:>9} {:>8} {:>7}   {}", "크기", "PNG", "토큰", "걸림", "뭐라고 하는가");
     for (wide, tall) in &sizes {
         let rgb = if (*wide, *tall) == (taken.wide, taken.tall) {
             taken.rgb.clone()
@@ -147,22 +168,28 @@ fn run() -> i32 {
         //: full-size arm is about 6 MB where the smallest is 43 kB. The byte count is printed
         //: precisely so a slow arm can be checked against it rather than assumed to be the model.
         let shot = png(&rgb, *wide, *tall);
-        let began = std::time::Instant::now();
-        let got = model.look_at(ASK, &shot);
-        let took = began.elapsed().as_secs_f64();
-        match got {
-            Ok(r) => {
-                let said = r.text.replace('\n', " ");
-                //: **A cut-off caption is not a short caption.** `length` means the ceiling took it
-                //: and whatever it was going to say about the room is missing, so the sentence below
-                //: cannot be read as the model's answer.
-                let how = if r.reason == "stop" { String::new() } else { format!(" [{}]", r.reason) };
-                println!("  {:>5}x{:<4} {:>7} B {:>8} {:>6.1}s{}   {}", wide, tall, shot.len(),
-                         r.prompt_tokens.map(|n| n.to_string()).unwrap_or_else(|| "?".into()),
-                         took, how, said.chars().take(90).collect::<String>());
+        for round in 0..repeat {
+            let began = std::time::Instant::now();
+            let got = model.look_at(ASK, &shot);
+            let took = began.elapsed().as_secs_f64();
+            //: **The same picture every round.** One photograph, re-asked, so the only thing that
+            //: can move between rounds is the model — which is what makes a spread readable as
+            //: sampling rather than as a property of the size.
+            let size = if round == 0 { format!("{wide}x{tall}") } else { String::new() };
+            match got {
+                Ok(r) => {
+                    let said = r.text.replace('\n', " ");
+                    //: **A cut-off caption is not a short caption.** `length` means the ceiling took
+                    //: it and whatever it was going to say about the room is missing, so the
+                    //: sentence below cannot be read as the model's answer.
+                    let how = if r.reason == "stop" { String::new() }
+                              else { format!(" [{}]", r.reason) };
+                    println!("  {:>10} {:>7} B {:>8} {:>6.1}s{}   {}", size, shot.len(),
+                             r.prompt_tokens.map(|n| n.to_string()).unwrap_or_else(|| "?".into()),
+                             took, how, said.chars().take(90).collect::<String>());
+                }
+                Err(e) => println!("  {:>10} {:>7} B                실패: {e}", size, shot.len()),
             }
-            Err(e) => println!("  {:>5}x{:<4} {:>7} B                실패: {e}", wide, tall,
-                               shot.len()),
         }
     }
 
@@ -175,6 +202,101 @@ fn run() -> i32 {
     println!("    그건 이 경로가 사람을 알아보는 데 쓸 수 없다는 뜻입니다.");
     println!("  시간은 PNG 크기와 같이 보세요 — 큰 쪽은 6 MB 를 들고 갑니다. 초가 바이트를 따라");
     println!("  움직이면 그건 모델이 아니라 전선입니다.");
+    0
+}
+
+/// **The negative control: the same question about pictures with no room in them.**
+///
+/// **It opens no camera** — every picture here is drawn in this function, which is the point. The
+/// first run's caption was *a person at a monitor, looking at the screen, and a yellow cup*, and the
+/// first two thirds of that are what anybody would guess in front of a webcam. If these captions
+/// also contain a person, the model is answering the question rather than the picture, and the room
+/// run says nothing.
+///
+/// The test card is the third one on purpose: **it is what the 8 s figure was measured on**, so this
+/// also re-reads that number on the machine as it stands today.
+fn control() -> i32 {
+    println!();
+    println!("  대조군 — 방이 없는 사진에 같은 질문");
+    println!("  **카메라를 열지 않습니다.** 세 장 모두 여기서 그립니다.");
+    println!("  질문이 사람을 명시하므로, 여기서 사람이 나오면 모델은 사진이 아니라 질문에");
+    println!("  답하고 있는 것이고 방 실험은 아무 말도 하지 않은 것이 됩니다.");
+    println!("  harness {}", argmind_measure::source_print(include_str!("seeing.rs")));
+    println!();
+
+    let (w, h) = (640usize, 360usize);
+    let mut cards: Vec<(&str, Vec<u8>)> = Vec::new();
+    cards.push(("평평한 회색", vec![128u8; w * h * 3]));
+    //: A fixed generator, so the noise arm is the same picture on every run and a changed answer is
+    //: the model rather than a different picture.
+    let mut seed = 0x2026_09_23u64;
+    let mut noise = vec![0u8; w * h * 3];
+    for byte in noise.iter_mut() {
+        seed = seed.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+        *byte = (seed >> 33) as u8;
+    }
+    cards.push(("균일 잡음", noise));
+    //: **Four coloured squares** — the drawn test card the captioning route was first measured on.
+    let mut card = vec![0u8; w * h * 3];
+    const QUARTERS: [[u8; 3]; 4] = [[220, 40, 40], [40, 180, 60], [50, 80, 220], [230, 200, 40]];
+    for y in 0..h {
+        for x in 0..w {
+            let c = QUARTERS[(y >= h / 2) as usize * 2 + (x >= w / 2) as usize];
+            let at = (y * w + x) * 3;
+            card[at..at + 3].copy_from_slice(&c);
+        }
+    }
+    cards.push(("색 사각형 네 개", card));
+
+    let mut model = Local::new(SEES);
+    model.think = Some(false);
+    model.keep_alive = "300s".into();
+    //: **The first call carries the load.** The first control run read 11.0 s for flat grey against
+    //: 3.4 s for noise at an identical 1137 tokens, which is the model arriving on the card and not
+    //: anything about the picture. One throwaway ask, so every printed number is warm.
+    print!("  모델을 올리는 중 ...");
+    let _ = std::io::Write::flush(&mut std::io::stdout());
+    let warming = std::time::Instant::now();
+    let _ = model.look_at("한 단어로 답하라: 색.", &png(&[128u8; 48], 4, 4));
+    println!(" {:.1}s\n", warming.elapsed().as_secs_f64());
+
+    let mut people = 0;
+    println!("  {:>16} {:>8} {:>7}   {}", "사진", "토큰", "걸림", "뭐라고 하는가");
+    for (what, rgb) in &cards {
+        let shot = png(rgb, w, h);
+        let began = std::time::Instant::now();
+        let got = model.look_at(ASK, &shot);
+        let took = began.elapsed().as_secs_f64();
+        match got {
+            Ok(r) => {
+                let said = r.text.replace('\n', " ");
+                //: **Crude on purpose, and printed as crude** — and the first run caught it being
+                //: too crude. `없` was the only denial it knew, so *사람이나 눈에 띄는 물건이 전혀
+                //: 보이지 않습니다* was scored as a person and the control read 1 of 3 when the three
+                //: sentences all declined. The Korean negations are a short list and it is written
+                //: out rather than guessed at; **the sentence printed beside it is still what
+                //: decides**, which is the only reason a wrong count was visible at all.
+                let denied = ["없", "않", "아니", "보이지", "찾을 수"];
+                if said.contains("사람") && !denied.iter().any(|d| said.contains(d)) {
+                    people += 1;
+                }
+                println!("  {:>16} {:>8} {:>6.1}s   {}", what,
+                         r.prompt_tokens.map(|n| n.to_string()).unwrap_or_else(|| "?".into()),
+                         took, said.chars().take(80).collect::<String>());
+            }
+            Err(e) => println!("  {:>16}                  실패: {e}", what),
+        }
+    }
+
+    println!();
+    println!("  방이 없는 사진 {}장 중 사람이 나온 것: {}", cards.len(), people);
+    println!("  (`사람` 이 있고 부정어가 없는 문장을 센 것 — 거칠기 때문에 옆의 문장이 판단입니다.");
+    println!("   첫 판에서 이 셈이 틀렸고, 옆의 문장이 있었기 때문에 틀린 것이 보였습니다.)");
+    if people == 0 {
+        println!("  0 이면 캡션은 그림을 읽고 있습니다 — 방 실험이 증거가 됩니다.");
+    } else {
+        println!("  0 이 아니면 질문이 말하고 있는 것이고, 방 실험은 아무 말도 하지 않았습니다.");
+    }
     0
 }
 
