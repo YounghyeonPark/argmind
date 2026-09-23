@@ -1,9 +1,13 @@
 //! Can a vision model say anything true about **this room**, and at what size?
 //!
 //! ```text
-//!   seeing                  one photograph, captioned at four sizes
-//!   seeing 320x180          one size only
+//!   cargo run -p argmind-measure --bin seeing --release
+//!   cargo run -p argmind-measure --bin seeing --release -- 320x180
 //! ```
+//!
+//! **From `native/`** — the workspace manifest is there and not at the repository root. `--release`
+//! because the largest arm hands 6 MB of picture to a hand-written base64, and in a debug build
+//! that shows up in the seconds as if the model had spent them.
 //!
 //! **The 8 s figure everybody quotes was measured on a drawn test card.** Four coloured squares, and
 //! the caption was accurate because there was nothing to be wrong about. Nobody has ever pointed
@@ -46,9 +50,12 @@ use argmind_measure::png;
 /// The vision model this tree already has. Apache-2.0, and already on the machine.
 const SEES: &str = "qwen3-vl:8b";
 
-/// **Four sizes over one photograph.** The largest is what the sensor gives; the smallest is below
-/// where `prompt_tokens` stopped falling, so if the answer holds there the picture is nearly free.
-const SIZES: [(usize, usize); 4] = [(1920, 1080), (640, 360), (320, 180), (160, 90)];
+/// **The sizes below the sensor's own.** The top arm is not in this list — it is whatever the
+/// camera actually gives, read at runtime, for a reason worth stating: asking for 1920x1080 from a
+/// 640x480 device would **upscale**, and an upscale carries no detail the smaller arm did not have.
+/// Every arm would then be the same picture at different byte counts and *resolution does not help*
+/// would come out true for free. Anything here at or above the sensor is dropped.
+const SMALLER: [(usize, usize); 3] = [(640, 360), (320, 180), (160, 90)];
 
 /// **Asked so a wrong answer is visible.** *Describe this image* invites a sentence that is true of
 /// any room; naming the three things makes a caption that is wrong say so.
@@ -60,14 +67,10 @@ fn main() {
 }
 
 fn run() -> i32 {
-    let only = std::env::args().skip(1).find_map(|a| {
+    let only: Option<(usize, usize)> = std::env::args().skip(1).find_map(|a| {
         let (w, h) = a.split_once('x')?;
         Some((w.parse().ok()?, h.parse().ok()?))
     });
-    let sizes: Vec<(usize, usize)> = match only {
-        Some(one) => vec![one],
-        None => SIZES.to_vec(),
-    };
 
     println!("\n  카메라가 본 방을 모델이 설명할 수 있는가");
     println!("  **카메라 불이 켜집니다.** 사진 한 장을 찍어 크기별로 줄여서 물어봅니다.");
@@ -92,11 +95,24 @@ fn run() -> i32 {
                  None => "끝내 안정되지 않음 — 사진이 흐릴 수 있습니다".to_string(),
              });
 
+    //: **The arms are known only once the device has answered.** The top one is the sensor's own
+    //: size and the rest are the standing list with anything at or above it dropped — see `SMALLER`
+    //: for why an upscaled arm would answer the question by itself.
+    let sizes: Vec<(usize, usize)> = match only {
+        Some(one) => vec![one],
+        None => std::iter::once((camera.width, camera.height))
+            .chain(SMALLER.iter().copied().filter(|(w, h)| *w < camera.width && *h < camera.height))
+            .collect(),
+    };
+    if only.is_some_and(|(w, h)| w > camera.width || h > camera.height) {
+        println!("  이 크기는 센서보다 큽니다 — 업스케일이고, 없는 디테일은 생기지 않습니다.");
+    }
+
     //: **One photograph at the sensor's size**, shrunk for each arm afterwards. Four separate
     //: captures would be four different instants, and *the small one missed the person* would be
     //: indistinguishable from *the person moved*.
-    let biggest = sizes.iter().map(|(w, _)| *w).max().unwrap_or(640);
-    let tallest = sizes.iter().map(|(_, h)| *h).max().unwrap_or(360);
+    let biggest = sizes.iter().map(|(w, _)| *w).max().unwrap_or(640).max(camera.width);
+    let tallest = sizes.iter().map(|(_, h)| *h).max().unwrap_or(360).max(camera.height);
     let taken = match camera.photograph(biggest, tallest) {
         Ok(p) => p,
         Err(why) => {
@@ -126,6 +142,10 @@ fn run() -> i32 {
             //: Shrunk from the one photograph, by averaging, the same way the camera reduced it.
             shrink_rgb(&taken.rgb, taken.wide, taken.tall, *wide, *tall)
         };
+        //: **Encoding is outside the clock.** `png` here writes deflate *stored* blocks — no
+        //: compression, by the licence argument the rest of the wire code is written under — so the
+        //: full-size arm is about 6 MB where the smallest is 43 kB. The byte count is printed
+        //: precisely so a slow arm can be checked against it rather than assumed to be the model.
         let shot = png(&rgb, *wide, *tall);
         let began = std::time::Instant::now();
         let got = model.look_at(ASK, &shot);
@@ -153,6 +173,8 @@ fn run() -> i32 {
     println!("  · 큰 것만 맞으면 해상도가 사는 것이 있다는 뜻이고, 그 값을 아는 셈입니다.");
     println!("  · 전부 그럴듯하고 전부 틀리면 — 어느 방에나 참인 문장을 쓰고 있는 것이고,");
     println!("    그건 이 경로가 사람을 알아보는 데 쓸 수 없다는 뜻입니다.");
+    println!("  시간은 PNG 크기와 같이 보세요 — 큰 쪽은 6 MB 를 들고 갑니다. 초가 바이트를 따라");
+    println!("  움직이면 그건 모델이 아니라 전선입니다.");
     0
 }
 
