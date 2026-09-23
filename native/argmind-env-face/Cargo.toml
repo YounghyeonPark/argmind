@@ -1,0 +1,16 @@
+# Faces, in pure Rust.
+#
+# `tract` reads ONNX and runs it with no C++ and no library beside the executable — which is the
+# same constraint `argmind-app.exe` already lives under, where a `-gnu` build dies on a
+# double-click with 0xC0000135 for want of one DLL. ONNX Runtime would have been the obvious
+# choice and would have brought that back.
+[package]
+name = "argmind-env-face"
+version = "0.0.1"
+edition = "2021"
+description = "Finding a face and where it is pointed, without a model that can talk."
+license = "Apache-2.0"
+
+[dependencies]
+# Apache-2.0 OR MIT, pure Rust, no build-time C toolchain.
+tract-onnx = "0.21"

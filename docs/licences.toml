@@ -138,6 +138,18 @@ tray-icon = { licence = "MIT OR Apache-2.0", why = """
 # hypothetical — this file said whisper.cpp was "not yet a dependency" while argmind was compiling
 # and running it, and a test now checks for that exact sentence.
 
+# **Faces, 2026-09-23, and the runtime was chosen by a constraint this tree already paid for.**
+# `argmind-app.exe` links its WebView2 loader statically because a `-gnu` build exits on a
+# double-click with `0xC0000135` and no message, for want of one DLL. ONNX Runtime is a DLL beside
+# the executable, so it loses to a pure-Rust reader even though it is the obvious choice and its
+# licence is fine.
+tract-onnx = { licence = "Apache-2.0 OR MIT", why = """
+    Reads ONNX and runs it, in Rust, with no C or C++ toolchain and nothing to ship beside the
+    executable. **Measured before it was taken**: it loads YuNet at 640x640 in 0.03 s and runs it in
+    103 ms, and SFace in 0.12 s and 45 ms, ten passes each. It does not load every graph — tract
+    passes about 85% of the ONNX backend tests and YuNet is refused at every input size but
+    640x640 — so this was a spike before it was a dependency.""" }
+
 # Not dependencies: spoken to over a port, or downloaded by the user at run time. Recorded so a
 # reader knows they were considered rather than missed.
 [external]
@@ -164,6 +176,23 @@ ggml = { licence = "MIT", why = """
     (992,615,488 bytes) and the 12 Hz tokenizer at Q4_K_M (254,974,752 bytes). Q8_0 for the talker
     is not a quality preference — `ggml-vulkan`'s K-quant path gives a silently wrong answer there;
     `native/argmind-serve/src/speaker.rs` has the measurement.""" }
+# **The face models, and the one that was refused.** The default choice everywhere for this job is
+# InsightFace — `buffalo_l`, the ArcFace family. Its *code* is MIT and its **weights are not**:
+# almost every published ArcFace-lineage weight file is trained on datasets released for research
+# only, and InsightFace sells a commercial licence for exactly that reason. The owner's rule is
+# 오픈소스라이센스에 문제 없는것만 사용할것, so it is out, and the pair below is what is left that
+# is small, fast and clean. Recorded because "we used the obvious one" is what a future reader will
+# otherwise assume.
+YuNet = { licence = "MIT", why = """
+    Face detection, 232,589 bytes, from OpenCV's model zoo. Gives a box and **five landmarks** —
+    eyes, nose, mouth corners — which is what `Face::head_on` reads. Fetched at first use and
+    hash-checked, never executed: it is weights for `tract`.""" }
+SFace = { licence = "Apache-2.0", why = """
+    Face recognition, 38,696,353 bytes, from the same zoo, giving 128 numbers per face. **The
+    licence on this one was once unclear** — an OpenCV issue from 2021 says it was not indicated —
+    and the model directory now carries an Apache-2.0 LICENSE of its own, which is the resolution
+    and is what is recorded. Fetched and hash-checked, never executed.""" }
+
 "Vulkan SDK" = { licence = "MIT OR Apache-2.0", why = """
     **A build tool, not a dependency** — the shader compiler `ggml-vulkan` needs to generate its
     SPIR-V, used at build time and not linked into anything argmind ships. What runs afterwards is
