@@ -87,10 +87,21 @@ the two days that built this, three of them flattering.
 **Nothing needs a display, a model, a network, a microphone or a speaker.** Re-derive with
 `cargo test --manifest-path native/Cargo.toml`.
 
-**Four rules are held by reading the source rather than by the compiler**, in `argmind-rules`:
+**Five rules are held by reading the source rather than by the compiler**, in `argmind-rules`:
 the licence record, the core naming no platform and being shown no coordinate, one place calling
-`perform`, a voice seam that cannot name a `Session`, and — since 2026-09-16 — **the application
-naming an operating system in one file.** Each was checked by breaking it.
+`perform`, a voice seam that cannot name a `Session`, — since 2026-09-16 — **the application
+naming an operating system in one file**, and — since 2026-09-23 — **the application taking no
+photograph.** Each was checked by breaking it.
+
+**The fifth one replaced a type, and that is a loss written down rather than hidden.** `camera.rs`
+reduced every frame to 64×36 greys and had no accessor for anything larger, so a picture could not
+leave the module however anybody felt about it. Asking whether a vision model can describe a room
+means giving that up: `Camera::photograph` exists, **takes the size as an argument** so the caller
+states in its own source how much of a room it wants, and what stands where the type stood is a
+rule — only a harness a person runs on purpose may call it. Two *code* breaks are caught, a
+`photograph(` and a bare `::shrink(`; a commented-out one is not, deliberately, for the same reason
+`hands.rs` needed a day earlier — **a rule that forbids writing down what it forbids is one nobody
+can document.**
 
 **One of them has an exception now, and the exception is written against what may be said.** *The
 room stays quiet unless somebody asked* allowed exactly one `say` in `app.rs`; choosing a voice
@@ -309,6 +320,17 @@ wrong route.** `camera.rs` reduces every frame to 64×36 greys and returns nothi
 property of the type*, because what a camera can honestly supply is **whether somebody is there** —
 the fact argmind most needs and does not have, since watching the screen will happily talk to an
 empty chair. One look is **32 ms**, not 8 s.
+
+**Every number in that paragraph is about four coloured squares, and `--bin seeing` is the harness
+that asks the other question.** Nobody has ever pointed the model at a room, so *does it say
+something true* and *at what size* are both unmeasured — and the second matters because
+`prompt_tokens` did not fall with the pixels, which means a small picture that works is nearly free.
+It takes **one** photograph and shrinks it for each of four sizes, because four captures would be
+four instants and *the small one missed the person* would be indistinguishable from *the person
+moved*. **Nothing is saved**: the captions reach the terminal and the picture dies with the process,
+since a stored photograph is what would let somebody check a caption later and that is the artefact
+this is trying not to make. **Unrun — it wants the owner in front of the lens**, who is the only
+available ground truth.
 
 **That is blocked on twenty seconds of the owner's time, and until 2026-09-22 it was blocked on a
 broken instrument.** `measure/presence` asks a person to hold still and then move; run with nobody
