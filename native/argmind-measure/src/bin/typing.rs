@@ -140,7 +140,12 @@ fn run() -> i32 {
         .unwrap_or_else(|| APP.into());
     println!("\n  키를 누르지 않고 글자를 넣을 수 있는가 — {}",
              if live { "LIVE, 실제로 씁니다" } else { "DRY, 아무것도 쓰지 않습니다" });
-    println!("  {exe} 를 경우마다 새로 띄웁니다. 앞면을 가져가고, 끝나면 닫습니다.\n");
+    println!("  {exe} 를 경우마다 새로 띄웁니다. 앞면을 가져가고, 끝나면 닫습니다.");
+    //: **Which harness produced this**, the way `choose` and the rest already do. Two runs were
+    //: reported with identical millisecond timings and a column that no longer existed in the
+    //: source, and nothing in the output could tell a stale paste from a stale build. A
+    //: measurement that cannot say which version made it is a measurement nobody can check.
+    println!("  harness {}\n", argmind_measure::source_print(include_str!("typing.rs")));
 
     let Ok(automation) = open_automation() else {
         println!("  UI Automation 이 열리지 않았습니다");
