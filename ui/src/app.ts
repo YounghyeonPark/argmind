@@ -39,6 +39,8 @@ interface Hello {
   attending: string;
   waiting: Proposal[];
   /** Whether new faces are being written down — the switch, not whether the camera is open. */
+  /** The one thing argmind has asked about and nobody has answered, or null. */
+  wonder: Wonder | null;
   remembering: boolean;
   /** Whether the two ONNX files are on disk. Without them the switch is on and nothing happens. */
   face_models: boolean;
@@ -47,6 +49,15 @@ interface Hello {
 
 /** One person argmind has seen. **No print** — the 128 numbers never leave the server, so a page
  *  in a screenshot or a bug report carries nobody's face. */
+/** Something argmind does not know. **Its text is a constant on the server**, not a model's
+ *  sentence — the deterministic side noticed a gap it could name, so no prompt was edited to make
+ *  this happen and none of the 1-for-7 risk is being taken. */
+interface Wonder {
+  id: number;
+  asked: string;
+  hint: string;
+}
+
 interface Person {
   key: string;
   name: string;
@@ -230,6 +241,7 @@ stream.addEventListener("hello", (e) => {
   camera.checked = d.watching_you;
   // **The switch, not the device** — unlike the camera above. Nothing is written down while the
   // models are missing, so the row says so rather than looking on and doing nothing.
+  askRow(d.wonder);
   faces.checked = d.remembering;
   faces.title = d.face_models ? "" : "얼굴 모델이 없습니다 — 필요한 것에서 받으세요";
   drawPeople(d.people);
@@ -254,6 +266,57 @@ for (const kind of ["them", "say", "note"] as Kind[]) {
 }
 
 stream.addEventListener("propose", (e) => row(JSON.parse((e as MessageEvent).data) as Proposal));
+
+stream.addEventListener("wonder", (e) => {
+  const raw = (e as MessageEvent).data;
+  askRow(raw === "null" ? null : (JSON.parse(raw) as Wonder));
+});
+
+// **One at a time, and it replaces rather than stacks.** The server holds at most one open
+// question; this mirrors that instead of trusting it, because a column of questions is the pile of
+// confirm buttons the owner pointed at once already.
+function askRow(w: Wonder | null): void {
+  document.getElementById("wonder")?.remove();
+  if (!w) return;
+
+  const box = document.createElement("div");
+  box.className = "proposal";
+  box.id = "wonder";
+
+  const what = document.createElement("span");
+  what.className = "what";
+  what.textContent = w.asked;
+
+  const answer = document.createElement("input");
+  answer.type = "text";
+  answer.placeholder = w.hint;
+  answer.maxLength = 40;
+
+  const send = (text: string) => {
+    // Disabled on the way out so a second press cannot answer twice; the server refuses a repeat
+    // anyway, and this is so the person is not left wondering whether it took.
+    answer.disabled = ok.disabled = skip.disabled = true;
+    void post(`/wonder/${w.id}`, text);
+  };
+
+  const ok = document.createElement("button");
+  ok.className = "yes";
+  ok.textContent = "그래요";
+  ok.onclick = () => send(answer.value);
+
+  // **Skipping is a real answer and looks like one.** Nothing here is asked twice, so a question
+  // with no way out would be a question somebody has to answer to make it go away.
+  const skip = document.createElement("button");
+  skip.className = "no";
+  skip.textContent = "넘어가기";
+  skip.onclick = () => send("");
+
+  answer.onkeydown = (ev) => { if (ev.key === "Enter") { send(answer.value); } };
+
+  box.append(what, answer, ok, skip);
+  pending.append(box);
+  answer.focus();
+}
 stream.addEventListener("ran", (e) => {
   const d = JSON.parse((e as MessageEvent).data);
   settle(d.token, d.confirmed === false ? `${d.label} — 눌렀지만 화면이 그대로임` : `${d.label} — 됨`);

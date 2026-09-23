@@ -156,6 +156,9 @@ struct Desk {
     /// rather than owned by that thread because the settings page renames and forgets people while
     /// it is running, and the roster is the one piece of state both of them write.
     people: Arc<Mutex<crate::people::People>>,
+    /// **The one thing argmind does not know and has asked about.** Shared with the camera
+    /// thread, which is what notices a gap; the job thread is what hears the answer.
+    wonders: Arc<Mutex<crate::wonders::Wonders>>,
     /// Whether to look for faces at all. Read by the camera loop every few seconds, so the switch
     /// does not mean closing the device and opening it again.
     want_faces: Arc<AtomicBool>,
@@ -201,6 +204,8 @@ enum Job {
     Camera(bool),
     /// Remember the faces it sees, or stop.
     Faces(bool),
+    /// Answer the one open question, or skip it with an empty string.
+    Answer(u64, String),
     /// Name one, forget one, forget everybody.
     NameFace(String, String),
     ForgetFace(String),
@@ -749,6 +754,7 @@ fn switch_camera(desk: &mut Desk, out: &Listeners, on: bool) {
     let (want_eyes, eyeing) = (Arc::clone(&desk.want_eyes), Arc::clone(&desk.eyeing));
     let moved_at = Arc::clone(&desk.moved_at);
     let (people, want_faces) = (Arc::clone(&desk.people), Arc::clone(&desk.want_faces));
+    let wonders = Arc::clone(&desk.wonders);
     let senses = desk.senses.clone();
     let out = Arc::clone(&desk.speaks_to);
     let chosen = crate::chosen::chosen("camera");
@@ -791,8 +797,21 @@ fn switch_camera(desk: &mut Desk, out: &Listeners, on: bool) {
                             eprintln!("  faces: 명부를 쓰지 못했습니다 — {why}");
                         }
                         out.send("people", &people_json(&roster));
-                        out.send("note", "처음 보는 얼굴을 기억했습니다 — \
-설정에서 이름을 붙이거나 지울 수 있습니다");
+                        //: **Asked rather than filed.** The owner, the same day: 모르는건
+                        //: 물어보는 기능도 있어야함. Writing an unnamed row into a settings panel
+                        //: and waiting for somebody to go looking for it is filing, not asking.
+                        let raised = roster.worth_asking().and_then(|key| {
+                            let mut open = wonders.lock().unwrap_or_else(|e| e.into_inner());
+                            open.ask(crate::wonders::About::Who(key)).map(wonder_json)
+                        });
+                        match raised {
+                            Some(json) => out.send("wonder", &json),
+                            //: One question at a time, so a second stranger while the first is
+                            //: unanswered is a note. They stay in the roster and the settings list
+                            //: is still where a name can be typed.
+                            None => out.send("note", "처음 보는 얼굴을 기억했습니다 — \
+설정에서 이름을 붙일 수 있습니다"),
+                        }
                     }
                     //: **Nothing is sent for a face it already knows.** The counters move in
                     //: memory and are written when the camera closes; an event every three
@@ -865,6 +884,12 @@ fn people_json(people: &crate::people::People) -> String {
         "{{\"key\":\"{}\",\"name\":\"{}\",\"first\":{},\"last\":{},\"times\":{}}}",
         escape(&p.key), escape(&p.name), p.first, p.last, p.times)).collect();
     format!("[{}]", rows.join(","))
+}
+
+/// One open question, for the page.
+fn wonder_json(w: &crate::wonders::Wonder) -> String {
+    format!("{{\"id\":{},\"asked\":\"{}\",\"hint\":\"{}\"}}",
+            w.id, escape(w.about.asked()), escape(w.about.hint()))
 }
 
 /// Seconds since the epoch, for a row that a person will read as a date.
@@ -1339,6 +1364,12 @@ fn hello(desk: &Desk, model: &str) -> String {
         format!("\"noticed\":{}", desk.noticed),
         format!("\"attending\":\"{}\"", escape(&desk.session.eyes.window().1)),
         format!("\"waiting\":[{}]", waiting.join(",")),
+        //: **Sent with the page rather than only as an event**, so a reload does not lose a
+        //: question nobody has answered. The event is for the question that arrives while somebody
+        //: is looking; this is for the one that was already there.
+        format!("\"wonder\":{}",
+                desk.wonders.lock().unwrap_or_else(|e| e.into_inner()).open()
+                    .map(wonder_json).unwrap_or_else(|| "null".into())),
         format!("\"remembering\":{}", desk.want_faces.load(Ordering::SeqCst)),
         format!("\"face_models\":{}", crate::faces::here()),
         format!("\"people\":{}",
@@ -1582,6 +1613,7 @@ pub fn run(how: How) {
                               //: **Read off disk at startup**, so a roster survives a restart —
                               //: which is the whole of what 기억 means here.
                               people: Arc::new(Mutex::new(crate::people::People::read())),
+                              wonders: Arc::new(Mutex::new(Default::default())),
                               want_faces: Arc::new(AtomicBool::new(
                                   crate::decided::standing("faces") == Some(Standing::Allowed))),
                               speaks_to: Arc::clone(&agent_out),
@@ -1899,6 +1931,24 @@ pub fn run(how: How) {
                     }
                     agent_out.send("people", &people_json(&roster));
                 }
+                Job::Answer(id, text) => {
+                    let answer = desk.wonders.lock().unwrap_or_else(|e| e.into_inner())
+                        .answered(id, &text);
+                    if let crate::wonders::Answered::Say(about, name) = answer {
+                        let crate::wonders::About::Who(key) = about;
+                        let mut roster = desk.people.lock().unwrap_or_else(|e| e.into_inner());
+                        //: **Marked whether or not a name came back.** What is recorded is that
+                        //: argmind asked, so somebody who skipped is not asked again tomorrow.
+                        roster.mark_asked(&key);
+                        let named = !name.is_empty() && roster.call(&key, &name);
+                        let _ = roster.write();
+                        agent_out.send("people", &people_json(&roster));
+                        agent_out.send("wonder", "null");
+                        if named {
+                            agent_out.send("note", &format!("{name} 님으로 기억하겠습니다"));
+                        }
+                    }
+                }
                 Job::Opened(tx) => {
                     let _ = tx.send(sse("hello", &hello(&desk, &agent_model)));
                     //: **What 항상 허용 buys, without anybody pressing 다시 확인.**
@@ -2152,6 +2202,16 @@ fn serve_one(mut stream: TcpStream, out: &Listeners, token: &str, jobs: &Sender<
         Route::ForgetFaces => {
             let _ = stream.write_all(&respond("204 No Content", "text/plain", ""));
             let _ = jobs.send(Job::ForgetFaces);
+        }
+        //: Length-checked here like `/face/name`, and for the same reason: a page can send a long
+        //: body by accident and the roster is not where that should be discovered.
+        Route::Answer(id, text) => {
+            if text.chars().count() <= 200 {
+                let _ = stream.write_all(&respond("204 No Content", "text/plain", ""));
+                let _ = jobs.send(Job::Answer(id, text));
+            } else {
+                let _ = stream.write_all(&respond("400 Bad Request", "text/plain", "no"));
+            }
         }
         Route::Listen(down) => {
             let _ = stream.write_all(&respond("204 No Content", "text/plain", ""));

@@ -62,6 +62,10 @@ pub struct Person {
     pub first: i64,
     pub last: i64,
     pub times: u64,
+    /// **Whether argmind has already asked who this is.** Written down rather than kept in memory
+    /// because the whole point is not asking twice, and a restart is exactly when a program forgets
+    /// that it already did. Set by answering *or* by skipping: both are an answer to the question.
+    pub asked: bool,
     /// SFace's 128 numbers. Private: a caller that wants to compare goes through [`People::saw`].
     print: Vec<f32>,
 }
@@ -141,9 +145,28 @@ impl People {
         self.next += 1;
         let key = format!("p{}", self.next);
         self.who.push(Person {
-            key: key.clone(), name: String::new(), first: when, last: when, times: 1, print,
+            key: key.clone(), name: String::new(), first: when, last: when, times: 1,
+            asked: false, print,
         });
         Saw::Fresh { key }
+    }
+
+    /// **Who argmind could ask about**: a row with no name that has not been asked about yet.
+    ///
+    /// Returns the key rather than the person, because the caller is going to raise a question and
+    /// then come back through [`People::mark_asked`] — holding a borrow across that is a borrow
+    /// held across a page round trip.
+    pub fn worth_asking(&self) -> Option<String> {
+        self.who.iter().find(|p| p.name.trim().is_empty() && !p.asked).map(|p| p.key.clone())
+    }
+
+    /// Remember that the question was put. **Answering and skipping both call this** — the fact
+    /// being recorded is *argmind has asked*, not *somebody replied*.
+    pub fn mark_asked(&mut self, key: &str) -> bool {
+        match self.who.iter_mut().find(|p| p.key == key) {
+            Some(p) => { p.asked = true; true }
+            None => false,
+        }
     }
 
     /// Give somebody a name. `false` when there is nobody by that key.
@@ -206,8 +229,8 @@ pub fn render(people: &People) -> String {
     let rows: Vec<String> = people.who.iter().map(|p| {
         let print: Vec<String> = p.print.iter().map(|f| format!("{f:.5}")).collect();
         format!("  {{\"key\": \"{}\", \"name\": \"{}\", \"first\": {}, \"last\": {}, \
-\"times\": {}, \"print\": [{}]}}",
-                p.key, escape(&p.name), p.first, p.last, p.times, print.join(","))
+\"times\": {}, \"asked\": {}, \"print\": [{}]}}",
+                p.key, escape(&p.name), p.first, p.last, p.times, p.asked, print.join(","))
     }).collect();
     format!("{{\"people\": [\n{}\n]}}\n", rows.join(",\n"))
 }
@@ -241,6 +264,11 @@ pub fn parse(text: &str) -> People {
             first: whole(line, "first").unwrap_or(0),
             last: whole(line, "last").unwrap_or(0),
             times: whole(line, "times").unwrap_or(0).max(0) as u64,
+            //: **Absent reads as not asked**, which re-asks once after an upgrade from a file
+            //: written before this field existed. Once, for people who have no name — which is the
+            //: right direction: the alternative silently loses the question for everybody already
+            //: in the roster.
+            asked: line.contains("\"asked\": true"),
             print,
         });
     }
@@ -386,6 +414,46 @@ mod tests {
         assert!(!people.forget("p1"), "forgetting twice is not a second success");
         let Saw::Fresh { key } = people.saw(print_of(40.0), 20) else { panic!("expected a row") };
         assert_ne!(key, "p1", "reusing p1 would file a stranger as the person just deleted");
+    }
+
+    #[test]
+    fn a_person_with_no_name_is_worth_asking_about_exactly_once() {
+        let mut people = People::default();
+        people.saw(print_of(1.0), 10);
+        assert_eq!(people.worth_asking().as_deref(), Some("p1"));
+        assert!(people.mark_asked("p1"));
+        assert_eq!(people.worth_asking(), None, "asking twice is the failure this field exists for");
+        assert!(!people.mark_asked("nobody"));
+    }
+
+    #[test]
+    fn somebody_already_named_is_never_asked_about() {
+        let mut people = People::default();
+        people.saw(print_of(1.0), 10);
+        people.call("p1", "영현");
+        assert_eq!(people.worth_asking(), None);
+    }
+
+    #[test]
+    fn having_asked_survives_the_file() {
+        let mut people = People::default();
+        people.saw(print_of(1.0), 10);
+        people.mark_asked("p1");
+        let back = parse(&render(&people));
+        assert!(back.who[0].asked);
+        assert_eq!(back.worth_asking(), None,
+                   "a restart is exactly when a program forgets it already asked");
+    }
+
+    #[test]
+    fn a_file_from_before_this_field_asks_once_more_rather_than_never() {
+        //: The upgrade case, written out by hand as the old version wrote it. Re-asking once is the
+        //: safe direction; silently losing the question for everybody already there is not.
+        let mut people = People::default();
+        people.saw(print_of(1.0), 10);
+        let old = render(&people).replace(", \"asked\": false", "");
+        assert!(!old.contains("asked"));
+        assert_eq!(parse(&old).worth_asking().as_deref(), Some("p1"));
     }
 
     #[test]

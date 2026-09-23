@@ -51,6 +51,7 @@ pub mod proposals;
 pub mod recogniser;
 pub mod senses;
 pub mod speaker;
+pub mod wonders;
 
 use std::collections::hash_map::RandomState;
 use std::hash::{BuildHasher, Hasher};
@@ -248,6 +249,9 @@ pub enum Route {
     ForgetFace(String),
     /// Forget everybody, and delete the file.
     ForgetFaces,
+    /// Answer the one open question. **An empty body is a skip** — the same act as the button
+    /// beside the box, because clearing the field and pressing enter says the same thing.
+    Answer(u64, String),
     /// Carry out what was proposed without waiting for 실행, or go back to asking.
     ///
     /// **The one route that changes what argmind may do rather than what it may know.** Everything
@@ -359,6 +363,10 @@ pub fn route(request: &Request) -> Route {
         ("POST", "/faces/on") => Route::Faces(true),
         ("POST", "/faces/off") => Route::Faces(false),
         ("POST", "/faces/forget-all") => Route::ForgetFaces,
+        ("POST", p) if p.starts_with("/wonder/") && p.len() > 8 => match p[8..].parse() {
+            Ok(id) => Route::Answer(id, request.body.clone()),
+            Err(_) => Route::Unknown,
+        },
         //: `/face/forget/<key>` and `/face/name/<key>`, the name in the body because it is a
         //: person's name — it can be Korean, it can be long, and a path is the wrong place for
         //: either. The same reasoning `/aim` already uses.
