@@ -135,6 +135,7 @@ name = "argmind-serve"
 version = "0.0.1"
 dependencies = [
  "argmind-core",
+ "argmind-env-face",
  "argmind-env-linux",
  "argmind-env-none",
  "argmind-env-ollama",

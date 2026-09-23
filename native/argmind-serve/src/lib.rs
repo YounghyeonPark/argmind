@@ -39,6 +39,7 @@ pub mod app;
 pub mod building;
 pub mod chosen;
 pub mod decided;
+pub mod faces;
 pub mod fetch;
 pub mod fix;
 pub mod mind;
@@ -238,6 +239,15 @@ pub enum Route {
     /// is held and closes it on the way up; this one is on until it is turned off, which is why the
     /// window that asks says so and why the light is the honest part of the design.
     Camera(bool),
+    /// Remember the faces the camera sees, or stop. **A different question from `Camera`** — one
+    /// is a light that is on, the other is a row in a file that outlives the session.
+    Faces(bool),
+    /// Give one remembered person a name. The key, and the name from the body.
+    NameFace(String, String),
+    /// Forget one person.
+    ForgetFace(String),
+    /// Forget everybody, and delete the file.
+    ForgetFaces,
     /// Carry out what was proposed without waiting for 실행, or go back to asking.
     ///
     /// **The one route that changes what argmind may do rather than what it may know.** Everything
@@ -344,6 +354,18 @@ pub fn route(request: &Request) -> Route {
         ("POST", "/aloud/off") => Route::Aloud(false),
         ("POST", "/camera/on") => Route::Camera(true),
         ("POST", "/camera/off") => Route::Camera(false),
+        //: **Before the prefixed ones**, so `forget-all` is never read as a person called
+        //: `forget-all`. Exact matches first is the whole rule and it is easy to get wrong once.
+        ("POST", "/faces/on") => Route::Faces(true),
+        ("POST", "/faces/off") => Route::Faces(false),
+        ("POST", "/faces/forget-all") => Route::ForgetFaces,
+        //: `/face/forget/<key>` and `/face/name/<key>`, the name in the body because it is a
+        //: person's name — it can be Korean, it can be long, and a path is the wrong place for
+        //: either. The same reasoning `/aim` already uses.
+        ("POST", p) if p.starts_with("/face/forget/") && p.len() > 13 =>
+            Route::ForgetFace(p[13..].to_string()),
+        ("POST", p) if p.starts_with("/face/name/") && p.len() > 11 =>
+            Route::NameFace(p[11..].to_string(), request.body.clone()),
         ("POST", "/acting/on") => Route::Acting(true),
         ("POST", "/acting/off") => Route::Acting(false),
         ("POST", "/notice/on") => Route::Notice(true),

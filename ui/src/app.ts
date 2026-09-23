@@ -38,6 +38,22 @@ interface Hello {
   noticed: number;
   attending: string;
   waiting: Proposal[];
+  /** Whether new faces are being written down — the switch, not whether the camera is open. */
+  remembering: boolean;
+  /** Whether the two ONNX files are on disk. Without them the switch is on and nothing happens. */
+  face_models: boolean;
+  people: Person[];
+}
+
+/** One person argmind has seen. **No print** — the 128 numbers never leave the server, so a page
+ *  in a screenshot or a bug report carries nobody's face. */
+interface Person {
+  key: string;
+  name: string;
+  /** Unix seconds. */
+  first: number;
+  last: number;
+  times: number;
 }
 
 /** One microphone, speaker or camera, as the server lists it. */
@@ -212,6 +228,11 @@ stream.addEventListener("hello", (e) => {
   aloud.checked = d.speaks;
   acting.checked = d.acts;
   camera.checked = d.watching_you;
+  // **The switch, not the device** — unlike the camera above. Nothing is written down while the
+  // models are missing, so the row says so rather than looking on and doing nothing.
+  faces.checked = d.remembering;
+  faces.title = d.face_models ? "" : "얼굴 모델이 없습니다 — 필요한 것에서 받으세요";
+  drawPeople(d.people);
   drawNoticing(d.noticing, d.noticed);
   // Rebuilt from the server's own list, so a reload is never a page showing buttons the server
   // has forgotten — or missing ones it still holds.
@@ -325,6 +346,80 @@ camera.onchange = () => {
 stream.addEventListener("camera", (e) => {
   camera.checked = (e as MessageEvent).data === "1";
 });
+
+// Remembering faces. **The same shape as the camera above** — the server owns the standing answer
+// and can raise the four-button window, so the checkbox is set from the event rather than from the
+// click. Turning it on does not open anything: three things have to be true before a face is
+// written down, and this is one of them.
+const faces = document.getElementById("faces") as HTMLInputElement;
+const people = document.getElementById("people") as HTMLElement;
+const peopleRows = document.getElementById("people-rows") as HTMLElement;
+
+faces.onchange = () => {
+  const want = faces.checked;
+  faces.checked = false;
+  void post(want ? "/faces/on" : "/faces/off");
+};
+
+stream.addEventListener("faces", (e) => {
+  faces.checked = (e as MessageEvent).data === "1";
+});
+
+stream.addEventListener("people", (e) => {
+  drawPeople(JSON.parse((e as MessageEvent).data) as Person[]);
+});
+
+/** A date somebody can read, from Unix seconds. */
+function on(seconds: number): string {
+  if (!seconds) return "";
+  const d = new Date(seconds * 1000);
+  return `${d.getMonth() + 1}월 ${d.getDate()}일`;
+}
+
+// **The list is the safeguard, not decoration.** Both ways this can go wrong are visible in it: a
+// threshold too low merges two people into one row, and one too high makes the same person a new
+// row every session. The threshold is OpenCV's rather than measured here, so somebody has to be
+// able to see which is happening.
+function drawPeople(who: Person[]): void {
+  people.hidden = who.length === 0;
+  peopleRows.textContent = "";
+  for (const p of who) {
+    const row = document.createElement("div");
+    row.className = "row";
+
+    const name = document.createElement("input");
+    name.type = "text";
+    name.value = p.name;
+    name.placeholder = "이름 없음";
+    name.maxLength = 40;
+    // **On blur and on Enter, not on every keystroke.** A write per character would be a file
+    // rewritten forty times for one name.
+    const save = () => void post(`/face/name/${encodeURIComponent(p.key)}`, name.value);
+    name.onblur = save;
+    name.onkeydown = (ev) => { if (ev.key === "Enter") { name.blur(); } };
+
+    const when = document.createElement("span");
+    when.className = "cost";
+    when.textContent = `${on(p.first)}부터 · ${p.times}번 · 마지막 ${on(p.last)}`;
+
+    const drop = document.createElement("button");
+    drop.type = "button";
+    drop.className = "plain";
+    drop.textContent = "잊기";
+    drop.onclick = () => void post(`/face/forget/${encodeURIComponent(p.key)}`);
+
+    row.append(name, when, drop);
+    peopleRows.append(row);
+  }
+}
+
+// **Asks first.** Everything else in this panel is reversible by pressing it again; this is not.
+const forgetFaces = document.getElementById("forget-faces") as HTMLButtonElement;
+forgetFaces.onclick = () => {
+  if (window.confirm("기억한 얼굴을 모두 지우고 파일도 지웁니다. 되돌릴 수 없습니다.")) {
+    void post("/faces/forget-all");
+  }
+};
 
 const acting = document.getElementById("acting") as HTMLInputElement;
 acting.onchange = () => {

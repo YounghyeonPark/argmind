@@ -163,6 +163,7 @@ fn one_of_each() -> Vec<Fix> {
                             commit: "90ef".repeat(10), why: "목소리".into(),
                             minutes: 15, built: false },
         Fix::StartOllama { why: "Ollama가 설치되어 있는데 실행 중이 아닙니다.".into() },
+        Fix::FetchFaces { about_mb: argmind_serve::faces::BOTH_MB },
     ];
     //: **Exhaustive by construction.** A variant added to the enum and not to the list above makes
     //: this fail to compile, which is the only way a list like this stays a list of everything.
@@ -170,7 +171,8 @@ fn one_of_each() -> Vec<Fix> {
         match fix {
             Fix::PullModel { .. } | Fix::OpenPage { .. } | Fix::Install { .. }
             | Fix::Fetch { .. } | Fix::BuildRecogniser { .. } | Fix::BuildSpeaker { .. }
-            | Fix::StartOllama { .. } | Fix::RunElevated { .. } => {}
+            | Fix::StartOllama { .. } | Fix::RunElevated { .. }
+            | Fix::FetchFaces { .. } => {}
         }
     }
     all

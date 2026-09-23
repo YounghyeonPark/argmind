@@ -152,6 +152,13 @@ struct Desk {
     /// is an answer that should age like any other, and an empty one would make a camera that had
     /// been on for two seconds indistinguishable from an empty room.
     moved_at: Arc<Mutex<Option<Instant>>>,
+    /// **Everybody the camera has recognised**, shared with the camera thread. Behind a mutex
+    /// rather than owned by that thread because the settings page renames and forgets people while
+    /// it is running, and the roster is the one piece of state both of them write.
+    people: Arc<Mutex<crate::people::People>>,
+    /// Whether to look for faces at all. Read by the camera loop every few seconds, so the switch
+    /// does not mean closing the device and opening it again.
+    want_faces: Arc<AtomicBool>,
     /// How to speak to every open page, for the one thing here that outlives the call that started
     /// it. **Every other path is handed an `out` by its caller**; the camera thread has no caller
     /// left by the time it has something to say.
@@ -192,6 +199,12 @@ enum Job {
     Acting(bool),
     /// Keep the camera on and watch for movement, or switch it off.
     Camera(bool),
+    /// Remember the faces it sees, or stop.
+    Faces(bool),
+    /// Name one, forget one, forget everybody.
+    NameFace(String, String),
+    ForgetFace(String),
+    ForgetFaces,
     /// An answer to a permission question: which thing, and which of the four buttons.
     Decide(String, Answer),
     /// Take back a standing answer, from the settings.
@@ -664,6 +677,10 @@ fn carry_out(desk: &mut Desk, out: &Listeners, model: &str, key: &str) {
             out.send("mic-allowed", "1");
         }
         "camera" => switch_camera(desk, out, true),
+        //: **Nothing opens and nothing downloads.** The camera decides whether there is a picture
+        //: and `face-models` decides whether the files are here; this only says what may be done
+        //: with what is already running.
+        "faces" => switch_faces(desk, out, true),
         //: **Nothing starts and nothing installs.** The standing answer *is* the state, so all this
         //: does is tell the page the switch is on — which is why `Job::Acting` writes a 거부 when
         //: it is turned off rather than flipping a field: there is no field.
@@ -731,6 +748,7 @@ fn switch_camera(desk: &mut Desk, out: &Listeners, on: bool) {
     desk.want_eyes.store(true, Ordering::SeqCst);
     let (want_eyes, eyeing) = (Arc::clone(&desk.want_eyes), Arc::clone(&desk.eyeing));
     let moved_at = Arc::clone(&desk.moved_at);
+    let (people, want_faces) = (Arc::clone(&desk.people), Arc::clone(&desk.want_faces));
     let senses = desk.senses.clone();
     let out = Arc::clone(&desk.speaks_to);
     let chosen = crate::chosen::chosen("camera");
@@ -744,6 +762,9 @@ fn switch_camera(desk: &mut Desk, out: &Listeners, on: bool) {
         let began = Instant::now();
         *moved_at.lock().unwrap_or_else(|e| e.into_inner()) = Some(began);
         let mut last_moved: Option<Instant> = None;
+        //: **Said once, not every three seconds.** A roster that is full is a standing fact and
+        //: repeating it in the transcript would bury the conversation it is meant to support.
+        let mut said_full = false;
         let outcome = crate::platform::watch_movement(
             chosen.as_deref(), &carry_on,
             &mut |moved, took| {
@@ -756,6 +777,37 @@ fn switch_camera(desk: &mut Desk, out: &Listeners, on: bool) {
                     None => format!("{:.0}초째 아무 움직임 없음", began.elapsed().as_secs_f64()),
                 };
                 senses.saw("카메라", what, took);
+            },
+            //: Three things have to be true: the models on disk, the switch on, and — implicitly —
+            //: a camera, since this closure only runs inside its loop.
+            &|| want_faces.load(Ordering::SeqCst) && crate::faces::here(),
+            &mut |print| {
+                let mut roster = people.lock().unwrap_or_else(|e| e.into_inner());
+                match roster.saw(print, now_seconds()) {
+                    crate::people::Saw::Fresh { .. } => {
+                        //: **Written the moment somebody new arrives**, not at shutdown: a crash
+                        //: between the two would lose exactly the row that was worth keeping.
+                        if let Err(why) = roster.write() {
+                            eprintln!("  faces: 명부를 쓰지 못했습니다 — {why}");
+                        }
+                        out.send("people", &people_json(&roster));
+                        out.send("note", "처음 보는 얼굴을 기억했습니다 — \
+설정에서 이름을 붙이거나 지울 수 있습니다");
+                    }
+                    //: **Nothing is sent for a face it already knows.** The counters move in
+                    //: memory and are written when the camera closes; an event every three
+                    //: seconds saying *still you* is noise on a channel the conversation shares.
+                    crate::people::Saw::Known { .. } => {}
+                    crate::people::Saw::Full => {
+                        if !said_full {
+                            said_full = true;
+                            out.send("note", &format!(
+                                "기억할 수 있는 얼굴 {}명이 다 찼습니다 — 설정에서 지우면 \
+자리가 생깁니다", crate::people::MOST_REMEMBERED));
+                        }
+                    }
+                    crate::people::Saw::Wrong => {}
+                }
             });
         eyeing.store(false, Ordering::SeqCst);
         out.send("camera", "0");
@@ -769,8 +821,56 @@ fn switch_camera(desk: &mut Desk, out: &Listeners, on: bool) {
         //: that only grows is worse than none. **Both copies of the fact**, or the gate would go on
         //: answering from a camera that is off.
         senses.forget("카메라");
+        //: **The counters, on the way out.** Every new person was written when they arrived; what
+        //: is left is 마지막 본 때 and how many times, which are worth a write and not worth one
+        //: every three seconds.
+        {
+            let roster = people.lock().unwrap_or_else(|e| e.into_inner());
+            if !roster.who.is_empty() {
+                let _ = roster.write();
+            }
+        }
         *moved_at.lock().unwrap_or_else(|e| e.into_inner()) = None;
     });
+}
+
+/// Remembering faces, on or off.
+///
+/// **It does not touch the camera.** Three things have to be true before a face is remembered — the
+/// device is open, the models are on disk, and this is on — and they are three switches because
+/// they are three decisions. Turning this on while the camera is off is allowed and does nothing
+/// yet, which is the honest behaviour: the alternative is a switch that silently opens a device.
+fn switch_faces(desk: &mut Desk, out: &Listeners, on: bool) {
+    desk.want_faces.store(on, Ordering::SeqCst);
+    out.send("faces", if on { "1" } else { "0" });
+    if !on {
+        //: **Switching off stops the writing, it does not erase what is written.** Forgetting is a
+        //: different button, and conflating them would delete a roster somebody meant to keep.
+        out.send("note", "얼굴을 더 기억하지 않습니다 — 이미 기억한 것은 그대로입니다");
+        return;
+    }
+    out.send("note", if !crate::faces::here() {
+        "얼굴 모델이 없습니다 — 설정의 필요한 것에서 받으세요"
+    } else if !desk.eyeing.load(Ordering::SeqCst) {
+        "카메라를 켜면 얼굴을 기억합니다"
+    } else {
+        "이제 본 얼굴을 기억합니다 — 사진은 저장하지 않습니다"
+    });
+}
+
+/// Everybody argmind has seen, for the page. **No print**: the 128 numbers stay on this side, and
+/// a page that never receives them cannot leak them into a log, a screenshot or a bug report.
+fn people_json(people: &crate::people::People) -> String {
+    let rows: Vec<String> = people.who.iter().map(|p| format!(
+        "{{\"key\":\"{}\",\"name\":\"{}\",\"first\":{},\"last\":{},\"times\":{}}}",
+        escape(&p.key), escape(&p.name), p.first, p.last, p.times)).collect();
+    format!("[{}]", rows.join(","))
+}
+
+/// Seconds since the epoch, for a row that a person will read as a date.
+fn now_seconds() -> i64 {
+    std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs() as i64).unwrap_or(0)
 }
 
 /// Install one thing, because somebody pressed the button that said what it would do.
@@ -1239,6 +1339,10 @@ fn hello(desk: &Desk, model: &str) -> String {
         format!("\"noticed\":{}", desk.noticed),
         format!("\"attending\":\"{}\"", escape(&desk.session.eyes.window().1)),
         format!("\"waiting\":[{}]", waiting.join(",")),
+        format!("\"remembering\":{}", desk.want_faces.load(Ordering::SeqCst)),
+        format!("\"face_models\":{}", crate::faces::here()),
+        format!("\"people\":{}",
+                people_json(&desk.people.lock().unwrap_or_else(|e| e.into_inner()))),
     ];
     //: Assembled from a list rather than one long format string. The first version wrapped that
     //: string across two lines and the indentation of the second landed **inside the JSON** —
@@ -1475,6 +1579,11 @@ pub fn run(how: How) {
                               want_eyes: Arc::new(AtomicBool::new(false)),
                               eyeing: Arc::new(AtomicBool::new(false)),
                               moved_at: Arc::new(Mutex::new(None)),
+                              //: **Read off disk at startup**, so a roster survives a restart —
+                              //: which is the whole of what 기억 means here.
+                              people: Arc::new(Mutex::new(crate::people::People::read())),
+                              want_faces: Arc::new(AtomicBool::new(
+                                  crate::decided::standing("faces") == Some(Standing::Allowed))),
                               speaks_to: Arc::clone(&agent_out),
                               senses: senses.clone(), turn: turn.clone(),
                               before: Vec::new(), lately_noticed: Vec::new(), noticed: 0 };
@@ -1751,6 +1860,45 @@ pub fn run(how: How) {
                     //: the rest of the session — the feature working and appearing not to.
                     adopt_voice(&mut desk, &agent_out);
                 }
+                //: **Gated exactly like the camera**, and by its own key. A standing 허용 turns
+                //: it on at the first page open; anything else asks.
+                Job::Faces(on) => match (on, crate::decided::standing("faces")) {
+                    (false, _) => switch_faces(&mut desk, &agent_out, false),
+                    (true, Some(Standing::Allowed)) => switch_faces(&mut desk, &agent_out, true),
+                    (true, Some(Standing::Denied)) => agent_out.send("note",
+                        "거부해 두셨습니다 — 설정에서 되돌릴 수 있습니다"),
+                    (true, None) => {
+                        agent_out.send("faces", "0");
+                        agent_out.send("asking", &asking_json("faces"));
+                    }
+                },
+                Job::NameFace(key, name) => {
+                    let mut roster = desk.people.lock().unwrap_or_else(|e| e.into_inner());
+                    if roster.call(&key, &name) {
+                        let _ = roster.write();
+                        agent_out.send("people", &people_json(&roster));
+                    }
+                }
+                Job::ForgetFace(key) => {
+                    let mut roster = desk.people.lock().unwrap_or_else(|e| e.into_inner());
+                    if roster.forget(&key) {
+                        let _ = roster.write();
+                        agent_out.send("people", &people_json(&roster));
+                        agent_out.send("note", "한 사람을 잊었습니다");
+                    }
+                }
+                Job::ForgetFaces => {
+                    let mut roster = desk.people.lock().unwrap_or_else(|e| e.into_inner());
+                    match roster.forget_everybody() {
+                        //: **The file goes too.** Somebody pressing this means *there is nothing
+                        //: of mine here*, and an empty file is a worse answer than no file.
+                        Ok(()) => agent_out.send("note", "기억한 얼굴을 모두 지웠습니다 — \
+파일도 지웠습니다"),
+                        Err(why) => agent_out.send("note",
+                            &format!("파일을 지우지 못했습니다 — {why}")),
+                    }
+                    agent_out.send("people", &people_json(&roster));
+                }
                 Job::Opened(tx) => {
                     let _ = tx.send(sse("hello", &hello(&desk, &agent_model)));
                     //: **What 항상 허용 buys, without anybody pressing 다시 확인.**
@@ -1981,6 +2129,29 @@ fn serve_one(mut stream: TcpStream, out: &Listeners, token: &str, jobs: &Sender<
         Route::Camera(on) => {
             let _ = stream.write_all(&respond("204 No Content", "text/plain", ""));
             let _ = jobs.send(Job::Camera(on));
+        }
+        Route::Faces(on) => {
+            let _ = stream.write_all(&respond("204 No Content", "text/plain", ""));
+            let _ = jobs.send(Job::Faces(on));
+        }
+        //: **Length-checked here rather than at the far end**, because a page is allowed to send a
+        //: long name by accident and the roster should not be where that is discovered. `call`
+        //: trims to 40 characters too; this refuses a request that is obviously not a name.
+        Route::NameFace(key, name) => {
+            if name.chars().count() <= 200 {
+                let _ = stream.write_all(&respond("204 No Content", "text/plain", ""));
+                let _ = jobs.send(Job::NameFace(key, name));
+            } else {
+                let _ = stream.write_all(&respond("400 Bad Request", "text/plain", "no"));
+            }
+        }
+        Route::ForgetFace(key) => {
+            let _ = stream.write_all(&respond("204 No Content", "text/plain", ""));
+            let _ = jobs.send(Job::ForgetFace(key));
+        }
+        Route::ForgetFaces => {
+            let _ = stream.write_all(&respond("204 No Content", "text/plain", ""));
+            let _ = jobs.send(Job::ForgetFaces);
         }
         Route::Listen(down) => {
             let _ = stream.write_all(&respond("204 No Content", "text/plain", ""));

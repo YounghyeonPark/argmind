@@ -319,6 +319,34 @@ pub fn every(model: &str) -> Vec<Need> {
         })),
     });
 
+    //: **Last, and never `required`.** Everything above it is argmind working; this is argmind
+    //: recognising, which is an extra the owner asked for on 2026-09-23 and which the program is
+    //: entirely usable without.
+    //:
+    //: **Offered off Windows too, unlike the builds.** `can_carry_out_fixes` gates things that run
+    //: an installer or a compiler on a machine where none of that has been tried. This downloads
+    //: two files and reads them with a pure-Rust library, which works the same everywhere — the
+    //: part that is Windows-only is the camera that would feed it, and that is said in `found`.
+    let models = crate::faces::here();
+    out.push(Need {
+        key: "face-models",
+        what: "얼굴 모델",
+        required: false,
+        present: models,
+        found: if models {
+            format!("{} 에 있음", crate::needs::model_shed().display())
+        } else if crate::platform::watches_people() {
+            "없음 — 받으면 본 얼굴이 같은 사람인지 알 수 있습니다".into()
+        } else {
+            //: **True and worth saying**: the files would work here, the camera would not.
+            "없음 — 이 운영체제에는 카메라가 없어서 받아도 쓸 데가 없습니다".into()
+        },
+        how: format!("{} MB, YuNet(MIT) 과 SFace(Apache-2.0)", crate::faces::BOTH_MB),
+        fix: offered(crate::platform::watches_people().then(|| Fix::FetchFaces {
+            about_mb: crate::faces::BOTH_MB,
+        })),
+    });
+
     out
 }
 

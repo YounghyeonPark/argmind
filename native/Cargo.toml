@@ -7,3 +7,13 @@
 [workspace]
 resolver = "2"
 members = ["argmind-core", "argmind-env-windows", "argmind-voice", "argmind-env-ollama", "argmind-env-whisper", "argmind-env-qwentts", "argmind-env-none", "argmind-env-linux", "argmind-env-face", "argmind-measure", "argmind-rules", "argmind-window", "argmind-serve"]
+
+# **Debug information for this tree, not for its dependencies.**
+#
+# Added 2026-09-23, when `tract-onnx` arrived and `cargo test` started failing with *the paging
+# file is too small* — twenty test binaries linking a neural-network runtime's debug symbols at
+# once. This keeps symbols for the crates somebody here would actually step through and drops them
+# for everything underneath, which is what makes the link fit. **A backtrace through argmind is
+# unchanged**; one through tract now gives addresses.
+[profile.dev.package."*"]
+debug = false

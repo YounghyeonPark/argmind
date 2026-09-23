@@ -44,6 +44,13 @@ argmind-env-linux = { path = "../argmind-env-linux", optional = true }
 
 [target.'cfg(windows)'.dependencies]
 argmind-env-windows = { path = "../argmind-env-windows" }
+# **Here because of a toolchain, not because of an operating system.** The crate itself has no
+# `cfg` in it and would run on all three; `tract-linalg` builds assembly through `cc`, so
+# `cargo check --target x86_64-unknown-linux-gnu` cannot reach it from this machine for want of a
+# Linux compiler, and that cross-check is the thing keeping the application portable. The gate is
+# true for a second reason too — the only camera in this tree is the Windows one — but the first
+# reason is the honest one. `argmind-env-face/src/lib.rs` has it.
+argmind-env-face = { path = "../argmind-env-face" }
 argmind-env-qwentts = { path = "../argmind-env-qwentts" }
 
 [features]

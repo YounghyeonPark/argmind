@@ -207,6 +207,19 @@
       <span class="what">카메라로 사람 알아보기</span>
       <span class="cost">켜 두는 동안 카메라 불이 켜져 있습니다 — 64x36 회색만 보고, 아는 것은 마지막 움직임이 몇 초 전인가뿐</span>
     </label>
+    <!-- A second switch under the camera, and deliberately not part of it. The camera is a light
+         that is on; this is a row in a file that outlives the session, and agreeing to the first is
+         not agreeing to the second. What is written is 128 numbers and two dates per person — no
+         picture, and the numbers cannot be turned back into one. -->
+    <label class="switch">
+      <input type="checkbox" id="faces">
+      <span class="what">본 얼굴 기억하기</span>
+      <span class="cost">사진은 저장하지 않습니다 — 숫자 128개와 날짜만, 최대 20명. 이름은 직접 붙이셔야 합니다</span>
+    </label>
+    <div id="people" hidden>
+      <div class="rows" id="people-rows"></div>
+      <button type="button" id="forget-faces" class="plain">모두 잊기</button>
+    </div>
     <label class="switch">
       <input type="checkbox" id="acting">
       <span class="what">확인 없이 실행</span>

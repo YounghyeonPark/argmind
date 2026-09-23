@@ -68,6 +68,13 @@ pub enum Fix {
     /// A documented Windows command that needs administrator rights, run through the elevation
     /// prompt so Windows asks as well.
     RunElevated { command: String, why: String },
+    /// Fetch **both** face model files, which are two `Fetch`es behind one question.
+    ///
+    /// Separate from `Fetch` for the reason `BuildSpeaker` keeps its weights: one capability that
+    /// needs two files should ask once, and the two it runs are literally
+    /// [`crate::faces::model_fixes`] — so what was agreed to and what happens cannot come apart.
+    /// Nothing is executed; both are read by `tract`.
+    FetchFaces { about_mb: u64 },
 }
 
 impl Fix {
@@ -78,6 +85,7 @@ impl Fix {
             Fix::OpenPage { .. } => "argmind — 설치 페이지를 열까요?",
             Fix::Install { .. } => "argmind — 내려받아 설치할까요?",
             Fix::Fetch { .. } => "argmind — 파일을 받을까요?",
+            Fix::FetchFaces { .. } => "argmind — 얼굴 모델을 받을까요?",
             //: Two questions, so two titles. A window headed "빌드할까요?" over a sentence that
             //: says nothing will be compiled is a window that was not read.
             Fix::BuildRecogniser { built: true, .. } => "argmind — 받아쓰기 서버를 띄울까요?",
@@ -161,6 +169,16 @@ pub fn describe(fix: &Fix) -> String {
              · 받은 설치 프로그램을 실행합니다 — 만든 곳을 신뢰한다는 뜻입니다\n\
              · 설치 프로그램이 스스로 물어볼 수 있습니다\n\n\
              내려받아 설치할까요?"),
+        Fix::FetchFaces { about_mb } => format!(
+            "카메라가 본 얼굴이 같은 사람인지 판단하는 모델 두 개입니다.\n\n\
+             · 합쳐서 약 {about_mb} MB를 내려받습니다 — 대부분이 얼굴을 기억하는 쪽입니다\n\
+             · {}\n\
+             · 받은 뒤 해시를 확인하고, 다르면 지웁니다\n\
+             · 실행하지 않습니다 — 데이터 파일입니다\n\
+             · 이것만으로는 아무 얼굴도 기억하지 않습니다. 기억은 설정의 \"{}\" 가 따로 정합니다\n\n\
+             받을까요?",
+            crate::needs::model_shed().display(),
+            crate::decided::what("faces")),
         Fix::Fetch { url, into, why, about_mb, sha256 } => format!(
             "{why}\n\n\
              · {url} 에서 약 {about_mb} MB를 내려받습니다\n\
@@ -284,6 +302,18 @@ pub fn apply(fix: &Fix, say: &mut dyn FnMut(&str)) -> Result<String, String> {
             //: six months, when it is out of date.
             let _ = std::fs::remove_file(&at);
             Ok("설치했습니다".into())
+        }
+        //: **Both, or neither is any use.** The detector without the recogniser finds a face
+        //: it cannot tell from any other; the recogniser without the detector has nothing to look
+        //: at. Already-present files are skipped, the way `BuildSpeaker` skips its weights.
+        Fix::FetchFaces { .. } => {
+            for one in crate::faces::model_fixes() {
+                let Fix::Fetch { into, .. } = &one else { continue };
+                if !std::path::Path::new(into).is_file() {
+                    apply(&one, say)?;
+                }
+            }
+            Ok("얼굴 모델 두 개를 받았습니다".into())
         }
         Fix::Fetch { url, into, sha256, .. } => {
             let at = std::path::PathBuf::from(into);

@@ -284,10 +284,23 @@ mod chosen {
         if dry { hands } else { hands.arm() }
     }
 
+    /// **Yes** — there is a camera here, so a face detector has something to look at.
+    pub fn watches_people() -> bool {
+        true
+    }
+
     pub fn watch_movement(want: Option<&str>, carry_on: &dyn Fn() -> bool,
-                          saw: &mut dyn FnMut(bool, f64)) -> Result<(), String> {
+                          saw: &mut dyn FnMut(bool, f64),
+                          faces: &dyn Fn() -> bool,
+                          met: &mut dyn FnMut(Vec<f32>)) -> Result<(), String> {
         use argmind_env_windows::camera::{Camera, ENOUGH_TO_JUDGE, MOVING, MOVING_WINDOW};
         let mut camera = Camera::on(want)?;
+        //: **Asked every tick rather than read once**, so turning the switch on does not mean
+        //: closing the camera and opening it again — which is a light going off and on for no
+        //: reason a person watching it could explain. Switching it off drops the 38 MB model.
+        let mut looker: Option<argmind_env_face::Faces> = None;
+        let mut gave_up = false;
+        let mut last_face = std::time::Instant::now();
         let mut before = None;
         let mut window: Vec<f64> = Vec::new();
         let mut began = std::time::Instant::now();
@@ -327,6 +340,49 @@ mod chosen {
             let middle = window[window.len() / 2];
             window.clear();
             saw(middle >= MOVING, so_far);
+
+            //: **On the movement thread rather than beside it**, because two threads on one device
+            //: is two lights' worth of nothing — the same reason `switch_camera` refuses to start
+            //: a second watcher. The cost is that about 150 ms of every `FACE_EVERY` seconds is
+            //: spent not sampling movement; at a 3 s window needing 6 samples that is one or two
+            //: out of a window, written down rather than assumed harmless.
+            if !faces() {
+                //: Off means off: the model goes, and so does the memory of having failed to read
+                //: it — somebody who fixes a missing file and switches back on should not be told
+                //: about the old failure for the rest of the session.
+                looker = None;
+                gave_up = false;
+                continue;
+            }
+            if last_face.elapsed().as_secs_f64() < super::FACE_EVERY {
+                continue;
+            }
+            last_face = std::time::Instant::now();
+            if looker.is_none() && !gave_up {
+                //: **A failure is not fatal.** Movement is what the light was turned on for, and a
+                //: missing model file must not close the camera.
+                match argmind_env_face::Faces::load(&crate::faces::finder_at())
+                    .and_then(|f| f.also_remember(&crate::faces::namer_at())) {
+                    Ok(f) => looker = Some(f),
+                    Err(why) => {
+                        eprintln!("  faces: 모델을 읽지 못했습니다 — {why}");
+                        gave_up = true;
+                    }
+                }
+            }
+            let Some(looker) = &looker else { continue };
+            let Ok(shot) = camera.photograph(super::FACE_WIDE, super::FACE_TALL) else { continue };
+            let Ok(found) = looker.find(&shot.rgb, shot.wide, shot.tall, super::A_FACE)
+                else { continue };
+            //: The largest, because one person at a desk is the case this is for and a face on a
+            //: poster behind them is smaller. **Two people is not handled** and would show in the
+            //: roster as one of them never being seen.
+            let Some(biggest) = found.iter().max_by(|a, b| (a.rect.2 * a.rect.3)
+                .partial_cmp(&(b.rect.2 * b.rect.3)).unwrap_or(std::cmp::Ordering::Equal))
+                else { continue };
+            if let Ok(Some(print)) = looker.embed(&shot.rgb, shot.wide, shot.tall, biggest) {
+                met(print);
+            }
         }
         Ok(())
     }
@@ -416,8 +472,16 @@ mod chosen {
         if dry { hands } else { hands.arm() }
     }
 
+    /// **No** — there is no camera here, so nothing would feed a face detector. The models
+    /// themselves are portable; what is missing is the thing that would look through.
+    pub fn watches_people() -> bool {
+        false
+    }
+
     pub fn watch_movement(_want: Option<&str>, _carry_on: &dyn Fn() -> bool,
-                          _saw: &mut dyn FnMut(bool, f64)) -> Result<(), String> {
+                          _saw: &mut dyn FnMut(bool, f64),
+                          _faces: &dyn Fn() -> bool,
+                          _met: &mut dyn FnMut(Vec<f32>)) -> Result<(), String> {
         Err("이 운영체제에서는 카메라를 쓸 수 없습니다".into())
     }
 
@@ -425,6 +489,23 @@ mod chosen {
         None
     }
 }
+
+/// How often the camera loop stops sampling movement and looks for a face.
+///
+/// **Three seconds, matching the movement window**, so the two land on the same beat rather than
+/// drifting past each other. It is a person at a desk: they do not become somebody else between
+/// ticks, and a faster rate would buy nothing and cost a sample.
+pub const FACE_EVERY: f64 = 3.0;
+
+/// What the detector is fed. YuNet letterboxes to 640 square, so this leaves the picture at scale
+/// 1.0 and invents no pixel.
+pub const FACE_WIDE: usize = 640;
+pub const FACE_TALL: usize = 360;
+
+/// **Below this a detection is not a face.** OpenCV's own default for YuNet. Nothing here has
+/// measured a better one, and a number chosen to make something pass would be the failure this
+/// project's standards exist against.
+pub const A_FACE: f32 = 0.6;
 
 //: Everything else: no environment has been written for it, or this build was asked not to
 //: use the one there is.
@@ -471,8 +552,16 @@ mod chosen {
         if dry { hands } else { hands.arm() }
     }
 
+    /// **No** — there is no camera here, so nothing would feed a face detector. The models
+    /// themselves are portable; what is missing is the thing that would look through.
+    pub fn watches_people() -> bool {
+        false
+    }
+
     pub fn watch_movement(_want: Option<&str>, _carry_on: &dyn Fn() -> bool,
-                          _saw: &mut dyn FnMut(bool, f64)) -> Result<(), String> {
+                          _saw: &mut dyn FnMut(bool, f64),
+                          _faces: &dyn Fn() -> bool,
+                          _met: &mut dyn FnMut(Vec<f32>)) -> Result<(), String> {
         Err("이 운영체제에서는 카메라를 쓸 수 없습니다".into())
     }
 
