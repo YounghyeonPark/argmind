@@ -269,8 +269,18 @@ mod chosen {
     ///
     /// **It is not a second path past the guard**: `click_button` checks `may_touch` before it
     /// chooses a path, and falls back to a click when no pattern fits.
+    /// **And typing through one too, since 2026-09-23.** Measured on Character Map, a fresh window
+    /// per case: both `hello` and `안녕하세요 반갑습니다` went in through `ValuePattern`, and a box
+    /// already holding `먼저` was appended to rather than replaced. It writes at the point of the
+    /// widget argmind just clicked, so in the 250 ms between the click and the typing a person can
+    /// click into a box of their own and argmind's sentence still goes where argmind aimed.
+    ///
+    /// **Where it does not apply it changes nothing** — no value pattern, read-only, or anything
+    /// already in the box, and it is the keyboard exactly as before. The residual risk is a control
+    /// that supports `ValuePattern`, reports itself blank, and holds content anyway; that is
+    /// unmeasured and would need other applications. One application, one run.
     pub fn hands(dry: bool) -> Touch {
-        let hands = Touch::unrestricted().with_patterns();
+        let hands = Touch::unrestricted().with_patterns().with_typing_patterns();
         if dry { hands } else { hands.arm() }
     }
 

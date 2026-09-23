@@ -222,16 +222,22 @@ fn clicking_patterns_do_not_turn_typing_patterns_on() {
 
 /// **What ships, and the one place that decides it.**
 ///
-/// The application asks `platform::hands` for its hands; that asks for clicking patterns and not
-/// for typing ones. If this ever fails because typing patterns were switched on, the thing to check
-/// first is whether `--bin typing` has been run — the numbers, not the intent.
+/// **This said the opposite until 2026-09-23, and its own message said what would change it**: the
+/// assertion was that typing patterns must *not* ship, *and `--bin typing` has no recorded run to
+/// justify it*. There is one now — Character Map, a fresh window per case, both `hello` and
+/// `안녕하세요 반갑습니다` in through `ValuePattern`, and a box already holding `먼저` appended to
+/// rather than replaced. So it is turned round deliberately rather than deleted, and what it pins
+/// now is that both hands are decided in the one place that may name a platform.
 #[test]
-fn the_shipped_hands_click_through_patterns_and_type_through_keys() {
+fn the_shipped_hands_use_patterns_for_both_hands() {
     let source = include_str!("../../argmind-serve/src/platform.rs");
-    assert!(source.contains("Touch::unrestricted().with_patterns()"),
-            "the application no longer asks for clicking patterns");
-    assert!(!source.contains("with_typing_patterns"),
-            "typing patterns ship, and `--bin typing` has no recorded run to justify it");
+    assert!(source.contains("Touch::unrestricted().with_patterns().with_typing_patterns()"),
+            "the application no longer asks for both");
+    //: **Counted on the whole call, not the substring.** `with_patterns()` is inside
+    //: `with_typing_patterns()`, so a count of the shorter one says two where it means one — which
+    //: is how a rule about *asked for exactly once* quietly stops being one.
+    assert_eq!(source.matches("Touch::unrestricted().with_patterns().with_typing_patterns()")
+               .count(), 1, "the hands are built in more than one place");
 }
 
 /// **A click aims the type that follows it, once.**

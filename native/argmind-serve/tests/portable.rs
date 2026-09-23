@@ -260,8 +260,11 @@ fn the_seam_asks_for_patterns_only_where_there_are_any() {
     let next = source[windows + 10..].find("#[cfg(").map(|i| i + windows + 10)
         .unwrap_or(source.len());
     let block = &source[windows..next];
-    assert!(block.contains("Touch::unrestricted().with_patterns()"),
-            "the windows hands no longer ask for patterns");
-    //: And nowhere else, because nowhere else has them.
-    assert_eq!(source.matches("with_patterns()").count(), 1, "patterns asked for outside windows");
+    assert!(block.contains("Touch::unrestricted().with_patterns().with_typing_patterns()"),
+            "the windows hands no longer ask for both kinds of pattern");
+    //: And nowhere else, because nowhere else has them. **Counted on the whole call**:
+    //: `with_patterns()` is a substring of `with_typing_patterns()`, so counting the short one
+    //: reads two where it means one.
+    assert_eq!(source.matches("Touch::unrestricted().with_patterns().with_typing_patterns()")
+               .count(), 1, "patterns asked for outside windows");
 }
