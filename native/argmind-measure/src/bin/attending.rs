@@ -6,11 +6,9 @@
 //!   cargo run -p argmind-measure --bin attending --release -- --check
 //! ```
 //!
-//! `--check` **opens no camera**: it reads the models, runs the detector on a drawn picture, and
-//! says whether the plumbing works. A harness that crashes after asking somebody to sit still for
-//! twenty seconds has spent their twenty seconds, and this one asks them to move on purpose.
-//!
 //! From `native/`, and `--release` — a debug build of `tract` is not the number anybody wants.
+//! `--check` **opens no camera**: it reads the models, runs the detector on a drawn picture and
+//! says whether the plumbing works, so a broken harness is found without spending somebody's time.
 //!
 //! ## The question
 //!
@@ -20,29 +18,48 @@
 //! nothing here has been pointed at a person yet.
 //!
 //! **The two do not answer the same question and that is the finding this harness has to protect.**
-//! [`Face::head_on`] reads where a *head* is pointed; a person who holds their head still and looks
-//! to the side is invisible to it and plain to the model. So the arms below are *looking* and *head
+//! `Face::head_on` reads where a *head* is pointed; somebody who holds their head still and looks
+//! to the side is invisible to it and plain to the model. So the arms are *looking* and *head
 //! turned away*, which is what the cheap path could possibly do, and the case it cannot do is named
 //! in the reading rather than measured around.
 //!
+//! ## Audited before it was run, against this repository's own list
+//!
+//! `docs/findings/harness-pitfalls.md` has ten ways the model has lied here and seven ways the
+//! measuring code has. Six applied, and the first had already destroyed a measurement in this tree:
+//!
+//! 1. **The phase order was fixed.** `presence` separated a still room from a still room **2.17
+//!    against 0.65, three to one in the wrong direction, purely by which phase ran first.** This
+//!    now runs both orders and says so when they disagree; a harness that only ever asks
+//!    looking-then-turned cannot tell a real gap from a warming camera.
+//! 2. **The detector was never warmed.** `tract`'s first pass carries setup the rest do not, and it
+//!    would have landed entirely inside whichever arm ran first — the same shape as the 17.2 s in
+//!    `seeing` that turned out to be a model loading.
+//! 3. **The model's picture was taken at t=0** while the detector sampled t=0 to t=10, so the two
+//!    were not looking at the same thing. It is taken at the midpoint now.
+//! 4. **Two failures were collapsed into one.** A sample was dropped both when no face was found
+//!    and when the eyes landed on top of each other, and only the first was counted — pitfall 5,
+//!    *a boolean where the delta was needed*. It would have read as a clean arm with a smaller `n`.
+//! 5. **The conditions were not in the result.** The threshold, the sizes, the model and the
+//!    fingerprint are printed now, because a number whose conditions live only in the source is a
+//!    number nobody can compare against next month. Three baselines here died of that.
+//! 6. **A `partial_cmp().unwrap()`** on face area, which panics on a NaN rather than dropping it.
+//!
 //! ## How it asks
 //!
-//! Two phases with a person doing each on purpose, the shape `presence` used to derive
-//! `camera::MOVING` — because a threshold taken from one state has never seen the thing it is meant
-//! to separate. Each phase samples the detector at whatever rate it runs and takes **one** model
-//! call for the comparison, on a photograph from the same phase.
+//! Phases with a person doing each on purpose, the shape `presence` used to derive
+//! `camera::MOVING` — a threshold taken from one state has never seen the thing it is meant to
+//! separate. Each phase samples the detector at whatever rate it runs and takes **one** model call,
+//! on a photograph from the middle of that phase.
 //!
-//! **The two numbers this produces are different in kind.** The detector's is a distribution over
-//! tens of samples; the model's is one sentence per phase. That is not a flaw in the harness, it is
-//! the difference being measured: one of them is cheap enough to ask continuously.
+//! **The two numbers are different in kind.** The detector's is a distribution over tens of
+//! samples; the model's is one sentence per phase. That is not a flaw, it is the difference being
+//! measured: one of them is cheap enough to ask continuously.
 //!
 //! **It says whether they separate. It does not pick a threshold to make them.** If the two ranges
 //! touch, they touch, and the cheap path does not answer this question on this face at this desk.
 //!
-//! ## What it does with the pictures
-//!
 //! **Nothing is written to disk.** The camera light comes on, the phases run, the light goes out.
-//! The detector never leaves the process and the one caption per phase reaches the terminal.
 
 use std::path::PathBuf;
 use std::time::{Duration, Instant};
@@ -55,59 +72,104 @@ use argmind_measure::png;
 const SEES: &str = "qwen3-vl:8b";
 /// The size `seeing` measured as the smallest that reads a gaze correctly.
 const ASKED_AT: (usize, usize) = (320, 180);
-/// What the detector is fed. Letterboxing to 640 leaves this at scale 1.0, so no pixel is invented.
+/// What the detector is fed. YuNet letterboxes to 640 square, so this leaves the picture at scale
+/// 1.0 and invents no pixel.
 const LOOKED_AT: (usize, usize) = (640, 360);
-/// **Below this a detection is not a face.** OpenCV's own default for YuNet; nothing here improves
-/// on it and a number chosen to make an arm pass would be the failure this project exists against.
+/// **Below this a detection is not a face.** OpenCV's own default for YuNet. Nothing here has
+/// measured a better one, and a number chosen to make an arm pass would be the failure this
+/// project's standards exist against.
 const A_FACE: f32 = 0.6;
 
 const ASK: &str = "이 사진 속 사람이 화면 쪽을 보고 있는가? \
 '보고 있다' 또는 '보고 있지 않다' 로 시작해서 한 문장으로만 답하라.";
 
-struct Phase {
-    what: &'static str,
-    tell: &'static str,
+#[derive(Clone, Copy, PartialEq)]
+enum Doing {
+    Looking,
+    Turned,
 }
 
-const PHASES: [Phase; 2] = [
-    Phase { what: "화면 보기", tell: "화면을 똑바로 보고 계세요" },
-    Phase { what: "고개 돌리기", tell: "고개를 옆으로 돌려 주세요 (눈만 말고 고개를)" },
-];
+impl Doing {
+    fn what(self) -> &'static str {
+        match self {
+            Doing::Looking => "화면 보기",
+            Doing::Turned => "고개 돌리기",
+        }
+    }
+    fn tell(self) -> &'static str {
+        match self {
+            Doing::Looking => "화면을 똑바로 보고 계세요",
+            Doing::Turned => "고개를 옆으로 돌려 주세요 (눈만 말고 고개를)",
+        }
+    }
+}
+
+/// What one phase produced.
+struct Went {
+    doing: Doing,
+    round: usize,
+    /// `|head_on|` per sample.
+    heads: Vec<f32>,
+    /// Face area per sample, so a subject swapped mid-run is visible rather than silent.
+    areas: Vec<f32>,
+    /// Milliseconds per `find`.
+    costs: Vec<f64>,
+    /// **Counted apart, because they are different failures.** Pitfall 5.
+    faceless: u32,
+    unreadable: u32,
+    said: String,
+    spoke: f64,
+}
 
 fn main() {
     std::process::exit(run());
 }
 
 fn run() -> i32 {
-    if std::env::args().any(|a| a == "--check") {
+    let args: Vec<String> = std::env::args().skip(1).collect();
+    if args.iter().any(|a| a == "--check") {
         return check();
     }
-    let quick = std::env::args().any(|a| a == "--quick");
+    let quick = args.iter().any(|a| a == "--quick");
     let seconds = if quick { 4.0 } else { 10.0 };
+    //: **Both orders, unless somebody is only checking the harness.** See the module note: a fixed
+    //: order is what made `presence` separate a still room from itself.
+    let rounds: Vec<[Doing; 2]> = if quick {
+        vec![[Doing::Looking, Doing::Turned]]
+    } else {
+        vec![[Doing::Looking, Doing::Turned], [Doing::Turned, Doing::Looking]]
+    };
 
     println!("\n  값싼 쪽과 비싼 쪽이 같은 사실에 동의하는가");
-    println!("  **카메라 불이 켜집니다.** 두 단계, 각 {seconds:.0}초. 시작 전에 알려드립니다.");
-    println!("  **아무것도 저장하지 않습니다** — 숫자와 문장 두 개만 화면에 남습니다.");
+    println!("  **카메라 불이 켜집니다.** {}단계, 각 {seconds:.0}초. 시작 전에 알려드립니다.",
+             rounds.len() * 2);
+    println!("  **아무것도 저장하지 않습니다** — 숫자와 문장만 화면에 남습니다.");
+    //: **Every condition the numbers depend on, printed.** Pitfall 2, and the reason three
+    //: baselines in this tree had to be thrown away.
+    println!("  조건: 검출 {}x{} 문턱 {A_FACE} · 모델 {SEES} {}x{} think:false(무시됨) · 두 순서",
+             LOOKED_AT.0, LOOKED_AT.1, ASKED_AT.0, ASKED_AT.1);
     println!("  harness {}", argmind_measure::source_print(include_str!("attending.rs")));
 
     let (finder, namer) = where_the_models_are();
     if !finder.is_file() {
-        println!("\n  모델이 없습니다. 두 개를 받아야 합니다 (MIT / Apache-2.0):");
-        println!("    mkdir -p \"{}\"", finder.parent().unwrap().display());
-        println!("    curl -L -o \"{}\" \\\n      {}", finder.display(), YUNET);
-        println!("    curl -L -o \"{}\" \\\n      {}", namer.display(), SFACE);
-        return 2;
+        return missing(&finder, &namer);
     }
     let loading = Instant::now();
     let faces = match Faces::load(&finder) {
         Ok(f) => f,
         Err(why) => { println!("\n  YuNet 을 읽지 못했습니다 — {why}"); return 2; }
     };
-    println!("  YuNet {:.2}s 만에 올림\n", loading.elapsed().as_secs_f64());
+    //: **Warmed, and the cost printed.** Point 2 of this file's own audit: the first pass carries
+    //: setup and would otherwise land entirely inside whichever arm ran first.
+    let warming = Instant::now();
+    let blank = vec![110u8; LOOKED_AT.0 * LOOKED_AT.1 * 3];
+    let _ = faces.find(&blank, LOOKED_AT.0, LOOKED_AT.1, A_FACE);
+    println!("  YuNet {:.2}s 만에 올림 · 첫 통과 {:.0} ms (버림)",
+             loading.elapsed().as_secs_f64(), warming.elapsed().as_secs_f64() * 1000.0);
 
     let mut model = Local::new(SEES);
     model.think = Some(false);
-    model.keep_alive = "300s".into();
+    model.keep_alive = "600s".into();
     print!("  모델을 올리는 중 ...");
     let _ = std::io::Write::flush(&mut std::io::stdout());
     let warming = Instant::now();
@@ -124,129 +186,187 @@ fn run() -> i32 {
                  None => "안 됨".into(),
              });
 
-    let mut readings: Vec<Vec<f32>> = Vec::new();
-    let mut costs: Vec<Vec<f64>> = Vec::new();
-    let mut said: Vec<String> = Vec::new();
-    let mut spoke: Vec<f64> = Vec::new();
-
-    for phase in &PHASES {
-        println!("  ── {} ──  {}", phase.what, phase.tell);
-        for n in (1..=3).rev() {
-            println!("     {n} ...");
-            std::thread::sleep(Duration::from_secs(1));
+    let mut all: Vec<Went> = Vec::new();
+    for (round, order) in rounds.iter().enumerate() {
+        for doing in order {
+            all.push(one_phase(&mut camera, &faces, &model, *doing, round, seconds));
         }
-        println!("     시작");
-
-        //: **One photograph for the model, taken at the start of the phase**, so its sentence is
-        //: about a moment inside the window the detector sampled and not about whatever the room
-        //: looked like once the person relaxed.
-        let for_model = camera.photograph(ASKED_AT.0, ASKED_AT.1).ok();
-
-        let mut heads = Vec::new();
-        let mut each = Vec::new();
-        let began = Instant::now();
-        let mut faceless = 0;
-        while began.elapsed().as_secs_f64() < seconds {
-            let Ok(shot) = camera.photograph(LOOKED_AT.0, LOOKED_AT.1) else { continue };
-            let ran = Instant::now();
-            let found = faces.find(&shot.rgb, shot.wide, shot.tall, A_FACE);
-            each.push(ran.elapsed().as_secs_f64() * 1000.0);
-            match found {
-                Ok(list) if !list.is_empty() => {
-                    //: The largest face, because a reflection or a photograph on the wall is
-                    //: smaller than the person at the desk and this harness has one subject.
-                    let biggest = list.iter().max_by(|a, b| (a.rect.2 * a.rect.3)
-                        .partial_cmp(&(b.rect.2 * b.rect.3)).unwrap()).unwrap();
-                    if let Some(h) = biggest.head_on() {
-                        heads.push(h.abs());
-                    }
-                }
-                Ok(_) => faceless += 1,
-                Err(why) => println!("     찾기 실패 — {why}"),
-            }
-        }
-        println!("     {} 표본, 얼굴 없음 {}", heads.len(), faceless);
-
-        let (mut caption, mut took) = (String::from("(사진을 못 찍음)"), 0.0);
-        if let Some(shot) = for_model {
-            let encoded = png(&shot.rgb, shot.wide, shot.tall);
-            let ran = Instant::now();
-            match model.look_at(ASK, &encoded) {
-                Ok(r) => { caption = r.text.replace('\n', " "); took = ran.elapsed().as_secs_f64(); }
-                Err(e) => caption = format!("(실패: {e})"),
-            }
-        }
-        readings.push(heads);
-        costs.push(each);
-        said.push(caption);
-        spoke.push(took);
-        println!();
     }
     drop(camera);
-
-    report(&readings, &costs, &said, &spoke);
+    report(&all);
     0
 }
 
-fn report(readings: &[Vec<f32>], costs: &[Vec<f64>], said: &[String], spoke: &[f64]) {
-    println!("  ── 값싼 쪽: 고개 방향 |head_on|, 0 이 정면 ──");
-    let mut middles = Vec::new();
-    for (i, phase) in PHASES.iter().enumerate() {
-        let mut v = readings[i].clone();
-        if v.is_empty() {
-            println!("  {:>12}  표본 없음 — 얼굴을 한 번도 못 찾았습니다", phase.what);
-            middles.push(None);
-            continue;
+fn one_phase(camera: &mut Camera, faces: &Faces, model: &Local, doing: Doing, round: usize,
+             seconds: f64) -> Went {
+    println!("  ── {} ({}번째) ──  {}", doing.what(), round + 1, doing.tell());
+    for n in (1..=3).rev() {
+        println!("     {n} ...");
+        std::thread::sleep(Duration::from_secs(1));
+    }
+    println!("     시작");
+
+    let mut went = Went {
+        doing, round, heads: Vec::new(), areas: Vec::new(), costs: Vec::new(),
+        faceless: 0, unreadable: 0, said: "(사진을 못 찍음)".into(), spoke: 0.0,
+    };
+    //: **Taken at the midpoint, not at the start.** The detector samples the whole window; a
+    //: picture from t=0 catches somebody still settling into position, and the two arms would then
+    //: be looking at different moments.
+    let mut for_model = None;
+    let began = Instant::now();
+    while began.elapsed().as_secs_f64() < seconds {
+        if for_model.is_none() && began.elapsed().as_secs_f64() >= seconds / 2.0 {
+            for_model = camera.photograph(ASKED_AT.0, ASKED_AT.1).ok();
         }
-        v.sort_by(|a, b| a.partial_cmp(b).unwrap());
-        let mid = v[v.len() / 2];
-        println!("  {:>12}  중앙 {:.2} · 10퍼센타일 {:.2} · 90퍼센타일 {:.2} · n={}",
-                 phase.what, mid, v[v.len() / 10], v[v.len() * 9 / 10], v.len());
-        middles.push(Some((v[v.len() / 10], mid, v[v.len() * 9 / 10])));
+        let Ok(shot) = camera.photograph(LOOKED_AT.0, LOOKED_AT.1) else { continue };
+        let ran = Instant::now();
+        let found = faces.find(&shot.rgb, shot.wide, shot.tall, A_FACE);
+        went.costs.push(ran.elapsed().as_secs_f64() * 1000.0);
+        match found {
+            Ok(list) if !list.is_empty() => {
+                //: The largest face: one person at a desk is the case this is for, and a face on a
+                //: poster behind them is smaller. `unwrap_or(Equal)` rather than `unwrap` — point 6
+                //: of this file's own audit.
+                let biggest = list.iter().max_by(|a, b| (a.rect.2 * a.rect.3)
+                    .partial_cmp(&(b.rect.2 * b.rect.3)).unwrap_or(std::cmp::Ordering::Equal));
+                match biggest.and_then(|f| f.head_on().map(|h| (h, f.rect.2 * f.rect.3))) {
+                    Some((h, area)) => { went.heads.push(h.abs()); went.areas.push(area); }
+                    //: **A face whose eyes landed on top of each other is not a missing face.**
+                    //: Collapsing the two is pitfall 5, and it would read as a clean arm with a
+                    //: smaller n.
+                    None => went.unreadable += 1,
+                }
+            }
+            Ok(_) => went.faceless += 1,
+            Err(why) => println!("     찾기 실패 — {why}"),
+        }
+    }
+    println!("     표본 {} · 얼굴 없음 {} · 읽을 수 없음 {}",
+             went.heads.len(), went.faceless, went.unreadable);
+
+    if let Some(shot) = for_model {
+        let encoded = png(&shot.rgb, shot.wide, shot.tall);
+        let ran = Instant::now();
+        match model.look_at(ASK, &encoded) {
+            Ok(r) => {
+                went.said = r.text.replace('\n', " ");
+                went.spoke = ran.elapsed().as_secs_f64();
+            }
+            Err(e) => went.said = format!("(실패: {e})"),
+        }
+    }
+    println!();
+    went
+}
+
+/// p10, median, p90.
+fn spread(v: &[f32]) -> Option<(f32, f32, f32)> {
+    if v.is_empty() {
+        return None;
+    }
+    let mut v = v.to_vec();
+    v.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+    Some((v[v.len() / 10], v[v.len() / 2], v[v.len() * 9 / 10]))
+}
+
+fn pooled(all: &[Went], doing: Doing) -> Vec<f32> {
+    all.iter().filter(|w| w.doing == doing).flat_map(|w| w.heads.clone()).collect()
+}
+
+/// Whether looking's 90th percentile clears turned's 10th, and both numbers.
+fn apart(look: &[f32], away: &[f32]) -> Option<(bool, f32, f32)> {
+    let (_, _, look_hi) = spread(look)?;
+    let (away_lo, _, _) = spread(away)?;
+    Some((look_hi < away_lo, look_hi, away_lo))
+}
+
+fn report(all: &[Went]) {
+    println!("  ── 값싼 쪽: 고개 방향 |head_on|, 0 이 정면 ──");
+    println!("  {:>14} {:>7} {:>7} {:>7} {:>6} {:>9}   {}",
+             "", "10%", "중앙", "90%", "n", "얼굴크기", "못읽음/없음");
+    for w in all {
+        match spread(&w.heads) {
+            Some((lo, mid, hi)) => {
+                let side = spread(&w.areas).map(|(_, m, _)| m.sqrt()).unwrap_or(0.0);
+                println!("  {:>10}({}) {lo:>7.2} {mid:>7.2} {hi:>7.2} {:>6} {side:>8.0}px   {}/{}",
+                         w.doing.what(), w.round + 1, w.heads.len(), w.unreadable, w.faceless);
+            }
+            None => println!("  {:>10}({})  표본 없음 — 얼굴을 한 번도 못 찾았습니다",
+                             w.doing.what(), w.round + 1),
+        }
     }
 
-    //: **The honest comparison is the tails, not the middles.** Two medians far apart with
-    //: overlapping ranges is a threshold that fires on the wrong phase several times a minute, and
-    //: `presence` learned that from a still maximum four hundred times its own median.
-    match (middles.first().and_then(|m| *m), middles.get(1).and_then(|m| *m)) {
-        (Some((_, look_mid, look_hi)), Some((away_lo, away_mid, _))) => {
-            println!();
-            if look_hi < away_lo {
-                let between = (look_hi * away_lo).sqrt();
-                println!("  **갈립니다.** 보는 쪽 90퍼센타일 {look_hi:.2} < 돌린 쪽 10퍼센타일 \
-{away_lo:.2}");
-                println!("  둘 사이의 기하 중간은 {between:.2} — 문턱을 쓴다면 여기입니다.");
-                println!("  중앙값 비 {:.1}x", away_mid / look_mid.max(1e-6));
+    let (look, away) = (pooled(all, Doing::Looking), pooled(all, Doing::Turned));
+    println!();
+    match apart(&look, &away) {
+        None => println!("  한쪽 표본이 비어서 비교할 수 없습니다."),
+        Some((clear, look_hi, away_lo)) => {
+            if clear {
+                println!("  **갈립니다.** 보는 쪽 90% {look_hi:.2} < 돌린 쪽 10% {away_lo:.2}");
+                println!("  둘 사이의 기하 중간은 {:.2} — 문턱을 쓴다면 여기입니다.",
+                         (look_hi * away_lo).sqrt());
             } else {
-                println!("  **겹칩니다.** 보는 쪽 90퍼센타일 {look_hi:.2} >= 돌린 쪽 10퍼센타일 \
-{away_lo:.2}");
-                println!("  이 얼굴 이 책상에서는 고개 방향만으로 가를 수 없습니다. 이건 실패가");
-                println!("  아니라 결과이고, 문턱을 낮춰서 통과시키는 것이 바로 하면 안 되는 일입니다.");
+                println!("  **겹칩니다.** 보는 쪽 90% {look_hi:.2} >= 돌린 쪽 10% {away_lo:.2}");
+                println!("  이 얼굴 이 책상에서는 고개 방향만으로 가를 수 없습니다. 실패가 아니라");
+                println!("  결과이고, 문턱을 낮춰 통과시키는 것이 바로 하면 안 되는 일입니다.");
             }
         }
-        _ => println!("\n  한쪽 표본이 비어서 비교할 수 없습니다."),
     }
 
-    println!("\n  ── 비싼 쪽: 같은 순간에 모델이 한 말 ──");
-    for (i, phase) in PHASES.iter().enumerate() {
-        println!("  {:>12}  {:.1}s   {}", phase.what, spoke[i],
-                 said[i].chars().take(70).collect::<String>());
+    //: **The order check, and it is the reason this runs twice.** `presence` read three to one in
+    //: the wrong direction from order alone; two rounds that disagree mean the gap is the harness.
+    let rounds = all.iter().map(|w| w.round).max().unwrap_or(0) + 1;
+    if rounds > 1 {
+        let verdicts: Vec<Option<bool>> = (0..rounds).map(|r| {
+            let of = |d| -> Vec<f32> {
+                all.iter().filter(|w| w.round == r && w.doing == d)
+                    .flat_map(|w| w.heads.clone()).collect()
+            };
+            apart(&of(Doing::Looking), &of(Doing::Turned)).map(|(c, _, _)| c)
+        }).collect();
+        let first = verdicts.first().copied().flatten();
+        let agree = first.is_some() && verdicts.iter().all(|v| *v == first);
+        println!();
+        println!("  순서 대조: {}",
+                 verdicts.iter().enumerate()
+                     .map(|(i, v)| format!("{}번째 {}", i + 1, match v {
+                         Some(true) => "갈림",
+                         Some(false) => "겹침",
+                         None => "표본 없음",
+                     }))
+                     .collect::<Vec<_>>().join(" · "));
+        println!("  {}", if agree {
+            "두 순서가 같은 답을 냅니다 — 순서 효과는 아닙니다."
+        } else {
+            "**두 순서가 다른 답을 냅니다.** 위의 결론은 순서의 것이지 고개의 것이 아닙니다 — \
+presence 가 정확히 이것으로 세 배를 거꾸로 읽었습니다."
+        });
+    }
+
+    println!("\n  ── 비싼 쪽: 같은 단계 한가운데의 사진에 모델이 한 말 ──");
+    for w in all {
+        println!("  {:>10}({}) {:>5.1}s   {}", w.doing.what(), w.round + 1, w.spoke,
+                 w.said.chars().take(64).collect::<String>());
     }
 
     println!("\n  ── 값 ──");
-    for (i, phase) in PHASES.iter().enumerate() {
-        let mut c = costs[i].clone();
-        if c.is_empty() { continue; }
-        c.sort_by(|a, b| a.partial_cmp(b).unwrap());
-        println!("  {:>12}  찾기 중앙 {:.0} ms, 최악 {:.0} ms   ·   모델 {:.0} ms",
-                 phase.what, c[c.len() / 2], c[c.len() - 1], spoke[i] * 1000.0);
+    let every: Vec<f32> = all.iter().flat_map(|w| w.costs.iter().map(|c| *c as f32)).collect();
+    if let Some((lo, mid, hi)) = spread(&every) {
+        println!("  찾기  10% {lo:.0} · 중앙 {mid:.0} · 90% {hi:.0} ms   (n={})", every.len());
+    }
+    let spoke: Vec<f32> = all.iter().filter(|w| w.spoke > 0.0).map(|w| w.spoke as f32).collect();
+    if let Some((_, mid, _)) = spread(&spoke) {
+        println!("  모델  중앙 {:.0} ms   (n={})", mid * 1000.0, spoke.len());
     }
 
     println!("\n  ── 읽기 ──");
     println!("  · 값싼 쪽이 갈리면, 그건 **고개**를 가른 것입니다. 고개를 고정하고 눈만 돌리는");
     println!("    경우는 이 하네스가 묻지 않았고 값싼 쪽은 원리상 못 봅니다.");
-    println!("  · 모델 문장이 두 단계에서 다르면 비싼 쪽도 맞은 것이고, 같으면 이 조명 이 각도");
-    println!("    에서는 비싼 쪽도 못 본 것입니다.");
+    println!("  · 얼굴크기가 단계마다 크게 다르면 다른 것을 보고 있었다는 뜻입니다 — 그러면");
+    println!("    위의 숫자는 한 사람에 대한 것이 아닙니다.");
+    println!("  · 모델 문장이 단계마다 다르면 비싼 쪽도 맞은 것이고, 같으면 이 조명 이 각도에서는");
+    println!("    비싼 쪽도 못 본 것입니다.");
     println!("  · 둘 다 맞으면 남는 질문은 정확도가 아니라 값입니다.");
 }
 
@@ -254,7 +374,7 @@ fn report(readings: &[Vec<f32>], costs: &[Vec<f64>], said: &[String], spoke: &[f
 /// the embedder on a drawn face, and reports. **It opens no camera.**
 ///
 /// It expects to find **no** face in what it draws, and says so: a detector that answered here
-/// would be finding faces in flat grey, which is the failure that would otherwise show up as a
+/// would be finding faces in a gradient, which is the failure that would otherwise show up as a
 /// beautifully separated measurement.
 fn check() -> i32 {
     println!();
@@ -267,14 +387,7 @@ fn check() -> i32 {
         match std::fs::metadata(path) {
             Ok(m) if m.len() == bytes => println!("  {what:<6} {} bytes  있음", m.len()),
             Ok(m) => println!("  {what:<6} {} bytes  **크기가 다름** (기대 {bytes})", m.len()),
-            Err(_) => {
-                println!("  {what:<6} 없음 — {}", path.display());
-                println!("\n  받는 법:");
-                println!("    mkdir -p \"{}\"", finder.parent().unwrap().display());
-                println!("    curl -L -o \"{}\" \\\n      {}", finder.display(), YUNET);
-                println!("    curl -L -o \"{}\" \\\n      {}", namer.display(), SFACE);
-                return 2;
-            }
+            Err(_) => return missing(&finder, &namer),
         }
     }
 
@@ -285,8 +398,6 @@ fn check() -> i32 {
     };
     println!("  둘 다 올림 {:.2}s", began.elapsed().as_secs_f64());
 
-    //: A drawn picture with no face in it. **Finding one here would be the bug**, and a check that
-    //: only proves the call returns is a check that passes on a detector answering at random.
     let (w, h) = LOOKED_AT;
     let mut drawn = vec![110u8; w * h * 3];
     for y in 0..h {
@@ -297,23 +408,22 @@ fn check() -> i32 {
             drawn[at + 2] = (200 - (y * 120 / h)) as u8;
         }
     }
+    //: Warmed here too, so the printed cost is the one the phases will see.
+    let _ = faces.find(&drawn, w, h, A_FACE);
     let ran = Instant::now();
     match faces.find(&drawn, w, h, A_FACE) {
         Err(why) => { println!("  찾기가 실패했습니다 — {why}"); return 2; }
         Ok(found) => {
             let took = ran.elapsed().as_secs_f64() * 1000.0;
-            if found.is_empty() {
-                println!("  그린 그림에서 얼굴 0개 · {took:.0} ms  — 맞는 답입니다");
-            } else {
+            if !found.is_empty() {
                 println!("  그린 그림에서 얼굴 {}개 · {took:.0} ms  — **틀린 답입니다.** \
 그라디언트에 얼굴은 없습니다", found.len());
                 return 1;
             }
+            println!("  그린 그림에서 얼굴 0개 · {took:.0} ms  — 맞는 답입니다");
         }
     }
 
-    //: The embedder is exercised on a made-up face, which says the graph runs and the alignment
-    //: does not panic. It says nothing about whether the numbers are any good.
     let made_up = argmind_env_face::Face {
         rect: (200.0, 100.0, 120.0, 120.0),
         marks: [(240.0, 140.0), (290.0, 140.0), (265.0, 165.0), (245.0, 190.0), (285.0, 190.0)],
@@ -333,10 +443,21 @@ fn check() -> i32 {
             }
         }
     }
-
+    //: **The made-up face is a shape check, not a quality one**, and saying so is the difference
+    //: between a check and a claim.
+    println!("  (지어낸 랜드마크입니다 — 그래프가 돈다는 뜻이지 숫자가 좋다는 뜻은 아닙니다)");
     println!();
     println!("  배선은 됩니다. 사람이 필요한 부분은 --quick 또는 인자 없이.");
     0
+}
+
+fn missing(finder: &PathBuf, namer: &PathBuf) -> i32 {
+    println!("\n  모델이 없습니다. 두 개를 받아야 합니다 (MIT / Apache-2.0):");
+    println!("    mkdir -p \"{}\"", finder.parent().unwrap().display());
+    println!("    curl -L -o \"{}\" \\\n      {}", finder.display(), YUNET);
+    println!("    curl -L -o \"{}\" \\\n      {}", namer.display(), SFACE);
+    println!("  또는 argmind 를 띄우고 설정 → 필요한 것 → 얼굴 모델.");
+    2
 }
 
 const YUNET: &str = "https://huggingface.co/opencv/opencv_zoo/resolve/main/\
@@ -344,7 +465,7 @@ models/face_detection_yunet/face_detection_yunet_2023mar.onnx";
 const SFACE: &str = "https://huggingface.co/opencv/opencv_zoo/resolve/main/\
 models/face_recognition_sface/face_recognition_sface_2021dec.onnx";
 
-/// **Beside the rest of argmind's own state**, not in the repository: a 38 MB weight file is not
+/// **Beside the rest of argmind's own state**, not in the repository: a 37 MB weight file is not
 /// source, and a harness that writes one into the tree is a harness that gets it committed.
 fn where_the_models_are() -> (PathBuf, PathBuf) {
     let base = std::env::var("LOCALAPPDATA").map(PathBuf::from)
