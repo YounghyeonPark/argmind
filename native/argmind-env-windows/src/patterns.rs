@@ -125,18 +125,29 @@ pub fn set_value(automation: &IUIAutomation, x: i64, y: i64, text: &str, live: b
         };
         let owner = at.CurrentProcessId().ok().map(|p| p as u32);
         if !allowed(owner) {
-            return Typed::Keys(format!("that point belongs to {owner:?}"));
+            return Typed::Keys(format!("that point belongs to pid {owner:?}"));
         }
+        //: **Named in the refusal.** Which element the point resolved to is the first thing
+        //: anybody reading a fallback wants, and it is the one thing a message saying only *no
+        //: value pattern* cannot give them.
+        let what = at.CurrentName().map(|n| n.to_string()).unwrap_or_default();
         let Ok(raw) = at.GetCurrentPattern(UIA_ValuePatternId) else {
-            return Typed::Keys("no value pattern".into());
+            return Typed::Keys(format!("{what:?} has no value pattern"));
         };
         let Ok(value) = raw.cast::<IUIAutomationValuePattern>() else {
-            return Typed::Keys("no value pattern".into());
+            return Typed::Keys(format!("{what:?} has no value pattern"));
         };
         //: **Read-only is a refusal and not a failure.** A label carries a value pattern and will
         //: not take one, and finding that out by writing would be finding it out too late.
-        if value.CurrentIsReadOnly().map(|r| r.as_bool()).unwrap_or(true) {
-            return Typed::Keys("read only".into());
+        //:
+        //: **Three answers, not two.** The first version folded *it says read-only* and *asking
+        //: failed* into one message with `unwrap_or(true)`, and a run that fell back four times out
+        //: of four could not say which — a safe default that makes two causes look like one is a
+        //: safe default that costs a measurement.
+        match value.CurrentIsReadOnly() {
+            Ok(r) if r.as_bool() => return Typed::Keys("it says read only".into()),
+            Ok(_) => {}
+            Err(e) => return Typed::Keys(format!("could not ask if read only ({e})")),
         }
         //: **The narrow case.** Anything already in the box means `SetValue` would delete it.
         let already = value.CurrentValue().map(|v| v.to_string()).unwrap_or_default();

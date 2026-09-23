@@ -154,7 +154,7 @@ fn run() -> i32 {
         }
     };
 
-    println!("  {:<13} {:<7} {:>8}   {:<6} {:<16} {}",
+    println!("  {:<13} {:<7} {:>8}   {:<6} {:<38} {}",
              "경로", "글자", "걸림", "판정", "실제 경로", "상자에서 읽은 것");
     let mut rows: Vec<(&str, bool)> = Vec::new();
     for arm in ["키보드", "ValuePattern"] {
@@ -183,6 +183,10 @@ fn run() -> i32 {
             hands.type_text(said);
             let took = began.elapsed().as_secs_f64() * 1000.0;
             let used = hands.by_value;
+            //: **The reason, not just the fact.** A harness that says *it fell back* and not *why*
+            //: cannot diagnose itself — this run reported the fallback four times out of four and
+            //: nothing about which of `set_value`'s five refusals it was.
+            let why = hands.why.clone();
             sleep(Duration::from_millis(350));
 
             let in_box = tidy(&value_at(&automation, cx, cy).unwrap_or_default());
@@ -190,9 +194,15 @@ fn run() -> i32 {
             //: **Which path actually ran**, counted by the hands rather than inferred from the
             //: result: the two arms produce the same text when both work, so a fallback nobody
             //: noticed would read as the pattern arm succeeding.
-            let how = if used > 0 { "패턴" } else { "키보드로 내려감" };
+            let how = if used > 0 {
+                "패턴".to_string()
+            } else if why.is_empty() {
+                "키보드".to_string()
+            } else {
+                format!("키보드 — {why}")
+            };
             rows.push((arm, ok));
-            println!("  {arm:<13} {:<7} {took:>6.0} ms   {:<6} {:<16} {:?}{}",
+            println!("  {arm:<13} {:<7} {took:>6.0} ms   {:<6} {:<38} {:?}{}",
                      if said.is_ascii() { "ascii" } else { "한글" },
                      if ok { "맞음" } else { "다름" }, how,
                      in_box.chars().take(24).collect::<String>(),
