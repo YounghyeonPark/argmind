@@ -20,6 +20,25 @@
 //! * **at what size**, because `prompt_tokens` was 1110 from 640×360 all the way down to 80×46 —
 //!   the tokens do not fall with the pixels, so if a small picture works it is free.
 //!
+//! ## What two runs answered — `docs/findings/seeing-a-room.md`
+//!
+//! **Three different answers, and the top one is a negative.** Two runs, 16 asks, the room in
+//! opposite states and the occupant read back both times.
+//!
+//! * *Somebody is there* and *a yellow cup* — **16 of 16 at every size, 160×90 included.** Neither
+//!   word is in the question, so the cup is the token that could not have been guessed.
+//! * *Are they looking at the screen* — **4 of 4 from 320×180 up; 1 of 4 at 160×90**, which said
+//!   보고 있습니다 in both states. A size that answers the same whether or not the thing is true is
+//!   not reading it, and its one score is the prior happening to match.
+//! * *Are their eyes open* — **no size gives it.** 1920×1080 added *눈을 감고* on 2 of 3 asks and
+//!   **the eyes were open.** It is the only false claim in sixteen captions and it appears only at
+//!   the size with twice the tokens.
+//!
+//! So the size is **320×180**, and the arm above it is not the cautious choice — it is the one that
+//! made something up. n is one photograph per state and the second state was luck rather than
+//! design; a deliberate pair is the weakness to fix before this is leaned on. The gaze question is
+//! binary, so **this cannot reach p < 0.05** however it is counted.
+//!
 //! ## Why this needs a door that did not exist
 //!
 //! `camera.rs` reduced every frame to 64×36 greys and had **no accessor for anything larger**. That
@@ -50,8 +69,9 @@
 //! noise, and the four-coloured-square test card the 8 s figure came from. **It opens no camera.**
 //! If a person appears in those captions, the prompt is doing the talking.
 //!
-//! `--repeat N` re-asks every size on **the same photograph**, which is what decides whether a
-//! spread like 4.0 / 5.1 / 6.5 s at an identical token count is a size effect or sampling.
+//! `--repeat N` re-asks every size on **the same photograph**, which is what decided that a spread
+//! like 4.0 / 5.1 / 6.5 s at an identical token count is sampling: warm, every size lands in one
+//! band and 6 MB at 2102 tokens is not distinguishable from 43 kB at 1137.
 //!
 //! **Stop argmind first if you want the times to mean anything.** It holds `qwen3:8b` on the card,
 //! and `crowding` lost thirty-five minutes to exactly that: a second model does not get the
@@ -154,6 +174,17 @@ fn run() -> i32 {
     //: below include whatever thinking happened.
     model.think = Some(false);
     model.keep_alive = "300s".into();
+
+    //: **The arms run largest first, so the first row would carry the model load** — and it did.
+    //: `1920x1080` read 17.2 s and then 13.9 s on the next run while its own second and third
+    //: rounds read 4.1 and 4.5, which is the model arriving on the card and not the resolution. An
+    //: earlier reading of this file's output blamed the doubled token count for it and was wrong.
+    //: One throwaway ask, as `--control` already does, so no printed number is cold.
+    print!("  모델을 올리는 중 ...");
+    let _ = std::io::Write::flush(&mut std::io::stdout());
+    let warming = std::time::Instant::now();
+    let _ = model.look_at("한 단어로 답하라: 색.", &png(&[128u8; 48], 4, 4));
+    println!(" {:.1}s\n", warming.elapsed().as_secs_f64());
 
     println!("  {:>10} {:>9} {:>8} {:>7}   {}", "크기", "PNG", "토큰", "걸림", "뭐라고 하는가");
     for (wide, tall) in &sizes {
