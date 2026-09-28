@@ -80,8 +80,23 @@ const LOOKED_AT: (usize, usize) = (640, 360);
 /// project's standards exist against.
 const A_FACE: f32 = 0.6;
 
-const ASK: &str = "이 사진 속 사람이 화면 쪽을 보고 있는가? \
-'보고 있다' 또는 '보고 있지 않다' 로 시작해서 한 문장으로만 답하라.";
+/// **The question `seeing` asked, and not a tidier one.**
+///
+/// The first run of this harness forced a binary — *answer with 보고 있다 or 보고 있지 않다* — and
+/// got 보고 있다 on all four phases, **including both with the head turned**, in two words each, at
+/// 2.3 s against the 4-5 s `seeing` took. `seeing` asked the open question below and read the gaze
+/// correctly 4 of 4 across two room states.
+///
+/// **A forced choice with the affirmative listed first is a leading question**, and four identical
+/// two-word answers is what this project calls a uniformly tidy result: evidence the measurement is
+/// broken rather than evidence about the model. The first reading of that run — *the expensive path
+/// failed* — is withdrawn; nothing was established about it either way.
+///
+/// The cost of asking the open question is that the two arms no longer answer in the same shape,
+/// and somebody has to read a sentence rather than compare a word. That is the smaller cost: a
+/// harness that changes the question and keeps the baseline is comparing nothing.
+const ASK: &str = "이 사진에 무엇이 있는지 한국어 한두 문장으로 말하라. \
+사람이 있는지, 있다면 화면 쪽을 보고 있는지, 그리고 눈에 띄는 물건 하나를 포함하라.";
 
 #[derive(Clone, Copy, PartialEq)]
 enum Doing {
@@ -366,7 +381,8 @@ presence 가 정확히 이것으로 세 배를 거꾸로 읽었습니다."
     println!("  · 얼굴크기가 단계마다 크게 다르면 다른 것을 보고 있었다는 뜻입니다 — 그러면");
     println!("    위의 숫자는 한 사람에 대한 것이 아닙니다.");
     println!("  · 모델 문장이 단계마다 다르면 비싼 쪽도 맞은 것이고, 같으면 이 조명 이 각도에서는");
-    println!("    비싼 쪽도 못 본 것입니다.");
+    println!("    비싼 쪽도 못 본 것입니다. **네 답이 똑같이 짧으면 질문을 의심하세요** — 첫 판이");
+    println!("    그랬고, 유도 질문이었지 모델이 틀린 게 아니었습니다.");
     println!("  · 둘 다 맞으면 남는 질문은 정확도가 아니라 값입니다.");
 }
 

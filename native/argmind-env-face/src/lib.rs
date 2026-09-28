@@ -51,9 +51,26 @@
 //!
 //! **And what it measures is a head, not a gaze.** [`Face::head_on`] is the nose's offset between
 //! the eyes, which moves when somebody turns their head and does not move when they keep their head
-//! still and look sideways. It is named for what it is. **No threshold is shipped here**: the number
-//! is returned raw, because `camera::MOVING` got its 0.15 from a measurement with a person doing
-//! both things on purpose and this one has not had that yet.
+//! still and look sideways. It is named for what it is.
+//!
+//! ## The threshold, measured 2026-09-23, and the doc comment the run refuted
+//!
+//! `argmind-measure --bin attending`, a person doing both on purpose, two orders, 311 samples:
+//! looking reads a median of **0.20 and 0.40** across the two rounds and turned reads **15.05 and
+//! 24.08**. The ranges do not come near touching — looking's 90th percentile is 0.41 against
+//! turned's 10th at 12.70 — and **both orders gave the same verdict**, which is the control that
+//! exists because `presence` once separated a still room from itself by order alone.
+//!
+//! **The number is not bounded and this file said it was.** *0 facing the camera, ±1 fully turned*
+//! was written before anybody ran it; the denominator is the eye separation, which goes to zero at
+//! profile, so the quantity **explodes** rather than saturating. Corrected on [`Face::head_on`].
+//!
+//! That is what makes [`HEAD_ASIDE`] a geometric choice rather than the midpoint of the gap. The
+//! run's own geometric middle is 2.29, and 2.29 sits in the part of the range where the denominator
+//! is collapsing and the value is unstable. **1.0 means the nose has reached one of the eyes** — a
+//! statement about a face rather than about a distribution — and it clears looking's worst by 2.3x
+//! and sits twelve times under turned's best. Anything from about 0.5 to 10 would separate this
+//! data; what picks 1.0 out of that is that it is the only value in it with a meaning.
 
 use std::path::Path;
 
@@ -89,11 +106,18 @@ pub struct Face {
 }
 
 impl Face {
-    /// **How square-on the head is: 0 facing the camera, ±1 fully turned.**
+    /// **How square-on the head is: 0 facing the camera, 1 when the nose reaches an eye — and
+    /// then it keeps going.**
     ///
     /// The nose sits midway between the eyes when somebody faces the lens and slides toward one of
     /// them as they turn. Dividing by the eye separation makes it independent of how far away they
     /// are, which is the only reason it can be one number rather than a table.
+    ///
+    /// **It is not bounded, and this comment used to say it was.** *±1 fully turned* was written
+    /// before anybody ran it. The divisor is the eye separation and that goes to zero at profile,
+    /// so the ratio explodes: measured, a turned head reads **15 and 24** where a facing one reads
+    /// 0.2 and 0.4. Good for a detector and bad for anybody reading the number as an angle, which
+    /// is why [`HEAD_ASIDE`] is picked from the stable end.
     ///
     /// **It is a head, not a gaze, and the difference is the whole caveat.** Somebody who holds
     /// their head still and looks off to the side reads 0 here and is not looking at the screen; the
@@ -127,6 +151,33 @@ impl Face {
         Some(((self.marks[2].1 - eyes) / tall - 0.5) * 2.0)
     }
 }
+
+/// **Past this, the head is not pointed at the camera.**
+///
+/// **1.0 is where the nose reaches an eye**, which is a fact about a face; the alternative on offer
+/// was 2.29, the geometric middle of the measured gap, and that lands where [`Face::head_on`]'s
+/// divisor is collapsing and the value is unstable. Measured 2026-09-23 over 311 samples and two
+/// orders: looking's 90th percentile is 0.41 and turned's 10th is 12.70, so **anything from about
+/// 0.5 to 10 separates this data** and the choice inside that range is geometry rather than
+/// measurement. Said out loud because a constant that looks derived and is not is how a number
+/// stops being questioned.
+///
+/// **One person, one desk, one camera, one light.** And it is a head: somebody holding their head
+/// still and looking sideways is under this and is not looking at the screen.
+pub const HEAD_ASIDE: f32 = 1.0;
+
+/// **How often a turned head cannot be read at all, which is a signal rather than a loss.**
+///
+/// [`Face::head_on`] returns `None` when the eyes land within a pixel of each other, and the run
+/// that produced [`HEAD_ASIDE`] read that as **0 and 1 of 95 while looking, against 22 of 96 and 48
+/// of 96 while turned**. Near profile the detector still finds the face and the two eyes collapse,
+/// so *unreadable* is most of the way to *turned* — and it means the surviving samples in the
+/// turned arm are the **less** turned ones, which makes the measured separation an understatement
+/// rather than a flattering one.
+///
+/// Nothing here acts on it yet; it is recorded because a caller that wants the extreme angles has a
+/// second signal sitting in what currently looks like a dropped sample.
+pub const UNREADABLE_IS_A_HINT: bool = true;
 
 /// The detector, and optionally the thing that turns a face into numbers.
 pub struct Faces {
@@ -364,6 +415,31 @@ mod tests {
         //: Signed, and the sign says which way: toward the picture's left eye is positive.
         assert!(face_at(70.0).head_on().unwrap() > 0.9);
         assert!(face_at(30.0).head_on().unwrap() < -0.9);
+    }
+
+    #[test]
+    fn the_threshold_clears_both_measured_arms() {
+        //: **The measurement, as a test.** `attending` read looking at a 90th percentile of 0.41
+        //: and turned at a 10th of 12.70; a change to `HEAD_ASIDE` that stops separating those is
+        //: a change that needs the run repeating, not a constant nudged in a diff.
+        assert!(HEAD_ASIDE > 0.41, "HEAD_ASIDE would call a facing head turned");
+        assert!(HEAD_ASIDE < 12.70, "HEAD_ASIDE would call a turned head facing");
+    }
+
+    #[test]
+    fn head_on_is_not_bounded_and_the_test_says_so() {
+        //: The doc comment claimed ±1 until a person turned their head in front of it. Near
+        //: profile the eyes converge, the divisor collapses and the ratio runs away — 15 and 24
+        //: measured. Written down as a test so the claim cannot quietly come back.
+        //: A head near profile: the eyes have converged to two pixels and the nose has not
+        //: followed them. The first version of this test collapsed the eyes and left the nose in
+        //: the middle of them, which is zero by construction and proved nothing.
+        let mut f = face_at(62.0);
+        f.marks[0] = (49.0, 40.0);
+        f.marks[1] = (51.0, 40.0);
+        let far = f.head_on().expect("two pixels apart is still readable");
+        assert!(far.abs() > 10.0,
+                "a collapsing eye separation must run away, not saturate — it read {far}");
     }
 
     #[test]
