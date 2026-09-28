@@ -178,6 +178,35 @@ sentence is not wired. `watch::regarding` stays, as the instrument's shared buil
 written on it where anybody would reach for it. The shipped prompt was never changed: the
 counterfactual swapped the line inside the harness only, so `r322a4c` still describes what runs.
 
+## 눈치 — the judgement moved into the program
+
+The owner, after the result above: *눈치에 대한 수치를 조절하는것도 방법일듯.* A number for reading
+the room. It is built, and **it is a different kind of dial from the four beside it**.
+
+재치 · 유머 · 봉사 · 헌신 reach the model as a sentence. A 눈치 sentence would be the experiment above
+a third time — the model speaks every time it is asked to speak first, and a line about the person
+becomes a line to them — with a slider on top claiming otherwise. `mind.rs` says a dial that moves
+nothing is worse than no dial. So **눈치 moves the program and is never shown to the model**; it
+does not live in `mind.json` either, whose writer knows only the prompt dials and would erase it the
+next time somebody turned 유머.
+
+**At 0 it is today, exactly.** From 1 up, and only for what argmind says unprompted:
+
+1. **It does not speak first to somebody turned away.** The remark is held and said when they look
+   back — unless the window changed in between, when it was about a screen they have left and is
+   dropped. One held at a time; the newest replaces it.
+2. **It leaves N × 10 s between its own unprompted remarks**, so 10 is at most one every 100 s. On a
+   path where the model speaks 224 times in 224, the only restraint available is the program's.
+
+**No evidence never means silence**: held only on a fresh, positive *turned away*, released on
+anything else — facing, unreadable, attention off, a camera that closed. The reading is cleared when
+the device closes so a stale *turned away* cannot strand a remark.
+
+Every number in it is chosen: 10 s a point, five minutes for a held remark to keep (the same as
+`AWAY_AFTER`), ten seconds for a camera reading to count as now. **Whether it feels like tact is not
+measured and cannot be from here** — it is a matter of living with it, and the line under the slider
+says what it does in terms somebody can check against what argmind actually did.
+
 ## What this does not answer
 
 **It is a head, not a gaze.** Somebody who holds their head still and looks to the side reads under

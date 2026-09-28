@@ -51,6 +51,7 @@ pub mod proposals;
 pub mod recogniser;
 pub mod senses;
 pub mod speaker;
+pub mod tact;
 pub mod wonders;
 
 use std::collections::hash_map::RandomState;
@@ -240,6 +241,8 @@ pub enum Route {
     /// is held and closes it on the way up; this one is on until it is turned off, which is why the
     /// window that asks says so and why the light is the honest part of the design.
     Camera(bool),
+    /// Set 눈치, 0–10. **Behaviour, never prompt** — `tact.rs`.
+    Nunchi(u8),
     /// Report whether a head is pointed at the screen, or stop. **Not the same as `Camera`** —
     /// that one is a light that is on; this is a fact about a person that the same light can give.
     Attention(bool),
@@ -363,6 +366,10 @@ pub fn route(request: &Request) -> Route {
         ("POST", "/camera/off") => Route::Camera(false),
         //: **Before the prefixed ones**, so `forget-all` is never read as a person called
         //: `forget-all`. Exact matches first is the whole rule and it is easy to get wrong once.
+        ("POST", p) if p.starts_with("/nunchi/") => match p[8..].parse::<u8>() {
+            Ok(n) => Route::Nunchi(n),
+            Err(_) => Route::Unknown,
+        },
         ("POST", "/attention/on") => Route::Attention(true),
         ("POST", "/attention/off") => Route::Attention(false),
         ("POST", "/faces/on") => Route::Faces(true),

@@ -409,6 +409,18 @@ to be quiet moved wanting-to-click 5 → 9 of 28, `noticing`'s old finding again
 `watch::regarding` stays as the harness's shared builder with the reason written on it, and the
 shipped prompt was never touched — the counterfactual swapped the line inside the harness only.
 
+**So the judgement moved into the program, as 눈치** — the owner's idea, 눈치에 대한 수치를
+조절하는것도 방법일듯. It sits with the four dials in `설정 → 생각` and is **not one of them**: those
+reach the model as a sentence and this is never shown to it, because a 눈치 line would be the same
+experiment a third time with a slider claiming it worked. It does not live in `mind.json` either,
+whose writer would erase it the next time somebody turned 유머; `tact.json` is its own file. **At 0 it
+is today exactly.** From 1 up, for unprompted remarks only: a remark to somebody turned away is
+**held and said when they look back**, dropped if the window changed meanwhile, one at a time with
+the newest winning; and **N × 10 s** separates argmind's own remarks. **No evidence never means
+silence** — held only on a fresh positive *turned away*, released on anything else, and the reading
+is cleared when the camera closes. Every number is chosen, and whether it feels like tact is not
+something a harness here can say. `argmind-serve/src/tact.rs`, 8 tests.
+
 **That is blocked on twenty seconds of the owner's time, and until 2026-09-22 it was blocked on a
 broken instrument.** `measure/presence` asks a person to hold still and then move; run with nobody
 moving in either phase it separated them **2.17 against 0.65**, three to one in the wrong direction,

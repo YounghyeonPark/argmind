@@ -43,6 +43,8 @@ interface Hello {
   /** Whether the head direction is being worked out — the switch, not whether the camera is open.
    *  Nothing is stored either way; the reading is a word with an age and it evaporates. */
   attending_to_you: boolean;
+  /** 눈치, 0–10. Behaviour, never prompt. */
+  nunchi: number;
   /** Whether new faces are being written down — the switch, not whether the camera is open. */
   remembering: boolean;
   /** Whether the two ONNX files are on disk. Without them the switch is on and nothing happens. */
@@ -250,6 +252,7 @@ stream.addEventListener("hello", (e) => {
   // **The switch, not the device** — unlike the camera above. Nothing happens while the models are
   // missing, so the rows say so rather than looking on and doing nothing.
   const noModels = d.face_models ? "" : "얼굴 모델이 없습니다 — 필요한 것에서 받으세요";
+  drawNunchi(d.nunchi);
   attention.checked = d.attending_to_you;
   attention.title = noModels;
   faces.checked = d.remembering;
@@ -1193,6 +1196,30 @@ function dialRow(d: Dial, most: number): HTMLElement {
   row.append(slider, at);
   return row;
 }
+
+// 눈치. **The line under the slider is the whole contract**, in the terms somebody would check
+// against what argmind actually does — because a dial whose effect cannot be seen is the kind this
+// project removes rather than keeps.
+const nunchi = document.getElementById("nunchi") as HTMLInputElement;
+const nunchiAt = document.getElementById("nunchi-at") as HTMLElement;
+const nunchiRow = document.getElementById("nunchi-row") as HTMLElement;
+const nunchiSays = document.getElementById("nunchi-says") as HTMLElement;
+
+function drawNunchi(n: number): void {
+  nunchi.value = String(n);
+  nunchiAt.textContent = String(n);
+  nunchiRow.classList.toggle("resting", n === 0);
+  nunchiSays.textContent = n === 0
+    ? "먼저 말을 거는 때를 따로 조절하지 않습니다"
+    : `먼저 거는 말 사이 ${n * 10}초 이상 · 고개를 돌리고 있으면 다시 볼 때까지 기다립니다`;
+}
+
+nunchi.oninput = () => {
+  nunchiAt.textContent = nunchi.value;
+  nunchiRow.classList.toggle("resting", nunchi.value === "0");
+};
+nunchi.onchange = () => void post(`/nunchi/${nunchi.value}`);
+stream.addEventListener("nunchi", (e) => drawNunchi(Number((e as MessageEvent).data)));
 
 // Saved when you leave the box, not on every keystroke: a goal is a sentence and half of one is
 // not worth writing to disk, let alone putting in front of the model.

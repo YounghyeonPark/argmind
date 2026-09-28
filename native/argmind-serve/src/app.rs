@@ -180,6 +180,18 @@ struct Desk {
     /// The last few unprompted remarks, with each one's own subject removed. **The ring the
     /// repetition guard compares against** — see `argmind_core::converse::said_before`.
     lately_noticed: Vec<String>,
+    /// **눈치**, 0–10. **Never shown to the model** — see `tact.rs` for the measurement that says
+    /// why it must not be. 0 is today's behaviour exactly.
+    nunchi: u8,
+    /// One remark argmind decided not to say yet, and the window it was about. **One, not a
+    /// queue**: the newest replaces it, because a tactful person does not arrive with a backlog.
+    held: Option<(argmind_core::intent::Intent, String, Instant)>,
+    /// When argmind last spoke unprompted, for the gap 눈치 keeps between remarks.
+    last_remark: Option<Instant>,
+    /// **What the camera last said about where the head points, and when.** Written by the camera
+    /// thread each window, read by `notice`. The age matters: a reading from a camera that stalled
+    /// a minute ago is no evidence, and `tact` treats no evidence as *say it*.
+    facing_now: Arc<Mutex<Option<(crate::platform::Facing, Instant)>>>,
     /// How many thoughts started without being asked for, and how many of those said something.
     /// **Counted where a person can see it**, because "how often does this happen on your desktop"
     /// is the question that decides whether it is worth having on.
@@ -207,6 +219,8 @@ enum Job {
     Camera(bool),
     /// Work out where the head is pointed, or stop.
     Attention(bool),
+    /// Turn 눈치.
+    Nunchi(u8),
     /// Remember the faces it sees, or stop.
     Faces(bool),
     /// Answer the one open question, or skip it with an empty string.
@@ -804,6 +818,7 @@ fn switch_camera(desk: &mut Desk, out: &Listeners, on: bool) {
     let moved_at = Arc::clone(&desk.moved_at);
     let (people, want_faces) = (Arc::clone(&desk.people), Arc::clone(&desk.want_faces));
     let want_attention = Arc::clone(&desk.want_attention);
+    let facing_now = Arc::clone(&desk.facing_now);
     let wonders = Arc::clone(&desk.wonders);
     let senses = desk.senses.clone();
     let out = Arc::clone(&desk.speaks_to);
@@ -828,6 +843,8 @@ fn switch_camera(desk: &mut Desk, out: &Listeners, on: bool) {
                     last_moved = Some(Instant::now());
                     *moved_at.lock().unwrap_or_else(|e| e.into_inner()) = last_moved;
                 }
+                *facing_now.lock().unwrap_or_else(|e| e.into_inner()) =
+                    Some((seen.facing, Instant::now()));
                 let what = camera_line(last_moved.map(|at| at.elapsed().as_secs_f64()),
                                        began.elapsed().as_secs_f64(), seen.facing);
                 senses.saw("카메라", what, seen.took);
@@ -889,6 +906,9 @@ fn switch_camera(desk: &mut Desk, out: &Listeners, on: bool) {
         //: that only grows is worse than none. **Both copies of the fact**, or the gate would go on
         //: answering from a camera that is off.
         senses.forget("카메라");
+        //: **The reading goes with the device.** A 눈치 that went on holding remarks because the last
+        //: thing a closed camera said was *turned away* would be a mute nobody pressed.
+        *facing_now.lock().unwrap_or_else(|e| e.into_inner()) = None;
         //: **The counters, on the way out.** Every new person was written when they arrived; what
         //: is left is 마지막 본 때 and how many times, which are worth a write and not worth one
         //: every three seconds.
@@ -1197,6 +1217,9 @@ fn notice(desk: &mut Desk, out: &Listeners, now: f64) {
         //: the watch to be reset — it needs a person to move.
         return;
     }
+    //: **A held remark first**, so somebody who looks back hears what argmind was waiting to say
+    //: before anything new is noticed on top of it.
+    release_held(desk, out);
     let after = desk.session.eyes.foreground();
     let fired = poll(&mut desk.watches, &desk.before, &after, now);
     desk.before = after;
@@ -1226,19 +1249,68 @@ fn notice(desk: &mut Desk, out: &Listeners, now: f64) {
         if argmind_core::converse::said_before(&reply, &desk.lately_noticed) {
             continue;
         }
-        desk.lately_noticed.push(reply.clone());
-        //: **A short ring.** A person who comes back to a window ten minutes later should hear it
-        //: again; the rule is against a run of them, not against ever saying it twice.
-        if desk.lately_noticed.len() > REMARKS_REMEMBERED {
-            desk.lately_noticed.remove(0);
+        //: **눈치 decides when, not whether.** At 0 this is always *now* and nothing below changed.
+        //: Above 0 a remark to somebody turned away, or too soon after the last one, is held
+        //: rather than said — and the program does that, because the model measurably cannot.
+        match crate::tact::now(desk.nunchi, evidence(desk), since_last(desk)) {
+            crate::tact::Now::Say => say_unprompted(desk, out, &intent, &reply),
+            crate::tact::Now::Hold => {
+                let window = desk.session.eyes.window().1;
+                desk.held = Some((intent, window, Instant::now()));
+            }
         }
-        desk.session.history.push(("you".into(), reply.clone()));
-        out.send("say", &reply);
-        //: Not spoken aloud. A proposal waits behind a button; a sentence nobody asked for waits
-        //: behind nothing, which is why speaking is tied to having been asked.
-        for effect in &intent.effects {
-            propose(desk, out, effect.clone());
+    }
+}
+
+/// What the camera says, reduced to what `tact` needs. **Only a fresh, positive *turned away*
+/// counts**; ten seconds is three camera windows, past which the reading is not evidence of now.
+fn evidence(desk: &Desk) -> crate::tact::Evidence {
+    match *desk.facing_now.lock().unwrap_or_else(|e| e.into_inner()) {
+        Some((crate::platform::Facing::Aside, at)) if at.elapsed().as_secs_f64() < 10.0 =>
+            crate::tact::Evidence::TurnedAway,
+        _ => crate::tact::Evidence::NotTurnedAway,
+    }
+}
+
+fn since_last(desk: &Desk) -> Option<f64> {
+    desk.last_remark.map(|at| at.elapsed().as_secs_f64())
+}
+
+/// **Say a held remark if 눈치 now allows it**, drop it if it is about a screen that is gone.
+fn release_held(desk: &mut Desk, out: &Listeners) {
+    let Some((intent, window, at)) = desk.held.take() else { return };
+    let same = desk.session.eyes.window().1 == window;
+    match crate::tact::held(desk.nunchi, evidence(desk), since_last(desk), same,
+                            at.elapsed().as_secs_f64()) {
+        crate::tact::Held::Keep => desk.held = Some((intent, window, at)),
+        crate::tact::Held::Drop => {}
+        crate::tact::Held::Release => {
+            let reply = spoken(&intent);
+            //: Checked again: something else may have been said while this one waited.
+            if !reply.is_empty()
+                && !argmind_core::converse::said_before(&reply, &desk.lately_noticed) {
+                say_unprompted(desk, out, &intent, &reply);
+            }
         }
+    }
+}
+
+/// **The one place an unprompted remark is actually made**, whether now or after waiting.
+fn say_unprompted(desk: &mut Desk, out: &Listeners, intent: &argmind_core::intent::Intent,
+                  reply: &str) {
+    desk.lately_noticed.push(reply.to_string());
+    //: **A short ring.** A person who comes back to a window ten minutes later should hear it
+    //: again; the rule is against a run of them, not against ever saying it twice.
+    if desk.lately_noticed.len() > REMARKS_REMEMBERED {
+        desk.lately_noticed.remove(0);
+    }
+    desk.last_remark = Some(Instant::now());
+    desk.session.history.push(("you".into(), reply.to_string()));
+    out.send("say", reply);
+    //: Not spoken aloud. A proposal waits behind a button; a sentence nobody asked for waits
+    //: behind nothing, which is why speaking is tied to having been asked.
+    for effect in &intent.effects {
+        propose(desk, out, effect.clone());
     }
 }
 
@@ -1589,6 +1661,7 @@ fn hello(desk: &Desk, model: &str) -> String {
                 desk.wonders.lock().unwrap_or_else(|e| e.into_inner()).open()
                     .map(wonder_json).unwrap_or_else(|| "null".into())),
         format!("\"attending_to_you\":{}", desk.want_attention.load(Ordering::SeqCst)),
+        format!("\"nunchi\":{}", desk.nunchi),
         format!("\"remembering\":{}", desk.want_faces.load(Ordering::SeqCst)),
         format!("\"face_models\":{}", crate::faces::here()),
         format!("\"people\":{}",
@@ -1839,7 +1912,9 @@ pub fn run(how: How) {
                                   crate::decided::standing("faces") == Some(Standing::Allowed))),
                               speaks_to: Arc::clone(&agent_out),
                               senses: senses.clone(), turn: turn.clone(),
-                              before: Vec::new(), lately_noticed: Vec::new(), noticed: 0 };
+                              before: Vec::new(), lately_noticed: Vec::new(), noticed: 0,
+                              nunchi: crate::tact::remembered(), held: None, last_remark: None,
+                              facing_now: Arc::new(Mutex::new(None)) };
         //: **The button is the permission, which is what this flag is for** — `session.rs`:
         //: *an interface with a confirm button turns this on and gates with the button instead*.
         //: This application has the button and did not turn it on, so `perform` refused every
@@ -2113,6 +2188,16 @@ pub fn run(how: How) {
                     //: the rest of the session — the feature working and appearing not to.
                     adopt_voice(&mut desk, &agent_out);
                 }
+                Job::Nunchi(to) => match crate::tact::turn(to) {
+                    Ok(n) => {
+                        desk.nunchi = n;
+                        //: A held remark under a lower setting may now be due; the next tick says
+                        //: it. Turning to 0 releases on that tick too, which is *today* again.
+                        agent_out.send("nunchi", &n.to_string());
+                        agent_out.send("note", &format!("눈치 {n}"));
+                    }
+                    Err(why) => agent_out.send("note", &why),
+                },
                 Job::Attention(on) => match (on, crate::decided::standing("attention")) {
                     (false, _) => switch_attention(&mut desk, &agent_out, false),
                     (true, Some(Standing::Allowed)) =>
@@ -2401,6 +2486,14 @@ fn serve_one(mut stream: TcpStream, out: &Listeners, token: &str, jobs: &Sender<
         Route::Camera(on) => {
             let _ = stream.write_all(&respond("204 No Content", "text/plain", ""));
             let _ = jobs.send(Job::Camera(on));
+        }
+        Route::Nunchi(to) => {
+            if to <= crate::tact::MOST {
+                let _ = stream.write_all(&respond("204 No Content", "text/plain", ""));
+                let _ = jobs.send(Job::Nunchi(to));
+            } else {
+                let _ = stream.write_all(&respond("400 Bad Request", "text/plain", "no"));
+            }
         }
         Route::Attention(on) => {
             let _ = stream.write_all(&respond("204 No Content", "text/plain", ""));

@@ -269,6 +269,17 @@
         <textarea id="aim" rows="2" placeholder="예: 코드 리뷰 중일 때는 놓친 것만 짧게 말해줘"></textarea>
       </label>
       <div id="dials"></div>
+      <!-- 눈치 sits with the dials because that is where a person looks for it, and is marked as
+           different because it is: the four above reach the model as a sentence, this one never
+           does. Measured 2026-09-28 — told the person had turned away, the model said so to them,
+           224 times it was asked to speak first it spoke — so the program holds the remark
+           instead. The line under it says what it does in the terms a person would check. -->
+      <div class="dial resting" id="nunchi-row">
+        <span class="name" title="모델에게 보내지 않습니다 — argmind 가 먼저 말을 거는 때를 정합니다">눈치</span>
+        <input type="range" id="nunchi" min="0" max="10" step="1" value="0">
+        <span class="at" id="nunchi-at">0</span>
+      </div>
+      <div class="cost" id="nunchi-says"></div>
       <div id="whatissent"></div>
     </div>
   </details>
