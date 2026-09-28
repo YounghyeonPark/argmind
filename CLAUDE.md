@@ -150,7 +150,21 @@ held none or several, and both duplicate cases with a real anchor still pass unc
 expectations file was not edited, and `argmind-core/tests/equivalence.rs` names the two divergences
 and asserts them. **Nothing asks the model**, which is shown the same two fields and cannot name the
 one it means either; the deterministic side knowing there are three buttons called `Open` is
-knowledge a person can act on, which is the shape of every other answer here. `argmind-core/tests/duplicates.rs`.
+knowledge a person can act on, which is the shape of every other answer here.
+
+**And it asks.** *Arg* — the owner, 2026-09-23: 모르는건 물어보는 기능도 있어야함. A `Several`
+raises a question with one button per candidate, each carrying its position, and **the question
+replaces the offer rather than joining it**: the proposal is still filed so the action keeps its
+token, but no row is drawn, because a 실행 button beside a question asking which one is two
+decisions for one action. **Answering is the confirmation** — somebody who picked the second
+`Open` has been at least as deliberate as somebody who pressed a button — and it still goes through
+`Proposals` and the one call site that performs anything. The answer travels as `Effect.which`:
+an index **and the count it was chosen against**, because three buttons can become two while
+somebody reads, and *the second one* then names a different button. Re-resolving alone does not
+catch that — the name still matches — so the count is checked first and a stale answer is refused
+and counted in `chose_too_late`, apart from `ambiguous`: *nobody was asked* and *asking is too slow
+here* say different things about whether this is worth having. **Coordinates reach the person and
+never the model**, which is the rule stated precisely rather than widened. `argmind-core/tests/duplicates.rs`, 12 tests.
 
 **A watch carries a floor** (`MIN_GAP = 3.0`). Perception changes 13 seconds in 14; a call costs
 0.3–2 s. **Watching is on by default since 2026-09-17** — the owner's decision, the cost

@@ -20,10 +20,27 @@ impl Trigger {
     }
 }
 
+/// **Which of several identically named things**, when a person has said.
+///
+/// `index` into the list the eyes gave, and `of` how many there were when the question was put.
+/// **Both, because the second is what makes the first safe**: three buttons called `Open` become
+/// two while somebody reads the question, and *the second one* then means a different button.
+/// `Session::perform` compares the count before it uses the index and refuses if it moved.
+///
+/// **Not a rectangle, and that distinction is the whole reason this is allowed.** A rectangle is
+/// stale 13 times in 14 over the second a call takes; an ordinal among same-named widgets is
+/// re-resolved at act time against a fresh reading, and the count check is what catches the case
+/// where re-resolving is not enough.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Among {
+    pub index: usize,
+    pub of: usize,
+}
+
 /// One thing to do. **It carries a name and a role, never a rectangle** — a listed widget is gone
 /// 13 times in 14 over the second a call takes, so the target is re-resolved immediately before
 /// acting and the rectangle is exactly what moves.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 pub struct Effect {
     pub kind: String,
     pub target: String,
@@ -33,6 +50,10 @@ pub struct Effect {
     /// unprompted**, which is an open edge in the permission model rather than a decision — what
     /// actually holds it is the single call site in the app.
     pub because_asked: Option<bool>,
+    /// **Set by a person and by nothing else.** The model never emits it — it is shown the same two
+    /// fields and cannot name the one it means — and the reader never fills it. It arrives when
+    /// somebody answers *which `Open`?*, which is the only thing in this program that knows.
+    pub which: Option<Among>,
 }
 
 impl Effect {

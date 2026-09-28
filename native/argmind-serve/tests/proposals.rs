@@ -9,7 +9,7 @@ use argmind_serve::proposals::{Answered, Proposals};
 
 fn click(target: &str) -> Effect {
     Effect { kind: "click".into(), target: target.into(), role: "button".into(),
-             text: String::new(), because_asked: Some(true) }
+             text: String::new(), because_asked: Some(true) , which: None}
 }
 
 fn gone(a: &Answered) -> bool {

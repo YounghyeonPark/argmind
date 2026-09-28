@@ -346,15 +346,44 @@ fn propose(desk: &mut Desk, out: &Listeners, effect: Effect) {
                          &format!("{{\"token\":-1,\"what\":\"{}\"}}", escape(&effect.target)));
                 return;
             }
-            //: **Said rather than guessed.** Before 2026-09-28 the lookup picked whichever copy an
-            //: arbitrary anchor favoured and this drew a button for it; asked for the font list in
-            //: Character Map's advanced view, that opened the character set list. Nothing here can
-            //: tell them apart and neither can the model — it is shown the same two fields — so the
-            //: honest move is to say how many there are and offer nothing.
+            //: **Asked rather than guessed.** Before 2026-09-28 the lookup picked whichever copy
+            //: an arbitrary anchor favoured and this drew a button for it; asked for the font list
+            //: in Character Map's advanced view, that opened the character set list.
+            //:
+            //: **The question replaces the offer rather than joining it.** A proposal is still
+            //: filed, so the action keeps its token and `Proposals` keeps making a stale one unable
+            //: to confirm a later act — but no `propose` event goes out, because a row with a 실행
+            //: button beside a question asking which one is two decisions for one action.
+            //: **Answering is the confirmation**: somebody who picked the second `Open` has been at
+            //: least as deliberate as somebody who pressed a button, so a second press would be
+            //: ceremony.
             argmind_core::session::Found::Several(same) => {
-                out.send("note", &format!(
-                    "{} 이라는 것이 {}개 있어서 어느 것인지 알 수 없습니다 — 이름만으로는 \
-가릴 수 없습니다", effect.target, same.len()));
+                let among: Vec<String> = same.iter().enumerate()
+                    //: **Coordinates, to a person.** The rule is that the *model* is never shown a
+                    //: rectangle; somebody looking at their own screen is exactly who a position
+                    //: helps, and it is the only thing that tells two identically named buttons
+                    //: apart. First cut — an ordinal and a point; whether that is enough to choose
+                    //: by is unmeasured.
+                    .map(|(i, w)| {
+                        let (x, y) = w.centre();
+                        format!("{}번째 · 화면 {x}, {y}", i + 1)
+                    }).collect();
+                let what = label(&effect, None);
+                desk.session.remember_doing(&[], &[], std::slice::from_ref(&effect), &[]);
+                let token = desk.proposals.offer(effect, what.clone(), String::new());
+                let raised = {
+                    let mut open = desk.wonders.lock().unwrap_or_else(|e| e.into_inner());
+                    open.ask(crate::wonders::About::WhichOne { token, what, among })
+                        .map(wonder_json)
+                };
+                match raised {
+                    Some(json) => out.send("wonder", &json),
+                    //: One question at a time. A second ambiguous click while the first is
+                    //: unanswered is told and dropped rather than queued — the pile of confirm
+                    //: buttons, arriving somewhere else.
+                    None => out.send("note",
+                        "어느 것인지 물어볼 것이 이미 하나 있어서 이번 건은 넘어갑니다"),
+                }
                 return;
             }
             argmind_core::session::Found::One(found) => {
@@ -959,10 +988,57 @@ fn people_json(people: &crate::people::People) -> String {
     format!("[{}]", rows.join(","))
 }
 
+/// Carry out whatever one answered question meant.
+///
+/// **Two kinds and one slot.** A name is typed and a copy is chosen; what they share is that the
+/// deterministic side found a gap it could name, which is why they are one mechanism.
+fn which_one(desk: &mut Desk, out: &Listeners, about: crate::wonders::About, said: String) {
+    out.send("wonder", "null");
+    match about {
+        crate::wonders::About::Who(key) => {
+            let mut roster = desk.people.lock().unwrap_or_else(|e| e.into_inner());
+            //: **Marked whether or not a name came back.** What is recorded is that argmind asked,
+            //: so somebody who skipped is not asked again tomorrow.
+            roster.mark_asked(&key);
+            let named = !said.is_empty() && roster.call(&key, &said);
+            let _ = roster.write();
+            out.send("people", &people_json(&roster));
+            if named {
+                out.send("note", &format!("{said} 님으로 기억하겠습니다"));
+            }
+        }
+        crate::wonders::About::WhichOne { token, among, .. } => {
+            //: **Skipping declines the action.** The proposal is taken off the board the same way
+            //: 아니 takes it off, so nothing is left waiting for a press that will not come.
+            let Ok(index) = said.parse::<usize>() else {
+                desk.proposals.decline(token);
+                out.send("note", "어느 것인지 고르지 않아 넘어갑니다");
+                return;
+            };
+            if index >= among.len() {
+                desk.proposals.decline(token);
+                out.send("note", "그런 선택지가 없습니다");
+                return;
+            }
+            //: **Answering is the confirmation, and it still goes through `Proposals`** — so a
+            //: token that has gone stale cannot confirm a later action, which is the guarantee that
+            //: exists whether a person pressed a button or picked a copy.
+            if let Answered::Run(mut p) = desk.proposals.confirm(token) {
+                p.effect.which = Some(argmind_core::intent::Among {
+                    index, of: among.len(),
+                });
+                act(desk, out, p);
+            }
+        }
+    }
+}
+
 /// One open question, for the page.
 fn wonder_json(w: &crate::wonders::Wonder) -> String {
-    format!("{{\"id\":{},\"asked\":\"{}\",\"hint\":\"{}\"}}",
-            w.id, escape(w.about.asked()), escape(w.about.hint()))
+    format!("{{\"id\":{},\"asked\":\"{}\",\"hint\":\"{}\",\"among\":[{}]}}",
+            w.id, escape(&w.about.asked()), escape(w.about.hint()),
+            w.about.among().iter().map(|a| format!("\"{}\"", escape(a)))
+                .collect::<Vec<_>>().join(","))
 }
 
 /// Seconds since the epoch, for a row that a person will read as a date.
@@ -2021,22 +2097,12 @@ pub fn run(how: How) {
                 Job::Answer(id, text) => {
                     let answer = desk.wonders.lock().unwrap_or_else(|e| e.into_inner())
                         .answered(id, &text);
-                    if let crate::wonders::Answered::Say(about, name) = answer {
-                        let crate::wonders::About::Who(key) = about;
-                        let mut roster = desk.people.lock().unwrap_or_else(|e| e.into_inner());
-                        //: **Marked whether or not a name came back.** What is recorded is that
-                        //: argmind asked, so somebody who skipped is not asked again tomorrow.
-                        roster.mark_asked(&key);
-                        let named = !name.is_empty() && roster.call(&key, &name);
-                        let _ = roster.write();
-                        agent_out.send("people", &people_json(&roster));
-                        agent_out.send("wonder", "null");
-                        if named {
-                            agent_out.send("note", &format!("{name} 님으로 기억하겠습니다"));
-                        }
+                    if let crate::wonders::Answered::Say(about, said) = answer {
+                        which_one(&mut desk, &agent_out, about, said);
                     }
                 }
                 Job::Opened(tx) => {
+
                     let _ = tx.send(sse("hello", &hello(&desk, &agent_model)));
                     //: **What 항상 허용 buys, without anybody pressing 다시 확인.**
                     //:

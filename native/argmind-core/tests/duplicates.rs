@@ -12,7 +12,7 @@
 //! here rather than in a run somebody has to notice.
 
 use argmind_core::contract::{Eyes, Hands, Speaks, Widget};
-use argmind_core::intent::Effect;
+use argmind_core::intent::{Among, Effect};
 use argmind_core::session::{Found, Session};
 
 /// A screen, handed out once per read and then repeated — `find` reads once, `perform` twice.
@@ -88,7 +88,7 @@ fn the_click_is_refused_and_counted_apart_from_a_vanishing() {
     let screen = character_map();
     let mut s = looking(screen.clone(), screen);
     let click = Effect { kind: "click".into(), target: "Open".into(), role: "button".into(),
-                         text: String::new(), because_asked: Some(true) };
+                         text: String::new(), because_asked: Some(true) , which: None};
     let (did, _proposed, refused) = s.perform(std::slice::from_ref(&click));
     assert!(did.is_empty(), "a click with two candidates must not land");
     assert_eq!(refused.len(), 1);
@@ -97,6 +97,66 @@ fn the_click_is_refused_and_counted_apart_from_a_vanishing() {
     assert_eq!(s.ambiguous, 1);
     assert_eq!(s.vanished, 0);
     assert!(s.hands.0.is_empty(), "nothing was pressed");
+}
+
+/// A click on `Open`, optionally carrying which copy a person picked.
+fn click_open(which: Option<Among>) -> Effect {
+    Effect { kind: "click".into(), target: "Open".into(), role: "button".into(),
+             text: String::new(), because_asked: Some(true), which }
+}
+
+#[test]
+fn the_copy_a_person_named_is_the_one_pressed() {
+    let screen = character_map();
+    let mut s = looking(screen.clone(), screen);
+    let (did, _, refused) = s.perform(&[click_open(Some(Among { index: 1, of: 2 }))]);
+    assert_eq!(did.len(), 1);
+    assert!(refused.is_empty());
+    //: The second `Open` in tree order is the lower one — see `character_map`.
+    assert_eq!(s.hands.0.len(), 1);
+    assert_eq!(s.hands.0[0].rect.1, 200, "the first copy was pressed, not the one chosen");
+    assert_eq!(s.ambiguous, 0);
+    assert_eq!(s.chose_too_late, 0);
+}
+
+#[test]
+fn an_answer_the_screen_outran_is_refused_rather_than_reinterpreted() {
+    //: **The reason `Among` carries the count.** Three buttons became two while somebody read the
+    //: question, so *the third one* now names nothing and *the second one* names a different
+    //: button. Re-resolving alone does not catch this — the name still matches — which is why the
+    //: count is checked before the index is used.
+    let screen = character_map();
+    let mut s = looking(screen.clone(), screen);
+    let (did, _, refused) = s.perform(&[click_open(Some(Among { index: 1, of: 3 }))]);
+    assert!(did.is_empty(), "an index chosen against a different screen must not be used");
+    assert_eq!(refused.len(), 1);
+    assert!(s.hands.0.is_empty());
+    //: **Counted apart.** *Nobody was asked* and *asking is too slow here* say different things
+    //: about whether this feature is worth having.
+    assert_eq!(s.chose_too_late, 1);
+    assert_eq!(s.ambiguous, 0);
+}
+
+#[test]
+fn an_index_past_the_end_is_refused_even_when_the_count_agrees() {
+    //: A hand-edited request, or a page that counted wrong. `of` matching does not make `index`
+    //: safe, and an index out of range would panic rather than refuse.
+    let screen = character_map();
+    let mut s = looking(screen.clone(), screen);
+    let (did, _, refused) = s.perform(&[click_open(Some(Among { index: 2, of: 2 }))]);
+    assert!(did.is_empty());
+    assert_eq!(refused.len(), 1);
+    assert_eq!(s.chose_too_late, 1);
+}
+
+#[test]
+fn a_chosen_index_does_nothing_when_the_name_resolves_to_one_thing() {
+    //: The index only ever means *among these copies*. With a single match the ordinary path runs
+    //: and the answer is simply not needed — it must not skip the resolution or press something else.
+    let mut s = looking(vec![at("Open", "button", 40, 40)], vec![]);
+    let (did, _, _) = s.perform(&[click_open(Some(Among { index: 5, of: 9 }))]);
+    assert_eq!(did.len(), 1);
+    assert_eq!(s.hands.0[0].rect.1, 40);
 }
 
 #[test]

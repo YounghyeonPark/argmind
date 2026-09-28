@@ -112,6 +112,12 @@ pub struct Session<E: Eyes, H: Hands, M: Speaks> {
     /// name that was never a key. Before 2026-09-28 this case was not counted at all — it was a
     /// click on whichever copy an arbitrary anchor favoured, reported as a success.
     pub ambiguous: u32,
+    /// **How many answers arrived after the screen had moved on.** A person said *the second
+    /// `Open`* and by the time the click ran there were no longer three of them, so the index means
+    /// a different button and the effect is refused. Counted apart from [`Session::ambiguous`]
+    /// because the two are different facts about whether asking is worth doing: one says nobody was
+    /// asked, the other says asking is too slow here.
+    pub chose_too_late: u32,
     pub unknown_keys: u32,
     /// **The human is the permission.** An interface with a confirm button turns this on and gates
     /// with the button instead, which is stronger than the flag; one with no button leaves it off.
@@ -129,7 +135,7 @@ pub struct Session<E: Eyes, H: Hands, M: Speaks> {
 impl<E: Eyes, H: Hands, M: Speaks> Session<E, H, M> {
     pub fn new(eyes: E, hands: H, model: M) -> Self {
         Session { eyes, hands, model, seen: Vec::new(), history: Vec::new(), exchanges: 0,
-                  blind: 0, vanished: 0, ambiguous: 0, unknown_keys: 0,
+                  blind: 0, vanished: 0, ambiguous: 0, chose_too_late: 0, unknown_keys: 0,
                   may_act_unprompted: false,
                   remember_turns: Some(REMEMBER_TURNS), limit: MAX_LISTED,
                   mind: Mind::resting(), note: Note::blank() }
@@ -254,12 +260,31 @@ impl<E: Eyes, H: Hands, M: Speaks> Session<E, H, M> {
                     }
                     //: **Refused rather than guessed**, which is the whole of the 2026-09-16 fix:
                     //: the old code pressed whichever copy the arbitrary anchor happened to favour
-                    //: and reported success. A caller that wants to ask a person which one has the
-                    //: list — see `Found::Several` — and this path has nobody to ask.
-                    Found::Several(_) => {
-                        self.ambiguous += 1;
-                        refused.push(effect.clone());
-                    }
+                    //: and reported success.
+                    //:
+                    //: **Unless a person said which.** `Among` carries the index *and* how many
+                    //: there were when they were asked, and the count is checked first: three
+                    //: buttons called `Open` can become two while somebody reads the question, and
+                    //: *the second one* then means a different button. That case is counted apart
+                    //: — it is not *nobody told us*, it is *somebody told us and the screen
+                    //: outran them*, and the two say different things about whether asking works.
+                    Found::Several(same) => match effect.which {
+                        Some(a) if a.of == same.len() && a.index < same.len() => {
+                            let target = same[a.index].clone();
+                            self.hands.click(&target);
+                            let confirmed = self.confirm(&target);
+                            did.push(Done { effect: effect.clone(), target: Some(target),
+                                            confirmed });
+                        }
+                        Some(_) => {
+                            self.chose_too_late += 1;
+                            refused.push(effect.clone());
+                        }
+                        None => {
+                            self.ambiguous += 1;
+                            refused.push(effect.clone());
+                        }
+                    },
                     Found::One(target) => {
                         self.hands.click(&target);
                         let confirmed = self.confirm(&target);

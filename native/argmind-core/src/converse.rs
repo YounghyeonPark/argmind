@@ -190,7 +190,7 @@ pub fn effect_of(item: &serde_json::Value, listed: &[Widget], trigger: &Trigger)
         }
         let w = &listed[index as usize];
         return Some(Effect { kind: "click".into(), target: w.name.clone(), role: w.role.clone(),
-                             text: String::new(), because_asked: because });
+                             text: String::new(), because_asked: because , which: None});
     }
     if let Some(v) = obj.get("type") {
         let s = v.as_str()?;
@@ -198,12 +198,12 @@ pub fn effect_of(item: &serde_json::Value, listed: &[Widget], trigger: &Trigger)
             return None;
         }
         return Some(Effect { kind: "type".into(), target: String::new(), role: String::new(),
-                             text: s.to_string(), because_asked: because });
+                             text: s.to_string(), because_asked: because , which: None});
     }
     if let Some(v) = obj.get("key") {
         let s = v.as_str()?;
         return Some(Effect { kind: "key".into(), target: String::new(), role: String::new(),
-                             text: s.to_lowercase(), because_asked: because });
+                             text: s.to_lowercase(), because_asked: because , which: None});
     }
     None
 }

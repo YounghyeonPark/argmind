@@ -58,7 +58,11 @@ interface Hello {
 interface Wonder {
   id: number;
   asked: string;
+  /** Placeholder for the box, when the answer is typed. Empty when it is chosen. */
   hint: string;
+  /** One line per candidate, in the order the eyes gave them. The answer is an index into this,
+   *  which the server re-resolves against a fresh reading — and refuses if the count moved. */
+  among: string[];
 }
 
 interface Person {
@@ -292,36 +296,61 @@ function askRow(w: Wonder | null): void {
   const what = document.createElement("span");
   what.className = "what";
   what.textContent = w.asked;
+  box.append(what);
 
-  const answer = document.createElement("input");
-  answer.type = "text";
-  answer.placeholder = w.hint;
-  answer.maxLength = 40;
-
+  const parts: HTMLElement[] = [];
   const send = (text: string) => {
     // Disabled on the way out so a second press cannot answer twice; the server refuses a repeat
     // anyway, and this is so the person is not left wondering whether it took.
-    answer.disabled = ok.disabled = skip.disabled = true;
+    for (const p of parts) { (p as HTMLInputElement | HTMLButtonElement).disabled = true; }
     void post(`/wonder/${w.id}`, text);
   };
 
-  const ok = document.createElement("button");
-  ok.className = "yes";
-  ok.textContent = "그래요";
-  ok.onclick = () => send(answer.value);
+  let first: HTMLElement | null = null;
+  if (w.among.length > 0) {
+    // **Candidates are buttons, not a number to type.** A free-text answer to *which one* would be
+    // a second way to say an index and a second way to get it wrong. Each carries its position,
+    // because that is the only thing telling two identically named buttons apart — and the person
+    // looking at their own screen is exactly who a position helps.
+    w.among.forEach((line, i) => {
+      const pick = document.createElement("button");
+      pick.className = "yes";
+      pick.textContent = line;
+      pick.onclick = () => send(String(i));
+      parts.push(pick);
+      box.append(pick);
+      if (!first) first = pick;
+    });
+  } else {
+    const answer = document.createElement("input");
+    answer.type = "text";
+    answer.placeholder = w.hint;
+    answer.maxLength = 40;
+    answer.onkeydown = (ev) => { if (ev.key === "Enter") { send(answer.value); } };
+    parts.push(answer);
+    box.append(answer);
+    first = answer;
+
+    const ok = document.createElement("button");
+    ok.className = "yes";
+    ok.textContent = "그래요";
+    ok.onclick = () => send(answer.value);
+    parts.push(ok);
+    box.append(ok);
+  }
 
   // **Skipping is a real answer and looks like one.** Nothing here is asked twice, so a question
-  // with no way out would be a question somebody has to answer to make it go away.
+  // with no way out would be a question somebody has to answer to make it go away — and for a
+  // choice it is also how you say *none of them*, which declines the action.
   const skip = document.createElement("button");
   skip.className = "no";
   skip.textContent = "넘어가기";
   skip.onclick = () => send("");
+  parts.push(skip);
+  box.append(skip);
 
-  answer.onkeydown = (ev) => { if (ev.key === "Enter") { send(answer.value); } };
-
-  box.append(what, answer, ok, skip);
   pending.append(box);
-  answer.focus();
+  first?.focus();
 }
 stream.addEventListener("ran", (e) => {
   const d = JSON.parse((e as MessageEvent).data);

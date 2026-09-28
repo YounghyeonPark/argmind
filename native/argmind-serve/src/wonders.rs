@@ -42,20 +42,46 @@
 pub enum About {
     /// A face with a row and no name. Carries the person's key.
     Who(String),
+    /// **Several things share the name and role that were chosen**, and no deterministic rule can
+    /// say which was meant — see `Session::find`. Measured 2026-09-16: asked for the font list in
+    /// Character Map's advanced view, argmind opened the character set list, because `Open` names
+    /// more than one button there.
+    ///
+    /// Carries the proposal's `token`, so answering *is* the confirmation and the action still goes
+    /// through `Proposals` and the one call site that performs anything; and `among`, one line per
+    /// candidate **in the order the eyes gave them**, which is what makes the answer an index this
+    /// can re-resolve against.
+    WhichOne { token: u64, what: String, among: Vec<String> },
 }
 
 impl About {
-    /// What the person reads. **A constant per kind** — see the module note.
-    pub fn asked(&self) -> &'static str {
+    /// What the person reads. **Built from the situation, never from a model** — see the module
+    /// note: the deterministic side counted the buttons, so no prompt was edited to make this
+    /// sentence exist and none of the 1-for-7 risk is being taken.
+    pub fn asked(&self) -> String {
         match self {
-            About::Who(_) => "처음 보는 분이네요. 누구신가요?",
+            About::Who(_) => "처음 보는 분이네요. 누구신가요?".into(),
+            About::WhichOne { what, among, .. } =>
+                format!("{what} 이(가) {}개 있습니다. 어느 것입니까?", among.len()),
         }
     }
 
-    /// What goes in the box before anything is typed.
+    /// What goes in the box before anything is typed. Empty when the answer is a choice rather
+    /// than a sentence.
     pub fn hint(&self) -> &'static str {
         match self {
             About::Who(_) => "이름 — 비워 두고 넘어가도 됩니다",
+            About::WhichOne { .. } => "",
+        }
+    }
+
+    /// The candidates, when there are any. **A page renders one button each**; a question with a
+    /// text box and a question with buttons are the same object here because the *shape* of not
+    /// knowing is the same and only the answer differs.
+    pub fn among(&self) -> &[String] {
+        match self {
+            About::Who(_) => &[],
+            About::WhichOne { among, .. } => among,
         }
     }
 }
@@ -181,5 +207,41 @@ mod tests {
         assert!(about.asked().ends_with('?'));
         assert!(about.hint().contains("넘어가"),
                 "somebody must be able to see that not answering is allowed");
+        assert!(about.among().is_empty(), "a name is typed, not chosen");
+    }
+
+    fn which(n: usize) -> About {
+        About::WhichOne { token: 7, what: "Open 버튼".into(),
+                          among: (0..n).map(|i| format!("{}번째", i + 1)).collect() }
+    }
+
+    #[test]
+    fn a_choice_asks_how_many_there_are_and_offers_each() {
+        let about = which(3);
+        assert!(about.asked().contains('3'), "{}", about.asked());
+        assert!(about.asked().ends_with('?'));
+        assert_eq!(about.among().len(), 3);
+        //: **No text box.** A free-text answer to *which one* would be a second way to say an
+        //: index and a second way to get it wrong.
+        assert!(about.hint().is_empty());
+    }
+
+    #[test]
+    fn a_choice_is_skippable_like_every_other_question() {
+        //: Nothing here is asked twice, so a question with no way out is one somebody has to
+        //: answer to make it go away.
+        let mut w = Wonders::default();
+        let id = w.ask(which(2)).unwrap().id;
+        assert_eq!(w.answered(id, ""), Answered::Say(which(2), String::new()));
+        assert!(w.open().is_none());
+    }
+
+    #[test]
+    fn a_choice_and_a_name_cannot_stack() {
+        //: One at a time is the rule and it does not care which kind. A face question arriving
+        //: while somebody is deciding which `Open` would be two things to read and one slot.
+        let mut w = Wonders::default();
+        assert!(w.ask(which(2)).is_some());
+        assert!(w.ask(About::Who("p1".into())).is_none());
     }
 }
