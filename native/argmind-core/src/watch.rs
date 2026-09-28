@@ -52,6 +52,57 @@ pub fn py_repr(s: &str) -> String {
 ///
 /// Three, because perception changes 13 seconds in 14 and a call costs 0.3–2 s. A watch that fires
 /// on every change is a model that never stops.
+/// **What the camera says about the person, as the sentence a watch's trigger carries — measured
+/// and deliberately NOT wired into `notice`.** Read the second section before changing that.
+///
+/// The owner, 2026-09-28, asked whether argmind should stay quiet when somebody has turned away:
+/// *말을 걸지말지는 상황에 맞게 판단하면 됨* — judge it by the situation. So this was built as a fact
+/// for the model rather than a gate, on the assumption that silence is already an answer the model
+/// gives on this path.
+///
+/// ## Why it is not wired: the model narrates it
+///
+/// `argmind-measure --bin turned`, 28 unprompted moments over four captured screens, four arms,
+/// two instructions: **224 of 224 spoke.** Not once did `qwen3:8b` choose silence on this path —
+/// including under an instruction that said *otherwise leave "say" empty*. The assumption above
+/// was false, and it was the one everything rested on.
+///
+/// Worse, the fact became something to say: *You turned your head, I noticed.* *사용자가 고개를
+/// 돌리고 있어요.* **The neutral control narrated most of all** — [`PRESENT`] drew a remark about
+/// the person 18 times in 28 — so it is the presence of a sentence about them, not its content,
+/// that does it. Wired as built, argmind would announce that somebody had looked away.
+///
+/// And telling it to be quiet moved *wanting to click* from 5 to 9 of 28, which is the exact
+/// finding `noticing` recorded long before: *telling it to be quiet in the prompt bought no silence
+/// and started it wanting to click things.* Reproduced, on a different axis.
+///
+/// **So what is kept is the instrument.** This function exists so the harness renders the sentence
+/// the application would send; the application does not send it. `docs/findings/attention.md`.
+///
+/// **Parallel on purpose**, *사용자가 ___ 있음* in all three, so a harness can hold everything but the
+/// content still. The dials taught that a content-free sentence in a slot moves results on its own
+/// — the placebo fixed the index leak as well as the dials did — so the comparison that means
+/// anything is [`TURNED`] against [`PRESENT`], never [`TURNED`] against nothing.
+pub const FACING: &str = "사용자가 화면 쪽을 보고 있음";
+pub const TURNED: &str = "사용자가 고개를 돌리고 있음";
+/// **The control, and true every time it could appear**: `notice` only runs while
+/// `somebody_about` says somebody is there, so this carries no information about attention.
+pub const PRESENT: &str = "사용자가 자리에 있음";
+
+/// A watch's sentence with what is known about where the person is looking, **or unchanged**.
+///
+/// `None` returns the sentence exactly, which is what makes adding this free at rest: with the
+/// switch off, with no models, or with a head that could not be read, the model is told what it
+/// was always told. **One function** for the application and the harness, because a harness that
+/// wrote the sentence its own way would be measuring a prompt nobody sends — `noticing` already
+/// records that lesson about `py_repr`.
+pub fn regarding(text: &str, them: Option<&str>) -> String {
+    match them {
+        Some(fact) => format!("{text} — {fact}"),
+        None => text.to_string(),
+    }
+}
+
 pub const MIN_GAP: f64 = 3.0;
 
 /// What a watch is looking for.

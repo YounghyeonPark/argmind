@@ -1,0 +1,723 @@
+{
+  "acted": [
+    5,
+    1,
+    4,
+    4
+  ],
+  "arms": [
+    {
+      "appended": null,
+      "arm": "없음"
+    },
+    {
+      "appended": "사용자가 자리에 있음",
+      "arm": "자리에 있음"
+    },
+    {
+      "appended": "사용자가 화면 쪽을 보고 있음",
+      "arm": "보고 있음"
+    },
+    {
+      "appended": "사용자가 고개를 돌리고 있음",
+      "arm": "고개 돌림"
+    }
+  ],
+  "cases": 28,
+  "harness_print": "ffb118",
+  "korean": [
+    4,
+    6,
+    7,
+    6
+  ],
+  "model": "qwen3:8b",
+  "paired": {
+    "discordant": 0,
+    "louder": 0,
+    "p": 1.0,
+    "quieted": 0
+  },
+  "prompt": "r322a4c",
+  "rows": [
+    {
+      "arm": "없음",
+      "effects": 0,
+      "said": "The window changed to 'character-map'.",
+      "trigger": "the window changed to 'character-map'"
+    },
+    {
+      "arm": "자리에 있음",
+      "effects": 0,
+      "said": "You are in the character-map window. What would you like to do?",
+      "trigger": "the window changed to 'character-map'"
+    },
+    {
+      "arm": "보고 있음",
+      "effects": 0,
+      "said": "I noticed the window changed to 'character-map'.",
+      "trigger": "the window changed to 'character-map'"
+    },
+    {
+      "arm": "고개 돌림",
+      "effects": 0,
+      "said": "You turned your head, I noticed.",
+      "trigger": "the window changed to 'character-map'"
+    },
+    {
+      "arm": "없음",
+      "effects": 0,
+      "said": "Character Grid appeared",
+      "trigger": "'Character Grid' appeared"
+    },
+    {
+      "arm": "자리에 있음",
+      "effects": 0,
+      "said": "Character Grid appeared — you're here.",
+      "trigger": "'Character Grid' appeared"
+    },
+    {
+      "arm": "보고 있음",
+      "effects": 0,
+      "said": "Character Grid appeared — you're looking at the screen.",
+      "trigger": "'Character Grid' appeared"
+    },
+    {
+      "arm": "고개 돌림",
+      "effects": 0,
+      "said": "Character Grid appeared — you turned your head.",
+      "trigger": "'Character Grid' appeared"
+    },
+    {
+      "arm": "없음",
+      "effects": 1,
+      "said": "Copy appeared",
+      "trigger": "'Copy' appeared"
+    },
+    {
+      "arm": "자리에 있음",
+      "effects": 0,
+      "said": "Copy appeared — you're here.",
+      "trigger": "'Copy' appeared"
+    },
+    {
+      "arm": "보고 있음",
+      "effects": 0,
+      "said": "Copy appeared — you're looking at the screen.",
+      "trigger": "'Copy' appeared"
+    },
+    {
+      "arm": "고개 돌림",
+      "effects": 1,
+      "said": "Copy button appeared. Are you ready to copy the selected character?",
+      "trigger": "'Copy' appeared"
+    },
+    {
+      "arm": "없음",
+      "effects": 0,
+      "said": "U+0021: Exclamation Mark appeared.",
+      "trigger": "'U+0021: Exclamation Mark' appeared"
+    },
+    {
+      "arm": "자리에 있음",
+      "effects": 0,
+      "said": "U+0021: Exclamation Mark appeared. Are you looking to copy this character or adjust anything else?",
+      "trigger": "'U+0021: Exclamation Mark' appeared"
+    },
+    {
+      "arm": "보고 있음",
+      "effects": 0,
+      "said": "U+0021: Exclamation Mark appeared.",
+      "trigger": "'U+0021: Exclamation Mark' appeared"
+    },
+    {
+      "arm": "고개 돌림",
+      "effects": 0,
+      "said": "U+0021: Exclamation Mark appeared. Are you looking for something specific?",
+      "trigger": "'U+0021: Exclamation Mark' appeared"
+    },
+    {
+      "arm": "없음",
+      "effects": 0,
+      "said": "Help appeared.",
+      "trigger": "'Help' appeared"
+    },
+    {
+      "arm": "자리에 있음",
+      "effects": 0,
+      "said": "Help appeared — user is present.",
+      "trigger": "'Help' appeared"
+    },
+    {
+      "arm": "보고 있음",
+      "effects": 0,
+      "said": "Help appeared — you're looking at the screen.",
+      "trigger": "'Help' appeared"
+    },
+    {
+      "arm": "고개 돌림",
+      "effects": 0,
+      "said": "Help appeared — you turned your head.",
+      "trigger": "'Help' appeared"
+    },
+    {
+      "arm": "없음",
+      "effects": 0,
+      "said": "Page down appeared.",
+      "trigger": "'Page down' appeared"
+    },
+    {
+      "arm": "자리에 있음",
+      "effects": 0,
+      "said": "Page down appeared — you're here.",
+      "trigger": "'Page down' appeared"
+    },
+    {
+      "arm": "보고 있음",
+      "effects": 0,
+      "said": "Page down appeared — you're looking at the screen.",
+      "trigger": "'Page down' appeared"
+    },
+    {
+      "arm": "고개 돌림",
+      "effects": 0,
+      "said": "Page down appeared — you're turning your head.",
+      "trigger": "'Page down' appeared"
+    },
+    {
+      "arm": "없음",
+      "effects": 1,
+      "said": "Minimize appeared.",
+      "trigger": "'Minimize' appeared"
+    },
+    {
+      "arm": "자리에 있음",
+      "effects": 1,
+      "said": "Minimize appeared — you're here.",
+      "trigger": "'Minimize' appeared"
+    },
+    {
+      "arm": "보고 있음",
+      "effects": 1,
+      "said": "Minimize button appeared. Are you trying to minimize the window?",
+      "trigger": "'Minimize' appeared"
+    },
+    {
+      "arm": "고개 돌림",
+      "effects": 1,
+      "said": "Minimize button appeared. Are you wanting to minimize the window?",
+      "trigger": "'Minimize' appeared"
+    },
+    {
+      "arm": "없음",
+      "effects": 0,
+      "said": "I noticed the window changed to 'chrome-remote-desktop---qvb-flfm-dev1'.",
+      "trigger": "the window changed to 'chrome-remote-desktop---qvb-flfm-dev1'"
+    },
+    {
+      "arm": "자리에 있음",
+      "effects": 0,
+      "said": "사용자가 자리에 있습니다.",
+      "trigger": "the window changed to 'chrome-remote-desktop---qvb-flfm-dev1'"
+    },
+    {
+      "arm": "보고 있음",
+      "effects": 0,
+      "said": "화면을 보고 계시네요. 도와드릴까요?",
+      "trigger": "the window changed to 'chrome-remote-desktop---qvb-flfm-dev1'"
+    },
+    {
+      "arm": "고개 돌림",
+      "effects": 0,
+      "said": "사용자가 고개를 돌리고 있네요.",
+      "trigger": "the window changed to 'chrome-remote-desktop---qvb-flfm-dev1'"
+    },
+    {
+      "arm": "없음",
+      "effects": 0,
+      "said": "QVB-FLFM-DEV1 - Y가 나타났습니다.",
+      "trigger": "'QVB-FLFM-DEV1 - Y' appeared"
+    },
+    {
+      "arm": "자리에 있음",
+      "effects": 0,
+      "said": "QVB-FLFM-DEV1 - Y appeared - User is present",
+      "trigger": "'QVB-FLFM-DEV1 - Y' appeared"
+    },
+    {
+      "arm": "보고 있음",
+      "effects": 0,
+      "said": "QVB-FLFM-DEV1 - Y가 나타났습니다. 화면을 보고 계시는군요.",
+      "trigger": "'QVB-FLFM-DEV1 - Y' appeared"
+    },
+    {
+      "arm": "고개 돌림",
+      "effects": 0,
+      "said": "사용자가 고개를 돌리고 있네요.",
+      "trigger": "'QVB-FLFM-DEV1 - Y' appeared"
+    },
+    {
+      "arm": "없음",
+      "effects": 1,
+      "said": "복구 버튼이 나타났어요.",
+      "trigger": "'복구' appeared"
+    },
+    {
+      "arm": "자리에 있음",
+      "effects": 0,
+      "said": "복구 버튼이 나타났습니다. 사용자가 자리에 있습니다.",
+      "trigger": "'복구' appeared"
+    },
+    {
+      "arm": "보고 있음",
+      "effects": 1,
+      "said": "복구 버튼이 나타났습니다. 도와드릴까요?",
+      "trigger": "'복구' appeared"
+    },
+    {
+      "arm": "고개 돌림",
+      "effects": 1,
+      "said": "복구 버튼이 나타났습니다. 도와드릴까요?",
+      "trigger": "'복구' appeared"
+    },
+    {
+      "arm": "없음",
+      "effects": 0,
+      "said": "QVB-FLFM-DEV1 appeared",
+      "trigger": "'QVB-FLFM-DEV1' appeared"
+    },
+    {
+      "arm": "자리에 있음",
+      "effects": 0,
+      "said": "QVB-FLFM-DEV1 appeared — 사용자가 자리에 있음",
+      "trigger": "'QVB-FLFM-DEV1' appeared"
+    },
+    {
+      "arm": "보고 있음",
+      "effects": 0,
+      "said": "QVB-FLFM-DEV1이 나타났습니다. 화면을 보고 계시는군요.",
+      "trigger": "'QVB-FLFM-DEV1' appeared"
+    },
+    {
+      "arm": "고개 돌림",
+      "effects": 0,
+      "said": "QVB-FLFM-DEV1이 나타났습니다. 사용자가 고개를 돌리고 있네요.",
+      "trigger": "'QVB-FLFM-DEV1' appeared"
+    },
+    {
+      "arm": "없음",
+      "effects": 0,
+      "said": "Connected appeared",
+      "trigger": "'Connected' appeared"
+    },
+    {
+      "arm": "자리에 있음",
+      "effects": 0,
+      "said": "Connected appeared — 사용자가 자리에 있음",
+      "trigger": "'Connected' appeared"
+    },
+    {
+      "arm": "보고 있음",
+      "effects": 0,
+      "said": "연결 상태가 보입니다. 도움이 필요하신가요?",
+      "trigger": "'Connected' appeared"
+    },
+    {
+      "arm": "고개 돌림",
+      "effects": 0,
+      "said": "Connected appeared — you turned your head.",
+      "trigger": "'Connected' appeared"
+    },
+    {
+      "arm": "없음",
+      "effects": 1,
+      "said": "비밀번호 저장 버튼이 나타났습니다.",
+      "trigger": "'비밀번호 저장' appeared"
+    },
+    {
+      "arm": "자리에 있음",
+      "effects": 0,
+      "said": "비밀번호 저장 버튼이 나타났습니다. 사용자가 자리에 있습니다.",
+      "trigger": "'비밀번호 저장' appeared"
+    },
+    {
+      "arm": "보고 있음",
+      "effects": 1,
+      "said": "비밀번호 저장 버튼이 나타났습니다.",
+      "trigger": "'비밀번호 저장' appeared"
+    },
+    {
+      "arm": "고개 돌림",
+      "effects": 1,
+      "said": "비밀번호 저장 버튼이 보입니다. 도와드릴까요?",
+      "trigger": "'비밀번호 저장' appeared"
+    },
+    {
+      "arm": "없음",
+      "effects": 1,
+      "said": "Chrome Remote Desktop 맞춤설정 및 제어가 나타났습니다.",
+      "trigger": "'Chrome Remote Desktop 맞춤설정 및 제어' appeared"
+    },
+    {
+      "arm": "자리에 있음",
+      "effects": 0,
+      "said": "Chrome Remote Desktop 맞춤설정 및 제어가 나타났습니다. 사용자가 자리에 있습니다.",
+      "trigger": "'Chrome Remote Desktop 맞춤설정 및 제어' appeared"
+    },
+    {
+      "arm": "보고 있음",
+      "effects": 1,
+      "said": "Chrome Remote Desktop 맞춤설정 및 제어가 나타났습니다. 도와드릴까요?",
+      "trigger": "'Chrome Remote Desktop 맞춤설정 및 제어' appeared"
+    },
+    {
+      "arm": "고개 돌림",
+      "effects": 0,
+      "said": "Chrome Remote Desktop 맞춤설정 및 제어가 나타났습니다. 도와드릴까요?",
+      "trigger": "'Chrome Remote Desktop 맞춤설정 및 제어' appeared"
+    },
+    {
+      "arm": "없음",
+      "effects": 0,
+      "said": "The window has changed to 'system-information'.",
+      "trigger": "the window changed to 'system-information'"
+    },
+    {
+      "arm": "자리에 있음",
+      "effects": 0,
+      "said": "You're here. Let me know if you need anything.",
+      "trigger": "the window changed to 'system-information'"
+    },
+    {
+      "arm": "보고 있음",
+      "effects": 0,
+      "said": "You're looking at the system information. Is there anything specific you need?",
+      "trigger": "the window changed to 'system-information'"
+    },
+    {
+      "arm": "고개 돌림",
+      "effects": 0,
+      "said": "You turned your head. Is there something I can help with?",
+      "trigger": "the window changed to 'system-information'"
+    },
+    {
+      "arm": "없음",
+      "effects": 0,
+      "said": "System Summary appeared.",
+      "trigger": "'System Summary' appeared"
+    },
+    {
+      "arm": "자리에 있음",
+      "effects": 0,
+      "said": "System Summary appeared — you're here.",
+      "trigger": "'System Summary' appeared"
+    },
+    {
+      "arm": "보고 있음",
+      "effects": 0,
+      "said": "System Summary appeared — you're looking at the screen.",
+      "trigger": "'System Summary' appeared"
+    },
+    {
+      "arm": "고개 돌림",
+      "effects": 0,
+      "said": "System Summary appeared — you turned your head.",
+      "trigger": "'System Summary' appeared"
+    },
+    {
+      "arm": "없음",
+      "effects": 0,
+      "said": "System Manufacturer is LENOVO.",
+      "trigger": "'System Manufacturer' appeared"
+    },
+    {
+      "arm": "자리에 있음",
+      "effects": 0,
+      "said": "System Manufacturer appeared — you're here.",
+      "trigger": "'System Manufacturer' appeared"
+    },
+    {
+      "arm": "보고 있음",
+      "effects": 0,
+      "said": "You're looking at the System Summary. Is there anything specific you need?",
+      "trigger": "'System Manufacturer' appeared"
+    },
+    {
+      "arm": "고개 돌림",
+      "effects": 0,
+      "said": "You're looking at the System Summary. Is there anything specific you need?",
+      "trigger": "'System Manufacturer' appeared"
+    },
+    {
+      "arm": "없음",
+      "effects": 0,
+      "said": "BIOS Mode is set to UEFI.",
+      "trigger": "'BIOS Mode' appeared"
+    },
+    {
+      "arm": "자리에 있음",
+      "effects": 0,
+      "said": "BIOS Mode is UEFI. Are you looking for something specific?",
+      "trigger": "'BIOS Mode' appeared"
+    },
+    {
+      "arm": "보고 있음",
+      "effects": 0,
+      "said": "BIOS Mode is UEFI. Need anything else?",
+      "trigger": "'BIOS Mode' appeared"
+    },
+    {
+      "arm": "고개 돌림",
+      "effects": 0,
+      "said": "BIOS Mode is UEFI. Need anything else?",
+      "trigger": "'BIOS Mode' appeared"
+    },
+    {
+      "arm": "없음",
+      "effects": 0,
+      "said": "I noticed 'C:\\WINDOWS\\system32' in the System Directory.",
+      "trigger": "'C:\\\\WINDOWS\\\\system32' appeared"
+    },
+    {
+      "arm": "자리에 있음",
+      "effects": 0,
+      "said": "You're here.",
+      "trigger": "'C:\\\\WINDOWS\\\\system32' appeared"
+    },
+    {
+      "arm": "보고 있음",
+      "effects": 0,
+      "said": "You're looking at the System Summary. Is there anything specific you need?",
+      "trigger": "'C:\\\\WINDOWS\\\\system32' appeared"
+    },
+    {
+      "arm": "고개 돌림",
+      "effects": 0,
+      "said": "You turned your head. Is there something I can help with?",
+      "trigger": "'C:\\\\WINDOWS\\\\system32' appeared"
+    },
+    {
+      "arm": "없음",
+      "effects": 0,
+      "said": "I noticed '12.6 GB' appeared.",
+      "trigger": "'12.6 GB' appeared"
+    },
+    {
+      "arm": "자리에 있음",
+      "effects": 0,
+      "said": "You're here.",
+      "trigger": "'12.6 GB' appeared"
+    },
+    {
+      "arm": "보고 있음",
+      "effects": 0,
+      "said": "You're looking at the memory usage. Need anything else?",
+      "trigger": "'12.6 GB' appeared"
+    },
+    {
+      "arm": "고개 돌림",
+      "effects": 0,
+      "said": "You're looking at the memory usage. Need anything else?",
+      "trigger": "'12.6 GB' appeared"
+    },
+    {
+      "arm": "없음",
+      "effects": 0,
+      "said": "I noticed 'App Control for Business policy' appeared.",
+      "trigger": "'App Control for Business policy' appeared"
+    },
+    {
+      "arm": "자리에 있음",
+      "effects": 0,
+      "said": "App Control for Business policy is Enforced. Is there anything else you need?",
+      "trigger": "'App Control for Business policy' appeared"
+    },
+    {
+      "arm": "보고 있음",
+      "effects": 0,
+      "said": "App Control for Business policy is Enforced. Need anything else?",
+      "trigger": "'App Control for Business policy' appeared"
+    },
+    {
+      "arm": "고개 돌림",
+      "effects": 0,
+      "said": "App Control for Business policy is Enforced. Need anything else?",
+      "trigger": "'App Control for Business policy' appeared"
+    },
+    {
+      "arm": "없음",
+      "effects": 0,
+      "said": "The window changed to 'untitled---paint'.",
+      "trigger": "the window changed to 'untitled---paint'"
+    },
+    {
+      "arm": "자리에 있음",
+      "effects": 0,
+      "said": "You're here, the window changed to 'untitled---paint'.",
+      "trigger": "the window changed to 'untitled---paint'"
+    },
+    {
+      "arm": "보고 있음",
+      "effects": 0,
+      "said": "I noticed the window changed to 'untitled---paint'.",
+      "trigger": "the window changed to 'untitled---paint'"
+    },
+    {
+      "arm": "고개 돌림",
+      "effects": 0,
+      "said": "You turned your head. Let me know if you need anything.",
+      "trigger": "the window changed to 'untitled---paint'"
+    },
+    {
+      "arm": "없음",
+      "effects": 0,
+      "said": "I noticed 'File' appeared.",
+      "trigger": "'File' appeared"
+    },
+    {
+      "arm": "자리에 있음",
+      "effects": 0,
+      "said": "File appeared — you're here.",
+      "trigger": "'File' appeared"
+    },
+    {
+      "arm": "보고 있음",
+      "effects": 0,
+      "said": "File appeared — you're looking at the screen.",
+      "trigger": "'File' appeared"
+    },
+    {
+      "arm": "고개 돌림",
+      "effects": 0,
+      "said": "File appeared — you're turning your head.",
+      "trigger": "'File' appeared"
+    },
+    {
+      "arm": "없음",
+      "effects": 0,
+      "said": "I noticed 'Rotate' appeared.",
+      "trigger": "'Rotate' appeared"
+    },
+    {
+      "arm": "자리에 있음",
+      "effects": 0,
+      "said": "Rotate appeared — you're here.",
+      "trigger": "'Rotate' appeared"
+    },
+    {
+      "arm": "보고 있음",
+      "effects": 0,
+      "said": "Rotate appeared — you're looking at the screen.",
+      "trigger": "'Rotate' appeared"
+    },
+    {
+      "arm": "고개 돌림",
+      "effects": 0,
+      "said": "Rotate appeared — you're turning your head.",
+      "trigger": "'Rotate' appeared"
+    },
+    {
+      "arm": "없음",
+      "effects": 0,
+      "said": "Rectangle appeared.",
+      "trigger": "'Rectangle' appeared"
+    },
+    {
+      "arm": "자리에 있음",
+      "effects": 0,
+      "said": "Rectangle appeared — you're here.",
+      "trigger": "'Rectangle' appeared"
+    },
+    {
+      "arm": "보고 있음",
+      "effects": 0,
+      "said": "Rectangle appeared. Is there anything else you need?",
+      "trigger": "'Rectangle' appeared"
+    },
+    {
+      "arm": "고개 돌림",
+      "effects": 0,
+      "said": "Rectangle appeared. Are you looking for something specific?",
+      "trigger": "'Rectangle' appeared"
+    },
+    {
+      "arm": "없음",
+      "effects": 0,
+      "said": "Rounded rectangular callout is available. Would you like to use it?",
+      "trigger": "'Rounded rectangular callout' appeared"
+    },
+    {
+      "arm": "자리에 있음",
+      "effects": 0,
+      "said": "Rounded rectangular callout appeared — you're here.",
+      "trigger": "'Rounded rectangular callout' appeared"
+    },
+    {
+      "arm": "보고 있음",
+      "effects": 0,
+      "said": "Rounded rectangular callout is available. Is there anything else you need?",
+      "trigger": "'Rounded rectangular callout' appeared"
+    },
+    {
+      "arm": "고개 돌림",
+      "effects": 0,
+      "said": "You've turned your head. Is there something I can assist you with?",
+      "trigger": "'Rounded rectangular callout' appeared"
+    },
+    {
+      "arm": "없음",
+      "effects": 0,
+      "said": "Orange appeared.",
+      "trigger": "'Orange' appeared"
+    },
+    {
+      "arm": "자리에 있음",
+      "effects": 0,
+      "said": "Orange appeared — you're here.",
+      "trigger": "'Orange' appeared"
+    },
+    {
+      "arm": "보고 있음",
+      "effects": 0,
+      "said": "Orange appeared. Is there anything specific you'd like to do?",
+      "trigger": "'Orange' appeared"
+    },
+    {
+      "arm": "고개 돌림",
+      "effects": 0,
+      "said": "Orange appeared. Are you looking for something specific?",
+      "trigger": "'Orange' appeared"
+    },
+    {
+      "arm": "없음",
+      "effects": 0,
+      "said": "Lavender appeared.",
+      "trigger": "'Lavender' appeared"
+    },
+    {
+      "arm": "자리에 있음",
+      "effects": 0,
+      "said": "Lavender appeared — you're here.",
+      "trigger": "'Lavender' appeared"
+    },
+    {
+      "arm": "보고 있음",
+      "effects": 0,
+      "said": "Lavender appeared. Is there anything specific you'd like to do?",
+      "trigger": "'Lavender' appeared"
+    },
+    {
+      "arm": "고개 돌림",
+      "effects": 0,
+      "said": "Lavender appeared. Are you looking for something specific?",
+      "trigger": "'Lavender' appeared"
+    }
+  ],
+  "screens_print": "5020f7",
+  "spoke": [
+    28,
+    28,
+    28,
+    28
+  ]
+}

@@ -397,6 +397,18 @@ blackboard line is byte for byte what it was, which is the only ground a new pro
 had. **It gates nothing**: `somebody_about` still asks about movement alone, because nothing has
 measured that a turned head should change what argmind does on a tick.
 
+**Asked to judge it rather than gate it, and this model cannot — measured 2026-09-28.** The owner:
+말을 걸지말지는 상황에 맞게 판단하면 됨. Telling the model the fact where it decides to speak first
+rested on silence being an answer it gives there, and `--bin turned` found **224 of 224 spoke**
+across four arms and two instructions — including one that said *otherwise leave "say" empty*. The
+reader manufactures nothing, so that is the model; `noticing` recorded the same 8 of 8 long ago.
+**The silence a person gets on this path has always come from `said_before`.** Worse, a sentence
+about the person became a sentence *to* them — *You turned your head, I noticed* — and the neutral
+control drew the most of it, 18 of 28, so it is the line's presence and not its content. Telling it
+to be quiet moved wanting-to-click 5 → 9 of 28, `noticing`'s old finding again. **Not wired**;
+`watch::regarding` stays as the harness's shared builder with the reason written on it, and the
+shipped prompt was never touched — the counterfactual swapped the line inside the harness only.
+
 **That is blocked on twenty seconds of the owner's time, and until 2026-09-22 it was blocked on a
 broken instrument.** `measure/presence` asks a person to hold still and then move; run with nobody
 moving in either phase it separated them **2.17 against 0.65**, three to one in the wrong direction,

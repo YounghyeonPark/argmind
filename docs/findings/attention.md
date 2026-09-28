@@ -131,6 +131,53 @@ not say argmind should behave differently when it does. `somebody_about` still a
 movement, `notice` is still what it gates, and wiring attention into that decision would be shipping
 a behaviour nobody measured. Reporting and acting are two steps and one of them is earned.
 
+## Asked to judge, and it cannot — 2026-09-28
+
+The owner: *말을 걸지말지는 상황에 맞게 판단하면 됨.* Not a rule that goes quiet when somebody turns
+away, but argmind judging the situation. The natural way to give a model that judgement is to tell
+it the fact where it decides to speak first — beside the watch's trigger — and let silence be its
+answer. **That rested on one assumption: that silence is an answer this model gives on this path.**
+`argmind-measure --bin turned` checked it, with the failure conditions written first.
+
+28 unprompted moments over the four captured screens, each in four arms that differ only in one
+appended sentence, built by the same `watch::regarding` the application would use:
+
+| | spoke | talked about the person | wanted to click |
+|---|---|---|---|
+| **shipped instruction** — *Mentioning it is usually enough* | | | |
+| 없음 (today) | 28 / 28 | — | 5 / 28 |
+| 자리에 있음 (control) | 28 / 28 | | 1 / 28 |
+| 보고 있음 | 28 / 28 | | 4 / 28 |
+| 고개 돌림 | 28 / 28 | | 4 / 28 |
+| **counterfactual** — *say something only if it is worth their attention; otherwise leave "say" empty* | | | |
+| 없음 | 28 / 28 | 0 / 28 | 9 / 28 |
+| 자리에 있음 (control) | 28 / 28 | **18 / 28** | 9 / 28 |
+| 보고 있음 | 28 / 28 | 9 / 28 | 12 / 28 |
+| 고개 돌림 | 28 / 28 | 12 / 28 | 9 / 28 |
+
+**224 of 224 spoke, and zero pairs discordant in either run.** A uniformly tidy result is evidence
+the measurement is broken, so the responsible assumption was looked for before anything was
+concluded: the reader does not manufacture a sentence — `say` is the model's field or empty — so the
+uniformity is the model. It is also what `noticing` recorded long before, 8 of 8.
+
+**Three things, and none of them is the pre-registered success.**
+
+1. **It never chooses silence here**, not even when the instruction says to leave `say` empty. On
+   this path the silence a person gets comes from `said_before`, which is deterministic — the model
+   was never supplying it.
+2. **A sentence about the person becomes a sentence to the person.** *You turned your head, I
+   noticed.* *사용자가 고개를 돌리고 있어요.* The **control** drew the most of it, 18 of 28 — *You're
+   here* — so it is the presence of a line about them, not what the line says. Wired as built,
+   argmind would have announced that somebody looked away. That is the worst of the outcomes and it
+   was caught before it shipped.
+3. **Telling it to be quiet made it want to click**, 5 → 9 of 28 at baseline — `noticing`'s old
+   finding, reproduced on a different axis.
+
+So the judgement the owner asked for **cannot be delegated to this model on this path**, and the
+sentence is not wired. `watch::regarding` stays, as the instrument's shared builder, with the reason
+written on it where anybody would reach for it. The shipped prompt was never changed: the
+counterfactual swapped the line inside the harness only, so `r322a4c` still describes what runs.
+
 ## What this does not answer
 
 **It is a head, not a gaze.** Somebody who holds their head still and looks to the side reads under
