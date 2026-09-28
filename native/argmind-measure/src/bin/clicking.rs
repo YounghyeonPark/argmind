@@ -212,10 +212,21 @@ fn run() -> i32 {
         };
         //: **Re-resolved immediately before acting**, because a listed widget is gone 13 times in
         //: 14 over the second a call takes.
-        let Some(target) = session.find(&click.target, &click.role) else {
-            println!("  GONE      {:<22} {:?} was not there to click", trim(goal),
-                     trim(&click.target));
-            continue;
+        //: **Three outcomes, printed apart.** The measured miss on 2026-09-16 was this harness
+        //: reporting a click that landed on the wrong copy of a same-named button; collapsing
+        //: `Several` into `GONE` would hide it a second way.
+        let target = match session.find(&click.target, &click.role) {
+            argmind_core::session::Found::One(w) => w,
+            argmind_core::session::Found::Gone => {
+                println!("  GONE      {:<22} {:?} was not there to click", trim(goal),
+                         trim(&click.target));
+                continue;
+            }
+            argmind_core::session::Found::Several(same) => {
+                println!("  AMBIGUOUS {:<22} {:?} matches {} widgets — a name is not a key",
+                         trim(goal), trim(&click.target), same.len());
+                continue;
+            }
         };
         if !foreground_is(pid) {
             println!("  SKIPPED   {:<22} the front changed while deciding", trim(goal));

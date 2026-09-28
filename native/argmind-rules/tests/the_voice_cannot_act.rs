@@ -111,7 +111,21 @@ fn nothing_outside_the_core_performs_except_the_three_that_may() {
             }
             let rel = path.strip_prefix(&native).unwrap_or(&path)
                 .to_string_lossy().replace('\\', "/");
-            if MAY.contains(&rel.as_str()) || rel.starts_with("argmind-core/src/") {
+            //: **The crate that defines it, including its own tests** — widened on 2026-09-28 and
+            //: said out loud rather than slipped in. `argmind-core/src/` was already skipped
+            //: wholesale because that is where `perform` lives and the core is the thing that
+            //: performs; a test binary in the same crate is not the program, is linked into no
+            //: executable, and cannot be reached from a microphone or from anything else at run
+            //: time. What made the widening necessary was `tests/duplicates.rs`, which pins that a
+            //: click with two candidates is **refused** — coverage of a refusal, which is the last
+            //: thing this rule should be making harder to test.
+            //:
+            //: **`argmind-serve/tests/` is still caught, and that is the half worth keeping**: a
+            //: test there would reach the real hands and click whoever ran it. Checked by breaking
+            //: it both ways.
+            if MAY.contains(&rel.as_str())
+                || rel.starts_with("argmind-core/src/")
+                || rel.starts_with("argmind-core/tests/") {
                 continue;
             }
             let text = std::fs::read_to_string(&path).unwrap_or_default();

@@ -110,6 +110,15 @@ means hearing it, so there is a second, and it may say only the one fixed consta
 have walked through the **old** rule, which matched the literal text `voice.say(` — a rule about a
 local variable's name.
 
+**One of the five was widened on 2026-09-28, deliberately and with the break checks.** *Only three
+files outside the core may reach an action* now also skips `argmind-core/tests/`, on the same ground
+`argmind-core/src/` was already skipped: that is the crate where `perform` lives, a test binary
+there is linked into no executable, and nothing at run time can reach it. What made it necessary was
+a test that pins a **refusal** — a click with two candidates must not land — and a rule that makes a
+refusal harder to test is working against itself. **`argmind-serve/tests/` is still caught**, which
+is the half worth keeping: a test there would reach the real hands and click whoever ran it. All
+three cases were checked by breaking them.
+
 **And one rule is held by the compiler.** `cargo test -p argmind-serve --features headless` builds
 the whole application against `argmind-env-none` and runs the server against it. A `use
 argmind_env_windows::` added to `app.rs` compiles fine on this machine and quietly un-ports the
@@ -125,9 +134,23 @@ a listed widget is gone **13 times in 14** over the second a call takes. The rol
 the name alone was not a key: a `text` label reading `Font :` in front of a `combo box` of the same
 name took the click and did nothing. **And name-and-role is still not a key**: Character Map's
 advanced view has more than one button named `Open`, which cost a goal in `clicking` — the agent
-opened the character set list when the font list was asked for. The tie-break anchors on the *first*
-same-named widget in the previous reading, so among copies it settles nothing, and the model cannot
-name the one it means either.
+opened the character set list when the font list was asked for.
+
+**Since 2026-09-28 the lookup says so rather than guessing, and the rule came out of the comment
+that recorded the failure.** *The tie-break anchors on the first same-named widget in the previous
+reading, so among copies the anchor is itself arbitrary and nearest-to-it is arbitrary too* — so the
+tie-break means something in exactly one case, when **the previous reading held exactly one of
+them**, which makes the anchor a fact about where that thing was and *nearest to it* a statement
+about where it went. With none or with several it is a coin toss with a distance calculation on top,
+and `find` now returns `Found::Several` instead. `perform` refuses those and counts them in
+`ambiguous`, apart from `vanished`, because a world that moved and a name that was never a key are
+different failures. **The committed Python expectations confirm the rule rather than merely
+permitting it**: of eleven `find` cases it reclassifies exactly the two where the previous reading
+held none or several, and both duplicate cases with a real anchor still pass unchanged — so the
+expectations file was not edited, and `argmind-core/tests/equivalence.rs` names the two divergences
+and asserts them. **Nothing asks the model**, which is shown the same two fields and cannot name the
+one it means either; the deterministic side knowing there are three buttons called `Open` is
+knowledge a person can act on, which is the shape of every other answer here. `argmind-core/tests/duplicates.rs`.
 
 **A watch carries a floor** (`MIN_GAP = 3.0`). Perception changes 13 seconds in 14; a call costs
 0.3–2 s. **Watching is on by default since 2026-09-17** — the owner's decision, the cost

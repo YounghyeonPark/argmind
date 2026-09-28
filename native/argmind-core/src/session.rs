@@ -68,6 +68,36 @@ pub fn recent(history: &[(String, String)], turns: Option<i64>) -> Vec<(String, 
     history[opens[opens.len() - turns as usize]..].to_vec()
 }
 
+/// **What a lookup found, including the answer that used to be a guess.**
+///
+/// Three outcomes rather than an `Option`, because *it is gone* and *there are four of them* are
+/// different facts and a caller does different things about them — and collapsing two failures into
+/// one `None` is pitfall 5 in `docs/findings/harness-pitfalls.md`, which cost this project a round
+/// of work once already.
+#[derive(Clone, Debug, PartialEq)]
+pub enum Found {
+    /// Not on screen any more. A listed widget is gone 13 times in 14 over the second a call takes.
+    Gone,
+    /// Exactly one, or several with an anchor that is a fact rather than a coin toss. See
+    /// [`Session::find`].
+    One(Widget),
+    /// **Several, and nothing deterministic can say which.** Carried in the order the eyes gave
+    /// them, which is what makes *the third one called `Open`* a designator somebody can answer
+    /// with and this can re-resolve.
+    Several(Vec<Widget>),
+}
+
+impl Found {
+    /// The one, if there is exactly one. **Named so a caller that wants the old behaviour has to
+    /// write down that it is dropping the other two cases.**
+    pub fn only(self) -> Option<Widget> {
+        match self {
+            Found::One(w) => Some(w),
+            _ => None,
+        }
+    }
+}
+
 pub struct Session<E: Eyes, H: Hands, M: Speaks> {
     pub eyes: E,
     pub hands: H,
@@ -77,6 +107,11 @@ pub struct Session<E: Eyes, H: Hands, M: Speaks> {
     pub exchanges: usize,
     pub blind: u32,
     pub vanished: u32,
+    /// **How many clicks were refused for having more than one candidate.** Counted apart from
+    /// `vanished` because the two are different failures: one is a world that moved, the other is a
+    /// name that was never a key. Before 2026-09-28 this case was not counted at all — it was a
+    /// click on whichever copy an arbitrary anchor favoured, reported as a success.
+    pub ambiguous: u32,
     pub unknown_keys: u32,
     /// **The human is the permission.** An interface with a confirm button turns this on and gates
     /// with the button instead, which is stronger than the flag; one with no button leaves it off.
@@ -94,7 +129,8 @@ pub struct Session<E: Eyes, H: Hands, M: Speaks> {
 impl<E: Eyes, H: Hands, M: Speaks> Session<E, H, M> {
     pub fn new(eyes: E, hands: H, model: M) -> Self {
         Session { eyes, hands, model, seen: Vec::new(), history: Vec::new(), exchanges: 0,
-                  blind: 0, vanished: 0, unknown_keys: 0, may_act_unprompted: false,
+                  blind: 0, vanished: 0, ambiguous: 0, unknown_keys: 0,
+                  may_act_unprompted: false,
                   remember_turns: Some(REMEMBER_TURNS), limit: MAX_LISTED,
                   mind: Mind::resting(), note: Note::blank() }
     }
@@ -116,33 +152,50 @@ impl<E: Eyes, H: Hands, M: Speaks> Session<E, H, M> {
         }
     }
 
-    /// The thing with this name and role, **in the world as it is now** — or nothing if it has
-    /// gone. The role is half of the key; among duplicates the one nearest to where a same-named
-    /// thing was last seen wins, which assumes a thing moves rather than teleporting past its own
-    /// copies.
+    /// The thing with this name and role, **in the world as it is now** — or [`Found::Gone`], or
+    /// [`Found::Several`] when nothing here can say which.
     ///
-    /// **Measured 2026-09-16: that assumption does not cover a control with copies, and it cost a
-    /// goal.** Character Map in advanced view has more than one button named `Open` — in basic view
-    /// the single one belongs to the `Font :` combo — and asked for the font list the agent opened
-    /// the character set list instead. The anchor below is found with `.find()`, *the first* match
-    /// in the previous reading, so with duplicates the anchor is itself arbitrary and nearest-to-it
-    /// is arbitrary too. **This disambiguates a control that moved; it cannot disambiguate a
-    /// control that has copies**, and neither can the model, which is shown the same two fields.
-    pub fn find(&mut self, name: &str, role: &str) -> Option<Widget> {
+    /// The role is half of the key; among duplicates the one nearest to where a same-named thing was
+    /// last seen wins, which assumes a thing **moves** rather than teleporting past its own copies.
+    ///
+    /// ## When that assumption holds, and when it was measured not to
+    ///
+    /// **Measured 2026-09-16: it does not cover a control with copies, and it cost a goal.**
+    /// Character Map in advanced view has more than one button named `Open` — in basic view the
+    /// single one belongs to the `Font :` combo — and asked for the font list the agent opened the
+    /// character set list instead.
+    ///
+    /// The comment that recorded that already contained the rule this now follows: *the anchor is
+    /// found with `.find()`, the first match in the previous reading, so with duplicates the anchor
+    /// is itself arbitrary and nearest-to-it is arbitrary too.* So the tie-break is trustworthy in
+    /// exactly one case — **the previous reading held exactly one** of them, which makes the anchor
+    /// a fact about where that thing was and *nearest to it* a statement about where it went. With
+    /// none or with several, the anchor is a guess and this now declines rather than making it.
+    ///
+    /// **Nothing here asks the model.** It is shown the same two fields and cannot name the one it
+    /// means either; the deterministic side knows there are three buttons called `Open`, which is
+    /// knowledge a person can act on. That is the shape of every other answer in this program:
+    /// WHERE is not something a model supplies.
+    pub fn find(&mut self, name: &str, role: &str) -> Found {
         let fresh = self.eyes.foreground();
         let same: Vec<&Widget> = fresh.iter()
             .filter(|w| w.name == name && (role.is_empty() || w.role == role)).collect();
         if same.is_empty() {
-            return None;
+            return Found::Gone;
         }
         if same.len() == 1 {
-            return Some(same[0].clone());
+            return Found::One(same[0].clone());
         }
         //: The role appears twice in this function and the second copy masks the first: dropping it
         //: from the filter alone changes nothing while this lookup still pulls the tiebreak back.
-        let was = self.seen.iter()
-            .find(|w| w.name == name && (role.is_empty() || w.role == role))
-            .map(|w| w.centre()).unwrap_or_else(|| same[0].centre());
+        let before: Vec<&Widget> = self.seen.iter()
+            .filter(|w| w.name == name && (role.is_empty() || w.role == role)).collect();
+        //: **One before and several now: the thing moved and something like it appeared.** The
+        //: anchor is a fact. Anything else and it is a coin toss with a distance calculation on top.
+        if before.len() != 1 {
+            return Found::Several(same.iter().map(|w| (*w).clone()).collect());
+        }
+        let was = before[0].centre();
         let (mut best, mut best_d) = (same[0], i64::MAX);
         for w in &same {
             let c = w.centre();
@@ -152,7 +205,7 @@ impl<E: Eyes, H: Hands, M: Speaks> Session<E, H, M> {
                 best = w;
             }
         }
-        Some(best.clone())
+        Found::One(best.clone())
     }
 
     /// Did the world move? `None` when the hands are not live — a dry run has nothing to confirm,
@@ -193,13 +246,21 @@ impl<E: Eyes, H: Hands, M: Speaks> Session<E, H, M> {
             }
             match effect.kind.as_str() {
                 "click" => match self.find(&effect.target, &effect.role) {
-                    None => {
+                    Found::Gone => {
                         //: It was there when the question was asked and it is not now. Whatever
                         //: occupies that rectangle was never chosen.
                         self.vanished += 1;
                         refused.push(effect.clone());
                     }
-                    Some(target) => {
+                    //: **Refused rather than guessed**, which is the whole of the 2026-09-16 fix:
+                    //: the old code pressed whichever copy the arbitrary anchor happened to favour
+                    //: and reported success. A caller that wants to ask a person which one has the
+                    //: list — see `Found::Several` — and this path has nobody to ask.
+                    Found::Several(_) => {
+                        self.ambiguous += 1;
+                        refused.push(effect.clone());
+                    }
+                    Found::One(target) => {
                         self.hands.click(&target);
                         let confirmed = self.confirm(&target);
                         did.push(Done { effect: effect.clone(), target: Some(target), confirmed });

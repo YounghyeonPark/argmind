@@ -341,12 +341,23 @@ fn think(desk: &mut Desk, out: &Listeners, text: &str) {
 fn propose(desk: &mut Desk, out: &Listeners, effect: Effect) {
     let (text, hint) = if effect.kind == "click" {
         match desk.session.find(&effect.target, &effect.role) {
-            None => {
+            argmind_core::session::Found::Gone => {
                 out.send("gone",
                          &format!("{{\"token\":-1,\"what\":\"{}\"}}", escape(&effect.target)));
                 return;
             }
-            Some(found) => {
+            //: **Said rather than guessed.** Before 2026-09-28 the lookup picked whichever copy an
+            //: arbitrary anchor favoured and this drew a button for it; asked for the font list in
+            //: Character Map's advanced view, that opened the character set list. Nothing here can
+            //: tell them apart and neither can the model — it is shown the same two fields — so the
+            //: honest move is to say how many there are and offer nothing.
+            argmind_core::session::Found::Several(same) => {
+                out.send("note", &format!(
+                    "{} 이라는 것이 {}개 있어서 어느 것인지 알 수 없습니다 — 이름만으로는 \
+가릴 수 없습니다", effect.target, same.len()));
+                return;
+            }
+            argmind_core::session::Found::One(found) => {
                 let (cx, cy) = found.centre();
                 //: **A second opinion, not a gate.** A widget's own centre resolves back to itself
                 //: about seven times in ten, and a caption button answering `application` is the

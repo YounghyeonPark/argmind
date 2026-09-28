@@ -12,7 +12,7 @@ use argmind_core::contract::{Eyes, Hands, Speaks, Widget};
 use argmind_core::converse::{render, MOST_AT_ONCE};
 use argmind_core::intent::{Done, Effect, Trigger};
 use argmind_core::llm::first_object;
-use argmind_core::session::{describe, recent, Session};
+use argmind_core::session::{Found, describe, recent, Session};
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 
@@ -154,19 +154,46 @@ fn the_history_the_window_and_the_resolution_match() {
                    "recent(turns={turns:?})");
     }
 
+    //: **Two of these eleven diverge from the Python on purpose, since 2026-09-28**, and they are
+    //: named rather than skipped. The Python answered every duplicate case with *something*; two of
+    //: those answers were guesses, and `Found::Several` is the Rust declining to make them.
+    //:
+    //: The rule is the one the old comment on `Session::find` already contained: the tie-break
+    //: anchors on the first same-named widget in the **previous** reading, so it means something
+    //: only when the previous reading held exactly one. This data is what confirms the rule rather
+    //: than merely permitting it — the two cases it reclassifies are the two where the previous
+    //: reading held **none or several**, and the two duplicate cases where it held one still pass
+    //: unchanged. **The expectations file is not edited**: it is what the Python produced, it is
+    //: evidence, and evidence that moves to agree with the code is not evidence.
+    const GUESSES: [&str; 2] = ["the Font : trap, name alone", "duplicates, nothing ever seen"];
+    let mut declined = 0;
     for case in d["find"].as_array().unwrap() {
         let fresh: Vec<Widget> = case["fresh"].as_array().unwrap().iter().map(widget_of).collect();
         let seen: Vec<Widget> = case["seen"].as_array().unwrap().iter().map(widget_of).collect();
+        let label = case["label"].as_str().unwrap();
         let mut s = session(vec![fresh], &[], false, None, true);
         s.seen = seen;
         let got = s.find(case["name"].as_str().unwrap(), case["role"].as_str().unwrap());
+        if GUESSES.contains(&label) {
+            //: **Asserted, not excused.** A case in this list that stops being ambiguous means the
+            //: rule moved, and the run has to say so rather than passing quietly.
+            declined += 1;
+            match got {
+                Found::Several(same) => assert!(same.len() > 1, "{label}: Several of one"),
+                other => panic!("{label}: the Python guessed here and this should decline, \
+                                 got {other:?}"),
+            }
+            continue;
+        }
         match (got, case["want"].is_null()) {
-            (None, true) => {}
-            (Some(w), false) => assert_eq!(widget_json(&w), case["want"],
-                                           "{}", case["label"].as_str().unwrap()),
-            (g, _) => panic!("{}: got {:?}", case["label"].as_str().unwrap(), g),
+            (Found::Gone, true) => {}
+            (Found::One(w), false) => assert_eq!(widget_json(&w), case["want"], "{label}"),
+            (g, _) => panic!("{label}: got {g:?}"),
         }
     }
+    assert_eq!(declined, GUESSES.len(),
+               "a case named as a Python guess is no longer in the data; the divergence recorded \
+                here has lost its subject");
 
     for case in d["channels"].as_array().unwrap() {
         let e = effect_from(&case["effect"]);
