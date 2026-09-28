@@ -207,7 +207,16 @@
       <span class="what">카메라로 사람 알아보기</span>
       <span class="cost">켜 두는 동안 카메라 불이 켜져 있습니다 — 64x36 회색만 보고, 아는 것은 마지막 움직임이 몇 초 전인가뿐</span>
     </label>
-    <!-- A second switch under the camera, and deliberately not part of it. The camera is a light
+    <!-- Between the camera and the roster, because that is where it sits in what it gives away:
+         more than *something moved*, less than *this is who it was*, and it writes nothing down.
+         Measured 2026-09-23 — a turned head reads thirty times a facing one at 99 ms and no model.
+         It is a head and not a gaze, and the label says so rather than promising 시선 추적. -->
+    <label class="switch">
+      <input type="checkbox" id="attention">
+      <span class="what">화면을 보고 있는지 알기</span>
+      <span class="cost">고개 방향입니다 — 고개를 두고 눈만 돌리면 보고 있는 것으로 읽습니다. 아무것도 저장하지 않습니다</span>
+    </label>
+    <!-- A third switch under the camera, and deliberately not part of it. The camera is a light
          that is on; this is a row in a file that outlives the session, and agreeing to the first is
          not agreeing to the second. What is written is 128 numbers and two dates per person — no
          picture, and the numbers cannot be turned back into one. -->

@@ -179,6 +179,45 @@ pub const HEAD_ASIDE: f32 = 1.0;
 /// second signal sitting in what currently looks like a dropped sample.
 pub const UNREADABLE_IS_A_HINT: bool = true;
 
+/// What a window of samples says about where a head is pointed.
+///
+/// **A window rather than a frame, and that is the measurement's own shape.** `attending` reported
+/// medians over ten-second phases, not single readings, and `presence` learned the same lesson the
+/// hard way: a quiet distribution with rare enormous spikes makes any per-frame rule either
+/// unfireable or constantly firing. A caller that classified one sample would be using a constant
+/// derived from medians against a statistic it was not derived from.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum Pointed {
+    /// Pointed at the camera. Carries the window's median `|head_on|`.
+    AtIt { middle: f32 },
+    /// Turned away. Carries the same.
+    Aside { middle: f32 },
+    /// **Nothing readable in the whole window**, which is not the same as *turned*.
+    ///
+    /// See [`UNREADABLE_IS_A_HINT`]: measured, this correlates strongly with a turned head — 0 and
+    /// 1 of 95 looking against 22 and 48 of 96 turned — and *correlates* is all that was measured.
+    /// It is a third answer rather than a vote for the second one.
+    Unreadable,
+}
+
+/// Classify one window of `|head_on|` readings against [`HEAD_ASIDE`].
+///
+/// `readings` are the samples that could be read; an empty slice is [`Pointed::Unreadable`], which
+/// is how a window of near-profile frames arrives.
+pub fn pointed(readings: &[f32]) -> Pointed {
+    if readings.is_empty() {
+        return Pointed::Unreadable;
+    }
+    let mut v: Vec<f32> = readings.iter().map(|h| h.abs()).collect();
+    v.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+    let middle = v[v.len() / 2];
+    if middle < HEAD_ASIDE {
+        Pointed::AtIt { middle }
+    } else {
+        Pointed::Aside { middle }
+    }
+}
+
 /// The detector, and optionally the thing that turns a face into numbers.
 pub struct Faces {
     finder: Ready,
@@ -415,6 +454,51 @@ mod tests {
         //: Signed, and the sign says which way: toward the picture's left eye is positive.
         assert!(face_at(70.0).head_on().unwrap() > 0.9);
         assert!(face_at(30.0).head_on().unwrap() < -0.9);
+    }
+
+    #[test]
+    fn a_window_of_the_measured_medians_lands_where_it_should() {
+        //: **The run, as a test.** These are the four phase medians `attending` printed; a change
+        //: to `HEAD_ASIDE` or to this statistic that reclassifies them is a change that needs the
+        //: person and the camera again, not a constant nudged in a diff.
+        assert!(matches!(pointed(&[0.20]), Pointed::AtIt { .. }));
+        assert!(matches!(pointed(&[0.40]), Pointed::AtIt { .. }));
+        assert!(matches!(pointed(&[15.05]), Pointed::Aside { .. }));
+        assert!(matches!(pointed(&[24.08]), Pointed::Aside { .. }));
+    }
+
+    #[test]
+    fn nothing_readable_is_a_third_answer_and_not_a_vote_for_turned() {
+        //: The measurement says unreadable *correlates* with turning. Treating it as turning would
+        //: be asserting more than was measured, and it is the shape of small step that later reads
+        //: as a finding nobody made.
+        assert_eq!(pointed(&[]), Pointed::Unreadable);
+    }
+
+    #[test]
+    fn one_wild_sample_does_not_decide_a_window() {
+        //: A median, not a maximum. `presence` read a still room at a median of 0.05 with a
+        //: **maximum of 23.09** — four hundred times — because a monitor relighting a face moves
+        //: every pixel at once. The same spike here would be a person declared to have turned away.
+        let mostly_facing = [0.2, 0.3, 0.25, 40.0, 0.22];
+        assert!(matches!(pointed(&mostly_facing), Pointed::AtIt { .. }),
+                "one spike in five must not carry the window");
+    }
+
+    #[test]
+    fn the_middle_it_reports_is_the_one_it_judged_on() {
+        //: **A display that disagrees with the verdict beside it** is pitfall 4 in this project's
+        //: own list, and it happened twice there. The number carried out is the number compared.
+        match pointed(&[0.1, 0.2, 0.3]) {
+            Pointed::AtIt { middle } => assert!((middle - 0.2).abs() < 1e-6),
+            other => panic!("expected AtIt, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn the_sign_does_not_matter_only_the_distance() {
+        //: Left and right are the same fact here: the head is not pointed at the camera.
+        assert_eq!(pointed(&[-15.0]), pointed(&[15.0]));
     }
 
     #[test]

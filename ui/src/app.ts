@@ -38,9 +38,12 @@ interface Hello {
   noticed: number;
   attending: string;
   waiting: Proposal[];
-  /** Whether new faces are being written down — the switch, not whether the camera is open. */
   /** The one thing argmind has asked about and nobody has answered, or null. */
   wonder: Wonder | null;
+  /** Whether the head direction is being worked out — the switch, not whether the camera is open.
+   *  Nothing is stored either way; the reading is a word with an age and it evaporates. */
+  attending_to_you: boolean;
+  /** Whether new faces are being written down — the switch, not whether the camera is open. */
   remembering: boolean;
   /** Whether the two ONNX files are on disk. Without them the switch is on and nothing happens. */
   face_models: boolean;
@@ -239,11 +242,14 @@ stream.addEventListener("hello", (e) => {
   aloud.checked = d.speaks;
   acting.checked = d.acts;
   camera.checked = d.watching_you;
-  // **The switch, not the device** — unlike the camera above. Nothing is written down while the
-  // models are missing, so the row says so rather than looking on and doing nothing.
   askRow(d.wonder);
+  // **The switch, not the device** — unlike the camera above. Nothing happens while the models are
+  // missing, so the rows say so rather than looking on and doing nothing.
+  const noModels = d.face_models ? "" : "얼굴 모델이 없습니다 — 필요한 것에서 받으세요";
+  attention.checked = d.attending_to_you;
+  attention.title = noModels;
   faces.checked = d.remembering;
-  faces.title = d.face_models ? "" : "얼굴 모델이 없습니다 — 필요한 것에서 받으세요";
+  faces.title = noModels;
   drawPeople(d.people);
   drawNoticing(d.noticing, d.noticed);
   // Rebuilt from the server's own list, so a reload is never a page showing buttons the server
@@ -408,6 +414,20 @@ camera.onchange = () => {
 
 stream.addEventListener("camera", (e) => {
   camera.checked = (e as MessageEvent).data === "1";
+});
+
+// Whether argmind works out where the head is pointed. **The same shape as the camera above** —
+// the server owns the standing answer and can raise the four-button window, so the checkbox is set
+// from the event rather than from the click. Turning it on opens nothing and stores nothing.
+const attention = document.getElementById("attention") as HTMLInputElement;
+attention.onchange = () => {
+  const want = attention.checked;
+  attention.checked = false;
+  void post(want ? "/attention/on" : "/attention/off");
+};
+
+stream.addEventListener("attention", (e) => {
+  attention.checked = (e as MessageEvent).data === "1";
 });
 
 // Remembering faces. **The same shape as the camera above** — the server owns the standing answer

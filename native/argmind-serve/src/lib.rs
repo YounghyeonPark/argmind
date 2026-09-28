@@ -240,6 +240,9 @@ pub enum Route {
     /// is held and closes it on the way up; this one is on until it is turned off, which is why the
     /// window that asks says so and why the light is the honest part of the design.
     Camera(bool),
+    /// Report whether a head is pointed at the screen, or stop. **Not the same as `Camera`** —
+    /// that one is a light that is on; this is a fact about a person that the same light can give.
+    Attention(bool),
     /// Remember the faces the camera sees, or stop. **A different question from `Camera`** — one
     /// is a light that is on, the other is a row in a file that outlives the session.
     Faces(bool),
@@ -360,6 +363,8 @@ pub fn route(request: &Request) -> Route {
         ("POST", "/camera/off") => Route::Camera(false),
         //: **Before the prefixed ones**, so `forget-all` is never read as a person called
         //: `forget-all`. Exact matches first is the whole rule and it is easy to get wrong once.
+        ("POST", "/attention/on") => Route::Attention(true),
+        ("POST", "/attention/off") => Route::Attention(false),
         ("POST", "/faces/on") => Route::Faces(true),
         ("POST", "/faces/off") => Route::Faces(false),
         ("POST", "/faces/forget-all") => Route::ForgetFaces,

@@ -159,6 +159,9 @@ struct Desk {
     /// **The one thing argmind does not know and has asked about.** Shared with the camera
     /// thread, which is what notices a gap; the job thread is what hears the answer.
     wonders: Arc<Mutex<crate::wonders::Wonders>>,
+    /// Whether to work out where the head is pointed. Read by the camera loop every second, so
+    /// the switch does not mean closing the device and opening it again.
+    want_attention: Arc<AtomicBool>,
     /// Whether to look for faces at all. Read by the camera loop every few seconds, so the switch
     /// does not mean closing the device and opening it again.
     want_faces: Arc<AtomicBool>,
@@ -202,6 +205,8 @@ enum Job {
     Acting(bool),
     /// Keep the camera on and watch for movement, or switch it off.
     Camera(bool),
+    /// Work out where the head is pointed, or stop.
+    Attention(bool),
     /// Remember the faces it sees, or stop.
     Faces(bool),
     /// Answer the one open question, or skip it with an empty string.
@@ -686,6 +691,9 @@ fn carry_out(desk: &mut Desk, out: &Listeners, model: &str, key: &str) {
         //: and `face-models` decides whether the files are here; this only says what may be done
         //: with what is already running.
         "faces" => switch_faces(desk, out, true),
+        //: Same shape as `faces`: nothing opens, nothing downloads. The camera decides whether
+        //: there is a picture and `face-models` whether the files are here.
+        "attention" => switch_attention(desk, out, true),
         //: **Nothing starts and nothing installs.** The standing answer *is* the state, so all this
         //: does is tell the page the switch is on — which is why `Job::Acting` writes a 거부 when
         //: it is turned off rather than flipping a field: there is no field.
@@ -754,6 +762,7 @@ fn switch_camera(desk: &mut Desk, out: &Listeners, on: bool) {
     let (want_eyes, eyeing) = (Arc::clone(&desk.want_eyes), Arc::clone(&desk.eyeing));
     let moved_at = Arc::clone(&desk.moved_at);
     let (people, want_faces) = (Arc::clone(&desk.people), Arc::clone(&desk.want_faces));
+    let want_attention = Arc::clone(&desk.want_attention);
     let wonders = Arc::clone(&desk.wonders);
     let senses = desk.senses.clone();
     let out = Arc::clone(&desk.speaks_to);
@@ -773,17 +782,16 @@ fn switch_camera(desk: &mut Desk, out: &Listeners, on: bool) {
         let mut said_full = false;
         let outcome = crate::platform::watch_movement(
             chosen.as_deref(), &carry_on,
-            &mut |moved, took| {
-                if moved {
+            &mut |seen| {
+                if seen.moved {
                     last_moved = Some(Instant::now());
                     *moved_at.lock().unwrap_or_else(|e| e.into_inner()) = last_moved;
                 }
-                let what = match &last_moved {
-                    Some(at) => format!("마지막 움직임 {:.0}초 전", at.elapsed().as_secs_f64()),
-                    None => format!("{:.0}초째 아무 움직임 없음", began.elapsed().as_secs_f64()),
-                };
-                senses.saw("카메라", what, took);
+                let what = camera_line(last_moved.map(|at| at.elapsed().as_secs_f64()),
+                                       began.elapsed().as_secs_f64(), seen.facing);
+                senses.saw("카메라", what, seen.took);
             },
+            &|| want_attention.load(Ordering::SeqCst) && crate::faces::here(),
             //: Three things have to be true: the models on disk, the switch on, and — implicitly —
             //: a camera, since this closure only runs inside its loop.
             &|| want_faces.load(Ordering::SeqCst) && crate::faces::here(),
@@ -850,6 +858,60 @@ fn switch_camera(desk: &mut Desk, out: &Listeners, on: bool) {
             }
         }
         *moved_at.lock().unwrap_or_else(|e| e.into_inner()) = None;
+    });
+}
+
+/// **What the camera puts on the blackboard**, as one sentence.
+///
+/// **One slot, because it is one device and one window.** Two slots would age separately and let a
+/// reader pair a movement reading with a head reading from a different tick — and `senses.rs` puts
+/// an age on a slot precisely so that cannot happen quietly.
+///
+/// **Nothing is added at rest**, which is the whole ground this was allowed on: prompt edits here
+/// are 1 for 7, and `Facing::NotLookedFor` renders nothing, so with the switch off the line is byte
+/// for byte what it was before any of this existed. A test below holds that.
+///
+/// Lifted out of the camera thread's closure for one reason: a claim about what a prompt does at
+/// rest is worth nothing if it cannot be run.
+fn camera_line(moved_secs_ago: Option<f64>, since_open: f64,
+               facing: crate::platform::Facing) -> String {
+    let mut what = match moved_secs_ago {
+        Some(ago) => format!("마지막 움직임 {ago:.0}초 전"),
+        None => format!("{since_open:.0}초째 아무 움직임 없음"),
+    };
+    match facing {
+        crate::platform::Facing::NotLookedFor => {}
+        crate::platform::Facing::AtIt => what.push_str(" · 화면 쪽을 봄"),
+        crate::platform::Facing::Aside => what.push_str(" · 고개를 돌림"),
+        //: **Said as itself.** It correlates with a turned head and is not it — 0 and 1 of 95
+        //: against 22 and 48 of 96 — and a word that claimed otherwise would be a finding nobody
+        //: made. `docs/findings/attention.md`.
+        crate::platform::Facing::Unreadable => what.push_str(" · 고개 방향을 읽지 못함"),
+    }
+    what
+}
+
+/// Knowing where the head is pointed, on or off.
+///
+/// **It does not touch the camera and it writes nothing down.** What reaches the blackboard is a
+/// word with an age and it evaporates when the device closes — which is why this sits above `faces`
+/// and below `camera` in how much it gives away, and why it is still a key of its own: somebody may
+/// want the light on for movement without argmind working out where they are looking.
+///
+/// **And it does not gate anything.** `docs/findings/attention.md` measured that a turned head
+/// reads thirty times a facing one; nothing has measured that the fact should change what argmind
+/// does on a tick. Reporting it and acting on it are two steps and only the first is earned.
+fn switch_attention(desk: &mut Desk, out: &Listeners, on: bool) {
+    desk.want_attention.store(on, Ordering::SeqCst);
+    out.send("attention", if on { "1" } else { "0" });
+    out.send("note", if !on {
+        "고개 방향은 더 보지 않습니다"
+    } else if !crate::faces::here() {
+        "얼굴 모델이 없습니다 — 설정의 필요한 것에서 받으세요"
+    } else if !desk.eyeing.load(Ordering::SeqCst) {
+        "카메라를 켜면 화면을 보고 있는지 알 수 있습니다"
+    } else {
+        "화면을 보고 있는지 봅니다 — 고개 방향이고, 시선은 아닙니다"
     });
 }
 
@@ -1370,6 +1432,7 @@ fn hello(desk: &Desk, model: &str) -> String {
         format!("\"wonder\":{}",
                 desk.wonders.lock().unwrap_or_else(|e| e.into_inner()).open()
                     .map(wonder_json).unwrap_or_else(|| "null".into())),
+        format!("\"attending_to_you\":{}", desk.want_attention.load(Ordering::SeqCst)),
         format!("\"remembering\":{}", desk.want_faces.load(Ordering::SeqCst)),
         format!("\"face_models\":{}", crate::faces::here()),
         format!("\"people\":{}",
@@ -1613,6 +1676,8 @@ pub fn run(how: How) {
                               //: **Read off disk at startup**, so a roster survives a restart —
                               //: which is the whole of what 기억 means here.
                               people: Arc::new(Mutex::new(crate::people::People::read())),
+                              want_attention: Arc::new(AtomicBool::new(
+                                  crate::decided::standing("attention") == Some(Standing::Allowed))),
                               wonders: Arc::new(Mutex::new(Default::default())),
                               want_faces: Arc::new(AtomicBool::new(
                                   crate::decided::standing("faces") == Some(Standing::Allowed))),
@@ -1892,6 +1957,17 @@ pub fn run(how: How) {
                     //: the rest of the session — the feature working and appearing not to.
                     adopt_voice(&mut desk, &agent_out);
                 }
+                Job::Attention(on) => match (on, crate::decided::standing("attention")) {
+                    (false, _) => switch_attention(&mut desk, &agent_out, false),
+                    (true, Some(Standing::Allowed)) =>
+                        switch_attention(&mut desk, &agent_out, true),
+                    (true, Some(Standing::Denied)) => agent_out.send("note",
+                        "거부해 두셨습니다 — 설정에서 되돌릴 수 있습니다"),
+                    (true, None) => {
+                        agent_out.send("attention", "0");
+                        agent_out.send("asking", &asking_json("attention"));
+                    }
+                },
                 //: **Gated exactly like the camera**, and by its own key. A standing 허용 turns
                 //: it on at the first page open; anything else asks.
                 Job::Faces(on) => match (on, crate::decided::standing("faces")) {
@@ -2180,6 +2256,10 @@ fn serve_one(mut stream: TcpStream, out: &Listeners, token: &str, jobs: &Sender<
             let _ = stream.write_all(&respond("204 No Content", "text/plain", ""));
             let _ = jobs.send(Job::Camera(on));
         }
+        Route::Attention(on) => {
+            let _ = stream.write_all(&respond("204 No Content", "text/plain", ""));
+            let _ = jobs.send(Job::Attention(on));
+        }
         Route::Faces(on) => {
             let _ = stream.write_all(&respond("204 No Content", "text/plain", ""));
             let _ = jobs.send(Job::Faces(on));
@@ -2219,6 +2299,53 @@ fn serve_one(mut stream: TcpStream, out: &Listeners, token: &str, jobs: &Sender<
         }
         Route::Unknown => {
             let _ = stream.write_all(&respond("404 Not Found", "text/plain", "no"));
+        }
+    }
+}
+
+#[cfg(test)]
+mod attention_tests {
+    use super::camera_line;
+    use crate::platform::Facing;
+
+    #[test]
+    fn the_switch_off_changes_the_line_by_nothing() {
+        //: **The claim this feature was allowed on.** Prompt edits here are 1 for 7, and the only
+        //: sentence-level one that paid was a slot fed by state and absent when there is no state.
+        //: If this ever fails, a prompt grew a line nobody measured.
+        let before = "마지막 움직임 3초 전";
+        assert_eq!(camera_line(Some(3.0), 99.0, Facing::NotLookedFor), before);
+        assert_eq!(camera_line(None, 12.0, Facing::NotLookedFor), "12초째 아무 움직임 없음");
+    }
+
+    #[test]
+    fn each_of_the_three_readings_says_a_different_thing() {
+        let of = |f| camera_line(Some(1.0), 9.0, f);
+        let three = [of(Facing::AtIt), of(Facing::Aside), of(Facing::Unreadable)];
+        for (i, a) in three.iter().enumerate() {
+            for b in three.iter().skip(i + 1) {
+                assert_ne!(a, b, "two readings render the same sentence");
+            }
+        }
+    }
+
+    #[test]
+    fn unreadable_does_not_claim_the_head_was_turned() {
+        //: The measurement says it *correlates* with turning. A sentence that said 고개를 돌림 here
+        //: would be asserting what nobody measured, which is the small step that later reads as a
+        //: finding.
+        let unreadable = camera_line(Some(1.0), 9.0, Facing::Unreadable);
+        let aside = camera_line(Some(1.0), 9.0, Facing::Aside);
+        assert!(!unreadable.contains("돌림"), "{unreadable}");
+        assert!(aside.contains("돌림"));
+    }
+
+    #[test]
+    fn the_movement_half_is_untouched_by_the_head_half() {
+        //: One slot carries two facts and the second must not rewrite the first — the failure would
+        //: be silent, because both sentences read fine.
+        for f in [Facing::NotLookedFor, Facing::AtIt, Facing::Aside, Facing::Unreadable] {
+            assert!(camera_line(Some(7.0), 9.0, f).starts_with("마지막 움직임 7초 전"));
         }
     }
 }

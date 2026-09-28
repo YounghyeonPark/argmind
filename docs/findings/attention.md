@@ -89,6 +89,48 @@ is broken, not evidence about the subject. The seconds say the same thing from t
 The harness now asks the open question. **Until it is re-run, nothing is established about the
 expensive path on this axis** beyond what `seeing` already said.
 
+## Wired, 2026-09-23 — and what was deliberately not wired
+
+`설정 → 화면을 보고 있는지 알기`, the fourteenth decidable key, `attention`. Three switches now sit
+under the camera and they are three decisions:
+
+| key | what it allows | what it leaves behind |
+|---|---|---|
+| `camera` | the light stays on, movement is reported | nothing |
+| **`attention`** | **where the head is pointed** | **nothing — a word with an age** |
+| `faces` | the same face is recognised | a row per person, until deleted |
+
+`attention` is its own key because it is its own fact: `camera` says *something moved* and this says
+*a person is pointed at the screen*, which is more about them. It sits above `faces` in the list and
+below it in what it gives away — the roster outlives the session and this evaporates when the device
+closes.
+
+**The reading rides the movement loop.** Two threads on one device is two lights' worth of nothing,
+which is the reason `switch_camera` already refuses to start a second watcher. A face pass runs every
+`FACE_PASS = 1.0 s` while the switch is on — about three readings per movement window — and the
+window is classified at its edge by `pointed()`, a median, because **the constant was derived from
+medians and using it on one frame would be using it against a statistic it was not derived from.**
+
+What that costs: 99 ms of every 1,000 rather than of every 3,000. A movement window needs six looks
+to judge and has room for about ninety at 32 ms each, so it loses roughly a tenth of them.
+
+**Three readings, and the third is not a vote for the second.** `화면 쪽을 봄` / `고개를 돌림` /
+`고개 방향을 읽지 못함`. The last one is where the eyes converged — measured 0 and 1 of 95 looking
+against 22 and 48 of 96 turned, so it correlates with turning, and *correlates* is all that was
+measured. `Facing` has four states rather than an `Option<bool>` for the same reason: *nobody asked*
+and *it could not be read* are different facts, and collapsing them is the pitfall that cost this
+project a round of work once already.
+
+**Nothing is added at rest, and a test holds it.** `camera_line` was lifted out of the camera
+thread's closure so the claim can be run: with the switch off the blackboard line is byte for byte
+what it was before any of this existed. That is the ground the dials were allowed on and it is the
+only ground a fifteenth prompt slot could have had — prompt edits here are 1 for 7.
+
+**And it gates nothing.** The measurement says a turned head reads thirty times a facing one; it does
+not say argmind should behave differently when it does. `somebody_about` still asks only about
+movement, `notice` is still what it gates, and wiring attention into that decision would be shipping
+a behaviour nobody measured. Reporting and acting are two steps and one of them is earned.
+
 ## What this does not answer
 
 **It is a head, not a gaze.** Somebody who holds their head still and looks to the side reads under

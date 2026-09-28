@@ -290,7 +290,8 @@ mod chosen {
     }
 
     pub fn watch_movement(want: Option<&str>, carry_on: &dyn Fn() -> bool,
-                          saw: &mut dyn FnMut(bool, f64),
+                          saw: &mut dyn FnMut(super::Seen),
+                          attending: &dyn Fn() -> bool,
                           faces: &dyn Fn() -> bool,
                           met: &mut dyn FnMut(Vec<f32>)) -> Result<(), String> {
         use argmind_env_windows::camera::{Camera, ENOUGH_TO_JUDGE, MOVING, MOVING_WINDOW};
@@ -301,6 +302,12 @@ mod chosen {
         let mut looker: Option<argmind_env_face::Faces> = None;
         let mut gave_up = false;
         let mut last_face = std::time::Instant::now();
+        //: **Accumulated across the window and classified at its edge**, the way movement already
+        //: is. One frame compared against `HEAD_ASIDE` would be using a constant derived from
+        //: medians against a statistic it was not derived from.
+        let mut heads: Vec<f32> = Vec::new();
+        let mut unreadable = 0u32;
+        let mut embedded = std::time::Instant::now();
         let mut before = None;
         let mut window: Vec<f64> = Vec::new();
         let mut began = std::time::Instant::now();
@@ -327,6 +334,68 @@ mod chosen {
                     continue;
                 }
             }
+            //: **Before the window closes**, so the readings belong to the window they are
+            //: reported with. Below the boundary they would describe the previous one.
+            let wanted = attending() || faces();
+            let cadence = if attending() { super::FACE_PASS } else { super::FACE_EVERY };
+            if wanted && last_face.elapsed().as_secs_f64() >= cadence {
+                last_face = std::time::Instant::now();
+                if looker.is_none() && !gave_up {
+                    //: **A failure is not fatal.** Movement is what the light was turned on for,
+                    //: and a missing model file must not close the camera.
+                    match argmind_env_face::Faces::load(&crate::faces::finder_at())
+                        .and_then(|f| f.also_remember(&crate::faces::namer_at())) {
+                        Ok(f) => looker = Some(f),
+                        Err(why) => {
+                            eprintln!("  faces: 모델을 읽지 못했습니다 — {why}");
+                            gave_up = true;
+                        }
+                    }
+                }
+                if let Some(looker) = &looker {
+                    if let Ok(shot) = camera.photograph(super::FACE_WIDE, super::FACE_TALL) {
+                        match looker.find(&shot.rgb, shot.wide, shot.tall, super::A_FACE) {
+                            Ok(found) if !found.is_empty() => {
+                                //: The largest: one person at a desk is the case this is for, and a
+                                //: face on a poster behind them is smaller. **Two people is not
+                                //: handled** and would show in the roster as one never being seen.
+                                let biggest = found.iter().max_by(|a, b| (a.rect.2 * a.rect.3)
+                                    .partial_cmp(&(b.rect.2 * b.rect.3))
+                                    .unwrap_or(std::cmp::Ordering::Equal));
+                                if let Some(face) = biggest {
+                                    match face.head_on() {
+                                        Some(h) => heads.push(h),
+                                        None => unreadable += 1,
+                                    }
+                                    //: **Embedding stays on the slow cadence.** A stranger does not
+                                    //: arrive three times a second, and 45 ms a pass spent for
+                                    //: nothing is 45 ms movement did not get.
+                                    if faces()
+                                        && embedded.elapsed().as_secs_f64() >= super::FACE_EVERY {
+                                        embedded = std::time::Instant::now();
+                                        if let Ok(Some(print)) =
+                                            looker.embed(&shot.rgb, shot.wide, shot.tall, face) {
+                                            met(print);
+                                        }
+                                    }
+                                }
+                            }
+                            Ok(_) => {}
+                            Err(_) => {}
+                        }
+                    }
+                }
+            }
+            if !wanted {
+                //: Off means off: the model goes, and so does the memory of having failed to read
+                //: it — somebody who fixes a missing file and switches back on should not be told
+                //: about the old failure for the rest of the session.
+                looker = None;
+                gave_up = false;
+                heads.clear();
+                unreadable = 0;
+            }
+
             if began.elapsed().as_secs_f64() < MOVING_WINDOW {
                 continue;
             }
@@ -339,50 +408,26 @@ mod chosen {
             window.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
             let middle = window[window.len() / 2];
             window.clear();
-            saw(middle >= MOVING, so_far);
+            //: **Reported as one value**, and `NotLookedFor` whenever the switch is off — which is
+            //: a different answer from *looked and could not tell*.
+            let facing = if !attending() {
+                super::Facing::NotLookedFor
+            } else {
+                match argmind_env_face::pointed(&heads) {
+                    argmind_env_face::Pointed::AtIt { .. } => super::Facing::AtIt,
+                    argmind_env_face::Pointed::Aside { .. } => super::Facing::Aside,
+                    argmind_env_face::Pointed::Unreadable => super::Facing::Unreadable,
+                }
+            };
+            heads.clear();
+            unreadable = 0;
+            saw(super::Seen { moved: middle >= MOVING, facing, took: so_far });
 
             //: **On the movement thread rather than beside it**, because two threads on one device
             //: is two lights' worth of nothing — the same reason `switch_camera` refuses to start
             //: a second watcher. The cost is that about 150 ms of every `FACE_EVERY` seconds is
             //: spent not sampling movement; at a 3 s window needing 6 samples that is one or two
             //: out of a window, written down rather than assumed harmless.
-            if !faces() {
-                //: Off means off: the model goes, and so does the memory of having failed to read
-                //: it — somebody who fixes a missing file and switches back on should not be told
-                //: about the old failure for the rest of the session.
-                looker = None;
-                gave_up = false;
-                continue;
-            }
-            if last_face.elapsed().as_secs_f64() < super::FACE_EVERY {
-                continue;
-            }
-            last_face = std::time::Instant::now();
-            if looker.is_none() && !gave_up {
-                //: **A failure is not fatal.** Movement is what the light was turned on for, and a
-                //: missing model file must not close the camera.
-                match argmind_env_face::Faces::load(&crate::faces::finder_at())
-                    .and_then(|f| f.also_remember(&crate::faces::namer_at())) {
-                    Ok(f) => looker = Some(f),
-                    Err(why) => {
-                        eprintln!("  faces: 모델을 읽지 못했습니다 — {why}");
-                        gave_up = true;
-                    }
-                }
-            }
-            let Some(looker) = &looker else { continue };
-            let Ok(shot) = camera.photograph(super::FACE_WIDE, super::FACE_TALL) else { continue };
-            let Ok(found) = looker.find(&shot.rgb, shot.wide, shot.tall, super::A_FACE)
-                else { continue };
-            //: The largest, because one person at a desk is the case this is for and a face on a
-            //: poster behind them is smaller. **Two people is not handled** and would show in the
-            //: roster as one of them never being seen.
-            let Some(biggest) = found.iter().max_by(|a, b| (a.rect.2 * a.rect.3)
-                .partial_cmp(&(b.rect.2 * b.rect.3)).unwrap_or(std::cmp::Ordering::Equal))
-                else { continue };
-            if let Ok(Some(print)) = looker.embed(&shot.rgb, shot.wide, shot.tall, biggest) {
-                met(print);
-            }
         }
         Ok(())
     }
@@ -479,7 +524,8 @@ mod chosen {
     }
 
     pub fn watch_movement(_want: Option<&str>, _carry_on: &dyn Fn() -> bool,
-                          _saw: &mut dyn FnMut(bool, f64),
+                          _saw: &mut dyn FnMut(super::Seen),
+                          _attending: &dyn Fn() -> bool,
                           _faces: &dyn Fn() -> bool,
                           _met: &mut dyn FnMut(Vec<f32>)) -> Result<(), String> {
         Err("이 운영체제에서는 카메라를 쓸 수 없습니다".into())
@@ -489,6 +535,44 @@ mod chosen {
         None
     }
 }
+
+/// **Where a head is pointed, as the application is allowed to know it.**
+///
+/// Four states and not an `Option<bool>`. *Nobody asked* and *it could not be read* are different
+/// facts, and collapsing them is pitfall 5 in `docs/findings/harness-pitfalls.md` — *a boolean where
+/// the delta was needed* — which cost this project a round of work once already. The measurement is
+/// in `docs/findings/attention.md`.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum Facing {
+    /// The switch is off, or there are no models. **Nothing was looked for.**
+    NotLookedFor,
+    /// Looked for and the head could not be read all window — near profile, where the two eyes
+    /// converge. Correlates with turning (0 and 1 of 95 against 22 and 48 of 96) and is not it.
+    Unreadable,
+    AtIt,
+    Aside,
+}
+
+/// What one turn of the camera loop found. **Both facts from one tick, in one value**, because they
+/// are one tick: reporting them separately would let a caller pair a movement reading with a head
+/// reading from three seconds earlier and never notice.
+#[derive(Clone, Copy, Debug)]
+pub struct Seen {
+    pub moved: bool,
+    pub facing: Facing,
+    /// How long the window actually took, in seconds.
+    pub took: f64,
+}
+
+/// How often a face pass runs while attention is switched on.
+///
+/// **One second, which buys about three readings per movement window.** The measurement took its
+/// medians over roughly ninety samples a phase; three is not that statistic and a caller must not
+/// quote the two as comparable. It is enough to land on the right side of a thirty-fold gap, and
+/// what it costs is about a tenth of the loop — at 99 ms a pass against a 32 ms look, three passes
+/// take 300 ms of every 3,000, where a window needs six looks to judge movement and has room for
+/// ninety.
+pub const FACE_PASS: f64 = 1.0;
 
 /// How often the camera loop stops sampling movement and looks for a face.
 ///
@@ -559,7 +643,8 @@ mod chosen {
     }
 
     pub fn watch_movement(_want: Option<&str>, _carry_on: &dyn Fn() -> bool,
-                          _saw: &mut dyn FnMut(bool, f64),
+                          _saw: &mut dyn FnMut(super::Seen),
+                          _attending: &dyn Fn() -> bool,
                           _faces: &dyn Fn() -> bool,
                           _met: &mut dyn FnMut(Vec<f32>)) -> Result<(), String> {
         Err("이 운영체제에서는 카메라를 쓸 수 없습니다".into())

@@ -98,7 +98,7 @@ impl Standing {
 /// **A fixed list rather than any string the page sends.** A key is what a stored *yes* is attached
 /// to, so a page that could invent one could invent a permission the program never asks about — and
 /// a typo would silently create a second, always-unanswered copy of a real one.
-pub const DECIDABLE: [&str; 13] = [
+pub const DECIDABLE: [&str; 14] = [
     //: The needs from `needs.rs`. `korean-voice` and `vulkan` are elevation, the rest change the
     //: machine.
     "ollama", "model", "whisper", "korean-voice", "vulkan", "speaker", "face-models",
@@ -114,6 +114,12 @@ pub const DECIDABLE: [&str; 13] = [
     //: every half minute — a light that is on means a camera that is on, and a blinking one says
     //: *mostly off*, which would not be true.
     "camera",
+    //: **A third thing the same open camera can say, and its own key because it is its own fact.**
+    //: `camera` reports whether anything moved; this reports whether a head is pointed at the
+    //: screen, which is more about a person than movement is. It writes nothing down — what reaches
+    //: the blackboard is a word with an age and it evaporates — so it sits above `faces` and below
+    //: `camera` in how much it gives away, and somebody may well want the light on without it.
+    "attention",
     //: **And the one that writes something down about a person.** `camera` is a light that stays
     //: on; this is a row in a file that outlives the session. They are two questions and the
     //: second is the heavier one — allowing a camera to be open is not agreeing that what it sees
@@ -154,6 +160,10 @@ pub fn what(key: &str) -> &'static str {
         //: **Not 카메라 사용**, which would read as *may it take a picture*. What is allowed is a
         //: camera that stays on; what leaves the module is never a picture.
         "camera" => "카메라로 사람 알아보기",
+        //: **Not 시선 추적.** What is measured is where a *head* points; somebody holding their head
+        //: still and looking sideways reads as facing the screen, and a name promising gaze would be
+        //: promising the one case this cannot do.
+        "attention" => "화면을 보고 있는지 알기",
         //: **Not 얼굴 인식**, which would say argmind knows who somebody is. It knows that two
         //: faces are the same face; a name is something a person types, and this row's own note
         //: says so where it is switched on.

@@ -346,6 +346,20 @@ gate did the choosing, since InsightFace's weights are non-commercial and YuNet 
 the one case the model can see and this cannot — and pricing that case is exactly what the leading
 question voided. `camera::MOVING` still answers *is somebody at the desk* in 32 ms with neither.
 
+**And the cheap one is wired, as a reading and not as a gate.** `attention` is the fourteenth
+decidable key and `설정 → 화면을 보고 있는지 알기` is the switch; three switches sit under the camera
+because they are three decisions — the light, the head, the roster — and only the third leaves
+anything behind. The reading rides the movement loop rather than a second thread on the same device,
+a face pass every `FACE_PASS = 1 s` giving about three readings a window, and the window is
+classified by a **median**, because the constant came from medians and using it on one frame would be
+using it against a statistic it was not derived from. **Three readings and the third is not a vote
+for the second**: 화면 쪽을 봄 / 고개를 돌림 / 고개 방향을 읽지 못함, and `Facing` carries four states
+rather than an `Option<bool>` so that *nobody asked* and *could not be read* stay apart. **Nothing is
+added at rest and `camera_line` is a function so a test can say so** — with the switch off the
+blackboard line is byte for byte what it was, which is the only ground a new prompt slot could have
+had. **It gates nothing**: `somebody_about` still asks about movement alone, because nothing has
+measured that a turned head should change what argmind does on a tick.
+
 **That is blocked on twenty seconds of the owner's time, and until 2026-09-22 it was blocked on a
 broken instrument.** `measure/presence` asks a person to hold still and then move; run with nobody
 moving in either phase it separated them **2.17 against 0.65**, three to one in the wrong direction,
