@@ -358,32 +358,7 @@ fn propose(desk: &mut Desk, out: &Listeners, effect: Effect) {
             //: least as deliberate as somebody who pressed a button, so a second press would be
             //: ceremony.
             argmind_core::session::Found::Several(same) => {
-                let among: Vec<String> = same.iter().enumerate()
-                    //: **Coordinates, to a person.** The rule is that the *model* is never shown a
-                    //: rectangle; somebody looking at their own screen is exactly who a position
-                    //: helps, and it is the only thing that tells two identically named buttons
-                    //: apart. First cut — an ordinal and a point; whether that is enough to choose
-                    //: by is unmeasured.
-                    .map(|(i, w)| {
-                        let (x, y) = w.centre();
-                        format!("{}번째 · 화면 {x}, {y}", i + 1)
-                    }).collect();
-                let what = label(&effect, None);
-                desk.session.remember_doing(&[], &[], std::slice::from_ref(&effect), &[]);
-                let token = desk.proposals.offer(effect, what.clone(), String::new());
-                let raised = {
-                    let mut open = desk.wonders.lock().unwrap_or_else(|e| e.into_inner());
-                    open.ask(crate::wonders::About::WhichOne { token, what, among })
-                        .map(wonder_json)
-                };
-                match raised {
-                    Some(json) => out.send("wonder", &json),
-                    //: One question at a time. A second ambiguous click while the first is
-                    //: unanswered is told and dropped rather than queued — the pile of confirm
-                    //: buttons, arriving somewhere else.
-                    None => out.send("note",
-                        "어느 것인지 물어볼 것이 이미 하나 있어서 이번 건은 넘어갑니다"),
-                }
+                ask_which(desk, out, effect, &same);
                 return;
             }
             argmind_core::session::Found::One(found) => {
@@ -442,7 +417,9 @@ fn propose(desk: &mut Desk, out: &Listeners, effect: Effect) {
 
 /// **The only place in this program that performs anything.**
 fn act(desk: &mut Desk, out: &Listeners, p: Proposal) {
+    let before = (desk.session.ambiguous, desk.session.chose_too_late);
     let (did, downgraded, refused) = desk.session.perform(std::slice::from_ref(&p.effect));
+    let after = (desk.session.ambiguous, desk.session.chose_too_late);
     desk.session.remember_doing(&did, &refused, &[], &[]);
     //: **The core refused because nobody asked for this**, which is a different outcome from
     //: *done* and from *gone*, and until 2026-09-22 it was reported as `ran`.
@@ -465,10 +442,34 @@ fn act(desk: &mut Desk, out: &Listeners, p: Proposal) {
         return;
     }
     if !refused.is_empty() {
-        //: **Gone between the offer and the button** — the case the whole re-resolve exists for,
-        //: and a proper outcome rather than an error.
-        out.send("gone",
-                 &format!("{{\"token\":{},\"what\":\"{}\"}}", p.token, escape(&p.effect.target)));
+        match why_refused((before.0, after.0), (before.1, after.1)) {
+            //: **Gone between the offer and the button** — the case the whole re-resolve exists
+            //: for, and a proper outcome rather than an error.
+            Refusal::Gone => out.send("gone",
+                &format!("{{\"token\":{},\"what\":\"{}\"}}", p.token, escape(&p.effect.target))),
+            //: **There, and more than once.** `dropped` takes the row off without the page's
+            //: *그새 사라짐*, which would be false, and the question goes up from a fresh look —
+            //: the list it offers is the screen as it is now, not as it was when the offer was made.
+            why => {
+                out.send("dropped", &p.token.to_string());
+                out.send("note", if why == Refusal::Outrun {
+                    "고르시는 동안 화면이 바뀌어 누르지 않았습니다 — 지금 화면으로 다시 여쭙니다"
+                } else {
+                    "제안한 뒤에 같은 이름이 더 생겨서 누르지 않았습니다 — 어느 것인지 여쭙니다"
+                });
+                match desk.session.find(&p.effect.target, &p.effect.role) {
+                    argmind_core::session::Found::Several(same) =>
+                        ask_which(desk, out, p.effect.clone(), &same),
+                    //: It settled back to one, or went, in the moment between the refusal and
+                    //: this look. Either way there is nothing to ask and the person is told.
+                    argmind_core::session::Found::One(_) => out.send("note",
+                        "다시 보니 하나뿐입니다 — 필요하면 다시 말씀해 주세요"),
+                    argmind_core::session::Found::Gone => out.send("gone",
+                        &format!("{{\"token\":{},\"what\":\"{}\"}}", p.token,
+                                 escape(&p.effect.target))),
+                }
+            }
+        }
         return;
     }
     let confirmed = match did.first().and_then(|d| d.confirmed) {
@@ -986,6 +987,74 @@ fn people_json(people: &crate::people::People) -> String {
         "{{\"key\":\"{}\",\"name\":\"{}\",\"first\":{},\"last\":{},\"times\":{}}}",
         escape(&p.key), escape(&p.name), p.first, p.last, p.times)).collect();
     format!("[{}]", rows.join(","))
+}
+
+/// **Ask which of several identically named things was meant.** The question replaces the offer.
+///
+/// Called from two places and that is why it is a function: from `propose`, when the copies were
+/// already there at offer time, and from `act`, when they appeared between the offer and the press.
+/// **Neither caller can reach `act` again through here** — the only way from this question to a
+/// click is a person answering it — which is what keeps the one path that presses anything free of
+/// a loop on a screen that keeps changing.
+fn ask_which(desk: &mut Desk, out: &Listeners, mut effect: Effect,
+             same: &[argmind_core::contract::Widget]) {
+    //: **A stale answer is not carried into a new question.** The count it was chosen against is
+    //: exactly what just failed to match.
+    effect.which = None;
+    let among: Vec<String> = same.iter().enumerate()
+        //: **Coordinates, to a person.** The rule is that the *model* is never shown a rectangle;
+        //: somebody looking at their own screen is exactly who a position helps, and it is the
+        //: only thing that tells two identically named buttons apart. First cut — an ordinal and a
+        //: point; whether that is enough to choose by is unmeasured.
+        .map(|(i, w)| {
+            let (x, y) = w.centre();
+            format!("{}번째 · 화면 {x}, {y}", i + 1)
+        }).collect();
+    let what = label(&effect, None);
+    desk.session.remember_doing(&[], &[], std::slice::from_ref(&effect), &[]);
+    let token = desk.proposals.offer(effect, what.clone(), String::new());
+    let raised = {
+        let mut open = desk.wonders.lock().unwrap_or_else(|e| e.into_inner());
+        open.ask(crate::wonders::About::WhichOne { token, what, among }).map(wonder_json)
+    };
+    match raised {
+        Some(json) => out.send("wonder", &json),
+        //: One question at a time. A second ambiguous click while the first is unanswered is told
+        //: and **declined**, so its token does not sit in `Proposals` waiting for a press that has
+        //: no row to be pressed from.
+        None => {
+            desk.proposals.decline(token);
+            out.send("note", "어느 것인지 물어볼 것이 이미 하나 있어서 이번 건은 넘어갑니다");
+        }
+    }
+}
+
+/// **Why `perform` refused**, read off the counters it keeps rather than guessed from the effect.
+///
+/// Three reasons and they want three different sentences. Until 2026-09-28 `act` reported every
+/// refusal as `gone` — which the page prints as *그새 사라짐* — so somebody who had just answered
+/// *which `Open`?* and been outrun by the screen was told the button had vanished, when there were
+/// in fact two of it. The core counted them apart from the day `Several` existed; the one place that
+/// speaks to a person folded them back together, which is pitfall 5 arriving in the newest code.
+#[derive(Debug, PartialEq)]
+pub enum Refusal {
+    /// Not on screen any more — the case re-resolving exists for.
+    Gone,
+    /// It was one thing at offer time and is several now.
+    Copies,
+    /// A person chose one, and by the press the count had changed under them.
+    Outrun,
+}
+
+/// Compare the counters from before and after one `perform`.
+pub fn why_refused(ambiguous: (u32, u32), late: (u32, u32)) -> Refusal {
+    if late.1 > late.0 {
+        Refusal::Outrun
+    } else if ambiguous.1 > ambiguous.0 {
+        Refusal::Copies
+    } else {
+        Refusal::Gone
+    }
 }
 
 /// Carry out whatever one answered question meant.
@@ -2377,6 +2446,38 @@ fn serve_one(mut stream: TcpStream, out: &Listeners, token: &str, jobs: &Sender<
         Route::Unknown => {
             let _ = stream.write_all(&respond("404 Not Found", "text/plain", "no"));
         }
+    }
+}
+
+#[cfg(test)]
+mod refusal_tests {
+    use super::{why_refused, Refusal};
+
+    #[test]
+    fn nothing_counted_is_the_ordinary_gone() {
+        assert_eq!(why_refused((0, 0), (0, 0)), Refusal::Gone);
+        assert_eq!(why_refused((4, 4), (2, 2)), Refusal::Gone);
+    }
+
+    #[test]
+    fn copies_that_appeared_are_not_reported_as_vanishing() {
+        //: **The defect this exists for.** Every refusal used to reach the page as `gone`, which
+        //: prints 그새 사라짐 — about a button that was there twice.
+        assert_eq!(why_refused((0, 1), (0, 0)), Refusal::Copies);
+    }
+
+    #[test]
+    fn an_answer_the_screen_outran_is_its_own_outcome() {
+        //: Somebody answered the question a moment ago. Telling them the thing vanished would be
+        //: the worst of the three sentences to get wrong, because they were looking at it.
+        assert_eq!(why_refused((0, 0), (0, 1)), Refusal::Outrun);
+    }
+
+    #[test]
+    fn late_wins_when_both_moved() {
+        //: `perform` handles one effect here and counts one of them, but a caller handing it more
+        //: than one could see both move. *Outrun* is the more specific fact about a person's answer.
+        assert_eq!(why_refused((0, 1), (0, 1)), Refusal::Outrun);
     }
 }
 

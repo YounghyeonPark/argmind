@@ -69,6 +69,21 @@
 //! opened was the **character set** list. So advanced view has at least two buttons named `Open`,
 //! and the agent resolved to the wrong one. The delta is what proves which.
 //!
+//! ## Since 2026-09-28 it asks, and this harness answers the way a person would
+//!
+//! `Session::find` now returns `Found::Several` for that screen instead of guessing, and the
+//! application asks *which `Open`?* with one button per copy. A harness has nobody to ask, so the
+//! font goal carries a **stand-in**: the answer a person looking at Character Map would give — *the
+//! one beside the `Font :` box* — computed as the copy nearest that combo. It then acts through the
+//! same `Effect::which` the application's answer uses.
+//!
+//! **What that measures and what it does not.** It measures the mechanism end to end on a real
+//! window: that the ambiguity is detected, that an index reaches the widget it names, and that the
+//! goal is then met. **It does not measure whether a real person would choose right** from
+//! *2번째 · 화면 391, 107* — the stand-in knows which box is the font box because this file says so.
+//! The summary prints *after asking* apart, so the agent-alone number stays comparable to the 2 of 3
+//! above.
+//!
 //! **The model could not have done better.** It is shown `name, role` pairs; three identical
 //! `Open / button` entries give it no way to name the one it means. This is the same defect as the
 //! `text` label reading `Font :` in front of a `combo box` of the same name — the one the `role`
@@ -84,9 +99,9 @@ use std::collections::BTreeSet;
 use std::thread::sleep;
 use std::time::Duration;
 
-use argmind_core::contract::Speaks;
-use argmind_core::intent::Trigger;
-use argmind_core::session::Session;
+use argmind_core::contract::{Eyes, Speaks};
+use argmind_core::intent::{Among, Trigger};
+use argmind_core::session::{Found, Session};
 use argmind_env_ollama::Local;
 use argmind_env_windows::hands::Did;
 use argmind_env_windows::{foreground_is, is_minimised, pointing, Pointing, to_front, windows_of,
@@ -124,10 +139,20 @@ impl Expect {
     }
 }
 
-const GOALS: [(&str, Expect); 3] = [
-    ("고급 옵션 켜줘", Expect::Appears("search")),
-    ("글꼴 목록 열어줘", Expect::Appears("arial")),
-    ("이 창 최소화해", Expect::Minimised),
+/// **How a person would answer *which one?* for this goal**, if it comes up: the copy nearest the
+/// widget with this name and role. `None` means the harness has no stand-in and an ambiguous goal
+/// is reported and skipped.
+///
+/// Written before any run, like `Expect`, and for the same reason: an answer chosen after seeing
+/// which copy worked is not a stand-in for a person, it is the result copied into the question.
+type StandIn = Option<(&'static str, &'static str)>;
+
+const GOALS: [(&str, Expect, StandIn); 3] = [
+    ("고급 옵션 켜줘", Expect::Appears("search"), None),
+    //: The font list's drop-down is the `Open` immediately beside the `Font :` combo — measured in
+    //: basic view at `(391, 107)` against a combo spanning `x 86..407`.
+    ("글꼴 목록 열어줘", Expect::Appears("arial"), Some(("Font :", "combo box"))),
+    ("이 창 최소화해", Expect::Minimised, None),
 ];
 
 /// Every named thing across **every** window the process owns.
@@ -194,7 +219,10 @@ fn run() -> i32 {
              if dry { "DRY — nothing will be pressed" } else { "LIVE — it will press buttons" });
 
     let (mut worked, mut moved) = (0, 0);
-    for (goal, expect) in &GOALS {
+    //: **Counted apart**, so the agent-alone number stays comparable with the 2 of 3 measured before
+    //: asking existed. Folding them together would report the stand-in's knowledge as the agent's.
+    let (mut asked, mut worked_after_asking) = (0, 0);
+    for (goal, expect, stand_in) in &GOALS {
         to_front(main_window);
         sleep(Duration::from_millis(400));
         if !foreground_is(pid) {
@@ -206,26 +234,47 @@ fn run() -> i32 {
         let before = named(&mut session.eyes, pid);
         let intent = session.decide(&Trigger::said(goal));
         let clicks: Vec<_> = intent.effects.iter().filter(|e| e.kind == "click").cloned().collect();
-        let Some(click) = clicks.first() else {
+        let Some(first) = clicks.first() else {
             println!("  NO CLICK  {:<22} said {:?}", trim(goal), trim(&intent.say));
             continue;
         };
+        //: Owned, because an answer to *which one?* is written into it.
+        let mut click = first.clone();
+        let mut was_asked = false;
         //: **Re-resolved immediately before acting**, because a listed widget is gone 13 times in
         //: 14 over the second a call takes.
         //: **Three outcomes, printed apart.** The measured miss on 2026-09-16 was this harness
         //: reporting a click that landed on the wrong copy of a same-named button; collapsing
         //: `Several` into `GONE` would hide it a second way.
         let target = match session.find(&click.target, &click.role) {
-            argmind_core::session::Found::One(w) => w,
-            argmind_core::session::Found::Gone => {
+            Found::One(w) => w,
+            Found::Gone => {
                 println!("  GONE      {:<22} {:?} was not there to click", trim(goal),
                          trim(&click.target));
                 continue;
             }
-            argmind_core::session::Found::Several(same) => {
+            Found::Several(same) => {
                 println!("  AMBIGUOUS {:<22} {:?} matches {} widgets — a name is not a key",
                          trim(goal), trim(&click.target), same.len());
-                continue;
+                let Some((near_name, near_role)) = stand_in else { continue };
+                let reading = session.eyes.foreground();
+                let Some(anchor) = reading.iter()
+                    .find(|w| w.name == *near_name && w.role == *near_role) else {
+                    println!("            no {near_name:?} {near_role:?} on screen to answer by");
+                    continue;
+                };
+                let a = anchor.centre();
+                let Some((k, chosen)) = same.iter().enumerate().min_by_key(|(_, w)| {
+                    let c = w.centre();
+                    (c.0 - a.0).pow(2) + (c.1 - a.1).pow(2)
+                }) else { continue };
+                let (cx, cy) = chosen.centre();
+                println!("  ASKED     {:<22} stand-in answered {} of {} — the one beside {:?} at \
+({cx}, {cy})", trim(goal), k + 1, same.len(), near_name);
+                click.which = Some(Among { index: k, of: same.len() });
+                was_asked = true;
+                asked += 1;
+                chosen.clone()
             }
         };
         if !foreground_is(pid) {
@@ -233,7 +282,7 @@ fn run() -> i32 {
             continue;
         }
 
-        session.perform(std::slice::from_ref(click));
+        session.perform(std::slice::from_ref(&click));
         let did = session.hands.done.last().cloned();
         sleep(Duration::from_millis(900));
         let after = named(&mut session.eyes, pid);
@@ -241,6 +290,9 @@ fn run() -> i32 {
         let met = expect.holds(&before, &after, main_window);
         if met {
             worked += 1;
+            if was_asked {
+                worked_after_asking += 1;
+            }
         }
         if changed {
             moved += 1;
@@ -267,6 +319,12 @@ fn run() -> i32 {
 
     println!("\n  {worked} of {} did the expected thing; {moved} changed the window at all",
              GOALS.len());
+    //: **The agent alone and the agent with a person are two numbers.** The first is comparable to
+    //: 2 of 3; the second measures that asking routes to the right widget, not that a person would
+    //: have picked it — the stand-in's answer is this file's knowledge.
+    println!("  alone {} of {} · asked {asked}, worked after asking {worked_after_asking} · \
+ambiguous refused {} · chose too late {}",
+             worked - worked_after_asking, GOALS.len(), session.ambiguous, session.chose_too_late);
     //: **Passed the guard and actually went out are two numbers**, and a dry run has the first
     //: without the second. Printing one of them as the other is how a dry run comes to read as
     //: evidence that something was pressed.
