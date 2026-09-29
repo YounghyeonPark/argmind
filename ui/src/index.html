@@ -55,6 +55,9 @@
   .line.noticed::before { content: "◦ "; }
 
   #noticing { font-size: 12px; color: var(--warn); white-space: nowrap; }
+  #sense { font-size: 12px; color: var(--dim); white-space: nowrap; }
+  #sense .away { color: var(--warn); }
+  #held { font-size: 12px; color: var(--warn); white-space: nowrap; }
   .switch { display: grid; grid-template-columns: auto 1fr; gap: 2px 8px;
             padding: 8px 14px 10px; cursor: pointer; }
   .switch input { margin: 2px 0 0; }
@@ -164,6 +167,12 @@
          by default now and a header button for something already on is a button that only ever
          gets pressed by accident. -->
     <span id="noticing" hidden></span>
+    <!-- What the camera reads, shown to the person and not only to the model. Until 2026-09-29
+         this reached the blackboard alone, so every camera feature was invisible by construction —
+         and the owner, trying all four, could not tell working from broken. The *away* half is the
+         one that matters most: it is the gate that stops argmind speaking first at all. -->
+    <span id="sense" hidden></span>
+    <span id="held" hidden>할 말 대기 중</span>
     <span id="status"></span>
   </header>
   <div id="spent"></div>

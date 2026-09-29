@@ -293,6 +293,33 @@ let noticedSoFar = 0;
 // The switch is in 설정 and the header only reports. **Two elements for one fact**, which is worth
 // it here: watching is on by default now, so the thing a person needs at a glance is *is it
 // looking right now*, and the thing they need occasionally is *make it stop*.
+// ---- what the camera reads ---------------------------------------------------------------------
+const sense = document.getElementById("sense");
+const held = document.getElementById("held");
+stream.addEventListener("sense", (e) => {
+    const raw = e.data;
+    if (raw === "null") {
+        sense.hidden = true;
+        return;
+    }
+    const d = JSON.parse(raw);
+    sense.hidden = false;
+    sense.replaceChildren();
+    sense.append(`카메라 · ${d.camera}`);
+    if (!d.present) {
+        // **The gate, said out loud.** This is what stops argmind speaking first at all, and it was
+        // silent: five minutes of sitting still and every unprompted remark stopped with no sign why.
+        const away = document.createElement("span");
+        away.className = "away";
+        away.textContent = " · 자리 비움으로 봄 — 먼저 말 걸지 않음";
+        sense.append(away);
+    }
+});
+// 눈치's only effect is a remark not yet made, so it has to be seen or it cannot be told from
+// broken.
+stream.addEventListener("held", (e) => {
+    held.hidden = e.data !== "1";
+});
 function drawNoticing(on, count) {
     noticedSoFar = count;
     notice.checked = on;

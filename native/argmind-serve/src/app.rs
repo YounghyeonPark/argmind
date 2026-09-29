@@ -192,6 +192,8 @@ struct Desk {
     /// thread each window, read by `notice`. The age matters: a reading from a camera that stalled
     /// a minute ago is no evidence, and `tact` treats no evidence as *say it*.
     facing_now: Arc<Mutex<Option<(crate::platform::Facing, Instant)>>>,
+    /// **When a face was last in view.** Presence evidence apart from movement — see `present`.
+    face_seen_at: Arc<Mutex<Option<Instant>>>,
     /// How many thoughts started without being asked for, and how many of those said something.
     /// **Counted where a person can see it**, because "how often does this happen on your desktop"
     /// is the question that decides whether it is worth having on.
@@ -819,6 +821,7 @@ fn switch_camera(desk: &mut Desk, out: &Listeners, on: bool) {
     let (people, want_faces) = (Arc::clone(&desk.people), Arc::clone(&desk.want_faces));
     let want_attention = Arc::clone(&desk.want_attention);
     let facing_now = Arc::clone(&desk.facing_now);
+    let face_seen_at = Arc::clone(&desk.face_seen_at);
     let wonders = Arc::clone(&desk.wonders);
     let senses = desk.senses.clone();
     let out = Arc::clone(&desk.speaks_to);
@@ -839,14 +842,29 @@ fn switch_camera(desk: &mut Desk, out: &Listeners, on: bool) {
         let outcome = crate::platform::watch_movement(
             chosen.as_deref(), &carry_on,
             &mut |seen| {
+                if let Some(why) = &seen.broke {
+                    out.send("note", why);
+                }
                 if seen.moved {
                     last_moved = Some(Instant::now());
                     *moved_at.lock().unwrap_or_else(|e| e.into_inner()) = last_moved;
+                }
+                if seen.face {
+                    *face_seen_at.lock().unwrap_or_else(|e| e.into_inner()) = Some(Instant::now());
                 }
                 *facing_now.lock().unwrap_or_else(|e| e.into_inner()) =
                     Some((seen.facing, Instant::now()));
                 let what = camera_line(last_moved.map(|at| at.elapsed().as_secs_f64()),
                                        began.elapsed().as_secs_f64(), seen.facing);
+                //: **To the person as well as to the model.** Until 2026-09-29 this line went to
+                //: the blackboard only, which is read by the thinking tick and shown to nobody —
+                //: so every camera feature was invisible by construction, and turning one on and
+                //: seeing nothing was indistinguishable from turning on one that was broken.
+                let here = present(
+                    moved_at.lock().ok().and_then(|m| m.map(|t| t.elapsed().as_secs_f64())),
+                    face_seen_at.lock().ok().and_then(|f| f.map(|t| t.elapsed().as_secs_f64())));
+                out.send("sense", &format!("{{\"camera\":\"{}\",\"present\":{here}}}",
+                                           escape(&what)));
                 senses.saw("카메라", what, seen.took);
             },
             &|| want_attention.load(Ordering::SeqCst) && crate::faces::here(),
@@ -909,6 +927,8 @@ fn switch_camera(desk: &mut Desk, out: &Listeners, on: bool) {
         //: **The reading goes with the device.** A 눈치 that went on holding remarks because the last
         //: thing a closed camera said was *turned away* would be a mute nobody pressed.
         *facing_now.lock().unwrap_or_else(|e| e.into_inner()) = None;
+        *face_seen_at.lock().unwrap_or_else(|e| e.into_inner()) = None;
+        out.send("sense", "null");
         //: **The counters, on the way out.** Every new person was written when they arrived; what
         //: is left is 마지막 본 때 and how many times, which are worth a write and not worth one
         //: every three seconds.
@@ -942,6 +962,8 @@ fn camera_line(moved_secs_ago: Option<f64>, since_open: f64,
     };
     match facing {
         crate::platform::Facing::NotLookedFor => {}
+        //: **Nobody to read**, which is not the same as a head that could not be read.
+        crate::platform::Facing::NoFace => what.push_str(" · 얼굴 안 보임"),
         crate::platform::Facing::AtIt => what.push_str(" · 화면 쪽을 봄"),
         crate::platform::Facing::Aside => what.push_str(" · 고개를 돌림"),
         //: **Said as itself.** It correlates with a turned head and is not it — 0 and 1 of 95
@@ -1200,8 +1222,26 @@ fn somebody_about(desk: &Desk) -> Option<bool> {
     if !fresh {
         return None;
     }
-    let at = desk.moved_at.lock().ok()?;
-    Some(at.is_some_and(|t| t.elapsed().as_secs_f64() < AWAY_AFTER))
+    let moved = desk.moved_at.lock().ok()?.map(|t| t.elapsed().as_secs_f64());
+    let face = desk.face_seen_at.lock().ok()?.map(|t| t.elapsed().as_secs_f64());
+    Some(present(moved, face))
+}
+
+/// **Is somebody there**, from how long ago something moved and how long ago a face was seen.
+///
+/// **Movement alone went quiet on a person sitting still**, and `camera.rs` said it would: the
+/// threshold was measured with somebody moving on purpose, and *a person reading without shifting
+/// is below it*. Five minutes of reading and `notice` stopped for good — the owner, 2026-09-29,
+/// tried every camera feature and saw nothing, and this gate returning *nobody here* before any
+/// trigger was polled is the one thing that silences all of them at once.
+///
+/// **A face is the stronger evidence and it is measured**: over the `attending` run, with a person
+/// at the desk, YuNet found a face on **382 of 382** passes — not one miss, looking or turned. It
+/// only counts when a face pass is running, which is when *화면을 보고 있는지 알기* or *본 얼굴
+/// 기억하기* is on; with both off this is movement alone, exactly as before.
+pub fn present(moved_ago: Option<f64>, face_ago: Option<f64>) -> bool {
+    let recent = |ago: Option<f64>| ago.is_some_and(|s| s < AWAY_AFTER);
+    recent(moved_ago) || recent(face_ago)
 }
 
 fn notice(desk: &mut Desk, out: &Listeners, now: f64) {
@@ -1257,6 +1297,10 @@ fn notice(desk: &mut Desk, out: &Listeners, now: f64) {
             crate::tact::Now::Hold => {
                 let window = desk.session.eyes.window().1;
                 desk.held = Some((intent, window, Instant::now()));
+                //: **Holding is shown.** 눈치's only effect is a remark not made, and a dial whose
+                //: effect is invisible is one nobody can tell from a broken one — which is what
+                //: the owner reported on 2026-09-29.
+                out.send("held", "1");
             }
         }
     }
@@ -1283,8 +1327,9 @@ fn release_held(desk: &mut Desk, out: &Listeners) {
     match crate::tact::held(desk.nunchi, evidence(desk), since_last(desk), same,
                             at.elapsed().as_secs_f64()) {
         crate::tact::Held::Keep => desk.held = Some((intent, window, at)),
-        crate::tact::Held::Drop => {}
+        crate::tact::Held::Drop => out.send("held", "0"),
         crate::tact::Held::Release => {
+            out.send("held", "0");
             let reply = spoken(&intent);
             //: Checked again: something else may have been said while this one waited.
             if !reply.is_empty()
@@ -1914,7 +1959,8 @@ pub fn run(how: How) {
                               senses: senses.clone(), turn: turn.clone(),
                               before: Vec::new(), lately_noticed: Vec::new(), noticed: 0,
                               nunchi: crate::tact::remembered(), held: None, last_remark: None,
-                              facing_now: Arc::new(Mutex::new(None)) };
+                              facing_now: Arc::new(Mutex::new(None)),
+                              face_seen_at: Arc::new(Mutex::new(None)) };
         //: **The button is the permission, which is what this flag is for** — `session.rs`:
         //: *an interface with a confirm button turns this on and gates with the button instead*.
         //: This application has the button and did not turn it on, so `perform` refused every
@@ -2543,6 +2589,31 @@ fn serve_one(mut stream: TcpStream, out: &Listeners, token: &str, jobs: &Sender<
 }
 
 #[cfg(test)]
+mod presence_tests {
+    use super::{present, AWAY_AFTER};
+
+    #[test]
+    fn a_face_keeps_a_still_person_present() {
+        //: **The case that silenced everything.** Nothing has crossed the movement threshold for
+        //: ten minutes, and there is a face in view.
+        assert!(present(Some(600.0), Some(2.0)));
+        assert!(present(None, Some(2.0)));
+    }
+
+    #[test]
+    fn with_no_face_pass_it_is_movement_alone_as_before() {
+        assert!(present(Some(10.0), None));
+        assert!(!present(Some(AWAY_AFTER + 1.0), None));
+        assert!(!present(None, None));
+    }
+
+    #[test]
+    fn an_old_face_is_not_a_person_now() {
+        assert!(!present(None, Some(AWAY_AFTER + 1.0)));
+    }
+}
+
+#[cfg(test)]
 mod refusal_tests {
     use super::{why_refused, Refusal};
 
@@ -2592,7 +2663,8 @@ mod attention_tests {
     #[test]
     fn each_of_the_three_readings_says_a_different_thing() {
         let of = |f| camera_line(Some(1.0), 9.0, f);
-        let three = [of(Facing::AtIt), of(Facing::Aside), of(Facing::Unreadable)];
+        let three = [of(Facing::AtIt), of(Facing::Aside), of(Facing::Unreadable),
+                     of(Facing::NoFace)];
         for (i, a) in three.iter().enumerate() {
             for b in three.iter().skip(i + 1) {
                 assert_ne!(a, b, "two readings render the same sentence");
@@ -2615,7 +2687,8 @@ mod attention_tests {
     fn the_movement_half_is_untouched_by_the_head_half() {
         //: One slot carries two facts and the second must not rewrite the first — the failure would
         //: be silent, because both sentences read fine.
-        for f in [Facing::NotLookedFor, Facing::AtIt, Facing::Aside, Facing::Unreadable] {
+        for f in [Facing::NotLookedFor, Facing::AtIt, Facing::Aside, Facing::Unreadable,
+                  Facing::NoFace] {
             assert!(camera_line(Some(7.0), 9.0, f).starts_with("마지막 움직임 7초 전"));
         }
     }

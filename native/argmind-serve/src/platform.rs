@@ -307,7 +307,9 @@ mod chosen {
         //: medians against a statistic it was not derived from.
         let mut heads: Vec<f32> = Vec::new();
         let mut unreadable = 0u32;
+        let mut faces_found = 0u32;
         let mut embedded = std::time::Instant::now();
+        let mut broke: Option<String> = None;
         let mut before = None;
         let mut window: Vec<f64> = Vec::new();
         let mut began = std::time::Instant::now();
@@ -343,11 +345,17 @@ mod chosen {
                 if looker.is_none() && !gave_up {
                     //: **A failure is not fatal.** Movement is what the light was turned on for,
                     //: and a missing model file must not close the camera.
+                    //:
+                    //: **And not silent either.** Until 2026-09-29 this went to stderr only, which
+                    //: nobody running the window reads: the owner turned both face switches on,
+                    //: saw nothing happen, and had no way to know whether a model had failed or a
+                    //: face had simply not been found. It rides out on the next `Seen` instead.
                     match argmind_env_face::Faces::load(&crate::faces::finder_at())
                         .and_then(|f| f.also_remember(&crate::faces::namer_at())) {
                         Ok(f) => looker = Some(f),
                         Err(why) => {
                             eprintln!("  faces: 모델을 읽지 못했습니다 — {why}");
+                            broke = Some(format!("얼굴 모델을 읽지 못했습니다 — {why}"));
                             gave_up = true;
                         }
                     }
@@ -356,6 +364,7 @@ mod chosen {
                     if let Ok(shot) = camera.photograph(super::FACE_WIDE, super::FACE_TALL) {
                         match looker.find(&shot.rgb, shot.wide, shot.tall, super::A_FACE) {
                             Ok(found) if !found.is_empty() => {
+                                faces_found += 1;
                                 //: The largest: one person at a desk is the case this is for, and a
                                 //: face on a poster behind them is smaller. **Two people is not
                                 //: handled** and would show in the roster as one never being seen.
@@ -412,6 +421,8 @@ mod chosen {
             //: a different answer from *looked and could not tell*.
             let facing = if !attending() {
                 super::Facing::NotLookedFor
+            } else if faces_found == 0 {
+                super::Facing::NoFace
             } else {
                 match argmind_env_face::pointed(&heads) {
                     argmind_env_face::Pointed::AtIt { .. } => super::Facing::AtIt,
@@ -419,9 +430,12 @@ mod chosen {
                     argmind_env_face::Pointed::Unreadable => super::Facing::Unreadable,
                 }
             };
+            let face = faces_found > 0;
             heads.clear();
             unreadable = 0;
-            saw(super::Seen { moved: middle >= MOVING, facing, took: so_far });
+            faces_found = 0;
+            saw(super::Seen { moved: middle >= MOVING, facing, face, took: so_far,
+                              broke: broke.take() });
 
             //: **On the movement thread rather than beside it**, because two threads on one device
             //: is two lights' worth of nothing — the same reason `switch_camera` refuses to start
@@ -546,6 +560,9 @@ mod chosen {
 pub enum Facing {
     /// The switch is off, or there are no models. **Nothing was looked for.**
     NotLookedFor,
+    /// Looked for, and **no face was in view all window**. Separate from `Unreadable` since
+    /// 2026-09-29 — see `Seen::face`.
+    NoFace,
     /// Looked for and the head could not be read all window — near profile, where the two eyes
     /// converge. Correlates with turning (0 and 1 of 95 against 22 and 48 of 96) and is not it.
     Unreadable,
@@ -556,12 +573,20 @@ pub enum Facing {
 /// What one turn of the camera loop found. **Both facts from one tick, in one value**, because they
 /// are one tick: reporting them separately would let a caller pair a movement reading with a head
 /// reading from three seconds earlier and never notice.
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Debug)]
 pub struct Seen {
     pub moved: bool,
     pub facing: Facing,
+    /// **Whether any face was found this window, apart from where it pointed.** Before 2026-09-29
+    /// the two were one value: a window with no face in it and a window with a face whose eyes
+    /// had converged both came out `Unreadable`, which is pitfall 5 in this project's own list and
+    /// it was in code written the day after that list was quoted at it. `false` whenever no face
+    /// pass ran, so a camera with both face switches off reports exactly what it did before.
+    pub face: bool,
     /// How long the window actually took, in seconds.
     pub took: f64,
+    /// **Something that went wrong and a person should be told**, once. `None` almost always.
+    pub broke: Option<String>,
 }
 
 /// How often a face pass runs while attention is switched on.
