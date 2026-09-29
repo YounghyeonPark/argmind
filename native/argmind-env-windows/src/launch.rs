@@ -13,7 +13,7 @@ use std::process::{Child, Command};
 use std::time::{Duration, Instant};
 
 use windows::Win32::Foundation::{BOOL, HWND, LPARAM, TRUE};
-use windows::Win32::UI::WindowsAndMessaging::{EnumWindows, GetForegroundWindow,
+use windows::Win32::UI::WindowsAndMessaging::{EnumWindows, GetClassNameW, GetForegroundWindow,
     GetWindowTextLengthW, GetWindowTextW, GetWindowThreadProcessId, IsIconic, IsWindowVisible,
     SetForegroundWindow};
 
@@ -113,6 +113,61 @@ pub fn to_front(handle: isize) -> bool {
 }
 
 /// A window's title, for saying what won instead of what was asked for.
+/// A window's **class**, which does not change with the language Windows is installed in —
+/// unlike its title, which reads *Taskbar* here and something else on a Korean install.
+pub fn window_class(handle: isize) -> String {
+    unsafe {
+        let mut buf = [0u16; 256];
+        let n = GetClassNameW(HWND(handle as _), &mut buf);
+        String::from_utf16_lossy(&buf[..n.max(0) as usize])
+    }
+}
+
+/// **Shell surfaces a person passes through on the way to a window, and never works in.**
+///
+/// The owner's transcript of 2026-09-17 already had `the window changed to 'Taskbar'` in it, and
+/// on 2026-09-29 it was the one thing argmind spoke about: clicking the taskbar to switch apps puts
+/// the taskbar in front for a moment, the watch counted that as the person moving to a window
+/// called Taskbar, and the remark was about the taskbar rather than about where they went.
+///
+/// **By class, and only the unambiguous ones.** The primary and secondary taskbars, their overflow,
+/// and the desktop. Start and search are left out on purpose: they are `Windows.UI.Core.CoreWindow`,
+/// which a packaged app can also be, and a list that silenced a real application would be worse than
+/// one remark about the Start menu.
+pub const PASSED_THROUGH: [&str; 6] = ["Shell_TrayWnd", "Shell_SecondaryTrayWnd",
+                                       "NotifyIconOverflowWindow",
+                                       "TopLevelWindowForOverflowXamlIsland",
+                                       "Progman", "WorkerW"];
+
+pub fn passed_through(class: &str) -> bool {
+    PASSED_THROUGH.contains(&class)
+}
+
+#[cfg(test)]
+mod passing_through {
+    use super::passed_through;
+
+    #[test]
+    fn the_taskbar_and_the_desktop_are_passed_through() {
+        //: `Shell_TrayWnd` is the class confirmed on this machine on 2026-09-29, with an empty title
+        //: — the *Taskbar* in the transcript was UI Automation's name for it, which is why this goes
+        //: by class and not by what the window is called.
+        for class in ["Shell_TrayWnd", "Shell_SecondaryTrayWnd", "Progman", "WorkerW"] {
+            assert!(passed_through(class), "{class}");
+        }
+    }
+
+    #[test]
+    fn a_real_application_is_never_passed_through() {
+        //: **The half that matters more.** A list that swallowed a working window would silence the
+        //: watch for it entirely, which is worse than one remark about the taskbar.
+        for class in ["Chrome_WidgetWin_1", "Notepad", "ApplicationFrameWindow",
+                      "Windows.UI.Core.CoreWindow", "CabinetWClass", ""] {
+            assert!(!passed_through(class), "{class:?} would be silenced");
+        }
+    }
+}
+
 pub fn window_title(handle: isize) -> String {
     unsafe {
         let mut buf = [0u16; 256];

@@ -41,7 +41,7 @@ use std::time::Duration;
 
 use argmind_core::contract::{Eyes, Widget};
 
-use crate::launch::{pid_of, window_title};
+use crate::launch::{passed_through, pid_of, window_class, window_title};
 use crate::WindowsEyes;
 
 #[derive(Default)]
@@ -58,6 +58,13 @@ impl Watcher {
     /// Note what is in front. Cheap enough to call several times a second.
     pub fn saw(&self, handle: isize) {
         if handle == 0 {
+            return;
+        }
+        //: **Never recorded, so never attended.** Passing through the taskbar leaves the last real
+        //: window at the head of `recent`, and arriving at the next one makes that the head — so the
+        //: watch sees one change, from where they were to where they went, which is what happened.
+        //: A handle that has gone answers an empty class and is recorded as before.
+        if passed_through(&window_class(handle)) {
             return;
         }
         let Ok(mut seen) = self.0.lock() else { return };

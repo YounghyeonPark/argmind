@@ -20,7 +20,12 @@
   }
   header {
     padding: 10px 14px; border-bottom: 1px solid var(--edge);
-    display: flex; gap: 12px; align-items: baseline;
+    display: flex; gap: 4px 12px; align-items: baseline;
+    /* **Wraps rather than widening the window.** The camera line added on 2026-09-29 made the
+       header wider than a narrow window and put a horizontal scrollbar under the whole page — the
+       first screenshot after it shipped had one. A second row is better than a page that scrolls
+       sideways to read the status of a camera. */
+    flex-wrap: wrap;
   }
   #attending { font-weight: 600; flex: 1; overflow: hidden; text-overflow: ellipsis;
                white-space: nowrap; }
