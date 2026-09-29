@@ -588,6 +588,36 @@ pub fn plan_for(key: &str) -> String {
              · 먼저 말을 건 생각은 여전히 말로만 나옵니다. 이 설정은 사람이 시킨 것에만 적용됩니다\n\
              · 두 번째 의견이 다른 위젯을 가리키면 그때는 그래도 물어봅니다\n\n\
              버튼 없이 실행할까요?"),
+        //: **Found by the test below, not by reading.** It had been asking with the bare default
+        //: since it became a setting on 2026-09-17 — the permission to make a noise in the room.
+        //: What it says is what `argmind-rules` holds: a remark argmind makes on its own is text.
+        "aloud" => String::from(
+            "argmind 가 대답을 소리 내어 말합니다.\n\n\
+             · 말을 건 것에 대한 대답만 소리로 나옵니다 — 먼저 거는 말은 글로만 나옵니다\n\
+             · 신경망 목소리가 떠 있으면 그 목소리로, 아니면 윈도우 기본 음성으로 말합니다\n\
+             · 목소리는 *장치와 목소리* 에서 고르고, 고르면 한 번 들려줍니다\n\
+             · 끄면 대답은 화면에 글로만 나옵니다\n\n\
+             소리 내어 말할까요?"),
+        //: **Written at the camera's standard, because it asks for more than the camera does.**
+        //: Until 2026-09-29 these two fell through to the default and asked a bare *…을(를)
+        //: 허용할까요?* — and one of them writes something about a person to disk.
+        "attention" => String::from(
+            "카메라로 고개가 화면 쪽을 향하는지 봅니다.\n\n\
+             · 카메라가 켜져 있을 때만 동작합니다. 켜기만 해서는 아무것도 열지 않습니다\n\
+             · 1초마다 얼굴의 눈·코 위치 다섯 점을 찾습니다 — 모델을 부르지 않고 약 0.1초\n\
+             · **고개** 방향입니다. 고개는 두고 눈만 돌리면 보고 있는 것으로 읽습니다\n\
+             · 아무것도 저장하지 않습니다. 결과는 위 줄에 *화면 쪽을 봄* 처럼 보이고 곧 사라집니다\n\
+             · 모델에게는 보내지 않습니다 — 보내면 *고개를 돌리셨네요* 라고 말하는 것을 쟀습니다\n\n\
+             켤까요?"),
+        "faces" => String::from(
+            "카메라에 보인 얼굴이 전에 본 사람인지 기억합니다.\n\n\
+             · **사진은 저장하지 않습니다.** 사람마다 숫자 128개와 처음·마지막 본 날짜만 남깁니다\n\
+             · 그 숫자로 얼굴을 되살릴 수는 없습니다\n\
+             · 카메라 앞을 지나간 누구든 기록될 수 있습니다 — 그래서 최대 20명에서 멈춥니다\n\
+             · 처음 보는 얼굴이면 *누구신가요?* 라고 한 번만 묻습니다. 넘어가도 됩니다\n\
+             · 설정에서 이름을 고치거나 한 명씩, 또는 전부 지울 수 있습니다 (%LOCALAPPDATA%\\\
+argmind\\faces.json)\n\n\
+             기억할까요?"),
         "microphone" => String::from(
             "말한 것을 받아쓰려면 마이크를 엽니다.\n\n\
              · 스페이스를 **누르고 있는 동안에만** 열립니다 — 켜 두는 것이 아닙니다\n\
@@ -2585,6 +2615,69 @@ fn serve_one(mut stream: TcpStream, out: &Listeners, token: &str, jobs: &Sender<
         Route::Unknown => {
             let _ = stream.write_all(&respond("404 Not Found", "text/plain", "no"));
         }
+    }
+}
+
+#[cfg(test)]
+mod question_tests {
+    use super::plan_for;
+
+    #[test]
+    fn every_switch_asks_with_more_than_its_own_name() {
+        //: **The default is one line — *…을(를) 허용할까요?* — and two switches were shipping on it.**
+        //: One of them writes something about a person to disk. Every key a person can be asked
+        //: about must say what it does before the buttons, the way the camera always did.
+        //: **Only what can actually be asked.** A need with no fix raises no question — there is
+        //: nothing to carry out — and in the headless build no need has one, because nothing here
+        //: has run a fix off Windows. The first version of this test demanded a sentence for all
+        //: fourteen keys and the headless build refused it: seven needs asking with the default,
+        //: none of which a person could ever be shown. The rule is about questions a person sees.
+        //: **The switches, named**, because in the headless build a switch and a need that is not
+        //: listed there look identical — `korean-voice` and `vulkan` are Windows facts and vanish
+        //: off Windows — and the second attempt at this test treated both as switches. A switch can
+        //: always be asked; a need only when it is listed here with a fix.
+        const SWITCHES: [&str; 7] =
+            ["notice", "microphone", "aloud", "acting", "camera", "attention", "faces"];
+        for key in SWITCHES {
+            assert!(crate::decided::DECIDABLE.contains(&key), "{key} is no longer decidable");
+        }
+        //: **And the list cannot quietly go stale** on the build the hook runs by default: every
+        //: decidable key that is not a switch must be a need there. A new switch left off the list
+        //: above would otherwise be skipped as an unlisted need and never checked.
+        #[cfg(all(windows, not(feature = "headless")))]
+        for key in crate::decided::DECIDABLE {
+            if !SWITCHES.contains(&key) {
+                assert!(crate::needs::by_key("qwen3:8b", key).is_some(),
+                        "{key} is neither a switch nor a need — add it to SWITCHES");
+            }
+        }
+        let askable = |key: &&&str| SWITCHES.contains(key)
+            || crate::needs::by_key("qwen3:8b", key).is_some_and(|need| need.fix.is_some());
+        //: Collected rather than stopping at the first, so one run names every gap.
+        let thin: Vec<String> = crate::decided::DECIDABLE.iter()
+            .filter(askable)
+            .map(|key| (key, plan_for(key)))
+            .filter(|(_, plan)| plan.lines().filter(|l| !l.trim().is_empty()).count() < 3
+                                || !plan.trim_end().ends_with("까요?"))
+            .map(|(key, plan)| format!("{key}: {}", plan.replace('\n', " / ")))
+            .collect();
+        assert!(thin.is_empty(), "asked with almost nothing:\n{}", thin.join("\n"));
+    }
+
+    #[test]
+    fn remembering_faces_says_what_is_kept_and_where() {
+        let plan = plan_for("faces");
+        assert!(plan.contains("사진은 저장하지 않습니다"));
+        assert!(plan.contains("128"));
+        assert!(plan.contains("20명"));
+        assert!(plan.contains(r"%LOCALAPPDATA%\argmind\faces.json"), "{plan}");
+    }
+
+    #[test]
+    fn attention_says_it_is_a_head_and_that_the_model_never_sees_it() {
+        let plan = plan_for("attention");
+        assert!(plan.contains("고개"));
+        assert!(plan.contains("모델에게는 보내지 않습니다"));
     }
 }
 

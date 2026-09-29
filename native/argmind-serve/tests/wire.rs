@@ -277,6 +277,34 @@ fn only_the_page_and_its_scripts_are_served_without_a_token() {
     }
 }
 
+/// **Every route added on 2026-09-23 to 2026-09-28, parsed.** None of them had a test, and the
+/// owner's first run of the switches they serve reported *nothing happens* — so the part of that
+/// which is the server misreading a path is ruled out here rather than guessed at.
+#[test]
+fn the_routes_for_the_new_switches_parse() {
+    use argmind_serve::{route, Route};
+    let post = |p: &str, body: &str| {
+        let mut r = parse_request(&format!("POST {p} HTTP/1.1\r\n\r\n")).unwrap();
+        r.body = body.to_string();
+        route(&r)
+    };
+    assert!(matches!(post("/attention/on", ""), Route::Attention(true)));
+    assert!(matches!(post("/attention/off", ""), Route::Attention(false)));
+    assert!(matches!(post("/faces/on", ""), Route::Faces(true)));
+    assert!(matches!(post("/nunchi/5", ""), Route::Nunchi(5)));
+    assert!(matches!(post("/nunchi/x", ""), Route::Unknown));
+    assert!(matches!(post("/wonder/3", "영현"), Route::Answer(3, ref b) if b == "영현"));
+    assert!(matches!(post("/face/forget/p1", ""), Route::ForgetFace(ref k) if k == "p1"));
+    assert!(matches!(post("/face/name/p2", "누구"), Route::NameFace(ref k, ref n)
+                     if k == "p2" && n == "누구"));
+    //: **Exact before prefix**, the one ordering mistake that would make somebody's forget-all
+    //: forget a person called `forget-all`.
+    assert!(matches!(post("/faces/forget-all", ""), Route::ForgetFaces));
+    //: And the permission answer the new keys go through.
+    assert!(matches!(post("/decide/attention/always", ""),
+                     Route::Decide(ref k, ref h) if k == "attention" && h == "always"));
+}
+
 #[test]
 fn a_permission_answer_is_two_segments() {
     let r = parse_request("POST /decide/notice/never HTTP/1.1\r\n\r\n").unwrap();

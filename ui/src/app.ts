@@ -832,6 +832,12 @@ function ask(a: Asking): void {
     asking.replaceChildren();
   }));
   asking.hidden = false;
+  // **Brought to where the person is looking.** The question lives above the settings panel and
+  // the switches that raise it live deep inside it, so ticking one after scrolling down put the
+  // question off screen and unticked the box — which reads exactly as *I turned it on and nothing
+  // happened*. The owner reported that on 2026-09-29 with a screenshot of a camera line that never
+  // grew a head direction.
+  asking.scrollIntoView({ block: "center", behavior: "smooth" });
 }
 
 stream.addEventListener("asking", (e) => ask(JSON.parse((e as MessageEvent).data) as Asking));
