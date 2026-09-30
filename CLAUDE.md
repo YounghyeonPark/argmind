@@ -395,7 +395,11 @@ rather than an `Option<bool>` so that *nobody asked* and *could not be read* sta
 added at rest and `camera_line` is a function so a test can say so** — with the switch off the
 blackboard line is byte for byte what it was, which is the only ground a new prompt slot could have
 had. **It gates nothing**: `somebody_about` still asks about movement alone, because nothing has
-measured that a turned head should change what argmind does on a tick.
+measured that a turned head should change what argmind does on a tick. **Confirmed live by the owner on
+2026-09-30 — 화면 보고 고개돌리는건 됨** — the first run of it inside the application rather than
+a harness, and it took two fixes to get there: the camera line had never been shown to anybody, and
+the permission question rose above the settings panel while the switch sat deep inside it, so
+ticking the box unticked it and put the question off screen.
 
 **Asked to judge it rather than gate it, and this model cannot — measured 2026-09-28.** The owner:
 말을 걸지말지는 상황에 맞게 판단하면 됨. Telling the model the fact where it decides to speak first
