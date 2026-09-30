@@ -40,9 +40,10 @@
 use std::collections::BTreeMap;
 use std::path::PathBuf;
 
-/// **OpenCV's own number for SFace, not one measured here.** See the module note: the measurement
-/// that would replace it needs a face this machine has never seen.
-pub const ALIKE_ENOUGH: f32 = 0.363;
+/// **OpenCV's own number for SFace**, kept in `argmind_core::recognise` so the harness that measures
+/// the roster's rule and the roster run the same one. Re-exported here where it was always read.
+pub use argmind_core::recognise::ALIKE_ENOUGH;
+use argmind_core::recognise::{alike, best, Newcomer};
 
 /// **How many people argmind will ever hold.** Chosen, not measured, and low on purpose — see the
 /// module note. Past this nothing new is enrolled and the caller is told.
@@ -51,12 +52,15 @@ pub const MOST_REMEMBERED: usize = 20;
 /// How long a print is, so a hand-edited file with the wrong shape is dropped rather than compared.
 pub const PRINT_LENGTH: usize = 128;
 
-/// **Which way the prints in the file were made.** A print is only comparable with another made the
-/// same way, and on 2026-09-30 the way changed: the face had been handed to SFace in BGR and with
-/// nearest-pixel sampling, where OpenCV — and so the training — uses RGB and bilinear. Prints of
-/// the owner made the old way sat at cosine **0.01 to 0.36** against each other, and a print made
-/// the right way compared with one of those means nothing at all. So rows from before are dropped
-/// on reading rather than kept to fail matching for ever, and the application says so.
+/// **Which way the prints in the file were made**, written on every row so that a change that
+/// really does make prints incomparable has a marker to act on.
+///
+/// **Rows without it are kept, and that is measured.** On 2026-09-30 the preparation changed from
+/// BGR and nearest sampling to OpenCV's RGB and bilinear, and rows made the old way were at first
+/// dropped on reading on the assumption that they could not be compared with new ones. `--bin
+/// recognising` checked the assumption on the owner's face: an old print against the new-way
+/// centre, **median 0.880, 20 of 20 over threshold**. So the drop was reverted before it ever ran —
+/// it would have thrown away a name for nothing.
 pub const PRINT_VERSION: u32 = 2;
 
 /// One person argmind has seen.
@@ -95,8 +99,11 @@ impl Person {
 pub enum Saw {
     /// Recognised, with how alike it was.
     Known { key: String, alike: f32 },
-    /// Not recognised, and a row was made.
+    /// Not recognised, and a row was made — **from two frames that agreed**, never from one.
     Fresh { key: String },
+    /// Not recognised, and **held**: one frame's word, waiting for a second to agree before anybody
+    /// is written down.
+    Unsure,
     /// Not recognised, and no row was made because the roster is full.
     Full,
     /// The print was the wrong shape — a hand-edited file or a different model.
@@ -107,9 +114,9 @@ pub enum Saw {
 #[derive(Clone, Debug, Default)]
 pub struct People {
     pub who: Vec<Person>,
-    /// **How many rows were thrown away on reading because they were made the old way.** Reported
-    /// once so a person who is asked their name again knows why.
-    pub dropped_old: usize,
+    /// **A face nobody knows, held until a second agrees.** Not written to the file: it is one
+    /// frame's word, and a restart is a reasonable moment to forget it.
+    newcomer: Newcomer,
     /// Counts up so a key is never reused after a forget, which would silently merge two people.
     next: u64,
 }
@@ -139,13 +146,12 @@ impl People {
         if print.len() != PRINT_LENGTH || print.iter().any(|f| !f.is_finite()) {
             return Saw::Wrong;
         }
-        let best = self.who.iter().enumerate()
-            .filter_map(|(i, p)| alike(&print, &p.print).map(|a| (i, a)))
-            .filter(|(_, a)| *a >= ALIKE_ENOUGH)
-            .max_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal));
-        if let Some((i, a)) = best {
+        if let Some((i, a)) = best(self.who.iter().map(|p| p.print.as_slice()), &print) {
             self.who[i].last = when;
             self.who[i].times += 1;
+            //: **A known face clears what was held** — see `recognise`: one unmatched frame between
+            //: frames that match somebody is a bad frame of them.
+            self.newcomer.known();
             //: **The print is not updated.** A running average would drift toward whatever lighting
             //: the last session had, and there is no measurement here saying which is better.
             return Saw::Known { key: self.who[i].key.clone(), alike: a };
@@ -153,10 +159,16 @@ impl People {
         if self.who.len() >= MOST_REMEMBERED {
             return Saw::Full;
         }
+        //: **One frame is not a person.** Until 2026-09-30 it was, and nine rows grew for one face
+        //: from the frames of it arriving and leaving — which, measured, do not agree with each other.
+        let Some((print, first)) = self.newcomer.unknown(print, when as f64) else {
+            return Saw::Unsure;
+        };
         self.next += 1;
         let key = format!("p{}", self.next);
+        //: **Two sightings, counted as two** — the frame that was held and the one that agreed.
         self.who.push(Person {
-            key: key.clone(), name: String::new(), first: when, last: when, times: 1,
+            key: key.clone(), name: String::new(), first: first as i64, last: when, times: 2,
             asked: false, print,
         });
         Saw::Fresh { key }
@@ -210,17 +222,6 @@ impl People {
     }
 }
 
-/// Cosine similarity, −1 to 1. `None` on a length mismatch or a zero vector, because both mean the
-/// comparison is meaningless rather than zero.
-fn alike(a: &[f32], b: &[f32]) -> Option<f32> {
-    if a.len() != b.len() || a.is_empty() {
-        return None;
-    }
-    let dot: f32 = a.iter().zip(b).map(|(x, y)| x * y).sum();
-    let ma: f32 = a.iter().map(|x| x * x).sum::<f32>().sqrt();
-    let mb: f32 = b.iter().map(|x| x * x).sum::<f32>().sqrt();
-    if ma == 0.0 || mb == 0.0 { None } else { Some(dot / (ma * mb)) }
-}
 
 /// `%LOCALAPPDATA%\argmind\faces.json`, beside the decisions and the models.
 pub fn at() -> PathBuf {
@@ -266,14 +267,8 @@ pub fn parse(text: &str) -> People {
         if print.len() != PRINT_LENGTH {
             continue;
         }
-        //: **Counted before the version check**, so a key used by a row that is about to be
-        //: dropped is still never handed to somebody new.
         if let Some(n) = key.strip_prefix('p').and_then(|d| d.parse::<u64>().ok()) {
             people.next = people.next.max(n);
-        }
-        if whole(line, "v") != Some(PRINT_VERSION as i64) {
-            people.dropped_old += 1;
-            continue;
         }
         people.who.push(Person {
             key,
@@ -356,11 +351,45 @@ mod tests {
         v
     }
 
+    /// **Enrol the way the roster now requires**: two frames that agree. Asserts the first one alone
+    /// does not, so every test that sets up a person also checks the rule it depends on.
+    fn enrol(people: &mut People, print: Vec<f32>, when: i64) -> String {
+        assert_eq!(people.saw(print.clone(), when), Saw::Unsure, "one frame must not enrol");
+        match people.saw(print, when + 1) {
+            Saw::Fresh { key } => key,
+            other => panic!("two agreeing frames should enrol, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn one_frame_of_a_stranger_writes_nothing_down() {
+        //: **The defect of 2026-09-30.** A face arriving or leaving made a row on its own.
+        let mut people = People::default();
+        assert_eq!(people.saw(print_of(1.0), 10), Saw::Unsure);
+        assert!(people.who.is_empty());
+        //: And frames that disagree, one after another, never become anybody.
+        assert_eq!(people.saw(print_of(40.0), 13), Saw::Unsure);
+        assert_eq!(people.saw(print_of(80.0), 16), Saw::Unsure);
+        assert!(people.who.is_empty(), "nine rows for one face came from exactly this");
+    }
+
+    #[test]
+    fn a_stray_frame_of_somebody_known_is_not_a_new_person() {
+        let mut people = People::default();
+        enrol(&mut people, print_of(1.0), 10);
+        //: A bad frame, then the person again: the bad frame was theirs.
+        assert_eq!(people.saw(print_of(60.0), 20), Saw::Unsure);
+        assert!(matches!(people.saw(print_of(1.0), 23), Saw::Known { .. }));
+        //: And the next stray does not pair with the one the known face cleared.
+        assert_eq!(people.saw(print_of(60.0), 26), Saw::Unsure);
+        assert_eq!(people.who.len(), 1);
+    }
+
     #[test]
     fn a_new_face_is_enrolled_and_the_same_face_is_recognised() {
         let mut people = People::default();
         let me = print_of(1.0);
-        let Saw::Fresh { key } = people.saw(me.clone(), 100) else { panic!("first sight is fresh") };
+        let key = enrol(&mut people, me.clone(), 100);
         assert_eq!(people.who.len(), 1);
         match people.saw(me, 200) {
             Saw::Known { key: again, alike } => {
@@ -370,22 +399,22 @@ mod tests {
             other => panic!("the same face came back as {other:?}"),
         }
         assert_eq!(people.who.len(), 1, "recognising must not enrol");
-        assert_eq!(people.who[0].times, 2);
         assert_eq!(people.who[0].last, 200);
         assert_eq!(people.who[0].first, 100, "the first sighting is not overwritten");
+        assert_eq!(people.who[0].times, 3, "two frames to enrol, one to recognise");
     }
 
     #[test]
     fn a_different_face_gets_its_own_row() {
         let mut people = People::default();
-        people.saw(print_of(1.0), 100);
+        enrol(&mut people, print_of(1.0), 100);
         //: Far enough apart to be under the threshold; the test asserts that rather than assuming.
         let other = print_of(40.0);
         let first = people.who[0].print.clone();
         assert!(alike(&other, &first).unwrap() < ALIKE_ENOUGH,
                 "this fixture stopped being two people; the test below would pass for the wrong \
                  reason");
-        assert!(matches!(people.saw(other, 110), Saw::Fresh { .. }));
+        enrol(&mut people, other, 110);
         assert_eq!(people.who.len(), 2);
     }
 
@@ -394,8 +423,8 @@ mod tests {
         let mut people = People::default();
         //: Two rows, and a probe nearer the second. Taking the first over the line would return the
         //: wrong person and the answer would depend on enrolment order.
-        people.saw(print_of(1.0), 10);
-        people.saw(print_of(40.0), 20);
+        enrol(&mut people, print_of(1.0), 10);
+        enrol(&mut people, print_of(40.0), 20);
         let mut near_second = print_of(40.0);
         near_second[0] += 0.02;
         match people.saw(near_second, 30) {
@@ -408,8 +437,8 @@ mod tests {
     fn the_roster_fills_rather_than_evicting_quietly() {
         let mut people = People::default();
         for i in 0..MOST_REMEMBERED {
-            assert!(matches!(people.saw(print_of(i as f32 * 5.0 + 1.0), 10), Saw::Fresh { .. }),
-                    "fixture {i} collided with an earlier one");
+            //: `enrol` asserts both steps, so a fixture colliding with an earlier one still fails.
+            enrol(&mut people, print_of(i as f32 * 5.0 + 1.0), 10 + i as i64 * 3);
         }
         assert_eq!(people.saw(print_of(999.0), 10), Saw::Full);
         assert_eq!(people.who.len(), MOST_REMEMBERED, "nobody was evicted to make room");
@@ -426,46 +455,28 @@ mod tests {
     #[test]
     fn forgetting_does_not_hand_the_key_to_the_next_stranger() {
         let mut people = People::default();
-        people.saw(print_of(1.0), 10);
+        enrol(&mut people, print_of(1.0), 10);
         assert!(people.forget("p1"));
         assert!(!people.forget("p1"), "forgetting twice is not a second success");
-        let Saw::Fresh { key } = people.saw(print_of(40.0), 20) else { panic!("expected a row") };
+        let key = enrol(&mut people, print_of(40.0), 20);
         assert_ne!(key, "p1", "reusing p1 would file a stranger as the person just deleted");
     }
 
     #[test]
-    fn a_row_made_the_old_way_is_dropped_and_counted() {
-        //: A row as the version before 2026-09-30 wrote it: no `v`. Its print was made in BGR with
-        //: nearest sampling and cannot be compared with one made now.
+    fn a_row_from_before_the_preparation_changed_is_kept() {
+        //: **Measured compatible, so kept**: an old-way print against the new-way centre, median
+        //: 0.880 and 20 of 20 over threshold. Dropping them would have thrown a name away.
         let mut people = People::default();
-        people.saw(print_of(1.0), 10);
-        let new = render(&people);
-        let old = new.replace(&format!(", \"v\": {PRINT_VERSION}"), "");
-        assert!(!old.contains("\"v\""));
-        let back = parse(&old);
-        assert!(back.who.is_empty(), "an old print must not be kept to fail matching");
-        assert_eq!(back.dropped_old, 1);
-        //: And a current row survives untouched.
-        let kept = parse(&new);
-        assert_eq!(kept.who.len(), 1);
-        assert_eq!(kept.dropped_old, 0);
-    }
-
-    #[test]
-    fn a_dropped_rows_key_is_not_handed_to_somebody_new() {
-        let mut people = People::default();
-        people.saw(print_of(1.0), 10);
-        people.saw(print_of(40.0), 20);
+        enrol(&mut people, print_of(1.0), 10);
         let old = render(&people).replace(&format!(", \"v\": {PRINT_VERSION}"), "");
-        let mut back = parse(&old);
-        let Saw::Fresh { key } = back.saw(print_of(80.0), 30) else { panic!("expected a row") };
-        assert_eq!(key, "p3");
+        assert!(!old.contains("\"v\""));
+        assert_eq!(parse(&old).who.len(), 1);
     }
 
     #[test]
     fn a_person_with_no_name_is_worth_asking_about_exactly_once() {
         let mut people = People::default();
-        people.saw(print_of(1.0), 10);
+        enrol(&mut people, print_of(1.0), 10);
         assert_eq!(people.worth_asking().as_deref(), Some("p1"));
         assert!(people.mark_asked("p1"));
         assert_eq!(people.worth_asking(), None, "asking twice is the failure this field exists for");
@@ -475,7 +486,7 @@ mod tests {
     #[test]
     fn somebody_already_named_is_never_asked_about() {
         let mut people = People::default();
-        people.saw(print_of(1.0), 10);
+        enrol(&mut people, print_of(1.0), 10);
         people.call("p1", "영현");
         assert_eq!(people.worth_asking(), None);
     }
@@ -483,7 +494,7 @@ mod tests {
     #[test]
     fn having_asked_survives_the_file() {
         let mut people = People::default();
-        people.saw(print_of(1.0), 10);
+        enrol(&mut people, print_of(1.0), 10);
         people.mark_asked("p1");
         let back = parse(&render(&people));
         assert!(back.who[0].asked);
@@ -496,7 +507,7 @@ mod tests {
         //: The upgrade case, written out by hand as the old version wrote it. Re-asking once is the
         //: safe direction; silently losing the question for everybody already there is not.
         let mut people = People::default();
-        people.saw(print_of(1.0), 10);
+        enrol(&mut people, print_of(1.0), 10);
         let old = render(&people).replace(", \"asked\": false", "");
         assert!(!old.contains("asked"));
         assert_eq!(parse(&old).worth_asking().as_deref(), Some("p1"));
@@ -505,7 +516,7 @@ mod tests {
     #[test]
     fn a_name_is_the_persons_and_argmind_never_invents_one() {
         let mut people = People::default();
-        people.saw(print_of(1.0), 10);
+        enrol(&mut people, print_of(1.0), 10);
         assert_eq!(people.who[0].name, "");
         assert!(people.who[0].shown().starts_with("이름 없음"));
         assert!(people.call("p1", "  영현  "));
@@ -519,8 +530,8 @@ mod tests {
     #[test]
     fn a_roster_survives_the_round_trip() {
         let mut people = People::default();
-        people.saw(print_of(1.0), 100);
-        people.saw(print_of(40.0), 110);
+        enrol(&mut people, print_of(1.0), 100);
+        enrol(&mut people, print_of(40.0), 110);
         people.call("p2", "누군가 \"따옴표\" 있는");
         let back = parse(&render(&people));
         assert_eq!(back.who.len(), 2);
@@ -537,19 +548,19 @@ mod tests {
     #[test]
     fn the_counter_survives_a_round_trip_too() {
         let mut people = People::default();
-        people.saw(print_of(1.0), 10);
-        people.saw(print_of(40.0), 20);
+        enrol(&mut people, print_of(1.0), 10);
+        enrol(&mut people, print_of(40.0), 20);
         people.forget("p1");
         let mut back = parse(&render(&people));
-        let Saw::Fresh { key } = back.saw(print_of(80.0), 30) else { panic!("expected a row") };
+        let key = enrol(&mut back, print_of(80.0), 30);
         assert_eq!(key, "p3", "after a reload the next key must still be past every key ever used");
     }
 
     #[test]
     fn one_mangled_row_does_not_lose_the_others() {
         let mut people = People::default();
-        people.saw(print_of(1.0), 10);
-        people.saw(print_of(40.0), 20);
+        enrol(&mut people, print_of(1.0), 10);
+        enrol(&mut people, print_of(40.0), 20);
         let text = render(&people);
         let broken: Vec<&str> = text.lines().collect();
         //: The second row truncated mid-array, which is what a half-written file looks like.
@@ -563,7 +574,7 @@ mod tests {
     #[test]
     fn a_duplicated_key_is_dropped_rather_than_renamed() {
         let mut people = People::default();
-        people.saw(print_of(1.0), 10);
+        enrol(&mut people, print_of(1.0), 10);
         let one = render(&people);
         let row = one.lines().nth(1).unwrap().trim_end_matches(',');
         let doubled = format!("{{\"people\": [\n{row},\n{row}\n]}}");
@@ -582,7 +593,7 @@ mod tests {
         //: **The claim the module note makes, checked.** A row is numbers and dates; if a field
         //: ever carries pixels this fails, which is the only way that promise stays true.
         let mut people = People::default();
-        people.saw(print_of(1.0), 10);
+        enrol(&mut people, print_of(1.0), 10);
         let text = render(&people);
         for word in ["png", "jpeg", "rgb", "base64", "image", "pixels", "data:"] {
             assert!(!text.to_lowercase().contains(word),

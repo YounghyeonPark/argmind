@@ -22,6 +22,7 @@ pub mod converse;
 pub mod intent;
 pub mod llm;
 pub mod mind;
+pub mod recognise;
 pub mod session;
 pub mod thinking;
 pub mod watch;

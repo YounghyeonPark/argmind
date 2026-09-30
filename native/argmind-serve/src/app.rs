@@ -904,7 +904,7 @@ fn switch_camera(desk: &mut Desk, out: &Listeners, on: bool) {
             &mut |print| {
                 let mut roster = people.lock().unwrap_or_else(|e| e.into_inner());
                 match roster.saw(print, now_seconds()) {
-                    crate::people::Saw::Fresh { .. } => {
+                    crate::people::Saw::Fresh { key } => {
                         //: **Written the moment somebody new arrives**, not at shutdown: a crash
                         //: between the two would lose exactly the row that was worth keeping.
                         if let Err(why) = roster.write() {
@@ -914,10 +914,14 @@ fn switch_camera(desk: &mut Desk, out: &Listeners, on: bool) {
                         //: **Asked rather than filed.** The owner, the same day: 모르는건
                         //: 물어보는 기능도 있어야함. Writing an unnamed row into a settings panel
                         //: and waiting for somebody to go looking for it is filing, not asking.
-                        let raised = roster.worth_asking().and_then(|key| {
+                        //: **About the row just made**, not the first unnamed one on the list.
+                        //: Until 2026-09-30 this asked `worth_asking()`, which returns the oldest
+                        //: unnamed row — and with stray rows in the roster that was a stranger
+                        //: from last week rather than the face in front of the camera now.
+                        let raised = {
                             let mut open = wonders.lock().unwrap_or_else(|e| e.into_inner());
                             open.ask(crate::wonders::About::Who(key)).map(wonder_json)
-                        });
+                        };
                         match raised {
                             Some(json) => out.send("wonder", &json),
                             //: One question at a time, so a second stranger while the first is
@@ -940,6 +944,8 @@ fn switch_camera(desk: &mut Desk, out: &Listeners, on: bool) {
                         }
                     }
                     crate::people::Saw::Wrong => {}
+                    //: One frame's word, held for a second to agree. Nothing to say yet.
+                    crate::people::Saw::Unsure => {}
                 }
             });
         eyeing.store(false, Ordering::SeqCst);
@@ -2334,20 +2340,6 @@ pub fn run(how: How) {
                 Job::Opened(tx) => {
 
                     let _ = tx.send(sse("hello", &hello(&desk, &agent_model)));
-                    //: **Said once, to the first page, and then written away.** A roster made the
-                    //: old way was dropped on reading; a person about to be asked their name again
-                    //: is owed the reason, and a file that still held the old rows would drop them
-                    //: again at every launch and say so every time.
-                    {
-                        let mut roster = desk.people.lock().unwrap_or_else(|e| e.into_inner());
-                        if roster.dropped_old > 0 {
-                            let _ = tx.send(sse("note", &format!(
-                                "얼굴을 알아보는 방식을 고쳐서, 전에 기억한 {}줄을 지웠습니다 — \
-같은 분인데 여러 줄로 갈라져 있었습니다. 이름을 한 번 다시 여쭙겠습니다", roster.dropped_old)));
-                            roster.dropped_old = 0;
-                            let _ = roster.write();
-                        }
-                    }
                     //: **What 항상 허용 buys, without anybody pressing 다시 확인.**
                     //:
                     //: It only happened on `Job::Look`, which is the button — so after every

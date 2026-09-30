@@ -437,6 +437,22 @@ actual condition — a face leaving the frame and returning, embedded every thre
 state it is in — so the harness now has three phases and a candidate gate (facing, inside the frame,
 detector sure), with pass and fail counted apart. Nothing about the gate ships until it has run.
 
+**It ran, and the gate was the wrong gate.** Facing 20 of 20, **turning the head 20 of 20**, leaning
+out and back **8 of 13** — the bad frames are the arriving and leaving ones, and the gate let them
+through about as often as it stopped them (81% of passing frames over threshold against 88% of
+failing) while discarding sixteen good turned-head frames to do it. It did not ship. The same run
+checked the other assumption and **refuted that too**: an old-way print against the new-way centre
+read 0.880, 20 of 20, so dropping old rows — which would have deleted a name seen 161 times — was
+reverted before it ever ran. **What the bad frames do share is that they disagree with each other**:
+by then the roster held nine rows for one face, 36 of 36 pairs under 0.363, the closest 0.3628. So
+`argmind_core::recognise` — core because the harness and the application must run one rule, and the
+roster compiles where the face models do not — enrols a new face only when **two consecutive
+unknown frames agree**, keeps their mean rather than one arbitrary frame, and lets a known face clear
+whatever was held. And the question after enrolment now asks about **the row just made**, where it
+had asked about the oldest unnamed one — a stranger from last week, with stray rows present.
+`--bin recognising` replays every recorded frame through that rule and the old one and counts rows
+for one person; that number is what the rule stands or falls on and it has not been taken yet.
+
 **That is blocked on twenty seconds of the owner's time, and until 2026-09-22 it was blocked on a
 broken instrument.** `measure/presence` asks a person to hold still and then move; run with nobody
 moving in either phase it separated them **2.17 against 0.65**, three to one in the wrong direction,

@@ -33,7 +33,26 @@
 //! gate** — facing (`|head_on| < HEAD_ASIDE`), fully inside the frame, score at least [`SURE`] — is
 //! applied, and the prints that pass and the prints that fail are counted apart.
 //!
+//! ## The second run, and what replaced the gate
+//!
+//! Sitting still 20 of 20, turning the head **20 of 20**, leaning out and back **8 of 13** — the bad
+//! frames are the arriving and leaving ones. The candidate gate **did not separate them** (81% of
+//! passing frames over threshold against 88% of failing) and would have thrown away sixteen good
+//! turned-head frames to do it. And an old-way print against the new-way centre read **0.880, 20 of
+//! 20**, so the application's dropping of old rows was reverted before it ever ran.
+//!
+//! What the bad frames share is that they do not agree with each other — the nine stray rows sat
+//! under 0.363 in 36 of 36 pairs — so the rule now in `argmind_core::recognise` enrols a new face
+//! only when **two consecutive unknown frames agree**. This harness replays every recorded frame, in
+//! order, through **that same rule** and through the old one, into an empty roster, and counts the
+//! rows each makes for one person. At the application's cadence — a frame every three seconds —
+//! and at every frame, which is the harder case: more chances for two bad frames to agree.
+//!
 //! ## Written before the run
+//!
+//! * **Replay: the new rule makes one row, the old rule more than one**, at the application's
+//!   cadence. If the new rule also makes several, agreement between bad frames is more common than
+//!   the stray rows suggested and the rule needs a longer run of agreement.
 //!
 //! * **The reference holds**: phase 1 like the first run, nearly every print over 0.363.
 //! * **The bad prints are phases 2 and 3**, and they are the ones the gate rejects: of prints that
@@ -45,12 +64,15 @@
 
 use std::time::{Duration, Instant};
 
+use argmind_core::recognise::{best, Newcomer};
 use argmind_env_face::{alike, Face, Faces, BEFORE, HEAD_ASIDE, SHIPPED};
 use argmind_env_windows::camera::Camera;
 
-/// **OpenCV's cosine threshold for SFace**, the same number as `people::ALIKE_ENOUGH` — which this
-/// crate cannot name, since `argmind-measure` does not depend on the application.
-const SAME: f32 = 0.363;
+/// **OpenCV's cosine threshold for SFace**, from the rule the application runs.
+const SAME: f32 = argmind_core::recognise::ALIKE_ENOUGH;
+/// **How often the application embeds a face**, `platform::FACE_EVERY`, which this crate cannot
+/// name. The replay at this cadence is the one that describes what a person sees.
+const APP_EVERY: f64 = 3.0;
 /// A detector score the candidate gate asks for. **Chosen** — higher than the 0.6 that finds a face,
 /// because finding one and trusting its landmarks are different questions.
 const SURE: f32 = 0.8;
@@ -68,6 +90,8 @@ const PHASES: [(&str, &str, f64); 3] = [
 
 struct Print {
     phase: usize,
+    /// Seconds since the first phase began.
+    at: f64,
     shipped: Vec<f32>,
     before: Vec<f32>,
     head: Option<f32>,
@@ -138,6 +162,7 @@ fn run() -> i32 {
 
     let mut prints: Vec<Print> = Vec::new();
     let mut faceless = [0usize; 3];
+    let start = Instant::now();
     for (i, (what, tell, seconds)) in PHASES.iter().enumerate() {
         println!("  ── {what} ──  {tell}");
         for n in (1..=3).rev() {
@@ -158,7 +183,8 @@ fn run() -> i32 {
                             (faces.embed_as(&shot.rgb, shot.wide, shot.tall, face, SHIPPED),
                              faces.embed_as(&shot.rgb, shot.wide, shot.tall, face, BEFORE)) {
                             prints.push(Print {
-                                phase: i, shipped: a, before: b, head: face.head_on(),
+                                phase: i, at: start.elapsed().as_secs_f64(),
+                                shipped: a, before: b, head: face.head_on(),
                                 score: face.score, inside: inside(face, shot.wide, shot.tall),
                             });
                         }
@@ -214,7 +240,52 @@ fn run() -> i32 {
     println!("  예전 ↔ 새 기준   {}", share(&cross));
     println!("  예전 ↔ 예전 기준 {}", share(&old_self));
 
+    //: **The replay: what the roster would have done with this session.** An empty roster, every
+    //: frame in the order it was taken, matched by `recognise::best` — the application's own
+    //: function — and a frame nobody matches either enrolled at once (the rule until 2026-09-30) or
+    //: handed to `Newcomer` (the rule now).
+    let replay = |frames: &[&Print], agree: bool| -> usize {
+        let mut roster: Vec<Vec<f32>> = Vec::new();
+        let mut newcomer = Newcomer::default();
+        for p in frames {
+            if best(roster.iter().map(|r| r.as_slice()), &p.shipped).is_some() {
+                newcomer.known();
+                continue;
+            }
+            if !agree {
+                roster.push(p.shipped.clone());
+            } else if let Some((print, _)) = newcomer.unknown(p.shipped.clone(), p.at) {
+                roster.push(print);
+            }
+        }
+        roster.len()
+    };
+    let every: Vec<&Print> = prints.iter().collect();
+    let mut cadence: Vec<&Print> = Vec::new();
+    for p in &prints {
+        if cadence.last().is_none_or(|last| p.at - last.at >= APP_EVERY) {
+            cadence.push(p);
+        }
+    }
+    let (old_app, new_app) = (replay(&cadence, false), replay(&cadence, true));
+    let (old_all, new_all) = (replay(&every, false), replay(&every, true));
+    println!("\n  ── 재생: 한 사람에게 명부가 몇 줄을 만드는가 (정답 1) ──");
+    println!("  {:<24} {:>10} {:>14}", "", "한 번 보면 등록", "두 번 맞아야 등록");
+    println!("  {:<24} {old_app:>10} {new_app:>14}", format!("앱 속도 ({APP_EVERY}초, {}장)", cadence.len()));
+    println!("  {:<24} {old_all:>10} {new_all:>14}", format!("모든 장 ({}장)", every.len()));
+
     println!("\n  ── 읽기, 돌리기 전에 적어둔 대로 ──");
+    if new_app == 1 && old_app > 1 {
+        println!("  · **새 규칙이 한 줄로 막습니다**: 앱 속도에서 예전 {old_app}줄 → {new_app}줄.");
+    } else if new_app == 1 {
+        println!("  · 새 규칙은 한 줄입니다. 이번 세션은 예전 규칙도 {old_app}줄이라 차이를 보여주지 못했습니다.");
+    } else {
+        println!("  · **새 규칙도 {new_app}줄입니다.** 나쁜 장끼리 연달아 맞는 경우가 생각보다 흔합니다 —");
+        println!("    두 장이 아니라 더 긴 일치가 필요합니다.");
+    }
+    if new_all > 1 {
+        println!("  · 모든 장에서는 {new_all}줄 — 장이 촘촘할수록 나쁜 장 둘이 맞을 기회가 늘어납니다.");
+    }
     let rate = |v: &[f32]| if v.is_empty() { f32::NAN }
                            else { v.iter().filter(|c| **c >= SAME).count() as f32 / v.len() as f32 };
     let (rp, rf) = (rate(&pass), rate(&fail));
