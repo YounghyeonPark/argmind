@@ -2334,6 +2334,20 @@ pub fn run(how: How) {
                 Job::Opened(tx) => {
 
                     let _ = tx.send(sse("hello", &hello(&desk, &agent_model)));
+                    //: **Said once, to the first page, and then written away.** A roster made the
+                    //: old way was dropped on reading; a person about to be asked their name again
+                    //: is owed the reason, and a file that still held the old rows would drop them
+                    //: again at every launch and say so every time.
+                    {
+                        let mut roster = desk.people.lock().unwrap_or_else(|e| e.into_inner());
+                        if roster.dropped_old > 0 {
+                            let _ = tx.send(sse("note", &format!(
+                                "얼굴을 알아보는 방식을 고쳐서, 전에 기억한 {}줄을 지웠습니다 — \
+같은 분인데 여러 줄로 갈라져 있었습니다. 이름을 한 번 다시 여쭙겠습니다", roster.dropped_old)));
+                            roster.dropped_old = 0;
+                            let _ = roster.write();
+                        }
+                    }
                     //: **What 항상 허용 buys, without anybody pressing 다시 확인.**
                     //:
                     //: It only happened on `Job::Look`, which is the button — so after every

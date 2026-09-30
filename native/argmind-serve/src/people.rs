@@ -51,6 +51,14 @@ pub const MOST_REMEMBERED: usize = 20;
 /// How long a print is, so a hand-edited file with the wrong shape is dropped rather than compared.
 pub const PRINT_LENGTH: usize = 128;
 
+/// **Which way the prints in the file were made.** A print is only comparable with another made the
+/// same way, and on 2026-09-30 the way changed: the face had been handed to SFace in BGR and with
+/// nearest-pixel sampling, where OpenCV — and so the training — uses RGB and bilinear. Prints of
+/// the owner made the old way sat at cosine **0.01 to 0.36** against each other, and a print made
+/// the right way compared with one of those means nothing at all. So rows from before are dropped
+/// on reading rather than kept to fail matching for ever, and the application says so.
+pub const PRINT_VERSION: u32 = 2;
+
 /// One person argmind has seen.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Person {
@@ -99,6 +107,9 @@ pub enum Saw {
 #[derive(Clone, Debug, Default)]
 pub struct People {
     pub who: Vec<Person>,
+    /// **How many rows were thrown away on reading because they were made the old way.** Reported
+    /// once so a person who is asked their name again knows why.
+    pub dropped_old: usize,
     /// Counts up so a key is never reused after a forget, which would silently merge two people.
     next: u64,
 }
@@ -229,7 +240,7 @@ pub fn render(people: &People) -> String {
     let rows: Vec<String> = people.who.iter().map(|p| {
         let print: Vec<String> = p.print.iter().map(|f| format!("{f:.5}")).collect();
         format!("  {{\"key\": \"{}\", \"name\": \"{}\", \"first\": {}, \"last\": {}, \
-\"times\": {}, \"asked\": {}, \"print\": [{}]}}",
+\"times\": {}, \"asked\": {}, \"v\": {PRINT_VERSION}, \"print\": [{}]}}",
                 p.key, escape(&p.name), p.first, p.last, p.times, p.asked, print.join(","))
     }).collect();
     format!("{{\"people\": [\n{}\n]}}\n", rows.join(",\n"))
@@ -255,8 +266,14 @@ pub fn parse(text: &str) -> People {
         if print.len() != PRINT_LENGTH {
             continue;
         }
+        //: **Counted before the version check**, so a key used by a row that is about to be
+        //: dropped is still never handed to somebody new.
         if let Some(n) = key.strip_prefix('p').and_then(|d| d.parse::<u64>().ok()) {
             people.next = people.next.max(n);
+        }
+        if whole(line, "v") != Some(PRINT_VERSION as i64) {
+            people.dropped_old += 1;
+            continue;
         }
         people.who.push(Person {
             key,
@@ -414,6 +431,35 @@ mod tests {
         assert!(!people.forget("p1"), "forgetting twice is not a second success");
         let Saw::Fresh { key } = people.saw(print_of(40.0), 20) else { panic!("expected a row") };
         assert_ne!(key, "p1", "reusing p1 would file a stranger as the person just deleted");
+    }
+
+    #[test]
+    fn a_row_made_the_old_way_is_dropped_and_counted() {
+        //: A row as the version before 2026-09-30 wrote it: no `v`. Its print was made in BGR with
+        //: nearest sampling and cannot be compared with one made now.
+        let mut people = People::default();
+        people.saw(print_of(1.0), 10);
+        let new = render(&people);
+        let old = new.replace(&format!(", \"v\": {PRINT_VERSION}"), "");
+        assert!(!old.contains("\"v\""));
+        let back = parse(&old);
+        assert!(back.who.is_empty(), "an old print must not be kept to fail matching");
+        assert_eq!(back.dropped_old, 1);
+        //: And a current row survives untouched.
+        let kept = parse(&new);
+        assert_eq!(kept.who.len(), 1);
+        assert_eq!(kept.dropped_old, 0);
+    }
+
+    #[test]
+    fn a_dropped_rows_key_is_not_handed_to_somebody_new() {
+        let mut people = People::default();
+        people.saw(print_of(1.0), 10);
+        people.saw(print_of(40.0), 20);
+        let old = render(&people).replace(&format!(", \"v\": {PRINT_VERSION}"), "");
+        let mut back = parse(&old);
+        let Saw::Fresh { key } = back.saw(print_of(80.0), 30) else { panic!("expected a row") };
+        assert_eq!(key, "p3");
     }
 
     #[test]

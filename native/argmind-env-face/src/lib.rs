@@ -317,11 +317,18 @@ impl Faces {
     /// not ship for the same reason it ships no threshold for [`Face::head_on`].
     pub fn embed(&self, rgb: &[u8], width: usize, height: usize, face: &Face)
                  -> Result<Option<Vec<f32>>, String> {
+        self.embed_as(rgb, width, height, face, SHIPPED)
+    }
+
+    /// The same, prepared a stated way. **For the harness that measures the preparation**; the
+    /// application calls [`Faces::embed`] and gets [`SHIPPED`].
+    pub fn embed_as(&self, rgb: &[u8], width: usize, height: usize, face: &Face, how: Prepared)
+                    -> Result<Option<Vec<f32>>, String> {
         let Some(namer) = &self.namer else { return Ok(None) };
         //: **Aligned on the eyes rather than cropped to the box.** SFace was trained on faces put
         //: through a five-point similarity transform, and handing it a plain crop is the mistake
         //: that produces embeddings which are consistently wrong in a way nothing complains about.
-        let plane = align(rgb, width, height, &face.marks);
+        let plane = align(rgb, width, height, &face.marks, how);
         let input: Tensor = tract_ndarray::Array4::from_shape_vec((1, 3, 112, 112), plane)
             .map_err(|e| e.to_string())?.into();
         let out = namer.run(tvec!(input.into())).map_err(|e| e.to_string())?;
@@ -362,7 +369,8 @@ const CANON: [(f32, f32); 5] = [(38.29, 51.70), (73.53, 51.50), (56.02, 71.74),
 /// **A similarity transform and not a full affine**: four numbers — rotation, one scale and a
 /// shift — fitted least-squares over the five pairs. A full affine can shear a face into the
 /// template and would hide a bad detection instead of producing a bad embedding, which is worse.
-fn align(rgb: &[u8], width: usize, height: usize, marks: &[(f32, f32); 5]) -> Vec<f32> {
+fn align(rgb: &[u8], width: usize, height: usize, marks: &[(f32, f32); 5],
+         how: Prepared) -> Vec<f32> {
     //: Umeyama, restricted to similarity: solve for (a, b, tx, ty) where
     //: [x'] = [a -b][x] + [tx]
     //: [y']   [b  a][y]   [ty]
@@ -391,21 +399,64 @@ fn align(rgb: &[u8], width: usize, height: usize, marks: &[(f32, f32); 5]) -> Ve
             let (ox, oy) = (x as f32 - dx, y as f32 - dy);
             let fx = ia * ox - ib * oy + sx;
             let fy = ib * ox + ia * oy + sy;
-            if fx < 0.0 || fy < 0.0 {
-                continue;
-            }
-            let (px, py) = (fx as usize, fy as usize);
-            if px >= width || py >= height {
-                continue;
-            }
-            let at = (py * width + px) * 3;
+            let Some([r, g, b]) = sample(rgb, width, height, fx, fy, how) else { continue };
             let to = y * 112 + x;
-            plane[to] = rgb[at + 2] as f32;
-            plane[112 * 112 + to] = rgb[at + 1] as f32;
-            plane[2 * 112 * 112 + to] = rgb[at] as f32;
+            //: **RGB, in that order, for SFace — and it was BGR until 2026-09-30.** OpenCV's
+            //: `FaceRecognizerSF::feature` builds its blob with `swapRB = true` from a BGR image,
+            //: which hands the network RGB; YuNet's blob has `swapRB = false` and takes BGR, and this
+            //: file fed both the same way. The owner saw it as *it asks my name again every time I
+            //: step out of frame*: six rows for one person, prints of the same face at cosine 0.01
+            //: to 0.36 against a threshold of 0.363.
+            let (first, last) = if how.rgb { (r, b) } else { (b, r) };
+            plane[to] = first;
+            plane[112 * 112 + to] = g;
+            plane[2 * 112 * 112 + to] = last;
         }
     }
     plane
+}
+
+/// **How a face is prepared for SFace.** Two switches, kept only so the harness that decides
+/// between them can hold everything else still. [`SHIPPED`] is what runs.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Prepared {
+    /// Channel order handed to the network.
+    pub rgb: bool,
+    /// Bilinear rather than nearest-pixel sampling — `warpAffine`'s default, which is what OpenCV's
+    /// `alignCrop` uses.
+    pub bilinear: bool,
+}
+
+/// **What OpenCV does**, which is what SFace was trained against.
+pub const SHIPPED: Prepared = Prepared { rgb: true, bilinear: true };
+/// What this file did until 2026-09-30. Kept so the fix can be measured against it and not merely
+/// asserted — `argmind-measure --bin recognising`.
+pub const BEFORE: Prepared = Prepared { rgb: false, bilinear: false };
+
+/// One pixel of the source at a fractional position, or `None` outside it.
+fn sample(rgb: &[u8], width: usize, height: usize, fx: f32, fy: f32, how: Prepared)
+          -> Option<[f32; 3]> {
+    if fx < 0.0 || fy < 0.0 || fx > (width - 1) as f32 || fy > (height - 1) as f32 {
+        return None;
+    }
+    let at = |x: usize, y: usize| {
+        let i = (y * width + x) * 3;
+        [rgb[i] as f32, rgb[i + 1] as f32, rgb[i + 2] as f32]
+    };
+    if !how.bilinear {
+        return Some(at(fx as usize, fy as usize));
+    }
+    let (x0, y0) = (fx.floor() as usize, fy.floor() as usize);
+    let (x1, y1) = ((x0 + 1).min(width - 1), (y0 + 1).min(height - 1));
+    let (tx, ty) = (fx - x0 as f32, fy - y0 as f32);
+    let (a, b, c, d) = (at(x0, y0), at(x1, y0), at(x0, y1), at(x1, y1));
+    let mut out = [0.0f32; 3];
+    for k in 0..3 {
+        let top = a[k] * (1.0 - tx) + b[k] * tx;
+        let bottom = c[k] * (1.0 - tx) + d[k] * tx;
+        out[k] = top * (1.0 - ty) + bottom * ty;
+    }
+    Some(out)
 }
 
 /// Strongest first, then drop anything overlapping one already kept.
@@ -537,6 +588,33 @@ mod tests {
     fn the_nose_halfway_down_is_level() {
         //: eyes at 40, mouth at 70, nose at 55 is exactly between.
         assert!(face_at(50.0).head_down().unwrap().abs() < 0.01);
+    }
+
+    #[test]
+    fn the_recogniser_is_handed_red_first() {
+        //: **The defect of 2026-09-30, pinned.** A source of one colour everywhere — red 200, green
+        //: 100, blue 50 — so whatever the geometry does, the first plane handed to SFace is red
+        //: under the shipped preparation and blue under the old one.
+        let (w, h) = (200usize, 200usize);
+        let img: Vec<u8> = (0..w * h).flat_map(|_| [200u8, 100, 50]).collect();
+        let marks = [(80.0, 90.0), (120.0, 90.0), (100.0, 110.0), (84.0, 130.0), (116.0, 130.0)];
+        let shipped = align(&img, w, h, &marks, SHIPPED);
+        let before = align(&img, w, h, &marks, BEFORE);
+        let centre = 56 * 112 + 56;
+        assert!((shipped[centre] - 200.0).abs() < 0.5, "first plane is not red: {}", shipped[centre]);
+        assert!((shipped[2 * 112 * 112 + centre] - 50.0).abs() < 0.5);
+        assert!((before[centre] - 50.0).abs() < 0.5, "the old way should be kept for measuring");
+    }
+
+    #[test]
+    fn bilinear_sampling_lands_between_pixels() {
+        //: Two pixels, black and white; halfway between them is grey, not one or the other.
+        let img = [0u8, 0, 0, 255, 255, 255];
+        let mid = sample(&img, 2, 1, 0.5, 0.0, SHIPPED).unwrap();
+        assert!((mid[0] - 127.5).abs() < 0.01, "{mid:?}");
+        let near = sample(&img, 2, 1, 0.5, 0.0, BEFORE).unwrap();
+        assert_eq!(near[0], 0.0, "nearest takes the pixel the position falls in");
+        assert!(sample(&img, 2, 1, 1.5, 0.0, SHIPPED).is_none(), "outside is nothing");
     }
 
     #[test]
