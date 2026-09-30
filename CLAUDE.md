@@ -425,6 +425,18 @@ silence** — held only on a fresh positive *turned away*, released on anything 
 is cleared when the camera closes. Every number is chosen, and whether it feels like tact is not
 something a harness here can say. `argmind-serve/src/tact.rs`, 8 tests.
 
+**Face memory split one person into six rows, and the first cause named for it was wrong.** The
+owner, 2026-09-30: *얼굴을 치웠다 다시 보이면 이름을 또 물어봄.* The roster held six rows for one
+face, their prints at cosine 0.01–0.36 against a 0.363 threshold. OpenCV was read rather than
+recalled — `FaceRecognizerSF::feature` uses `swapRB = true`, so SFace wants RGB and this tree fed it
+BGR, nearest-sampled where `warpAffine` is bilinear — and that was fixed and **committed as the
+cause**. `--bin recognising` then refuted it on the owner's own face: sitting still, **0.715 median
+the new way and 0.714 the old**, 152 of 153 pairs over threshold either way. The fix matches the
+reference and stays; **the causal claim is withdrawn.** What that run could not see is the owner's
+actual condition — a face leaving the frame and returning, embedded every three seconds whatever
+state it is in — so the harness now has three phases and a candidate gate (facing, inside the frame,
+detector sure), with pass and fail counted apart. Nothing about the gate ships until it has run.
+
 **That is blocked on twenty seconds of the owner's time, and until 2026-09-22 it was blocked on a
 broken instrument.** `measure/presence` asks a person to hold still and then move; run with nobody
 moving in either phase it separated them **2.17 against 0.65**, three to one in the wrong direction,
