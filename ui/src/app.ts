@@ -51,6 +51,15 @@ interface Hello {
   face_models: boolean;
   people: Person[];
   errands: Errand[];
+  rules: Rule[];
+}
+
+/** Where argmind may not act, or must always ask. */
+interface Rule {
+  /** Part of a window title; empty is every app. */
+  app: string;
+  action: "all" | "click" | "type" | "key";
+  then: "never" | "confirm";
 }
 
 /** One piece of work handed over. `state` is the program's word, never the model's. */
@@ -272,6 +281,7 @@ stream.addEventListener("hello", (e) => {
   faces.title = noModels;
   drawPeople(d.people);
   drawErrands(d.errands);
+  drawRules(d.rules);
   drawNoticing(d.noticing, d.noticed);
   // Rebuilt from the server's own list, so a reload is never a page showing buttons the server
   // has forgotten — or missing ones it still holds.
@@ -611,6 +621,64 @@ function drawErrands(list: Errand[]): void {
     errandRows.append(row);
   }
 }
+
+// 규칙. Edited as a list and saved whole; the server answers with what it actually kept, so a
+// list it refused redraws as what still stands rather than as what was typed.
+const ruleRows = document.getElementById("rule-rows") as HTMLElement;
+const ruleAdd = document.getElementById("rule-add") as HTMLButtonElement;
+const ruleSave = document.getElementById("rule-save") as HTMLButtonElement;
+
+const actions: [Rule["action"], string][] =
+  [["all", "모든 동작"], ["click", "누르기"], ["type", "입력"], ["key", "키"]];
+const thens: [Rule["then"], string][] = [["never", "하지 않음"], ["confirm", "항상 물어봄"]];
+
+function choice<T extends string>(options: [T, string][], at: T): HTMLSelectElement {
+  const s = document.createElement("select");
+  for (const [value, text] of options) {
+    const o = document.createElement("option");
+    o.value = value;
+    o.textContent = text;
+    s.append(o);
+  }
+  s.value = at;
+  return s;
+}
+
+function ruleRow(r: Rule): HTMLElement {
+  const row = document.createElement("div");
+  row.className = "rule";
+  const app = document.createElement("input");
+  app.maxLength = 80;
+  app.placeholder = "앱 (예: 카카오톡) — 비우면 모든 앱";
+  app.value = r.app;
+  const drop = document.createElement("button");
+  drop.type = "button";
+  drop.className = "plain";
+  drop.textContent = "빼기";
+  drop.onclick = () => row.remove();
+  row.append(app, choice(actions, r.action), choice(thens, r.then), drop);
+  return row;
+}
+
+function drawRules(list: Rule[]): void {
+  ruleRows.replaceChildren(...list.map(ruleRow));
+}
+
+ruleAdd.onclick = () => ruleRows.append(ruleRow({ app: "", action: "all", then: "never" }));
+
+ruleSave.onclick = () => {
+  // Tabs separate the fields, so a tab typed into a name would split it; it is a space instead.
+  const lines = Array.from(ruleRows.querySelectorAll(".rule")).map((row) => {
+    const app = row.querySelector("input") as HTMLInputElement;
+    const picks = row.querySelectorAll("select");
+    return [app.value.replace(/\t/g, " "), picks[0]?.value ?? "all", picks[1]?.value ?? "never"].join("\t");
+  });
+  void post("/rules", lines.join("\n"));
+};
+
+stream.addEventListener("rules", (e) => {
+  drawRules(JSON.parse((e as MessageEvent).data) as Rule[]);
+});
 
 /** A date somebody can read, from Unix seconds. */
 function on(seconds: number): string {

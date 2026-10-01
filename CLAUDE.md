@@ -65,6 +65,8 @@ the two days that built this, three of them flattering.
                                 watch.rs     a trigger that starts from a change, with its floor
                                 errand.rs    work handed over: check, think, conclude — the
                                              program deciding when, the model one thing each
+                                rule.rs      where it may not act and where it must always ask,
+                                             per app and per action — the program's, never shown
     native/argmind-env-windows/ UI Automation for eyes, SendInput for hands, WASAPI for the
                                 microphone, SAPI for the voice, a cover window
     native/argmind-env-ollama/  the model, over raw HTTP/1.1
@@ -211,6 +213,22 @@ somebody reads the row, *그 지점에는 link Cargo.lock* is information and th
 with nobody reading it, it is the last thing between a wrong resolution and a click, so a proposal
 carrying one still waits. It stays a note otherwise, because the hit test disagrees with a correct
 pixel about three times in ten.
+
+**A password is the person's to type, and a rule is the person's to write — since 2026-10-01,
+from the dots comparison.** `Hands::into_a_secret` is asked before every `type`, and `perform`
+refuses and counts `secret` apart from *gone* and *ambiguous*; on Windows it is UI Automation's
+`IsPassword` of the focus and of the box just clicked, and the hands refuse on their own too, so a
+harness that skips the session is still held. **Default `false`**, so an environment that cannot
+tell does not stop typing — the weaker direction, chosen so typing is not Windows-only. Checked
+against a hidden window this test makes, an `ES_PASSWORD` box and a plain one, both directions;
+**a browser's password box is not checked.** **And a rule had to be narrowed for it**: `hands.rs`'s test forbade `GetFocusedElement` anywhere,
+because typing aimed at the focus was measured and rejected; the guard *reads* the focus, since keys
+land there whatever the hands decide. Allowed once, inside `typing_into_a_secret`, and broken two
+ways to check — a focus read in `type_string` and a second helper beside the guard both still fail. `규칙` in 설정 holds rules by app (part of a window
+title, empty = everywhere) and action (all / click / type / key): *하지 않음* is never offered and is
+checked again at the press, *항상 물어봄* takes the row away from 확인 없이 실행. The strictest rule
+wins in either order. None at rest, which is today exactly. **The gate inside `propose` and `act` is
+not exercised end to end** — the headless build sees no widgets — only `rule::applies` beneath it.
 
 **One call, not two.** A round trip is the budget: 0.45 s warm, 4.7 s and 5.9 s for the first two.
 

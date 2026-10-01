@@ -87,6 +87,18 @@ pub trait Hands {
     fn keys(&self) -> Option<Vec<String>> {
         None
     }
+    /// **Would text typed now land in a password field?** Asked before every `type`, and a `true`
+    /// is a refusal: argmind sends what it types to nobody, but it is a program that writes down
+    /// what it did and shows a model its history, and a password has no business in either. The
+    /// person types it themselves — that is the hand-off.
+    ///
+    /// **`false` by default**, which means an environment that cannot tell does not stop typing.
+    /// That is the weaker direction and it is chosen: refusing every keystroke on a platform with
+    /// no way to ask would make typing a feature of Windows alone. Windows answers from UI
+    /// Automation's `IsPassword`; AT-SPI has a `password text` role and nobody has wired it yet.
+    fn into_a_secret(&mut self) -> bool {
+        false
+    }
 }
 
 /// Asking the model. **It is handed text and returns text** — never an image, never a coordinate.

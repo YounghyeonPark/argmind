@@ -50,6 +50,7 @@ pub mod people;
 pub mod platform;
 pub mod proposals;
 pub mod recogniser;
+pub mod rules;
 pub mod senses;
 pub mod speaker;
 pub mod tact;
@@ -259,6 +260,8 @@ pub enum Route {
     /// Answer the one open question. **An empty body is a skip** — the same act as the button
     /// beside the box, because clearing the field and pressing enter says the same thing.
     Answer(u64, String),
+    /// Replace the rules with these, one per line, `app<TAB>action<TAB>then`.
+    Rules(String),
     /// Hand argmind an errand, in the person's own words.
     Errand(String),
     /// Answer an errand's question, or correct its result.
@@ -396,6 +399,9 @@ pub fn route(request: &Request) -> Route {
         //: `/errand` with the words in the body, `/errand/<id>/answer` likewise, and
         //: `/errand/<id>/drop`. The words are a person's sentence, so never the path.
         ("POST", "/errand") => Route::Errand(request.body.clone()),
+        //: The whole list, because the page edits it as a list and a route per row would be three
+        //: routes to keep in step with one table.
+        ("POST", "/rules") => Route::Rules(request.body.clone()),
         ("POST", p) if p.starts_with("/errand/") => match p[8..].split_once('/') {
             Some((id, "answer")) => match id.parse() {
                 Ok(id) => Route::ErrandAnswer(id, request.body.clone()),

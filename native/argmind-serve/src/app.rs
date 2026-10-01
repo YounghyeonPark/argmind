@@ -192,6 +192,8 @@ struct Desk {
     errands: Vec<argmind_core::errand::Errand>,
     /// When an errand was last stepped, on the clock `notice` uses.
     stepped_at: f64,
+    /// **규칙**, read at startup and replaced whole from the page. See [`argmind_core::rule`].
+    rules: Vec<argmind_core::rule::Rule>,
     /// **What the camera last said about where the head points, and when.** Written by the camera
     /// thread each window, read by `notice`. The age matters: a reading from a camera that stalled
     /// a minute ago is no evidence, and `tact` treats no evidence as *say it*.
@@ -254,6 +256,8 @@ enum Job {
     Errand(String),
     ErrandAnswer(u64, String),
     ErrandDrop(u64),
+    /// The rules, as the page sent them.
+    Rules(String),
     /// The thinking thread took one step: **the copy it stepped from and the result**, so a step
     /// computed before an answer arrived is recognised and thrown away rather than written over it.
     Stepped(argmind_core::errand::Errand, argmind_core::errand::Errand),
@@ -366,6 +370,9 @@ fn think(desk: &mut Desk, out: &Listeners, text: &str) {
 
 /// File one offer. **This does not act.**
 fn propose(desk: &mut Desk, out: &Listeners, effect: Effect) {
+    //: **Which app this would happen in.** A click knows its widget's window; typing and keys go
+    //: to the window in front, which is the one argmind is attending to.
+    let mut window = desk.session.eyes.window().1;
     let (text, hint) = if effect.kind == "click" {
         match desk.session.find(&effect.target, &effect.role) {
             argmind_core::session::Found::Gone => {
@@ -389,6 +396,9 @@ fn propose(desk: &mut Desk, out: &Listeners, effect: Effect) {
                 return;
             }
             argmind_core::session::Found::One(found) => {
+                if !found.window.is_empty() {
+                    window = found.window.clone();
+                }
                 let (cx, cy) = found.centre();
                 //: **A second opinion, not a gate.** A widget's own centre resolves back to itself
                 //: about seven times in ten, and a caption button answering `application` is the
@@ -408,10 +418,24 @@ fn propose(desk: &mut Desk, out: &Listeners, effect: Effect) {
     } else {
         (label(&effect, None), String::new())
     };
+    //: **A rule the person wrote, checked by the program and never shown to the model.** *Never*
+    //: is not offered at all — a row with a 실행 button for something forbidden would be the
+    //: button arguing with the rule — and the turn is told in words so the next one can see why.
+    let rule = argmind_core::rule::applies(&desk.rules, &window, &effect.kind);
+    if rule == Some(argmind_core::rule::Then::Never) {
+        let said = argmind_core::rule::told(&desk.rules, &window, &effect.kind);
+        desk.session.history.push(("could not".into(), format!(
+            "{} — the person has a rule against it in this app; nothing was done",
+            label(&effect, None))));
+        out.send("note", &said);
+        return;
+    }
     //: **In the conversation, not only on the screen.** An offer the person then argues with —
     //: *"not that one"* — has to be something the next turn can see.
     desk.session.remember_doing(&[], &[], std::slice::from_ref(&effect), &[]);
     let doubt = !hint.is_empty();
+    //: *Always ask* here means the button, whatever 확인 없이 실행 says.
+    let must_confirm = rule == Some(argmind_core::rule::Then::Confirm);
     //: **Whose idea it was**, read before the effect is handed over. `unprompted()` is `Some(false)`
     //: for anything a watch or a raised judgement produced, and it is the one thing the automatic
     //: path below is not allowed to carry out.
@@ -435,7 +459,7 @@ fn propose(desk: &mut Desk, out: &Listeners, effect: Effect) {
     //: is a permission a person gave to *this* action; the standing answer is a permission given
     //: once, in advance, to a kind of action — and the kind it was given to is *the thing I just
     //: asked for*. A turn argmind began itself waits, however the switch is set.
-    if !doubt && !its_own_idea && crate::decided::standing("acting") == Some(Standing::Allowed) {
+    if !doubt && !its_own_idea && !must_confirm && crate::decided::standing("acting") == Some(Standing::Allowed) {
         if let Answered::Run(p) = desk.proposals.confirm(token) {
             act(desk, out, p);
         }
@@ -444,9 +468,30 @@ fn propose(desk: &mut Desk, out: &Listeners, effect: Effect) {
 
 /// **The only place in this program that performs anything.**
 fn act(desk: &mut Desk, out: &Listeners, p: Proposal) {
+    //: **The rule again at the press**, because the window in front can change between an offer
+    //: and a button — a row offered in the editor and pressed after switching to the messenger.
+    let window = desk.session.eyes.window().1;
+    if argmind_core::rule::applies(&desk.rules, &window, &p.effect.kind)
+        == Some(argmind_core::rule::Then::Never) {
+        out.send("dropped", &p.token.to_string());
+        out.send("note", &argmind_core::rule::told(&desk.rules, &window, &p.effect.kind));
+        return;
+    }
     let before = (desk.session.ambiguous, desk.session.chose_too_late);
+    let secret_before = desk.session.secret;
     let (did, downgraded, refused) = desk.session.perform(std::slice::from_ref(&p.effect));
     let after = (desk.session.ambiguous, desk.session.chose_too_late);
+    //: **A password field is the hand-off**, not a failure: told as what it is, and written into
+    //: the conversation as such — `remember_doing` would record it as *it had gone by then*.
+    if desk.session.secret > secret_before {
+        desk.session.remember_doing(&did, &[], &[], &[]);
+        desk.session.history.push(("could not".into(),
+            "type into a password field — the person types passwords themselves; nothing was done"
+                .into()));
+        out.send("dropped", &p.token.to_string());
+        out.send("note", "비밀번호 칸이라 입력하지 않았습니다 — 비밀번호는 직접 입력해 주세요");
+        return;
+    }
     desk.session.remember_doing(&did, &refused, &[], &[]);
     //: **The core refused because nobody asked for this**, which is a different outcome from
     //: *done* and from *gone*, and until 2026-09-22 it was reported as `ran`.
@@ -1817,6 +1862,7 @@ fn hello(desk: &Desk, model: &str) -> String {
         format!("\"people\":{}",
                 people_json(&desk.people.lock().unwrap_or_else(|e| e.into_inner()))),
         format!("\"errands\":{}", crate::errands::list_json(&desk.errands)),
+        format!("\"rules\":{}", argmind_core::rule::for_the_page(&desk.rules)),
     ];
     //: Assembled from a list rather than one long format string. The first version wrapped that
     //: string across two lines and the indentation of the second landed **inside the JSON** —
@@ -2086,6 +2132,7 @@ pub fn run(how: How) {
                               before: Vec::new(), lately_noticed: Vec::new(), noticed: 0,
                               nunchi: crate::tact::remembered(), held: None, last_remark: None,
                               errands: crate::errands::remembered(), stepped_at: 0.0,
+                              rules: crate::rules::remembered(),
                               facing_now: Arc::new(Mutex::new(None)),
                               face_seen_at: Arc::new(Mutex::new(None)) };
         //: **The button is the permission, which is what this flag is for** — `session.rs`:
@@ -2332,6 +2379,20 @@ pub fn run(how: How) {
                         agent_out.send("note", "알겠습니다 — 이어서 생각하겠습니다");
                         keep_errands(&desk, &agent_out);
                     }
+                }
+                Job::Rules(lines) => {
+                    match argmind_core::rule::from_lines(&lines) {
+                        Ok(rules) => match crate::rules::keep(&rules) {
+                            Ok(()) => {
+                                desk.rules = rules;
+                                agent_out.send("note", "규칙을 저장했습니다");
+                            }
+                            Err(why) => agent_out.send("note", &why),
+                        },
+                        //: Refused whole and said why, and the page is sent what still stands.
+                        Err(why) => agent_out.send("note", &why),
+                    }
+                    agent_out.send("rules", &argmind_core::rule::for_the_page(&desk.rules));
                 }
                 Job::ErrandDrop(id) => {
                     if crate::errands::drop(&mut desk.errands, id) {
@@ -2753,6 +2814,15 @@ fn serve_one(mut stream: TcpStream, out: &Listeners, token: &str, jobs: &Sender<
             if text.chars().count() <= crate::errands::MOST_CHARS {
                 let _ = stream.write_all(&respond("204 No Content", "text/plain", ""));
                 let _ = jobs.send(Job::ErrandAnswer(id, text));
+            } else {
+                let _ = stream.write_all(&respond("400 Bad Request", "text/plain", "no"));
+            }
+        }
+        //: Thirty rules of eighty characters fit easily; anything far beyond is not a rule list.
+        Route::Rules(lines) => {
+            if lines.len() <= 16_384 {
+                let _ = stream.write_all(&respond("204 No Content", "text/plain", ""));
+                let _ = jobs.send(Job::Rules(lines));
             } else {
                 let _ = stream.write_all(&respond("400 Bad Request", "text/plain", "no"));
             }

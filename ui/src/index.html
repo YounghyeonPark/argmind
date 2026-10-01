@@ -102,6 +102,10 @@
   #aiming { border-bottom: 1px solid var(--edge); font-size: 13px; }
   #holding { border-bottom: 1px solid var(--edge); font-size: 13px; background: #fdfcfa; }
   #errands { border-bottom: 1px solid var(--edge); font-size: 13px; }
+  #rules { padding: 6px 14px; border-top: 1px solid var(--edge); }
+  #rules .what { color: var(--ink); }
+  .rule { display: flex; gap: 6px; align-items: center; margin: 4px 0; }
+  .rule input { flex: 1; font: inherit; padding: 3px 6px; border: 1px solid var(--edge); }
   #errands > summary { padding: 6px 14px; cursor: pointer; color: var(--dim); }
   #errand-body { padding: 0 14px 10px; }
   #errand-form { display: flex; gap: 6px; margin-bottom: 6px; }
@@ -261,6 +265,16 @@
       <span class="what">확인 없이 실행</span>
       <span class="cost">제안을 버튼 없이 바로 실행합니다 — 두 번째 의견이 다르면 그때는 물어봅니다</span>
     </label>
+    <!-- 규칙. Where argmind may not act and where it must always ask, by app and by kind of
+         action. **Checked by the program and never shown to the model**, which is what makes it a
+         rule rather than a request. An app is matched by part of its window title. -->
+    <div id="rules">
+      <div class="what">규칙 — 앱마다 하지 않을 것, 항상 물어볼 것</div>
+      <div class="cost">창 제목의 일부로 앱을 찾습니다. 비워 두면 모든 앱입니다. 비밀번호 칸에는 규칙과 상관없이 입력하지 않습니다</div>
+      <div id="rule-rows"></div>
+      <button type="button" id="rule-add" class="plain">규칙 추가</button>
+      <button type="button" id="rule-save">저장</button>
+    </div>
     <div id="decisions"></div>
   </details>
   <!-- Which microphone, speaker and camera, and a button that uses each one for a moment so the

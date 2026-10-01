@@ -118,6 +118,9 @@ pub struct Session<E: Eyes, H: Hands, M: Speaks> {
     /// because the two are different facts about whether asking is worth doing: one says nobody was
     /// asked, the other says asking is too slow here.
     pub chose_too_late: u32,
+    /// Typing refused because it would have landed in a password field. See
+    /// [`crate::contract::Hands::into_a_secret`].
+    pub secret: u32,
     pub unknown_keys: u32,
     /// **The human is the permission.** An interface with a confirm button turns this on and gates
     /// with the button instead, which is stronger than the flag; one with no button leaves it off.
@@ -135,7 +138,7 @@ pub struct Session<E: Eyes, H: Hands, M: Speaks> {
 impl<E: Eyes, H: Hands, M: Speaks> Session<E, H, M> {
     pub fn new(eyes: E, hands: H, model: M) -> Self {
         Session { eyes, hands, model, seen: Vec::new(), history: Vec::new(), exchanges: 0,
-                  blind: 0, vanished: 0, ambiguous: 0, chose_too_late: 0, unknown_keys: 0,
+                  blind: 0, vanished: 0, ambiguous: 0, chose_too_late: 0, secret: 0, unknown_keys: 0,
                   may_act_unprompted: false,
                   remember_turns: Some(REMEMBER_TURNS), limit: MAX_LISTED,
                   mind: Mind::resting(), note: Note::blank() }
@@ -292,6 +295,13 @@ impl<E: Eyes, H: Hands, M: Speaks> Session<E, H, M> {
                     }
                 },
                 "type" => {
+                    //: **A password is the person's to type.** Refused and counted apart — this
+                    //: is neither *gone* nor *ambiguous*, and the person is told something else.
+                    if self.hands.into_a_secret() {
+                        self.secret += 1;
+                        refused.push(effect.clone());
+                        continue;
+                    }
                     self.hands.type_text(&effect.text);
                     did.push(Done { effect: effect.clone(), target: None, confirmed: None });
                 }

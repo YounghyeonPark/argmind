@@ -20,6 +20,7 @@
 pub mod contract;
 pub mod converse;
 pub mod errand;
+pub mod rule;
 pub mod intent;
 pub mod llm;
 pub mod mind;

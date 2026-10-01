@@ -277,7 +277,18 @@ fn a_click_aims_one_type_and_then_stops() {
     let code: String = source.lines()
         .map(|l| l.split("//").next().unwrap_or("")).collect::<Vec<_>>().join("
 ");
-    assert!(!code.contains("GetFocusedElement"), "typing fell back to focus again");
+    //:
+    //: **One exception, and it reads rather than aims** — since 2026-10-01. Keys land in the focus
+    //: whatever this file decides, so *is the focus a password box?* is the question a password
+    //: guard has to ask of exactly that element. Allowed once, inside `typing_into_a_secret` and
+    //: nowhere else; the targeting code in `type_string` is still held to *keys, not focus*.
+    let guard_at = code.find("pub fn typing_into_a_secret").expect("the password guard");
+    let guard_end = code[guard_at..].find("pub fn type_string").map(|i| guard_at + i)
+        .expect("the guard comes before type_string");
+    let outside = format!("{}{}", &code[..guard_at], &code[guard_end..]);
+    assert!(!outside.contains("GetFocusedElement"), "typing fell back to focus again");
+    assert_eq!(code[guard_at..guard_end].matches("GetFocusedElement").count(), 1,
+               "the password guard asks the focus once");
 }
 
 /// **A control's own line terminator is not somebody's work.**

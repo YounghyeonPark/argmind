@@ -141,6 +141,7 @@ stream.addEventListener("hello", (e) => {
     faces.title = noModels;
     drawPeople(d.people);
     drawErrands(d.errands);
+    drawRules(d.rules);
     drawNoticing(d.noticing, d.noticed);
     // Rebuilt from the server's own list, so a reload is never a page showing buttons the server
     // has forgotten — or missing ones it still holds.
@@ -454,6 +455,55 @@ function drawErrands(list) {
         errandRows.append(row);
     }
 }
+// 규칙. Edited as a list and saved whole; the server answers with what it actually kept, so a
+// list it refused redraws as what still stands rather than as what was typed.
+const ruleRows = document.getElementById("rule-rows");
+const ruleAdd = document.getElementById("rule-add");
+const ruleSave = document.getElementById("rule-save");
+const actions = [["all", "모든 동작"], ["click", "누르기"], ["type", "입력"], ["key", "키"]];
+const thens = [["never", "하지 않음"], ["confirm", "항상 물어봄"]];
+function choice(options, at) {
+    const s = document.createElement("select");
+    for (const [value, text] of options) {
+        const o = document.createElement("option");
+        o.value = value;
+        o.textContent = text;
+        s.append(o);
+    }
+    s.value = at;
+    return s;
+}
+function ruleRow(r) {
+    const row = document.createElement("div");
+    row.className = "rule";
+    const app = document.createElement("input");
+    app.maxLength = 80;
+    app.placeholder = "앱 (예: 카카오톡) — 비우면 모든 앱";
+    app.value = r.app;
+    const drop = document.createElement("button");
+    drop.type = "button";
+    drop.className = "plain";
+    drop.textContent = "빼기";
+    drop.onclick = () => row.remove();
+    row.append(app, choice(actions, r.action), choice(thens, r.then), drop);
+    return row;
+}
+function drawRules(list) {
+    ruleRows.replaceChildren(...list.map(ruleRow));
+}
+ruleAdd.onclick = () => ruleRows.append(ruleRow({ app: "", action: "all", then: "never" }));
+ruleSave.onclick = () => {
+    // Tabs separate the fields, so a tab typed into a name would split it; it is a space instead.
+    const lines = Array.from(ruleRows.querySelectorAll(".rule")).map((row) => {
+        const app = row.querySelector("input");
+        const picks = row.querySelectorAll("select");
+        return [app.value.replace(/\t/g, " "), picks[0]?.value ?? "all", picks[1]?.value ?? "never"].join("\t");
+    });
+    void post("/rules", lines.join("\n"));
+};
+stream.addEventListener("rules", (e) => {
+    drawRules(JSON.parse(e.data));
+});
 /** A date somebody can read, from Unix seconds. */
 function on(seconds) {
     if (!seconds)

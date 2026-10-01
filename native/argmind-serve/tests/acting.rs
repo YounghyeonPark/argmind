@@ -119,6 +119,11 @@ fn doubt_still_asks_even_when_acting_is_allowed() {
     assert!(guard.contains("!doubt"),
             "the automatic path does not check for a second opinion: {guard}");
     assert!(guard.contains("Standing::Allowed"), "{guard}");
+    //: **And a 항상 물어봄 rule** — since 2026-10-01, the third thing the automatic path yields to.
+    assert!(guard.contains("!must_confirm"), "a rule saying always ask is ignored: {guard}");
+    assert!(propose.contains("let must_confirm = rule == Some(argmind_core::rule::Then::Confirm);"),
+            "must_confirm no longer means the rule said so:
+{propose}");
     //: **`doubt` is the hint being non-empty and nothing else.** A refactor that made it mean
     //: something looser — *the widget was found*, say — would pass the line above and gate on
     //: nothing.

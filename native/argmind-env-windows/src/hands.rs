@@ -340,7 +340,35 @@ impl WindowsHands {
         self.record(Did::Sent { live: true })
     }
 
+    /// **Is the focus, or the box just clicked, a password field?** UI Automation's `IsPassword`,
+    /// asked of both because text goes to one or the other: keys to the focus, a value pattern to
+    /// the aim. **Unreadable reads as no** — see `Hands::into_a_secret` for why that direction.
+    pub fn typing_into_a_secret(&mut self) -> bool {
+        if self.automation.is_none() {
+            self.automation = crate::open_automation().ok();
+        }
+        let Some(automation) = &self.automation else { return false };
+        let secret = |e: windows::core::Result<
+            windows::Win32::UI::Accessibility::IUIAutomationElement>| unsafe {
+            e.ok().and_then(|e| e.CurrentIsPassword().ok()).is_some_and(|b| b.as_bool())
+        };
+        let focused = secret(unsafe { automation.GetFocusedElement() });
+        let aimed = match self.aimed {
+            Some(((x, y), when)) if when.elapsed() <= AIM_LASTS => secret(unsafe {
+                automation.ElementFromPoint(POINT { x: x as i32, y: y as i32 })
+            }),
+            _ => false,
+        };
+        focused || aimed
+    }
+
     pub fn type_string(&mut self, text: &str) -> Did {
+        //: **A second line behind `perform`'s.** A harness calls this directly and never goes
+        //: through a session, and a password guard that only one caller passes is not a guard.
+        if self.typing_into_a_secret() {
+            self.aimed = None;
+            return self.record(Did::Refused("a password field".into()));
+        }
         //: **Tried before the dry check, not after.** A dry run that went straight to
         //: `Sent { live: false }` would report the keyboard arm on a machine where the pattern arm
         //: is what would have happened, and a harness comparing the two would be comparing one.
@@ -455,6 +483,9 @@ impl Hands for WindowsHands {
     }
     fn type_text(&mut self, text: &str) {
         self.type_string(text);
+    }
+    fn into_a_secret(&mut self) -> bool {
+        self.typing_into_a_secret()
     }
     fn press(&mut self, key: &str) {
         self.press_key(key);
