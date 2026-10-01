@@ -85,7 +85,20 @@ pub struct Mind {
     /// 놓친 것만 말해줘*, and a design with only numbers would push every real instruction into
     /// the conversation, where it is twelve turns from being forgotten.
     pub aim: String,
+    /// **What the person asked argmind to remember**, one sentence each, in their own words —
+    /// *나를 대표님이라고 불러*, *메모장 말고 VS Code*. From the dots comparison: corrections and
+    /// preferences that outlive the twelve turns of history, shown one by one and deletable one by
+    /// one. **Never written by the model**: added by the person in the panel, by saying
+    /// *…기억해줘*, or by accepting an offer the program makes when it reads a correction.
+    pub kept: Vec<String>,
 }
+
+/// How many things are kept. Chosen: each is a line in every prompt, and the dials' own rule is
+/// that a long list is how a prompt stops being read.
+pub const MOST_KEPT: usize = 12;
+
+/// How long one may be, in characters. A sentence, not a document.
+pub const KEPT_CHARS: usize = 200;
 
 /// **The default is rest**, written out rather than derived: a derived one leaves `dials` empty
 /// while `resting()` fills it with zeros, and two values that behave identically but compare
@@ -99,12 +112,13 @@ impl Default for Mind {
 impl Mind {
     /// Nothing set. The prompt is then exactly what it was before any of this existed.
     pub fn resting() -> Self {
-        Mind { dials: vec![0; DIALS.len()], aim: String::new() }
+        Mind { dials: vec![0; DIALS.len()], aim: String::new(), kept: Vec::new() }
     }
 
     /// Is every dial at zero and no goal written?
     pub fn at_rest(&self) -> bool {
         self.aim.trim().is_empty() && self.dials.iter().all(|&n| n == 0)
+            && self.kept.iter().all(|k| k.trim().is_empty())
     }
 
     /// Read one dial by its Korean name, clamped, missing meaning zero.
@@ -146,16 +160,82 @@ impl Mind {
             //: is the side worth erring on.
             out.push_str(&format!("{AIM_AT}{}.", parts.join(", ")));
         }
+        //: **The goal first and the kept sentences after it, under the one label they share** —
+        //: the goal was always rendered as *기억해 달라고 한 것*, and a goal alone renders byte for
+        //: byte as it did, so what the dials were measured against has not moved.
         let aim = self.aim.trim();
-        if !aim.is_empty() {
+        let said: Vec<String> = std::iter::once(aim)
+            .chain(self.kept.iter().map(|k| k.trim()))
+            .filter(|s| !s.is_empty())
+            //: The person's own words, unedited and quoted, so a rewrite of the surrounding
+            //: sentence cannot quietly change what they asked for.
+            .map(|s| format!("\"{s}\""))
+            .collect();
+        if !said.is_empty() {
             if !out.is_empty() {
                 out.push(' ');
             }
-            //: The person's own words, unedited and quoted, so a rewrite of the surrounding
-            //: sentence cannot quietly change what they asked for.
-            out.push_str(&format!("{KEEP_IN_MIND}\"{aim}\""));
+            out.push_str(&format!("{KEEP_IN_MIND}{}", said.join(" / ")));
         }
         out.push_str(BUT);
         Some(out)
     }
+}
+
+/// What a turn asking to be remembered means.
+#[derive(Debug, PartialEq)]
+pub enum Keep {
+    /// A sentence to keep, with the request words taken off.
+    This(String),
+    /// *이거 기억해줘* — a request with nothing in it that could stand alone in a prompt a week
+    /// later. Asked back rather than stored, because *"이거"* in every prompt is noise.
+    Vague,
+}
+
+/// The words that make a turn a request to remember. **The program reads them, not the model**:
+/// a model asked to decide what to remember is a model writing its own instructions, and this
+/// project's note invented having done things the first time it was asked about itself.
+const KEEP_WORDS: [&str; 8] = ["기억해줘", "기억해 줘", "기억해둬", "기억해 둬", "기억해 두세요",
+                               "기억해주세요", "기억해 주세요", "기억해"];
+
+/// **Is this turn asking argmind to remember something?** Only when the request words end the
+/// sentence or open it — *기억해?* is a question, and *내가 뭐라고 했는지 기억해?* is not a request.
+pub fn asked_to_keep(text: &str) -> Option<Keep> {
+    let t = text.trim();
+    if t.ends_with('?') || t.ends_with('？') {
+        return None;
+    }
+    let t = t.trim_end_matches(['.', '!', '~', ' ']);
+    let rest = KEEP_WORDS.iter().find_map(|w| t.strip_suffix(w))
+        .or_else(|| t.strip_prefix("기억해:").or_else(|| t.strip_prefix("기억해 :")))?;
+    let rest = rest.trim().trim_matches([',', ':', '.', ' ']).trim();
+    //: *…라고*, *…는 거* and *…것* are how Korean quotes a sentence before 기억해줘; the quote
+    //: marker goes, the sentence stays.
+    //: *…다고* keeps its 다 (*쓴다고* → *쓴다*); *…이라고* and *…라고* after a noun go whole
+    //: (*화요일이라고* → *화요일*).
+    let rest = if let Some(r) = rest.strip_suffix("다고") {
+        format!("{r}다")
+    } else {
+        ["이라고", "라고", "라는 거", "다는 거", "다는 것", "는 거", "는 것"].iter()
+            .find_map(|m| rest.strip_suffix(m)).unwrap_or(rest).to_string()
+    };
+    let rest = rest.trim();
+    let deictic = ["이거", "그거", "저거", "이것", "그것", "저것", "이걸", "그걸", "이것을", "그것을",
+                   "이 말", "그 말", "방금", "방금 거", ""];
+    if deictic.contains(&rest) || rest.chars().count() < 4 {
+        return Some(Keep::Vague);
+    }
+    Some(Keep::This(rest.chars().take(KEPT_CHARS).collect()))
+}
+
+/// The words that make a turn look like a correction or a standing preference. **An offer, never
+/// a store**: the program shows *기억해 둘까요?* and the person decides, so a word list that fires
+/// on the wrong sentence costs one dismissed row and nothing in the prompt.
+const PREFERENCE_WORDS: [&str; 10] = ["말고", "그게 아니라", "하지 마", "하지마", "싫어", "좋아해",
+                                      "앞으로", "항상", "절대", "부르지 마"];
+
+pub fn worth_offering(text: &str) -> bool {
+    let t = text.trim();
+    t.chars().count() >= 6 && !t.ends_with('?') && asked_to_keep(t).is_none()
+        && PREFERENCE_WORDS.iter().any(|w| t.contains(w))
 }

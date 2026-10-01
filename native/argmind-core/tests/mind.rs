@@ -132,3 +132,50 @@ fn a_dial_left_alone_is_not_mentioned() {
     }
     assert!(!line.contains(&format!("0/{MOST}")), "{line}");
 }
+
+// ---- kept sentences ----------------------------------------------------------------------------
+
+use argmind_core::mind::{asked_to_keep, worth_offering, Keep};
+
+/// **A goal alone renders exactly as it did**, so every measurement of the dials still describes
+/// the shipped prompt; kept sentences follow it under the same label.
+#[test]
+fn kept_sentences_follow_the_goal_and_the_goal_alone_is_unchanged() {
+    let mut mind = Mind::resting();
+    mind.aim = "놓친 것만 말해줘".into();
+    let alone = mind.line().unwrap();
+    assert_eq!(alone, "사용자가 기억해 달라고 한 것: \"놓친 것만 말해줘\" 그렇다고 해서 할 말이 없는데 \
+말하거나, 부탁받지 않은 일을 할 이유가 되지는 않습니다.");
+    mind.kept = vec!["나를 대표님이라고 불러".into()];
+    assert!(mind.line().unwrap().contains("\"놓친 것만 말해줘\" / \"나를 대표님이라고 불러\""));
+    let mut only = Mind::resting();
+    only.kept = vec!["영어로 대답해".into()];
+    assert!(!only.at_rest());
+    assert!(only.line().unwrap().starts_with("사용자가 기억해 달라고 한 것: \"영어로 대답해\""));
+    only.kept = vec!["  ".into()];
+    assert!(only.at_rest() && only.line().is_none(), "a blank kept sentence is rest");
+}
+
+#[test]
+fn a_request_to_remember_is_read_by_the_program() {
+    assert_eq!(asked_to_keep("나는 존댓말이 편해, 기억해줘"),
+               Some(Keep::This("나는 존댓말이 편해".into())));
+    assert_eq!(asked_to_keep("메모장 말고 VS Code를 쓴다고 기억해 둬."),
+               Some(Keep::This("메모장 말고 VS Code를 쓴다".into())));
+    assert_eq!(asked_to_keep("기억해: 회의는 화요일"), Some(Keep::This("회의는 화요일".into())));
+    assert_eq!(asked_to_keep("회의는 화요일이라고 기억해줘"), Some(Keep::This("회의는 화요일".into())));
+    assert_eq!(asked_to_keep("이거 기억해줘"), Some(Keep::Vague));
+    //: Questions and sentences that merely mention remembering are not requests.
+    assert_eq!(asked_to_keep("내가 뭐라고 했는지 기억해?"), None);
+    assert_eq!(asked_to_keep("어제 일 기억나?"), None);
+    assert_eq!(asked_to_keep("안녕"), None);
+}
+
+#[test]
+fn a_correction_is_offered_and_small_talk_is_not() {
+    assert!(worth_offering("메모장 말고 VS Code로 열어줘"));
+    assert!(worth_offering("앞으로 반말로 해줘"));
+    assert!(!worth_offering("고마워"));
+    assert!(!worth_offering("이거 말고 뭐 있어?"), "a question is not a preference");
+    assert!(!worth_offering("나는 존댓말이 편해, 기억해줘"), "already a request, not an offer");
+}

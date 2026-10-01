@@ -1005,6 +1005,55 @@ stream.addEventListener("mind", (e) => {
         dials.append(dialRow(d, m.most));
     }
     whatissent.textContent = m.line;
+    drawKept(m.kept ?? []);
+});
+const keptRows = document.getElementById("kept-rows");
+const keptForm = document.getElementById("kept-form");
+const keptWhat = document.getElementById("kept-what");
+function drawKept(list) {
+    keptRows.replaceChildren(...list.map((text, i) => {
+        const row = document.createElement("div");
+        row.className = "kept";
+        const t = document.createElement("span");
+        t.className = "text";
+        t.textContent = text;
+        const drop = document.createElement("button");
+        drop.type = "button";
+        drop.className = "plain";
+        drop.textContent = "지우기";
+        drop.onclick = () => void post(`/kept/${i}/drop`);
+        row.append(t, drop);
+        return row;
+    }));
+}
+keptForm.onsubmit = (ev) => {
+    ev.preventDefault();
+    const text = keptWhat.value.trim();
+    if (!text)
+        return;
+    keptWhat.value = "";
+    void post("/kept", text);
+};
+// **기억해 둘까요?** — offered by the program after a turn that reads as a correction or a
+// preference. Nothing is kept until the button is pressed, and the row goes either way.
+stream.addEventListener("keep-offer", (e) => {
+    const text = e.data;
+    const row = document.createElement("div");
+    row.className = "offer";
+    const ask = document.createElement("span");
+    ask.textContent = `기억해 둘까요? 「${text}」`;
+    const yes = document.createElement("button");
+    yes.type = "button";
+    yes.textContent = "기억하기";
+    yes.onclick = () => { void post("/kept", text); row.remove(); };
+    const no = document.createElement("button");
+    no.type = "button";
+    no.className = "plain";
+    no.textContent = "아니요";
+    no.onclick = () => row.remove();
+    row.append(ask, yes, no);
+    transcript.append(row);
+    transcript.scrollTop = transcript.scrollHeight;
 });
 function dialRow(d, most) {
     const row = document.createElement("div");

@@ -258,6 +258,8 @@ enum Job {
     ErrandDrop(u64),
     /// The rules, as the page sent them.
     Rules(String),
+    Keep(String),
+    Unkeep(usize),
     /// The thinking thread took one step: **the copy it stepped from and the result**, so a step
     /// computed before an answer arrived is recognised and thrown away rather than written over it.
     Stepped(argmind_core::errand::Errand, argmind_core::errand::Errand),
@@ -305,7 +307,35 @@ fn label(effect: &Effect, found: Option<&Widget>) -> String {
 }
 
 /// One turn: ask, say, and turn every effect into a row that waits.
+/// **A request to remember, answered by the program.** No model call: what to keep is the
+/// person's sentence, and asking a model to decide what argmind should remember is asking it to
+/// write its own instructions. The reply is fixed words, and both halves go into the history so the
+/// next turn can see what was kept.
+fn kept_instead(desk: &mut Desk, out: &Listeners, text: &str) -> bool {
+    let Some(asked) = argmind_core::mind::asked_to_keep(text) else { return false };
+    let reply = match asked {
+        argmind_core::mind::Keep::This(said) => match crate::mind::keep(&said) {
+            Ok(mind) => {
+                desk.session.mind = mind;
+                out.send("mind", &mind_json(&desk.session.mind));
+                format!("기억했습니다 — 「{said}」. 설정 → 생각에서 보고 지울 수 있습니다")
+            }
+            Err(why) => why,
+        },
+        argmind_core::mind::Keep::Vague =>
+            "무엇을 기억할지 한 문장으로 말씀해 주세요 — 예: 「메모장 말고 VS Code를 쓴다고 기억해줘」"
+                .to_string(),
+    };
+    desk.session.history.push(("them".into(), text.to_string()));
+    desk.session.history.push(("you".into(), reply.clone()));
+    out.send("say", &reply);
+    true
+}
+
 fn think(desk: &mut Desk, out: &Listeners, text: &str) {
+    if kept_instead(desk, out, text) {
+        return;
+    }
     //: **Held for the whole turn, and it clears itself.** While this is alive the senses stand
     //: down: one declines to start and one already running is abandoned mid-call. A guard rather
     //: than two stores, because an early return that left the flag set would silence every sense
@@ -753,9 +783,10 @@ pub fn mind_json(mind: &argmind_core::mind::Mind) -> String {
         format!("{{\"name\":\"{}\",\"gloss\":\"{}\",\"at\":{}}}",
                 escape(korean), escape(gloss), mind.of(korean))
     }).collect();
-    format!("{{\"most\":{},\"aim\":\"{}\",\"line\":\"{}\",\"dials\":[{}]}}",
+    let kept: Vec<String> = mind.kept.iter().map(|k| format!("\"{}\"", escape(k))).collect();
+    format!("{{\"most\":{},\"aim\":\"{}\",\"line\":\"{}\",\"dials\":[{}],\"kept\":[{}]}}",
             argmind_core::mind::MOST, escape(&mind.aim),
-            escape(&mind.line().unwrap_or_default()), rows.join(","))
+            escape(&mind.line().unwrap_or_default()), rows.join(","), kept.join(","))
 }
 
 /// What to say when the model gave back the person's own words with a question mark on them.
@@ -2179,7 +2210,17 @@ pub fn run(how: How) {
                 Err(_) => break,
             };
             match job {
-                Job::Said(text) => think(&mut desk, &agent_out, text.trim()),
+                Job::Said(text) => {
+                    let text = text.trim();
+                    think(&mut desk, &agent_out, text);
+                    //: **Offered, never kept.** A correction or a preference in the person's words
+                    //: is a row asking 기억해 둘까요? — the word list is rough, and a rough list
+                    //: that only offers costs one dismissed row when it is wrong.
+                    if argmind_core::mind::worth_offering(text)
+                        && !desk.session.mind.kept.iter().any(|k| k.trim() == text) {
+                        agent_out.send("keep-offer", text);
+                    }
+                }
                 Job::Confirm(n) => {
                     if let Answered::Run(p) = desk.proposals.confirm(n) {
                         act(&mut desk, &agent_out, p);
@@ -2379,6 +2420,26 @@ pub fn run(how: How) {
                         agent_out.send("note", "알겠습니다 — 이어서 생각하겠습니다");
                         keep_errands(&desk, &agent_out);
                     }
+                }
+                Job::Keep(text) => {
+                    match crate::mind::keep(&text) {
+                        Ok(mind) => {
+                            desk.session.mind = mind;
+                            agent_out.send("note", "기억했습니다");
+                        }
+                        Err(why) => agent_out.send("note", &why),
+                    }
+                    agent_out.send("mind", &mind_json(&desk.session.mind));
+                }
+                Job::Unkeep(i) => {
+                    match crate::mind::unkeep(i) {
+                        Ok(mind) => {
+                            desk.session.mind = mind;
+                            agent_out.send("note", "잊었습니다");
+                        }
+                        Err(why) => agent_out.send("note", &why),
+                    }
+                    agent_out.send("mind", &mind_json(&desk.session.mind));
                 }
                 Job::Rules(lines) => {
                     match argmind_core::rule::from_lines(&lines) {
@@ -2817,6 +2878,18 @@ fn serve_one(mut stream: TcpStream, out: &Listeners, token: &str, jobs: &Sender<
             } else {
                 let _ = stream.write_all(&respond("400 Bad Request", "text/plain", "no"));
             }
+        }
+        Route::Keep(text) => {
+            if text.chars().count() <= argmind_core::mind::KEPT_CHARS {
+                let _ = stream.write_all(&respond("204 No Content", "text/plain", ""));
+                let _ = jobs.send(Job::Keep(text));
+            } else {
+                let _ = stream.write_all(&respond("400 Bad Request", "text/plain", "no"));
+            }
+        }
+        Route::Unkeep(i) => {
+            let _ = stream.write_all(&respond("204 No Content", "text/plain", ""));
+            let _ = jobs.send(Job::Unkeep(i));
         }
         //: Thirty rules of eighty characters fit easily; anything far beyond is not a rule list.
         Route::Rules(lines) => {

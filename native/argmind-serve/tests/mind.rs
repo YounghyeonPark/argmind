@@ -142,3 +142,47 @@ fn a_mirrored_reply_is_replaced_by_an_honest_one() {
     let quiet = read_reply(r#"{"say": "", "do": []}"#, &screen, &trigger);
     assert_eq!(spoken(&quiet), "");
 }
+
+// ---- kept sentences ----------------------------------------------------------------------------
+
+/// **Kept sentences survive a restart, one line each, quotes and colons intact.**
+#[test]
+fn kept_sentences_written_down_read_back_the_same() {
+    let mut mind = Mind::resting();
+    mind.aim = "놓친 것만".into();
+    mind.kept = vec!["나를 \"대표님\"이라고 불러".into(), "메모장 말고: VS Code".into()];
+    let text = render(&mind);
+    assert_eq!(text.matches("\"기억\":").count(), 2, "{text}");
+    assert_eq!(parse(&text), mind, "wrote {text}");
+    //: Nothing kept writes nothing, so a file at rest is unchanged by this feature.
+    assert_eq!(render(&Mind::resting()), "{}
+");
+}
+
+/// A blank kept line in a hand-edited file is not a sentence, and more than the most is not kept.
+#[test]
+fn a_hand_edited_file_keeps_only_what_is_a_sentence_and_no_more_than_the_most() {
+    let mut text = String::from("{
+  \"기억\": \"   \",
+");
+    for i in 0..argmind_core::mind::MOST_KEPT + 3 {
+        text.push_str(&format!("  \"기억\": \"문장 {i}\",
+"));
+    }
+    text.push_str("}
+");
+    let mind = parse(&text);
+    assert_eq!(mind.kept.len(), argmind_core::mind::MOST_KEPT);
+    assert_eq!(mind.kept[0], "문장 0");
+}
+
+#[test]
+fn keeping_and_forgetting_travel_as_routes() {
+    let post = |path: &str, body: &str| route(&Request { method: "POST".into(), path: path.into(),
+                                                         token: None, body: body.into() });
+    assert_eq!(post("/kept", "나를 대표님이라고 불러"), Route::Keep("나를 대표님이라고 불러".into()));
+    assert_eq!(post("/kept/2/drop", ""), Route::Unkeep(2));
+    for bad in ["/kept/x/drop", "/kept/2", "/kept/2/forget", "/kept/"] {
+        assert_eq!(post(bad, ""), Route::Unknown, "{bad}");
+    }
+}

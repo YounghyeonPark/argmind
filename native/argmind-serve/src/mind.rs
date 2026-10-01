@@ -34,6 +34,10 @@ use argmind_core::mind::{Mind, DIALS, MOST};
 /// dial called 목표 could not shadow it silently.
 pub const AIM: &str = "목표";
 
+/// The key each kept sentence is written under — **once per sentence**, one per line, which is
+/// what this hand reader can read and what a person editing the file can see.
+pub const KEPT: &str = "기억";
+
 /// Where the file lives — beside the decisions and the devices.
 pub fn at() -> PathBuf {
     let mut path = std::env::var("LOCALAPPDATA").map(PathBuf::from)
@@ -70,9 +74,15 @@ pub fn parse(text: &str) -> Mind {
         let Some((left, right)) = line.split_once(':') else { continue };
         let key = left.trim().trim_matches('"');
         let right = right.trim();
-        if key == AIM {
+        if key == AIM || key == KEPT {
             if let Some((inside, _)) = right.strip_prefix('"').and_then(|r| r.rsplit_once('"')) {
-                mind.aim = unescape(inside);
+                let said = unescape(inside);
+                if key == AIM {
+                    mind.aim = said;
+                } else if !said.trim().is_empty()
+                    && mind.kept.len() < argmind_core::mind::MOST_KEPT {
+                    mind.kept.push(said);
+                }
             }
             continue;
         }
@@ -98,6 +108,9 @@ pub fn render(mind: &Mind) -> String {
     let aim = mind.aim.trim();
     if !aim.is_empty() {
         rows.push(format!("  \"{AIM}\": \"{}\"", escape(aim)));
+    }
+    for kept in mind.kept.iter().map(|k| k.trim()).filter(|k| !k.is_empty()) {
+        rows.push(format!("  \"{KEPT}\": \"{}\"", escape(kept)));
     }
     if rows.is_empty() {
         return "{}\n".to_string();
@@ -151,6 +164,37 @@ pub fn aim(text: &str) -> Result<Mind, String> {
     //: A goal is a sentence, and **the length is capped where a sentence stops being one**. Nothing
     //: here is measured; it is a guard against a paste of a whole file ending up in every prompt.
     mind.aim = text.trim().chars().take(400).collect();
+    write(&mind)?;
+    Ok(mind)
+}
+
+/// **Remember one sentence**, in the person's words. The same sentence twice is one, and a full
+/// list is refused with the reason rather than trimmed — nothing the person asked to keep is
+/// dropped without them choosing which.
+pub fn keep(text: &str) -> Result<Mind, String> {
+    let said: String = text.trim().chars().take(argmind_core::mind::KEPT_CHARS).collect();
+    if said.is_empty() {
+        return Err("기억할 문장을 적어 주세요".into());
+    }
+    let mut mind = remembered();
+    if !mind.kept.iter().any(|k| k.trim() == said) {
+        if mind.kept.len() >= argmind_core::mind::MOST_KEPT {
+            return Err(format!("기억한 것이 {}개입니다 — 하나를 지우고 다시 말씀해 주세요",
+                               argmind_core::mind::MOST_KEPT));
+        }
+        mind.kept.push(said);
+    }
+    write(&mind)?;
+    Ok(mind)
+}
+
+/// Forget one, by its place in the list the page was shown.
+pub fn unkeep(index: usize) -> Result<Mind, String> {
+    let mut mind = remembered();
+    if index >= mind.kept.len() {
+        return Err("그 항목은 이미 없습니다".into());
+    }
+    mind.kept.remove(index);
     write(&mind)?;
     Ok(mind)
 }

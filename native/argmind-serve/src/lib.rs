@@ -262,6 +262,10 @@ pub enum Route {
     Answer(u64, String),
     /// Replace the rules with these, one per line, `app<TAB>action<TAB>then`.
     Rules(String),
+    /// Remember this sentence, in the person's words.
+    Keep(String),
+    /// Forget the kept sentence at this place in the list.
+    Unkeep(usize),
     /// Hand argmind an errand, in the person's own words.
     Errand(String),
     /// Answer an errand's question, or correct its result.
@@ -402,6 +406,13 @@ pub fn route(request: &Request) -> Route {
         //: The whole list, because the page edits it as a list and a route per row would be three
         //: routes to keep in step with one table.
         ("POST", "/rules") => Route::Rules(request.body.clone()),
+        //: The sentence in the body, like `/aim`; forgetting by place in the list the page drew.
+        ("POST", "/kept") => Route::Keep(request.body.clone()),
+        ("POST", p) if p.starts_with("/kept/") => match p[6..].strip_suffix("/drop")
+            .and_then(|i| i.parse().ok()) {
+            Some(i) => Route::Unkeep(i),
+            None => Route::Unknown,
+        },
         ("POST", p) if p.starts_with("/errand/") => match p[8..].split_once('/') {
             Some((id, "answer")) => match id.parse() {
                 Ok(id) => Route::ErrandAnswer(id, request.body.clone()),

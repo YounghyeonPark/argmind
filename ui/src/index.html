@@ -103,6 +103,11 @@
   #holding { border-bottom: 1px solid var(--edge); font-size: 13px; background: #fdfcfa; }
   #errands { border-bottom: 1px solid var(--edge); font-size: 13px; }
   #rules { padding: 6px 14px; border-top: 1px solid var(--edge); }
+  .kept { display: flex; gap: 6px; align-items: baseline; padding: 2px 0; }
+  .kept .text { flex: 1; color: var(--ink); }
+  #kept-form, .offer { display: flex; gap: 6px; margin-top: 4px; }
+  #kept-form input { flex: 1; font: inherit; padding: 3px 6px; border: 1px solid var(--edge); }
+  .offer { align-items: baseline; color: var(--dim); font-size: 13px; padding: 2px 0; }
   #rules .what { color: var(--ink); }
   .rule { display: flex; gap: 6px; align-items: center; margin: 4px 0; }
   .rule input { flex: 1; font: inherit; padding: 3px 6px; border: 1px solid var(--edge); }
@@ -323,6 +328,16 @@
         <span>목표</span>
         <textarea id="aim" rows="2" placeholder="예: 코드 리뷰 중일 때는 놓친 것만 짧게 말해줘"></textarea>
       </label>
+      <!-- 기억한 것. The person's sentences, one row each, each deletable — the per-item view the
+           dots comparison asked for. Added here, by saying …기억해줘, or by accepting an offer. -->
+      <div class="goal">
+        <span>기억한 것 — 대화에서 「…기억해줘」라고 해도 됩니다</span>
+        <div id="kept-rows"></div>
+        <form id="kept-form" class="reply" autocomplete="off">
+          <input id="kept-what" maxlength="200" placeholder="예: 나를 대표님이라고 불러">
+          <button type="submit">기억하기</button>
+        </form>
+      </div>
       <div id="dials"></div>
       <!-- 눈치 sits with the dials because that is where a person looks for it, and is marked as
            different because it is: the four above reach the model as a sentence, this one never
