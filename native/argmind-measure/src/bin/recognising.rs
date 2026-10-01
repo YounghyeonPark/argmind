@@ -289,13 +289,19 @@ fn run() -> i32 {
     let rate = |v: &[f32]| if v.is_empty() { f32::NAN }
                            else { v.iter().filter(|c| **c >= SAME).count() as f32 / v.len() as f32 };
     let (rp, rf) = (rate(&pass), rate(&fail));
+    //: **The verdict was too easy to earn, and it said *ship* on two frames.** The first version
+    //: shipped the gate whenever passing frames cleared 95% and beat failing ones by anything at
+    //: all; the third run read 14 of 14 against 17 of 19 and printed *이 관문을 싣습니다* — on the
+    //: run after one where the same gate failed, 81% against 88%. It also costs every turned-head
+    //: frame, which matched 20 of 20 in both runs. So the gap now has to be large before this says
+    //: the gate separates, and it never says *ship*: two runs disagreeing is not a decision.
     if pass.is_empty() {
         println!("  · 고개·들락날락 구간에서 관문을 통과한 얼굴이 없습니다 — 관문이 너무 좁거나 구간이 짧았습니다.");
-    } else if rp >= 0.95 && (fail.is_empty() || rf < rp) {
-        println!("  · **관문이 가릅니다**: 통과 {:.0}% 가 기준을 넘고 탈락은 {:.0}%. 이 관문을 싣습니다.",
+    } else if rp >= 0.95 && rf <= rp - 0.25 {
+        println!("  · **관문이 크게 가릅니다**: 통과 {:.0}% 대 탈락 {:.0}%. 다른 실행에서도 그런지 보세요.",
                  rp * 100.0, rf * 100.0);
     } else {
-        println!("  · **관문이 안 가릅니다**: 통과 {:.0}% 대 탈락 {:.0}%. 이 관문은 틀린 관문입니다.",
+        println!("  · **관문이 가르지 못합니다**: 통과 {:.0}% 대 탈락 {:.0}% — 차이가 작거나 반대입니다.",
                  rp * 100.0, rf * 100.0);
     }
     if rate(&cross) >= 0.95 {

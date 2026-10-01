@@ -451,7 +451,14 @@ unknown frames agree**, keeps their mean rather than one arbitrary frame, and le
 whatever was held. And the question after enrolment now asks about **the row just made**, where it
 had asked about the oldest unnamed one — a stranger from last week, with stray rows present.
 `--bin recognising` replays every recorded frame through that rule and the old one and counts rows
-for one person; that number is what the rule stands or falls on and it has not been taken yet.
+for one person; that number is what the rule stands or falls on. **It held, once**: the third run
+replayed 10 frames at the application's cadence and 53 at every frame, and the old rule made **2
+rows** for one person both ways where the new rule made **1**. One session and a one-row difference
+— the evidence that matters next is the owner not being asked again. **The same run printed *ship
+the gate*** on 14 of 14 passing against 17 of 19 failing — two frames, a run after the same gate
+failed 81% to 88%, and still discarding 18 turned-head frames that matched — and it did not ship;
+the harness's verdict was too easy to earn and now needs a 25-point gap and never says *ship*.
+Old-way prints against the new centre: 0.878, 19 of 20.
 
 **That is blocked on twenty seconds of the owner's time, and until 2026-09-22 it was blocked on a
 broken instrument.** `measure/presence` asks a person to hold still and then move; run with nobody
