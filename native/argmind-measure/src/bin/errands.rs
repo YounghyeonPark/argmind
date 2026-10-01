@@ -148,18 +148,70 @@ fn preflight_only(model: &Local, date: &str) {
     println!("\n  A {}/{} · B {}/{} · C {}/{}", right[0], total[0], right[1], total[1], right[2], total[2]);
 }
 
+/// **For `--answered`: does an answer from the person change the result?** Found live on
+/// 2026-10-01: the weather errand stopped, was told *서울은 맑고 18도래. 우산이 필요한지만
+/// 정리해줘*, and concluded *직접 확인할 수 없어… 15~20도* — the answer sat in the notes and was
+/// ignored. Each case: the errand, the answer, and words the result must contain to have used it.
+/// **Written before the run**: all three use the answer, and the weather names no temperature but 18.
+/// A `|` is *any of these*. **The weather's second word was added after the first run**, which
+/// passed on *우산이 필요한지 여부는 날씨 상황에 따라 달라질 수 있으므로* — mentioning the umbrella
+/// without answering — and it is stricter, so the baseline it was added after reads the same 2 of 3.
+const ANSWERED: [(&str, &str, &[&str]); 3] = [
+    ("오늘 서울 날씨 알아봐줘", "서울은 맑고 18도래. 우산이 필요한지만 정리해줘",
+     &["우산", "필요 없|필요하지 않|안 챙|없어도|필요가 없"]),
+    ("다음 주 부모님 생신 선물 아이디어를 정리해줘", "예산은 5만원이고 어머니는 등산을 좋아하셔", &["등산"]),
+    ("다음 주 팀 회의 일정 잡아줘", "팀원은 넷이고 화요일 오후와 목요일 오전만 다 같이 돼", &["화요일", "목요일"]),
+];
+
+fn answered_only(model: &Local, date: &str, year: &str) {
+    println!("  ── 사람이 답한 뒤, {}개 ──", ANSWERED.len());
+    let mut used = 0;
+    for (what, answer, must) in ANSWERED {
+        let mut e = Errand::new(1, what);
+        //: Straight past the check, as the application does after an answer: the preflight is not
+        //: what is being measured, and it is asked only once.
+        e.steps = 1;
+        e.state = State::Working;
+        e.answered(answer);
+        while e.state.open() {
+            let Ok(r) = model.ask(&ask_for_a_step(&e, "", date)) else { break };
+            read_step(&r.text, &mut e);
+        }
+        let text = format!("{} {}", e.result, e.ask);
+        let hit = must.iter().all(|m| m.split('|').any(|w| text.contains(w)));
+        let made_up = fabricated(&text.replace("18도", ""), year);
+        if hit && made_up.is_none() {
+            used += 1;
+        }
+        println!("     {what}\n       답: {answer}\n       {:?}, {}걸음 — {}{}", e.state, e.steps,
+                 if hit { "답을 씀" } else { "**답을 안 씀**" },
+                 made_up.map(|f| format!(", **지어냄 {f}**")).unwrap_or_default());
+        for l in text.trim().lines() {
+            println!("         {l}");
+        }
+    }
+    println!("\n  답을 쓰고 지어내지 않음 {used}/{}", ANSWERED.len());
+}
+
 fn main() {
     let mut model = Local::new("qwen3:8b");
     model.think = Some(false);
     model.keep_alive = "300s".into();
     let now = SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_secs() as i64).unwrap_or(0);
-    let date = today(now, 9);
+    //: Korea, fixed: the harness reads the same date wherever it is run.
+    let date = today(now, 9 * 60);
     let year: String = date.chars().take(4).collect();
     if std::env::args().any(|a| a == "--preflight") {
         for _ in 0..2 {
             let _ = model.ask("Reply with the single word: ready");
         }
         return preflight_only(&model, &date);
+    }
+    if std::env::args().any(|a| a == "--answered") {
+        for _ in 0..2 {
+            let _ = model.ask("Reply with the single word: ready");
+        }
+        return answered_only(&model, &date, &year);
     }
     println!("\n  맡긴 일이 실제로 나아가는가 — qwen3:8b, 점검 · 생각 · 정리, 행동 칸 없음, 오늘 {date}");
     println!("  harness {}\n", argmind_measure::source_print(include_str!("errands.rs")));

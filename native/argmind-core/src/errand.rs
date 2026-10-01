@@ -185,6 +185,12 @@ impl Errand {
         self.state = State::Working;
         self.stalled = 0;
         self.told = false;
+        //: **An errand handed back by the cap gets its budget back.** Without this the first step
+        //: after an answer would meet the cap again and hand it straight back — the answer heard and
+        //: thrown away. Past the preflight, not before it: the person has already been asked.
+        if self.steps >= MOST_STEPS {
+            self.steps = 1;
+        }
     }
 
     /// Start it again, from where it was, after a result the person did not accept.
@@ -249,13 +255,33 @@ pub fn ask_for_a_step(errand: &Errand, screen: &str, today: &str) -> String {
     }
 }
 
+/// **What the person said comes first, apart, and above argmind's own notes.**
+///
+/// It used to be one line among the notes, prefixed. Found live, 2026-10-01: the weather errand
+/// was told *서울은 맑고 18도래. 우산이 필요한지만 정리해줘* and concluded *직접 확인할 수 없어…
+/// 15~20도*; `--answered` then read 2 of 3. A slot fed by state and present only when there is
+/// something in it — the one kind of prompt edit that has paid here — so with no answer the
+/// prompt is byte for byte what the measured runs saw.
 fn notes_block(errand: &Errand, most: usize) -> String {
-    let shown: Vec<&String> = errand.notes.iter().rev().take(most).collect();
-    if shown.is_empty() {
-        return "아직 생각한 것이 없다.\n\n".into();
+    let theirs: Vec<&str> = errand.notes.iter()
+        .filter_map(|n| n.strip_prefix(FROM_THEM)).collect();
+    let ours: Vec<&String> = errand.notes.iter().filter(|n| !n.starts_with(FROM_THEM))
+        .rev().take(most).collect();
+    let mut p = String::new();
+    if !theirs.is_empty() {
+        p.push_str("사람이 직접 알려준 것 — 너가 짐작한 어떤 것보다 이것이 맞다. 이것을 바탕으로 하고, \
+사람이 부탁한 대로 답하라:\n");
+        for t in &theirs {
+            p.push_str(&format!("- {t}\n"));
+        }
+        p.push('\n');
     }
-    let mut p = String::from("지금까지 생각한 것:\n");
-    for n in shown.iter().rev() {
+    if ours.is_empty() {
+        p.push_str("아직 생각한 것이 없다.\n\n");
+        return p;
+    }
+    p.push_str("지금까지 생각한 것:\n");
+    for n in ours.iter().rev() {
         p.push_str(&format!("- {n}\n"));
     }
     p.push('\n');
@@ -421,10 +447,11 @@ fn guard(errand: &mut Errand) {
     }
 }
 
-/// **Today, as the prompts say it**, from Unix seconds and an offset in hours. Pure, so it can be
-/// tested and so the core still names no clock: the caller reads the time.
-pub fn today(unix: i64, offset_hours: i64) -> String {
-    let days = (unix + offset_hours * 3600).div_euclid(86_400);
+/// **Today, as the prompts say it**, from Unix seconds and an offset in minutes — minutes because
+/// India and Newfoundland are half an hour off. Pure, so it can be tested and so the core still
+/// names no clock: the caller reads the time and the time zone.
+pub fn today(unix: i64, offset_minutes: i64) -> String {
+    let days = (unix + offset_minutes * 60).div_euclid(86_400);
     //: Howard Hinnant's civil-from-days.
     let z = days + 719_468;
     let era = z.div_euclid(146_097);
@@ -448,6 +475,18 @@ pub fn render_all(errands: &[Errand]) -> String {
         "invented": e.invented, "told": e.told,
     })).collect();
     serde_json::to_string_pretty(&json!({ "errands": rows })).unwrap_or_else(|_| "{}".into()) + "\n"
+}
+
+/// **What a page is shown, on one line** — a server-sent event's data ends at a newline. The
+/// newest thought the model had, not the person's answers, stands for *what it is on now*.
+pub fn for_the_page(errands: &[Errand]) -> String {
+    let rows: Vec<Value> = errands.iter().map(|e| {
+        let lately = e.notes.iter().rev().find(|n| !n.starts_with(FROM_THEM))
+            .cloned().unwrap_or_default();
+        json!({ "id": e.id, "what": e.what, "state": e.state.word(), "steps": e.steps,
+                "lately": lately, "ask": e.ask, "result": e.result })
+    }).collect();
+    Value::Array(rows).to_string()
 }
 
 /// **A row that does not read is dropped, not the file** — one mangled errand should not lose the
@@ -604,10 +643,37 @@ mod tests {
     }
 
     #[test]
+    fn an_answer_after_the_cap_is_heard_rather_than_capped_again() {
+        let mut e = started();
+        for _ in 0..MOST_STEPS {
+            read_step("읽을 수 없는 답", &mut e);
+        }
+        assert_eq!(e.state, State::NeedsYou);
+        e.answered("돈 말고 시간을 아끼는 방법으로");
+        assert_eq!(e.phase(), Phase::Think, "back to thinking, not to the preflight");
+        assert_eq!(read_step(&thought("장보기를 한 번에 몰아서 한다"), &mut e), Stepped::Progressed);
+        assert_eq!(e.state, State::Working, "and the cap did not hand it straight back");
+    }
+
+    #[test]
+    fn what_the_person_said_stands_apart_and_only_when_said() {
+        let mut e = started();
+        read_step(&thought("앨범을 만든다"), &mut e);
+        let before = ask_for_a_step(&e, "", "오늘");
+        assert!(!before.contains("사람이 직접 알려준 것"), "absent at rest");
+        e.answered("어머니는 등산을 좋아하셔");
+        let after = ask_for_a_step(&e, "", "오늘");
+        let theirs = after.find("사람이 직접 알려준 것").expect("present once answered");
+        let ours = after.find("지금까지 생각한 것").unwrap();
+        assert!(theirs < ours, "the person's words come first");
+        assert!(after.contains("- 어머니는 등산을 좋아하셔") && !after.contains(FROM_THEM));
+    }
+
+    #[test]
     fn today_is_counted_from_the_epoch_correctly() {
         assert_eq!(today(0, 0), "1970년 1월 1일");
         //: 2026-10-01 00:30 in Korea is 2026-09-30 15:30 UTC.
-        assert_eq!(today(1_790_782_200, 9), "2026년 10월 1일");
+        assert_eq!(today(1_790_782_200, 9 * 60), "2026년 10월 1일");
         assert_eq!(today(1_790_782_200, 0), "2026년 9월 30일");
         assert_eq!(today(951_782_400, 0), "2000년 2월 29일", "a leap day");
     }

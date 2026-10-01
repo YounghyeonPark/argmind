@@ -752,6 +752,30 @@ pub fn describe() -> &'static str {
     }
 }
 
+/// **Minutes to add to UTC for the date on this machine's wall**, for an errand that is told
+/// today rather than left to guess it.
+///
+/// Off Windows this is 0 — the UTC date, a day out for a few hours either side of midnight — and
+/// that is said rather than fixed, because the only other source written so far would be parsing
+/// `date +%z`, and nothing here has run on a Linux desktop long enough to know it is right.
+pub fn utc_offset_minutes() -> i64 {
+    #[cfg(windows)]
+    {
+        argmind_env_windows::clock::utc_offset_minutes()
+    }
+    #[cfg(not(windows))]
+    {
+        0
+    }
+}
+
+/// Today, as an errand is told it.
+pub fn today() -> String {
+    let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs() as i64).unwrap_or(0);
+    argmind_core::errand::today(now, utc_offset_minutes())
+}
+
 /// Can this build see the screen and press things at all?
 pub fn embodied() -> bool {
     cfg!(all(windows, not(feature = "headless")))

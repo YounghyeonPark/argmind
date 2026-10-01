@@ -140,6 +140,7 @@ stream.addEventListener("hello", (e) => {
     faces.checked = d.remembering;
     faces.title = noModels;
     drawPeople(d.people);
+    drawErrands(d.errands);
     drawNoticing(d.noticing, d.noticed);
     // Rebuilt from the server's own list, so a reload is never a page showing buttons the server
     // has forgotten — or missing ones it still holds.
@@ -374,6 +375,85 @@ stream.addEventListener("faces", (e) => {
 stream.addEventListener("people", (e) => {
     drawPeople(JSON.parse(e.data));
 });
+// 맡긴 일. The list is redrawn from the server's every time, like the proposals — a page that kept
+// its own copy would show work the server had already finished.
+const errandForm = document.getElementById("errand-form");
+const errandWhat = document.getElementById("errand-what");
+const errandRows = document.getElementById("errand-rows");
+errandForm.onsubmit = (ev) => {
+    ev.preventDefault();
+    const what = errandWhat.value.trim();
+    if (!what)
+        return;
+    errandWhat.value = "";
+    void post("/errand", what);
+};
+stream.addEventListener("errands", (e) => {
+    drawErrands(JSON.parse(e.data));
+});
+const errandSays = {
+    waiting: "기다리는 중",
+    working: "생각하는 중",
+    needs_you: "여쭤볼 것이 있음",
+    done: "끝남",
+};
+function drawErrands(list) {
+    // **Not while somebody is typing an answer** into one of the rows — the same rule the goal box
+    // keeps. The next event after they finish draws it.
+    if (errandRows.contains(document.activeElement))
+        return;
+    errandRows.replaceChildren();
+    for (const e of list) {
+        const row = document.createElement("div");
+        row.className = "errand";
+        const head = document.createElement("div");
+        head.className = "head";
+        const what = document.createElement("span");
+        what.className = "what";
+        what.textContent = e.what;
+        const state = document.createElement("span");
+        state.className = "state";
+        state.textContent = e.state === "working" && e.steps > 0
+            ? `${errandSays[e.state]} · ${e.steps}걸음` : errandSays[e.state];
+        const drop = document.createElement("button");
+        drop.type = "button";
+        drop.className = "plain";
+        drop.textContent = "지우기";
+        drop.onclick = () => void post(`/errand/${e.id}/drop`);
+        head.append(what, state, drop);
+        row.append(head);
+        const shown = e.state === "done" ? e.result : e.state === "needs_you" ? e.ask : e.lately;
+        if (shown) {
+            const body = document.createElement("div");
+            body.className = e.state === "working" ? "body lately" : "body";
+            body.textContent = shown;
+            row.append(body);
+        }
+        // **A question is answered here, and a result is corrected here** — the same box, because
+        // *이게 아니라 저거* is how a person replies to a draft.
+        if (e.state === "needs_you" || e.state === "done") {
+            const reply = document.createElement("form");
+            reply.className = "reply";
+            const box = document.createElement("input");
+            box.maxLength = 200;
+            box.placeholder = e.state === "done" ? "고칠 점이 있으면 — 다시 생각합니다" : "답하기";
+            const send = document.createElement("button");
+            send.type = "submit";
+            send.textContent = e.state === "done" ? "다시" : "답하기";
+            reply.onsubmit = (ev) => {
+                ev.preventDefault();
+                const text = box.value.trim();
+                if (!text)
+                    return;
+                box.blur();
+                void post(`/errand/${e.id}/answer`, text);
+            };
+            reply.append(box, send);
+            row.append(reply);
+        }
+        errandRows.append(row);
+    }
+}
 /** A date somebody can read, from Unix seconds. */
 function on(seconds) {
     if (!seconds)

@@ -16,6 +16,7 @@
 pub mod ask;
 pub mod attending;
 pub mod camera;
+pub mod clock;
 pub mod cover;
 pub mod devices;
 pub mod hands;

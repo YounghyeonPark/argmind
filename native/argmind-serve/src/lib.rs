@@ -39,6 +39,7 @@ pub mod app;
 pub mod building;
 pub mod chosen;
 pub mod decided;
+pub mod errands;
 pub mod faces;
 pub mod fetch;
 pub mod fix;
@@ -258,6 +259,12 @@ pub enum Route {
     /// Answer the one open question. **An empty body is a skip** — the same act as the button
     /// beside the box, because clearing the field and pressing enter says the same thing.
     Answer(u64, String),
+    /// Hand argmind an errand, in the person's own words.
+    Errand(String),
+    /// Answer an errand's question, or correct its result.
+    ErrandAnswer(u64, String),
+    /// Take one off the list.
+    ErrandDrop(u64),
     /// Carry out what was proposed without waiting for 실행, or go back to asking.
     ///
     /// **The one route that changes what argmind may do rather than what it may know.** Everything
@@ -386,6 +393,20 @@ pub fn route(request: &Request) -> Route {
             Route::ForgetFace(p[13..].to_string()),
         ("POST", p) if p.starts_with("/face/name/") && p.len() > 11 =>
             Route::NameFace(p[11..].to_string(), request.body.clone()),
+        //: `/errand` with the words in the body, `/errand/<id>/answer` likewise, and
+        //: `/errand/<id>/drop`. The words are a person's sentence, so never the path.
+        ("POST", "/errand") => Route::Errand(request.body.clone()),
+        ("POST", p) if p.starts_with("/errand/") => match p[8..].split_once('/') {
+            Some((id, "answer")) => match id.parse() {
+                Ok(id) => Route::ErrandAnswer(id, request.body.clone()),
+                Err(_) => Route::Unknown,
+            },
+            Some((id, "drop")) => match id.parse() {
+                Ok(id) => Route::ErrandDrop(id),
+                Err(_) => Route::Unknown,
+            },
+            _ => Route::Unknown,
+        },
         ("POST", "/acting/on") => Route::Acting(true),
         ("POST", "/acting/off") => Route::Acting(false),
         ("POST", "/notice/on") => Route::Notice(true),

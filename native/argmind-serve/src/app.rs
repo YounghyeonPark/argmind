@@ -188,6 +188,10 @@ struct Desk {
     held: Option<(argmind_core::intent::Intent, String, Instant)>,
     /// When argmind last spoke unprompted, for the gap 눈치 keeps between remarks.
     last_remark: Option<Instant>,
+    /// **맡긴 일**, read off disk at startup and written on every change. See [`crate::errands`].
+    errands: Vec<argmind_core::errand::Errand>,
+    /// When an errand was last stepped, on the clock `notice` uses.
+    stepped_at: f64,
     /// **What the camera last said about where the head points, and when.** Written by the camera
     /// thread each window, read by `notice`. The age matters: a reading from a camera that stalled
     /// a minute ago is no evidence, and `tact` treats no evidence as *say it*.
@@ -246,6 +250,13 @@ enum Job {
     Thought(argmind_core::thinking::Note),
     /// Write the thinking goal.
     Aim(String),
+    /// A new errand, an answer to one, or one taken off the list.
+    Errand(String),
+    ErrandAnswer(u64, String),
+    ErrandDrop(u64),
+    /// The thinking thread took one step: **the copy it stepped from and the result**, so a step
+    /// computed before an answer arrived is recognised and thrown away rather than written over it.
+    Stepped(argmind_core::errand::Errand, argmind_core::errand::Errand),
     /// Open one for a moment and report.
     Try(String),
     /// Remember which voice, and say something in it.
@@ -1427,13 +1438,21 @@ struct Chew {
     note: argmind_core::thinking::Note,
 }
 
+/// What the thinking thread is handed: a note to revise, or an errand to step.
+enum Letter {
+    Note(Chew),
+    /// The errand as it stands, and today's date — read by the caller because the core names no
+    /// clock.
+    Errand(argmind_core::errand::Errand, String),
+}
+
 /// A one-deep letterbox to the thinking thread.
 ///
 /// **Dropped rather than queued.** A `Sender` would pile up thoughts about screens that have gone,
 /// and the oldest of those is the least worth having. This holds at most one and the thinker takes
 /// it when it is free; a tick arriving while one is waiting replaces it.
 #[derive(Clone)]
-struct Letterbox(Arc<Mutex<Option<Chew>>>, Arc<Condvar>);
+struct Letterbox(Arc<Mutex<Option<Letter>>>, Arc<Condvar>);
 
 impl Letterbox {
     fn new() -> Self {
@@ -1442,14 +1461,18 @@ impl Letterbox {
 
     /// Leave one, replacing whatever was there.
     fn try_send_chew(&self, chew: Chew) {
+        self.post(Letter::Note(chew));
+    }
+
+    fn post(&self, letter: Letter) {
         if let Ok(mut slot) = self.0.lock() {
-            *slot = Some(chew);
+            *slot = Some(letter);
             self.1.notify_one();
         }
     }
 
     /// Wait for one. `None` only if the lock is poisoned, which means the program is going down.
-    fn wait(&self) -> Option<Chew> {
+    fn wait(&self) -> Option<Letter> {
         let mut slot = self.0.lock().ok()?;
         while slot.is_none() {
             slot = self.1.wait(slot).ok()?;
@@ -1547,6 +1570,52 @@ fn raise_it(desk: &mut Desk, out: &Listeners) {
     for effect in &intent.effects {
         propose(desk, out, effect.clone());
     }
+}
+
+/// **Take one step on the oldest open errand**, if it is time and nobody is being answered.
+///
+/// The same two rules every sense keeps: not while a turn is in flight, and abandoned on the
+/// thinking thread the moment one begins. Not gated on the camera — working while nobody is there
+/// is half the point; only *telling* waits for somebody.
+fn step_errand(desk: &mut Desk, thinking: &Letterbox, now: f64) {
+    if now - desk.stepped_at < crate::errands::STEP_EVERY || desk.turn.in_flight() {
+        return;
+    }
+    let Some(e) = crate::errands::next_open(&desk.errands) else { return };
+    desk.stepped_at = now;
+    thinking.post(Letter::Errand(e.clone(), crate::platform::today()));
+}
+
+/// **Say one finished errand, or one that needs the person, when somebody is there to hear it.**
+///
+/// *There* is the camera's word when it has one — `somebody_about` — and 눈치's when it is turned
+/// up: a report is an unprompted remark like any other, so it waits for a head turned back and
+/// keeps 눈치's gap. With no camera and 눈치 at 0 it is said on the next tick, which is today's
+/// behaviour for every other remark. **Waiting loses nothing**: `told` is on the list, on disk.
+fn tell_errand(desk: &mut Desk, out: &Listeners) {
+    let Some(i) = crate::errands::due(&desk.errands) else { return };
+    if desk.turn.in_flight() || somebody_about(desk) == Some(false) {
+        return;
+    }
+    if crate::tact::now(desk.nunchi, evidence(desk), since_last(desk)) == crate::tact::Now::Hold {
+        return;
+    }
+    let said = crate::errands::report(&desk.errands[i]);
+    desk.errands[i].told = true;
+    desk.last_remark = Some(Instant::now());
+    //: **Into the history**, so *두 번째 거 좀 더 자세히* is a reply the next turn can read.
+    desk.session.history.push(("you".into(), said.clone()));
+    out.send("say", &said);
+    keep_errands(desk, out);
+}
+
+/// Write the list and tell every page. **Every change goes to disk**, because a list that lives in
+/// memory is a list that loses what somebody asked for when the window closes.
+fn keep_errands(desk: &Desk, out: &Listeners) {
+    if let Err(why) = crate::errands::keep(&desk.errands) {
+        out.send("note", &why);
+    }
+    out.send("errands", &crate::errands::list_json(&desk.errands));
 }
 
 /// What it is holding in mind, for the panel that shows it.
@@ -1747,6 +1816,7 @@ fn hello(desk: &Desk, model: &str) -> String {
         format!("\"face_models\":{}", crate::faces::here()),
         format!("\"people\":{}",
                 people_json(&desk.people.lock().unwrap_or_else(|e| e.into_inner()))),
+        format!("\"errands\":{}", crate::errands::list_json(&desk.errands)),
     ];
     //: Assembled from a list rather than one long format string. The first version wrapped that
     //: string across two lines and the indentation of the second landed **inside the JSON** —
@@ -1924,12 +1994,32 @@ pub fn run(how: How) {
             let mut model = Local::new(&model_name);
             model.think = Some(false);
             model.keep_alive = "300s".into();
-            while let Some(chew) = letters.wait() {
+            while let Some(letter) = letters.wait() {
                 //: Checked again here: a turn can have begun between the tick and this thread
                 //: waking, and starting anyway would be the rule holding only when it is easy.
                 if turn.in_flight() {
                     continue;
                 }
+                let chew = match letter {
+                    Letter::Note(chew) => chew,
+                    Letter::Errand(before, today) => {
+                        //: **An empty screen, on purpose** — see `crate::errands`.
+                        let prompt = argmind_core::errand::ask_for_a_step(&before, "", &today);
+                        let carry_on = turn.carry_on();
+                        let Ok(reply) = model.ask_while(&prompt, &[], &carry_on, &mut |_| {}) else {
+                            continue;
+                        };
+                        //: Abandoned is not a step: the errand is untouched and the next tick
+                        //: asks the same question again.
+                        if reply.reason == "abandoned" {
+                            continue;
+                        }
+                        let mut after = before.clone();
+                        argmind_core::errand::read_step(&reply.text, &mut after);
+                        let _ = jobs.send(Job::Stepped(before, after));
+                        continue;
+                    }
+                };
                 let others = senses.render("화면").unwrap_or_default();
                 let screen = if others.is_empty() {
                     chew.screen
@@ -1995,6 +2085,7 @@ pub fn run(how: How) {
                               senses: senses.clone(), turn: turn.clone(),
                               before: Vec::new(), lately_noticed: Vec::new(), noticed: 0,
                               nunchi: crate::tact::remembered(), held: None, last_remark: None,
+                              errands: crate::errands::remembered(), stepped_at: 0.0,
                               facing_now: Arc::new(Mutex::new(None)),
                               face_seen_at: Arc::new(Mutex::new(None)) };
         //: **The button is the permission, which is what this flag is for** — `session.rs`:
@@ -2032,6 +2123,10 @@ pub fn run(how: How) {
                     //: **After noticing, not instead of it.** A window change is what a person is
                     //: owed an answer about; revising a note is what happens in the gaps.
                     reflect(&mut desk, &letters, now);
+                    //: **Errands are not tied to watching**: somebody handed this over by name,
+                    //: which is a stronger permission than a switch about the screen.
+                    step_errand(&mut desk, &letters, now);
+                    tell_errand(&mut desk, &agent_out);
                     continue;
                 }
                 Err(_) => break,
@@ -2222,6 +2317,33 @@ pub fn run(how: How) {
                     });
                     agent_out.send("voice", desk.voice_is);
                     agent_out.send("decisions", &decisions_json());
+                }
+                Job::Errand(what) => {
+                    match crate::errands::add(&mut desk.errands, &what) {
+                        Ok(_) => {
+                            agent_out.send("note", "맡았습니다 — 생각해서 알려 드릴게요");
+                            keep_errands(&desk, &agent_out);
+                        }
+                        Err(why) => agent_out.send("note", why),
+                    }
+                }
+                Job::ErrandAnswer(id, text) => {
+                    if crate::errands::answer(&mut desk.errands, id, &text) {
+                        agent_out.send("note", "알겠습니다 — 이어서 생각하겠습니다");
+                        keep_errands(&desk, &agent_out);
+                    }
+                }
+                Job::ErrandDrop(id) => {
+                    if crate::errands::drop(&mut desk.errands, id) {
+                        keep_errands(&desk, &agent_out);
+                    }
+                }
+                Job::Stepped(before, after) => {
+                    if crate::errands::apply(&mut desk.errands, &before, after) {
+                        keep_errands(&desk, &agent_out);
+                        //: Said now if it can be, rather than up to a tick later.
+                        tell_errand(&mut desk, &agent_out);
+                    }
                 }
                 Job::Thought(note) => {
                     //: **A tick reaches the person through the panel, and one other way.** See
@@ -2617,6 +2739,27 @@ fn serve_one(mut stream: TcpStream, out: &Listeners, token: &str, jobs: &Sender<
         Route::Listen(down) => {
             let _ = stream.write_all(&respond("204 No Content", "text/plain", ""));
             let _ = jobs.send(Job::Listen(down));
+        }
+        //: Length-checked here like `/wonder`; `errands::add` checks again and says why.
+        Route::Errand(what) => {
+            if what.chars().count() <= crate::errands::MOST_CHARS {
+                let _ = stream.write_all(&respond("204 No Content", "text/plain", ""));
+                let _ = jobs.send(Job::Errand(what));
+            } else {
+                let _ = stream.write_all(&respond("400 Bad Request", "text/plain", "no"));
+            }
+        }
+        Route::ErrandAnswer(id, text) => {
+            if text.chars().count() <= crate::errands::MOST_CHARS {
+                let _ = stream.write_all(&respond("204 No Content", "text/plain", ""));
+                let _ = jobs.send(Job::ErrandAnswer(id, text));
+            } else {
+                let _ = stream.write_all(&respond("400 Bad Request", "text/plain", "no"));
+            }
+        }
+        Route::ErrandDrop(id) => {
+            let _ = stream.write_all(&respond("204 No Content", "text/plain", ""));
+            let _ = jobs.send(Job::ErrandDrop(id));
         }
         Route::Unknown => {
             let _ = stream.write_all(&respond("404 Not Found", "text/plain", "no"));
