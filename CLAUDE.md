@@ -79,6 +79,8 @@ the two days that built this, three of them flattering.
                                              the one bit that makes them stand down for a turn
                                 errands.rs   맡긴 일: the list on disk, a step every 5 s on the
                                              thinking thread, a report only to somebody there
+                                activity.rs  한 일: what it heard, saw, said and did, read off
+                                             every event the page is told — memory only
     native/argmind-measure/     every harness behind the numbers, and `--example raw_turn`
                                 for looking at one reply whole
     native/argmind-env-linux/   eyes for Linux: AT-SPI2 over D-Bus. No hands yet
@@ -230,6 +232,16 @@ title, empty = everywhere) and action (all / click / type / key): *하지 않음
 checked again at the press, *항상 물어봄* takes the row away from 확인 없이 실행. The strictest rule
 wins in either order. None at rest, which is today exactly. **The gate inside `propose` and `act` is
 not exercised end to end** — the headless build sees no widgets — only `rule::applies` beneath it.
+
+**한 일 is recorded where the page is told, not where somebody remembers to log** — since
+2026-10-01, item 5 of the dots comparison. `Listeners::send` turns every event worth a line into
+one (`activity::reading`): heard, the window in front, said, noticed, offered, ran and whether the
+screen moved, could not and why, asked, held back. A new path that tells the page anything is on
+the timeline with no logging call written. The person's typed words are the one thing recorded
+explicitly, because the page draws those itself. **Memory only, 500 lines, gone at exit** — a file
+of every window title and every sentence is a privacy decision with its own switch, not a side
+effect of a log. Driving the headless server to check it found a bug in the keep reader the same
+day: *불러달라고 기억해줘* kept *불러달*.
 
 **One call, not two.** A round trip is the budget: 0.45 s warm, 4.7 s and 5.9 s for the first two.
 

@@ -213,8 +213,13 @@ pub fn asked_to_keep(text: &str) -> Option<Keep> {
     //: marker goes, the sentence stays.
     //: *…다고* keeps its 다 (*쓴다고* → *쓴다*); *…이라고* and *…라고* after a noun go whole
     //: (*화요일이라고* → *화요일*).
+    //: **A quoted request keeps its 라** (*불러달라고* → *불러달라*, *하지 말라고* → *하지 말라*):
+    //: stripping 라고 there left *불러달*, found on the headless server the day this shipped.
     let rest = if let Some(r) = rest.strip_suffix("다고") {
         format!("{r}다")
+    } else if ["달라고", "하라고", "말라고", "주라고", "으라고", "오라고", "가라고", "보라고", "쓰라고"]
+        .iter().any(|m| rest.ends_with(m)) {
+        rest.strip_suffix('고').unwrap_or(rest).to_string()
     } else {
         ["이라고", "라고", "라는 거", "다는 거", "다는 것", "는 거", "는 것"].iter()
             .find_map(|m| rest.strip_suffix(m)).unwrap_or(rest).to_string()

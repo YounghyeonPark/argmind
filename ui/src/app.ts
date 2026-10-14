@@ -682,6 +682,59 @@ stream.addEventListener("rules", (e) => {
   drawRules(JSON.parse((e as MessageEvent).data) as Rule[]);
 });
 
+// 한 일. Asked for when the fold opens, then appended to line by line as the server records.
+interface Entry {
+  at: number;
+  kind: string;
+  text: string;
+}
+
+const timeline = document.getElementById("timeline") as HTMLDetailsElement;
+const timelineRows = document.getElementById("timeline-rows") as HTMLElement;
+const timelineClear = document.getElementById("timeline-clear") as HTMLButtonElement;
+
+function timelineRow(e: Entry): HTMLElement {
+  const row = document.createElement("div");
+  row.className = "tl";
+  const when = document.createElement("span");
+  when.className = "when";
+  const d = new Date(e.at * 1000);
+  when.textContent = [d.getHours(), d.getMinutes(), d.getSeconds()]
+    .map((n) => String(n).padStart(2, "0")).join(":");
+  const kind = document.createElement("span");
+  kind.className = "kind";
+  kind.textContent = e.kind;
+  const text = document.createElement("span");
+  text.className = "text";
+  text.textContent = e.text;
+  row.append(when, kind, text);
+  return row;
+}
+
+function timelineAppend(e: Entry): void {
+  const atBottom = timelineRows.scrollTop + timelineRows.clientHeight >= timelineRows.scrollHeight - 4;
+  timelineRows.append(timelineRow(e));
+  while (timelineRows.childElementCount > 500) timelineRows.firstElementChild?.remove();
+  if (atBottom) timelineRows.scrollTop = timelineRows.scrollHeight;
+}
+
+timeline.addEventListener("toggle", () => {
+  if (timeline.open) void post("/activity");
+});
+
+timelineClear.onclick = () => void post("/activity/clear");
+
+stream.addEventListener("activity", (e) => {
+  const list = JSON.parse((e as MessageEvent).data) as Entry[];
+  timelineRows.replaceChildren(...list.map(timelineRow));
+  timelineRows.scrollTop = timelineRows.scrollHeight;
+});
+
+stream.addEventListener("activity-line", (e) => {
+  // Only while somebody has the fold open; opening it asks for the whole list anyway.
+  if (timeline.open) timelineAppend(JSON.parse((e as MessageEvent).data) as Entry);
+});
+
 /** A date somebody can read, from Unix seconds. */
 function on(seconds: number): string {
   if (!seconds) return "";

@@ -104,6 +104,13 @@
   #errands { border-bottom: 1px solid var(--edge); font-size: 13px; }
   #rules { padding: 6px 14px; border-top: 1px solid var(--edge); }
   .kept { display: flex; gap: 6px; align-items: baseline; padding: 2px 0; }
+  #timeline { border-bottom: 1px solid var(--edge); font-size: 13px; }
+  #timeline > summary { padding: 6px 14px; cursor: pointer; color: var(--dim); }
+  #timeline-body { padding: 0 14px 10px; }
+  #timeline-rows { max-height: 260px; overflow-y: auto; margin: 4px 0; }
+  .tl { display: grid; grid-template-columns: 4.5em 5.5em 1fr; gap: 6px; padding: 1px 0; }
+  .tl .when, .tl .kind { color: var(--dim); white-space: nowrap; }
+  .tl .text { white-space: pre-wrap; overflow-wrap: anywhere; }
   .kept .text { flex: 1; color: var(--ink); }
   #kept-form, .offer { display: flex; gap: 6px; margin-top: 4px; }
   #kept-form input { flex: 1; font: inherit; padding: 3px 6px; border: 1px solid var(--edge); }
@@ -311,6 +318,17 @@
         <button type="submit">맡기기</button>
       </form>
       <div id="errand-rows"></div>
+    </div>
+  </details>
+  <!-- 한 일. What argmind heard, saw, said and did, in order — the account of itself an agent on a
+       desktop owes the person. Kept in memory only and gone when argmind closes; filled live while
+       open, and the program's words for each kind, never the model's. -->
+  <details id="timeline">
+    <summary>한 일 — 들은 것, 본 창, 말한 것, 한 것</summary>
+    <div id="timeline-body">
+      <div class="cost">argmind 가 꺼지면 사라집니다 — 파일로 남기지 않습니다. 최근 500줄</div>
+      <div id="timeline-rows"></div>
+      <button type="button" id="timeline-clear" class="plain">기록 지우기</button>
     </div>
   </details>
   <details id="holding" hidden>

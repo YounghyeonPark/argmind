@@ -93,17 +93,47 @@ impl Speaks for Model {
     }
 }
 
-/// Everything the page is told, as it happens.
+/// Everything the page is told, as it happens — **and the timeline of it**, kept in the one place
+/// every event passes through. See [`crate::activity`].
 #[derive(Default)]
-struct Listeners(Mutex<Vec<Sender<String>>>);
+struct Listeners(Mutex<Vec<Sender<String>>>, Mutex<crate::activity::Activity>);
 
 impl Listeners {
     fn send(&self, event: &str, data: &str) {
+        if let Some((kind, text)) = crate::activity::reading(event, data) {
+            self.record(kind, &text);
+        }
+        self.frame(event, data);
+    }
+
+    fn frame(&self, event: &str, data: &str) {
         let frame = sse(event, data);
         let Ok(mut who) = self.0.lock() else { return };
         //: A page that closed is a channel that errors, and dropping it here is the only cleanup
         //: there is — nothing tells a server that a page went away.
         who.retain(|tx| tx.send(frame.clone()).is_ok());
+    }
+
+    /// **One line on the timeline, and the page told of it.** Sent through `frame`, never `send`,
+    /// so the line about a line is not itself a line.
+    fn record(&self, kind: &'static str, text: &str) {
+        let line = {
+            let Ok(mut log) = self.1.lock() else { return };
+            log.push(crate::activity::now(), kind, text).map(crate::activity::entry_json)
+        };
+        if let Some(line) = line {
+            self.frame("activity-line", &line);
+        }
+    }
+
+    fn timeline(&self) -> String {
+        self.1.lock().map(|log| log.json()).unwrap_or_else(|_| "[]".into())
+    }
+
+    fn forget_timeline(&self) {
+        if let Ok(mut log) = self.1.lock() {
+            log.clear();
+        }
     }
 }
 
@@ -192,6 +222,9 @@ struct Desk {
     errands: Vec<argmind_core::errand::Errand>,
     /// When an errand was last stepped, on the clock `notice` uses.
     stepped_at: f64,
+    /// The last transcript sent as `them`, so the turn it starts does not put it on the timeline
+    /// twice. Taken by the turn.
+    heard_last: Option<String>,
     /// **규칙**, read at startup and replaced whole from the page. See [`argmind_core::rule`].
     rules: Vec<argmind_core::rule::Rule>,
     /// **What the camera last said about where the head points, and when.** Written by the camera
@@ -260,6 +293,8 @@ enum Job {
     Rules(String),
     Keep(String),
     Unkeep(usize),
+    Activity,
+    ClearActivity,
     /// The thinking thread took one step: **the copy it stepped from and the result**, so a step
     /// computed before an answer arrived is recognised and thrown away rather than written over it.
     Stepped(argmind_core::errand::Errand, argmind_core::errand::Errand),
@@ -333,6 +368,11 @@ fn kept_instead(desk: &mut Desk, out: &Listeners, text: &str) -> bool {
 }
 
 fn think(desk: &mut Desk, out: &Listeners, text: &str) {
+    //: **What the person said, on the timeline.** Not sent — the page drew it when it was typed —
+    //: and a spoken turn arrives here already sent as `them`, so this records only typed ones.
+    if !desk.heard_last.take().is_some_and(|h| h == text) {
+        out.record("들음", text);
+    }
     if kept_instead(desk, out, text) {
         return;
     }
@@ -1783,6 +1823,7 @@ fn listen(desk: &mut Desk, out: &Listeners, down: bool) {
             //: what the person said, and they have to be able to see what it thought it heard —
             //: which is also the only way a wrong transcript is ever noticed.
             out.send("them", &text);
+            desk.heard_last = Some(text.trim().to_string());
             think(desk, out, text.trim());
         }
     }
@@ -2163,7 +2204,7 @@ pub fn run(how: How) {
                               before: Vec::new(), lately_noticed: Vec::new(), noticed: 0,
                               nunchi: crate::tact::remembered(), held: None, last_remark: None,
                               errands: crate::errands::remembered(), stepped_at: 0.0,
-                              rules: crate::rules::remembered(),
+                              rules: crate::rules::remembered(), heard_last: None,
                               facing_now: Arc::new(Mutex::new(None)),
                               face_seen_at: Arc::new(Mutex::new(None)) };
         //: **The button is the permission, which is what this flag is for** — `session.rs`:
@@ -2420,6 +2461,11 @@ pub fn run(how: How) {
                         agent_out.send("note", "알겠습니다 — 이어서 생각하겠습니다");
                         keep_errands(&desk, &agent_out);
                     }
+                }
+                Job::Activity => agent_out.frame("activity", &agent_out.timeline()),
+                Job::ClearActivity => {
+                    agent_out.forget_timeline();
+                    agent_out.frame("activity", "[]");
                 }
                 Job::Keep(text) => {
                     match crate::mind::keep(&text) {
@@ -2878,6 +2924,14 @@ fn serve_one(mut stream: TcpStream, out: &Listeners, token: &str, jobs: &Sender<
             } else {
                 let _ = stream.write_all(&respond("400 Bad Request", "text/plain", "no"));
             }
+        }
+        Route::Activity => {
+            let _ = stream.write_all(&respond("204 No Content", "text/plain", ""));
+            let _ = jobs.send(Job::Activity);
+        }
+        Route::ClearActivity => {
+            let _ = stream.write_all(&respond("204 No Content", "text/plain", ""));
+            let _ = jobs.send(Job::ClearActivity);
         }
         Route::Keep(text) => {
             if text.chars().count() <= argmind_core::mind::KEPT_CHARS {

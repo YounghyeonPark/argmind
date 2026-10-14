@@ -164,6 +164,10 @@ fn a_request_to_remember_is_read_by_the_program() {
                Some(Keep::This("메모장 말고 VS Code를 쓴다".into())));
     assert_eq!(asked_to_keep("기억해: 회의는 화요일"), Some(Keep::This("회의는 화요일".into())));
     assert_eq!(asked_to_keep("회의는 화요일이라고 기억해줘"), Some(Keep::This("회의는 화요일".into())));
+    assert_eq!(asked_to_keep("나를 대표님이라고 불러달라고 기억해줘"),
+               Some(Keep::This("나를 대표님이라고 불러달라".into())));
+    assert_eq!(asked_to_keep("회의 중엔 말 걸지 말라고 기억해 둬"),
+               Some(Keep::This("회의 중엔 말 걸지 말라".into())));
     assert_eq!(asked_to_keep("이거 기억해줘"), Some(Keep::Vague));
     //: Questions and sentences that merely mention remembering are not requests.
     assert_eq!(asked_to_keep("내가 뭐라고 했는지 기억해?"), None);

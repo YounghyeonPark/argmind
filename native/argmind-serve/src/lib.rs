@@ -35,6 +35,7 @@
 //! reachable from exactly one place; the same argument has to hold here, which is why the protocol
 //! has a `confirm` route at all rather than acting on what the model returned.
 
+pub mod activity;
 pub mod app;
 pub mod building;
 pub mod chosen;
@@ -262,6 +263,9 @@ pub enum Route {
     Answer(u64, String),
     /// Replace the rules with these, one per line, `app<TAB>action<TAB>then`.
     Rules(String),
+    /// Send the timeline, or empty it.
+    Activity,
+    ClearActivity,
     /// Remember this sentence, in the person's words.
     Keep(String),
     /// Forget the kept sentence at this place in the list.
@@ -408,6 +412,8 @@ pub fn route(request: &Request) -> Route {
         ("POST", "/rules") => Route::Rules(request.body.clone()),
         //: The sentence in the body, like `/aim`; forgetting by place in the list the page drew.
         ("POST", "/kept") => Route::Keep(request.body.clone()),
+        ("POST", "/activity") => Route::Activity,
+        ("POST", "/activity/clear") => Route::ClearActivity,
         ("POST", p) if p.starts_with("/kept/") => match p[6..].strip_suffix("/drop")
             .and_then(|i| i.parse().ok()) {
             Some(i) => Route::Unkeep(i),
