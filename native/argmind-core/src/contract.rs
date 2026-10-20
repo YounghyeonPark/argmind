@@ -99,6 +99,20 @@ pub trait Hands {
     fn into_a_secret(&mut self) -> bool {
         false
     }
+    /// **Is there somewhere for text to go?** Asked before every `type`: the focus is a field that
+    /// takes text — `Some(true)` — or it is not — `Some(false)`, and the text is refused. Found in
+    /// the owner's session on 2026-10-21, where nothing asked this and a sequence typed and pressed
+    /// Enter with nothing checking where. `None` is *cannot tell*, and does not stop typing — the
+    /// same direction as [`Hands::into_a_secret`], for the same reason.
+    fn typing_lands(&mut self) -> Option<bool> {
+        None
+    }
+    /// **Did the last action land?** `Some(false)` when the environment refused it — covered,
+    /// gone, malformed — so `perform` can stop the steps after it rather than carry on into a
+    /// screen the first step did not produce. `None` when it cannot say, and then nothing changes.
+    fn landed(&self) -> Option<bool> {
+        None
+    }
 }
 
 /// Asking the model. **It is handed text and returns text** — never an image, never a coordinate.

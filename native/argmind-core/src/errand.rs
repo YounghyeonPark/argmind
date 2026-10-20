@@ -463,8 +463,14 @@ pub fn read_step(reply: &str, errand: &mut Errand) -> Stepped {
                 //: **The program's words**: the model's own account of this was a forecast. Marked,
                 //: so a program that can look it up — see [`Errand::looked_up`] — carries it on.
                 errand.needs_web = true;
-                errand.state = State::NeedsYou;
-                errand.ask = CANNOT_REACH.into();
+                //: **Already read** — a question the program looked up the moment it was asked —
+                //: means there is nothing to stop for.
+                if errand.found.is_empty() {
+                    errand.state = State::NeedsYou;
+                    errand.ask = CANNOT_REACH.into();
+                } else {
+                    errand.state = State::Working;
+                }
             } else if kind.starts_with('C') {
                 errand.state = State::NeedsYou;
                 errand.ask = if ask.is_empty() || claims_an_act(&ask) { ASK_FIRST.into() } else { ask };
@@ -785,6 +791,15 @@ mod tests {
                    "운동 루틴 알려줘"] {
             assert!(!asks_to_look_up(no), "{no}");
         }
+    }
+
+    #[test]
+    fn an_errand_that_arrives_already_read_does_not_stop_at_the_check() {
+        let mut e = Errand::new(1, "오늘 서울 날씨 알려줘");
+        e.looked_up("서울 맑음 18도", "u");
+        read_step(r#"{"kind": "B"}"#, &mut e);
+        assert_eq!(e.state, State::Working);
+        assert!(!e.wants_looking_up());
     }
 
     #[test]

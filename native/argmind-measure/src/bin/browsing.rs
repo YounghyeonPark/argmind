@@ -531,6 +531,7 @@ fn main() {
             .ok_or("no search box")?;
         hands.click(&boxed);
         std::thread::sleep(std::time::Duration::from_millis(400));
+        let field_here = hands.typing_lands();
         hands.type_text("경복궁");
         std::thread::sleep(std::time::Duration::from_millis(400));
         let value = pane.eval("document.activeElement && document.activeElement.value")?;
@@ -566,7 +567,16 @@ fn main() {
         println!("  4. 비밀번호 칸 {secret} · 보통 칸 {plain} — {}",
                  if ok { "기준대로" } else { "**기준과 다름**" });
 
-        println!("\n  ── 네 가지 중 {passed} 가지 기준대로 ──");
+        //: 5. Is there a field? Yes after clicking the search box (read above), no on a page whose
+        //: focus is nothing — both directions, since 2026-10-21.
+        go("https://example.com/")?;
+        let field_none = hands.typing_lands();
+        let ok = field_here == Some(true) && field_none == Some(false);
+        passed += ok as usize;
+        println!("  5. 입력할 칸: 검색창 누른 뒤 {field_here:?} · example.com {field_none:?} — {}",
+                 if ok { "기준대로" } else { "**기준과 다름**" });
+
+        println!("\n  ── 다섯 가지 중 {passed} 가지 기준대로 ──");
         Ok(())
     }
 

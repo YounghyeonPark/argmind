@@ -121,6 +121,13 @@ pub struct Session<E: Eyes, H: Hands, M: Speaks> {
     /// Typing refused because it would have landed in a password field. See
     /// [`crate::contract::Hands::into_a_secret`].
     pub secret: u32,
+    /// Typing refused because the focus was not a field — see [`Hands::typing_lands`].
+    pub nowhere_to_type: u32,
+    /// Actions the environment reported as not landing — see [`Hands::landed`].
+    pub not_landed: u32,
+    /// **Steps not attempted because one before them failed.** Counted apart: these were never
+    /// tried, and a person told *the click failed* should also be told what did not follow it.
+    pub unattempted: u32,
     pub unknown_keys: u32,
     /// **The human is the permission.** An interface with a confirm button turns this on and gates
     /// with the button instead, which is stronger than the flag; one with no button leaves it off.
@@ -138,7 +145,8 @@ pub struct Session<E: Eyes, H: Hands, M: Speaks> {
 impl<E: Eyes, H: Hands, M: Speaks> Session<E, H, M> {
     pub fn new(eyes: E, hands: H, model: M) -> Self {
         Session { eyes, hands, model, seen: Vec::new(), history: Vec::new(), exchanges: 0,
-                  blind: 0, vanished: 0, ambiguous: 0, chose_too_late: 0, secret: 0, unknown_keys: 0,
+                  blind: 0, vanished: 0, ambiguous: 0, chose_too_late: 0, secret: 0, nowhere_to_type: 0,
+                  not_landed: 0, unattempted: 0, unknown_keys: 0,
                   may_act_unprompted: false,
                   remember_turns: Some(REMEMBER_TURNS), limit: MAX_LISTED,
                   mind: Mind::resting(), note: Note::blank() }
@@ -245,14 +253,29 @@ impl<E: Eyes, H: Hands, M: Speaks> Session<E, H, M> {
         Intent { say: intent.say, effects, parroted: intent.parroted }
     }
 
+    /// **One step at a time, each checked against the screen as it is, and the rest stopped by a
+    /// step that did not land.** Since 2026-10-21: the owner asked for the weather with the pane on a
+    /// login page, and a click, *서울* and Enter ran one after another — the click re-read the
+    /// screen, nothing checked where the text would go, and nothing stopped the steps after a step
+    /// that went wrong. A click still re-resolves against a fresh reading; typing now asks whether
+    /// there is a field ([`Hands::typing_lands`]); and **any refusal, or an action the hands say did
+    /// not land, ends the sequence** — what follows was planned against a screen that step was
+    /// supposed to produce.
     pub fn perform(&mut self, effects: &[Effect]) -> (Vec<Done>, Vec<Effect>, Vec<Effect>) {
         let (mut did, mut proposed, mut refused) = (Vec::new(), Vec::new(), Vec::new());
+        let mut stopped = false;
         for effect in effects {
             if effect.unprompted() && !self.may_act_unprompted {
                 //: Not an error and not silence: it becomes something to say.
                 proposed.push(effect.clone());
                 continue;
             }
+            if stopped {
+                self.unattempted += 1;
+                refused.push(effect.clone());
+                continue;
+            }
+            let before = refused.len();
             match effect.kind.as_str() {
                 "click" => match self.find(&effect.target, &effect.role) {
                     Found::Gone => {
@@ -300,16 +323,31 @@ impl<E: Eyes, H: Hands, M: Speaks> Session<E, H, M> {
                     if self.hands.into_a_secret() {
                         self.secret += 1;
                         refused.push(effect.clone());
-                        continue;
+                    } else if self.hands.typing_lands() == Some(false) {
+                        //: **Nowhere for it to go**: the focus is not a field.
+                        self.nowhere_to_type += 1;
+                        refused.push(effect.clone());
+                    } else {
+                        self.hands.type_text(&effect.text);
+                        did.push(Done { effect: effect.clone(), target: None, confirmed: None });
                     }
-                    self.hands.type_text(&effect.text);
-                    did.push(Done { effect: effect.clone(), target: None, confirmed: None });
                 }
                 "key" => {
                     self.hands.press(&effect.text);
                     did.push(Done { effect: effect.clone(), target: None, confirmed: None });
                 }
                 _ => refused.push(effect.clone()),
+            }
+            //: **The hands' own word on whether it landed** — a covered click is sent nowhere and
+            //: recorded so; it is not something that happened.
+            if refused.len() == before && self.hands.landed() == Some(false) {
+                if let Some(d) = did.pop() {
+                    refused.push(d.effect);
+                }
+                self.not_landed += 1;
+            }
+            if refused.len() > before {
+                stopped = true;
             }
         }
         (did, proposed, refused)

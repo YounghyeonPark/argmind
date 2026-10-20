@@ -381,6 +381,9 @@ fn think(desk: &mut Desk, out: &Listeners, text: &str) {
     if kept_instead(desk, out, text) {
         return;
     }
+    if looked_up_instead(desk, out, text) {
+        return;
+    }
     //: **Held for the whole turn, and it clears itself.** While this is alive the senses stand
     //: down: one declines to start and one already running is abandoned mid-call. A guard rather
     //: than two stores, because an early return that left the flag set would silence every sense
@@ -437,14 +440,67 @@ fn think(desk: &mut Desk, out: &Listeners, text: &str) {
     } else if intent.effects.is_empty() {
         out.send("say", "…");
     }
-    for effect in &intent.effects {
-        propose(desk, out, effect.clone());
+    //: **One step at a time, and the rest stopped by a step that did not go ahead** — the owner,
+    //: 2026-10-21: 매번 화면상태를 확인하고 해야함. A click, *서울* and Enter had run one after
+    //: another into a login page. Each step is checked against the screen in `perform`; this is
+    //: the other half — what follows a failed step is not offered, because it was planned against a
+    //: screen that step was supposed to produce.
+    let mut rest = intent.effects.iter();
+    while let Some(effect) = rest.next() {
+        if !propose(desk, out, effect.clone()) {
+            let left: Vec<String> = rest.map(|e| label(e, None)).collect();
+            if !left.is_empty() {
+                desk.session.history.push(("could not".into(), format!(
+                    "{} — an earlier step did not go ahead, so these were not tried; nothing was done",
+                    left.join(", "))));
+                out.send("note", &format!("앞 단계가 되지 않아 나머지는 하지 않았습니다: {}",
+                                          left.join(" · ")));
+            }
+            break;
+        }
     }
     out.send("busy", "0");
 }
 
-/// File one offer. **This does not act.**
-fn propose(desk: &mut Desk, out: &Listeners, effect: Effect) {
+/// **A question about now, asked while argmind looks at its pane, is looked up by the program.**
+/// The owner's session, 2026-10-21: *오늘 서울날씨 알려줘* on a login page, and the model's plan was
+/// to type *서울* into the ID box. A lookup is not something to plan by clicking; the program puts
+/// the search in the pane where the person can see it, reads the page, and hands that to an errand
+/// to conclude — the errand path whose answer shapes have no `say` and no `do`.
+fn looked_up_instead(desk: &mut Desk, out: &Listeners, text: &str) -> bool {
+    if !desk.on_web.get() || !argmind_core::errand::asks_to_look_up(text) {
+        return false;
+    }
+    let Some(pane) = desk.web.as_ref() else { return false };
+    out.send("busy", "1");
+    let reader = argmind_env_browser::Pane::new(pane.wire.clone());
+    let read = reader.look_up(text);
+    out.send("busy", "0");
+    let reply = match read {
+        Ok((page, at)) => match crate::errands::add(&mut desk.errands, text) {
+            Ok(id) => {
+                if let Some(e) = desk.errands.iter_mut().find(|e| e.id == id) {
+                    e.looked_up(&page, &at);
+                    e.needs_web = true;
+                }
+                keep_errands(desk, out);
+                desk.session.seen.clear();
+                "브라우저 칸에 검색 결과를 띄웠습니다 — 읽고 정리해서 알려 드릴게요".to_string()
+            }
+            Err(why) => why.to_string(),
+        },
+        Err(why) => format!("찾아보지 못했습니다 ({why})"),
+    };
+    desk.session.history.push(("them".into(), text.to_string()));
+    desk.session.history.push(("you".into(), reply.clone()));
+    out.send("say", &reply);
+    true
+}
+
+/// File one offer, and run it when 확인 없이 실행 allows. **Returns whether the step after this
+/// one may go ahead**: not when this one is gone, waits on a question, is refused by a rule, or ran
+/// and did not land.
+fn propose(desk: &mut Desk, out: &Listeners, effect: Effect) -> bool {
     //: **Which app this would happen in.** A click knows its widget's window; typing and keys go
     //: to the window in front, which is the one argmind is attending to.
     let mut window = desk.session.eyes.window().1;
@@ -453,7 +509,7 @@ fn propose(desk: &mut Desk, out: &Listeners, effect: Effect) {
             argmind_core::session::Found::Gone => {
                 out.send("gone",
                          &format!("{{\"token\":-1,\"what\":\"{}\"}}", escape(&effect.target)));
-                return;
+                return false;
             }
             //: **Asked rather than guessed.** Before 2026-09-28 the lookup picked whichever copy
             //: an arbitrary anchor favoured and this drew a button for it; asked for the font list
@@ -468,7 +524,7 @@ fn propose(desk: &mut Desk, out: &Listeners, effect: Effect) {
             //: ceremony.
             argmind_core::session::Found::Several(same) => {
                 ask_which(desk, out, effect, &same);
-                return;
+                return false;
             }
             argmind_core::session::Found::One(found) => {
                 if !found.window.is_empty() {
@@ -503,7 +559,7 @@ fn propose(desk: &mut Desk, out: &Listeners, effect: Effect) {
             "{} — the person has a rule against it in this app; nothing was done",
             label(&effect, None))));
         out.send("note", &said);
-        return;
+        return false;
     }
     //: **In the conversation, not only on the screen.** An offer the person then argues with —
     //: *"not that one"* — has to be something the next turn can see.
@@ -536,13 +592,16 @@ fn propose(desk: &mut Desk, out: &Listeners, effect: Effect) {
     //: asked for*. A turn argmind began itself waits, however the switch is set.
     if !doubt && !its_own_idea && !must_confirm && crate::decided::standing("acting") == Some(Standing::Allowed) {
         if let Answered::Run(p) = desk.proposals.confirm(token) {
-            act(desk, out, p);
+            return act(desk, out, p);
         }
+        return false;
     }
+    //: Waiting for a person's press, which goes through the same checks when it comes.
+    true
 }
 
 /// **The only place in this program that performs anything.**
-fn act(desk: &mut Desk, out: &Listeners, p: Proposal) {
+fn act(desk: &mut Desk, out: &Listeners, p: Proposal) -> bool {
     //: **On the surface it was offered on**, and the switch put back however this returns — a click
     //: offered on a web page and confirmed after flipping to the desktop must not look for a desktop
     //: widget. A guard rather than a wrapper, so `perform` stays inside `act` where the rule wants it.
@@ -554,9 +613,10 @@ fn act(desk: &mut Desk, out: &Listeners, p: Proposal) {
         == Some(argmind_core::rule::Then::Never) {
         out.send("dropped", &p.token.to_string());
         out.send("note", &argmind_core::rule::told(&desk.rules, &window, &p.effect.kind));
-        return;
+        return false;
     }
     let before = (desk.session.ambiguous, desk.session.chose_too_late);
+    let (no_field, not_landed) = (desk.session.nowhere_to_type, desk.session.not_landed);
     let secret_before = desk.session.secret;
     let (did, downgraded, refused) = desk.session.perform(std::slice::from_ref(&p.effect));
     let after = (desk.session.ambiguous, desk.session.chose_too_late);
@@ -569,7 +629,7 @@ fn act(desk: &mut Desk, out: &Listeners, p: Proposal) {
                 .into()));
         out.send("dropped", &p.token.to_string());
         out.send("note", "비밀번호 칸이라 입력하지 않았습니다 — 비밀번호는 직접 입력해 주세요");
-        return;
+        return false;
     }
     desk.session.remember_doing(&did, &refused, &[], &[]);
     //: **The core refused because nobody asked for this**, which is a different outcome from
@@ -585,7 +645,7 @@ fn act(desk: &mut Desk, out: &Listeners, p: Proposal) {
         out.send("gone",
                  &format!("{{\"token\":{},\"what\":\"{}\"}}", p.token, escape(&p.effect.target)));
         out.send("note", "먼저 말을 건 생각이라 누르지 않고 말로만 두었습니다");
-        return;
+        return false;
     }
     if let Some(Did::Elsewhere { owner }) = desk.session.hands.last_done() {
         out.send("note", &match owner {
@@ -594,7 +654,18 @@ fn act(desk: &mut Desk, out: &Listeners, p: Proposal) {
             //: the target, a banner or a notice.
             None => "그 자리를 다른 것이 가리고 있어서 누르지 않았습니다".to_string(),
         });
-        return;
+        return false;
+    }
+    //: **Refused for a reason the screen gave**, said as that reason.
+    if desk.session.nowhere_to_type > no_field {
+        out.send("dropped", &p.token.to_string());
+        out.send("note", "입력할 칸이 선택되어 있지 않아서 입력하지 않았습니다");
+        return false;
+    }
+    if desk.session.not_landed > not_landed {
+        out.send("dropped", &p.token.to_string());
+        out.send("note", "그 동작이 화면에 닿지 않았습니다");
+        return false;
     }
     if !refused.is_empty() {
         match why_refused((before.0, after.0), (before.1, after.1)) {
@@ -625,7 +696,7 @@ fn act(desk: &mut Desk, out: &Listeners, p: Proposal) {
                 }
             }
         }
-        return;
+        return false;
     }
     let confirmed = match did.first().and_then(|d| d.confirmed) {
         Some(b) => b.to_string(),
@@ -633,6 +704,7 @@ fn act(desk: &mut Desk, out: &Listeners, p: Proposal) {
     };
     out.send("ran", &format!("{{\"token\":{},\"label\":\"{}\",\"confirmed\":{confirmed}}}",
                              p.token, escape(&p.label)));
+    true
 }
 
 /// What is missing, as the page needs it: the whole sentence a person reads before deciding.
@@ -1314,7 +1386,7 @@ fn which_one(desk: &mut Desk, out: &Listeners, about: crate::wonders::About, sai
                 p.effect.which = Some(argmind_core::intent::Among {
                     index, of: among.len(),
                 });
-                act(desk, out, p);
+                let _ = act(desk, out, p);
             }
         }
     }
@@ -2314,7 +2386,7 @@ pub fn run(how: How) {
                 }
                 Job::Confirm(n) => {
                     if let Answered::Run(p) = desk.proposals.confirm(n) {
-                        act(&mut desk, &agent_out, p);
+                        let _ = act(&mut desk, &agent_out, p);
                     }
                 }
                 Job::Decline(n) => {

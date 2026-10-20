@@ -344,22 +344,37 @@ impl WindowsHands {
     /// asked of both because text goes to one or the other: keys to the focus, a value pattern to
     /// the aim. **Unreadable reads as no** — see `Hands::into_a_secret` for why that direction.
     pub fn typing_into_a_secret(&mut self) -> bool {
+        let (focused, aimed) = self.where_text_goes();
+        let secret = |e: &Option<windows::Win32::UI::Accessibility::IUIAutomationElement>| {
+            e.as_ref().is_some_and(|e| unsafe { e.CurrentIsPassword() }.is_ok_and(|b| b.as_bool()))
+        };
+        secret(&focused) || secret(&aimed)
+    }
+
+    /// **The two elements text could reach right now**: the focus, where keys go, and the box just
+    /// clicked while that click is fresh, where a value pattern writes. The one place in this file
+    /// that reads the focus — `tests/hands.rs` holds it to that.
+    fn where_text_goes(&mut self) -> (Option<windows::Win32::UI::Accessibility::IUIAutomationElement>,
+                                      Option<windows::Win32::UI::Accessibility::IUIAutomationElement>) {
         if self.automation.is_none() {
             self.automation = crate::open_automation().ok();
         }
-        let Some(automation) = &self.automation else { return false };
-        let secret = |e: windows::core::Result<
-            windows::Win32::UI::Accessibility::IUIAutomationElement>| unsafe {
-            e.ok().and_then(|e| e.CurrentIsPassword().ok()).is_some_and(|b| b.as_bool())
-        };
-        let focused = secret(unsafe { automation.GetFocusedElement() });
+        let Some(automation) = &self.automation else { return (None, None) };
+        let focused = unsafe { automation.GetFocusedElement() }.ok();
         let aimed = match self.aimed {
-            Some(((x, y), when)) if when.elapsed() <= AIM_LASTS => secret(unsafe {
+            Some(((x, y), when)) if when.elapsed() <= AIM_LASTS => unsafe {
                 automation.ElementFromPoint(POINT { x: x as i32, y: y as i32 })
-            }),
-            _ => false,
+            }.ok(),
+            _ => None,
         };
-        focused || aimed
+        (focused, aimed)
+    }
+
+    /// **Is there a field where the text would go?** The box just clicked if that is fresh, the
+    /// focus otherwise; `None` when UI Automation will not say.
+    pub fn typing_lands_here(&mut self) -> Option<bool> {
+        let (focused, aimed) = self.where_text_goes();
+        Some(crate::patterns::takes_text(&aimed.or(focused)?))
     }
 
     pub fn type_string(&mut self, text: &str) -> Did {
@@ -486,6 +501,17 @@ impl Hands for WindowsHands {
     }
     fn into_a_secret(&mut self) -> bool {
         self.typing_into_a_secret()
+    }
+    fn typing_lands(&mut self) -> Option<bool> {
+        self.typing_lands_here()
+    }
+    /// **The record of the last action**, which every path through these hands writes.
+    fn landed(&self) -> Option<bool> {
+        match self.done.last()? {
+            Did::Sent { live: true } | Did::Operated { live: true, .. } => Some(true),
+            Did::Elsewhere { .. } | Did::Refused(_) => Some(false),
+            _ => None,
+        }
     }
     fn press(&mut self, key: &str) {
         self.press_key(key);

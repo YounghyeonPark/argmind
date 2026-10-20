@@ -317,6 +317,24 @@ impl Hands for WebHands {
                         (e.type === 'password' || /password/i.test(e.autocomplete || '')); })()")
             .ok().and_then(|v| v.as_bool()).unwrap_or(false)
     }
+    /// **The page's focus takes text**: a text-like input, a textarea or something editable, and
+    /// not disabled or read-only.
+    fn typing_lands(&mut self) -> Option<bool> {
+        self.pane.eval("(() => { const e = document.activeElement; if (!e || e === document.body) \
+                        return false; if (e.disabled || e.readOnly) return false; \
+                        if (e.isContentEditable || e.tagName === 'TEXTAREA') return true; \
+                        if (e.tagName !== 'INPUT') return false; \
+                        return !['button','submit','reset','checkbox','radio','hidden','image','file',\
+                        'range','color'].includes((e.type || 'text').toLowerCase()); })()")
+            .ok().and_then(|v| v.as_bool())
+    }
+    fn landed(&self) -> Option<bool> {
+        match self.done.last()? {
+            Did::Sent { live: true } => Some(true),
+            Did::Elsewhere { .. } | Did::Refused(_) => Some(false),
+            _ => None,
+        }
+    }
 }
 
 /// **A search, as an address.** Naver, because Google answered the pane with its automated-traffic

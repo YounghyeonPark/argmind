@@ -274,3 +274,23 @@ fn element_for(automation: &IUIAutomation, x: i64, y: i64, name: &str, role: &st
         Err(format!("no ancestor within {HOPS} hops matched the name and role"))
     }
 }
+
+/// **Does this control take text?** An edit or a document by its control type, or anything with a
+/// value pattern that is not read-only — a combo box's edit, a search box that calls itself
+/// something else. Read-only values and buttons are no.
+pub fn takes_text(e: &IUIAutomationElement) -> bool {
+    use windows::Win32::UI::Accessibility::{UIA_DocumentControlTypeId, UIA_EditControlTypeId};
+    unsafe {
+        //: **The value pattern first**, because it can say *read-only* and the control type
+        //: cannot: a read-only edit is still an Edit.
+        let read_only = e.GetCurrentPattern(UIA_ValuePatternId).ok()
+            .and_then(|raw| raw.cast::<IUIAutomationValuePattern>().ok())
+            .and_then(|v| v.CurrentIsReadOnly().ok())
+            .map(|r| r.as_bool());
+        match read_only {
+            Some(r) => !r,
+            None => e.CurrentControlType().is_ok_and(|t| t == UIA_EditControlTypeId
+                                                        || t == UIA_DocumentControlTypeId),
+        }
+    }
+}

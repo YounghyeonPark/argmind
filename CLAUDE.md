@@ -259,6 +259,22 @@ box opens an address or searches **Naver**, because Google refused the pane. **N
 application from here** — `argmind-app` takes the foreground and may open devices the person allowed;
 the pane's hands were measured, the switch and the box were not.
 
+**Each step is checked against the screen, and a step that did not go ahead stops the rest** —
+the owner, 2026-10-21: *매번 화면상태를 확인하고 해야함*. With 확인 없이 실행 just turned on, *오늘
+서울날씨 알려줘* on the pane's Naver login page became a click on the ID box, *서울* and Enter, one
+after another: a click re-read the screen, **nothing asked where the text would go, and nothing
+stopped the steps after one went wrong.** Now `Hands::typing_lands` is asked before every `type`
+(the page's focus on the web; on Windows the box just clicked or the focus, by value pattern then
+control type — a read-only edit is an Edit and takes nothing), `Hands::landed` after every action,
+and `perform` ends the sequence at the first refusal, counting what it did not try (`unattempted`).
+The application does the same across proposals: `propose` reports whether the next step may go
+ahead, and a turn whose step failed says which steps it left. **And a question about now, asked with
+the pane on, is not planned by clicking**: the program searches it in the pane and an errand
+concludes from the page. Checked: five step tests in the core with a control where nothing fails;
+edit yes, button no, read-only no in a hidden window; on a live page, a field after clicking
+Wikipedia's search box and none on `example.com`. **What this does not catch is a plan that is
+wrong but well-formed** — typing into a field that exists, on a screen that answered every check.
+
 **One call, not two.** A round trip is the budget: 0.45 s warm, 4.7 s and 5.9 s for the first two.
 
 ## The numbers, as they stand
