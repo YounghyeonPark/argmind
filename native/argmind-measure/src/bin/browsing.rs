@@ -29,6 +29,40 @@
 //!   where choosing fell apart, with room. And on each real page the three counts must fall in
 //!   order with the last above zero; a tidy row of zeros is a broken read, not an empty web.
 //!
+//! ## `--choosing`: does the model pick the right thing from these lists?
+//!
+//! The counts say the lists are 65–155 long; `crowding` says choosing collapses from 123 and has
+//! no reading between its captured screens and that. So: the same pages, the same narrowed list
+//! handed to the model through the shipped prompt, and requests whose answer is on the page.
+//!
+//! **Written before the run.** Four requests a page with one right item, named by role and name, and
+//! one request a page that nothing on it can do. **A live page changes**, so a request counts only
+//! when its item is in that run's list **exactly once** — a name that is there twice or not at all
+//! makes the request unanswerable rather than wrong, and it is printed as skipped.
+//!
+//! * **Usable as it stands if answerable requests land on the right item in at least 60%** — under
+//!   the captured screens' 21–24 of 28, well over `crowding`'s 3–8 of 28 from 123 up;
+//! * **and at least 4 of 5 impossible requests are declined** — no effect at all.
+//!
+//! Below either, the list needs narrowing before a model sees it, which is deterministic and a
+//! separate change. Where in the list the item sat is printed beside each answer, because
+//! `crowding` could not separate position from length.
+//!
+//! **What it read, 2026-10-20, one run: 15 of 20 answerable (75%), 5 of 5 declined, none skipped**
+//! — the bar met, and read as a flattering result first:
+//!
+//! * **The requests are easier than a person's.** They were written by looking at the lists, so
+//!   most name the item (*뉴스스탠드 탭*, *Code 버튼*). The impossible ones were obvious — alarms,
+//!   video — and 5 of 5 on those says little.
+//! * **The five misses have three shapes.** A Korean request for an English label, **three times**:
+//!   *글 올리는 곳* → `submit`, *구인 글* → `jobs`, *태그 목록* → `165 Tags` (where *브랜치 목록* →
+//!   `10 Branches` landed). **Off by one**: *경복궁* is row 30 and it pressed `종묘` at 31, saying
+//!   *31*. **Deep in the list**: Naver's search box is row 66 of 68 and it said it could not find one.
+//! * **And two things about talking, which the owner's priority puts first.** The index leaks into
+//!   the speech in **5 of 25** replies (*10번에 있습니다*, *옵션은 4번입니다*), at least the shipped 5 of
+//!   32; and **English pages pull the reply into English** — Korean in, English out on Hacker News
+//!   and GitHub, 5 of 25 — the labels in the list doing what an English slot did in `the dials`.
+//!
 //! ## What the first runs read, 2026-10-20
 //!
 //! * **The control failed first, and was right to.** The one link on `example.com` read as off
@@ -105,6 +139,8 @@ fn main() {
         nodes: usize,
         named: usize,
         shown: Vec<(String, String)>,
+        /// The same list as widgets, full names and boxes, for the model.
+        widgets: Vec<argmind_core::contract::Widget>,
     }
 
     fn read(orders: &Sender<Say>, url: &str) -> Result<Read, String> {
@@ -163,6 +199,10 @@ fn main() {
         let nodes = tree["nodes"].as_array().cloned().unwrap_or_default();
         let mut named = 0;
         let mut shown = Vec::new();
+        let mut widgets = Vec::new();
+        let title = ask(orders, "Runtime.evaluate",
+                        json!({ "expression": "document.title", "returnByValue": true }))?
+            ["result"]["value"].as_str().unwrap_or("").to_string();
         for n in &nodes {
             if n["ignored"].as_bool().unwrap_or(false) {
                 continue;
@@ -182,9 +222,11 @@ fn main() {
             let Some(&(x, y, w, h)) = boxes.get(&id) else { continue };
             if w > 0.0 && h > 0.0 && x < vx + vw && x + w > vx && y < vy + vh && y + h > vy {
                 shown.push((role.to_string(), name.chars().take(40).collect()));
+                widgets.push(argmind_core::contract::Widget::new(
+                    name, role, (x as i64, y as i64, w as i64, h as i64), &title));
             }
         }
-        Ok(Read { nodes: nodes.len(), named, shown })
+        Ok(Read { nodes: nodes.len(), named, shown, widgets })
     }
 
     fn measure(orders: &Sender<Say>) -> Result<(), String> {
@@ -209,6 +251,10 @@ fn main() {
             return Err("대조가 1 이 아닙니다 — 읽는 방법이 틀렸으니 아래 숫자를 믿지 마세요".into());
         }
 
+        if std::env::args().any(|a| a == "--choosing") {
+            return choosing(orders);
+        }
+
         const SITES: [&str; 6] = [
             "https://www.naver.com/",
             "https://www.google.com/search?q=%EC%84%9C%EC%9A%B8+%EB%82%A0%EC%94%A8",
@@ -231,6 +277,11 @@ fn main() {
                              r.nodes, r.named, r.shown.len(),
                              if ok { "100 이하" } else { "**100 넘음**" },
                              if sane { "" } else { " · **순서가 맞지 않음**" });
+                    if std::env::var("BROWSING_DUMP").is_ok() {
+                        for (i, (role, name)) in r.shown.iter().enumerate() {
+                            println!("        {i:>3} {role} \"{name}\"");
+                        }
+                    }
                     let first: Vec<String> = r.shown.iter().take(12)
                         .map(|(role, name)| format!("{role} \"{name}\"")).collect();
                     println!("      {}", first.join(", "));
@@ -242,6 +293,136 @@ fn main() {
         println!("  · 화면 안 100 이하: {under}/6 — {}",
                  if under >= 4 { "다음 단계로 갈 만함" } else { "**기준 못 미침**" });
         println!("  · 세 숫자가 순서대로이고 0 이 아님: {ordered}/6");
+        Ok(())
+    }
+
+    /// What a request needs: an item by role, and its name exactly or a part of it.
+    enum Want {
+        Is(&'static str, &'static str),
+        Has(&'static str, &'static str),
+        /// Nothing on the page can do this; the right answer is no effect.
+        Nothing,
+    }
+
+    struct Page {
+        url: &'static str,
+        asks: [(&'static str, Want); 5],
+    }
+
+    const PAGES: [Page; 5] = [
+        Page { url: "https://www.naver.com/", asks: [
+            ("뉴스스탠드 탭 열어줘", Want::Is("tab", "뉴스스탠드")),
+            ("검색창 눌러줘", Want::Is("combobox", "검색어를 입력해 주세요.")),
+            ("메일 열어줘", Want::Is("link", "메일")),
+            ("로그인 화면으로 가줘", Want::Is("link", "NAVER 로그인")),
+            ("장바구니에 담긴 거 결제해줘", Want::Nothing),
+        ] },
+        Page { url: "https://ko.wikipedia.org/wiki/%EC%84%9C%EC%9A%B8%ED%8A%B9%EB%B3%84%EC%8B%9C", asks: [
+            ("위키백과 검색창 눌러줘", Want::Is("searchbox", "위키백과 검색")),
+            ("계정 만들어줘", Want::Is("link", "계정 만들기")),
+            ("경복궁 문서로 가줘", Want::Is("link", "경복궁")),
+            ("이 문서를 다른 언어로 보고 싶어", Want::Has("button", "개 언어")),
+            ("동영상 재생해줘", Want::Nothing),
+        ] },
+        Page { url: "https://www.weather.go.kr/w/index.do", asks: [
+            ("지진 정보 열어줘", Want::Is("link", "지진·화산")),
+            ("태풍 정보 보여줘", Want::Is("link", "태풍")),
+            ("지명 입력하는 칸 눌러줘", Want::Is("textbox", "주요지명으로 입력")),
+            ("도움말 열어줘", Want::Is("link", "도움말")),
+            ("내일 아침 7시에 알람 맞춰줘", Want::Nothing),
+        ] },
+        Page { url: "https://news.ycombinator.com/", asks: [
+            ("new 페이지 열어줘", Want::Is("link", "new")),
+            ("로그인 해줘", Want::Is("link", "login")),
+            ("글 올리는 곳으로 가줘", Want::Is("link", "submit")),
+            ("구인 글 보여줘", Want::Is("link", "jobs")),
+            ("다크 모드 켜줘", Want::Nothing),
+        ] },
+        Page { url: "https://github.com/rust-lang/rust", asks: [
+            ("브랜치 목록 보여줘", Want::Has("link", "Branches")),
+            ("태그 목록 보여줘", Want::Has("link", "Tags")),
+            ("Code 버튼 눌러줘", Want::Is("button", "Code")),
+            ("가입하기", Want::Is("link", "Sign up")),
+            ("이 저장소 삭제해줘", Want::Nothing),
+        ] },
+    ];
+
+    struct Model(argmind_env_ollama::Local);
+
+    impl argmind_core::contract::Speaks for Model {
+        fn ask(&mut self, prompt: &str) -> String {
+            self.0.ask(prompt).map(|r| r.text).unwrap_or_default()
+        }
+    }
+
+    fn choosing(orders: &Sender<Say>) -> Result<(), String> {
+        use argmind_core::intent::Trigger;
+        use argmind_core::session::Session;
+        use argmind_measure::drive::{Fixed, Nothing};
+
+        let mut warm = argmind_env_ollama::Local::new("qwen3:8b");
+        warm.think = Some(false);
+        for _ in 0..2 {
+            let _ = warm.ask("Reply with the single word: ready");
+        }
+        println!("\n  ── 고르기: 실제 페이지의 목록, 출하된 프롬프트, qwen3:8b ──");
+        let (mut right, mut answerable, mut declined, mut impossible, mut skipped) = (0, 0, 0, 0, 0);
+        for page in &PAGES {
+            let r = read(orders, page.url)?;
+            println!("\n  {} — 화면 안 {}", page.url, r.widgets.len());
+            for (said, want) in &page.asks {
+                //: The item this request means, in this run's list — exactly one, or the request is
+                //: unanswerable today rather than wrong.
+                let target = match want {
+                    Want::Nothing => None,
+                    Want::Is(role, name) | Want::Has(role, name) => {
+                        let hits: Vec<(usize, &argmind_core::contract::Widget)> = r.widgets.iter()
+                            .enumerate()
+                            .filter(|(_, w)| w.role == *role && match want {
+                                Want::Is(..) => w.name == *name,
+                                _ => w.name.contains(name),
+                            }).collect();
+                        if hits.len() != 1 {
+                            skipped += 1;
+                            println!("     {said}\n       건너뜀 — {role} \"{name}\" 이 {}개", hits.len());
+                            continue;
+                        }
+                        Some(hits[0])
+                    }
+                };
+                let mut model = argmind_env_ollama::Local::new("qwen3:8b");
+                model.think = Some(false);
+                let mut session = Session::new(Fixed(r.widgets.clone()), Nothing, Model(model));
+                let intent = session.decide(&Trigger::said(said));
+                let did: Vec<String> = intent.effects.iter()
+                    .map(|e| format!("{} {} \"{}\"", e.kind, e.role, e.target)).collect();
+                let (ok, at) = match target {
+                    None => {
+                        impossible += 1;
+                        let ok = intent.effects.is_empty();
+                        declined += ok as usize;
+                        (ok, String::new())
+                    }
+                    Some((i, w)) => {
+                        answerable += 1;
+                        let ok = intent.effects.iter()
+                            .any(|e| e.kind == "click" && e.target == w.name);
+                        right += ok as usize;
+                        (ok, format!(" · 정답은 {i}번째"))
+                    }
+                };
+                println!("     {said}\n       {} {}{at}  — {}", if ok { "●" } else { "○" },
+                         if did.is_empty() { "(행동 없음)".to_string() } else { did.join(", ") },
+                         intent.say.chars().take(50).collect::<String>());
+            }
+        }
+        let rate = right as f64 / answerable.max(1) as f64;
+        println!("\n  ── 돌리기 전에 적어둔 대로 ──");
+        println!("  · 답이 있는 요청: {right}/{answerable} ({:.0}%) — {}", rate * 100.0,
+                 if rate >= 0.6 { "60% 이상" } else { "**60% 못 미침**" });
+        println!("  · 할 수 없는 요청을 거절: {declined}/{impossible} — {}",
+                 if impossible > 0 && declined * 5 >= impossible * 4 { "기준대로" } else { "**기준 못 미침**" });
+        println!("  · 건너뜀 (목록에 0개이거나 2개 이상): {skipped}");
         Ok(())
     }
 }
