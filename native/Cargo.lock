@@ -122,6 +122,7 @@ dependencies = [
  "argmind-env-ollama",
  "argmind-env-qwentts",
  "argmind-env-windows",
+ "argmind-window",
  "serde_json",
  "sha2",
 ]
@@ -157,6 +158,8 @@ version = "0.0.1"
 dependencies = [
  "tao",
  "tray-icon",
+ "webview2-com",
+ "windows-core 0.62.2",
  "wry",
 ]
 

@@ -20,3 +20,11 @@ wry = "0.57"
 tao = "0.37"
 # The icon by the clock, or the menu bar, or the status area.
 tray-icon = "0.25"
+
+# **The browser pane's controls, Windows only, and already in the graph behind wry** — MIT, and
+# no new crate enters the build. `CallDevToolsProtocolMethod` is how the pane is driven: the same
+# commands a debugging port would carry, inside the process, so no port is ever opened that any
+# other program on the machine could connect to.
+[target.'cfg(windows)'.dependencies]
+webview2-com = "0.39"
+windows-core = "0.62"

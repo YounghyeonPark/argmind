@@ -70,6 +70,12 @@ sha2 = { licence = "MIT OR Apache-2.0", why = "the prompt fingerprint, in tests 
 # that it does not follow transitive dependencies.
 wry = { licence = "Apache-2.0 OR MIT", why = "the webview: WebView2, WKWebView, WebKitGTK" }
 tao = { licence = "Apache-2.0", why = "the window and its event loop, on all three" }
+# **The browser pane's controls, 2026-10-20.** Both were already in the graph behind wry, so no
+# crate enters the build; what changes is that `argmind-window` names them, for one call —
+# `CallDevToolsProtocolMethod`, which carries DevTools commands inside the process so that no
+# debugging port is opened that any other program on the machine could reach.
+webview2-com = { licence = "MIT", why = "the pane's DevTools channel, without a port" }
+windows-core = { licence = "MIT OR Apache-2.0", why = "the string type that channel takes" }
 # **The Linux eyes, 2026-09-17.** The accessibility tree is D-Bus and this is the smallest correct
 # way to speak it. Measured rather than assumed: `dbus` resolves to **6 crates**, `zbus` to 85 and
 # `atspi` to 93. It binds `libdbus-1`, which this tree already requires on Linux because the tray

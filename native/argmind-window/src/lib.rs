@@ -51,6 +51,18 @@
 //! `cargo check` for a target whose system libraries are absent is not evidence. Saying so is the
 //! point: the code names no platform, which makes the port plausible and does not make it done.
 //!
+//! ## The browser pane
+//!
+//! **A second webview in the same window, for argmind's own browsing** — the owner's choice on
+//! 2026-10-20, over a separate Edge window and over a downloaded Chromium. It shares nothing with
+//! the page beside it: its own data folder, so its own cookies and storage, and its own policy —
+//! [`is_web`] rather than [`is_loopback`], no new windows, no downloads. Somebody can watch it.
+//!
+//! **Driven through `CallDevToolsProtocolMethod`, never a debugging port.** A port on loopback is
+//! open to every program on the machine; this is the same protocol carried inside the process.
+//! WebView2 has it and WKWebView and WebKitGTK do not, so [`devtools`] is the second function here
+//! that names an operating system, and off Windows it says so rather than pretending.
+//!
 //! **And the agent inside the window is Windows-only regardless.** `argmind-core` names no
 //! platform — its only dependency is `serde_json` — but the eyes are UI Automation, the hands are
 //! SendInput, the microphone is WASAPI, the camera is Media Foundation and both voices are
@@ -96,6 +108,21 @@ pub struct Shell {
     /// through a library. Naming the right folder needs to know the operating system, which this
     /// crate deliberately does not, so the caller passes one.
     pub data: Option<std::path::PathBuf>,
+    /// **A browser pane beside the page, or none.** None is the window as it always was.
+    pub pane: Option<Pane>,
+}
+
+/// argmind's own browser, inside its window.
+pub struct Pane {
+    /// Its own data folder — **never the page's**, so nothing argmind's server set is visible to a
+    /// website and nothing a website set is visible to argmind's page.
+    pub data: std::path::PathBuf,
+    /// Where it starts. Checked with [`is_web`]; anything else starts blank.
+    pub url: String,
+    /// How wide, beside the page. The window grows by this much.
+    pub wide: u32,
+    /// **Only the pane** — the page is not drawn. For a harness, which has no server to show.
+    pub alone: bool,
 }
 
 impl Default for Shell {
@@ -112,8 +139,26 @@ impl Default for Shell {
             hidden: false,
             tray: true,
             data: None,
+            pane: None,
         }
     }
+}
+
+/// **Where the pane may go: the web, and only the web.** `http` or `https`, an authority with no
+/// user in it, and **not this machine** — the pane must not be able to reach argmind's own server,
+/// whatever a page links to. The mirror image of [`is_loopback`], and built on it.
+pub fn is_web(url: &str) -> bool {
+    let rest = url.strip_prefix("http://").or_else(|| url.strip_prefix("https://"));
+    let Some(rest) = rest else { return false };
+    let authority = rest.split(['/', '?', '#']).next().unwrap_or("");
+    if authority.is_empty() || authority.contains('@') {
+        return false;
+    }
+    let host = authority.split(':').next().unwrap_or("").to_ascii_lowercase();
+    //: Loopback in every spelling a browser accepts, and the unspecified address, which some
+    //: systems route to loopback.
+    !(is_loopback(url) || authority.starts_with('[') || host.starts_with("127.")
+      || host == "0.0.0.0" || host.ends_with(".localhost") || host == "localhost")
 }
 
 /// **Loopback only, and refused otherwise.**
@@ -241,6 +286,32 @@ fn attach(window: &Window, url: &str, held: &mut wry::WebContext) -> Result<wry:
     view.map_err(|e| format!("화면을 만들지 못했습니다 ({e})"))
 }
 
+/// One CDP command's answer: the reply's JSON, or why there is none.
+pub type Answer = Result<String, String>;
+
+/// Run one Chrome DevTools Protocol command in the pane, **on the thread that owns it** — WebView2
+/// answers only there — and send the answer back. Asynchronous: the reply arrives on `reply` once
+/// the page has answered, and the loop is never held waiting for it.
+#[cfg(target_os = "windows")]
+fn devtools(view: &wry::WebView, method: &str, params: &str, reply: std::sync::mpsc::Sender<Answer>) {
+    use webview2_com::CallDevToolsProtocolMethodCompletedHandler;
+    use wry::WebViewExtWindows;
+    let answered = reply.clone();
+    let handler = CallDevToolsProtocolMethodCompletedHandler::create(Box::new(move |done, json| {
+        let _ = answered.send(done.map(|_| json).map_err(|e| format!("{e}")));
+        Ok(())
+    }));
+    let (m, p) = (windows_core::HSTRING::from(method), windows_core::HSTRING::from(params));
+    if let Err(e) = unsafe { view.webview().CallDevToolsProtocolMethod(&m, &p, &handler) } {
+        let _ = reply.send(Err(format!("{e}")));
+    }
+}
+
+#[cfg(not(target_os = "windows"))]
+fn devtools(_: &wry::WebView, _: &str, _: &str, reply: std::sync::mpsc::Sender<Answer>) {
+    let _ = reply.send(Err("이 운영체제의 웹뷰는 DevTools 프로토콜을 열어 주지 않습니다".into()));
+}
+
 /// What the loop is being told to do, from outside it.
 pub enum Say {
     /// Bring the window up — a second copy of the program was started and handed the job over.
@@ -249,6 +320,37 @@ pub enum Say {
     Tooltip(String),
     /// Close everything.
     Quit,
+    /// One command for the browser pane. Answered with an error when there is no pane.
+    Devtools { method: String, params: String, reply: std::sync::mpsc::Sender<Answer> },
+}
+
+/// The page and the pane side by side, in physical pixels of the window's inside.
+fn halves(window: &Window, page_wide: u32, alone: bool) -> (wry::Rect, wry::Rect) {
+    let size = window.inner_size();
+    let scale = window.scale_factor();
+    let page = if alone { 0 } else { ((page_wide as f64) * scale) as u32 };
+    let page = page.min(size.width);
+    let rect = |x: u32, w: u32| wry::Rect {
+        position: tao::dpi::PhysicalPosition::new(x as i32, 0).into(),
+        size: tao::dpi::PhysicalSize::new(w, size.height).into(),
+    };
+    (rect(0, page), rect(page, size.width - page))
+}
+
+/// The pane: a child webview with its own folder, the web only, no windows, no downloads.
+fn attach_pane(window: &Window, pane: &Pane, bounds: wry::Rect, held: &mut wry::WebContext)
+               -> Result<wry::WebView, String> {
+    let start = if is_web(&pane.url) { pane.url.as_str() } else { "about:blank" };
+    WebViewBuilder::new_with_web_context(held)
+        .with_url(start)
+        .with_bounds(bounds)
+        //: **Every navigation is checked**, not only the first: a page links anywhere, and
+        //: `Page.navigate` arrives here too.
+        .with_navigation_handler(|url| url == "about:blank" || is_web(&url))
+        .with_new_window_req_handler(|_, _| wry::NewWindowResponse::Deny)
+        .with_download_started_handler(|_, _| false)
+        .build_as_child(window)
+        .map_err(|e| format!("브라우저 칸을 만들지 못했습니다 ({e})"))
 }
 
 /// Open the window and stay in it until somebody quits.
@@ -266,16 +368,44 @@ pub fn run(shell: Shell, orders: Option<Receiver<Say>>) -> Result<(), String> {
     }
 
     let events = EventLoopBuilder::new().build();
+    let wide = match &shell.pane {
+        Some(p) if p.alone => p.wide,
+        Some(p) => shell.wide + p.wide,
+        None => shell.wide,
+    };
     let window = WindowBuilder::new()
         .with_title(&shell.title)
-        .with_inner_size(tao::dpi::LogicalSize::new(shell.wide, shell.tall))
+        .with_inner_size(tao::dpi::LogicalSize::new(wide, shell.tall))
         .with_visible(!shell.hidden)
         .with_focused(shell.focused && !shell.hidden)
         .build(&events)
         .map_err(|e| format!("창을 만들지 못했습니다 ({e})"))?;
     //: Held for as long as the webview is, which is why it is a binding and not an argument.
     let mut context = wry::WebContext::new(shell.data.clone());
-    let _view = attach(&window, &shell.url, &mut context)?;
+    //: **With no pane, exactly the window it always was** — the page attached the way it always
+    //: was. With one, both are children laid side by side and moved together on a resize.
+    let (view, pane) = match &shell.pane {
+        None => (Some(attach(&window, &shell.url, &mut context)?), None),
+        Some(p) => {
+            let (left, right) = halves(&window, shell.wide, p.alone);
+            let page = if p.alone {
+                None
+            } else {
+                Some(WebViewBuilder::new_with_web_context(&mut context)
+                    .with_url(&shell.url)
+                    .with_bounds(left)
+                    .with_new_window_req_handler(|_, _| wry::NewWindowResponse::Deny)
+                    .build_as_child(&window)
+                    .map_err(|e| format!("화면을 만들지 못했습니다 ({e})"))?)
+            };
+            let mut own = wry::WebContext::new(Some(p.data.clone()));
+            let pane = attach_pane(&window, p, right, &mut own)?;
+            //: The pane's context lives as long as the loop, like the page's.
+            std::mem::forget(own);
+            (page, Some(pane))
+        }
+    };
+    let (page_wide, alone) = (shell.wide, shell.pane.as_ref().is_some_and(|p| p.alone));
 
     const SIDE: u32 = 32;
     let mut show_id = None;
@@ -329,6 +459,15 @@ pub fn run(shell: Shell, orders: Option<Receiver<Say>>) -> Result<(), String> {
             //: until somebody hovers over it, which is a worse last impression than never having
             //: drawn one.
             Event::LoopDestroyed => { tray.take(); }
+            Event::WindowEvent { event: WindowEvent::Resized(_), .. } if pane.is_some() => {
+                let (left, right) = halves(&window, page_wide, alone);
+                if let Some(v) = view.as_ref() {
+                    let _ = v.set_bounds(left);
+                }
+                if let Some(p) = pane.as_ref() {
+                    let _ = p.set_bounds(right);
+                }
+            }
             Event::NewEvents(StartCause::Init) => {}
             _ => {}
         }
@@ -357,6 +496,10 @@ pub fn run(shell: Shell, orders: Option<Receiver<Say>>) -> Result<(), String> {
                         }
                     }
                     Say::Quit => leave = true,
+                    Say::Devtools { method, params, reply } => match pane.as_ref() {
+                        Some(p) => devtools(p, &method, &params, reply),
+                        None => { let _ = reply.send(Err("브라우저 칸이 없습니다".into())); }
+                    },
                 }
             }
         }
@@ -372,4 +515,23 @@ pub fn run(shell: Shell, orders: Option<Receiver<Say>>) -> Result<(), String> {
             *flow = ControlFlow::Exit;
         }
     });
+}
+
+#[cfg(test)]
+mod pane_tests {
+    use super::is_web;
+
+    #[test]
+    fn the_pane_goes_to_the_web_and_nowhere_else() {
+        for ok in ["https://www.naver.com/", "http://example.com", "https://ko.wikipedia.org/wiki/서울",
+                   "https://example.com:8443/a?b#c"] {
+            assert!(is_web(ok), "{ok}");
+        }
+        for no in ["http://127.0.0.1:7331/", "http://localhost/", "http://[::1]:7331/",
+                   "http://127.1.2.3/", "http://0.0.0.0/", "http://argmind.localhost/",
+                   "http://LOCALHOST/", "https://user@example.com/", "file:///C:/Windows",
+                   "javascript:alert(1)", "about:blank", "data:text/html,hi", "https:///x", ""] {
+            assert!(!is_web(no), "{no}");
+        }
+    }
 }
