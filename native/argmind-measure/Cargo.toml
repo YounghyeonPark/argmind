@@ -17,5 +17,6 @@ argmind-env-qwentts = { path = "../argmind-env-qwentts" }
 argmind-env-face = { path = "../argmind-env-face" }
 # `browsing` only: the pane in argmind's own window, driven without a debugging port.
 argmind-window = { path = "../argmind-window" }
+argmind-env-browser = { path = "../argmind-env-browser" }
 serde_json = "1"
 sha2 = "0.10"

@@ -63,6 +63,20 @@
 //!   32; and **English pages pull the reply into English** — Korean in, English out on Hacker News
 //!   and GitHub, 5 of 25 — the labels in the list doing what an English slot did in `the dials`.
 //!
+//! ## `--hands`: does pressing in the pane stay in the pane?
+//!
+//! `argmind-env-browser` presses with page events, never the operating system. Four checks,
+//! written before the run, each able to fail:
+//!
+//! 1. **A click lands and the pointer does not move.** *Learn more* on `example.com` takes the page
+//!    to `iana.org`, and the person's pointer reads the same before and after.
+//! 2. **Typing lands in the page.** The Wikipedia search box clicked, *경복궁* typed, and the box's
+//!    own value read back. Enter is not pressed.
+//! 3. **A covered target is refused** — the negative control. A layer is laid over the link in the
+//!    pane's own copy of the page; the click must come back `Elsewhere` and the page must not move.
+//! 4. **A password field reads as one and an ordinary one does not**, both added to the pane's page
+//!    and focused there.
+//!
 //! ## What the first runs read, 2026-10-20
 //!
 //! * **The control failed first, and was right to.** The one link on `example.com` read as off
@@ -254,6 +268,9 @@ fn main() {
         if std::env::args().any(|a| a == "--choosing") {
             return choosing(orders);
         }
+        if std::env::args().any(|a| a == "--hands") {
+            return hands(orders);
+        }
 
         const SITES: [&str; 6] = [
             "https://www.naver.com/",
@@ -423,6 +440,99 @@ fn main() {
         println!("  · 할 수 없는 요청을 거절: {declined}/{impossible} — {}",
                  if impossible > 0 && declined * 5 >= impossible * 4 { "기준대로" } else { "**기준 못 미침**" });
         println!("  · 건너뜀 (목록에 0개이거나 2개 이상): {skipped}");
+        Ok(())
+    }
+
+    fn hands(orders: &Sender<Say>) -> Result<(), String> {
+        use argmind_core::contract::{Did, Eyes, Hands};
+        use argmind_env_browser::Pane;
+        use serde_json::json;
+        use std::sync::{Arc, Mutex};
+
+        let wire_orders = Mutex::new(orders.clone());
+        let pane = Pane::new(Arc::new(move |method: &str, params: &str| -> Result<String, String> {
+            let (reply, answer) = channel();
+            wire_orders.lock().map_err(|_| "poisoned".to_string())?
+                .send(Say::Devtools { method: method.into(), params: params.into(), reply })
+                .map_err(|_| "the window has gone".to_string())?;
+            answer.recv_timeout(std::time::Duration::from_secs(30))
+                .map_err(|_| format!("{method}: no answer"))?
+        }));
+        let go = |url: &str| -> Result<(), String> {
+            pane.ask("Page.navigate", json!({ "url": url }))?;
+            let began = std::time::Instant::now();
+            loop {
+                std::thread::sleep(std::time::Duration::from_millis(300));
+                if pane.eval("document.readyState")? == "complete" { break; }
+                if began.elapsed().as_secs() > 25 { return Err(format!("{url}: not loaded")); }
+            }
+            std::thread::sleep(std::time::Duration::from_secs(1));
+            Ok(())
+        };
+        let host = || pane.eval("location.host").ok().and_then(|v| v.as_str().map(String::from))
+            .unwrap_or_default();
+        let mut passed = 0;
+        println!("\n  ── 칸 안에서 누르기 · 입력 — 페이지 이벤트만, 운영체제 입력 없음 ──");
+
+        //: 1. A click that lands, and a pointer that does not move.
+        go("https://example.com/")?;
+        let mut eyes = pane.eyes();
+        let mut hands = pane.hands(true);
+        let link = eyes.foreground().into_iter().find(|w| w.name == "Learn more")
+            .ok_or("no Learn more on example.com")?;
+        let before = argmind_env_windows::cursor_now();
+        hands.click(&link);
+        let after = argmind_env_windows::cursor_now();
+        std::thread::sleep(std::time::Duration::from_secs(3));
+        let landed = host();
+        let ok = hands.done.last() == Some(&Did::Sent { live: true }) && landed.contains("iana")
+            && before == after;
+        passed += ok as usize;
+        println!("  1. 누르기: {:?} → {landed} · 포인터 {before:?} → {after:?} — {}",
+                 hands.done.last(), if ok { "기준대로" } else { "**기준과 다름**" });
+
+        //: 2. Typing into the page's own box.
+        go("https://ko.wikipedia.org/wiki/%EC%84%9C%EC%9A%B8%ED%8A%B9%EB%B3%84%EC%8B%9C")?;
+        let boxed = eyes.foreground().into_iter().find(|w| w.role == "searchbox")
+            .ok_or("no search box")?;
+        hands.click(&boxed);
+        std::thread::sleep(std::time::Duration::from_millis(400));
+        hands.type_text("경복궁");
+        std::thread::sleep(std::time::Duration::from_millis(400));
+        let value = pane.eval("document.activeElement && document.activeElement.value")?;
+        let ok = value == "경복궁";
+        passed += ok as usize;
+        println!("  2. 입력: 검색창 값 {value} — {}", if ok { "기준대로" } else { "**기준과 다름**" });
+
+        //: 3. The negative control: the link covered, in the pane's own copy of the page.
+        go("https://example.com/")?;
+        let link = eyes.foreground().into_iter().find(|w| w.name == "Learn more")
+            .ok_or("no Learn more the second time")?;
+        pane.eval("(() => { const d = document.createElement('div'); \
+                   d.style.cssText = 'position:fixed;inset:0;z-index:99999;background:rgba(0,0,0,0.01)'; \
+                   document.body.appendChild(d); return 1; })()")?;
+        hands.click(&link);
+        std::thread::sleep(std::time::Duration::from_secs(2));
+        let stayed = host();
+        let ok = hands.done.last() == Some(&Did::Elsewhere { owner: None })
+            && stayed.contains("example.com");
+        passed += ok as usize;
+        println!("  3. 가린 대상: {:?} · 페이지 {stayed} — {}", hands.done.last(),
+                 if ok { "거부됨, 기준대로" } else { "**눌렸거나 다른 답**" });
+
+        //: 4. Password, both ways.
+        let secret = pane.eval("(() => { const i = document.createElement('input'); i.type = 'password'; \
+                                document.body.appendChild(i); i.focus(); return 1; })()")
+            .map(|_| hands.into_a_secret())?;
+        let plain = pane.eval("(() => { const i = document.createElement('input'); i.type = 'text'; \
+                               document.body.appendChild(i); i.focus(); return 1; })()")
+            .map(|_| hands.into_a_secret())?;
+        let ok = secret && !plain;
+        passed += ok as usize;
+        println!("  4. 비밀번호 칸 {secret} · 보통 칸 {plain} — {}",
+                 if ok { "기준대로" } else { "**기준과 다름**" });
+
+        println!("\n  ── 네 가지 중 {passed} 가지 기준대로 ──");
         Ok(())
     }
 }

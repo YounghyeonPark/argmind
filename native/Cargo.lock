@@ -56,6 +56,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "argmind-env-browser"
+version = "0.0.1"
+dependencies = [
+ "argmind-core",
+ "serde_json",
+]
+
+[[package]]
 name = "argmind-env-face"
 version = "0.0.1"
 dependencies = [
@@ -118,6 +126,7 @@ name = "argmind-measure"
 version = "0.0.1"
 dependencies = [
  "argmind-core",
+ "argmind-env-browser",
  "argmind-env-face",
  "argmind-env-ollama",
  "argmind-env-qwentts",

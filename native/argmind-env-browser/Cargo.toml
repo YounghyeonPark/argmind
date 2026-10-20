@@ -1,0 +1,13 @@
+[package]
+name = "argmind-env-browser"
+version = "0.0.1"
+edition = "2021"
+description = "Eyes and hands for argmind's own browser pane, over the DevTools protocol, naming no platform."
+license = "Apache-2.0"
+
+# **No platform crate and no transport.** What carries a DevTools command to the page is handed in
+# as a `Wire` — on Windows that is WebView2's in-process call, through `argmind-window` — so this
+# crate reads and presses a web page without knowing where the page lives.
+[dependencies]
+argmind-core = { path = "../argmind-core" }
+serde_json = "1"

@@ -6,7 +6,7 @@
 # the Python side, and the reason is the same — the core calls them and nothing else reaches it.
 [workspace]
 resolver = "2"
-members = ["argmind-core", "argmind-env-windows", "argmind-voice", "argmind-env-ollama", "argmind-env-whisper", "argmind-env-qwentts", "argmind-env-none", "argmind-env-linux", "argmind-env-face", "argmind-measure", "argmind-rules", "argmind-window", "argmind-serve"]
+members = ["argmind-core", "argmind-env-windows", "argmind-voice", "argmind-env-ollama", "argmind-env-whisper", "argmind-env-qwentts", "argmind-env-none", "argmind-env-linux", "argmind-env-face", "argmind-env-browser", "argmind-measure", "argmind-rules", "argmind-window", "argmind-serve"]
 
 # **Debug information for this tree, not for its dependencies.**
 #
