@@ -2124,9 +2124,12 @@ pub fn run(how: How) {
     //: **Thinking happens here, not on the thread that answers.** It used to be inline, and a model
     //: call there is a model call during which nobody gets a reply. What comes back is a `Job`.
     let letters = Letterbox::new();
+    //: **One switch for the whole program**, made before either thread that reads it.
+    let on_web = crate::surface::OnWeb::default();
     {
         let (letters, turn, senses, jobs, model_name) =
             (letters.clone(), turn.clone(), senses.clone(), jobs.clone(), model_name.clone());
+        let (web, on_web) = (web.clone(), on_web.clone());
         std::thread::spawn(move || {
             let mut model = Local::new(&model_name);
             model.think = Some(false);
@@ -2153,6 +2156,19 @@ pub fn run(how: How) {
                         }
                         let mut after = before.clone();
                         argmind_core::errand::read_step(&reply.text, &mut after);
+                        //: **Looked up by the program, in the pane, when the errand is about now
+                        //: or the check said it needs the web** — and only while nobody is using
+                        //: the pane, because an errand must not navigate a page somebody is
+                        //: reading. The model never chooses where to go: the search is the
+                        //: errand's own words. Without a pane, or with it in use, nothing changes.
+                        if after.wants_looking_up() && !on_web.get() {
+                            if let Some(pane) = web.as_ref() {
+                                let reader = argmind_env_browser::Pane::new(pane.wire.clone());
+                                if let Ok((text, at)) = reader.look_up(&after.what) {
+                                    after.looked_up(&text, &at);
+                                }
+                            }
+                        }
                         let _ = jobs.send(Job::Stepped(before, after));
                         continue;
                     }
@@ -2200,7 +2216,7 @@ pub fn run(how: How) {
         let (voice, voice_is) = if speak { pick_voice() } else { (None, "off") };
         let ear = hear.then(|| (Ear::new(), Whisper::default()));
         let (eyes, hands, on_web) =
-            crate::surface::surfaces(eyes, hands, web.as_ref(), !dry);
+            crate::surface::surfaces(eyes, hands, web.as_ref(), !dry, on_web);
         let mut desk = Desk { session: Session::new(eyes, hands, Model(model)), on_web,
                               web: web.clone(),
                               proposals: Proposals::default(), dry,

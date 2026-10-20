@@ -318,3 +318,52 @@ impl Hands for WebHands {
             .ok().and_then(|v| v.as_bool()).unwrap_or(false)
     }
 }
+
+/// **A search, as an address.** Naver, because Google answered the pane with its automated-traffic
+/// page in `--bin browsing`. Percent-encoded by hand — a byte at a time, so Korean is three escapes
+/// a character, which is what a browser sends.
+pub fn search_url(words: &str) -> String {
+    let mut q = String::new();
+    for b in words.trim().bytes() {
+        match b {
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => q.push(b as char),
+            b' ' => q.push('+'),
+            _ => q.push_str(&format!("%{b:02X}")),
+        }
+    }
+    format!("https://search.naver.com/search.naver?query={q}")
+}
+
+impl Pane {
+    /// **Open an address and wait for it**: loaded, then a second for what loads after loading.
+    pub fn open(&self, url: &str) -> Result<(), String> {
+        self.ask("Page.navigate", json!({ "url": url }))?;
+        let began = std::time::Instant::now();
+        loop {
+            std::thread::sleep(std::time::Duration::from_millis(300));
+            if self.eval("document.readyState")? == "complete" {
+                break;
+            }
+            if began.elapsed().as_secs() > 25 {
+                return Err(format!("{url}: 25초 안에 열리지 않았습니다"));
+            }
+        }
+        std::thread::sleep(std::time::Duration::from_secs(1));
+        Ok(())
+    }
+
+    /// **The page's words, as a person would read them** — `innerText`, which leaves out scripts,
+    /// styles and hidden text — and the address it ended up at.
+    pub fn text(&self) -> Result<(String, String), String> {
+        let text = self.eval("document.body ? document.body.innerText : ''")?
+            .as_str().unwrap_or("").to_string();
+        let at = self.eval("location.href")?.as_str().unwrap_or("").to_string();
+        Ok((text, at))
+    }
+
+    /// Search for these words and read what came back.
+    pub fn look_up(&self, words: &str) -> Result<(String, String), String> {
+        self.open(&search_url(words))?;
+        self.text()
+    }
+}

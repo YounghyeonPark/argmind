@@ -167,9 +167,8 @@ impl Hands for Touching {
 }
 
 /// Build both halves from what the window handed over, or desktop-only when there is no pane.
-pub fn surfaces(desk_eyes: Sight, desk_hands: Touch, pane: Option<&WebPane>, live: bool)
-                -> (Looking, Touching, OnWeb) {
-    let on_web = OnWeb::default();
+pub fn surfaces(desk_eyes: Sight, desk_hands: Touch, pane: Option<&WebPane>, live: bool,
+                on_web: OnWeb) -> (Looking, Touching, OnWeb) {
     let shared = pane.map(|p| Pane::new(p.wire.clone()));
     let looking = Looking { desk: desk_eyes, web: shared.as_ref().map(|p| p.eyes()),
                             on_web: on_web.clone() };
@@ -189,15 +188,7 @@ pub fn address(typed: &str) -> String {
     if !t.contains(' ') && t.contains('.') && !t.ends_with('.') {
         return format!("https://{t}");
     }
-    let mut q = String::new();
-    for b in t.bytes() {
-        match b {
-            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => q.push(b as char),
-            b' ' => q.push('+'),
-            _ => q.push_str(&format!("%{b:02X}")),
-        }
-    }
-    format!("https://search.naver.com/search.naver?query={q}")
+    argmind_env_browser::search_url(t)
 }
 
 #[cfg(test)]
