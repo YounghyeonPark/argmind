@@ -155,7 +155,7 @@ pub fn listing(tree: &Value, snapshot: &Value, metrics: &Value, title: &str)
 impl WebEyes {
     /// **The window a rule matches is the page's title and its host** — so a rule can name a site
     /// (`naver.com`) as well as a page.
-    fn window(&self) -> String {
+    pub fn window(&self) -> String {
         let title = self.pane.eval("document.title").ok()
             .and_then(|v| v.as_str().map(str::to_string)).unwrap_or_default();
         let host = self.pane.eval("location.host").ok()

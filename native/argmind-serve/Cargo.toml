@@ -9,6 +9,8 @@ license = "Apache-2.0"
 # rule is cheapest to obey when there is nothing new to check.
 [dependencies]
 argmind-core = { path = "../argmind-core" }
+# argmind's own browser pane — platform-free; what carries its commands is handed in by the window.
+argmind-env-browser = { path = "../argmind-env-browser" }
 
 # The binary is the application, so it reaches the environment; the library above it is protocol
 # and proposals only, and depends on neither.

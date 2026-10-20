@@ -103,6 +103,11 @@
   #holding { border-bottom: 1px solid var(--edge); font-size: 13px; background: #fdfcfa; }
   #errands { border-bottom: 1px solid var(--edge); font-size: 13px; }
   #rules { padding: 6px 14px; border-top: 1px solid var(--edge); }
+  #webbar { display: flex; gap: 8px; align-items: center; padding: 4px 14px;
+            border-bottom: 1px solid var(--edge); font-size: 13px; }
+  #webbar[hidden] { display: none; }
+  #web-form { display: flex; flex: 1; gap: 6px; }
+  #web-where { flex: 1; font: inherit; padding: 3px 6px; border: 1px solid var(--edge); }
   .kept { display: flex; gap: 6px; align-items: baseline; padding: 2px 0; }
   #timeline { border-bottom: 1px solid var(--edge); font-size: 13px; }
   #timeline > summary { padding: 6px 14px; cursor: pointer; color: var(--dim); }
@@ -379,6 +384,17 @@
     <summary>모델이 본 것</summary>
     <pre id="seen"></pre>
   </details>
+  <!-- 웹. argmind's own browser pane, beside this page, and the address it goes to. Shown only
+       when this window has a pane — the console server and a second window have none. With it on,
+       a turn looks at the pane and presses only in it: page events, never the pointer or the
+       keyboard, so argmind's web work and the person's own never meet. -->
+  <div id="webbar" hidden>
+    <label class="switch-inline"><input type="checkbox" id="web"> 웹</label>
+    <form id="web-form" autocomplete="off">
+      <input id="web-where" placeholder="주소나 찾을 말 — 예: naver.com, 서울 날씨">
+      <button type="submit">열기</button>
+    </form>
+  </div>
   <div class="middle">
     <div class="stage">
       <!-- Drawn behind the conversation and never in front of it: it carries no information the

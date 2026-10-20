@@ -55,7 +55,31 @@ fn complain(title: &str, body: &str) {
 
 fn main() {
     let second = already_running();
-    let how = How::from_args();
+    let mut how = How::from_args();
+    //: **The pane's controls, made before either side starts.** The window owns the pane; the
+    //: server gets a wire to it and a switch for it. A second launch — a viewer onto an argmind
+    //: already running — makes no pane: that argmind already has one.
+    let (orders, inbox) = std::sync::mpsc::channel::<argmind_window::Say>();
+    if !second {
+        let wire_to = std::sync::Mutex::new(orders.clone());
+        let show_to = std::sync::Mutex::new(orders.clone());
+        how.web = Some(argmind_serve::surface::WebPane {
+            wire: std::sync::Arc::new(move |method: &str, params: &str| -> Result<String, String> {
+                let (reply, answer) = std::sync::mpsc::channel();
+                wire_to.lock().map_err(|_| "poisoned".to_string())?
+                    .send(argmind_window::Say::Devtools { method: method.into(),
+                                                          params: params.into(), reply })
+                    .map_err(|_| "창이 닫혔습니다".to_string())?;
+                answer.recv_timeout(Duration::from_secs(30))
+                    .map_err(|_| format!("{method}: 30초 안에 답이 없습니다"))?
+            }),
+            show: std::sync::Arc::new(move |on: bool| {
+                if let Ok(to) = show_to.lock() {
+                    let _ = to.send(argmind_window::Say::ShowPane(on));
+                }
+            }),
+        });
+    }
     let tooltip = format!("argmind — {}", how.line());
 
     if !second {
@@ -90,12 +114,20 @@ fn main() {
         //: quits the program rather than a viewer.
         tray: !second,
         data: webview_shed(),
+        //: **Its own folder, beside the page's and never the same one** — a website's cookies and
+        //: argmind's page's storage do not meet. Hidden until somebody turns 웹 on.
+        pane: (!second).then(|| argmind_window::Pane {
+            data: webview_shed().map(|d| d.join("pane")).unwrap_or_else(|| std::env::temp_dir()
+                .join("argmind-pane")),
+            url: "about:blank".into(), wide: 900, alone: false, shown: false,
+        }),
         ..Shell::default()
     };
 
     //: **A failure here is not something to swallow.** There is no console, so an error was
     //: becoming an application that started and vanished — leaving a server nobody could see.
-    if let Err(why) = argmind_window::run(shell, None) {
+    drop(orders);
+    if let Err(why) = argmind_window::run(shell, Some(inbox)) {
         complain("argmind — 창을 만들지 못했습니다",
                  &format!("{why}\n\n\
                            WebView2 런타임이 필요합니다 — Windows 11에는 기본으로 들어 있습니다.\n\

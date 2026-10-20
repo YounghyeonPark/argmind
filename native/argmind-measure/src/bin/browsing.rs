@@ -127,7 +127,7 @@ fn main() {
         //: keyboard from whatever the person was doing.
         focused: false,
         tray: false,
-        pane: Some(Pane { data, url: "about:blank".into(), wide: 1280, alone: true }),
+        pane: Some(Pane { data, url: "about:blank".into(), wide: 1280, alone: true, shown: true }),
         ..Shell::default()
     };
     if let Err(why) = run(shell, Some(inbox)) {

@@ -123,6 +123,9 @@ pub struct Pane {
     pub wide: u32,
     /// **Only the pane** — the page is not drawn. For a harness, which has no server to show.
     pub alone: bool,
+    /// Drawn from the start, or hidden until [`Say::ShowPane`]. Hidden, the window is the width
+    /// it always was.
+    pub shown: bool,
 }
 
 impl Default for Shell {
@@ -320,6 +323,8 @@ pub enum Say {
     Tooltip(String),
     /// Close everything.
     Quit,
+    /// Show the browser pane beside the page, or hide it.
+    ShowPane(bool),
     /// One command for the browser pane. Answered with an error when there is no pane.
     Devtools { method: String, params: String, reply: std::sync::mpsc::Sender<Answer> },
 }
@@ -370,8 +375,8 @@ pub fn run(shell: Shell, orders: Option<Receiver<Say>>) -> Result<(), String> {
     let events = EventLoopBuilder::new().build();
     let wide = match &shell.pane {
         Some(p) if p.alone => p.wide,
-        Some(p) => shell.wide + p.wide,
-        None => shell.wide,
+        Some(p) if p.shown => shell.wide + p.wide,
+        _ => shell.wide,
     };
     let window = WindowBuilder::new()
         .with_title(&shell.title)
@@ -406,6 +411,10 @@ pub fn run(shell: Shell, orders: Option<Receiver<Say>>) -> Result<(), String> {
         }
     };
     let (page_wide, alone) = (shell.wide, shell.pane.as_ref().is_some_and(|p| p.alone));
+    let pane_wide = shell.pane.as_ref().map(|p| p.wide).unwrap_or(0);
+    if let (Some(p), Some(conf)) = (pane.as_ref(), shell.pane.as_ref()) {
+        let _ = p.set_visible(conf.shown || conf.alone);
+    }
 
     const SIDE: u32 = 32;
     let mut show_id = None;
@@ -496,6 +505,19 @@ pub fn run(shell: Shell, orders: Option<Receiver<Say>>) -> Result<(), String> {
                         }
                     }
                     Say::Quit => leave = true,
+                    //: **Grown by the pane and shrunk back**, so a person who never opens it
+                    //: never has a wider window.
+                    Say::ShowPane(on) => if let Some(p) = pane.as_ref() {
+                        let height = window.inner_size().to_logical::<f64>(window.scale_factor()).height;
+                        let wide = if on { page_wide + pane_wide } else { page_wide };
+                        window.set_inner_size(tao::dpi::LogicalSize::new(wide as f64, height));
+                        let _ = p.set_visible(on);
+                        let (left, right) = halves(&window, page_wide, alone);
+                        if let Some(v) = view.as_ref() {
+                            let _ = v.set_bounds(left);
+                        }
+                        let _ = p.set_bounds(right);
+                    },
                     Say::Devtools { method, params, reply } => match pane.as_ref() {
                         Some(p) => devtools(p, &method, &params, reply),
                         None => { let _ = reply.send(Err("브라우저 칸이 없습니다".into())); }

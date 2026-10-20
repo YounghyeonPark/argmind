@@ -52,6 +52,9 @@ interface Hello {
   people: Person[];
   errands: Errand[];
   rules: Rule[];
+  /** Whether this window holds argmind's browser pane, and whether argmind is looking at it. */
+  has_web: boolean;
+  web: boolean;
 }
 
 /** Where argmind may not act, or must always ask. */
@@ -284,6 +287,8 @@ stream.addEventListener("hello", (e) => {
   drawPeople(d.people);
   drawErrands(d.errands);
   drawRules(d.rules);
+  webbar.hidden = !d.has_web;
+  web.checked = d.web;
   drawNoticing(d.noticing, d.noticed);
   // Rebuilt from the server's own list, so a reload is never a page showing buttons the server
   // has forgotten — or missing ones it still holds.
@@ -623,6 +628,32 @@ function drawErrands(list: Errand[]): void {
     errandRows.append(row);
   }
 }
+
+// 웹. The switch is set from the server's answer, not the click — the same shape as the camera.
+const webbar = document.getElementById("webbar") as HTMLElement;
+const web = document.getElementById("web") as HTMLInputElement;
+const webForm = document.getElementById("web-form") as HTMLFormElement;
+const webWhere = document.getElementById("web-where") as HTMLInputElement;
+
+web.onchange = () => {
+  const want = web.checked;
+  web.checked = !want;
+  void post(want ? "/web/on" : "/web/off");
+};
+
+webForm.onsubmit = (ev) => {
+  ev.preventDefault();
+  const where = webWhere.value.trim();
+  if (!where) return;
+  // Opening an address shows the pane, because an address opened out of sight is a page nobody
+  // can see argmind reading.
+  if (!web.checked) void post("/web/on");
+  void post("/web/go", where);
+};
+
+stream.addEventListener("web", (e) => {
+  web.checked = (e as MessageEvent).data === "1";
+});
 
 // 규칙. Edited as a list and saved whole; the server answers with what it actually kept, so a
 // list it refused redraws as what still stands rather than as what was typed.

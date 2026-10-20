@@ -183,6 +183,7 @@ mod without_an_environment {
         const MINE: u16 = 7731;
         let how = argmind_serve::app::How {
             dry: true, speak: false, hear: false, model_name: "qwen3:8b".into(), port: MINE,
+            web: None,
         };
         std::thread::spawn(move || argmind_serve::app::run(how));
 

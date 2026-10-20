@@ -19,7 +19,7 @@ fn gone(a: &Answered) -> bool {
 #[test]
 fn an_offer_waits_and_only_a_confirmation_releases_it() {
     let mut p = Proposals::default();
-    let a = p.offer(click("Copy"), "클릭  button Copy".into(), String::new());
+    let a = p.offer(click("Copy"), "클릭  button Copy".into(), String::new(), false);
     assert_eq!(p.waiting().len(), 1);
     //: Filing an offer does not act, and reading the queue does not act.
     assert_eq!(p.waiting()[0].effect.target, "Copy");
@@ -37,7 +37,7 @@ fn an_offer_waits_and_only_a_confirmation_releases_it() {
 #[test]
 fn a_proposal_can_only_be_answered_once() {
     let mut p = Proposals::default();
-    let a = p.offer(click("Copy"), "a".into(), String::new());
+    let a = p.offer(click("Copy"), "a".into(), String::new(), false);
     assert!(matches!(p.confirm(a), Answered::Run(_)));
     assert!(gone(&p.confirm(a)));
     assert!(gone(&p.decline(a)));
@@ -50,9 +50,9 @@ fn a_proposal_can_only_be_answered_once() {
 #[test]
 fn a_stale_button_cannot_confirm_a_later_proposal() {
     let mut p = Proposals::default();
-    let first = p.offer(click("Copy"), "copy".into(), String::new());
+    let first = p.offer(click("Copy"), "copy".into(), String::new(), false);
     p.clear();
-    let second = p.offer(click("Delete"), "delete".into(), String::new());
+    let second = p.offer(click("Delete"), "delete".into(), String::new(), false);
     assert_ne!(first, second, "the number came back and now names a different action");
     //: A page still showing the old button confirms nothing…
     assert!(gone(&p.confirm(first)));
@@ -67,7 +67,7 @@ fn a_stale_button_cannot_confirm_a_later_proposal() {
 #[test]
 fn declining_returns_the_effect_so_the_conversation_hears_about_it() {
     let mut p = Proposals::default();
-    let a = p.offer(click("Close"), "close".into(), String::new());
+    let a = p.offer(click("Close"), "close".into(), String::new(), false);
     match p.decline(a) {
         Answered::TurnedDown(got) => assert_eq!(got.effect.target, "Close"),
         other => panic!("{other:?}"),
@@ -79,8 +79,8 @@ fn declining_returns_the_effect_so_the_conversation_hears_about_it() {
 #[test]
 fn clearing_hands_back_what_was_still_waiting() {
     let mut p = Proposals::default();
-    p.offer(click("A"), "a".into(), String::new());
-    p.offer(click("B"), "b".into(), String::new());
+    p.offer(click("A"), "a".into(), String::new(), false);
+    p.offer(click("B"), "b".into(), String::new(), false);
     let dropped = p.clear();
     //: **Handed back, not discarded**: two offers the person never answered are two things the
     //: next turn should be told were withdrawn.
@@ -93,7 +93,7 @@ fn clearing_hands_back_what_was_still_waiting() {
 #[test]
 fn a_disagreeing_hint_does_not_stop_the_button() {
     let mut p = Proposals::default();
-    let a = p.offer(click("Close"), "close".into(), "그 지점에는 application".into());
+    let a = p.offer(click("Close"), "close".into(), "그 지점에는 application".into(), false);
     assert!(!p.waiting()[0].hint.is_empty());
     //: A widget's own centre resolves back to itself about seven times in ten, and a caption
     //: button resolving to `application` is the hit test disagreeing with a pixel that is correct.
@@ -104,9 +104,9 @@ fn a_disagreeing_hint_does_not_stop_the_button() {
 #[test]
 fn a_turn_that_offers_three_things_offers_three_buttons() {
     let mut p = Proposals::default();
-    let a = p.offer(click("A"), "a".into(), String::new());
-    let b = p.offer(click("B"), "b".into(), String::new());
-    let c = p.offer(click("C"), "c".into(), String::new());
+    let a = p.offer(click("A"), "a".into(), String::new(), false);
+    let b = p.offer(click("B"), "b".into(), String::new(), false);
+    let c = p.offer(click("C"), "c".into(), String::new(), false);
     assert_eq!(p.waiting().len(), 3);
     //: Declining the middle one leaves the other two exactly where they were — the person is
     //: answering actions, not a batch.
@@ -114,4 +114,21 @@ fn a_turn_that_offers_three_things_offers_three_buttons() {
     assert_eq!(p.waiting().len(), 2);
     assert!(matches!(p.confirm(c), Answered::Run(_)));
     assert!(matches!(p.confirm(a), Answered::Run(_)));
+}
+
+/// **A proposal remembers the surface it was offered on**, so the button presses there even if
+/// the switch has moved — see `surface.rs`.
+#[test]
+fn a_web_offer_is_still_a_web_offer_when_it_is_confirmed() {
+    let mut p = Proposals::default();
+    let web = p.offer(click("메일"), "메일".into(), String::new(), true);
+    let desk = p.offer(click("메일"), "메일".into(), String::new(), false);
+    match p.confirm(web) {
+        Answered::Run(got) => assert!(got.web),
+        _ => panic!("not confirmed"),
+    }
+    match p.confirm(desk) {
+        Answered::Run(got) => assert!(!got.web),
+        _ => panic!("not confirmed"),
+    }
 }

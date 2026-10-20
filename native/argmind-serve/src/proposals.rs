@@ -27,6 +27,9 @@ pub struct Proposal {
     /// times in ten, and a caption button resolving to `application` is the hit test disagreeing
     /// with a pixel that is correct. It is shown and it never blocks.
     pub hint: String,
+    /// **Which surface it was offered on** — argmind's browser pane, or the desktop. `act` presses
+    /// there, whatever the switch says by the time the button is pressed.
+    pub web: bool,
 }
 
 //: `Effect` in the core derives no `PartialEq`, and adding one there to make a test in a
@@ -62,10 +65,10 @@ impl Proposals {
     /// confirm a later proposal that happens to have inherited the number — the person would read
     /// one action and authorise a different one, which is the failure this whole mechanism exists
     /// to prevent.
-    pub fn offer(&mut self, effect: Effect, label: String, hint: String) -> u64 {
+    pub fn offer(&mut self, effect: Effect, label: String, hint: String, web: bool) -> u64 {
         let token = self.next;
         self.next += 1;
-        self.pending.push(Proposal { token, effect, label, hint });
+        self.pending.push(Proposal { token, effect, label, hint, web });
         token
     }
 

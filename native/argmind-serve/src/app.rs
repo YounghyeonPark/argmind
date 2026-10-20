@@ -138,7 +138,10 @@ impl Listeners {
 }
 
 struct Desk {
-    session: Session<Sight, Touch, Model>,
+    session: Session<crate::surface::Looking, crate::surface::Touching, Model>,
+    /// **Whether argmind is looking at its browser pane**, and the pane itself when there is one.
+    on_web: crate::surface::OnWeb,
+    web: Option<crate::surface::WebPane>,
     proposals: Proposals,
     dry: bool,
     /// **`None` unless asked for.** Speaking makes a noise in a room, which is not something to
@@ -291,6 +294,8 @@ enum Job {
     ErrandDrop(u64),
     /// The rules, as the page sent them.
     Rules(String),
+    Web(bool),
+    WebGo(String),
     Keep(String),
     Unkeep(usize),
     Activity,
@@ -473,7 +478,7 @@ fn propose(desk: &mut Desk, out: &Listeners, effect: Effect) {
                 //: **A second opinion, not a gate.** A widget's own centre resolves back to itself
                 //: about seven times in ten, and a caption button answering `application` is the
                 //: hit test disagreeing with a pixel that is correct.
-                let hint = match desk.session.eyes.inner.at_point(cx, cy) {
+                let hint = match desk.session.eyes.at_point(cx, cy) {
                     Some((name, role)) if name != found.name
                         && !found.name.contains(&name) && !name.contains(&found.name) => {
                         format!("그 지점에는 {} {}",
@@ -510,7 +515,7 @@ fn propose(desk: &mut Desk, out: &Listeners, effect: Effect) {
     //: for anything a watch or a raised judgement produced, and it is the one thing the automatic
     //: path below is not allowed to carry out.
     let its_own_idea = effect.unprompted();
-    let token = desk.proposals.offer(effect, text, hint);
+    let token = desk.proposals.offer(effect, text, hint, desk.on_web.get());
     if let Some(p) = desk.proposals.waiting().last() {
         out.send("propose", &as_json(p));
     }
@@ -538,6 +543,10 @@ fn propose(desk: &mut Desk, out: &Listeners, effect: Effect) {
 
 /// **The only place in this program that performs anything.**
 fn act(desk: &mut Desk, out: &Listeners, p: Proposal) {
+    //: **On the surface it was offered on**, and the switch put back however this returns — a click
+    //: offered on a web page and confirmed after flipping to the desktop must not look for a desktop
+    //: widget. A guard rather than a wrapper, so `perform` stays inside `act` where the rule wants it.
+    let _surface = desk.on_web.for_now(p.web && desk.web.is_some());
     //: **The rule again at the press**, because the window in front can change between an offer
     //: and a button — a row offered in the editor and pressed after switching to the messenger.
     let window = desk.session.eyes.window().1;
@@ -578,9 +587,13 @@ fn act(desk: &mut Desk, out: &Listeners, p: Proposal) {
         out.send("note", "먼저 말을 건 생각이라 누르지 않고 말로만 두었습니다");
         return;
     }
-    if let Some(Did::Elsewhere { owner }) = desk.session.hands.done.last() {
-        out.send("note",
-                 &format!("그 지점은 다른 프로그램({owner:?})의 것이라 누르지 않았습니다"));
+    if let Some(Did::Elsewhere { owner }) = desk.session.hands.last_done() {
+        out.send("note", &match owner {
+            Some(_) => format!("그 지점은 다른 프로그램({owner:?})의 것이라 누르지 않았습니다"),
+            //: The pane's hands ask the page, and a page has no programs — something on it covered
+            //: the target, a banner or a notice.
+            None => "그 자리를 다른 것이 가리고 있어서 누르지 않았습니다".to_string(),
+        });
         return;
     }
     if !refused.is_empty() {
@@ -1217,7 +1230,7 @@ fn ask_which(desk: &mut Desk, out: &Listeners, mut effect: Effect,
         }).collect();
     let what = label(&effect, None);
     desk.session.remember_doing(&[], &[], std::slice::from_ref(&effect), &[]);
-    let token = desk.proposals.offer(effect, what.clone(), String::new());
+    let token = desk.proposals.offer(effect, what.clone(), String::new(), desk.on_web.get());
     let raised = {
         let mut open = desk.wonders.lock().unwrap_or_else(|e| e.into_inner());
         open.ask(crate::wonders::About::WhichOne { token, what, among }).map(wonder_json)
@@ -1423,7 +1436,9 @@ fn notice(desk: &mut Desk, out: &Listeners, now: f64) {
     //: **A held remark first**, so somebody who looks back hears what argmind was waiting to say
     //: before anything new is noticed on top of it.
     release_held(desk, out);
-    let after = desk.session.eyes.foreground();
+    //: **The desktop, always** — see `surface.rs`: watching the pane would be argmind noticing
+    //: itself.
+    let after = desk.session.eyes.desk.foreground();
     let fired = poll(&mut desk.watches, &desk.before, &after, now);
     desk.before = after;
     for trigger in fired {
@@ -1458,7 +1473,7 @@ fn notice(desk: &mut Desk, out: &Listeners, now: f64) {
         match crate::tact::now(desk.nunchi, evidence(desk), since_last(desk)) {
             crate::tact::Now::Say => say_unprompted(desk, out, &intent, &reply),
             crate::tact::Now::Hold => {
-                let window = desk.session.eyes.window().1;
+                let window = desk.session.eyes.desk.window().1;
                 desk.held = Some((intent, window, Instant::now()));
                 //: **Holding is shown.** 눈치's only effect is a remark not made, and a dial whose
                 //: effect is invisible is one nobody can tell from a broken one — which is what
@@ -1486,7 +1501,7 @@ fn since_last(desk: &Desk) -> Option<f64> {
 /// **Say a held remark if 눈치 now allows it**, drop it if it is about a screen that is gone.
 fn release_held(desk: &mut Desk, out: &Listeners) {
     let Some((intent, window, at)) = desk.held.take() else { return };
-    let same = desk.session.eyes.window().1 == window;
+    let same = desk.session.eyes.desk.window().1 == window;
     match crate::tact::held(desk.nunchi, evidence(desk), since_last(desk), same,
                             at.elapsed().as_secs_f64()) {
         crate::tact::Held::Keep => desk.held = Some((intent, window, at)),
@@ -1935,6 +1950,8 @@ fn hello(desk: &Desk, model: &str) -> String {
                 people_json(&desk.people.lock().unwrap_or_else(|e| e.into_inner()))),
         format!("\"errands\":{}", crate::errands::list_json(&desk.errands)),
         format!("\"rules\":{}", argmind_core::rule::for_the_page(&desk.rules)),
+        format!("\"has_web\":{}", desk.web.is_some()),
+        format!("\"web\":{}", desk.on_web.get()),
     ];
     //: Assembled from a list rather than one long format string. The first version wrapped that
     //: string across two lines and the indentation of the second landed **inside the JSON** —
@@ -1958,6 +1975,9 @@ pub struct How {
     /// to be running. It found nothing and reported success, which is the shape of measurement
     /// error this project keeps a list of.
     pub port: u16,
+    /// **argmind's own browser pane**, when there is a window to hold one — handed over by
+    /// `argmind-app`. `None` for the console server and every test: no pane, desktop only.
+    pub web: Option<crate::surface::WebPane>,
 }
 
 /// Does argmind make a sound?
@@ -2029,8 +2049,7 @@ impl How {
             //: because a test must not read another argmind's page and call it a pass.
             port: PORT,
             model_name: std::env::args().skip(1).find(|a| a.contains(':'))
-                .unwrap_or_else(|| "qwen3:8b".into()),
-        }
+                .unwrap_or_else(|| "qwen3:8b".into()), web: None, }
     }
 
     /// The one line a person reads to know what it will and will not do.
@@ -2058,7 +2077,7 @@ pub fn url(port: u16) -> String {
 /// thread.
 pub fn run(how: How) {
 
-    let How { dry, speak, hear, model_name, port: how_port } = how;
+    let How { dry, speak, hear, model_name, port: how_port, web } = how;
 
     //: **Checked before the socket opens.** An agent that can press buttons on your screen has no
     //: business accepting a connection from the network.
@@ -2180,7 +2199,10 @@ pub fn run(how: How) {
         model.think = Some(false);
         let (voice, voice_is) = if speak { pick_voice() } else { (None, "off") };
         let ear = hear.then(|| (Ear::new(), Whisper::default()));
-        let mut desk = Desk { session: Session::new(eyes, hands, Model(model)),
+        let (eyes, hands, on_web) =
+            crate::surface::surfaces(eyes, hands, web.as_ref(), !dry);
+        let mut desk = Desk { session: Session::new(eyes, hands, Model(model)), on_web,
+                              web: web.clone(),
                               proposals: Proposals::default(), dry,
                               voice, voice_is, wants_voice: speak, ear,
                               //: One watch for now: the person moved to a different window, which
@@ -2462,6 +2484,38 @@ pub fn run(how: How) {
                         keep_errands(&desk, &agent_out);
                     }
                 }
+                Job::Web(on) => match desk.web.as_ref() {
+                    Some(pane) => {
+                        (pane.show)(on);
+                        desk.on_web.set(on);
+                        //: The list on screen changes surface, so the next turn reads afresh.
+                        desk.session.seen.clear();
+                        agent_out.send("web", if on { "1" } else { "0" });
+                        agent_out.send("note", if on {
+                            "이제 argmind 의 브라우저 칸을 보고 그 안에서만 누릅니다"
+                        } else {
+                            "다시 데스크톱을 봅니다"
+                        });
+                    }
+                    None => {
+                        agent_out.send("web", "0");
+                        agent_out.send("note", "이 창에는 브라우저 칸이 없습니다 — argmind-app 으로 여세요");
+                    }
+                },
+                Job::WebGo(typed) => match desk.web.as_ref() {
+                    Some(pane) => {
+                        let url = crate::surface::address(&typed);
+                        let params = format!("{{\"url\":\"{}\"}}", escape(&url));
+                        match pane.wire.call("Page.navigate", &params) {
+                            //: Where it went is on the timeline; whether it was allowed to go is the
+                            //: window's navigation check, not this.
+                            Ok(_) => agent_out.send("note", &format!("브라우저 칸: {url}")),
+                            Err(why) => agent_out.send("note", &format!("열지 못했습니다 ({why})")),
+                        }
+                        desk.session.seen.clear();
+                    }
+                    None => agent_out.send("note", "이 창에는 브라우저 칸이 없습니다"),
+                },
                 Job::Activity => agent_out.frame("activity", &agent_out.timeline()),
                 Job::ClearActivity => {
                     agent_out.forget_timeline();
@@ -2921,6 +2975,18 @@ fn serve_one(mut stream: TcpStream, out: &Listeners, token: &str, jobs: &Sender<
             if text.chars().count() <= crate::errands::MOST_CHARS {
                 let _ = stream.write_all(&respond("204 No Content", "text/plain", ""));
                 let _ = jobs.send(Job::ErrandAnswer(id, text));
+            } else {
+                let _ = stream.write_all(&respond("400 Bad Request", "text/plain", "no"));
+            }
+        }
+        Route::Web(on) => {
+            let _ = stream.write_all(&respond("204 No Content", "text/plain", ""));
+            let _ = jobs.send(Job::Web(on));
+        }
+        Route::WebGo(typed) => {
+            if !typed.trim().is_empty() && typed.chars().count() <= 2000 {
+                let _ = stream.write_all(&respond("204 No Content", "text/plain", ""));
+                let _ = jobs.send(Job::WebGo(typed));
             } else {
                 let _ = stream.write_all(&respond("400 Bad Request", "text/plain", "no"));
             }

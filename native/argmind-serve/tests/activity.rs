@@ -34,7 +34,7 @@ fn the_interface_talking_to_itself_is_not_a_line() {
 #[test]
 fn a_proposal_reads_back_through_the_shape_it_was_written_in() {
     let p = Proposal { token: 7, label: "입력  \u{201c}그가 \"안녕\"\n했다\u{201d}".into(),
-                       hint: String::new(), effect: Default::default() };
+                       hint: String::new(), effect: Default::default(), web: false };
     let sent = as_json(&p);
     assert_eq!(field(&sent, "label").as_deref(), Some(p.label.as_str()));
     assert_eq!(reading("propose", &sent), Some(("제안", p.label.clone())));

@@ -81,6 +81,8 @@ the two days that built this, three of them flattering.
                                              thinking thread, a report only to somebody there
                                 activity.rs  한 일: what it heard, saw, said and did, read off
                                              every event the page is told — memory only
+                                surface.rs   desktop or argmind's browser pane — one session,
+                                             one switch, a proposal pressed where it was made
     native/argmind-measure/     every harness behind the numbers, and `--example raw_turn`
                                 for looking at one reply whole
     native/argmind-env-linux/   eyes for Linux: AT-SPI2 over D-Bus. No hands yet
@@ -245,6 +247,17 @@ explicitly, because the page draws those itself. **Memory only, 500 lines, gone 
 of every window title and every sentence is a privacy decision with its own switch, not a side
 effect of a log. Driving the headless server to check it found a bug in the keep reader the same
 day: *불러달라고 기억해줘* kept *불러달*.
+
+**The browser pane is a surface of the one session, not a second session** — since 2026-10-20.
+`one_place_acts.rs` holds that `perform` is called once, inside `act`, and a second session would be a
+second place; so the eyes and hands are a pair (`surface.rs`) that reads and presses the desktop or
+the pane on one switch, and the conversation, the button, the rules and the timeline are shared. **A
+proposal remembers its surface** and `act` presses there behind a guard that puts the switch back on
+any return — the first version wrapped `act` and the rule caught `perform` moving into the wrapper.
+**Watching reads the desktop whatever the switch says**: the pane is argmind's own doing. The address
+box opens an address or searches **Naver**, because Google refused the pane. **Not run inside the
+application from here** — `argmind-app` takes the foreground and may open devices the person allowed;
+the pane's hands were measured, the switch and the box were not.
 
 **One call, not two.** A round trip is the budget: 0.45 s warm, 4.7 s and 5.9 s for the first two.
 

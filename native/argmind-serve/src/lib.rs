@@ -54,6 +54,7 @@ pub mod recogniser;
 pub mod rules;
 pub mod senses;
 pub mod speaker;
+pub mod surface;
 pub mod tact;
 pub mod wonders;
 
@@ -263,6 +264,10 @@ pub enum Route {
     Answer(u64, String),
     /// Replace the rules with these, one per line, `app<TAB>action<TAB>then`.
     Rules(String),
+    /// Show argmind's browser pane and look there, or hide it and look at the desktop.
+    Web(bool),
+    /// Open an address in the pane, or search for the words.
+    WebGo(String),
     /// Send the timeline, or empty it.
     Activity,
     ClearActivity,
@@ -413,6 +418,9 @@ pub fn route(request: &Request) -> Route {
         //: The sentence in the body, like `/aim`; forgetting by place in the list the page drew.
         ("POST", "/kept") => Route::Keep(request.body.clone()),
         ("POST", "/activity") => Route::Activity,
+        ("POST", "/web/on") => Route::Web(true),
+        ("POST", "/web/off") => Route::Web(false),
+        ("POST", "/web/go") => Route::WebGo(request.body.clone()),
         ("POST", "/activity/clear") => Route::ClearActivity,
         ("POST", p) if p.starts_with("/kept/") => match p[6..].strip_suffix("/drop")
             .and_then(|i| i.parse().ok()) {
