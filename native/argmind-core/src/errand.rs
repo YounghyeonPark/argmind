@@ -302,6 +302,19 @@ pub fn sounds_current(what: &str) -> bool {
     NOW_WORDS.iter().any(|w| what.contains(w))
 }
 
+/// **Is a turn asking for something on the web right now?** A question about now (`NOW_WORDS`)
+/// that asks to be told or found, and not about the screen. **An offer is all it makes** — the
+/// owner's first session with the pane had *오늘 서울 날씨 알려줘* answered *제가 직접
+/// 확인해드릴게요… 잠시만 기다려주세요!* and nothing after it, because a turn has no way to search;
+/// the program offers the one way there is, an errand, and the person decides.
+pub fn asks_to_look_up(said: &str) -> bool {
+    let asks = ["알려줘", "알려 줘", "알아봐", "알아 봐", "찾아줘", "찾아 줘", "찾아봐", "검색",
+                "얼마야", "어때", "어떻게 돼"];
+    let screen = ["화면", "여기", "이 창", "이거"];
+    sounds_current(said) && asks.iter().any(|w| said.contains(w))
+        && !screen.iter().any(|w| said.contains(w))
+}
+
 /// **What was read on the web, fenced.** Present only when there is some, so every errand that
 /// never looked anything up is asked exactly what it was asked before. The fence and the sentence
 /// above it are the prompt half of the injection defence; the other half, which does not depend on
@@ -761,6 +774,17 @@ mod tests {
         let mut plan = Errand::new(2, "아침 15분 운동 루틴을 짜줘");
         read_step(r#"{"kind": "A"}"#, &mut plan);
         assert!(!plan.wants_looking_up());
+    }
+
+    #[test]
+    fn a_question_about_now_is_offered_a_lookup_and_one_about_the_screen_is_not() {
+        for yes in ["오늘 서울 날씨 알려줘", "지금 코스피 얼마야", "이번 주 개봉 영화 찾아줘"] {
+            assert!(asks_to_look_up(yes), "{yes}");
+        }
+        for no in ["지금 화면에 뭐 있는지 알려줘", "메일 열어줘", "오늘도 고마워",
+                   "운동 루틴 알려줘"] {
+            assert!(!asks_to_look_up(no), "{no}");
+        }
     }
 
     #[test]

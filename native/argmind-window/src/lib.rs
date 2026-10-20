@@ -343,7 +343,8 @@ fn halves(window: &Window, page_wide: u32, alone: bool) -> (wry::Rect, wry::Rect
 }
 
 /// The pane: a child webview with its own folder, the web only, no windows, no downloads.
-fn attach_pane(window: &Window, pane: &Pane, bounds: wry::Rect, held: &mut wry::WebContext)
+fn attach_pane(window: &Window, pane: &Pane, bounds: wry::Rect, held: &mut wry::WebContext,
+               wanted: std::rc::Rc<std::cell::RefCell<Vec<String>>>)
                -> Result<wry::WebView, String> {
     let start = if is_web(&pane.url) { pane.url.as_str() } else { "about:blank" };
     WebViewBuilder::new_with_web_context(held)
@@ -352,7 +353,14 @@ fn attach_pane(window: &Window, pane: &Pane, bounds: wry::Rect, held: &mut wry::
         //: **Every navigation is checked**, not only the first: a page links anywhere, and
         //: `Page.navigate` arrives here too.
         .with_navigation_handler(|url| url == "about:blank" || is_web(&url))
-        .with_new_window_req_handler(|_, _| wry::NewWindowResponse::Deny)
+        //: **A link that wants a new tab opens here instead.** Naver's 메일 is `target="_blank"`,
+        //: and refusing the window outright made the click land and do nothing — *화면이 바뀌지
+        //: 않음*, twice, in the owner's first session with the pane. The address is queued and the
+        //: loop loads it, through the same navigation check as everything else.
+        .with_new_window_req_handler(move |url, _| {
+            wanted.borrow_mut().push(url);
+            wry::NewWindowResponse::Deny
+        })
         .with_download_started_handler(|_, _| false)
         .build_as_child(window)
         .map_err(|e| format!("브라우저 칸을 만들지 못했습니다 ({e})"))
@@ -387,6 +395,8 @@ pub fn run(shell: Shell, orders: Option<Receiver<Say>>) -> Result<(), String> {
         .map_err(|e| format!("창을 만들지 못했습니다 ({e})"))?;
     //: Held for as long as the webview is, which is why it is a binding and not an argument.
     let mut context = wry::WebContext::new(shell.data.clone());
+    //: New-tab requests from the pane, loaded by the loop on its next turn.
+    let wanted = std::rc::Rc::new(std::cell::RefCell::new(Vec::<String>::new()));
     //: **With no pane, exactly the window it always was** — the page attached the way it always
     //: was. With one, both are children laid side by side and moved together on a resize.
     let (view, pane) = match &shell.pane {
@@ -404,7 +414,7 @@ pub fn run(shell: Shell, orders: Option<Receiver<Say>>) -> Result<(), String> {
                     .map_err(|e| format!("화면을 만들지 못했습니다 ({e})"))?)
             };
             let mut own = wry::WebContext::new(Some(p.data.clone()));
-            let pane = attach_pane(&window, p, right, &mut own)?;
+            let pane = attach_pane(&window, p, right, &mut own, wanted.clone())?;
             //: The pane's context lives as long as the loop, like the page's.
             std::mem::forget(own);
             (page, Some(pane))
@@ -453,6 +463,14 @@ pub fn run(shell: Shell, orders: Option<Receiver<Say>>) -> Result<(), String> {
 
         let mut raise = false;
         let mut leave = false;
+
+        if let Some(p) = pane.as_ref() {
+            for url in wanted.borrow_mut().drain(..) {
+                if is_web(&url) {
+                    let _ = p.load_url(&url);
+                }
+            }
+        }
 
         match event {
             //: Stated so the reason is in the code: closing is hiding. The program is still there,

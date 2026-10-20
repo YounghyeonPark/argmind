@@ -1481,6 +1481,28 @@ keptForm.onsubmit = (ev) => {
   void post("/kept", text);
 };
 
+// **웹에서 찾아볼까요?** — offered by the program after a question about now, when there is a
+// pane. Pressing makes it an errand, which looks it up there and reports back; nothing else happens.
+stream.addEventListener("lookup-offer", (e) => {
+  const text = (e as MessageEvent).data as string;
+  const row = document.createElement("div");
+  row.className = "offer";
+  const ask = document.createElement("span");
+  ask.textContent = `웹에서 찾아볼까요? 「${text}」`;
+  const yes = document.createElement("button");
+  yes.type = "button";
+  yes.textContent = "찾아보기";
+  yes.onclick = () => { void post("/errand", text); row.remove(); };
+  const no = document.createElement("button");
+  no.type = "button";
+  no.className = "plain";
+  no.textContent = "아니요";
+  no.onclick = () => row.remove();
+  row.append(ask, yes, no);
+  transcript.append(row);
+  transcript.scrollTop = transcript.scrollHeight;
+});
+
 // **기억해 둘까요?** — offered by the program after a turn that reads as a correction or a
 // preference. Nothing is kept until the button is pressed, and the row goes either way.
 stream.addEventListener("keep-offer", (e) => {

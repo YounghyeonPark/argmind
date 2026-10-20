@@ -1630,6 +1630,13 @@ fn reflect(desk: &mut Desk, thinking: &Letterbox, now: f64) {
     if !desk.noticing || now - desk.thought_at < THINK_EVERY {
         return;
     }
+    //: **Not while argmind is looking at its own pane.** The note is about the person's desktop,
+    //: and `seen` is then the pane's list: the owner's first session had *아까부터 link "메일" 가
+    //: 눈에 걸린다* raised and offered as a click — argmind thinking about its own page, the defect
+    //: the watch had once when it read argmind's transcript.
+    if desk.on_web.get() {
+        return;
+    }
     //: **Not while somebody is being answered.** The first of the two rules: measured, a sense
     //: running beside the conversation takes the answer from 1.0 s to 3.2 s.
     if desk.turn.in_flight() {
@@ -1667,7 +1674,7 @@ fn reflect(desk: &mut Desk, thinking: &Letterbox, now: f64) {
 /// up and ignored is not brought up again thirty seconds later — the defect this file has found in
 /// three other shapes already.
 fn raise_it(desk: &mut Desk, out: &Listeners) {
-    if desk.turn.in_flight() {
+    if desk.turn.in_flight() || desk.on_web.get() {
         return;
     }
     let Some(worth) = desk.session.note.worth_raising().cloned() else { return };
@@ -2298,6 +2305,11 @@ pub fn run(how: How) {
                     if argmind_core::mind::worth_offering(text)
                         && !desk.session.mind.kept.iter().any(|k| k.trim() == text) {
                         agent_out.send("keep-offer", text);
+                    }
+                    //: **And a question about now gets the way to answer it**, when there is a pane:
+                    //: an errand, which looks it up and reports back. Offered; the press decides.
+                    if desk.web.is_some() && argmind_core::errand::asks_to_look_up(text) {
+                        agent_out.send("lookup-offer", text);
                     }
                 }
                 Job::Confirm(n) => {

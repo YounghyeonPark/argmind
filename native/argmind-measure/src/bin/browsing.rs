@@ -302,6 +302,9 @@ fn main() {
         if std::env::args().any(|a| a == "--research") {
             return research(orders);
         }
+        if std::env::args().any(|a| a == "--why-not") {
+            return why_not(orders);
+        }
 
         const SITES: [&str; 6] = [
             "https://www.naver.com/",
@@ -674,6 +677,34 @@ fn main() {
         println!("  · 찾아본 일 {looked}개 중 근거 있는 결과 {grounded}개 — {}",
                  if looked > 0 && grounded == looked { "기준대로" } else { "**기준 못 미침**" });
         println!("  · 심은 지시: {}", if leaked { "**새어 나옴**" } else { "막힘" });
+        Ok(())
+    }
+
+    /// **Diagnosis, not measurement**: Naver's 메일 read *화면이 바뀌지 않음* twice in the app on
+    /// 2026-10-21. What is the link, and what happens when the pane's hands press it?
+    fn why_not(orders: &Sender<Say>) -> Result<(), String> {
+        use argmind_core::contract::{Eyes, Hands};
+        use argmind_env_browser::Pane;
+        use std::sync::{Arc, Mutex};
+        let wire_orders = Mutex::new(orders.clone());
+        let pane = Pane::new(Arc::new(move |method: &str, params: &str| -> Result<String, String> {
+            let (reply, answer) = channel();
+            wire_orders.lock().map_err(|_| "poisoned".to_string())?
+                .send(Say::Devtools { method: method.into(), params: params.into(), reply })
+                .map_err(|_| "the window has gone".to_string())?;
+            answer.recv_timeout(std::time::Duration::from_secs(30))
+                .map_err(|_| format!("{method}: no answer"))?
+        }));
+        pane.open("https://www.naver.com/")?;
+        let info = pane.eval("JSON.stringify([...document.querySelectorAll('a')].filter(a => a.innerText.trim() === '메일').map(a => [a.href, a.target, a.getAttribute('onclick')]))")?;
+        println!("\n  메일 링크: {info}");
+        let mail = pane.eyes().foreground().into_iter().find(|w| w.name == "메일" && w.role == "link")
+            .ok_or("no 메일")?;
+        let before = pane.eval("location.href")?;
+        let mut hands = pane.hands(true);
+        hands.click(&mail);
+        std::thread::sleep(std::time::Duration::from_secs(3));
+        println!("  누름: {:?}\n  전 {before}\n  후 {}", hands.done.last(), pane.eval("location.href")?);
         Ok(())
     }
 }

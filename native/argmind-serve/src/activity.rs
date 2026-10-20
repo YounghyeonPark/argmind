@@ -50,6 +50,7 @@ pub fn reading(event: &str, data: &str) -> Option<(&'static str, String)> {
         "note" => ("알림", data.to_string()),
         "attending" if !data.is_empty() => ("보는 창", data.to_string()),
         "keep-offer" => ("기억 제안", data.to_string()),
+        "lookup-offer" => ("찾아보기 제안", data.to_string()),
         "propose" => ("제안", field(data, "label")?),
         "ran" => {
             let how = match data.contains("\"confirmed\":true") {
