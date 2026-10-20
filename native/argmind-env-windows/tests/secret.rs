@@ -78,3 +78,11 @@ fn an_edit_takes_text_and_a_button_and_a_read_only_box_do_not() {
         assert!(!f, "a read-only box read as taking text");
     }
 }
+
+/// **The time since the last input is a time**: non-negative, and on a machine somebody is using
+/// it is not decades. Reading it moves nothing and types nothing.
+#[test]
+fn the_time_since_input_is_a_sensible_number() {
+    let s = argmind_env_windows::seconds_since_input().expect("Windows answers");
+    assert!((0.0..60.0 * 60.0 * 24.0 * 50.0).contains(&s), "{s}");
+}

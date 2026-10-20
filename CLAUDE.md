@@ -558,6 +558,13 @@ sense does — that rule is about two things contending for one graphics card an
 to the model. What reaches the blackboard is an age, *마지막 움직임 N초 전*, because the threshold
 measures movement and a person reading without shifting is below it.
 
+**Input counts as somebody there — since 2026-10-21.** The owner typed to argmind while the camera
+read *601초째 아무 움직임 없음 · 얼굴 안 보임*, and a finished errand — *16.0°C, 어제보다 2.7°C 높은
+편* — sat unreported, because the room was *empty*. `present` now takes the seconds since the last
+keyboard or mouse input, from `GetLastInputInfo`: **a time and nothing else**, no hook and no
+characters, the *typing activity* this file set apart from a keylogger. It only ever adds *present*;
+with the camera off the gate is still *no evidence*.
+
 **The payoff is a gate rather than a prompt line.** The blackboard is read in one place, the
 thinking tick, and the thing that talks to an empty chair is `notice` — so `somebody_about` sits
 in front of it and an empty room costs **no model call at all**, rather than a call whose answer is

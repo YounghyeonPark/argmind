@@ -385,3 +385,23 @@ pub fn cursor_round_trip(points: &[(i64, i64)]) -> Vec<((i64, i64), (i64, i64))>
     }
     out
 }
+
+/// **How long since anybody touched the keyboard or the mouse**, in seconds — the time and nothing
+/// else. `GetLastInputInfo` reports when the last input arrived and cannot say what it was, so this
+/// is the *typing activity* CLAUDE.md set apart from a keylogger: no hook, no characters.
+///
+/// Wanted because the camera alone called the owner absent on 2026-10-21 — *601초째 아무 움직임 없음
+/// · 얼굴 안 보임* — while they were typing to it, and a finished errand waited unreported.
+pub fn seconds_since_input() -> Option<f64> {
+    use windows::Win32::System::SystemInformation::GetTickCount;
+    use windows::Win32::UI::Input::KeyboardAndMouse::{GetLastInputInfo, LASTINPUTINFO};
+    let mut info = LASTINPUTINFO { cbSize: std::mem::size_of::<LASTINPUTINFO>() as u32, dwTime: 0 };
+    unsafe {
+        if !GetLastInputInfo(&mut info).as_bool() {
+            return None;
+        }
+        //: Both are milliseconds since boot in a `u32`, which wraps after 49.7 days; the wrapping
+        //: difference is still right across one wrap.
+        Some(GetTickCount().wrapping_sub(info.dwTime) as f64 / 1000.0)
+    }
+}

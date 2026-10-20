@@ -1104,7 +1104,8 @@ fn switch_camera(desk: &mut Desk, out: &Listeners, on: bool) {
                 //: seeing nothing was indistinguishable from turning on one that was broken.
                 let here = present(
                     moved_at.lock().ok().and_then(|m| m.map(|t| t.elapsed().as_secs_f64())),
-                    face_seen_at.lock().ok().and_then(|f| f.map(|t| t.elapsed().as_secs_f64())));
+                    face_seen_at.lock().ok().and_then(|f| f.map(|t| t.elapsed().as_secs_f64())),
+                    crate::platform::seconds_since_input());
                 out.send("sense", &format!("{{\"camera\":\"{}\",\"present\":{here}}}",
                                            escape(&what)));
                 senses.saw("카메라", what, seen.took);
@@ -1472,7 +1473,7 @@ fn somebody_about(desk: &Desk) -> Option<bool> {
     }
     let moved = desk.moved_at.lock().ok()?.map(|t| t.elapsed().as_secs_f64());
     let face = desk.face_seen_at.lock().ok()?.map(|t| t.elapsed().as_secs_f64());
-    Some(present(moved, face))
+    Some(present(moved, face, crate::platform::seconds_since_input()))
 }
 
 /// **Is somebody there**, from how long ago something moved and how long ago a face was seen.
@@ -1487,9 +1488,14 @@ fn somebody_about(desk: &Desk) -> Option<bool> {
 /// at the desk, YuNet found a face on **382 of 382** passes — not one miss, looking or turned. It
 /// only counts when a face pass is running, which is when *화면을 보고 있는지 알기* or *본 얼굴
 /// 기억하기* is on; with both off this is movement alone, exactly as before.
-pub fn present(moved_ago: Option<f64>, face_ago: Option<f64>) -> bool {
+///
+/// **And somebody using the keyboard or the mouse is there**, whatever the camera saw — the owner,
+/// 2026-10-21: the camera read *601초째 아무 움직임 없음 · 얼굴 안 보임* while they typed to argmind,
+/// and a finished errand sat unreported because the room was *empty*. The camera can be pointed
+/// elsewhere, and a person can face another monitor; input cannot be produced by nobody.
+pub fn present(moved_ago: Option<f64>, face_ago: Option<f64>, input_ago: Option<f64>) -> bool {
     let recent = |ago: Option<f64>| ago.is_some_and(|s| s < AWAY_AFTER);
-    recent(moved_ago) || recent(face_ago)
+    recent(moved_ago) || recent(face_ago) || recent(input_ago)
 }
 
 fn notice(desk: &mut Desk, out: &Listeners, now: f64) {
@@ -2380,7 +2386,10 @@ pub fn run(how: How) {
                     }
                     //: **And a question about now gets the way to answer it**, when there is a pane:
                     //: an errand, which looks it up and reports back. Offered; the press decides.
-                    if desk.web.is_some() && argmind_core::errand::asks_to_look_up(text) {
+                    //: **Not with the pane on**: there the program has already searched it,
+                    //: and the row made a second errand that could not look anything up.
+                    if desk.web.is_some() && !desk.on_web.get()
+                        && argmind_core::errand::asks_to_look_up(text) {
                         agent_out.send("lookup-offer", text);
                     }
                 }
@@ -3201,20 +3210,28 @@ mod presence_tests {
     fn a_face_keeps_a_still_person_present() {
         //: **The case that silenced everything.** Nothing has crossed the movement threshold for
         //: ten minutes, and there is a face in view.
-        assert!(present(Some(600.0), Some(2.0)));
-        assert!(present(None, Some(2.0)));
+        assert!(present(Some(600.0), Some(2.0), None));
+        assert!(present(None, Some(2.0), None));
+    }
+
+    #[test]
+    fn somebody_typing_is_there_whatever_the_camera_saw() {
+        //: The owner's case: ten minutes of nothing on camera, input a few seconds ago.
+        assert!(present(Some(601.0), None, Some(3.0)));
+        //: And input long ago is no evidence of now.
+        assert!(!present(Some(601.0), None, Some(AWAY_AFTER + 1.0)));
     }
 
     #[test]
     fn with_no_face_pass_it_is_movement_alone_as_before() {
-        assert!(present(Some(10.0), None));
-        assert!(!present(Some(AWAY_AFTER + 1.0), None));
-        assert!(!present(None, None));
+        assert!(present(Some(10.0), None, None));
+        assert!(!present(Some(AWAY_AFTER + 1.0), None, None));
+        assert!(!present(None, None, None));
     }
 
     #[test]
     fn an_old_face_is_not_a_person_now() {
-        assert!(!present(None, Some(AWAY_AFTER + 1.0)));
+        assert!(!present(None, Some(AWAY_AFTER + 1.0), None));
     }
 }
 

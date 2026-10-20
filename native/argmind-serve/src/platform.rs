@@ -769,6 +769,19 @@ pub fn utc_offset_minutes() -> i64 {
     }
 }
 
+/// **Seconds since the last keyboard or mouse input**, or `None` where nothing can say. The time
+/// only — see `argmind_env_windows::seconds_since_input`.
+pub fn seconds_since_input() -> Option<f64> {
+    #[cfg(all(windows, not(feature = "headless")))]
+    {
+        argmind_env_windows::seconds_since_input()
+    }
+    #[cfg(not(all(windows, not(feature = "headless"))))]
+    {
+        None
+    }
+}
+
 /// Today, as an errand is told it.
 pub fn today() -> String {
     let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH)
