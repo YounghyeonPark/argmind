@@ -129,6 +129,7 @@ stream.addEventListener("hello", (e) => {
     talk.hidden = !d.hears;
     aloud.checked = d.speaks;
     acting.checked = d.acts;
+    initiative.checked = d.initiative;
     camera.checked = d.watching_you;
     askRow(d.wonder);
     // **The switch, not the device** — unlike the camera above. Nothing happens while the models are
@@ -629,6 +630,15 @@ acting.onchange = () => {
 };
 stream.addEventListener("acting", (e) => {
     acting.checked = e.data === "1";
+});
+const initiative = document.getElementById("initiative");
+initiative.onchange = () => {
+    const want = initiative.checked;
+    initiative.checked = false;
+    void post(want ? "/initiative/on" : "/initiative/off");
+};
+stream.addEventListener("initiative", (e) => {
+    initiative.checked = e.data === "1";
 });
 const aloud = document.getElementById("aloud");
 aloud.onchange = () => {

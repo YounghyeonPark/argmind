@@ -114,7 +114,7 @@ fn an_automatic_run_goes_through_the_same_offer_a_person_would_press() {
 fn doubt_still_asks_even_when_acting_is_allowed() {
     let propose = function("propose");
     let guard = propose.lines()
-        .find(|l| l.contains("crate::decided::standing(\"acting\")"))
+        .find(|l| l.contains("crate::decided::standing(") && l.contains("Standing::Allowed"))
         .unwrap_or_else(|| panic!("the standing answer is not consulted:\n{propose}"));
     assert!(guard.contains("!doubt"),
             "the automatic path does not check for a second opinion: {guard}");
@@ -167,9 +167,12 @@ fn argmind_own_idea_needs_a_person_and_not_a_standing_yes() {
             "propose no longer reads whose idea it was:
 {propose}");
     let guard = propose.lines()
-        .find(|l| l.contains("crate::decided::standing(\"acting\")"))
+        .find(|l| l.contains("crate::decided::standing(") && l.contains("Standing::Allowed"))
         .unwrap_or_else(|| panic!("the standing answer is not consulted:
 {propose}"));
-    assert!(guard.contains("!its_own_idea"),
-            "확인 없이 실행 would carry out a turn argmind began itself: {guard}");
+    //: **Changed 2026-10-21, at the owner's choice: argmind's own idea may run without a person —
+    //: but only on its own standing answer.** The half a refactor would drop is the same as before:
+    //: 확인 없이 실행 alone must never carry out what argmind began itself.
+    assert!(guard.contains(r#"if its_own_idea { "initiative" } else { "acting" }"#),
+            "argmind's own idea is no longer gated by its own key: {guard}");
 }

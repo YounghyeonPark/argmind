@@ -275,6 +275,20 @@ edit yes, button no, read-only no in a hidden window; on a live page, a field af
 Wikipedia's search box and none on `example.com`. **What this does not catch is a plan that is
 wrong but well-formed** — typing into a field that exists, on a screen that answered every check.
 
+**argmind's own ideas may run without a person — on their own key, since 2026-10-21.** The owner
+found asking every time tiresome; eleven hours of the timeline showed what was asking: **0 requests
+of theirs and 1 proposal row, against 97 notices, 37 unprompted remarks and *Move all to Desktop* —
+Google Drive's button for moving lost files — raised every minute and a half**, in Chrome and a
+search page as well as in its own dialog, failing *그새 사라짐* 15 times. Asked, the owner chose *run
+argmind's own ideas too* over *never ask, never do*, knowing the example. So `initiative` is the
+fifteenth decidable key and the gate in `propose` reads **which** standing answer by whose idea it
+was: `acting` for what was asked, `initiative` for what argmind began — 확인 없이 실행 alone still
+never carries out argmind's own idea, which is what `tests/acting.rs` now pins. **Two defects went
+with it**: a judgement is raised once a session, not once per three looks; and a window change is
+remarked on only when the remark comes with something to do (the owner chose *fewer* over off).
+What still stands between argmind's idea and a click is the screen check, the rules and the second
+opinion — and `noticing` measured it wanting to click on 5–9 of 28 window changes.
+
 **One call, not two.** A round trip is the budget: 0.45 s warm, 4.7 s and 5.9 s for the first two.
 
 ## The numbers, as they stand

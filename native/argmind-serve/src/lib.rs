@@ -264,6 +264,8 @@ pub enum Route {
     Answer(u64, String),
     /// Replace the rules with these, one per line, `app<TAB>action<TAB>then`.
     Rules(String),
+    /// Let argmind carry out what it thought of by itself, or go back to waiting for a person.
+    Initiative(bool),
     /// Show argmind's browser pane and look there, or hide it and look at the desktop.
     Web(bool),
     /// Open an address in the pane, or search for the words.
@@ -438,6 +440,8 @@ pub fn route(request: &Request) -> Route {
             },
             _ => Route::Unknown,
         },
+        ("POST", "/initiative/on") => Route::Initiative(true),
+        ("POST", "/initiative/off") => Route::Initiative(false),
         ("POST", "/acting/on") => Route::Acting(true),
         ("POST", "/acting/off") => Route::Acting(false),
         ("POST", "/notice/on") => Route::Notice(true),

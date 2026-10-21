@@ -28,6 +28,8 @@ interface Hello {
   speaks: boolean;
   /** Whether a proposal is carried out without the button. */
   acts: boolean;
+  /** Whether what argmind thought of by itself runs without a person. */
+  initiative: boolean;
   /** Whether the camera is open right now — the fact, not the permission. */
   watching_you: boolean;
   /** Which voice: "neural", "windows", "none" or "off". Named rather than a flag, because the
@@ -274,6 +276,7 @@ stream.addEventListener("hello", (e) => {
   talk.hidden = !d.hears;
   aloud.checked = d.speaks;
   acting.checked = d.acts;
+  initiative.checked = d.initiative;
   camera.checked = d.watching_you;
   askRow(d.wonder);
   // **The switch, not the device** — unlike the camera above. Nothing happens while the models are
@@ -827,6 +830,17 @@ acting.onchange = () => {
 
 stream.addEventListener("acting", (e) => {
   acting.checked = (e as MessageEvent).data === "1";
+});
+
+const initiative = document.getElementById("initiative") as HTMLInputElement;
+initiative.onchange = () => {
+  const want = initiative.checked;
+  initiative.checked = false;
+  void post(want ? "/initiative/on" : "/initiative/off");
+};
+
+stream.addEventListener("initiative", (e) => {
+  initiative.checked = (e as MessageEvent).data === "1";
 });
 
 const aloud = document.getElementById("aloud") as HTMLInputElement;

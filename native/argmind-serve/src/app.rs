@@ -228,6 +228,8 @@ struct Desk {
     /// The last transcript sent as `them`, so the turn it starts does not put it on the timeline
     /// twice. Taken by the turn.
     heard_last: Option<String>,
+    /// Judgements already raised this session, by name and role — see `raise_it`.
+    raised: Vec<(String, String)>,
     /// **규칙**, read at startup and replaced whole from the page. See [`argmind_core::rule`].
     rules: Vec<argmind_core::rule::Rule>,
     /// **What the camera last said about where the head points, and when.** Written by the camera
@@ -294,6 +296,7 @@ enum Job {
     ErrandDrop(u64),
     /// The rules, as the page sent them.
     Rules(String),
+    Initiative(bool),
     Web(bool),
     WebGo(String),
     Keep(String),
@@ -590,7 +593,10 @@ fn propose(desk: &mut Desk, out: &Listeners, effect: Effect) -> bool {
     //: is a permission a person gave to *this* action; the standing answer is a permission given
     //: once, in advance, to a kind of action — and the kind it was given to is *the thing I just
     //: asked for*. A turn argmind began itself waits, however the switch is set.
-    if !doubt && !its_own_idea && !must_confirm && crate::decided::standing("acting") == Some(Standing::Allowed) {
+    //: **Whose idea it was decides which standing answer counts.** What a person asked for runs on
+    //: `acting`; what argmind thought of runs only on `initiative` — two questions, two answers,
+    //: the owner's of 2026-09-22 and 2026-10-21.
+    if !doubt && !must_confirm && crate::decided::standing(if its_own_idea { "initiative" } else { "acting" }) == Some(Standing::Allowed) {
         if let Answered::Run(p) = desk.proposals.confirm(token) {
             return act(desk, out, p);
         }
@@ -799,6 +805,14 @@ pub fn plan_for(key: &str) -> String {
              · 먼저 말을 건 생각은 여전히 말로만 나옵니다. 이 설정은 사람이 시킨 것에만 적용됩니다\n\
              · 두 번째 의견이 다른 위젯을 가리키면 그때는 그래도 물어봅니다\n\n\
              버튼 없이 실행할까요?"),
+        //: **What it actually did the day it was asked for**, in the window that asks.
+        "initiative" => String::from(
+            "argmind 가 스스로 떠올린 클릭도 묻지 않고 실행합니다.\n\n\
+             · 창이 바뀔 때 무언가 누르고 싶어 한 것이 28번 중 5~9번이었습니다 (측정)\n\
+             · 하루 동안 같은 버튼(Move all to Desktop — 파일 이동)을 여러 번 꺼냈습니다\n\
+             · 누르기 직전에 화면을 다시 읽고, 대상이 없거나 단계가 안 되면 멈춥니다\n\
+             · 규칙의 '하지 않음'과, 그 지점이 다른 것을 가리킬 때는 여전히 멈추거나 묻습니다\n\n\
+             스스로 판단한 것도 실행할까요?"),
         //: **Found by the test below, not by reading.** It had been asking with the bare default
         //: since it became a setting on 2026-09-17 — the permission to make a noise in the room.
         //: What it says is what `argmind-rules` holds: a remark argmind makes on its own is text.
@@ -999,6 +1013,10 @@ fn carry_out(desk: &mut Desk, out: &Listeners, model: &str, key: &str) {
         "acting" => {
             out.send("acting", "1");
             out.send("note", "이제 확인 없이 실행합니다 — 설정에서 되돌릴 수 있습니다");
+        }
+        "initiative" => {
+            out.send("initiative", "1");
+            out.send("note", "이제 스스로 판단한 것도 실행합니다 — 설정에서 되돌릴 수 있습니다");
         }
         //: Everything else is a need with a fix, and `fix` re-reads what is missing before acting.
         _ => {
@@ -1531,18 +1549,19 @@ fn notice(desk: &mut Desk, out: &Listeners, now: f64) {
         desk.session.history.push(("noticed".into(), trigger.text.clone()));
         //: A watch cannot be parroted — nobody said anything to mirror — but it goes through the
         //: same call so there is one place that decides what gets said.
-        let reply = spoken(&intent);
-        if reply.is_empty() {
-            //: **Silence is the common answer and it is the right one.** Saying so once would be
-            //: information; saying it every three seconds is the noise this whole floor exists to
-            //: prevent, so nothing is sent.
+        //: **Nothing to do, nothing said** — the owner's choice on 2026-10-21, after eleven hours of
+        //: *아, VS Code에서 작업 중이시군요!* on every window change, 37 of them. The model speaks on
+        //: every one it is given (224 of 224 in `turned`), so the silence is the program's: a window
+        //: change is remarked on only when the remark comes with something to do.
+        if intent.effects.is_empty() {
             continue;
         }
+        let reply = spoken(&intent);
         //: **The fourth identical remark is not made.** Measured: over eight window changes it
         //: spoke 8 times out of 8 and 6 of those were one sentence with the name swapped. Telling
         //: it to be quiet in the prompt bought no silence and started it wanting to click things,
         //: so this is caught on the way out — the answer that worked for the parrot.
-        if argmind_core::converse::said_before(&reply, &desk.lately_noticed) {
+        if !reply.is_empty() && argmind_core::converse::said_before(&reply, &desk.lately_noticed) {
             continue;
         }
         //: **눈치 decides when, not whether.** At 0 this is always *now* and nothing below changed.
@@ -1599,6 +1618,14 @@ fn release_held(desk: &mut Desk, out: &Listeners) {
 /// **The one place an unprompted remark is actually made**, whether now or after waiting.
 fn say_unprompted(desk: &mut Desk, out: &Listeners, intent: &argmind_core::intent::Intent,
                   reply: &str) {
+    if reply.is_empty() {
+        for effect in &intent.effects {
+            if !propose(desk, out, effect.clone()) {
+                break;
+            }
+        }
+        return;
+    }
     desk.lately_noticed.push(reply.to_string());
     //: **A short ring.** A person who comes back to a window ten minutes later should hear it
     //: again; the rule is against a run of them, not against ever saying it twice.
@@ -1756,6 +1783,16 @@ fn raise_it(desk: &mut Desk, out: &Listeners) {
         return;
     }
     let Some(worth) = desk.session.note.worth_raising().cloned() else { return };
+    //: **Raised once a session, not once per three looks.** The owner's eleven hours on
+    //: 2026-10-21 had *Move all to Desktop* raised every minute and a half, in Chrome and in a
+    //: search page as much as in the dialog it belonged to: putting a judgement down did not stop
+    //: the next ticks choosing the same widget and counting to three again.
+    let key = (worth.name.clone(), worth.role.clone());
+    if desk.raised.contains(&key) {
+        desk.session.note.let_go();
+        return;
+    }
+    desk.raised.push(key);
     //: **Put down before the turn, not after.** A model call takes a second or two and the tick
     //: that follows must not find it still standing and raise it twice.
     desk.session.note.let_go();
@@ -2015,6 +2052,8 @@ fn hello(desk: &Desk, model: &str) -> String {
         //: Read rather than held: the standing answer is the state.
         format!("\"acts\":{}",
                 crate::decided::standing("acting") == Some(Standing::Allowed)),
+        format!("\"initiative\":{}",
+                crate::decided::standing("initiative") == Some(Standing::Allowed)),
         //: **Held rather than read**, unlike `acts`: a standing 허용 says the camera *may* be on
         //: and this says it *is*, and they come apart when the device fails to open.
         format!("\"watching_you\":{}", desk.eyeing.load(Ordering::SeqCst)),
@@ -2328,6 +2367,7 @@ pub fn run(how: How) {
                               nunchi: crate::tact::remembered(), held: None, last_remark: None,
                               errands: crate::errands::remembered(), stepped_at: 0.0,
                               rules: crate::rules::remembered(), heard_last: None,
+                              raised: Vec::new(),
                               facing_now: Arc::new(Mutex::new(None)),
                               face_seen_at: Arc::new(Mutex::new(None)) };
         //: **The button is the permission, which is what this flag is for** — `session.rs`:
@@ -2435,6 +2475,23 @@ pub fn run(how: How) {
                     (true, None) => {
                         agent_out.send("camera", "0");
                         agent_out.send("asking", &asking_json("camera"));
+                    }
+                },
+                //: **The same shape as 확인 없이 실행**: off is written down, on asks unless it
+                //: was already answered.
+                Job::Initiative(on) => match (on, crate::decided::standing("initiative")) {
+                    (false, _) => {
+                        if let Err(why) = crate::decided::keep("initiative", Some(Standing::Denied)) {
+                            agent_out.send("note", &why);
+                        }
+                        agent_out.send("initiative", "0");
+                        agent_out.send("note", "스스로 판단한 것은 다시 물어보고 실행합니다");
+                        agent_out.send("decisions", &decisions_json());
+                    }
+                    (true, Some(Standing::Allowed)) => agent_out.send("initiative", "1"),
+                    (true, _) => {
+                        agent_out.send("initiative", "0");
+                        agent_out.send("asking", &asking_json("initiative"));
                     }
                 },
                 Job::Acting(on) => match (on, crate::decided::standing("acting")) {
@@ -3014,6 +3071,10 @@ fn serve_one(mut stream: TcpStream, out: &Listeners, token: &str, jobs: &Sender<
             let _ = stream.write_all(&respond("204 No Content", "text/plain", ""));
             let _ = jobs.send(Job::Notice(on));
         }
+        Route::Initiative(on) => {
+            let _ = stream.write_all(&respond("204 No Content", "text/plain", ""));
+            let _ = jobs.send(Job::Initiative(on));
+        }
         Route::Acting(on) => {
             let _ = stream.write_all(&respond("204 No Content", "text/plain", ""));
             let _ = jobs.send(Job::Acting(on));
@@ -3157,8 +3218,8 @@ mod question_tests {
         //: listed there look identical — `korean-voice` and `vulkan` are Windows facts and vanish
         //: off Windows — and the second attempt at this test treated both as switches. A switch can
         //: always be asked; a need only when it is listed here with a fix.
-        const SWITCHES: [&str; 7] =
-            ["notice", "microphone", "aloud", "acting", "camera", "attention", "faces"];
+        const SWITCHES: [&str; 8] =
+            ["notice", "microphone", "aloud", "acting", "initiative", "camera", "attention", "faces"];
         for key in SWITCHES {
             assert!(crate::decided::DECIDABLE.contains(&key), "{key} is no longer decidable");
         }
