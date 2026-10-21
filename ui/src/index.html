@@ -339,6 +339,10 @@
       <div class="cost">argmind 가 꺼지면 사라집니다 — 파일로 남기지 않습니다. 최근 500줄</div>
       <div id="timeline-rows"></div>
       <button type="button" id="timeline-clear" class="plain">기록 지우기</button>
+      <!-- The conversation itself, unlike the timeline above, is kept in a file — the owner asked
+           for it on 2026-10-21 — so this says where, and empties it. -->
+      <div class="cost">대화 내용은 %LOCALAPPDATA%\argmind\conversation.jsonl 에 남고, 다시 켜도 이어집니다</div>
+      <button type="button" id="conversation-forget" class="plain">대화 기억 지우기</button>
     </div>
   </details>
   <details id="holding" hidden>

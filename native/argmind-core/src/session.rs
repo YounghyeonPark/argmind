@@ -8,6 +8,10 @@ use crate::mind::Mind;
 use crate::thinking::Note;
 
 pub const REMEMBER_TURNS: i64 = 12;
+/// **Tokens kept free for the reply** when the history is fitted to the context. Replies are tens
+/// of tokens; a thousand leaves room for the long ones without letting the prompt and the reply
+/// together overrun the context and have the server cut the instructions off the front.
+pub const ANSWER_ROOM: usize = 1024;
 /// How many of argmind's own actions the note carries. **Three, matching `MOST_AT_ONCE`** — the
 /// longest sequence it can perform in one turn, so the note holds the last thing it did whole.
 pub const DID_IN_NOTE: usize = 3;
@@ -52,6 +56,52 @@ pub fn describe(effect: &Effect, widget: Option<&Widget>, form: usize) -> String
 /// choice** — this was a negative slice, and `history[-0:]` is the entire list, so the one setting
 /// a person reaches for to turn memory off turned it all the way up. Cutting on boundaries is the
 /// other half: 353 of 3,312 prompts built by the line-slicing version opened mid-turn.
+/// **Tokens a text will cost, overestimated on purpose.** Measured on qwen3:8b's tokenizer on
+/// 2026-10-21: Korean 0.59–0.66 tokens a character across two samples, English 0.31, a mix 0.48.
+/// Fitted, Hangul costs up to 0.9 and everything else 0.31; this charges 1.0 and 0.4, which
+/// overestimated every sample by 15–45%. **Over is the safe side**: a prompt longer than the
+/// context is cut by the server from the front, and the front is the instructions.
+pub fn estimate_tokens(text: &str) -> usize {
+    let mut hangul = 0usize;
+    let mut other = 0usize;
+    for c in text.chars() {
+        if ('\u{AC00}'..='\u{D7A3}').contains(&c) || ('\u{3130}'..='\u{318F}').contains(&c) {
+            hangul += 1;
+        } else {
+            other += 1;
+        }
+    }
+    hangul + (other * 2).div_ceil(5)
+}
+
+/// **As much of the conversation as fits, in whole turns, newest first.** The budget is tokens, by
+/// [`estimate_tokens`], counting each line as the prompt renders it. A turn that does not fit is
+/// dropped whole and so is everything older — the same rule as [`recent`], which a line-based cut
+/// broke once by opening on a reply whose question had gone.
+pub fn recent_within(history: &[(String, String)], budget: usize) -> Vec<(String, String)> {
+    let opens: Vec<usize> = history.iter().enumerate()
+        .filter(|(_, (who, _))| TURN_OPENS.contains(&who.as_str())).map(|(i, _)| i).collect();
+    let cost = |lines: &[(String, String)]| -> usize {
+        lines.iter().map(|(who, text)| estimate_tokens(&format!("  {who}: {text}\n"))).sum()
+    };
+    let mut from = history.len();
+    let mut spent = 0usize;
+    //: Lines after the last opener belong to the newest turn too.
+    let mut ends: Vec<usize> = opens.clone();
+    ends.reverse();
+    let mut upper = history.len();
+    for start in ends {
+        let turn = cost(&history[start..upper]);
+        if spent + turn > budget {
+            break;
+        }
+        spent += turn;
+        from = start;
+        upper = start;
+    }
+    history[from..].to_vec()
+}
+
 pub fn recent(history: &[(String, String)], turns: Option<i64>) -> Vec<(String, String)> {
     let turns = match turns {
         None => return history.to_vec(),
@@ -134,6 +184,9 @@ pub struct Session<E: Eyes, H: Hands, M: Speaks> {
     pub may_act_unprompted: bool,
     pub remember_turns: Option<i64>,
     pub limit: usize,
+    /// **The model's context, in tokens, when the history should fill it** rather than stop at
+    /// [`REMEMBER_TURNS`]. `None` is the turn count, as every harness here measured.
+    pub context_tokens: Option<usize>,
     /// What it is trying to be, from the settings. **Resting until somebody turns a dial**, and
     /// resting renders the prompt this program shipped with, byte for byte.
     pub mind: Mind,
@@ -148,7 +201,7 @@ impl<E: Eyes, H: Hands, M: Speaks> Session<E, H, M> {
                   blind: 0, vanished: 0, ambiguous: 0, chose_too_late: 0, secret: 0, nowhere_to_type: 0,
                   not_landed: 0, unattempted: 0, unknown_keys: 0,
                   may_act_unprompted: false,
-                  remember_turns: Some(REMEMBER_TURNS), limit: MAX_LISTED,
+                  remember_turns: Some(REMEMBER_TURNS), limit: MAX_LISTED, context_tokens: None,
                   mind: Mind::resting(), note: Note::blank() }
     }
 
@@ -160,6 +213,20 @@ impl<E: Eyes, H: Hands, M: Speaks> Session<E, H, M> {
 
     pub fn recent(&self) -> Vec<(String, String)> {
         recent(&self.history, self.remember_turns)
+    }
+
+    /// **The history this prompt can carry**: by turns when no context size is set — today's
+    /// behaviour, which every measurement here was taken under — and otherwise as much as fits
+    /// beside `without_history`, the rest of the prompt, leaving [`ANSWER_ROOM`] for the reply.
+    pub fn recent_for(&self, without_history: &str) -> Vec<(String, String)> {
+        match self.context_tokens {
+            None => self.recent(),
+            Some(ctx) => {
+                //: The heading the history adds, and the blank line after it.
+                let fixed = estimate_tokens(without_history) + estimate_tokens("Recently:\n\n");
+                recent_within(&self.history, ctx.saturating_sub(ANSWER_ROOM + fixed))
+            }
+        }
     }
 
     pub fn knows_key(&self, name: &str) -> bool {
@@ -242,7 +309,17 @@ impl<E: Eyes, H: Hands, M: Speaks> Session<E, H, M> {
             self.observe();
         }
         let listed: Vec<Widget> = self.seen.iter().take(self.limit).cloned().collect();
-        let prompt = crate::converse::render_with(&listed, trigger, &self.recent(),
+        //: **Rendered once without the history to learn what is left for it**, when the history is
+        //: fitted to the context; by turns otherwise, exactly as before.
+        let history = match self.context_tokens {
+            None => self.recent(),
+            Some(_) => {
+                let bare = crate::converse::render_with(&listed, trigger, &[], self.limit,
+                                                        &self.mind, &self.note);
+                self.recent_for(&bare)
+            }
+        };
+        let prompt = crate::converse::render_with(&listed, trigger, &history,
                                                   self.limit, &self.mind, &self.note);
         let (reply, tokens) = self.model.ask_scored(&prompt);
         let intent = read_reply(&reply, &listed, trigger);
@@ -458,4 +535,20 @@ impl<E: Eyes, H: Hands, M: Speaks> Session<E, H, M> {
         }
         !same
     }
+}
+
+/// **One line of the conversation file**: when, who, what. JSON, one object a line, so a line that
+/// does not read loses only itself.
+pub fn history_line(at: u64, who: &str, text: &str) -> String {
+    serde_json::json!({ "at": at, "who": who, "text": text }).to_string()
+}
+
+/// The conversation back out of the file, oldest first, the last `most` lines.
+pub fn history_from(file: &str, most: usize) -> Vec<(String, String)> {
+    let all: Vec<(String, String)> = file.lines().filter_map(|l| {
+        let v: serde_json::Value = serde_json::from_str(l).ok()?;
+        Some((v["who"].as_str()?.to_string(), v["text"].as_str()?.to_string()))
+    }).collect();
+    let skip = all.len().saturating_sub(most);
+    all[skip..].to_vec()
 }

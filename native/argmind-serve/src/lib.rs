@@ -39,6 +39,7 @@ pub mod activity;
 pub mod app;
 pub mod building;
 pub mod chosen;
+pub mod conversation;
 pub mod decided;
 pub mod errands;
 pub mod faces;
@@ -270,6 +271,8 @@ pub enum Route {
     Web(bool),
     /// Open an address in the pane, or search for the words.
     WebGo(String),
+    /// Empty the conversation, in memory and in its file.
+    ForgetConversation,
     /// Send the timeline, or empty it.
     Activity,
     ClearActivity,
@@ -420,6 +423,7 @@ pub fn route(request: &Request) -> Route {
         //: The sentence in the body, like `/aim`; forgetting by place in the list the page drew.
         ("POST", "/kept") => Route::Keep(request.body.clone()),
         ("POST", "/activity") => Route::Activity,
+        ("POST", "/conversation/forget") => Route::ForgetConversation,
         ("POST", "/web/on") => Route::Web(true),
         ("POST", "/web/off") => Route::Web(false),
         ("POST", "/web/go") => Route::WebGo(request.body.clone()),

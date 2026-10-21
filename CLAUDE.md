@@ -197,8 +197,17 @@ renders nothing and the six probes still hash to `r322a4c`.
 every window change was recorded before anything was known to come of it, so twelve window changes
 pushed the person's own conversation out of the prompt: the owner said argmind did not remember
 what they had talked about, and eleven hours of the timeline held 97 notices against a handful of
-their words. A notice now enters the history only when it is said or acted on. **The other half is
-not fixed**: the history lives in memory and every restart erases it.
+their words. A notice now enters the history only when it is said or acted on. **And the other half,
+the same day**: the conversation is appended to `conversation.jsonl` and read back at start, and the
+prompt no longer stops at twelve turns — `Session::context_tokens` fills what the screen and
+`ANSWER_ROOM` leave of the 8,192-token context with whole turns, newest first, by a token estimate
+that charges 1.0 a Hangul character and 0.4 anything else (measured 0.59–0.66 and 0.31 on qwen3's
+tokenizer; over is the safe side, since an overlong prompt loses its instructions off the front).
+`--bin context`, conditions written first: a first-turn fact after twenty turns recalled **3 of 3
+fitted against 0 of 3 at twelve turns**, and `choosing` **31 of 37 with that history against 30 with
+none**. On the headless server, a fact said, the server killed and restarted, and asked: *나비라고
+했어요!* No summaries are kept — the model wrote things it had not done the one time it described
+itself. 대화 기억 지우기 empties the file.
 
 **History is bounded in TURNS, not lines** (`remember_turns = 12`). A turn costs 2.11 lines and the
 old line-based slice landed **inside a turn in 10.7% of prompts** — 7.6% opening on a reply whose

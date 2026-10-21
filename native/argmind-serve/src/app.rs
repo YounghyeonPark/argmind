@@ -234,6 +234,8 @@ struct Desk {
     /// The last transcript sent as `them`, so the turn it starts does not put it on the timeline
     /// twice. Taken by the turn.
     heard_last: Option<String>,
+    /// How many lines of the history are already in the conversation file.
+    kept_lines: usize,
     /// Judgements already raised this session, by name and role — see `raise_it`.
     raised: Vec<(String, String)>,
     /// **규칙**, read at startup and replaced whole from the page. See [`argmind_core::rule`].
@@ -307,6 +309,7 @@ enum Job {
     WebGo(String),
     Keep(String),
     Unkeep(usize),
+    ForgetConversation,
     Activity,
     ClearActivity,
     /// The thinking thread took one step: **the copy it stepped from and the result**, so a step
@@ -573,6 +576,28 @@ fn looked_up_instead(desk: &mut Desk, out: &Listeners, text: &str) -> bool {
     desk.session.history.push(("you".into(), reply.clone()));
     out.send("say", &reply);
     true
+}
+
+/// **The model's context, in tokens** — `Local`'s `num_ctx`, which the prompt must fit inside.
+/// The history fills what the screen and the reply leave of it.
+pub const CONTEXT_TOKENS: usize = 8192;
+
+/// **Write what the conversation gained since last time**, and keep the history in memory bounded
+/// — the file holds it all, the prompt takes what fits.
+fn keep_conversation(desk: &mut Desk, out: &Listeners) {
+    let h = &desk.session.history;
+    if desk.kept_lines > h.len() {
+        desk.kept_lines = h.len();
+    }
+    if let Err(why) = crate::conversation::append(&h[desk.kept_lines..]) {
+        out.send("note", &why);
+    }
+    desk.kept_lines = h.len();
+    if desk.session.history.len() > 2 * crate::conversation::READ_BACK {
+        let drop = desk.session.history.len() - crate::conversation::READ_BACK;
+        desk.session.history.drain(..drop);
+        desk.kept_lines -= drop;
+    }
 }
 
 /// **Below this, an action waits for a person even when it would otherwise run by itself.**
@@ -2468,7 +2493,7 @@ pub fn run(how: How) {
                               nunchi: crate::tact::remembered(), held: None, last_remark: None,
                               errands: crate::errands::remembered(), stepped_at: 0.0,
                               rules: crate::rules::remembered(), heard_last: None,
-                              raised: Vec::new(),
+                              raised: Vec::new(), kept_lines: 0,
                               facing_now: Arc::new(Mutex::new(None)),
                               face_seen_at: Arc::new(Mutex::new(None)) };
         //: **The button is the permission, which is what this flag is for** — `session.rs`:
@@ -2491,6 +2516,11 @@ pub fn run(how: How) {
         //: touched on the hot path — and a mind that was never set is a resting one, which renders
         //: the prompt this program shipped with byte for byte.
         desk.session.mind = crate::mind::remembered();
+        //: **The conversation where it left off**, and the prompt filling the model's context with
+        //: it rather than stopping at twelve turns — see `crate::conversation`.
+        desk.session.history = crate::conversation::remembered();
+        desk.kept_lines = desk.session.history.len();
+        desk.session.context_tokens = Some(CONTEXT_TOKENS);
         //: Whether the standing answers have been acted on yet this run. See `Job::Opened`.
         let mut caught_up = false;
         let started = std::time::Instant::now();
@@ -2501,6 +2531,7 @@ pub fn run(how: How) {
             let job = match inbox.recv_timeout(std::time::Duration::from_millis(700)) {
                 Ok(job) => job,
                 Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {
+                    keep_conversation(&mut desk, &agent_out);
                     let now = started.elapsed().as_secs_f64();
                     notice(&mut desk, &agent_out, now);
                     //: **After noticing, not instead of it.** A window change is what a person is
@@ -2514,6 +2545,8 @@ pub fn run(how: How) {
                 }
                 Err(_) => break,
             };
+            //: Whatever the job, what it added to the conversation goes to the file after it.
+            let keep_after = !matches!(job, Job::ForgetConversation);
             match job {
                 Job::Said(text) => {
                     let text = text.trim();
@@ -2780,6 +2813,14 @@ pub fn run(how: How) {
                     }
                     None => agent_out.send("note", "이 창에는 브라우저 칸이 없습니다"),
                 },
+                Job::ForgetConversation => {
+                    desk.session.history.clear();
+                    desk.kept_lines = 0;
+                    match crate::conversation::forget() {
+                        Ok(()) => agent_out.send("note", "대화 기억을 지웠습니다 — 파일도 비웠습니다"),
+                        Err(why) => agent_out.send("note", &why),
+                    }
+                }
                 Job::Activity => agent_out.frame("activity", &agent_out.timeline()),
                 Job::ClearActivity => {
                     agent_out.forget_timeline();
@@ -2999,6 +3040,9 @@ pub fn run(how: How) {
                     //: shows the thought rather than an empty panel that fills in thirty seconds.
                     let _ = tx.send(sse("note-kept", &note_json(&desk.session.note)));
                 }
+            }
+            if keep_after {
+                keep_conversation(&mut desk, &agent_out);
             }
         }
     });
@@ -3258,6 +3302,10 @@ fn serve_one(mut stream: TcpStream, out: &Listeners, token: &str, jobs: &Sender<
             } else {
                 let _ = stream.write_all(&respond("400 Bad Request", "text/plain", "no"));
             }
+        }
+        Route::ForgetConversation => {
+            let _ = stream.write_all(&respond("204 No Content", "text/plain", ""));
+            let _ = jobs.send(Job::ForgetConversation);
         }
         Route::Activity => {
             let _ = stream.write_all(&respond("204 No Content", "text/plain", ""));

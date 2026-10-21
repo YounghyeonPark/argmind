@@ -758,6 +758,11 @@ timeline.addEventListener("toggle", () => {
 
 timelineClear.onclick = () => void post("/activity/clear");
 
+const conversationForget = document.getElementById("conversation-forget") as HTMLButtonElement;
+conversationForget.onclick = () => {
+  if (confirm("argmind 가 기억하는 대화를 지울까요? 파일도 비웁니다.")) void post("/conversation/forget");
+};
+
 stream.addEventListener("activity", (e) => {
   const list = JSON.parse((e as MessageEvent).data) as Entry[];
   timelineRows.replaceChildren(...list.map(timelineRow));
