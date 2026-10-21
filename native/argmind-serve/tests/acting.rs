@@ -178,3 +178,16 @@ fn argmind_own_idea_needs_a_person_and_not_a_standing_yes() {
     assert!(guard.contains(r#"if its_own_idea { "initiative" } else { "acting" }"#),
             "argmind's own idea is no longer gated by its own key: {guard}");
 }
+
+/// **A window change argmind did nothing with is not a turn of the conversation.** `noticed` opens
+/// a turn and the prompt keeps twelve; recorded before the check that it came to anything, silent
+/// notices pushed the person's own words out of memory — the owner, 2026-10-21. Held by reading
+/// `notice`: the line that records it comes after the line that drops a notice with nothing to do.
+#[test]
+fn a_silent_notice_does_not_take_a_turn_of_memory() {
+    let notice = function("notice");
+    let silent = notice.find("if intent.effects.is_empty()").expect("the silent case is gone");
+    let kept = notice.find("history.push((\"noticed\"").expect("notices are no longer recorded");
+    assert!(kept > silent, "a notice is recorded before it is known to come to anything");
+    assert_eq!(notice.matches("history.push((\"noticed\"").count(), 1);
+}

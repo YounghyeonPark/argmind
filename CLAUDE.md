@@ -193,6 +193,13 @@ not asked what it did**: asked once, it invented having tidied somebody's browse
 it for three revisions, so `tried` is read off `remember_doing`'s own record instead. A blank note
 renders nothing and the six probes still hash to `r322a4c`.
 
+**A silent notice is not a turn — since 2026-10-21.** `noticed` opens a turn as `them` does, and
+every window change was recorded before anything was known to come of it, so twelve window changes
+pushed the person's own conversation out of the prompt: the owner said argmind did not remember
+what they had talked about, and eleven hours of the timeline held 97 notices against a handful of
+their words. A notice now enters the history only when it is said or acted on. **The other half is
+not fixed**: the history lives in memory and every restart erases it.
+
 **History is bounded in TURNS, not lines** (`remember_turns = 12`). A turn costs 2.11 lines and the
 old line-based slice landed **inside a turn in 10.7% of prompts** — 7.6% opening on a reply whose
 question had been dropped. `remember_turns=0` means none and `None` means all; the old `remember=0`

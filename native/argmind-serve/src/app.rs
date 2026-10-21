@@ -1635,7 +1635,6 @@ fn notice(desk: &mut Desk, out: &Listeners, now: f64) {
         out.send("busy", "1");
         let intent = desk.session.decide(&trigger);
         out.send("busy", "0");
-        desk.session.history.push(("noticed".into(), trigger.text.clone()));
         //: A watch cannot be parroted — nobody said anything to mirror — but it goes through the
         //: same call so there is one place that decides what gets said.
         //: **Nothing to do, nothing said** — the owner's choice on 2026-10-21, after eleven hours of
@@ -1653,6 +1652,12 @@ fn notice(desk: &mut Desk, out: &Listeners, now: f64) {
         if !reply.is_empty() && argmind_core::converse::said_before(&reply, &desk.lately_noticed) {
             continue;
         }
+        //: **Into the conversation only now that something comes of it.** `noticed` opens a turn and
+        //: the prompt keeps twelve, so every silent window change used to push one of the person's
+        //: own turns out — 97 notices against a handful of words from the owner in eleven hours, on
+        //: 2026-10-21, when they said argmind did not remember what they had talked about. A window
+        //: change argmind did nothing with is not part of the conversation.
+        desk.session.history.push(("noticed".into(), trigger.text.clone()));
         //: **눈치 decides when, not whether.** At 0 this is always *now* and nothing below changed.
         //: Above 0 a remark to somebody turned away, or too soon after the last one, is held
         //: rather than said — and the program does that, because the model measurably cannot.
