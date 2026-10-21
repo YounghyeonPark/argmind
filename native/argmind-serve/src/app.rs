@@ -387,6 +387,9 @@ fn think(desk: &mut Desk, out: &Listeners, text: &str) {
     if looked_up_instead(desk, out, text) {
         return;
     }
+    if moved_web_instead(desk, out, text) {
+        return;
+    }
     //: **Held for the whole turn, and it clears itself.** While this is alive the senses stand
     //: down: one declines to start and one already running is abandoned mid-call. A guard rather
     //: than two stores, because an early return that left the flag set would silence every sense
@@ -465,15 +468,81 @@ fn think(desk: &mut Desk, out: &Listeners, text: &str) {
     out.send("busy", "0");
 }
 
+/// **Show the pane and look there, or hide it and look at the desktop** — the one way it happens,
+/// whether a person pressed 웹 or a turn moved it.
+fn show_web(desk: &mut Desk, out: &Listeners, on: bool) -> bool {
+    let Some(pane) = desk.web.as_ref() else { return false };
+    if desk.on_web.get() == on {
+        return true;
+    }
+    (pane.show)(on);
+    desk.on_web.set(on);
+    //: The list on screen changes surface, so the next reading is a fresh one.
+    desk.session.seen.clear();
+    out.send("web", if on { "1" } else { "0" });
+    true
+}
+
+/// **The turn moves the pane by itself**, by what was said — see `surface::web_move`. Returns true
+/// when that was the whole of the request and the turn ends here.
+fn moved_web_instead(desk: &mut Desk, out: &Listeners, text: &str) -> bool {
+    if desk.web.is_none() {
+        return false;
+    }
+    let reply = match crate::surface::web_move(text, desk.on_web.get()) {
+        None => return false,
+        Some(crate::surface::WebMove::ToDesktop) => {
+            show_web(desk, out, false);
+            return false;
+        }
+        Some(crate::surface::WebMove::Close) => {
+            show_web(desk, out, false);
+            "웹 칸을 닫았습니다".to_string()
+        }
+        Some(crate::surface::WebMove::Open { url, only }) => {
+            show_web(desk, out, true);
+            if let Some(pane) = desk.web.as_ref() {
+                let reader = argmind_env_browser::Pane::new(pane.wire.clone());
+                if let Err(why) = reader.open(&url) {
+                    out.send("note", &format!("열지 못했습니다 ({why})"));
+                }
+            }
+            desk.session.seen.clear();
+            if !only {
+                //: Something was asked of the page; the turn carries on, looking at it.
+                return false;
+            }
+            format!("웹 칸에 열었습니다 — {url}")
+        }
+        Some(crate::surface::WebMove::Search(words)) => {
+            show_web(desk, out, true);
+            if let Some(pane) = desk.web.as_ref() {
+                let reader = argmind_env_browser::Pane::new(pane.wire.clone());
+                if let Err(why) = reader.open(&argmind_env_browser::search_url(&words)) {
+                    out.send("note", &format!("검색하지 못했습니다 ({why})"));
+                }
+            }
+            desk.session.seen.clear();
+            format!("웹 칸에 「{words}」 검색 결과를 띄웠습니다")
+        }
+    };
+    desk.session.history.push(("them".into(), text.to_string()));
+    desk.session.history.push(("you".into(), reply.clone()));
+    out.send("say", &reply);
+    true
+}
+
 /// **A question about now, asked while argmind looks at its pane, is looked up by the program.**
 /// The owner's session, 2026-10-21: *오늘 서울날씨 알려줘* on a login page, and the model's plan was
 /// to type *서울* into the ID box. A lookup is not something to plan by clicking; the program puts
 /// the search in the pane where the person can see it, reads the page, and hands that to an errand
 /// to conclude — the errand path whose answer shapes have no `say` and no `do`.
 fn looked_up_instead(desk: &mut Desk, out: &Listeners, text: &str) -> bool {
-    if !desk.on_web.get() || !argmind_core::errand::asks_to_look_up(text) {
+    if desk.web.is_none() || !argmind_core::errand::asks_to_look_up(text) {
         return false;
     }
+    //: **Opened by the question**, since 2026-10-21 — it used to need the 웹 switch on first.
+    show_web(desk, out, true);
     let Some(pane) = desk.web.as_ref() else { return false };
     out.send("busy", "1");
     let reader = argmind_env_browser::Pane::new(pane.wire.clone());
@@ -2428,8 +2497,9 @@ pub fn run(how: How) {
                     //: an errand, which looks it up and reports back. Offered; the press decides.
                     //: **Not with the pane on**: there the program has already searched it,
                     //: and the row made a second errand that could not look anything up.
-                    if desk.web.is_some() && !desk.on_web.get()
-                        && argmind_core::errand::asks_to_look_up(text) {
+                    //: **Only without a pane**: with one, the question opened it and was looked
+                    //: up, and a row would make a second errand.
+                    if desk.web.is_none() && argmind_core::errand::asks_to_look_up(text) {
                         agent_out.send("lookup-offer", text);
                     }
                 }
@@ -2650,20 +2720,16 @@ pub fn run(how: How) {
                         keep_errands(&desk, &agent_out);
                     }
                 }
-                Job::Web(on) => match desk.web.as_ref() {
-                    Some(pane) => {
-                        (pane.show)(on);
-                        desk.on_web.set(on);
-                        //: The list on screen changes surface, so the next turn reads afresh.
-                        desk.session.seen.clear();
-                        agent_out.send("web", if on { "1" } else { "0" });
+                Job::Web(on) => match desk.web.is_some() {
+                    true => {
+                        show_web(&mut desk, &agent_out, on);
                         agent_out.send("note", if on {
                             "이제 argmind 의 브라우저 칸을 보고 그 안에서만 누릅니다"
                         } else {
                             "다시 데스크톱을 봅니다"
                         });
                     }
-                    None => {
+                    false => {
                         agent_out.send("web", "0");
                         agent_out.send("note", "이 창에는 브라우저 칸이 없습니다 — argmind-app 으로 여세요");
                     }

@@ -289,6 +289,15 @@ remarked on only when the remark comes with something to do (the owner chose *fe
 What still stands between argmind's idea and a click is the screen check, the rules and the second
 opinion — and `noticing` measured it wanting to click on 5–9 of 28 window changes.
 
+**The pane opens and closes itself, by what was said — since 2026-10-21.** The owner: nobody presses
+웹 by hand. `surface::web_move` is a word rule, not a model call, for the same reason everything
+else that moved out of the model did: a site or an address opens it (and a request after the name —
+*네이버에서 메일 열어줘* — carries on inside it), *…검색해줘* opens it on a Naver search, a question
+about now opens it and is looked up, *웹 닫아* closes it, and a desktop app named while it is up
+(*메모장*, *탐색기*…) takes the turn back to the desktop. *검색창 눌러줘* is a box, not a search; *다음*
+is not a site. Errands looking things up in the background still do not show it. **Not run in the
+application from here.**
+
 **One call, not two.** A round trip is the budget: 0.45 s warm, 4.7 s and 5.9 s for the first two.
 
 ## The numbers, as they stand

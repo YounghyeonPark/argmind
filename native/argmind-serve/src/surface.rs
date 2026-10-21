@@ -191,9 +191,133 @@ pub fn address(typed: &str) -> String {
     argmind_env_browser::search_url(t)
 }
 
+/// **Whether a turn moves argmind onto the web or off it**, read by the program from what was said.
+///
+/// The owner, 2026-10-21: *argmind가 상황에 맞게 웹창을 열고 닫는걸 스스로 하게 해줘* — nobody presses
+/// the 웹 switch by hand. **Not a model's decision**: this model has been measured choosing silence 0
+/// times in 224 and sorting errands by the position of an option, and *which surface* is a choice a
+/// word list can make about as well and always the same way. Each rule is one a person can predict.
+#[derive(Debug, PartialEq)]
+pub enum WebMove {
+    /// Open the pane at this address. `only` when nothing else was asked, so the turn ends there.
+    Open { url: String, only: bool },
+    /// Open the pane on a search for these words.
+    Search(String),
+    /// Back to the desktop, with nothing else asked.
+    Close,
+    /// Back to the desktop, and the turn carries on there.
+    ToDesktop,
+}
+
+/// Sites by the names people say. **Not 다음**, which is mostly *next*.
+const SITES: [(&str, &str); 12] = [
+    ("네이버 메일", "https://mail.naver.com/"), ("네이버", "https://www.naver.com/"),
+    ("naver", "https://www.naver.com/"), ("유튜브", "https://www.youtube.com/"),
+    ("youtube", "https://www.youtube.com/"), ("위키백과", "https://ko.wikipedia.org/"),
+    ("나무위키", "https://namu.wiki/"), ("깃허브", "https://github.com/"),
+    ("github", "https://github.com/"), ("쿠팡", "https://www.coupang.com/"),
+    ("지메일", "https://mail.google.com/"), ("구글", "https://www.google.com/"),
+];
+
+/// What makes an opening the whole request: the verbs and particles around a site's name.
+const OPEN_WORDS: [&str; 16] = ["열어줘", "열어 줘", "열어", "띄워줘", "띄워 줘", "켜줘", "켜 줘",
+                                "가줘", "가 줘", "들어가줘", "들어가 줘", "접속해줘", "좀", "에", "로", "으로"];
+
+/// Things on the desktop people name, which mean the turn is about the desktop.
+const DESKTOP: [&str; 16] = ["메모장", "탐색기", "파일 탐색기", "바탕화면", "데스크톱", "vs code",
+                             "vscode", "비주얼 스튜디오", "엑셀", "워드", "파워포인트", "카카오톡",
+                             "계산기", "그림판", "작업 표시줄", "설정 창"];
+
+const CLOSE: [&str; 8] = ["웹 닫", "웹창 닫", "웹 꺼", "브라우저 닫", "브라우저 꺼", "칸 닫", "웹 숨겨",
+                          "브라우저 숨겨"];
+
+const SEARCH: [&str; 7] = ["검색해줘", "검색해 줘", "검색해봐", "검색해 봐", "웹에서 찾아", "인터넷에서 찾아",
+                           "찾아봐줘"];
+
+pub fn web_move(said: &str, on_web: bool) -> Option<WebMove> {
+    let t = said.trim();
+    let low = t.to_lowercase();
+    if CLOSE.iter().any(|w| t.contains(w)) {
+        return Some(WebMove::Close);
+    }
+    //: **A desktop app named while the pane is up** — the turn is about the desktop.
+    if on_web && DESKTOP.iter().any(|w| low.contains(w)) {
+        return Some(WebMove::ToDesktop);
+    }
+    //: **Searching, said in so many words.** *검색창* is a box on a page, not a request to search.
+    if let Some(verb) = SEARCH.iter().find(|w| t.contains(*w)) {
+        let words = t.split(verb).next().unwrap_or("").trim()
+            .trim_end_matches(|c: char| c == '을' || c == '를' || c == ' ').trim();
+        if !words.is_empty() && !t.contains("검색창") {
+            return Some(WebMove::Search(words.to_string()));
+        }
+    }
+    //: **An address**, typed as one: a token with a dot and a known ending.
+    let address = t.split_whitespace().map(|w| w.trim_matches(|c: char| !c.is_ascii_alphanumeric()
+                                                                && c != '.' && c != '/' && c != ':'))
+        .find(|w| {
+            let w = w.to_lowercase();
+            [".com", ".net", ".org", ".kr", ".io", ".dev", ".wiki", ".co"].iter()
+                .any(|end| w.contains(end)) && !w.starts_with('.')
+        });
+    let (url, name) = match address {
+        Some(a) => (if a.starts_with("http") { a.to_string() } else { format!("https://{a}") },
+                    a.to_string()),
+        None => match SITES.iter().find(|(name, _)| low.contains(name)) {
+            Some((name, url)) => (url.to_string(), name.to_string()),
+            None => return None,
+        },
+    };
+    //: **Only the opening was asked** when nothing is left once the site and the verbs are gone.
+    let mut rest = low.replace(&name.to_lowercase(), " ");
+    //: **Longest first**: *가줘* taken out of *들어가줘* leaves *들어*, which reads as a request.
+    let mut words = OPEN_WORDS.to_vec();
+    words.sort_by_key(|w| std::cmp::Reverse(w.chars().count()));
+    for w in words {
+        rest = rest.replace(w, " ");
+    }
+    let only = rest.split_whitespace().all(|w| w.chars().count() <= 1);
+    Some(WebMove::Open { url, only })
+}
+
 #[cfg(test)]
 mod tests {
-    use super::{address, OnWeb};
+    use super::{address, web_move, OnWeb, WebMove};
+
+    #[test]
+    fn sites_open_and_a_request_after_them_carries_on() {
+        assert_eq!(web_move("네이버 열어줘", false),
+                   Some(WebMove::Open { url: "https://www.naver.com/".into(), only: true }));
+        assert_eq!(web_move("github.com 들어가줘", false),
+                   Some(WebMove::Open { url: "https://github.com".into(), only: true }));
+        assert_eq!(web_move("네이버에서 메일 열어줘", false),
+                   Some(WebMove::Open { url: "https://www.naver.com/".into(), only: false }));
+        assert_eq!(web_move("네이버 메일 열어줘", false),
+                   Some(WebMove::Open { url: "https://mail.naver.com/".into(), only: true }));
+    }
+
+    #[test]
+    fn searching_is_said_and_a_search_box_is_not_a_search() {
+        assert_eq!(web_move("러스트 비동기 검색해줘", false),
+                   Some(WebMove::Search("러스트 비동기".into())));
+        assert_eq!(web_move("서울 맛집을 웹에서 찾아줘", false),
+                   Some(WebMove::Search("서울 맛집".into())));
+        assert_eq!(web_move("검색창 눌러줘", true), None);
+    }
+
+    #[test]
+    fn closing_and_the_desktop_take_it_back() {
+        assert_eq!(web_move("웹 닫아줘", true), Some(WebMove::Close));
+        assert_eq!(web_move("메모장 열어줘", true), Some(WebMove::ToDesktop));
+        assert_eq!(web_move("메모장 열어줘", false), None, "already on the desktop");
+    }
+
+    #[test]
+    fn ordinary_talk_moves_nothing() {
+        for t in ["안녕", "고마워", "다음 주 회의 정리해줘", "메일 열어줘", "이거 눌러줘"] {
+            assert_eq!(web_move(t, false), None, "{t}");
+        }
+    }
 
     #[test]
     fn the_switch_comes_back_however_the_scope_is_left() {
