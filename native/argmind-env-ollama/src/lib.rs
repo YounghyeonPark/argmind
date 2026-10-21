@@ -41,13 +41,16 @@ pub struct Local {
     pub think: Option<bool>,
     pub stop_when_answered: bool,
     pub stop_when_looping: bool,
+    /// **Ask for each token's probability.** Off unless set, so every request this tree has ever
+    /// measured is the request it sends. See [`Local::ask_scored`].
+    pub logprobs: bool,
 }
 
 impl Local {
     pub fn new(model: &str) -> Self {
         Local { model: model.into(), host: OLLAMA.into(), ctx: 8192, max_tokens: 4096,
                 keep_alive: "60s".into(), think: None,
-                stop_when_answered: true, stop_when_looping: true }
+                stop_when_answered: true, stop_when_looping: true, logprobs: false }
     }
 
     /// The exact bytes of the request. **A pure function of the settings and the prompt**, which is
@@ -84,8 +87,20 @@ impl Local {
         if let Some(think) = self.think {
             out.push_str(&format!(", \"think\": {}", if think { "true" } else { "false" }));
         }
+        if self.logprobs {
+            out.push_str(", \"logprobs\": true");
+        }
         out.push('}');
         out
+    }
+
+    /// **The reply and how sure the model was of each token in it** — `(token, ln p)`, in order.
+    /// Ollama 0.40.6 returns them, measured 2026-10-21. A `Local` without `logprobs` set returns
+    /// an empty list rather than asking: the request is the caller's to change.
+    pub fn ask_scored(&self, prompt: &str) -> std::io::Result<(Reply, Vec<(String, f64)>)> {
+        let mut tokens = Vec::new();
+        let reply = self.ask_collecting(prompt, &[], &|| true, &mut |_| {}, &mut tokens)?;
+        Ok((reply, tokens))
     }
 
     /// Ask, and read until there is nothing left worth reading.
@@ -147,6 +162,12 @@ impl Local {
     /// that treats it as a reply would be quoting a sentence nobody finished.
     pub fn ask_while(&self, prompt: &str, pictures: &[String], carry_on: &dyn Fn() -> bool,
                      keep: &mut dyn FnMut(&str)) -> std::io::Result<Reply> {
+        self.ask_collecting(prompt, pictures, carry_on, keep, &mut Vec::new())
+    }
+
+    fn ask_collecting(&self, prompt: &str, pictures: &[String], carry_on: &dyn Fn() -> bool,
+                      keep: &mut dyn FnMut(&str), tokens: &mut Vec<(String, f64)>)
+                      -> std::io::Result<Reply> {
         let body = self.body_with(prompt, pictures);
         let (host, port) = split_host(&self.host);
         let stream = TcpStream::connect((host.as_str(), port))?;
@@ -176,6 +197,13 @@ impl Local {
                 continue;
             }
             let Ok(d) = serde_json::from_str::<serde_json::Value>(&line) else { continue };
+            if let Some(each) = d.get("logprobs").and_then(|v| v.as_array()) {
+                for t in each {
+                    if let (Some(tok), Some(lp)) = (t["token"].as_str(), t["logprob"].as_f64()) {
+                        tokens.push((tok.to_string(), lp));
+                    }
+                }
+            }
             let message = &d["message"];
             let thinking = message.get("thinking").and_then(|v| v.as_str()).unwrap_or("");
             let chunk = message.get("content").and_then(|v| v.as_str());

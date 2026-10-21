@@ -121,6 +121,8 @@ fn doubt_still_asks_even_when_acting_is_allowed() {
     assert!(guard.contains("Standing::Allowed"), "{guard}");
     //: **And a 항상 물어봄 rule** — since 2026-10-01, the third thing the automatic path yields to.
     assert!(guard.contains("!must_confirm"), "a rule saying always ask is ignored: {guard}");
+    //: **And a model that was not sure** — since 2026-10-21, `SURE_ENOUGH`.
+    assert!(guard.contains("!unsure"), "an action the model was unsure of runs by itself: {guard}");
     assert!(propose.contains("let must_confirm = rule == Some(argmind_core::rule::Then::Confirm);"),
             "must_confirm no longer means the rule said so:
 {propose}");

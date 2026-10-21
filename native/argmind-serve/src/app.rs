@@ -91,6 +91,12 @@ impl Speaks for Model {
             String::new()
         })
     }
+    fn ask_scored(&mut self, prompt: &str) -> (String, Vec<(String, f64)>) {
+        self.0.ask_scored(prompt).map(|(r, t)| (r.text, t)).unwrap_or_else(|e| {
+            eprintln!("  the model did not answer: {e}");
+            (String::new(), Vec::new())
+        })
+    }
 }
 
 /// Everything the page is told, as it happens — **and the timeline of it**, kept in the one place
@@ -453,7 +459,7 @@ fn think(desk: &mut Desk, out: &Listeners, text: &str) {
     //: screen that step was supposed to produce.
     let mut rest = intent.effects.iter();
     while let Some(effect) = rest.next() {
-        if !propose(desk, out, effect.clone()) {
+        if !propose(desk, out, effect.clone(), intent.sure) {
             let left: Vec<String> = rest.map(|e| label(e, None)).collect();
             if !left.is_empty() {
                 desk.session.history.push(("could not".into(), format!(
@@ -569,10 +575,21 @@ fn looked_up_instead(desk: &mut Desk, out: &Listeners, text: &str) -> bool {
     true
 }
 
+/// **Below this, an action waits for a person even when it would otherwise run by itself.**
+///
+/// Measured 2026-10-21 by `--bin sure`, the probability of the tokens of the reply's `do`: on the
+/// 37 goals of `choosing`, 21 of 27 actions sat at 1.000 and the threshold that kept 90% right was
+/// **0.94** — 21 of 23 right above it, 22 of 27 without it. **Then checked where it was not
+/// chosen**, the browsing pane's 25 goals on live pages: **15 of 16 right at or above 0.94, and
+/// both actions below it wrong** — *구인 글* at 0.223 and *브랜치 목록* at 0.926, each clicking links
+/// nobody asked for beside the right one, which multiplying over every token of `do` pulls down.
+/// Small, and it does not catch a wrong action the model is certain of: two sat at 1.000.
+pub const SURE_ENOUGH: f64 = 0.94;
+
 /// File one offer, and run it when 확인 없이 실행 allows. **Returns whether the step after this
 /// one may go ahead**: not when this one is gone, waits on a question, is refused by a rule, or ran
 /// and did not land.
-fn propose(desk: &mut Desk, out: &Listeners, effect: Effect) -> bool {
+fn propose(desk: &mut Desk, out: &Listeners, effect: Effect, sure: Option<f64>) -> bool {
     //: **Which app this would happen in.** A click knows its widget's window; typing and keys go
     //: to the window in front, which is the one argmind is attending to.
     let mut window = desk.session.eyes.window().1;
@@ -639,6 +656,9 @@ fn propose(desk: &mut Desk, out: &Listeners, effect: Effect) -> bool {
     let doubt = !hint.is_empty();
     //: *Always ask* here means the button, whatever 확인 없이 실행 says.
     let must_confirm = rule == Some(argmind_core::rule::Then::Confirm);
+    //: **How sure the model was of this action** — below [`SURE_ENOUGH`] it waits for a person,
+    //: whoever's idea it was. `None` (a model that cannot say) gates nothing.
+    let unsure = sure.is_some_and(|s| s < SURE_ENOUGH);
     //: **Whose idea it was**, read before the effect is handed over. `unprompted()` is `Some(false)`
     //: for anything a watch or a raised judgement produced, and it is the one thing the automatic
     //: path below is not allowed to carry out.
@@ -665,7 +685,7 @@ fn propose(desk: &mut Desk, out: &Listeners, effect: Effect) -> bool {
     //: **Whose idea it was decides which standing answer counts.** What a person asked for runs on
     //: `acting`; what argmind thought of runs only on `initiative` — two questions, two answers,
     //: the owner's of 2026-09-22 and 2026-10-21.
-    if !doubt && !must_confirm && crate::decided::standing(if its_own_idea { "initiative" } else { "acting" }) == Some(Standing::Allowed) {
+    if !doubt && !must_confirm && !unsure && crate::decided::standing(if its_own_idea { "initiative" } else { "acting" }) == Some(Standing::Allowed) {
         if let Answered::Run(p) = desk.proposals.confirm(token) {
             return act(desk, out, p);
         }
@@ -1689,7 +1709,7 @@ fn say_unprompted(desk: &mut Desk, out: &Listeners, intent: &argmind_core::inten
                   reply: &str) {
     if reply.is_empty() {
         for effect in &intent.effects {
-            if !propose(desk, out, effect.clone()) {
+            if !propose(desk, out, effect.clone(), intent.sure) {
                 break;
             }
         }
@@ -1707,7 +1727,9 @@ fn say_unprompted(desk: &mut Desk, out: &Listeners, intent: &argmind_core::inten
     //: Not spoken aloud. A proposal waits behind a button; a sentence nobody asked for waits
     //: behind nothing, which is why speaking is tied to having been asked.
     for effect in &intent.effects {
-        propose(desk, out, effect.clone());
+        if !propose(desk, out, effect.clone(), intent.sure) {
+            break;
+        }
     }
 }
 
@@ -1890,7 +1912,9 @@ fn raise_it(desk: &mut Desk, out: &Listeners) {
     //: asked for. A turn argmind started itself is the last place to relax either of those, and
     //: after 2026-09-22 only one of the two is still a button.
     for effect in &intent.effects {
-        propose(desk, out, effect.clone());
+        if !propose(desk, out, effect.clone(), intent.sure) {
+            break;
+        }
     }
 }
 
@@ -2406,6 +2430,9 @@ pub fn run(how: How) {
         let hands = platform::hands(dry);
         let mut model = Local::new(&agent_model);
         model.think = Some(false);
+        //: **Each token's probability, for [`SURE_ENOUGH`].** Asked on this one model only: the
+        //: thinking thread and the errands have no actions to be sure of.
+        model.logprobs = true;
         let (voice, voice_is) = if speak { pick_voice() } else { (None, "off") };
         let ear = hear.then(|| (Ear::new(), Whisper::default()));
         let (eyes, hands, on_web) =

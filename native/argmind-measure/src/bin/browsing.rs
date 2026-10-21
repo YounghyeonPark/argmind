@@ -404,6 +404,9 @@ fn main() {
         fn ask(&mut self, prompt: &str) -> String {
             self.0.ask(prompt).map(|r| r.text).unwrap_or_default()
         }
+        fn ask_scored(&mut self, prompt: &str) -> (String, Vec<(String, f64)>) {
+            self.0.ask_scored(prompt).map(|(r, t)| (r.text, t)).unwrap_or_default()
+        }
     }
 
     fn choosing(orders: &Sender<Say>) -> Result<(), String> {
@@ -418,6 +421,8 @@ fn main() {
         }
         println!("\n  ── 고르기: 실제 페이지의 목록, 출하된 프롬프트, qwen3:8b ──");
         let (mut right, mut answerable, mut declined, mut impossible, mut skipped) = (0, 0, 0, 0, 0);
+        //: **The held-out check for `--bin sure`'s threshold**, chosen on the captured screens.
+        let mut held_out: Vec<(f64, bool)> = Vec::new();
         for page in &PAGES {
             let r = read(orders, page.url)?;
             println!("\n  {} — 화면 안 {}", page.url, r.widgets.len());
@@ -443,6 +448,7 @@ fn main() {
                 };
                 let mut model = argmind_env_ollama::Local::new("qwen3:8b");
                 model.think = Some(false);
+                model.logprobs = true;
                 let mut session = Session::new(Fixed(r.widgets.clone()), Nothing, Model(model));
                 let intent = session.decide(&Trigger::said(said));
                 let did: Vec<String> = intent.effects.iter()
@@ -456,14 +462,21 @@ fn main() {
                     }
                     Some((i, w)) => {
                         answerable += 1;
-                        let ok = intent.effects.iter()
+                        //: **One click, on it, and nothing else.** Until 2026-10-21 this asked
+                        //: whether *any* click was right, and *구인 글* clicking `jobs` and two
+                        //: stories nobody asked for read as right.
+                        let ok = intent.effects.len() == 1 && intent.effects.iter()
                             .any(|e| e.kind == "click" && e.target == w.name);
                         right += ok as usize;
                         (ok, format!(" · 정답은 {i}번째"))
                     }
                 };
-                println!("     {said}\n       {} {}{at}  — {}", if ok { "●" } else { "○" },
+                if let Some(sure) = intent.sure {
+                    held_out.push((sure, ok));
+                }
+                println!("     {said}\n       {} {}{at} · 확신도 {}  — {}", if ok { "●" } else { "○" },
                          if did.is_empty() { "(행동 없음)".to_string() } else { did.join(", ") },
+                         intent.sure.map(|s| format!("{s:.3}")).unwrap_or_else(|| "-".into()),
                          intent.say.chars().take(50).collect::<String>());
             }
         }
@@ -474,6 +487,12 @@ fn main() {
         println!("  · 할 수 없는 요청을 거절: {declined}/{impossible} — {}",
                  if impossible > 0 && declined * 5 >= impossible * 4 { "기준대로" } else { "**기준 못 미침**" });
         println!("  · 건너뜀 (목록에 0개이거나 2개 이상): {skipped}");
+        //: **0.94, as `--bin sure` chose it** — not re-chosen here, which is the point.
+        let above: Vec<&(f64, bool)> = held_out.iter().filter(|h| h.0 >= 0.94).collect();
+        let below: Vec<&(f64, bool)> = held_out.iter().filter(|h| h.0 < 0.94).collect();
+        let rate = |v: &[&(f64, bool)]| v.iter().filter(|h| h.1).count();
+        println!("  · 확신도 0.94 이상: {}/{} 맞음 · 미만: {}/{} 맞음",
+                 rate(&above), above.len(), rate(&below), below.len());
         Ok(())
     }
 

@@ -244,13 +244,16 @@ impl<E: Eyes, H: Hands, M: Speaks> Session<E, H, M> {
         let listed: Vec<Widget> = self.seen.iter().take(self.limit).cloned().collect();
         let prompt = crate::converse::render_with(&listed, trigger, &self.recent(),
                                                   self.limit, &self.mind, &self.note);
-        let reply = self.model.ask(&prompt);
+        let (reply, tokens) = self.model.ask_scored(&prompt);
         let intent = read_reply(&reply, &listed, trigger);
         let before = intent.effects.len();
         let effects: Vec<Effect> = intent.effects.into_iter()
             .filter(|e| e.kind != "key" || self.knows_key(&e.text)).collect();
         self.unknown_keys += (before - effects.len()) as u32;
-        Intent { say: intent.say, effects, parroted: intent.parroted }
+        //: How sure of the action, when there is one left after the key filter.
+        let sure = if effects.is_empty() { None }
+                   else { crate::converse::action_sureness(&tokens) };
+        Intent { say: intent.say, effects, parroted: intent.parroted, sure }
     }
 
     /// **One step at a time, each checked against the screen as it is, and the rest stopped by a

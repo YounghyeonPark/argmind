@@ -118,4 +118,10 @@ pub trait Hands {
 /// Asking the model. **It is handed text and returns text** — never an image, never a coordinate.
 pub trait Speaks {
     fn ask(&mut self, prompt: &str) -> String;
+    /// **The reply and each token's probability**, `(token, ln p)`, for a model that can say. The
+    /// default says nothing about certainty — an empty list — so every model that cannot is still a
+    /// model, and nothing reads a certainty that is not there.
+    fn ask_scored(&mut self, prompt: &str) -> (String, Vec<(String, f64)>) {
+        (self.ask(prompt), Vec::new())
+    }
 }

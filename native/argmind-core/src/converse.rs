@@ -320,8 +320,42 @@ pub fn read_reply(reply: &str, listed: &[Widget], trigger: &Trigger) -> Intent {
     if wanted.len() > MOST_AT_ONCE {
         //: The whole batch goes, not the first three. A reply asking for eight things has
         //: misunderstood, and doing three of them is worse than saying so.
-        return Intent { say, effects: Vec::new(), parroted };
+        return Intent { say, effects: Vec::new(), parroted, sure: None };
     }
     let effects = wanted.iter().filter_map(|item| effect_of(item, listed, trigger)).collect();
-    Intent { say, effects, parroted }
+    Intent { say, effects, parroted, sure: None }
+}
+
+/// **How sure the model was of the action part of a reply** — the product of the probabilities of
+/// every token after `"do":`, which is the action given what was already said. The reply shape puts
+/// `say` first, so this is *how sure of the click, having decided what to say*.
+///
+/// `None` when there is no action — `null`, `[]`, or no `do` at all — or no probabilities. Pure, so
+/// it can be checked without a model.
+pub fn action_sureness(tokens: &[(String, f64)]) -> Option<f64> {
+    if tokens.is_empty() {
+        return None;
+    }
+    let mut text = String::new();
+    let mut starts = Vec::with_capacity(tokens.len());
+    for (t, _) in tokens {
+        starts.push(text.len());
+        text.push_str(t);
+    }
+    let key = text.find("\"do\"")?;
+    let colon = key + text[key..].find(':')? + 1;
+    let value = text[colon..].trim_start();
+    if value.starts_with("null") || value.starts_with("[]") || value.is_empty() {
+        return None;
+    }
+    let mut logp = 0.0;
+    let mut any = false;
+    for (i, (t, lp)) in tokens.iter().enumerate() {
+        //: Every token that ends after the colon — a token straddling it carries the value's start.
+        if starts[i] + t.len() > colon && !t.trim().is_empty() {
+            logp += lp;
+            any = true;
+        }
+    }
+    any.then(|| logp.exp())
 }

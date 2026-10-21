@@ -83,6 +83,11 @@ pub struct Intent {
     /// platform**. The core can tell that a mirror happened; only an interface knows how to say
     /// so. See [`crate::converse::parroted`].
     pub parroted: bool,
+    /// **How sure the model was of the action it wrote**: the probability of the tokens of the
+    /// reply's `do`, given everything before them. `None` when there was no action or the model
+    /// cannot say. A score, not a calibrated probability — 2026-10-21 measured this model saying
+    /// 0.90 for a wrong answer — so what it may gate is decided by measurement, not by its value.
+    pub sure: Option<f64>,
 }
 
 /// One whole turn, as it happened.
