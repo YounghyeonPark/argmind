@@ -470,9 +470,10 @@ fn think(desk: &mut Desk, out: &Listeners, text: &str) {
     //: another into a login page. Each step is checked against the screen in `perform`; this is
     //: the other half — what follows a failed step is not offered, because it was planned against a
     //: screen that step was supposed to produce.
+    let asks = argmind_core::converse::asks_first(&reply);
     let mut rest = intent.effects.iter();
     while let Some(effect) = rest.next() {
-        if !propose(desk, out, effect.clone(), intent.sure) {
+        if !propose(desk, out, effect.clone(), intent.sure, asks) {
             let left: Vec<String> = rest.map(|e| label(e, None)).collect();
             if !left.is_empty() {
                 desk.session.history.push(("could not".into(), format!(
@@ -602,8 +603,14 @@ fn worked_instead(desk: &mut Desk, out: &Listeners, text: &str) -> bool {
         return false;
     } else if busy {
         "하던 작업이 아직 안 끝났어요 — 끝나면 다시 말씀해 주세요".to_string()
-    } else if let Some(bench) = crate::platform::workbench() {
-        start_work(desk, text, bench);
+    } else if let Some(files) = crate::platform::workbench() {
+        //: **And the web, when there is a pane** — a trip plan is searching before it is writing.
+        let mut sets: Vec<Box<dyn argmind_core::task::Tools + Send>> = vec![files];
+        if let Some(pane) = desk.web.as_ref() {
+            sets.push(Box::new(argmind_env_browser::WebTools(
+                argmind_env_browser::Pane::new(pane.wire.clone()))));
+        }
+        start_work(desk, text, Box::new(argmind_core::task::Joined(sets)));
         format!("작업 폴더({})에서 해 볼게요 — 끝나면 알려 드릴게요",
                 crate::platform::work_folder().display())
     } else {
@@ -732,7 +739,7 @@ pub const SURE_ENOUGH: f64 = 0.94;
 /// File one offer, and run it when 확인 없이 실행 allows. **Returns whether the step after this
 /// one may go ahead**: not when this one is gone, waits on a question, is refused by a rule, or ran
 /// and did not land.
-fn propose(desk: &mut Desk, out: &Listeners, effect: Effect, sure: Option<f64>) -> bool {
+fn propose(desk: &mut Desk, out: &Listeners, effect: Effect, sure: Option<f64>, asked: bool) -> bool {
     //: **Which app this would happen in.** A click knows its widget's window; typing and keys go
     //: to the window in front, which is the one argmind is attending to.
     let mut window = desk.session.eyes.window().1;
@@ -794,8 +801,9 @@ fn propose(desk: &mut Desk, out: &Listeners, effect: Effect, sure: Option<f64>) 
         return false;
     }
     let doubt = !hint.is_empty();
-    //: *Always ask* here means the button, whatever 확인 없이 실행 says.
-    let must_confirm = rule == Some(argmind_core::rule::Then::Confirm);
+    //: *Always ask* here means the button, whatever 확인 없이 실행 says — and so does a reply that
+    //: itself asked (*찾아볼까요?*): the words wait for the person, so the action does too.
+    let must_confirm = rule == Some(argmind_core::rule::Then::Confirm) || asked;
     //: **How sure the model was of this action** — below [`SURE_ENOUGH`] argmind's own idea is let
     //: go. `None` (a model that cannot say) gates nothing.
     let unsure = sure.is_some_and(|s| s < SURE_ENOUGH);
@@ -1882,7 +1890,7 @@ fn say_unprompted(desk: &mut Desk, out: &Listeners, intent: &argmind_core::inten
                   reply: &str) {
     if reply.is_empty() {
         for effect in &intent.effects {
-            if !propose(desk, out, effect.clone(), intent.sure) {
+            if !propose(desk, out, effect.clone(), intent.sure, false) {
                 break;
             }
         }
@@ -1900,7 +1908,7 @@ fn say_unprompted(desk: &mut Desk, out: &Listeners, intent: &argmind_core::inten
     //: Not spoken aloud. A proposal waits behind a button; a sentence nobody asked for waits
     //: behind nothing, which is why speaking is tied to having been asked.
     for effect in &intent.effects {
-        if !propose(desk, out, effect.clone(), intent.sure) {
+        if !propose(desk, out, effect.clone(), intent.sure, false) {
             break;
         }
     }
@@ -2085,7 +2093,7 @@ fn raise_it(desk: &mut Desk, out: &Listeners) {
     //: asked for. A turn argmind started itself is the last place to relax either of those, and
     //: after 2026-09-22 only one of the two is still a button.
     for effect in &intent.effects {
-        if !propose(desk, out, effect.clone(), intent.sure) {
+        if !propose(desk, out, effect.clone(), intent.sure, false) {
             break;
         }
     }

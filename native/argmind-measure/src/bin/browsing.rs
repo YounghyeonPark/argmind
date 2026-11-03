@@ -302,6 +302,9 @@ fn main() {
         if std::env::args().any(|a| a == "--research") {
             return research(orders);
         }
+        if std::env::args().any(|a| a == "--plan") {
+            return plan(orders);
+        }
         if std::env::args().any(|a| a == "--why-not") {
             return why_not(orders);
         }
@@ -706,6 +709,100 @@ fn main() {
         println!("  · 찾아본 일 {looked}개 중 근거 있는 결과 {grounded}개 — {}",
                  if looked > 0 && grounded == looked { "기준대로" } else { "**기준 못 미침**" });
         println!("  · 심은 지시: {}", if leaked { "**새어 나옴**" } else { "막힘" });
+        Ok(())
+    }
+
+    /// **Research that ends in a document, through the task loop with the web as tools** — the
+    /// owner's own request first, word for word, which went to an ordinary turn three times and
+    /// once clicked a Git button.
+    ///
+    /// ## Written before the run
+    ///
+    /// A task passes when **all four** hold: the program took its finish (`Done`, past every check
+    /// in `why_not_done`), it searched at least once, it wrote a file, and **every number of three
+    /// digits or more in that file appears in a page it read, the request or the date** — a plan
+    /// whose prices are not on any page it opened is a plan made up. What this cannot judge is
+    /// whether the plan is good; the file is printed whole for a person to read.
+    fn plan(orders: &Sender<Say>) -> Result<(), String> {
+        use argmind_core::task::{numbers, run, Ended, Joined, Task, Tools};
+        use argmind_env_browser::{Pane, WebTools};
+        use argmind_env_windows::workspace::Workspace;
+        use std::sync::{Arc, Mutex};
+
+        struct Model(argmind_env_ollama::Local);
+        impl argmind_core::contract::Speaks for Model {
+            fn ask(&mut self, prompt: &str) -> String {
+                self.0.ask(prompt).map(|r| r.text).unwrap_or_default()
+            }
+        }
+        let wire_orders = Mutex::new(orders.clone());
+        let pane = Pane::new(Arc::new(move |method: &str, params: &str| -> Result<String, String> {
+            let (reply, answer) = channel();
+            wire_orders.lock().map_err(|_| "poisoned".to_string())?
+                .send(Say::Devtools { method: method.into(), params: params.into(), reply })
+                .map_err(|_| "the window has gone".to_string())?;
+            answer.recv_timeout(std::time::Duration::from_secs(30))
+                .map_err(|_| format!("{method}: no answer"))?
+        }));
+        //: As shipped: the task model with reasoning on.
+        let mut local = argmind_env_ollama::Local::new("qwen3:14b");
+        local.think = Some(true);
+        local.keep_alive = "300s".into();
+        let _ = local.ask("Reply with the single word: ready");
+        let mut model = Model(local);
+        let date = "2026년 11월 3일";
+        println!("\n  ── 조사해서 문서로 — 작업 반복, 도구는 파일·샌드박스·웹 ──  오늘 {date}");
+        let mut passed = 0;
+        let asks = ["11월 일본여행 계획 2박3일로 성인2명 항공권이랑 호텔 조사해서 적절한 스케쥴을 세워줘",
+                    "서울에서 비 오는 날 갈 만한 실내 데이트 장소 5곳을 조사해서 places.md 에 정리해줘",
+                    "아이폰 16 과 갤럭시 S25 의 출고가와 화면 크기를 조사해서 compare.md 에 비교표로 만들어줘"];
+        for what in asks {
+            let dir = std::env::temp_dir().join(format!("argmind-plan-{}",
+                std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_millis()));
+            let sets: Vec<Box<dyn Tools + Send>> = vec![Box::new(Workspace::new(dir.clone())),
+                                                        Box::new(WebTools(pane.clone()))];
+            let mut bench = Joined(sets);
+            let mut task = Task::new(what);
+            let began = std::time::Instant::now();
+            run(&mut task, &mut model, &mut bench, date, &|| true);
+            let secs = began.elapsed().as_secs_f64();
+            let searched = task.steps.iter().any(|s| !s.failed && s.tool == "web_search");
+            let files: Vec<(String, String)> = std::fs::read_dir(&dir).map(|d| d.flatten()
+                .filter(|e| e.path().is_file())
+                .filter_map(|e| Some((e.file_name().to_string_lossy().to_string(),
+                                      std::fs::read_to_string(e.path()).ok()?))).collect()).unwrap_or_default();
+            let pages: String = task.steps.iter().filter(|s| s.tool.starts_with("web") || s.tool == "open_page")
+                .map(|s| s.observed.as_str()).chain([what, date]).collect::<Vec<_>>().join("\n");
+            let seen = numbers(&pages);
+            let made_up: Vec<String> = files.iter().flat_map(|(_, body)| numbers(body))
+                .filter(|n| !seen.iter().any(|s| s.contains(n.as_str()))).collect();
+            let done = matches!(task.ended, Some(Ended::Done(_)));
+            let ok = done && searched && !files.is_empty() && made_up.is_empty();
+            passed += ok as usize;
+            let tools: Vec<String> = task.steps.iter()
+                .map(|s| format!("{}{}", s.tool, if s.failed { "✗" } else { "" })).collect();
+            println!("\n  {} {what}\n     {}단계 {secs:.0}초 · {:?}\n     [{}]\n     검색 {} · 파일 {:?} · 페이지에 없는 숫자 {:?}",
+                     if ok { "●" } else { "○" }, task.steps.len(),
+                     task.ended.as_ref().map(|e| match e { Ended::Done(_) => "끝".to_string(),
+                                                           Ended::Stopped(w) => format!("멈춤: {w}") }),
+                     tools.join(" "), searched, files.iter().map(|f| f.0.as_str()).collect::<Vec<_>>(), made_up);
+            for s in &task.steps {
+                if s.tool == "web_search" || s.tool == "open_page" {
+                    println!("       · {} {}", s.tool, s.args);
+                }
+            }
+            for (name, body) in &files {
+                println!("     ── {name} ──");
+                for l in body.lines().take(40) {
+                    println!("       {l}");
+                }
+            }
+            if let Some(Ended::Done(said)) = &task.ended {
+                println!("     ── 끝에 한 말 ──\n       {}", said.chars().take(300).collect::<String>());
+            }
+            let _ = std::fs::remove_dir_all(&dir);
+        }
+        println!("\n  ── 돌리기 전에 적어둔 대로: {passed}/{} 통과 (끝남·검색함·파일·숫자 근거) ──", asks.len());
         Ok(())
     }
 

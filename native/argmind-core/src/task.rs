@@ -70,6 +70,35 @@ pub trait Tools {
     }
 }
 
+/// **Several tool sets as one** — the workbench's files and commands beside the web, say. A name
+/// goes to the first set that offers it; a path is missing if any set says so.
+pub struct Joined(pub Vec<Box<dyn Tools + Send>>);
+
+impl Tools for Joined {
+    fn list(&self) -> Vec<ToolSpec> {
+        self.0.iter().flat_map(|t| t.list()).collect()
+    }
+    fn call(&mut self, tool: &str, args: &Value) -> Result<String, String> {
+        for t in self.0.iter_mut() {
+            if t.list().iter().any(|s| s.name == tool) {
+                return t.call(tool, args);
+            }
+        }
+        Err(format!("그런 도구는 없다: {tool}"))
+    }
+    fn missing(&self, paths: &[String]) -> Vec<String> {
+        let mut out: Vec<String> = Vec::new();
+        for t in &self.0 {
+            for p in t.missing(paths) {
+                if !out.contains(&p) {
+                    out.push(p);
+                }
+            }
+        }
+        out
+    }
+}
+
 /// One step as it happened.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Step {
@@ -196,11 +225,17 @@ pub fn file_names(text: &str) -> Vec<String> {
 /// name, 파일, 문서, 코드…) and something to do to it (만들, 고쳐, 실행, 요약…). An address is
 /// not a file, so `naver.com` does not count; *메모장 열어줘* has nothing to do to a thing and stays
 /// a turn on the desktop.
+///
+/// **And research that ends in a plan** — since 2026-11-03, when *11월 일본여행 계획 2박3일로 성인2명
+/// 항공권이랑 호텔 조사해서 적절한 스케쥴을 세워줘* went to an ordinary turn three times, was answered
+/// *찾아볼까요?* each time, and once clicked a Git button in the editor.
 pub fn asks_for_work(text: &str) -> bool {
-    const THINGS: [&str; 14] = ["파일", "문서", "코드", "스크립트", "프로그램", "보고서", "엑셀", "csv",
-                                "CSV", "파이썬", "python", "Python", "테스트", "작업 폴더"];
-    const DOING: [&str; 17] = ["만들", "작성", "고쳐", "고치", "수정", "바꿔", "정리", "실행", "계산",
-                               "요약", "써 줘", "써줘", "짜 줘", "짜줘", "돌려", "분석", "번역"];
+    const THINGS: [&str; 22] = ["파일", "문서", "코드", "스크립트", "프로그램", "보고서", "엑셀", "csv",
+                                "CSV", "파이썬", "python", "Python", "테스트", "작업 폴더",
+                                "계획", "일정", "스케줄", "스케쥴", "여행", "비교", "목록", "리스트"];
+    const DOING: [&str; 22] = ["만들", "작성", "고쳐", "고치", "수정", "바꿔", "정리", "실행", "계산",
+                               "요약", "써 줘", "써줘", "짜 줘", "짜줘", "돌려", "분석", "번역",
+                               "조사", "세워", "알아봐", "찾아서", "찾아 "];
     const ADDRESSES: [&str; 6] = ["com", "net", "org", "kr", "io", "html"];
     let names_a_file = file_names(text).iter().any(|f| {
         let ext = f.rsplit('.').next().unwrap_or("");
@@ -217,7 +252,52 @@ pub fn numbers(text: &str) -> Vec<String> {
         !(c == ',' && i > 0 && chars[i - 1].is_ascii_digit()
           && chars.get(i + 1).is_some_and(|n| n.is_ascii_digit()))
     }).map(|(_, &c)| c).collect();
-    joined.split(|c: char| !c.is_ascii_digit()).filter(|d| d.len() >= 3).map(str::to_string).collect()
+    //: **And any number with 만 or 억 after it, written out** — *48만원* is a price of two digits,
+    //: and a trip plan's *48만~58만원* went past a rule that only read three. Written out on both
+    //: sides, so *48만원* on a page answers *480,000원* in a plan and the other way round.
+    let jc: Vec<char> = joined.chars().collect();
+    let mut out = Vec::new();
+    let mut i = 0;
+    while i < jc.len() {
+        if !jc[i].is_ascii_digit() {
+            i += 1;
+            continue;
+        }
+        let start = i;
+        while i < jc.len() && jc[i].is_ascii_digit() {
+            i += 1;
+        }
+        let digits: String = jc[start..i].iter().collect();
+        let unit = jc[i..].iter().find(|c| !c.is_whitespace());
+        let zeros = match unit {
+            Some('만') => Some(4),
+            Some('억') => Some(8),
+            _ => None,
+        };
+        match zeros {
+            Some(z) => out.push(format!("{}{}", digits.trim_start_matches('0'), "0".repeat(z))),
+            None if digits.len() >= 3 => out.push(digits),
+            None => {}
+        }
+    }
+    out
+}
+
+/// What the task wrote, by path: whole files and the replacing half of edits.
+fn written_files(task: &Task) -> Vec<(String, String)> {
+    task.steps.iter().filter(|s| !s.failed && (s.tool == "write_file" || s.tool == "edit_file"))
+        .filter_map(|s| {
+            let path = s.args.get("path")?.as_str()?.to_string();
+            let body = s.args.get("content").or_else(|| s.args.get("replace"))?.as_str()?.to_string();
+            Some((path, body))
+        }).collect()
+}
+
+/// A file that is a program, whose numbers are its own business rather than claims about the world.
+fn is_code(path: &str) -> bool {
+    const CODE: [&str; 14] = ["py", "js", "ts", "sh", "ps1", "rs", "c", "cpp", "h", "java", "go", "rb",
+                              "bat", "sql"];
+    path.rsplit_once('.').is_some_and(|(_, ext)| CODE.contains(&ext.to_ascii_lowercase().as_str()))
 }
 
 /// **Why a `done` cannot be taken at its word**, or `None`. From the first measurement: qwen3:8b
@@ -244,16 +324,25 @@ pub fn why_not_done(task: &Task, said: &str, tools: &dyn Tools, today: &str) -> 
     }
     //: **Not the refusals**: a refusal quotes the number it refused, and the first version let the
     //: same invented *150000* through on the second try because it had now been "seen".
-    //: **And what the work itself wrote**: a test file holding `is_leap(1900)` is a source for
-    //: *1900*, and leaving arguments out refused a right finish in `--bin complex`.
-    let written: Vec<String> = task.steps.iter().filter(|s| s.tool != "done" && !s.failed)
-        .map(|s| s.args.to_string()).collect();
+    //: **And the code the work wrote — code, not prose.** A test file holding `is_leap(1900)` is a
+    //: source for *1900*; leaving it out refused a right finish in `--bin complex`. The first fix
+    //: counted *every* write, and a trip plan then wrote hotel prices no page had shown into
+    //: `notes.md` and was taken on the strength of its own file. So a document's numbers are
+    //: checked like the closing words', and only code is a source.
+    let code: Vec<String> = written_files(task).into_iter().filter(|(p, _)| is_code(p))
+        .map(|(_, body)| body).collect();
     let seen: String = task.steps.iter().filter(|s| s.tool != "done").map(|s| s.observed.as_str())
-        .chain(written.iter().map(String::as_str))
+        .chain(code.iter().map(String::as_str))
         .chain([task.what.as_str(), today]).collect::<Vec<_>>().join("\n");
     let seen_numbers = numbers(&seen);
-    let unseen: Vec<String> = numbers(said).into_iter()
-        .filter(|n| !seen_numbers.iter().any(|s| s.contains(n.as_str()))).collect();
+    let prose: String = written_files(task).into_iter().filter(|(p, _)| !is_code(p))
+        .map(|(_, body)| body).collect::<Vec<_>>().join("\n");
+    let mut unseen: Vec<String> = Vec::new();
+    for n in numbers(said).into_iter().chain(numbers(&prose)) {
+        if !seen_numbers.iter().any(|s| s.contains(n.as_str())) && !unseen.contains(&n) {
+            unseen.push(n);
+        }
+    }
     if !unseen.is_empty() {
         return Some(format!("{} 은(는) 어떤 도구 결과에도 나온 적이 없는 숫자다. 계산은 명령을 실행해서 \
 결과로 확인하라", unseen.join(", ")));
@@ -478,7 +567,20 @@ mod tests {
         step(&mut t, &mut model, &mut tools, "오늘");
         assert!(t.ended.is_none() && t.steps[1].observed.contains("summary.md"), "{:?}", t.steps);
 
-        //: A number the work itself wrote is a source: the test file holds 1900.
+        //: A number in a document it wrote, from no page: refused, though the closing words name
+        //: no number at all.
+        let mut model = Scripted(vec![
+            r#"{"tool": "run", "args": {"command": "python3 a.py"}}"#,
+            r#"{"tool": "write_file", "args": {"path": "plan.md", "content": "호텔 150,000원"}}"#,
+            r#"{"done": "계획을 썼습니다"}"#,
+        ]);
+        let mut t = Task::new("x");
+        for _ in 0..3 {
+            step(&mut t, &mut model, &mut Box_::default(), "오늘");
+        }
+        assert!(t.ended.is_none() && t.steps[2].observed.contains("150000"), "{:?}", t.steps);
+
+        //: A number the code itself wrote is a source: the test file holds 1900.
         let mut model = Scripted(vec![
             r#"{"tool": "write_file", "args": {"path": "t.py", "content": "assert not is_leap(1900)"}}"#,
             r#"{"done": "1900년이 윤년이 아님을 검사합니다"}"#,
@@ -516,7 +618,12 @@ mod tests {
                     "보고서 문서 하나 작성해줘", "파이썬으로 엑셀 정리하는 코드 짜줘"] {
             assert!(asks_for_work(yes), "{yes}");
         }
+        for yes in ["11월 일본여행 계획 2박3일로 성인2명 항공권이랑 호텔 조사해서 적절한 스케쥴을 세워줘",
+                    "노트북 세 개 가격 비교해서 표로 정리해줘"] {
+            assert!(asks_for_work(yes), "{yes}");
+        }
         for no in ["메모장 열어줘", "오늘 서울 날씨 알려줘", "네이버에서 메일 열어줘", "검색창 눌러줘",
+                   "여행 가고 싶다", "일정 보여줘",
                    "naver.com 열어서 정리해줘", "고마워", "이 파일 열어줘", "나를 대표님이라고 불러"] {
             assert!(!asks_for_work(no), "{no}");
         }
@@ -527,6 +634,7 @@ mod tests {
         assert_eq!(file_names("summary.md에 쓰고 calc.py 를 고쳤다. 3.14 와 316000.0"),
                    vec!["summary.md", "calc.py"]);
         assert_eq!(numbers("합계 1,580,000원, 평균 316000.0, 12월 5일, 2개"), vec!["1580000", "316000"]);
+        assert_eq!(numbers("48만~58만원, 1억 원, 3 만"), vec!["480000", "580000", "100000000", "30000"]);
     }
 
     #[test]

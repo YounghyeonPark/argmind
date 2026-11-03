@@ -332,6 +332,15 @@ pub fn read_reply(reply: &str, listed: &[Widget], trigger: &Trigger) -> Intent {
 ///
 /// `None` when there is no action — `null`, `[]`, or no `do` at all — or no probabilities. Pure, so
 /// it can be checked without a model.
+/// **Does this reply ask before doing?** *찾아볼까요?* with a click beside it is two answers to one
+/// question — the words say *shall I* and the action slot says *I did*. The owner's request for a
+/// trip plan was answered that way and the click was a Git button in the editor. A question ending
+/// in *까요?* means the action waits for the person, however 확인 없이 실행 is set.
+pub fn asks_first(say: &str) -> bool {
+    let s = say.trim().trim_end_matches(|c: char| c == '!' || c.is_whitespace());
+    s.ends_with('?') && s.contains("까요")
+}
+
 pub fn action_sureness(tokens: &[(String, f64)]) -> Option<f64> {
     if tokens.is_empty() {
         return None;
@@ -358,4 +367,17 @@ pub fn action_sureness(tokens: &[(String, f64)]) -> Option<f64> {
         }
     }
     any.then(|| logp.exp())
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn a_reply_that_asks_holds_its_action() {
+        for q in ["먼저 항공권과 호텔을 찾아볼까요?", "검색해 볼까요? ", "이걸로 할까요?!"] {
+            assert!(super::asks_first(q), "{q}");
+        }
+        for s in ["검색했습니다", "무엇을 찾으세요?", "열었어요. 더 볼까요 말까요는 나중에", ""] {
+            assert!(!super::asks_first(s), "{s}");
+        }
+    }
 }
