@@ -197,9 +197,36 @@
      confirming the device is open. They differ when a microphone fails to start. */
   #talk.holding { border-color: var(--warn); }
   #talk.listening { background: #fdf3ea; }
+
+  /* **조용한 화면 — the default since 2026-11-03.** The owner: 앱 인터페이스에 불필요한 내용이
+     너무 많이 나옴. 기본적으로 안보이게 해주고, 구형 화면만 나오고 argmind가 이야기 하는건
+     자막형태로. So the sphere fills the window, what argmind says is a subtitle under it, and
+     everything else — the header, the panels, the transcript, the notes — is one press of ⋯ away.
+     **What a person has to answer is never hidden**: the questions, the rows that ask before acting
+     and the 기억/찾아보기 offers live in #pending and stay; the permission window and anything
+     missing stay too. Hiding those would make argmind look stuck while it waits for somebody. */
+  body.quiet header, body.quiet #spent, body.quiet details, body.quiet #webbar,
+  body.quiet #transcript { display: none !important; }
+  body.quiet #pending:not(:empty) { border-top: none; background: rgba(250, 249, 246, .92); }
+  body.quiet #form { border-top: none; background: transparent; }
+  body.quiet #said { background: rgba(255, 255, 255, .7); }
+  #subtitle { position: absolute; left: 0; right: 0; bottom: 18px; padding: 0 22px;
+              text-align: center; font-size: 17px; line-height: 1.6; color: var(--ink);
+              pointer-events: none; opacity: 0; transition: opacity .6s ease; }
+  #subtitle.on { opacity: 1; }
+  #subtitle span { background: rgba(250, 249, 246, .88); padding: 3px 10px; border-radius: 6px;
+                   -webkit-box-decoration-break: clone; box-decoration-break: clone;
+                   white-space: pre-wrap; }
+  body:not(.quiet) #subtitle { display: none; }
+  #detail { position: fixed; top: 6px; right: 8px; z-index: 5; padding: 0 8px; line-height: 1.6;
+            opacity: .45; background: transparent; }
+  #detail:hover { opacity: .9; }
+  body:not(.quiet) #detail { opacity: .7; }
 </style>
 
-<body data-token="__TOKEN__">
+<body data-token="__TOKEN__" class="quiet">
+  <!-- The one control the quiet view shows: everything else, one press away. -->
+  <button type="button" id="detail" title="자세히 보기 / 간단히 보기">⋯</button>
   <header>
     <span id="attending">…</span>
     <!-- State, not a control: the switch lives in 설정 since 2026-09-17, because watching is on
@@ -410,6 +437,9 @@
            page does not also say in words, so it must never be the thing in the way of them. -->
       <canvas id="orb" aria-hidden="true"></canvas>
       <div id="transcript"></div>
+      <!-- What argmind says, as a subtitle under the sphere — shown in the quiet view only, and
+           gone again after long enough to read it. The transcript keeps every line regardless. -->
+      <div id="subtitle" aria-live="polite"><span></span></div>
     </div>
   </div>
   <div id="pending"></div>

@@ -229,7 +229,41 @@ const eye = orb(document.getElementById("orb") as HTMLCanvasElement);
 // The conversation is the content. The sphere is presence, and presence recedes once there is
 // something to read.
 function recede(): void {
-  eye.presence(transcript.childElementCount === 0 ? 1 : 0.4);
+  //: In the quiet view there is no text over the sphere to give way to, so it stays whole.
+  eye.presence(quiet() || transcript.childElementCount === 0 ? 1 : 0.4);
+}
+
+// 조용한 화면, and the ⋯ that opens everything else. Remembered per viewer — a convenience, so
+// storage that is missing or refused just means the quiet default.
+const detail = document.getElementById("detail") as HTMLButtonElement;
+const subtitle = document.getElementById("subtitle") as HTMLElement;
+let subtitleTimer: number | undefined;
+
+function quiet(): boolean {
+  return document.body.classList.contains("quiet");
+}
+
+function setQuiet(on: boolean): void {
+  document.body.classList.toggle("quiet", on);
+  try { localStorage.setItem("argmind-view", on ? "quiet" : "full"); } catch { /* no storage */ }
+  recede();
+}
+
+try {
+  if (localStorage.getItem("argmind-view") === "full") document.body.classList.remove("quiet");
+} catch { /* no storage: the quiet default stands */ }
+
+detail.onclick = () => setQuiet(!quiet());
+
+/** What argmind said, as a subtitle, for long enough to read it — about eight characters a second
+ *  and never less than four seconds, so a short answer does not blink past. */
+function subtitleShow(text: string): void {
+  const span = subtitle.firstElementChild as HTMLElement;
+  span.textContent = text;
+  subtitle.classList.add("on");
+  if (subtitleTimer !== undefined) clearTimeout(subtitleTimer);
+  subtitleTimer = window.setTimeout(() => subtitle.classList.remove("on"),
+                                    Math.min(20000, 4000 + text.length * 120));
 }
 recede();
 
@@ -308,6 +342,7 @@ for (const kind of ["them", "say", "note"] as Kind[]) {
     //: A reply is the event the person is waiting for; what they typed is not news to them.
     if (kind === "say") {
       eye.jolt("said");
+      subtitleShow((e as MessageEvent).data);
     }
   });
 }
@@ -1518,8 +1553,9 @@ stream.addEventListener("lookup-offer", (e) => {
   no.textContent = "아니요";
   no.onclick = () => row.remove();
   row.append(ask, yes, no);
-  transcript.append(row);
-  transcript.scrollTop = transcript.scrollHeight;
+  //: **Where questions live**, not in the transcript — so the quiet view, which hides the
+  //: transcript, still shows something waiting for an answer.
+  pending.append(row);
 });
 
 // **기억해 둘까요?** — offered by the program after a turn that reads as a correction or a
@@ -1540,8 +1576,9 @@ stream.addEventListener("keep-offer", (e) => {
   no.textContent = "아니요";
   no.onclick = () => row.remove();
   row.append(ask, yes, no);
-  transcript.append(row);
-  transcript.scrollTop = transcript.scrollHeight;
+  //: **Where questions live**, not in the transcript — so the quiet view, which hides the
+  //: transcript, still shows something waiting for an answer.
+  pending.append(row);
 });
 
 function dialRow(d: Dial, most: number): HTMLElement {
