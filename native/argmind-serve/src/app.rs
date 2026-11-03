@@ -397,16 +397,20 @@ fn think(desk: &mut Desk, out: &Listeners, text: &str) {
     if !desk.heard_last.take().is_some_and(|h| h == text) {
         out.record("들음", text);
     }
-    if kept_instead(desk, out, text) {
-        return;
-    }
-    if worked_instead(desk, out, text) {
-        return;
-    }
-    if looked_up_instead(desk, out, text) {
-        return;
-    }
-    if moved_web_instead(desk, out, text) {
+    //: **One decision, in `crate::route`**, which `--bin routing` measures — the same function, so
+    //: a miss there is a miss here. Each path still checks what it needs before it acts.
+    let route = crate::route::by_rules(text, desk.web.is_some(), desk.on_web.get(),
+                                       desk.working.load(Ordering::SeqCst));
+    out.record("길", route.name());
+    let handled = match route {
+        crate::route::Route::Keep => kept_instead(desk, out, text),
+        crate::route::Route::Work => worked_instead(desk, out, text),
+        crate::route::Route::LookUp => looked_up_instead(desk, out, text),
+        //: On a turn too: a desktop app named with the pane up takes the pane down and returns
+        //: false, so the turn carries on at the desktop.
+        crate::route::Route::Web | crate::route::Route::Turn => moved_web_instead(desk, out, text),
+    };
+    if handled {
         return;
     }
     //: **Held for the whole turn, and it clears itself.** While this is alive the senses stand

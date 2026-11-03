@@ -131,6 +131,7 @@ dependencies = [
  "argmind-env-ollama",
  "argmind-env-qwentts",
  "argmind-env-windows",
+ "argmind-serve",
  "argmind-window",
  "serde_json",
  "sha2",

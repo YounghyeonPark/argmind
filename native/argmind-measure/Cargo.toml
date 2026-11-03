@@ -7,6 +7,8 @@ license = "Apache-2.0"
 
 [dependencies]
 argmind-core = { path = "../argmind-core" }
+# **The routing rules as the application runs them**, for `--bin routing` — no window, no eyes.
+argmind-serve = { path = "../argmind-serve", default-features = false }
 argmind-env-ollama = { path = "../argmind-env-ollama" }
 # The harness layer uses a capability; the capability never uses the harness.
 # measure/capture.py imports argmind.env.windows for the same reason, in the same direction.
