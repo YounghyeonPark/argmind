@@ -26,6 +26,7 @@ pub mod microphone;
 pub mod patterns;
 pub mod speaker;
 pub mod supervise;
+pub mod workspace;
 pub use hands::{Reach, WindowsHands};
 pub use attending::{Attending, Watcher};
 pub use cover::Cover;

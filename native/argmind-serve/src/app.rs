@@ -236,6 +236,11 @@ struct Desk {
     heard_last: Option<String>,
     /// How many lines of the history are already in the conversation file.
     kept_lines: usize,
+    /// **A task under way** — one at a time — and the bit that stops it between steps.
+    working: Arc<AtomicBool>,
+    stop_work: Arc<AtomicBool>,
+    /// Where a finished task reports back, so its result enters the history on this thread.
+    jobs: Sender<Job>,
     /// Judgements already raised this session, by name and role — see `raise_it`.
     raised: Vec<(String, String)>,
     /// **규칙**, read at startup and replaced whole from the page. See [`argmind_core::rule`].
@@ -308,6 +313,8 @@ enum Job {
     Web(bool),
     WebGo(String),
     Keep(String),
+    /// A task ended, with what to tell the person — said and kept in the history.
+    Worked(String),
     Unkeep(usize),
     ForgetConversation,
     Activity,
@@ -391,6 +398,9 @@ fn think(desk: &mut Desk, out: &Listeners, text: &str) {
         out.record("들음", text);
     }
     if kept_instead(desk, out, text) {
+        return;
+    }
+    if worked_instead(desk, out, text) {
         return;
     }
     if looked_up_instead(desk, out, text) {
@@ -539,6 +549,83 @@ fn moved_web_instead(desk: &mut Desk, out: &Listeners, text: &str) -> bool {
     desk.session.history.push(("you".into(), reply.clone()));
     out.send("say", &reply);
     true
+}
+
+/// The model a task runs on. **Chosen by `--bin tasks`, written down before it ran**: qwen3:14b
+/// passed 6 of 6 against qwen3:8b's 0, where 8b ended its tasks by saying they were done. The
+/// conversation stays on the session's model, which every other harness measured.
+pub const TASK_MODEL: &str = "qwen3:14b";
+
+/// **Work, rather than a turn: carried to the end by the task loop** — the owner, 2026-11-03:
+/// *문서수정이나 작성 그리고 코드도 필요하면 생성해야하고 실행도 스스로.* One task at a time, on its
+/// own thread so the conversation goes on; each step goes on the timeline as it happens, and what
+/// it ended with is said and kept. Between steps it waits out a turn, the rule every sense keeps.
+/// **Not gated by 확인 없이 실행**: what it touches is the work folder, a sandbox that can reach only
+/// that folder, and PowerShell in it — the last one weaker, and said so in `workspace.rs`.
+fn worked_instead(desk: &mut Desk, out: &Listeners, text: &str) -> bool {
+    let busy = desk.working.load(Ordering::SeqCst);
+    let reply = if busy && ["멈춰", "그만"].iter().any(|w| text.contains(w)) {
+        desk.stop_work.store(true, Ordering::SeqCst);
+        "하던 작업을 멈출게요".to_string()
+    } else if !argmind_core::task::asks_for_work(text) {
+        return false;
+    } else if busy {
+        "하던 작업이 아직 안 끝났어요 — 끝나면 다시 말씀해 주세요".to_string()
+    } else if let Some(bench) = crate::platform::workbench() {
+        start_work(desk, text, bench);
+        format!("작업 폴더({})에서 해 볼게요 — 끝나면 알려 드릴게요",
+                crate::platform::work_folder().display())
+    } else {
+        "이 환경에서는 파일이나 명령을 다룰 수 없습니다".to_string()
+    };
+    desk.session.history.push(("them".into(), text.to_string()));
+    desk.session.history.push(("you".into(), reply.clone()));
+    out.send("say", &reply);
+    true
+}
+
+fn start_work(desk: &Desk, what: &str, mut bench: Box<dyn argmind_core::task::Tools + Send>) {
+    use argmind_core::task::{step, Ended, Task};
+    let (working, stop, turn) = (Arc::clone(&desk.working), Arc::clone(&desk.stop_work), desk.turn.clone());
+    let (jobs, out, what) = (desk.jobs.clone(), Arc::clone(&desk.speaks_to), what.to_string());
+    working.store(true, Ordering::SeqCst);
+    stop.store(false, Ordering::SeqCst);
+    std::thread::spawn(move || {
+        let mut local = Local::new(TASK_MODEL);
+        local.think = Some(false);
+        local.keep_alive = "300s".into();
+        let mut model = Model(local);
+        let mut task = Task::new(&what);
+        let today = crate::platform::today();
+        out.record("작업", &format!("시작: {what}"));
+        loop {
+            while turn.in_flight() && !stop.load(Ordering::SeqCst) {
+                std::thread::sleep(std::time::Duration::from_millis(200));
+            }
+            if stop.load(Ordering::SeqCst) {
+                task.ended = Some(Ended::Stopped("사람이 멈췄습니다".into()));
+                break;
+            }
+            let before = task.steps.len();
+            let going = step(&mut task, &mut model, bench.as_mut(), &today);
+            for s in &task.steps[before..] {
+                let first = s.observed.lines().find(|l| !l.trim().is_empty()).unwrap_or("");
+                let args: String = s.args.to_string().chars().take(80).collect();
+                out.record("작업", &format!("{}{} {args} → {}", s.tool, if s.failed { " ✗" } else { "" },
+                                            first.chars().take(100).collect::<String>()));
+            }
+            if !going {
+                break;
+            }
+        }
+        let said = match task.ended {
+            Some(Ended::Done(s)) => s,
+            Some(Ended::Stopped(why)) => format!("작업을 다 끝내지 못했습니다 — {why}"),
+            None => "작업이 멈췄습니다".into(),
+        };
+        working.store(false, Ordering::SeqCst);
+        let _ = jobs.send(Job::Worked(said));
+    });
 }
 
 /// **A question about now, asked while argmind looks at its pane, is looked up by the program.**
@@ -2474,6 +2561,7 @@ pub fn run(how: How) {
     }
 
     let agent_out = Arc::clone(&out);
+    let agent_jobs = jobs.clone();
     let agent_model = model_name.clone();
     //: Everything COM touches lives on this thread and never leaves it.
     std::thread::spawn(move || {
@@ -2519,6 +2607,8 @@ pub fn run(how: How) {
                               errands: crate::errands::remembered(), stepped_at: 0.0,
                               rules: crate::rules::remembered(), heard_last: None,
                               raised: Vec::new(), kept_lines: 0,
+                              working: Arc::new(AtomicBool::new(false)),
+                              stop_work: Arc::new(AtomicBool::new(false)), jobs: agent_jobs,
                               facing_now: Arc::new(Mutex::new(None)),
                               face_seen_at: Arc::new(Mutex::new(None)) };
         //: **The button is the permission, which is what this flag is for** — `session.rs`:
@@ -2850,6 +2940,10 @@ pub fn run(how: How) {
                 Job::ClearActivity => {
                     agent_out.forget_timeline();
                     agent_out.frame("activity", "[]");
+                }
+                Job::Worked(said) => {
+                    desk.session.history.push(("you".into(), said.clone()));
+                    agent_out.send("say", &said);
                 }
                 Job::Keep(text) => {
                     match crate::mind::keep(&text) {

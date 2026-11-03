@@ -63,6 +63,8 @@ the two days that built this, three of them flattering.
                                 converse.rs  one call: what to say, and what if anything to do
                                 session.rs   observe / decide / perform, separately
                                 watch.rs     a trigger that starts from a change, with its floor
+                                task.rs      work carried to the end: one tool a step, the
+                                             record verbatim, a `done` checked against it
                                 errand.rs    work handed over: check, think, conclude — the
                                              program deciding when, the model one thing each
                                 mind.rs      (also) the sentences it was asked to keep
@@ -326,6 +328,27 @@ cannot answer, and every screen check in `perform`. **argmind's own idea, doubtf
 `notice` pauses while the pane is up: a switch to Snipping Tool had been planned against the pane's
 list as *click Naver's search box*.
 
+**Work is carried to the end by a loop the program runs — since 2026-11-03.** The owner: *복잡한
+업무도 처리가능해야함 문서수정이나 작성 그리고 코드도 필요하면 생성해야하고 실행도 스스로.* A turn picks
+at most three clicks from one look; work is `argmind_core::task` — **the model picks one tool and
+its arguments a step, the program runs it and writes down what came back verbatim**, and the program
+decides when to stop (25 steps, three failures, the third identical call). The workbench is
+`argmind-env-windows::workspace`: files inside `%USERPROFILE%\argmind-work` with `..` and absolute
+paths refused and every replaced file backed up, `run` in **`argmind-sandbox`, a WSL distro of
+argmind's own with drive mounting and interop off** that mounts only that folder per command, and
+`run_windows` as PowerShell in it — weaker, and said so. Chosen by the owner: both, by the work.
+**And a `done` is not taken at its word**: the first run had qwen3:8b end five of six tasks after
+0–2 steps with a summary it had not written and a total — *합계는 150000* — no command printed, so
+`why_not_done` refuses a finish with nothing done, one naming a file that is not there, or one
+holding a number of three digits or more that no tool result, the request or the date contains.
+What it cannot catch is a sentence that claims and names nothing checkable — 8b's *calc.py 를
+수정했습니다* after only reading it went through. `asks_for_work` is the word rule that routes a
+turn there (a thing — a file name, 파일, 문서, 코드… — and a doing — 만들, 고쳐, 실행, 요약…);
+**one task at a time on its own thread**, each step on the timeline as 작업, waiting out a turn
+between steps, *멈춰* stopping it, the end said and kept. **Not run inside the application from
+here**: driving the server means opening the page, and that applies standing answers that open the
+camera and microphone.
+
 **One call, not two.** A round trip is the budget: 0.45 s warm, 4.7 s and 5.9 s for the first two.
 
 ## The numbers, as they stand
@@ -369,6 +392,7 @@ list as *click Naver's search box*.
 | seeing a room | **three answers, and the top one is a negative.** `qwen3-vl:8b` on one photograph per room state, the occupant reading back both times, 16 asks. *Somebody is there* and *a yellow cup* are **16 of 16 at every size down to 160×90 and 43 kB** — neither word is in the question, so the cup is the token that could not be guessed. **The gaze is where the sizes part**: 4 of 4 from 320×180 up, **1 of 4 at 160×90**, which said 보고 있습니다 in *both* states — a size that answers the same whether or not the thing is true is not reading it. **And the largest arm invented a detail**: 1920×1080 added *눈을 감고* on 2 of 3 asks and the eyes were open, the only false claim in sixteen captions, at the one size with twice the tokens. So **320×180** — the arm above it is not the cautious choice. Costs nothing extra: warm, 6 MB at 2102 tokens is **not distinguishable** from 43 kB at 1137, and the 17.2 s first read was the model arriving on the card, written up as the token count and **withdrawn**. Negative control **0 of 3** on flat grey, noise and the four-square test card, and the harness's own tally was wrong there — it knew one Korean negation — which only the sentence printed beside it revealed. Binary question, so **it cannot reach p < 0.05**, and the second room state was luck |
 | attention, cheaply | **a turned head is thirty times a facing one, and the expensive arm of the same run is void.** YuNet's five landmarks at **99 ms** and no model: looking reads medians of **0.20 and 0.40**, turned **15.05 and 24.08**, and the tails do not come near — 0.41 against 12.70 over 311 samples. **Both orders agree**, which is the control that exists because `presence` once separated a still room from itself three to one by order alone. `HEAD_ASIDE = 1.0` is **geometry, not the middle of the gap**: the run refuted this file's own claim that `head_on` is bounded — the divisor is the eye separation, which goes to zero at profile, so it read 15 and 24 rather than saturating at 1, and the midpoint 2.29 sits where the value is unstable. Anything from 0.5 to 10 separates the data and 1.0 is the only value in it that means something (*the nose has reached an eye*). **Unreadable is a signal**: 0 and 1 of 95 looking against 22 and 48 of 96 turned, so the surviving turned samples are the less turned ones and the gap is an understatement. **And the model arm says nothing** — all four phases answered 보고 있다 in two words at 2.3 s, and the reading *the expensive path failed* is **withdrawn**: the question was a forced binary with the affirmative first, where `seeing` asked openly and got 4 of 4. Four identical short answers is a broken measurement, not a result. `docs/findings/attention.md` |
 | the pointer | **the axis the patterns do win, 3 of 3 — and they are on now.** Parked at `(700, 400)`: `invoke` leaves it there, a click drags it to the widget at `(130, 459)`, and both press the box. **The first version of this harness measured nothing** — it parked with `cursor_round_trip`, which puts the cursor back where it found it, so every arm read the position the previous arm's click had left and both reported *unmoved* |
+| tasks | **qwen3:14b 6 of 6, qwen3:8b 0 of 6, and the 14b runs the work** — the rule written first was *14b replaces 8b only if it passes at least two more*, and the conversation stays on 8b. Six tasks checked by the program against files and records, never the model's account: write and run a script, summarise into a file, a one-line edit with the rest byte-identical, a failing test fixed (re-run by the harness in the sandbox), a CSV's sum and mean, a Windows file listing. **The first run read 1 against 1, and two of 14b's five misses were the workbench**: the sandbox kept the first task's folder mounted, so a correct fix was tested against the wrong files, and `dir /B` failing in PowerShell came back as an ordinary result. Fixed with the `done` check and a circle rule that warns on the first repeat (it had stopped at the first): **5 of 6 against 1**, reproduced, and the run between found the check itself letting an invented *150000* through on the second try, because the refusal quoting it counted as a source. **The sixth is fitted to this set**: telling `run` to put multi-line code in a file came after watching 14b pack a program into `python3 -c` three times. **8b's 0 is the check working** — every one of its finishes was refused, where 1 of 6 before was its one honest run. One run each, six tasks: a ranking of the two models on this workbench, not a rate. `--bin tasks`, `TASKS_VERBOSE=1` for every step |
 
 **The one slot that is absent unless somebody asks for it.** `mind.rs` renders nothing at rest, so
 the six probes still hash to `r322a4c` at 5,676 bytes — a tag recorded from the Python before a dial

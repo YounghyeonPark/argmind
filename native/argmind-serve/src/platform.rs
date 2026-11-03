@@ -782,6 +782,27 @@ pub fn seconds_since_input() -> Option<f64> {
     }
 }
 
+/// **The folder a task works in** — `%USERPROFILE%\argmind-work`, made if it is not there.
+pub fn work_folder() -> std::path::PathBuf {
+    let home = std::env::var_os("USERPROFILE").or_else(|| std::env::var_os("HOME"))
+        .map(std::path::PathBuf::from).unwrap_or_else(std::env::temp_dir);
+    home.join("argmind-work")
+}
+
+/// **The workbench a task works at**, or `None` where nothing has been written: files in
+/// [`work_folder`], commands in the `argmind-sandbox` WSL distro, PowerShell for what only runs on
+/// Windows. See `argmind_env_windows::workspace`.
+pub fn workbench() -> Option<Box<dyn argmind_core::task::Tools + Send>> {
+    #[cfg(all(windows, not(feature = "headless")))]
+    {
+        Some(Box::new(argmind_env_windows::workspace::Workspace::new(work_folder())))
+    }
+    #[cfg(not(all(windows, not(feature = "headless"))))]
+    {
+        None
+    }
+}
+
 /// Today, as an errand is told it.
 pub fn today() -> String {
     let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH)
