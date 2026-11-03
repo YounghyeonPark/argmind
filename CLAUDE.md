@@ -314,6 +314,18 @@ about now opens it and is looked up, *웹 닫아* closes it, and a desktop app n
 is not a site. Errands looking things up in the background still do not show it. **Not run in the
 application from here.**
 
+**What a person asks for runs without a question — since 2026-11-03.** The owner, five 실행 rows on
+screen: *자꾸 실행을 물어봐서 일이 진행이 안됨. 그냥 자동으로 수행해야돼.* The timeline said why: a
+request answered with *click the search box, type 일본, Enter* sat behind `SURE_ENOUGH`, which was
+measured on single clicks and multiplies over every token of `do` — a typed word and a key pull a
+correct plan under 0.94 almost by construction, **a flaw in that measurement's design** rather than a
+finding about the plan. So with 확인 없이 실행 on, a request runs past the sureness gate and the
+second opinion; what still stops it is the person's own *항상 물어봄*, the *which one?* a program
+cannot answer, and every screen check in `perform`. **argmind's own idea, doubtful or unsure, with 스스로
+실행 on, is now neither asked nor done** — a row nobody was waiting for is what stalls the work. And
+`notice` pauses while the pane is up: a switch to Snipping Tool had been planned against the pane's
+list as *click Naver's search box*.
+
 **One call, not two.** A round trip is the budget: 0.45 s warm, 4.7 s and 5.9 s for the first two.
 
 ## The numbers, as they stand

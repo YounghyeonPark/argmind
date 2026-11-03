@@ -675,19 +675,31 @@ fn propose(desk: &mut Desk, out: &Listeners, effect: Effect, sure: Option<f64>) 
         out.send("note", &said);
         return false;
     }
-    //: **In the conversation, not only on the screen.** An offer the person then argues with —
-    //: *"not that one"* — has to be something the next turn can see.
-    desk.session.remember_doing(&[], &[], std::slice::from_ref(&effect), &[]);
     let doubt = !hint.is_empty();
     //: *Always ask* here means the button, whatever 확인 없이 실행 says.
     let must_confirm = rule == Some(argmind_core::rule::Then::Confirm);
-    //: **How sure the model was of this action** — below [`SURE_ENOUGH`] it waits for a person,
-    //: whoever's idea it was. `None` (a model that cannot say) gates nothing.
+    //: **How sure the model was of this action** — below [`SURE_ENOUGH`] argmind's own idea is let
+    //: go. `None` (a model that cannot say) gates nothing.
     let unsure = sure.is_some_and(|s| s < SURE_ENOUGH);
     //: **Whose idea it was**, read before the effect is handed over. `unprompted()` is `Some(false)`
-    //: for anything a watch or a raised judgement produced, and it is the one thing the automatic
-    //: path below is not allowed to carry out.
+    //: for anything a watch or a raised judgement produced.
     let its_own_idea = effect.unprompted();
+    //: **argmind's own idea, doubtful, with 스스로 실행 on: neither asked nor done.** The owner,
+    //: 2026-11-03, with five 실행 rows waiting on screen: 자꾸 실행을 물어봐서 일이 진행이 안됨. A
+    //: row for something nobody asked for and the model was not sure of is the pile of buttons that
+    //: stalls the work; dropping it costs a suggestion, and nobody was waiting for that suggestion.
+    //: With 스스로 실행 off, argmind's ideas are still offered as rows — that is a person who wants
+    //: to be asked.
+    if its_own_idea && (doubt || unsure)
+        && crate::decided::standing("initiative") == Some(Standing::Allowed) {
+        desk.session.history.push(("could not".into(), format!(
+            "{} — not sure enough of an idea nobody asked for; nothing was done",
+            label(&effect, None))));
+        return false;
+    }
+    //: **In the conversation, not only on the screen.** An offer the person then argues with —
+    //: *"not that one"* — has to be something the next turn can see.
+    desk.session.remember_doing(&[], &[], std::slice::from_ref(&effect), &[]);
     let token = desk.proposals.offer(effect, text, hint, desk.on_web.get());
     if let Some(p) = desk.proposals.waiting().last() {
         out.send("propose", &as_json(p));
@@ -710,7 +722,13 @@ fn propose(desk: &mut Desk, out: &Listeners, effect: Effect, sure: Option<f64>) 
     //: **Whose idea it was decides which standing answer counts.** What a person asked for runs on
     //: `acting`; what argmind thought of runs only on `initiative` — two questions, two answers,
     //: the owner's of 2026-09-22 and 2026-10-21.
-    if !doubt && !must_confirm && !unsure && crate::decided::standing(if its_own_idea { "initiative" } else { "acting" }) == Some(Standing::Allowed) {
+    //: **What a person asked for runs, since 2026-11-03** — no sureness gate and no second
+    //: opinion in front of it, at the owner's word: 그냥 자동으로 수행해야돼. The sureness gate was
+    //: measured on single clicks and multiplies over every token of `do`, so a click, a typed word
+    //: and Enter fell below it almost by construction — the request that stalled was exactly that.
+    //: What still stands is the person's own 항상 물어봄 rule, the *which one?* question a program
+    //: cannot answer for them, and every check `perform` makes against the screen at each step.
+    if !must_confirm && (!its_own_idea || (!doubt && !unsure)) && crate::decided::standing(if its_own_idea { "initiative" } else { "acting" }) == Some(Standing::Allowed) {
         if let Answered::Run(p) = desk.proposals.confirm(token) {
             return act(desk, out, p);
         }
@@ -1632,6 +1650,13 @@ pub fn present(moved_ago: Option<f64>, face_ago: Option<f64>, input_ago: Option<
 
 fn notice(desk: &mut Desk, out: &Listeners, now: f64) {
     if !desk.noticing {
+        return;
+    }
+    //: **Not while argmind looks at its pane.** A desktop window change would be planned against
+    //: the pane's list — the owner's session of 2026-11-03 had a switch to Snipping Tool turn into
+    //: *click the Naver search box, type 일본* — the same mistake the thinking tick had, paused for
+    //: the same reason.
+    if desk.on_web.get() {
         return;
     }
     //: **Nobody there, nothing to say.** The whole reason the camera earns its light: watching the
