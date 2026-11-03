@@ -213,7 +213,9 @@ pub fn file_names(text: &str) -> Vec<String> {
         let Some((stem, ext)) = word.rsplit_once('.') else { continue };
         if !stem.is_empty() && (1..=5).contains(&ext.len())
             && ext.chars().all(|c| c.is_ascii_alphanumeric())
-            && ext.chars().any(|c| c.is_ascii_alphabetic()) && !out.iter().any(|o| o == word) {
+            //: **An extension starts with a letter**: *15.5cm* read as a file called `15` with the
+            //: extension `5cm`, and a phone comparison was refused for a file that was a length.
+            && ext.starts_with(|c: char| c.is_ascii_alphabetic()) && !out.iter().any(|o| o == word) {
             out.push(word.to_string());
         }
     }
@@ -268,14 +270,43 @@ pub fn numbers(text: &str) -> Vec<String> {
             i += 1;
         }
         let digits: String = jc[start..i].iter().collect();
-        let unit = jc[i..].iter().find(|c| !c.is_whitespace());
-        let zeros = match unit {
-            Some('만') => Some(4),
-            Some('억') => Some(8),
-            _ => None,
-        };
-        match zeros {
-            Some(z) => out.push(format!("{}{}", digits.trim_start_matches('0'), "0".repeat(z))),
+        //: **억, 만 and 천 add up**, in that order: *114만 5천 원* is 1,145,000 and was read as
+        //: 1,140,000 — which no page said, so a right price was refused.
+        let mut value: Option<u128> = None;
+        let mut group: u128 = digits.parse().unwrap_or(0);
+        let mut j = i;
+        loop {
+            let k = (j..jc.len()).find(|&k| !jc[k].is_whitespace()).unwrap_or(jc.len());
+            let scale: u128 = match jc.get(k) {
+                Some('억') => 100_000_000,
+                Some('만') => 10_000,
+                Some('천') => 1_000,
+                _ => break,
+            };
+            value = Some(value.unwrap_or(0) + group * scale);
+            j = k + 1;
+            //: Another group follows only as digits and a smaller unit.
+            let m = (j..jc.len()).find(|&m| !jc[m].is_whitespace()).unwrap_or(jc.len());
+            let mut e = m;
+            while e < jc.len() && jc[e].is_ascii_digit() {
+                e += 1;
+            }
+            if e == m {
+                break;
+            }
+            let next: String = jc[m..e].iter().collect();
+            let unit = (e..jc.len()).find(|&u| !jc[u].is_whitespace()).and_then(|u| jc.get(u));
+            if !matches!(unit, Some('억' | '만' | '천')) {
+                break;
+            }
+            group = next.parse().unwrap_or(0);
+            j = e;
+        }
+        match value {
+            Some(v) => {
+                out.push(v.to_string());
+                i = j.max(i);
+            }
             None if digits.len() >= 3 => out.push(digits),
             None => {}
         }
@@ -635,6 +666,9 @@ mod tests {
                    vec!["summary.md", "calc.py"]);
         assert_eq!(numbers("합계 1,580,000원, 평균 316000.0, 12월 5일, 2개"), vec!["1580000", "316000"]);
         assert_eq!(numbers("48만~58만원, 1억 원, 3 만"), vec!["480000", "580000", "100000000", "30000"]);
+        assert_eq!(numbers("114만 5천 원, 1억 2000만, 5천원, 365,600원"),
+                   vec!["1145000", "120000000", "5000", "365600"]);
+        assert_eq!(file_names("15.5cm (6.1\") 와 156.4mm"), Vec::<String>::new());
     }
 
     #[test]

@@ -305,6 +305,9 @@ fn main() {
         if std::env::args().any(|a| a == "--plan") {
             return plan(orders);
         }
+        if std::env::args().any(|a| a == "--fare") {
+            return fare(orders);
+        }
         if std::env::args().any(|a| a == "--why-not") {
             return why_not(orders);
         }
@@ -803,6 +806,78 @@ fn main() {
             let _ = std::fs::remove_dir_all(&dir);
         }
         println!("\n  ── 돌리기 전에 적어둔 대로: {passed}/{} 통과 (끝남·검색함·파일·숫자 근거) ──", asks.len());
+        Ok(())
+    }
+
+    /// **Diagnosis, not measurement**: can the pane read a fare at all? The owner, 2026-11-03: *왜
+    /// 조회를 못하지? 회원로그인이 필요한 부분도 아닌데.* Opens fare and hotel searches by address and
+    /// reads the page's text every two seconds for half a minute, printing how much there is and
+    /// the lines with a price — so *the results arrive later than the read* and *the site refuses
+    /// the pane* are told apart.
+    fn fare(orders: &Sender<Say>) -> Result<(), String> {
+        use argmind_env_browser::Pane;
+        use std::sync::{Arc, Mutex};
+        let wire_orders = Mutex::new(orders.clone());
+        let pane = Pane::new(Arc::new(move |method: &str, params: &str| -> Result<String, String> {
+            let (reply, answer) = channel();
+            wire_orders.lock().map_err(|_| "poisoned".to_string())?
+                .send(Say::Devtools { method: method.into(), params: params.into(), reply })
+                .map_err(|_| "the window has gone".to_string())?;
+            answer.recv_timeout(std::time::Duration::from_secs(30))
+                .map_err(|_| format!("{method}: no answer"))?
+        }));
+        if std::env::args().any(|a| a == "--tools") {
+            use argmind_core::task::Tools;
+            let mut web = argmind_env_browser::WebTools(pane.clone());
+            for (tool, args) in [
+                ("search_flights", serde_json::json!({"from": "SEL", "to": "TYO", "depart": "2026-11-16", "return": "2026-11-18", "adults": 2})),
+                ("search_hotels", serde_json::json!({"place": "Tokyo", "check_in": "2026-11-16", "check_out": "2026-11-18", "adults": 2})),
+            ] {
+                let began = std::time::Instant::now();
+                let got = web.call(tool, &args);
+                println!("
+  ── {tool} ({:.1}초)", began.elapsed().as_secs_f64());
+                match got {
+                    Ok(t) => { for l in t.lines() { println!("     {l}"); } }
+                    Err(e) => println!("     오류: {e}"),
+                }
+            }
+            return Ok(());
+        }
+        let urls: Vec<String> = std::env::args().skip_while(|a| a != "--fare").skip(1)
+            .filter(|a| a.starts_with("http")).collect();
+        let urls = if urls.is_empty() { vec![
+            "https://flight.naver.com/flights/international/SEL-TYO-20261116/TYO-SEL-20261118?adult=2&fareType=Y".to_string(),
+            "https://www.skyscanner.co.kr/transport/flights/sela/tyoa/261116/261118/?adultsv2=2".to_string(),
+        ] } else { urls };
+        for url in urls {
+            println!("\n  ── {url}");
+            if let Err(why) = pane.open(&url) {
+                println!("     열지 못함: {why}");
+                continue;
+            }
+            let mut last = 0;
+            for tick in 0..15 {
+                std::thread::sleep(std::time::Duration::from_secs(2));
+                let Ok((text, at)) = pane.text() else { continue };
+                let n = text.chars().count();
+                let prices = text.lines().filter(|l| l.contains('원') && l.chars().any(|c| c.is_ascii_digit())).count();
+                if n != last {
+                    println!("     {:>2}초 글 {n}자 · 가격 줄 {prices} · {at}", (tick + 1) * 2);
+                    last = n;
+                }
+                if tick == 14 || (prices >= 5 && tick >= 5) {
+                    if let Ok(dir) = std::env::var("FARE_DUMP") {
+                        let name = format!("fare-{}.txt", url.len() % 1000);
+                        let _ = std::fs::write(std::path::Path::new(&dir).join(name), &text);
+                    }
+                    for l in text.lines().map(str::trim).filter(|l| !l.is_empty()).take(60) {
+                        println!("       {}", l.chars().take(100).collect::<String>());
+                    }
+                    break;
+                }
+            }
+        }
         Ok(())
     }
 
