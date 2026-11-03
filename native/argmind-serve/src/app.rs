@@ -397,11 +397,24 @@ fn think(desk: &mut Desk, out: &Listeners, text: &str) {
     if !desk.heard_last.take().is_some_and(|h| h == text) {
         out.record("들음", text);
     }
+    //: **Held for the whole turn, and it clears itself.** While this is alive the senses stand
+    //: down: one declines to start and one already running is abandoned mid-call. A guard rather
+    //: than two stores, because an early return that left the flag set would silence every sense
+    //: for the rest of the session. Taken before routing, since routing may ask the model and a
+    //: task's call should yield the card to it.
+    let _answering = desk.turn.begins();
     //: **One decision, in `crate::route`**, which `--bin routing` measures — the same function, so
-    //: a miss there is a miss here. Each path still checks what it needs before it acts.
-    let route = crate::route::by_rules(text, desk.web.is_some(), desk.on_web.get(),
-                                       desk.working.load(Ordering::SeqCst));
-    out.record("길", route.name());
+    //: a miss there is a miss here. The rules first, and where they say *a turn* the model is asked
+    //: whether it is work, shown the window in front: 0.15 s median, 0.23 s worst, measured. Each
+    //: path still checks what it needs before it acts.
+    let (_, front) = desk.session.eyes.window();
+    let (route, asked) = crate::route::routed(text, desk.web.is_some(), desk.on_web.get(),
+                                              desk.working.load(Ordering::SeqCst), &front,
+                                              &mut desk.session.model);
+    match asked {
+        Some((said, s)) => out.record("길", &format!("{} — 모델 {said}, {s:.2}초", route.name())),
+        None => out.record("길", route.name()),
+    }
     let handled = match route {
         crate::route::Route::Keep => kept_instead(desk, out, text),
         crate::route::Route::Work => worked_instead(desk, out, text),
@@ -413,11 +426,6 @@ fn think(desk: &mut Desk, out: &Listeners, text: &str) {
     if handled {
         return;
     }
-    //: **Held for the whole turn, and it clears itself.** While this is alive the senses stand
-    //: down: one declines to start and one already running is abandoned mid-call. A guard rather
-    //: than two stores, because an early return that left the flag set would silence every sense
-    //: for the rest of the session.
-    let _answering = desk.turn.begins();
     out.send("busy", "1");
     //: **The last turn's buttons go.** An offer the person never answered and then said something
     //: else about is one they moved on from, and a button whose label describes a screen that has
@@ -603,8 +611,8 @@ fn worked_instead(desk: &mut Desk, out: &Listeners, text: &str) -> bool {
     let reply = if busy && ["멈춰", "그만"].iter().any(|w| text.contains(w)) {
         desk.stop_work.store(true, Ordering::SeqCst);
         "하던 작업을 멈출게요".to_string()
-    } else if !argmind_core::task::asks_for_work(text) {
-        return false;
+    //: Not asked again whether this is work: `crate::route` decided, and the model's *work* is a
+    //: sentence the word rule did not recognise — asking the rule here would undo it.
     } else if busy {
         "하던 작업이 아직 안 끝났어요 — 끝나면 다시 말씀해 주세요".to_string()
     } else if let Some(files) = crate::platform::workbench() {

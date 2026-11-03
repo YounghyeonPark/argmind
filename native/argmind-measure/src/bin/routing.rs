@@ -45,6 +45,23 @@
 //! *Visual Studio Code* for real and written (the window the owner most often had in front).
 //! **The same criteria, but the arm was designed on the failures it is judged on.**
 //!
+//! ## The shipped router, and a held-out set — 2026-11-03, written before it ran
+//!
+//! **4. shipped** — `argmind_serve::route::routed`, what `think` now calls: the rules, then the
+//! model with the window in front, **read for `work` only**, and never on a question about how
+//! (`argmind_core::task::asks_about`, which the rules also obey now). Fitted twice over: the window
+//! and the guard were both made from this harness's misses. So a fourth source, **held** — fourteen
+//! sentences written after the guard and before any arm saw them: eight questions about how or
+//! about argmind's skill that are a turn, six requests that wear a question's or a how's clothes and
+//! are work.
+//!
+//! * **The guard holds** only if, on held, the shipped router sends **none of the eight** questions
+//!   to work **and at least five of the six** requests there, in its worst repeat.
+//! * **It ships** only if, on real + written, it has no more harmful misses than the rules alone
+//!   and borrowed stays ≥ 95%.
+//! * **Its cost is printed, not judged**: the router call's median and worst over every sentence
+//!   it was asked about, beside the 0.45 s a turn costs warm.
+//!
 //! ## Written before the run
 //!
 //! * **The rules are not fit to be the only router if they miss ≥ 20%** of real + written.
@@ -136,27 +153,37 @@ const WRITTEN: &[Said] = &[
     s("일정 관리 어떻게 해?", "written", T),
     s("계획 세우는 거 잘해?", "written", T),
     s("실행이 안 돼", "written", T),
+    // held: written after the guard, before any arm ran
+    s("보고서 잘 쓰는 방법 알려줘", "held", T),
+    s("엑셀에서 중복 지우는 법 알려줘", "held", T),
+    s("여행 계획은 보통 어떻게 세워?", "held", T),
+    s("코드 짜는 거 좋아해?", "held", T),
+    s("파일 정리 잘하는 편이야?", "held", T),
+    s("번역도 할 줄 알아?", "held", T),
+    s("일정 짤 때 뭐부터 해야 돼?", "held", T),
+    s("파이썬 스크립트는 어떻게 실행해?", "held", T),
+    s("이 폴더 파일 목록 정리해줄 수 있어?", "held", W),
+    s("다음 달 여행 일정 좀 짜줄래?", "held", W),
+    s("보고서 쓰는 법을 정리해서 문서로 만들어줘", "held", W),
+    s("엑셀 파일 어떻게 정리할지 계획 세워서 정리해줘", "held", W),
+    s("파이썬 코드 하나 만들어 줄래?", "held", W),
+    s("회의 일정표 만들어주세요", "held", W),
 ];
 
-const ASK: &str = "사람이 PC 비서에게 한 말이다. 어떤 처리로 보낼지 하나만 골라라.\n\
-- reply: 대화나 지식으로 바로 답할 말 (인사, 질문, 의견, 짧은 번역)\n\
-- desktop: 지금 화면의 앱에서 무언가를 누르거나 입력하는 요청 (앱 열기·닫기, 버튼, 저장, 복사)\n\
-- web: 웹사이트를 열거나 닫거나, 사이트에서 검색만 해 달라는 요청\n\
-- lookup: 지금·오늘의 정보(날씨, 환율, 주가, 뉴스)를 찾아 알려 달라는 요청\n\
-- work: 여러 단계가 필요한 일 — 조사해서 정리, 계획 세우기, 비교, 문서·파일·코드를 만들기·고치기·실행\n\
-- keep: 무엇을 기억해 달라는 요청\n\n\
-한 말: ";
-
+/// The application's own prompt and reader, so the arms measure the words it sends.
 fn model_route(model: &argmind_env_ollama::Local, text: &str, window: Option<&str>) -> String {
-    let front = window.map(|w| format!("지금 앞에 있는 창: {w}\n")).unwrap_or_default();
-    let prompt = format!("{front}{ASK}{text}\n\nJSON 하나로만 답하라: {{\"route\": \"reply|desktop|web|lookup|work|keep\"}}");
-    let reply = model.ask(&prompt).map(|r| r.text).unwrap_or_default();
-    let route = argmind_core::llm::first_object(&reply)
-        .and_then(|v| v.get("route").and_then(|r| r.as_str()).map(str::to_string))
-        .unwrap_or_else(|| "?".into());
-    match route.as_str() {
+    let reply = model.ask(&argmind_serve::route::model_prompt(text, window.unwrap_or("")))
+        .map(|r| r.text).unwrap_or_default();
+    match argmind_serve::route::model_said(&reply).as_str() {
         "reply" | "desktop" => "turn".into(),
         other => other.to_string(),
+    }
+}
+
+struct Model<'a>(&'a argmind_env_ollama::Local);
+impl argmind_core::contract::Speaks for Model<'_> {
+    fn ask(&mut self, prompt: &str) -> String {
+        self.0.ask(prompt).map(|r| r.text).unwrap_or_default()
     }
 }
 
@@ -169,6 +196,12 @@ fn title(screen: &str) -> &'static str {
         s if s.starts_with("chrome-remote-desktop") => "Chrome Remote Desktop - Google Chrome",
         _ => "Visual Studio Code",
     }
+}
+
+/// The window the shipped router is shown: each borrowed screen's title, and the editor otherwise.
+fn borrowed_or_code(all: &[(String, &'static str, Vec<&'static str>)], borrowed: &[&'static str]) -> Vec<&'static str> {
+    let mut k = 0;
+    all.iter().map(|(_, src, _)| if *src == "borrowed" { k += 1; borrowed[k - 1] } else { "Visual Studio Code" }).collect()
 }
 
 fn set() -> Vec<(String, &'static str, Vec<&'static str>)> {
@@ -222,9 +255,10 @@ fn main() {
     let all = set();
     let rules: Vec<String> = all.iter().map(|(t, _, _)| by_rules(t, true, false, false).name().to_string()).collect();
     println!("\n  길 나누기 — 이 말을 어디로 보내나\n  harness {}\n", argmind_measure::source_print(include_str!("routing.rs")));
-    let parts: [(&str, &dyn Fn(&str) -> bool); 4] = [
+    let parts: [(&str, &dyn Fn(&str) -> bool); 5] = [
         ("real", &|s: &str| s == "real"), ("written", &|s: &str| s == "written"),
-        ("real+written", &|s: &str| s != "borrowed"), ("borrowed", &|s: &str| s == "borrowed")];
+        ("real+written", &|s: &str| s == "real" || s == "written"), ("borrowed", &|s: &str| s == "borrowed"),
+        ("held", &|s: &str| s == "held")];
     let report = |name: &str, got: &[String]| {
         let mut line = format!("    {name:<16}");
         for (p, f) in &parts {
@@ -240,7 +274,7 @@ fn main() {
             println!("      [{src}] {t}  → {g}  (맞는 길 {})", ok.join("/"));
         }
     }
-    let (n, r, _) = score(&all, &rules, &|s| s != "borrowed");
+    let (n, r, _) = score(&all, &rules, &|s| s == "real" || s == "written");
     println!("\n    rules 가 놓친 비율 {:.0}% — 미리 적은 대로: {}", 100.0 * (n - r) as f64 / n as f64,
              if (n - r) * 5 >= n { "규칙만으로 길을 나누기에는 맞지 않다" } else { "규칙만으로도 된다" });
 
@@ -264,7 +298,32 @@ fn main() {
     }
     let mut worst: [(usize, usize, usize); 2] = [(usize::MAX, 0, 0); 2];
     let mut misses: BTreeMap<String, usize> = BTreeMap::new();
+    let mut shipped_misses: BTreeMap<String, usize> = BTreeMap::new();
+    //: worst right, worst harmful, worst borrowed %, worst questions sent to work, worst requests kept
+    let mut sw = (usize::MAX, 0usize, 100usize, 0usize, usize::MAX);
+    let mut costs: Vec<f64> = Vec::new();
+    let shown = borrowed_or_code(&all, &borrowed_windows);
     for repeat in 1..=3 {
+        //: **The shipped router, with the window always given** — the application always has one.
+        let shipped: Vec<String> = all.iter().zip(&shown).map(|((t, _, _), w)| {
+            let (route, asked) = argmind_serve::route::routed(t, true, false, false, w, &mut Model(&model));
+            if let Some((_, s)) = asked {
+                costs.push(s);
+            }
+            route.name().to_string()
+        }).collect();
+        println!();
+        report(&format!("shipped #{repeat}"), &shipped);
+        let (_, r, h) = score(&all, &shipped, &|s| s == "real" || s == "written");
+        let (bn, br, _) = score(&all, &shipped, &|s| s == "borrowed");
+        let held = |want: &str| all.iter().zip(&shipped)
+            .filter(|((_, src, ok), g)| *src == "held" && ok[0] == want && *g == "work").count();
+        sw = (sw.0.min(r), sw.1.max(h), sw.2.min(br * 100 / bn.max(1)), sw.3.max(held("turn")), sw.4.min(held("work")));
+        for ((t, src, ok), g) in all.iter().zip(&shipped) {
+            if !ok.contains(&g.as_str()) {
+                *shipped_misses.entry(format!("[{src}] {t}  → {g}  (맞는 길 {})", ok.join("/"))).or_default() += 1;
+            }
+        }
         let chosen: Vec<String> = all.iter().zip(&windows).map(|((t, _, _), w)| model_route(&model, t, *w)).collect();
         let joined: Vec<String> = rules.iter().zip(&chosen)
             .map(|(r, m)| if r == "turn" { m.clone() } else { r.clone() }).collect();
@@ -272,7 +331,7 @@ fn main() {
         report(&format!("model #{repeat}"), &chosen);
         report(&format!("rules→model #{repeat}"), &joined);
         for (i, got) in [&chosen, &joined].iter().enumerate() {
-            let (_, r, h) = score(&all, got, &|s| s != "borrowed");
+            let (_, r, h) = score(&all, got, &|s| s == "real" || s == "written");
             let (bn, br, _) = score(&all, got, &|s| s == "borrowed");
             if r < worst[i].0 {
                 worst[i] = (r, h, br * 100 / bn.max(1));
@@ -284,11 +343,26 @@ fn main() {
             }
         }
     }
+    println!("\n    shipped 가 틀린 것 (세 번 중 몇 번):");
+    for (m, k) in &shipped_misses {
+        println!("      {k}× {m}");
+    }
+    costs.sort_by(|a, b| a.partial_cmp(b).unwrap());
+    let (rn, rr0, rh0) = score(&all, &rules, &|s| s == "real" || s == "written");
+    println!("\n  ── shipped, 돌리기 전에 적어둔 대로 (반복 중 가장 나쁜 것) ──");
+    println!("    held: 질문 8개 중 작업으로 간 것 {} · 요청 6개 중 작업으로 간 것 {} — {}", sw.3, sw.4,
+             if sw.3 == 0 && sw.4 >= 5 { "막이 버틴다" } else { "막이 버티지 못한다" });
+    println!("    real+written {rn}개: 맞음 {} (rules {rr0}) · 해로운 {} (rules {rh0}) · borrowed {}% — {}",
+             sw.0, sw.1, sw.2, if sw.1 <= rh0 && sw.2 >= 95 { "앱에 붙인다" } else { "앱에 붙이지 않는다" });
+    if !costs.is_empty() {
+        println!("    모델에게 물은 것 {}번 (세 번 × {}문장) · 한 번에 중앙값 {:.2}초, 90% {:.2}초, 가장 느린 것 {:.2}초",
+                 costs.len(), all.len(), costs[costs.len() / 2], costs[costs.len() * 9 / 10], costs[costs.len() - 1]);
+    }
     println!("\n    rules→model 이 틀린 것 (세 번 중 몇 번):");
     for (m, k) in &misses {
         println!("      {k}× {m}");
     }
-    let (_, rr, rh) = score(&all, &rules, &|s| s != "borrowed");
+    let (_, rr, rh) = score(&all, &rules, &|s| s == "real" || s == "written");
     println!("\n  ── 돌리기 전에 적어둔 대로 (real+written {n}개, 반복 중 가장 나쁜 것) ──");
     for (i, name) in ["model", "rules→model"].iter().enumerate() {
         let (r, h, b) = worst[i];

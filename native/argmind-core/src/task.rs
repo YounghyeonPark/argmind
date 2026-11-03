@@ -244,6 +244,28 @@ pub fn asks_for_work(text: &str) -> bool {
         !ADDRESSES.contains(&ext.to_ascii_lowercase().as_str())
     });
     (names_a_file || THINGS.iter().any(|w| text.contains(w))) && DOING.iter().any(|w| text.contains(w))
+        && !asks_about(text)
+}
+
+/// **A question about how, or about whether argmind is good at something — not a request.** *문서
+/// 작성 잘하는 법 알려줘* has a thing and a doing in it and went to work; *계획 세우는 거 잘해?* and
+/// *일정 관리 어떻게 해?* went to work from the model three times in three. A question is answered
+/// in a sentence, and starting a two-minute task on one is the harm.
+///
+/// Read off the ending: *…법 알려줘*, or a question with no request in it. *짜줄래?* and *정리해줄
+/// 수 있어?* carry a 줘 or a 줄 and are requests. *만들 수 있어?* is left a request — chosen, not
+/// measured: somebody asking whether argmind can make a thing usually wants it made.
+pub fn asks_about(text: &str) -> bool {
+    let t = text.trim().trim_end_matches(['.', '!', '~', ' ']);
+    const HOW: [&str; 4] = ["법 알려줘", "법 알려 줘", "법 알려주세요", "법 좀 알려줘"];
+    if HOW.iter().any(|h| t.ends_with(h)) {
+        return true;
+    }
+    const REQUEST: [&str; 7] = ["줘", "줄래", "줄 수", "주세요", "주실", "줄까", "수 있"];
+    let q = t.trim_end_matches('?');
+    const ASKING: [&str; 6] = ["어떻게 해", "어떻게 하지", "잘해", "잘 해", "뭐야", "뭐부터 해야 돼"];
+    (t.ends_with('?') || ASKING.iter().any(|a| q.ends_with(a)))
+        && !REQUEST.iter().any(|r| q.contains(r))
 }
 
 /// Numbers of three digits or more, grouping commas removed.
@@ -655,8 +677,21 @@ mod tests {
         }
         for no in ["메모장 열어줘", "오늘 서울 날씨 알려줘", "네이버에서 메일 열어줘", "검색창 눌러줘",
                    "여행 가고 싶다", "일정 보여줘",
-                   "naver.com 열어서 정리해줘", "고마워", "이 파일 열어줘", "나를 대표님이라고 불러"] {
+                   "naver.com 열어서 정리해줘", "고마워", "이 파일 열어줘", "나를 대표님이라고 불러",
+                   "문서 작성 잘하는 법 알려줘", "파이썬 스크립트는 어떻게 실행해?"] {
             assert!(!asks_for_work(no), "{no}");
+        }
+    }
+
+    #[test]
+    fn a_question_about_how_is_not_a_request() {
+        for q in ["문서 작성 잘하는 법 알려줘", "계획 세우는 거 잘해?", "일정 관리 어떻게 해?",
+                  "코드 리뷰가 뭐야?"] {
+            assert!(asks_about(q), "{q}");
+        }
+        for r in ["다음 달 여행 일정 좀 짜줄래?", "이 폴더 파일 목록 정리해줄 수 있어?",
+                  "보고서 쓰는 법을 정리해서 문서로 만들어줘", "엑셀 만들 수 있어?", "블로그 글 하나 써줘"] {
+            assert!(!asks_about(r), "{r}");
         }
     }
 
