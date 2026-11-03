@@ -556,6 +556,37 @@ fn moved_web_instead(desk: &mut Desk, out: &Listeners, text: &str) -> bool {
 /// conversation stays on the session's model, which every other harness measured.
 pub const TASK_MODEL: &str = "qwen3:14b";
 
+/// **Reasoning on, for tasks only.** `--bin complex`, the same twelve tasks and the same loop:
+/// **11 of 12 with no false finish, against 8 of 12 and two** — at **148 s a task against 9 s**.
+/// A task runs on its own thread with the person free to talk, so the time is spent where nobody
+/// waits on it; the conversation keeps thinking off, where `repair` measured it halving Korean.
+pub const TASK_THINKS: bool = true;
+
+/// The task's model, **giving the card up whenever somebody is being answered**: a step with
+/// reasoning on runs for minutes, and a turn waiting behind it is the conversation freezing. The
+/// call is abandoned the moment a turn begins — dropping the socket frees the card, measured — and
+/// asked again once the turn is over.
+struct Yielding(Local, crate::senses::Turn);
+
+impl Speaks for Yielding {
+    fn ask(&mut self, prompt: &str) -> String {
+        loop {
+            while self.1.in_flight() {
+                std::thread::sleep(std::time::Duration::from_millis(200));
+            }
+            let carry_on = self.1.carry_on();
+            match self.0.ask_while(prompt, &[], &carry_on, &mut |_| {}) {
+                Ok(r) if r.reason == "abandoned" => continue,
+                Ok(r) => return r.text,
+                Err(e) => {
+                    eprintln!("  the task model did not answer: {e}");
+                    return String::new();
+                }
+            }
+        }
+    }
+}
+
 /// **Work, rather than a turn: carried to the end by the task loop** — the owner, 2026-11-03:
 /// *문서수정이나 작성 그리고 코드도 필요하면 생성해야하고 실행도 스스로.* One task at a time, on its
 /// own thread so the conversation goes on; each step goes on the timeline as it happens, and what
@@ -592,9 +623,9 @@ fn start_work(desk: &Desk, what: &str, mut bench: Box<dyn argmind_core::task::To
     stop.store(false, Ordering::SeqCst);
     std::thread::spawn(move || {
         let mut local = Local::new(TASK_MODEL);
-        local.think = Some(false);
+        local.think = Some(TASK_THINKS);
         local.keep_alive = "300s".into();
-        let mut model = Model(local);
+        let mut model = Yielding(local, turn.clone());
         let mut task = Task::new(&what);
         let today = crate::platform::today();
         out.record("작업", &format!("시작: {what}"));

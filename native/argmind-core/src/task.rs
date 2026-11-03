@@ -230,13 +230,26 @@ pub fn why_not_done(task: &Task, said: &str, tools: &dyn Tools, today: &str) -> 
     if !task.steps.iter().any(|s| !s.failed) {
         return Some("아직 도구로 한 일이 하나도 없다. 직접 해 보고 확인한 다음에 끝내라".into());
     }
+    //: **The last thing run failed and nothing ran since**: from `--bin complex`, a test file that
+    //: could not import what it tested, run, failed, and was called done.
+    let ran = |s: &&Step| s.tool.starts_with("run");
+    if let Some(last) = task.steps.iter().filter(ran).last() {
+        if last.failed {
+            return Some("마지막으로 실행한 명령이 실패했다. 오류를 고쳐서 성공하는 것을 확인한 다음에 끝내라".into());
+        }
+    }
     let gone = tools.missing(&file_names(said));
     if !gone.is_empty() {
         return Some(format!("{} 은(는) 작업 폴더에 없다. 아직 만들지 않았다", gone.join(", ")));
     }
     //: **Not the refusals**: a refusal quotes the number it refused, and the first version let the
     //: same invented *150000* through on the second try because it had now been "seen".
+    //: **And what the work itself wrote**: a test file holding `is_leap(1900)` is a source for
+    //: *1900*, and leaving arguments out refused a right finish in `--bin complex`.
+    let written: Vec<String> = task.steps.iter().filter(|s| s.tool != "done" && !s.failed)
+        .map(|s| s.args.to_string()).collect();
     let seen: String = task.steps.iter().filter(|s| s.tool != "done").map(|s| s.observed.as_str())
+        .chain(written.iter().map(String::as_str))
         .chain([task.what.as_str(), today]).collect::<Vec<_>>().join("\n");
     let seen_numbers = numbers(&seen);
     let unseen: Vec<String> = numbers(said).into_iter()
@@ -464,6 +477,35 @@ mod tests {
         step(&mut t, &mut model, &mut tools, "오늘");
         step(&mut t, &mut model, &mut tools, "오늘");
         assert!(t.ended.is_none() && t.steps[1].observed.contains("summary.md"), "{:?}", t.steps);
+
+        //: A number the work itself wrote is a source: the test file holds 1900.
+        let mut model = Scripted(vec![
+            r#"{"tool": "write_file", "args": {"path": "t.py", "content": "assert not is_leap(1900)"}}"#,
+            r#"{"done": "1900년이 윤년이 아님을 검사합니다"}"#,
+        ]);
+        let mut t = Task::new("x");
+        run(&mut t, &mut model, &mut Box_::default(), "오늘", &|| true);
+        assert!(matches!(t.ended, Some(Ended::Done(_))), "{:?}", t.steps);
+    }
+
+    #[test]
+    fn a_failed_last_run_refuses_the_finish() {
+        struct Fails(Box_);
+        impl Tools for Fails {
+            fn list(&self) -> Vec<ToolSpec> { self.0.list() }
+            fn call(&mut self, a: &str, b: &Value) -> Result<String, String> {
+                if a == "run" { Err("Traceback".into()) } else { self.0.call(a, b) }
+            }
+        }
+        let mut model = Scripted(vec![r#"{"tool": "write_file", "args": {"path": "a.py", "content": "x"}}"#,
+                                      r#"{"tool": "run", "args": {"command": "python3 a.py"}}"#,
+                                      r#"{"done": "됐습니다"}"#]);
+        let mut tools = Fails(Box_::default());
+        let mut t = Task::new("x");
+        for _ in 0..3 {
+            step(&mut t, &mut model, &mut tools, "오늘");
+        }
+        assert!(t.steps[2].observed.contains("실패했다"), "{:?}", t.steps);
     }
 
     #[test]

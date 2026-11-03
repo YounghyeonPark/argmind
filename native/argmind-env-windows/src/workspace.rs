@@ -33,6 +33,9 @@ pub const SANDBOX: &str = "argmind-sandbox";
 pub const RUN_SECONDS: u64 = 120;
 /// The largest file `read_file` returns whole.
 pub const READ_MOST: u64 = 512 * 1024;
+/// The longest `python3 -c` taken; past it a program belongs in a file. Chosen: a one-liner that
+/// prints something fits, a loop with a `with` around it does not.
+pub const PYTHON_ONE_LINE: usize = 120;
 /// Where replaced files go, inside the workspace.
 pub const BACKUPS: &str = ".argmind-backup";
 
@@ -245,7 +248,16 @@ impl Tools for Workspace {
                     n => Err(format!("{rel} 에서 {n}군데가 맞아 어느 것인지 모른다 — 더 길게 찾아라")),
                 }
             }
-            "run" => self.run_sandboxed(Self::arg(args, "command")?),
+            "run" => {
+                let command = Self::arg(args, "command")?;
+                //: **A program on one line is refused here, not explained in the prompt**: told in
+                //: the tool's own description, qwen3:14b still packed `with … for … if` into
+                //: `python3 -c` three times running, and bash or Python rejected it each time.
+                if command.contains("python3 -c") && command.chars().count() > PYTHON_ONE_LINE {
+                    return Err("긴 python3 -c 는 받지 않는다. write_file 로 .py 파일을 만든 다음 python3 그파일.py 로 실행하라".into());
+                }
+                self.run_sandboxed(command)
+            }
             "run_windows" => self.run_windows(Self::arg(args, "command")?),
             other => Err(format!("그런 도구는 없다: {other}")),
         }
