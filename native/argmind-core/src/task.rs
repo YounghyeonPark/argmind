@@ -75,6 +75,12 @@ pub trait Tools {
     fn missing(&self, _paths: &[String]) -> Vec<String> {
         Vec::new()
     }
+    /// **Calls the program makes before the model's first step**, as `(tool, args)` — what the
+    /// request names that the model would otherwise start without. Each is run and recorded as a
+    /// step like any other. None by default.
+    fn opening(&self, _what: &str) -> Vec<(String, Value)> {
+        Vec::new()
+    }
 }
 
 /// **Several tool sets as one** — the workbench's files and commands beside the web, say. A name
@@ -103,6 +109,9 @@ impl Tools for Joined {
             }
         }
         out
+    }
+    fn opening(&self, what: &str) -> Vec<(String, Value)> {
+        self.0.iter().flat_map(|t| t.opening(what)).collect()
     }
 }
 
@@ -663,6 +672,15 @@ pub fn step(task: &mut Task, model: &mut dyn Speaks, tools: &mut dyn Tools, toda
 /// Run a task to its end — the program's end or the model's.
 pub fn run(task: &mut Task, model: &mut dyn Speaks, tools: &mut dyn Tools, today: &str,
            carry_on: &dyn Fn() -> bool) {
+    if task.steps.is_empty() {
+        for (tool, args) in tools.opening(&task.what) {
+            let (observed, failed) = match tools.call(&tool, &args) {
+                Ok(o) => (cut(&o, OBSERVED_CHARS), false),
+                Err(e) => (cut(&format!("오류: {e}"), OBSERVED_CHARS), true),
+            };
+            task.steps.push(Step { tool, args, observed, failed });
+        }
+    }
     while carry_on() && step(task, model, tools, today) {}
     if task.ended.is_none() {
         task.ended = Some(Ended::Stopped("사람이 멈췄습니다".into()));
@@ -703,6 +721,34 @@ mod tests {
                 _ => Err("?".into()),
             }
         }
+    }
+
+    /// Tools that ask for one file to be read before anything else.
+    struct Opens(Box_);
+    impl Tools for Opens {
+        fn list(&self) -> Vec<ToolSpec> { self.0.list() }
+        fn call(&mut self, tool: &str, args: &Value) -> Result<String, String> { self.0.call(tool, args) }
+        fn opening(&self, what: &str) -> Vec<(String, Value)> {
+            if what.contains("plan.docx") { vec![("read_file".into(), json!({"path": "plan.docx"}))] } else { vec![] }
+        }
+    }
+
+    #[test]
+    fn what_the_request_names_is_read_before_the_first_step() {
+        let mut files = Box_::default();
+        files.files.insert("plan.docx".into(), "제2조 금액 5,000,000원".into());
+        let mut tools = Opens(files);
+        let mut task = Task::new("plan.docx 의 금액을 고쳐줘");
+        let mut model = Scripted(vec![r#"{"done": "고칠 금액이 5,000,000원으로 적혀 있습니다"}"#]);
+        run(&mut task, &mut model, &mut tools, "2026-11-06", &|| true);
+        assert_eq!(task.steps[0].tool, "read_file");
+        assert_eq!(task.steps[0].observed, "제2조 금액 5,000,000원");
+        //: Recorded like any other step, so what it read is a source for the finish's numbers.
+        assert!(matches!(task.ended, Some(Ended::Done(_))), "{:#?}", task.steps);
+        //: And nothing is read for a request that names nothing.
+        let mut other = Task::new("메모 정리해줘");
+        run(&mut other, &mut Scripted(vec![]), &mut tools, "2026-11-06", &|| false);
+        assert!(other.steps.is_empty());
     }
 
     #[test]

@@ -182,6 +182,27 @@ ggml = { licence = "MIT", why = """
     (992,615,488 bytes) and the 12 Hz tokenizer at Q4_K_M (254,974,752 bytes). Q8_0 for the talker
     is not a quality preference — `ggml-vulkan`'s K-quant path gives a silently wrong answer there;
     `native/argmind-serve/src/speaker.rs` has the measurement.""" }
+# **What the task sandbox has installed** — `argmind-sandbox`, a WSL distro of argmind's own
+# (Ubuntu 24.04), where `run` executes. Nothing here is linked into argmind or redistributed; these
+# are Ubuntu's own packages, installed there with `apt-get install --no-install-recommends`, and
+# the licences are read off each package's `/usr/share/doc/*/copyright` on 2026-11-06.
+"python3-docx" = { licence = "MIT", why = """
+    Word documents, made and read in the sandbox. Debian records Expat (the MIT text) and one
+    BSD-2-Clause file.""" }
+"python3-openpyxl" = { licence = "MIT", why = "Excel workbooks, made and read in the sandbox." }
+"python3-lxml" = { licence = "BSD-3-Clause", why = """
+    Required by both. Its copyright file also names one GPL-2+ file, `test.py` — the upstream
+    source tree's test runner, which the binary package does not install.""" }
+"python3-et-xmlfile" = { licence = "MIT", why = "Required by openpyxl." }
+"python3-typing-extensions" = { licence = "PSF-2.0", why = """
+    Required by python-docx. Not in `allowed`, which governs what is linked into argmind; PSF-2.0
+    is permissive with no copyleft, and it is the licence of the sandbox's `python3` itself.""" }
+"libxml2 and libxslt" = { licence = "MIT", why = "Beneath lxml. Debian records MIT and ISC." }
+# **And the one that was taken out.** Installed with its recommends, openpyxl and lxml pulled in
+# Pillow, and Pillow pulled in **`libimagequant` 2.18, GPL-3.0-or-later** — refused above. Purged
+# with every other recommend (bs4, html5lib, cssselect, olefile…); `import docx, openpyxl` and
+# writing both kinds of file work without them, checked after the purge.
+
 # **The face models, and the one that was refused.** The default choice everywhere for this job is
 # InsightFace — `buffalo_l`, the ArcFace family. Its *code* is MIT and its **weights are not**:
 # almost every published ArcFace-lineage weight file is trained on datasets released for research

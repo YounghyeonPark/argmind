@@ -16,6 +16,12 @@
 //!   write or an edit would replace is copied to `.argmind-backup` first, so a bad edit is undone by
 //!   copying a file back.
 //!
+//! * **Documents** — `.docx` and `.xlsx` — are made and changed in the sandbox, with `python-docx`
+//!   and `openpyxl` (both MIT, from Ubuntu's own packages, installed without their recommends so
+//!   that Pillow's GPL-3 `libimagequant` stays out — `docs/licences.toml`). `read_file` on one
+//!   returns its text, read there by the same libraries, and `write_file` and `edit_file` refuse
+//!   one: either would write characters into a zip and leave a file nothing opens.
+//!
 //! Every command has a time limit and its output is cut by the task loop; a command that runs past
 //! [`RUN_SECONDS`] is killed and says so.
 
@@ -36,6 +42,50 @@ pub const READ_MOST: u64 = 512 * 1024;
 /// The longest `python3 -c` taken; past it a program belongs in a file. Chosen: a one-liner that
 /// prints something fits, a loop with a `with` around it does not.
 pub const PYTHON_ONE_LINE: usize = 120;
+/// What the sandbox has to set up once, as root: `apt-get install --no-install-recommends
+/// python3-docx python3-openpyxl`.
+pub const DOCUMENT_PACKAGES: &str = "python3-docx python3-openpyxl";
+/// Files that are zips of XML: text goes in through a library, never through `write_file`.
+pub const DOCUMENTS: [&str; 3] = ["docx", "xlsx", "xlsm"];
+/// **Reads a document's text** in the sandbox: paragraphs and tables in body order with any style
+/// but the plain one named **after** the text, in brackets no document uses — written first as a
+/// `[Heading 1] ` prefix, a model took the prefix for the text and its script looked for paragraphs
+/// starting with it, changed none, and finished — and a workbook cell by cell with formulas as written — `openpyxl`
+/// cannot compute them, and a formula is what somebody asked for when they asked for one.
+const READ_DOCUMENT: &str = r###"
+import sys
+p = sys.argv[1]
+if p.lower().endswith(".docx"):
+    import docx
+    from docx.table import Table
+    from docx.text.paragraph import Paragraph
+    d = docx.Document(p)
+    for el in d.element.body.iterchildren():
+        tag = el.tag.split("}")[-1]
+        if tag == "p":
+            para = Paragraph(el, d)
+            style = para.style.name if para.style is not None else ""
+            if para.text.strip():
+                print(para.text if style in ("", "Normal") else f"{para.text}  〔서식: {style}〕")
+        elif tag == "tbl":
+            for row in Table(el, d).rows:
+                print("| " + " | ".join(c.text for c in row.cells) + " |")
+else:
+    import openpyxl
+    for ws in openpyxl.load_workbook(p).worksheets:
+        print(f"## 시트: {ws.title}")
+        for row in ws.iter_rows():
+            cells = [f"{c.coordinate}={c.value}" for c in row if c.value is not None]
+            if cells:
+                print("  ".join(cells))
+"###;
+
+/// Is this a document — a zip of XML that `write_file` would break?
+pub fn is_document(rel: &str) -> bool {
+    Path::new(rel.trim()).extension().and_then(|e| e.to_str())
+        .is_some_and(|e| DOCUMENTS.contains(&e.to_ascii_lowercase().as_str()))
+}
+
 /// Where replaced files go, inside the workspace.
 pub const BACKUPS: &str = ".argmind-backup";
 
@@ -127,6 +177,42 @@ impl Workspace {
         finish(c, Some(command), RUN_SECONDS + 15)
     }
 
+    /// **A document's text**, read in the sandbox — see [`READ_DOCUMENT`].
+    pub fn read_document(&self, rel: &str) -> Result<String, String> {
+        let rel = rel.trim().replace('\\', "/");
+        if rel.contains('\'') {
+            return Err(format!("{rel}: 따옴표가 든 이름은 읽지 않는다"));
+        }
+        let text = self.run_sandboxed(&format!("python3 - '{rel}' <<'ARGMIND_DOC'\n{READ_DOCUMENT}\nARGMIND_DOC"))
+            .map_err(|e| format!("{rel} 을 문서로 읽지 못했다: {e}"))?;
+        let text = text.strip_suffix("(종료 코드 0)").unwrap_or(&text).trim_end();
+        Ok(format!("({rel} 에서 글만 뽑았다. 〔 〕 안은 글이 아니라 그 문단의 서식이다 — 고치려면 run 에서 python-docx 나 openpyxl 로)\n{text}"))
+    }
+
+    /// Every document in the workspace, with when it last changed and its size. Backups are not
+    /// the person's documents.
+    fn documents(&self) -> Vec<(String, std::time::SystemTime, u64)> {
+        fn walk(dir: &Path, base: &Path, depth: usize, out: &mut Vec<(String, std::time::SystemTime, u64)>) {
+            let Ok(entries) = std::fs::read_dir(dir) else { return };
+            for e in entries.flatten() {
+                let p = e.path();
+                let rel = p.strip_prefix(base).unwrap_or(&p).to_string_lossy().replace('\\', "/");
+                if p.is_dir() {
+                    if depth < 3 && !rel.starts_with(BACKUPS) {
+                        walk(&p, base, depth + 1, out);
+                    }
+                } else if is_document(&rel) {
+                    if let Ok(m) = e.metadata() {
+                        out.push((rel, m.modified().unwrap_or(std::time::UNIX_EPOCH), m.len()));
+                    }
+                }
+            }
+        }
+        let mut out = Vec::new();
+        walk(&self.root, &self.root, 0, &mut out);
+        out
+    }
+
     /// **A command in PowerShell**, in the workspace folder. UTF-8 out, so Korean reads.
     pub fn run_windows(&self, command: &str) -> Result<String, String> {
         let mut c = Command::new("powershell.exe");
@@ -196,7 +282,7 @@ impl Tools for Workspace {
               json!({"path": "notes.md", "content": "..."})),
             t("edit_file", "파일에서 정확히 한 군데를 찾아 바꾼다",
               json!({"path": "notes.md", "find": "바꿀 부분", "replace": "새 내용"})),
-            t("run", "리눅스(bash)에서 명령을 실행한다. 작업 폴더가 현재 폴더다. python3 표준 라이브러리만 있다 (pandas, pip 없음 — csv 모듈을 써라). 여러 줄 코드는 python3 -c 에 넣지 말고 write_file 로 .py 파일을 만든 뒤 실행하라",
+            t("run", "리눅스(bash)에서 명령을 실행한다. 작업 폴더가 현재 폴더다. python3 표준 라이브러리와 Word 문서(.docx)용 python-docx(import docx), 엑셀(.xlsx)용 openpyxl 이 있다 (pandas, pip 없음 — csv 모듈을 써라). .docx 와 .xlsx 는 이것들로만 만들고 고친다. 여러 줄 코드는 python3 -c 에 넣지 말고 write_file 로 .py 파일을 만든 뒤 실행하라",
               json!({"command": "python3 main.py"})),
             t("run_windows", "Windows PowerShell 에서 명령을 실행한다. Windows 에서만 되는 일에만 쓴다",
               json!({"command": "Get-ChildItem"})),
@@ -213,12 +299,19 @@ impl Tools for Workspace {
                 if meta.len() > READ_MOST {
                     return Err(format!("{rel} 은 {} 바이트라 통째로 읽지 않는다", meta.len()));
                 }
+                if is_document(rel) {
+                    return self.read_document(rel);
+                }
                 let bytes = std::fs::read(&p).map_err(|e| e.to_string())?;
                 Ok(String::from_utf8_lossy(&bytes).to_string())
             }
             "write_file" => {
                 let rel = Self::arg(args, "path")?;
                 let content = Self::arg(args, "content")?;
+                if is_document(rel) {
+                    return Err(format!("{rel} 은 글자 파일이 아니라 압축된 문서다 — run 에서 python3 와 \
+python-docx(.docx) 나 openpyxl(.xlsx) 로 만들거나 고쳐라"));
+                }
                 let p = self.inside(rel)?;
                 self.backup(&p, rel)?;
                 if let Some(dir) = p.parent() {
@@ -231,6 +324,10 @@ impl Tools for Workspace {
                 let rel = Self::arg(args, "path")?;
                 let find = Self::arg(args, "find")?;
                 let replace = Self::arg(args, "replace")?;
+                if is_document(rel) {
+                    return Err(format!("{rel} 은 글자 파일이 아니라 압축된 문서다 — run 에서 python3 와 \
+python-docx(.docx) 나 openpyxl(.xlsx) 로 만들거나 고쳐라"));
+                }
                 let p = self.inside(rel)?;
                 let text = std::fs::read_to_string(&p).map_err(|_| format!("없는 파일: {rel}"))?;
                 //: **Exactly once**, or the edit is a guess about which one was meant — the same
@@ -265,5 +362,45 @@ impl Tools for Workspace {
 
     fn missing(&self, paths: &[String]) -> Vec<String> {
         paths.iter().filter(|p| self.inside(p).is_ok_and(|full| !full.exists())).cloned().collect()
+    }
+
+    /// **Every document the request names is read before the model's first step** — documents
+    /// only, since a text file is one the model reads for itself. `--bin documents`: in six of seven
+    /// failures no named document was read before the script that changed it was written.
+    fn opening(&self, what: &str) -> Vec<(String, Value)> {
+        self.documents().into_iter()
+            .filter(|(rel, _, _)| what.contains(rel.as_str())
+                || Path::new(rel).file_name().is_some_and(|n| what.contains(n.to_string_lossy().as_ref())))
+            .map(|(rel, _, _)| ("read_file".to_string(), json!({"path": rel})))
+            .collect()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_document_is_known_by_its_extension() {
+        for d in ["report.docx", "a/b.XLSX", " budget.xlsm "] {
+            assert!(is_document(d), "{d}");
+        }
+        for t in ["notes.md", "docx", "report.docx.txt", "data.csv", "x.doc"] {
+            assert!(!is_document(t), "{t}");
+        }
+    }
+
+    #[test]
+    fn text_is_not_written_into_a_document() {
+        let dir = std::env::temp_dir().join(format!("argmind-ws-doc-{}", std::process::id()));
+        let mut w = Workspace::new(dir.clone());
+        let wrote = w.call("write_file", &json!({"path": "r.docx", "content": "hello"}));
+        assert!(wrote.is_err_and(|e| e.contains("python-docx")));
+        assert!(!dir.join("r.docx").exists(), "nothing was written");
+        std::fs::write(dir.join("b.xlsx"), b"PK").unwrap();
+        let edited = w.call("edit_file", &json!({"path": "b.xlsx", "find": "PK", "replace": "x"}));
+        assert!(edited.is_err_and(|e| e.contains("openpyxl")));
+        assert_eq!(std::fs::read(dir.join("b.xlsx")).unwrap(), b"PK", "untouched");
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }
