@@ -50,12 +50,31 @@
 //!
 //! And one number beside it that matters more than the count: **said done and failed the check** —
 //! a finish that is false is the failure a person cannot see from the reply.
+//!
+//! ## A plan, and the person as a tool — written 2026-11-03, before either ran
+//!
+//! `COMPLEX_PLAN=1` makes each task a `Task::planned`: the model lists what must be true before it
+//! starts, and `done` is refused until each item has a quotation from a tool's result that the
+//! program finds there. `COMPLEX_ASK=1` adds `ask_person`, answered here by a person who says only
+//! *알아서 판단해서 해 주세요* — every one of the twelve is fully specified, so any question is one
+//! nobody needed.
+//!
+//! * **The plan stays** only if, thinking on, it passes **at least 10 of 12** (the run without it
+//!   read 11; one run each, so a one-task drop is noise and two is not) **with no false finish**.
+//! * **Asking is not a nuisance** only if the twelve put **at most 2** questions in all.
+//!
+//! `--asking` is the other half: three tasks whose facts only the person has — a deadline and who
+//! owns it, this week's three to-dos, a dinner's date, time and place. Each passes only if the file
+//! holds the person's facts. Run **with** `ask_person` (answering the facts to any question) and
+//! **without** it, as the control: without, nothing can know them, so **a pass there means the
+//! check is broken**. Asking works if **at least 2 of 3** pass with it and **0 of 3** without; a
+//! finish without it is counted apart — that is a task inventing what only the person knew.
 
 use std::path::{Path, PathBuf};
 use std::time::Instant;
 
 use argmind_core::contract::Speaks;
-use argmind_core::task::{run, Ended, Task};
+use argmind_core::task::{run, Asking, Ended, Joined, Task, Tools};
 use argmind_env_ollama::Local;
 use argmind_env_windows::workspace::Workspace;
 
@@ -66,7 +85,14 @@ struct Model(Local);
 
 impl Speaks for Model {
     fn ask(&mut self, prompt: &str) -> String {
-        self.0.ask(prompt).map(|r| r.text).unwrap_or_default()
+        let (reply, why) = self.0.ask(prompt).map(|r| (r.text, r.reason))
+            .unwrap_or_else(|e| (String::new(), format!("오류: {e}")));
+        //: `COMPLEX_RAW=1` prints every reply whole — what a step that did not read actually said,
+        //: and why the model stopped saying it.
+        if std::env::var("COMPLEX_RAW").is_ok() {
+            println!("         « {} » ({why})", reply.replace('\n', " ⏎ ").chars().take(400).collect::<String>());
+        }
+        reply
     }
 }
 
@@ -337,11 +363,69 @@ fn control() {
     println!("\n    → 대조가 깨진 검사 {broken}개\n");
 }
 
+/// Three tasks whose facts only the person has, the answer the person gives, and what the file
+/// must hold.
+const ASKING: [(&str, &str, &str, &str, &[&str]); 3] = [
+    ("deadline", "어제 회의에서 정한 프로젝트 마감일과 담당자를 deadline.md 에 적어줘",
+     "마감은 11월 21일, 담당은 박서연이에요", "deadline.md", &["21", "박서연"]),
+    ("todo", "내 이번 주 할 일 세 가지를 todo.md 에 체크리스트로 정리해줘",
+     "보고서 제출, 치과 예약, 엄마 생신 선물 사기", "todo.md", &["보고서", "치과", "선물"]),
+    ("dinner", "우리 팀 회식 공지문을 notice.md 로 써줘",
+     "11월 20일 저녁 7시, 강남역 소담 식당이에요", "notice.md", &["20", "소담"]),
+];
+
+fn asking(model: &mut Model) {
+    println!("  ── 사람만 아는 것: ask_person 이 있을 때와 없을 때 ──");
+    let (mut with, mut without, mut invented) = (0, 0, 0);
+    for (i, (name, what, answer, file, must)) in ASKING.iter().enumerate() {
+        for ask in [true, false] {
+            let dir = fresh(&format!("asking-{i}-{ask}"));
+            let asked = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
+            let mut sets: Vec<Box<dyn Tools + Send>> = vec![Box::new(Workspace::new(dir.clone()))];
+            if ask {
+                let (answer, asked) = (answer.to_string(), asked.clone());
+                sets.push(Box::new(Asking::new(move |q: &str| {
+                    asked.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+                    println!("         ? {q}");
+                    Some(answer.clone())
+                })));
+            }
+            let mut bench = Joined(sets);
+            let mut task = if std::env::var("COMPLEX_PLAN").is_ok() { Task::planned(what) } else { Task::new(what) };
+            run(&mut task, model, &mut bench, "2026년 11월 3일", &|| true);
+            let body = std::fs::read_to_string(dir.join(file)).unwrap_or_default();
+            let pass = !body.is_empty() && must.iter().all(|m| body.contains(m));
+            let done = matches!(task.ended, Some(Ended::Done(_)));
+            if ask { with += pass as usize } else {
+                without += pass as usize;
+                invented += (done && !pass) as usize;
+            }
+            println!("    {} {name:<9} {} 물음 {} · {} 단계 · {} — {}", if pass { "●" } else { "○" },
+                     if ask { "ask 있음" } else { "ask 없음" }, asked.load(std::sync::atomic::Ordering::SeqCst),
+                     task.steps.len(), match &task.ended { Some(Ended::Done(_)) => "끝".to_string(),
+                         Some(Ended::Stopped(w)) => format!("멈춤({})", w.chars().take(40).collect::<String>()), None => "?".into() },
+                     body.replace('\n', " ⏎ ").chars().take(120).collect::<String>());
+            let _ = std::fs::remove_dir_all(&dir);
+        }
+    }
+    println!("\n    → ask 있음 {with}/3 · ask 없음 {without}/3, 거기서 지어내고 끝낸 것 {invented}");
+    println!("    ── 돌리기 전에 적어둔 대로: {} ──\n",
+             if without > 0 { "대조가 깨졌다 — 검사를 고쳐야 한다" }
+             else if with >= 2 { "묻기가 된다" } else { "묻기가 되지 않는다" });
+}
+
 fn main() {
     if std::env::args().any(|a| a == "--control") {
         return control();
     }
-    let models: Vec<String> = std::env::args().skip(1).collect();
+    if std::env::args().any(|a| a == "--asking") {
+        let mut local = Local::new("qwen3:14b");
+        local.think = Some(std::env::var("COMPLEX_THINK").is_ok());
+        local.keep_alive = "300s".into();
+        println!("\n  harness {}\n", argmind_measure::source_print(include_str!("complex.rs")));
+        return asking(&mut Model(local));
+    }
+    let models: Vec<String> = std::env::args().skip(1).filter(|a| !a.starts_with("--")).collect();
     let models = if models.is_empty() { vec!["qwen3:14b".to_string()] } else { models };
     println!("\n  복잡한 작업 — 버그 여럿, 명세, 지저분한 자료, 실패할 수 있는 테스트");
     println!("  harness {}\n", argmind_measure::source_print(include_str!("complex.rs")));
@@ -358,16 +442,27 @@ fn main() {
         println!("  ── {name} ──");
         let (mut passed, mut false_done, mut runs, mut secs_all) = (0, 0, 0, 0.0);
         let (mut fitted, mut held, mut held_false) = (0, 0, 0);
+        let questions = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
         for (i, case) in CASES.iter().enumerate() {
             for r in 0..REPEATS {
                 let dir = fresh(&format!("{}-{i}-{r}", name.replace(':', "_")));
                 for (f, body) in case.files {
                     std::fs::write(dir.join(f), body).unwrap();
                 }
-                let mut bench = Workspace::new(dir.clone());
-                let mut task = Task::new(case.what);
+                let bench = Workspace::new(dir.clone());
+                let mut sets: Vec<Box<dyn Tools + Send>> = vec![Box::new(Workspace::new(dir.clone()))];
+                if std::env::var("COMPLEX_ASK").is_ok() {
+                    let asked = questions.clone();
+                    sets.push(Box::new(Asking::new(move |q: &str| {
+                        asked.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+                        println!("         ? {q}");
+                        Some("알아서 판단해서 해 주세요".to_string())
+                    })));
+                }
+                let mut tools = Joined(sets);
+                let mut task = if std::env::var("COMPLEX_PLAN").is_ok() { Task::planned(case.what) } else { Task::new(case.what) };
                 let began = Instant::now();
-                run(&mut task, &mut model, &mut bench, "2026년 11월 3일", &|| true);
+                run(&mut task, &mut model, &mut tools, "2026년 11월 3일", &|| true);
                 let secs = began.elapsed().as_secs_f64();
                 secs_all += secs;
                 let verdict = (case.check)(&dir, &task, &bench);
@@ -392,6 +487,14 @@ fn main() {
                          i + 1, r + 1, case.name, task.steps.len(),
                          match &verdict { Err(why) => format!(" — {}", why.chars().take(90).collect::<String>()), Ok(()) => String::new() });
                 println!("         [{}]", tools.join(" "));
+                if !task.plan.is_empty() {
+                    for (n, item) in task.plan.iter().enumerate() {
+                        println!("         {} {}. {} {}", if item.evidence.is_some() { "☑" } else if item.skipped.is_some() { "⊘" } else { "☐" },
+                                 n + 1, item.what,
+                                 item.evidence.as_deref().map(|e| format!("— 「{}」", e.chars().take(50).collect::<String>()))
+                                     .or(item.skipped.as_deref().map(|w| format!("— 뺌: {w}"))).unwrap_or_default());
+                    }
+                }
                 if std::env::var("COMPLEX_VERBOSE").is_ok() {
                     for s in &task.steps {
                         println!("         · {} {} → {}", s.tool,
@@ -406,6 +509,15 @@ fn main() {
                  secs_all / runs as f64);
         println!("      맞춘 것(1–9) {}/9 · 따로 둔 것(10–12) {}/3, 거기서 끝났다고 하고 틀린 것 {}",
                  fitted, held, held_false);
+        if std::env::var("COMPLEX_PLAN").is_ok() {
+            println!("    ── 계획, 돌리기 전에 적어둔 대로: {} ──",
+                     if passed >= 10 && false_done == 0 { "계획을 둔다" } else { "계획을 두지 않는다" });
+        }
+        if std::env::var("COMPLEX_ASK").is_ok() {
+            let q = questions.load(std::sync::atomic::Ordering::SeqCst);
+            println!("    ── 묻기, 돌리기 전에 적어둔 대로: 필요 없는 물음 {q}개 — {} ──",
+                     if q <= 2 { "성가시지 않다" } else { "성가시다" });
+        }
         println!("    ── 돌리기 전에 적어둔 대로: {} · 따로 둔 셋: {} ──\n",
                  if 3 * passed >= 2 * runs { "지금의 작업 반복으로 복잡한 일이 된다" }
                  else if 3 * passed <= runs { "작업 반복 구조를 바꿔야 한다" }

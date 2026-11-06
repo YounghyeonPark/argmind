@@ -47,6 +47,13 @@ pub const STEPS_SHOWN_WHOLE: usize = 6;
 /// Times a `done` may be refused before the task is stopped instead.
 pub const DONE_REFUSED_MOST: usize = 2;
 
+/// Items in a plan, most. Chosen: a plan longer than this is a list of steps, not of results.
+pub const MOST_ITEMS: usize = 6;
+
+/// Questions a task may put to the person, most. Chosen: a task that needs more than two answers
+/// was not handed over, it was dictated.
+pub const MOST_QUESTIONS: usize = 2;
+
 /// Said beside a call that repeats the one before it with the same result. The third in a row stops.
 const SAME_AGAIN: &str = "\n(바로 앞과 같은 호출에 같은 결과다. 같은 것을 또 하지 말고 다른 방법을 써라)";
 
@@ -117,6 +124,20 @@ pub enum Ended {
     Stopped(String),
 }
 
+/// **One thing that must be true before the work is finished**, and the words that showed it.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Item {
+    pub what: String,
+    /// A quotation from a tool's result — checked to be there, by the program — or nothing yet.
+    pub evidence: Option<String>,
+    /// **Or taken out, and why** — in the model's words, which go to the person with the result.
+    /// The first run with plans: *회의 내용을 담은 meeting_notes.md 가 있는지 확인한다*, written
+    /// before anything was looked at, for a file that did not exist — and a right `deadline.md` was
+    /// stopped for want of it. A plan written before the work guesses; a guess must be retractable,
+    /// and in the open.
+    pub skipped: Option<String>,
+}
+
 #[derive(Clone, Debug)]
 pub struct Task {
     pub what: String,
@@ -124,11 +145,27 @@ pub struct Task {
     pub ended: Option<Ended>,
     /// Replies that did not read as a tool call or `done`.
     pub unreadable: usize,
+    /// **What must be true before `done`**, written by the model once, before any tool — see
+    /// [`Task::planned`]. Empty when there is no plan, and then nothing about it is asked or shown.
+    pub plan: Vec<Item>,
+    /// Whether to ask for a plan first, and whether that has happened.
+    pub planning: bool,
+    pub planned: bool,
 }
 
 impl Task {
     pub fn new(what: &str) -> Task {
-        Task { what: what.trim().to_string(), steps: Vec::new(), ended: None, unreadable: 0 }
+        Task { what: what.trim().to_string(), steps: Vec::new(), ended: None, unreadable: 0,
+               plan: Vec::new(), planning: false, planned: false }
+    }
+
+    /// **A task that writes down, before it starts, what must be true when it ends** — and cannot
+    /// end until each of those has a quotation from a tool's result beside it. From the trip plan:
+    /// *상세히 기록 완료* with no file written, and a plan with no flight times — the request said
+    /// what was wanted and nothing compared the finish against it. The plan is written before any
+    /// tool runs, while there is nothing done to make the work look smaller than it was.
+    pub fn planned(what: &str) -> Task {
+        Task { planning: true, ..Task::new(what) }
     }
 }
 
@@ -151,6 +188,106 @@ fn cut(text: &str, most: usize) -> String {
     format!("…(앞 {}자 생략)\n{tail}", n - most)
 }
 
+/// The prompt for the plan — asked once, before any tool.
+pub fn ask_for_a_plan(task: &Task, tools: &[ToolSpec], today: &str) -> String {
+    let mut p = String::new();
+    p.push_str("너는 사람의 PC에서 일을 대신 끝까지 해내는 에이전트다. 일을 시작하기 전에, 끝났다고 말하려면 \
+무엇이 확인돼야 하는지 적는다.\n\n");
+    p.push_str(&format!("맡은 일: {}\n오늘 날짜: {today}\n\n쓸 수 있는 도구:\n", task.what));
+    for t in tools {
+        p.push_str(&format!("- {} — {}\n", t.name, t.does));
+    }
+    p.push_str(&format!("\n맡은 일이 요구하는 결과를 빠짐없이, 2~{MOST_ITEMS}개 항목으로 적어라. 각 항목은 \
+도구 결과로 확인할 수 있는 것이어야 한다 (예: \"report.md 에 범주별 합계를 썼다\", \"테스트가 통과했다\", \
+\"항공편의 가격과 시간을 조회했다\"). 아직 아무것도 하지 마라.\n\n\
+JSON 하나로만 답하라: {{\"plan\": [\"항목\", ...]}}"));
+    p
+}
+
+/// The plan's items, or none when the reply does not read — a task without a plan is the task as it
+/// was before plans, not a failure.
+pub fn read_plan(reply: &str) -> Vec<Item> {
+    crate::llm::first_object(reply)
+        .and_then(|v| v.get("plan").and_then(Value::as_array).cloned())
+        .unwrap_or_default().iter()
+        .filter_map(|i| i.as_str().map(str::trim).filter(|t| !t.is_empty()))
+        .take(MOST_ITEMS)
+        .map(|t| Item { what: t.to_string(), evidence: None, skipped: None }).collect()
+}
+
+fn squash(text: &str) -> String {
+    text.split_whitespace().collect::<Vec<_>>().join(" ")
+}
+
+/// **`check`: an item is done when the model quotes the result that shows it**, and the quotation
+/// is found in a tool's result by the program. What it cannot check is a quotation that is there
+/// and about something else — the item and the quote sit side by side for a person to read.
+fn check_item(task: &mut Task, args: &Value) -> (String, bool) {
+    let n = args.get("item").and_then(|v| v.as_u64().or_else(|| v.as_str()?.trim().parse().ok()));
+    let Some(n) = n.map(|n| n as usize).filter(|n| (1..=task.plan.len()).contains(n)) else {
+        return (format!("item 은 1~{} 중 하나여야 한다", task.plan.len()), true);
+    };
+    if let Some(why) = args.get("skip").and_then(Value::as_str).map(str::trim).filter(|w| !w.is_empty()) {
+        task.plan[n - 1].skipped = Some(why.to_string());
+        task.plan[n - 1].evidence = None;
+        return (format!("{n}번을 계획에서 뺐다: {} — 이유는 결과와 함께 사람에게 전한다", task.plan[n - 1].what), false);
+    }
+    let quote = args.get("evidence").and_then(Value::as_str).unwrap_or("");
+    let quote = squash(quote.trim().trim_matches(['"', '\'', '「', '」', '“', '”']));
+    if quote.chars().count() < 2 {
+        return ("evidence 에 도구 결과에서 그대로 옮긴 글을 넣어라".into(), true);
+    }
+    let found = task.steps.iter().filter(|s| !s.failed && s.tool != "check" && s.tool != "done")
+        .any(|s| squash(&s.observed).contains(&quote));
+    if !found {
+        let short: String = quote.chars().take(60).collect();
+        return (format!("「{short}」 은(는) 어떤 도구 결과에도 없다. 결과에 실제로 있는 글을 그대로 옮겨라"), true);
+    }
+    task.plan[n - 1].evidence = Some(quote);
+    task.plan[n - 1].skipped = None;
+    (format!("{n}번 확인: {}", task.plan[n - 1].what), false)
+}
+
+/// **The person, as a tool**: `ask_person`, at most [`MOST_QUESTIONS`] a task. What the person
+/// answers is a tool's result like any other — a source for numbers and for a `check`. No answer is
+/// an error that says to carry on with what is known and say what was assumed.
+pub struct Asking<F> {
+    ask: F,
+    pub asked: usize,
+}
+
+impl<F: FnMut(&str) -> Option<String>> Asking<F> {
+    pub fn new(ask: F) -> Self {
+        Asking { ask, asked: 0 }
+    }
+}
+
+impl<F: FnMut(&str) -> Option<String>> Tools for Asking<F> {
+    fn list(&self) -> Vec<ToolSpec> {
+        vec![ToolSpec {
+            name: "ask_person".into(),
+            does: format!("사람만 아는 것(개인 일정, 정한 내용, 취향, 예산 등)이 없어서 일을 할 수 없을 때만 \
+하나를 묻는다. 찾아보거나 파일에서 읽거나 알아서 정해도 되는 것은 묻지 마라. 최대 {MOST_QUESTIONS}번"),
+            args: json!({"question": "물을 것"}),
+        }]
+    }
+    fn call(&mut self, _tool: &str, args: &Value) -> Result<String, String> {
+        let q = args.get("question").or_else(|| args.get("value")).and_then(Value::as_str)
+            .unwrap_or("").trim().to_string();
+        if q.is_empty() {
+            return Err("question 이 비었다".into());
+        }
+        if self.asked >= MOST_QUESTIONS {
+            return Err(format!("이미 {MOST_QUESTIONS}번 물었다. 아는 것으로 하고, 가정한 것은 결과에 밝혀라"));
+        }
+        self.asked += 1;
+        match (self.ask)(&q) {
+            Some(a) => Ok(format!("사람의 답: {a}")),
+            None => Err("답이 없었다. 아는 것으로 하고, 가정한 것은 결과에 밝혀라".into()),
+        }
+    }
+}
+
 /// The prompt for the next step.
 pub fn ask_for_a_step(task: &Task, tools: &[ToolSpec], today: &str) -> String {
     let mut p = String::new();
@@ -161,7 +298,24 @@ pub fn ask_for_a_step(task: &Task, tools: &[ToolSpec], today: &str) -> String {
     for t in tools {
         p.push_str(&format!("- {} {} — {}\n", t.name, t.args, t.does));
     }
+    if !task.plan.is_empty() {
+        p.push_str("- check {\"item\": 번호, \"evidence\": \"도구 결과에서 그대로 옮긴 부분\"} — 계획의 한 항목이 \
+끝났음을 표시한다. evidence 는 아래 결과에 실제로 있는 글이어야 한다. 해 보니 할 수 없거나 필요 없는 항목이면 \
+{\"item\": 번호, \"skip\": \"이유\"} 로 뺀다 — 이유는 사람에게 그대로 전해진다\n");
+    }
     p.push('\n');
+    if !task.plan.is_empty() {
+        p.push_str("끝내기 전에 확인할 것 (일을 시작하기 전에 세운 계획):\n");
+        for (i, item) in task.plan.iter().enumerate() {
+            match (&item.evidence, &item.skipped) {
+                (Some(e), _) => p.push_str(&format!("[x] {}. {} — 근거: 「{}」\n", i + 1, item.what,
+                                                    e.chars().take(80).collect::<String>())),
+                (None, Some(w)) => p.push_str(&format!("[-] {}. {} — 뺌: {w}\n", i + 1, item.what)),
+                (None, None) => p.push_str(&format!("[ ] {}. {}\n", i + 1, item.what)),
+            }
+        }
+        p.push('\n');
+    }
     if task.steps.is_empty() {
         p.push_str("아직 한 것이 없다.\n\n");
     } else {
@@ -200,7 +354,21 @@ pub fn read_step(reply: &str) -> Next {
             tool: t.trim().to_string(),
             args: v.get("args").cloned().unwrap_or_else(|| json!({})),
         },
-        _ => Next::Unreadable,
+        //: **The tool's name as the key**: given `ask_person`, qwen3:14b wrote
+        //: `{"ask_person": "마감일이 언제예요?"}` three times in three, and an unreadable reply tells
+        //: the model nothing, so it said it again. Read as a call; a name that is no tool then comes
+        //: back as *그런 도구는 없다*, which is something the model can read.
+        _ => match v.as_object().filter(|o| o.len() == 1).and_then(|o| o.iter().next()) {
+            Some((name, args)) if !name.trim().is_empty() && name != "plan" => Next::Call {
+                tool: name.trim().to_string(),
+                args: match args {
+                    Value::Object(_) => args.clone(),
+                    Value::String(s) => json!({"value": s}),
+                    _ => json!({}),
+                },
+            },
+            _ => Next::Unreadable,
+        },
     }
 }
 
@@ -363,6 +531,13 @@ pub fn why_not_done(task: &Task, said: &str, tools: &dyn Tools, today: &str) -> 
     if !task.steps.iter().any(|s| !s.failed) {
         return Some("아직 도구로 한 일이 하나도 없다. 직접 해 보고 확인한 다음에 끝내라".into());
     }
+    let open: Vec<String> = task.plan.iter().enumerate()
+        .filter(|(_, i)| i.evidence.is_none() && i.skipped.is_none())
+        .map(|(n, i)| format!("{}번({})", n + 1, i.what)).collect();
+    if !open.is_empty() {
+        return Some(format!("계획의 {} 이(가) 아직 확인되지 않았다. 해 보고, 결과를 check 로 표시한 다음에 \
+끝내라 — 할 수 없는 항목이면 skip 과 이유로 빼라", open.join(", ")));
+    }
     //: **The last thing run failed and nothing ran since**: from `--bin complex`, a test file that
     //: could not import what it tested, run, failed, and was called done.
     let ran = |s: &&Step| s.tool.starts_with("run");
@@ -384,7 +559,9 @@ pub fn why_not_done(task: &Task, said: &str, tools: &dyn Tools, today: &str) -> 
     //: checked like the closing words', and only code is a source.
     let code: Vec<String> = written_files(task).into_iter().filter(|(p, _)| is_code(p))
         .map(|(_, body)| body).collect();
-    let seen: String = task.steps.iter().filter(|s| s.tool != "done").map(|s| s.observed.as_str())
+    //: Nor a `check`: its result repeats the plan's words, which the model wrote before anything ran.
+    let seen: String = task.steps.iter().filter(|s| s.tool != "done" && s.tool != "check")
+        .map(|s| s.observed.as_str())
         .chain(code.iter().map(String::as_str))
         .chain([task.what.as_str(), today]).collect::<Vec<_>>().join("\n");
     let seen_numbers = numbers(&seen);
@@ -409,16 +586,26 @@ pub fn step(task: &mut Task, model: &mut dyn Speaks, tools: &mut dyn Tools, toda
     if task.ended.is_some() {
         return false;
     }
-    if task.steps.len() >= MOST_STEPS {
+    //: A `check` is bookkeeping, not work, so it does not spend a step.
+    if task.steps.iter().filter(|s| s.tool != "check").count() >= MOST_STEPS {
         task.ended = Some(Ended::Stopped(format!("{MOST_STEPS}단계를 넘겨 멈췄습니다")));
         return false;
+    }
+    if task.planning && !task.planned {
+        task.planned = true;
+        task.plan = read_plan(&model.ask(&ask_for_a_plan(task, &tools.list(), today)));
+        return true;
     }
     let reply = model.ask(&ask_for_a_step(task, &tools.list(), today));
     match read_step(&reply) {
         Next::Done(said) => {
             task.unreadable = 0;
             let Some(why) = why_not_done(task, &said, tools, today) else {
-                task.ended = Some(Ended::Done(said));
+                //: What was taken out of the plan goes with the result, in the model's words.
+                let out: Vec<String> = task.plan.iter().filter_map(|i| Some(format!("{} ({})", i.what, i.skipped.as_ref()?)))
+                    .collect();
+                task.ended = Some(Ended::Done(if out.is_empty() { said }
+                                              else { format!("{said}\n(계획에서 뺀 것: {})", out.join("; ")) }));
                 return false;
             };
             let refused = task.steps.iter().filter(|s| s.tool == "done").count() + 1;
@@ -441,7 +628,9 @@ pub fn step(task: &mut Task, model: &mut dyn Speaks, tools: &mut dyn Tools, toda
         Next::Call { tool, args } => {
             task.unreadable = 0;
             let known = tools.list().iter().any(|t| t.name == tool);
-            let (observed, failed) = if !known {
+            let (observed, failed) = if tool == "check" && !task.plan.is_empty() {
+                check_item(task, &args)
+            } else if !known {
                 (format!("그런 도구는 없다: {tool}"), true)
             } else {
                 match tools.call(&tool, &args) {
@@ -681,6 +870,88 @@ mod tests {
                    "문서 작성 잘하는 법 알려줘", "파이썬 스크립트는 어떻게 실행해?"] {
             assert!(!asks_for_work(no), "{no}");
         }
+    }
+
+    #[test]
+    fn a_plan_holds_the_finish_until_each_item_is_quoted() {
+        let mut task = Task::planned("sum.py 를 만들어 실행하고 결과를 알려줘");
+        let mut model = Scripted(vec![
+            r#"{"plan": ["sum.py 를 썼다", "실행해서 합을 얻었다"]}"#,
+            r#"{"tool": "write_file", "args": {"path": "sum.py", "content": "print(55)"}}"#,
+            r#"{"tool": "run", "args": {"command": "python3 sum.py"}}"#,
+            r#"{"done": "합은 55"}"#,
+            //: A quotation that is not in any result is refused.
+            r#"{"tool": "check", "args": {"item": 2, "evidence": "합은 55 입니다"}}"#,
+            r#"{"tool": "check", "args": {"item": 1, "evidence": "썼다"}}"#,
+            r#"{"tool": "check", "args": {"item": 2, "evidence": "55"}}"#,
+            r#"{"done": "합은 55"}"#,
+        ]);
+        let mut tools = Box_::default();
+        run(&mut task, &mut model, &mut tools, "2026-11-03", &|| true);
+        assert_eq!(task.plan.len(), 2);
+        assert_eq!(task.ended, Some(Ended::Done("합은 55".into())), "{:#?}", task.steps);
+        let refused: Vec<&Step> = task.steps.iter().filter(|s| s.failed).collect();
+        assert_eq!(refused.len(), 2, "{refused:#?}");
+        assert!(refused[0].observed.contains("1번(sum.py 를 썼다)"), "{}", refused[0].observed);
+        assert!(refused[1].observed.contains("어떤 도구 결과에도 없다"), "{}", refused[1].observed);
+        assert_eq!(task.plan[1].evidence.as_deref(), Some("55"));
+    }
+
+    #[test]
+    fn an_item_taken_out_goes_to_the_person_with_its_reason() {
+        let mut task = Task::planned("deadline.md 에 적어줘");
+        let mut model = Scripted(vec![
+            r#"{"plan": ["meeting_notes.md 를 읽었다", "deadline.md 를 썼다"]}"#,
+            r#"{"tool": "write_file", "args": {"path": "deadline.md", "content": "21일"}}"#,
+            r#"{"tool": "check", "args": {"item": 2, "evidence": "썼다"}}"#,
+            //: A skip with no reason is no skip.
+            r#"{"tool": "check", "args": {"item": 1, "skip": " "}}"#,
+            r#"{"tool": "check", "args": {"item": 1, "skip": "그런 파일이 없다"}}"#,
+            r#"{"done": "deadline.md 를 썼다"}"#,
+        ]);
+        let mut tools = Box_::default();
+        run(&mut task, &mut model, &mut tools, "2026-11-03", &|| true);
+        assert_eq!(task.ended, Some(Ended::Done(
+            "deadline.md 를 썼다\n(계획에서 뺀 것: meeting_notes.md 를 읽었다 (그런 파일이 없다))".into())),
+            "{:#?}", task.steps);
+    }
+
+    #[test]
+    fn a_plan_that_does_not_read_is_no_plan() {
+        let mut task = Task::planned("sum.py 를 만들어 줘");
+        let mut model = Scripted(vec![
+            "계획은 이렇습니다",
+            r#"{"tool": "write_file", "args": {"path": "sum.py", "content": "print(55)"}}"#,
+            r#"{"done": "sum.py 를 만들었다"}"#,
+        ]);
+        let mut tools = Box_::default();
+        run(&mut task, &mut model, &mut tools, "2026-11-03", &|| true);
+        assert!(task.plan.is_empty());
+        assert_eq!(task.ended, Some(Ended::Done("sum.py 를 만들었다".into())));
+    }
+
+    #[test]
+    fn a_tool_named_as_the_key_is_a_call() {
+        assert_eq!(read_step(r#"{"ask_person": "마감일이 언제예요?"}"#),
+                   Next::Call { tool: "ask_person".into(), args: json!({"value": "마감일이 언제예요?"}) });
+        assert_eq!(read_step(r#"{"read_file": {"path": "a.txt"}}"#),
+                   Next::Call { tool: "read_file".into(), args: json!({"path": "a.txt"}) });
+        //: Two keys, or a plan where a step was asked for, still do not read.
+        assert_eq!(read_step(r#"{"a": 1, "b": 2}"#), Next::Unreadable);
+        assert_eq!(read_step(r#"{"plan": ["x"]}"#), Next::Unreadable);
+        let mut asking = Asking::new(|_: &str| Some("21일".to_string()));
+        assert_eq!(asking.call("ask_person", &json!({"value": "언제?"})), Ok("사람의 답: 21일".into()));
+    }
+
+    #[test]
+    fn the_person_is_asked_at_most_twice() {
+        let mut answers = vec![Some("11월 14일".to_string()), None];
+        let mut asking = Asking::new(move |_q: &str| if answers.is_empty() { Some("또".into()) } else { answers.remove(0) });
+        let q = json!({"question": "마감일이 언제예요?"});
+        assert_eq!(asking.call("ask_person", &q), Ok("사람의 답: 11월 14일".into()));
+        assert!(asking.call("ask_person", &q).unwrap_err().contains("답이 없었다"));
+        assert!(asking.call("ask_person", &q).unwrap_err().contains("이미 2번"));
+        assert!(asking.call("ask_person", &json!({})).is_err());
     }
 
     #[test]

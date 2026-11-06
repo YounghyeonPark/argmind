@@ -241,6 +241,9 @@ struct Desk {
     stop_work: Arc<AtomicBool>,
     /// Where a finished task reports back, so its result enters the history on this thread.
     jobs: Sender<Job>,
+    /// **A task's question waiting for the person**: the next thing they say is its answer, unless it
+    /// is *멈춰*. Empty when nothing is asked.
+    task_asks: Arc<Mutex<Option<Sender<String>>>>,
     /// Judgements already raised this session, by name and role — see `raise_it`.
     raised: Vec<(String, String)>,
     /// **규칙**, read at startup and replaced whole from the page. See [`argmind_core::rule`].
@@ -403,6 +406,20 @@ fn think(desk: &mut Desk, out: &Listeners, text: &str) {
     //: for the rest of the session. Taken before routing, since routing may ask the model and a
     //: task's call should yield the card to it.
     let _answering = desk.turn.begins();
+    //: **A task asked the person something, and this is the answer** — before any routing, since an
+    //: answer like *박서연, 21일* reads as nothing the rules know. *멈춰* is not an answer: dropping
+    //: the question lets the task go on to the stop below.
+    let waiting = desk.task_asks.lock().map(|mut w| w.take()).unwrap_or(None);
+    if let Some(answer_to) = waiting {
+        if !["멈춰", "그만"].iter().any(|w| text.contains(w)) && answer_to.send(text.to_string()).is_ok() {
+            out.record("길", "작업의 물음에 대한 답");
+            let reply = "알겠습니다 — 이어서 할게요".to_string();
+            desk.session.history.push(("them".into(), text.to_string()));
+            desk.session.history.push(("you".into(), reply.clone()));
+            out.send("say", &reply);
+            return;
+        }
+    }
     //: **One decision, in `crate::route`**, which `--bin routing` measures — the same function, so
     //: a miss there is a miss here. The rules first, and where they say *a turn* the model is asked
     //: whether it is work, shown the window in front: 0.15 s median, 0.23 s worst, measured. Each
@@ -575,6 +592,21 @@ pub const TASK_MODEL: &str = "qwen3:14b";
 /// waits on it; the conversation keeps thinking off, where `repair` measured it halving Korean.
 pub const TASK_THINKS: bool = true;
 
+/// Whether a task writes down first what must be true at its end — see `Task::planned`. **Off,
+/// measured**: `--bin complex` with thinking on read **8 of 12 with a plan against 11 of 12
+/// without**, under the 10 written first — and six of the eight passes were stopped anyway, the
+/// work right and an item nobody could quote still open (*the code is written correctly*). A plan
+/// written before looking guesses, and quoting the guess holds back the work that proves it.
+pub const TASK_PLANS: bool = false;
+
+/// Whether a task may ask the person — `task::Asking`, answered through the conversation. **Off,
+/// measured**: on the three errands only the person could finish it read **3 of 3 and 2 of 3 with
+/// the tool against 0 of 3 without**, so asking works — but on `--bin complex`, thinking on, the
+/// same twelve tasks read **8 of 12 and 10 of 12 with it, each with a false finish, against 12 of 12
+/// and none without it in the same hour**, and the one question it asked twice was for a file it
+/// could have read. The bar written first was 10 of 12 *and* no false finish.
+pub const TASK_ASKS: bool = false;
+
 /// The task's model, **giving the card up whenever somebody is being answered**: a step with
 /// reasoning on runs for minutes, and a turn waiting behind it is the conversation freezing. The
 /// call is abandoned the moment a turn begins — dropping the socket frees the card, measured — and
@@ -618,6 +650,31 @@ fn worked_instead(desk: &mut Desk, out: &Listeners, text: &str) -> bool {
     } else if let Some(files) = crate::platform::workbench() {
         //: **And the web, when there is a pane** — a trip plan is searching before it is writing.
         let mut sets: Vec<Box<dyn argmind_core::task::Tools + Send>> = vec![files];
+        //: **And the person**, who is asked through the conversation: the question is said like a
+        //: result, and the next thing they say comes back here — see `task_asks` in `think`.
+        let (slot, jobs) = (Arc::clone(&desk.task_asks), desk.jobs.clone());
+        let stop = Arc::clone(&desk.stop_work);
+        if TASK_ASKS { sets.push(Box::new(argmind_core::task::Asking::new(move |q: &str| {
+            let (tx, rx) = std::sync::mpsc::channel::<String>();
+            if let Ok(mut w) = slot.lock() {
+                *w = Some(tx);
+            }
+            let _ = jobs.send(Job::Worked(format!("작업하다가 여쭤볼게요 — {q}")));
+            //: Ten minutes, and *멈춰* drops the question at once.
+            let asked_at = std::time::Instant::now();
+            let got = loop {
+                match rx.recv_timeout(std::time::Duration::from_millis(500)) {
+                    Ok(a) => break Some(a),
+                    Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => break None,
+                    Err(_) if stop.load(Ordering::SeqCst) || asked_at.elapsed().as_secs() >= 600 => break None,
+                    Err(_) => {}
+                }
+            };
+            if let Ok(mut w) = slot.lock() {
+                w.take();
+            }
+            got
+        }))); }
         if let Some(pane) = desk.web.as_ref() {
             sets.push(Box::new(argmind_env_browser::WebTools(
                 argmind_env_browser::Pane::new(pane.wire.clone()))));
@@ -645,7 +702,7 @@ fn start_work(desk: &Desk, what: &str, mut bench: Box<dyn argmind_core::task::To
         local.think = Some(TASK_THINKS);
         local.keep_alive = "300s".into();
         let mut model = Yielding(local, turn.clone());
-        let mut task = Task::new(&what);
+        let mut task = if TASK_PLANS { Task::planned(&what) } else { Task::new(&what) };
         let today = crate::platform::today();
         out.record("작업", &format!("시작: {what}"));
         loop {
@@ -656,8 +713,14 @@ fn start_work(desk: &Desk, what: &str, mut bench: Box<dyn argmind_core::task::To
                 task.ended = Some(Ended::Stopped("사람이 멈췄습니다".into()));
                 break;
             }
-            let before = task.steps.len();
+            let (before, had_plan) = (task.steps.len(), task.planned);
             let going = step(&mut task, &mut model, bench.as_mut(), &today);
+            if !had_plan && task.planned {
+                let items: Vec<String> = task.plan.iter().enumerate()
+                    .map(|(n, i)| format!("{}. {}", n + 1, i.what)).collect();
+                out.record("작업", &format!("계획: {}", if items.is_empty() { "(읽지 못함 — 계획 없이)".into() }
+                                                        else { items.join(" · ") }));
+            }
             for s in &task.steps[before..] {
                 let first = s.observed.lines().find(|l| !l.trim().is_empty()).unwrap_or("");
                 let args: String = s.args.to_string().chars().take(80).collect();
@@ -2660,6 +2723,7 @@ pub fn run(how: How) {
                               raised: Vec::new(), kept_lines: 0,
                               working: Arc::new(AtomicBool::new(false)),
                               stop_work: Arc::new(AtomicBool::new(false)), jobs: agent_jobs,
+                              task_asks: Arc::new(Mutex::new(None)),
                               facing_now: Arc::new(Mutex::new(None)),
                               face_seen_at: Arc::new(Mutex::new(None)) };
         //: **The button is the permission, which is what this flag is for** — `session.rs`:
