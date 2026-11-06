@@ -94,7 +94,7 @@ pub fn field(json: &str, key: &str) -> Option<String> {
 
 /// The timeline itself.
 #[derive(Default)]
-pub struct Activity(VecDeque<Entry>);
+pub struct Activity(VecDeque<Entry>, u64);
 
 impl Activity {
     /// Add one. **The same window twice in a row is one line** — the header is re-sent whenever a
@@ -109,6 +109,7 @@ impl Activity {
             return None;
         }
         self.0.push_back(Entry { at, kind, text });
+        self.1 += 1;
         while self.0.len() > KEPT {
             self.0.pop_front();
         }
@@ -121,6 +122,17 @@ impl Activity {
 
     pub fn len(&self) -> usize {
         self.0.len()
+    }
+
+    /// Lines ever recorded — a mark for [`Activity::since`].
+    pub fn total(&self) -> u64 {
+        self.1
+    }
+
+    /// **What was recorded after a mark**, of what is still kept.
+    pub fn since(&self, mark: u64) -> Vec<&Entry> {
+        let n = (self.1.saturating_sub(mark) as usize).min(self.0.len());
+        self.0.iter().skip(self.0.len() - n).collect()
     }
 
     pub fn is_empty(&self) -> bool {

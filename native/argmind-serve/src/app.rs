@@ -136,6 +136,21 @@ impl Listeners {
         self.1.lock().map(|log| log.json()).unwrap_or_else(|_| "[]".into())
     }
 
+    fn mark(&self) -> u64 {
+        self.1.lock().map(|log| log.total()).unwrap_or(0)
+    }
+
+    /// **What came of a press, in the timeline's own words** — the lines `act` and `propose` already
+    /// write (*실행 — 화면이 바뀜*, *못 함 — 그새 사라짐*, a rule's note), so a task is told what a
+    /// person would read and nothing is written twice.
+    fn pressed_since(&self, mark: u64) -> String {
+        let Ok(log) = self.1.lock() else { return String::new() };
+        let lines: Vec<String> = log.since(mark).into_iter()
+            .filter(|e| ["제안", "실행", "못 함", "알림", "물음"].contains(&e.kind))
+            .map(|e| format!("{}: {}", e.kind, e.text)).collect();
+        if lines.is_empty() { "아무 일도 일어나지 않았다".into() } else { lines.join("\n") }
+    }
+
     fn forget_timeline(&self) {
         if let Ok(mut log) = self.1.lock() {
             log.clear();
@@ -244,6 +259,9 @@ struct Desk {
     /// **A task's question waiting for the person**: the next thing they say is its answer, unless it
     /// is *멈춰*. Empty when nothing is asked.
     task_asks: Arc<Mutex<Option<Sender<String>>>>,
+    /// **A task's press waiting on a row**: its token, where the answer goes, and the timeline mark
+    /// from before the press.
+    task_presses: Vec<(u64, Sender<String>, u64)>,
     /// Judgements already raised this session, by name and role — see `raise_it`.
     raised: Vec<(String, String)>,
     /// **규칙**, read at startup and replaced whole from the page. See [`argmind_core::rule`].
@@ -322,6 +340,11 @@ enum Job {
     ForgetConversation,
     Activity,
     ClearActivity,
+    /// **A task looks at the pane** — `(role, name)` of what can be pressed.
+    PaneLook(Sender<Result<Vec<(String, String)>, String>>),
+    /// **A task presses in the pane**, through `propose` and `act` like a turn. The answer is what
+    /// came of it, in the timeline's words — at once, or when the person answers the row.
+    PanePress(Effect, Sender<String>),
     /// The thinking thread took one step: **the copy it stepped from and the result**, so a step
     /// computed before an answer arrived is recognised and thrown away rather than written over it.
     Stepped(argmind_core::errand::Errand, argmind_core::errand::Errand),
@@ -449,6 +472,7 @@ fn think(desk: &mut Desk, out: &Listeners, text: &str) {
     //: gone is worse than no button.
     for dropped in desk.proposals.clear() {
         out.send("dropped", &dropped.token.to_string());
+        settle_press(desk, out, dropped.token, "실행 줄이 대화에 밀려 사라졌다 — 누르지 않았다");
     }
     let (handle, title) = desk.session.eyes.window();
     out.send("attending", &title);
@@ -692,6 +716,9 @@ fn worked_instead(desk: &mut Desk, out: &Listeners, text: &str) -> bool {
         if let Some(pane) = desk.web.as_ref() {
             sets.push(Box::new(argmind_env_browser::WebTools(
                 argmind_env_browser::Pane::new(pane.wire.clone()))));
+            //: **And pressing there — the pane only**, the owner's choice of 2026-11-06: a task runs
+            //: for minutes beside somebody using their own desktop.
+            sets.push(Box::new(pane_hands(desk.jobs.clone(), Arc::clone(&desk.stop_work))));
         }
         start_work(desk, text, Box::new(argmind_core::task::Joined(sets)));
         format!("작업 폴더({})에서 해 볼게요 — 끝나면 알려 드릴게요",
@@ -703,6 +730,79 @@ fn worked_instead(desk: &mut Desk, out: &Listeners, text: &str) -> bool {
     desk.session.history.push(("you".into(), reply.clone()));
     out.send("say", &reply);
     true
+}
+
+/// **What can be pressed in the pane, read there**, whatever the switch says — the switch is put
+/// back on return.
+fn pane_look(desk: &mut Desk) -> Result<Vec<(String, String)>, String> {
+    if desk.web.is_none() {
+        return Err("웹 칸이 없다".into());
+    }
+    let _pane = desk.on_web.for_now(true);
+    let (widgets, _) = desk.session.observe();
+    Ok(widgets.into_iter().take(desk.session.limit).map(|w| (w.role, w.name)).collect())
+}
+
+/// **A task's press, as a turn's** — `propose` with the effect a person asked for, on the pane. If
+/// it ran or was refused, the task hears at once; if it waits on a row — 확인 없이 실행 off, or a
+/// rule that always asks — the task waits for the person, and hears when they answer.
+fn pane_press(desk: &mut Desk, out: &Listeners, effect: Effect, tx: Sender<String>) {
+    if desk.web.is_none() {
+        let _ = tx.send("웹 칸이 없다 — 누르지 않았다".into());
+        return;
+    }
+    let mark = out.mark();
+    let _pane = desk.on_web.for_now(true);
+    let before: Vec<u64> = desk.proposals.waiting().iter().map(|p| p.token).collect();
+    let went = propose(desk, out, effect, None, false);
+    let row = desk.proposals.waiting().iter().map(|p| p.token).find(|t| !before.contains(t));
+    match row {
+        Some(token) if went => {
+            out.send("note", "작업이 웹 칸에서 누르려고 합니다 — 실행 줄을 눌러 주세요");
+            desk.task_presses.push((token, tx, mark));
+        }
+        _ => {
+            let _ = tx.send(out.pressed_since(mark));
+        }
+    }
+}
+
+/// The person answered a row a task was waiting on — or it went.
+fn settle_press(desk: &mut Desk, out: &Listeners, token: u64, how: &str) {
+    if let Some(i) = desk.task_presses.iter().position(|(t, ..)| *t == token) {
+        let (_, tx, mark) = desk.task_presses.remove(i);
+        let said = out.pressed_since(mark);
+        let _ = tx.send(if how.is_empty() { said } else { format!("{said}\n{how}") });
+    }
+}
+
+/// **The pane's hands, for a task** — the task thread asks the worker, which looks and presses as a
+/// turn does. A press waits for its answer as long as a person might take over a row, and *멈춰*
+/// lets go of it.
+fn pane_hands(jobs: Sender<Job>, stop: Arc<AtomicBool>) -> impl argmind_core::task::Tools + Send {
+    let looks = jobs.clone();
+    argmind_core::task::Pressing::new(
+        move || {
+            let (tx, rx) = std::sync::mpsc::channel();
+            looks.send(Job::PaneLook(tx)).map_err(|_| "argmind 이 닫혔다".to_string())?;
+            rx.recv_timeout(std::time::Duration::from_secs(30)).map_err(|_| "웹 칸을 보지 못했다".to_string())?
+        },
+        move |effect| {
+            let (tx, rx) = std::sync::mpsc::channel();
+            if jobs.send(Job::PanePress(effect, tx)).is_err() {
+                return "argmind 이 닫혔다 — 누르지 않았다".into();
+            }
+            let asked_at = std::time::Instant::now();
+            loop {
+                match rx.recv_timeout(std::time::Duration::from_millis(500)) {
+                    Ok(said) => return said,
+                    Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => return "답이 오지 않았다".into(),
+                    Err(_) if stop.load(Ordering::SeqCst) => return "사람이 작업을 멈췄다".into(),
+                    Err(_) if asked_at.elapsed().as_secs() >= 600 => return "10분 동안 실행 줄에 답이 없었다".into(),
+                    Err(_) => {}
+                }
+            }
+        })
 }
 
 fn start_work(desk: &Desk, what: &str, mut bench: Box<dyn argmind_core::task::Tools + Send>) {
@@ -2746,6 +2846,7 @@ pub fn run(how: How) {
                               working: Arc::new(AtomicBool::new(false)),
                               stop_work: Arc::new(AtomicBool::new(false)), jobs: agent_jobs,
                               task_asks: Arc::new(Mutex::new(None)),
+                              task_presses: Vec::new(),
                               facing_now: Arc::new(Mutex::new(None)),
                               face_seen_at: Arc::new(Mutex::new(None)) };
         //: **The button is the permission, which is what this flag is for** — `session.rs`:
@@ -2824,6 +2925,7 @@ pub fn run(how: How) {
                     if let Answered::Run(p) = desk.proposals.confirm(n) {
                         let _ = act(&mut desk, &agent_out, p);
                     }
+                    settle_press(&mut desk, &agent_out, n, "");
                 }
                 Job::Decline(n) => {
                     if let Answered::TurnedDown(p) = desk.proposals.decline(n) {
@@ -2832,7 +2934,12 @@ pub fn run(how: How) {
                                                     std::slice::from_ref(&p.effect));
                         agent_out.send("dropped", &p.token.to_string());
                     }
+                    settle_press(&mut desk, &agent_out, n, "사람이 실행 줄을 거절했다 — 누르지 않았다");
                 }
+                Job::PaneLook(tx) => {
+                    let _ = tx.send(pane_look(&mut desk));
+                }
+                Job::PanePress(effect, tx) => pane_press(&mut desk, &agent_out, effect, tx),
                 Job::Listen(down) => listen(&mut desk, &agent_out, down),
                 Job::Notice(on) => match (on, crate::decided::standing("notice")) {
                     //: **Switching off never asks.** A permission question in front of somebody

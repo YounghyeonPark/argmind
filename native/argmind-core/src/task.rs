@@ -115,6 +115,94 @@ impl Tools for Joined {
     }
 }
 
+/// **Pressing on a page, as tools** — the step from *read the web* to *use it*: a form to fill, a
+/// tab to open, a button whose answer appears only after it is pressed. The owner, 2026-11-06,
+/// chose **argmind's own pane only**, since a task runs for minutes beside a person using their
+/// own desktop.
+///
+/// **The model picks a number; the program turns it into a name and a role.** `look_pane` lists
+/// what can be pressed, numbered, with no rectangle — the turn's own rule — and `click` takes the
+/// number from the last look and nothing else. After a press the numbers are forgotten, since what
+/// they named may have moved: a click on a stale number is refused and the model told to look.
+///
+/// What looking and pressing *are* is the environment's: `look` returns `(role, name)` pairs, and
+/// `press` takes the effect and returns, in words, what came of it — in the application, the same
+/// `propose` and `act` a turn goes through, rules, password fields and screen checks included.
+pub struct Pressing<L, P> {
+    look: L,
+    press: P,
+    seen: Vec<(String, String)>,
+}
+
+impl<L, P> Pressing<L, P>
+where L: FnMut() -> Result<Vec<(String, String)>, String>, P: FnMut(crate::intent::Effect) -> String {
+    pub fn new(look: L, press: P) -> Self {
+        Pressing { look, press, seen: Vec::new() }
+    }
+}
+
+/// How many pressable things one look shows. `MAX_LISTED` is a turn's; a page's list past this is
+/// `crowding`'s collapse from 123.
+pub const MOST_PRESSABLE: usize = 100;
+
+fn effect(kind: &str, target: &str, role: &str, text: &str) -> crate::intent::Effect {
+    //: **Asked for**: a task is a request the person made — `because_asked` true, so a press is
+    //: gated as *what you asked for* is, never as argmind's own idea.
+    crate::intent::Effect { kind: kind.into(), target: target.into(), role: role.into(), text: text.into(),
+                            because_asked: Some(true), which: None }
+}
+
+impl<L, P> Tools for Pressing<L, P>
+where L: FnMut() -> Result<Vec<(String, String)>, String>, P: FnMut(crate::intent::Effect) -> String {
+    fn list(&self) -> Vec<ToolSpec> {
+        vec![
+            ToolSpec { name: "look_pane".into(), args: json!({}),
+                       does: "웹 칸에 지금 열린 페이지에서 누를 수 있는 것을 번호와 함께 본다. click 전에 먼저 본다".into() },
+            ToolSpec { name: "click".into(), args: json!({"item": 3}),
+                       does: "look_pane 이 보여 준 번호의 것을 누른다. 입력칸이면 누른 뒤 type_text 로 쓴다".into() },
+            ToolSpec { name: "type_text".into(), args: json!({"text": "A-1042"}),
+                       does: "방금 누른 입력칸에 글을 쓴다".into() },
+            ToolSpec { name: "press_key".into(), args: json!({"key": "Enter"}),
+                       does: "키 하나를 누른다 (Enter, Tab, Escape …)".into() },
+        ]
+    }
+    fn call(&mut self, tool: &str, args: &Value) -> Result<String, String> {
+        let text = |k: &str| args.get(k).and_then(Value::as_str).map(str::trim).filter(|s| !s.is_empty())
+            .map(String::from).ok_or_else(|| format!("{k} 가 없다"));
+        let pressed = match tool {
+            "look_pane" => {
+                let mut seen = (self.look)()?;
+                seen.truncate(MOST_PRESSABLE);
+                self.seen = seen;
+                if self.seen.is_empty() {
+                    return Ok("웹 칸에 누를 수 있는 것이 보이지 않는다".into());
+                }
+                let lines: Vec<String> = self.seen.iter().enumerate()
+                    .map(|(i, (role, name))| format!("{i}: {role} \"{name}\"")).collect();
+                return Ok(format!("웹 칸에서 누를 수 있는 것 (번호: 종류 \"이름\"):
+{}", lines.join("
+")));
+            }
+            "click" => {
+                let n = args.get("item").and_then(|v| v.as_u64().or_else(|| v.as_str()?.trim().parse().ok()))
+                    .ok_or("item 은 look_pane 의 번호다")? as usize;
+                let Some((role, name)) = self.seen.get(n).cloned() else {
+                    return Err(if self.seen.is_empty() { "먼저 look_pane 으로 보라 — 번호는 마지막으로 본 목록의 것이다".into() }
+                               else { format!("{n} 번은 마지막 목록에 없다 (0–{})", self.seen.len() - 1) });
+                };
+                (self.press)(effect("click", &name, &role, ""))
+            }
+            "type_text" => (self.press)(effect("type", "", "", &text("text")?)),
+            "press_key" => (self.press)(effect("key", "", "", &text("key")?)),
+            other => return Err(format!("그런 도구는 없다: {other}")),
+        };
+        //: What the numbers named may have moved.
+        self.seen.clear();
+        Ok(format!("{pressed}
+(화면이 바뀌었을 수 있다 — 다시 누르려면 look_pane 으로 다시 보라. 페이지 글은 read_pane)"))
+    }
+}
+
 /// One step as it happened.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Step {
@@ -832,6 +920,28 @@ mod tests {
         assert!(reasons_here(&t));
         t.steps.push(Step { tool: "run".into(), args: json!({}), observed: "ok".into(), failed: false });
         assert!(!reasons_here(&t));
+    }
+
+    #[test]
+    fn a_press_names_what_the_last_look_showed_and_nothing_else() {
+        let pressed = std::rc::Rc::new(std::cell::RefCell::new(Vec::<crate::intent::Effect>::new()));
+        let log = pressed.clone();
+        let mut hands = Pressing::new(
+            || Ok(vec![("textbox".to_string(), "주문번호".to_string()), ("button".to_string(), "조회".to_string())]),
+            move |e| { log.borrow_mut().push(e); "실행 — 화면이 바뀜".to_string() });
+        //: No look yet: refused, and nothing pressed.
+        assert!(hands.call("click", &json!({"item": 1})).is_err());
+        let seen = hands.call("look_pane", &json!({})).unwrap();
+        assert!(seen.contains("1: button \"조회\""), "{seen}");
+        assert_eq!(seen.lines().skip(1).collect::<Vec<_>>(), ["0: textbox \"주문번호\"", "1: button \"조회\""], "a role and a name, never a coordinate");
+        hands.call("click", &json!({"item": "1"})).unwrap();
+        //: The numbers are forgotten after a press.
+        assert!(hands.call("click", &json!({"item": 0})).is_err());
+        hands.call("type_text", &json!({"text": "A-1042"})).unwrap();
+        let p = pressed.borrow();
+        assert_eq!((p[0].kind.as_str(), p[0].target.as_str(), p[0].role.as_str()), ("click", "조회", "button"));
+        assert_eq!((p[1].kind.as_str(), p[1].text.as_str()), ("type", "A-1042"));
+        assert!(p.iter().all(|e| e.because_asked == Some(true)), "a task is something the person asked for");
     }
 
     #[test]

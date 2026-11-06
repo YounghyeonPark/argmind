@@ -105,6 +105,41 @@
 //! page it read. A sentence made up around true titles, which only reading the saved page caught. The
 //! planted instruction stayed out of the result, n = 1.
 //!
+//! ## `--work`: a task that has to press to get its answer (2026-11-06)
+//!
+//! The task loop could read the web and not use it: no form, no tab, no next page. Now it has
+//! `look_pane`, `click`, `type_text` and `press_key` in the pane — `task::Pressing`, the pane only
+//! by the owner's choice. **Three pages this harness writes into the pane itself**, so no site is
+//! pressed and nothing outside the window this harness opened is touched, and each answer is
+//! drawn by the page's own script only after a press. *Written into*, not served: the first run
+//! served them on 127.0.0.1 and **the pane refused every one** (`net::ERR_ABORTED`) — `is_web`
+//! keeps it off this machine so no page can reach argmind's own server, which is right and stays.
+//! So the pane opens `example.com` and the harness replaces the document, and the task is asked
+//! about *the page open in the pane*:
+//!
+//! 1. **a form**: type the order number, press 조회 — the waybill `KX-7731` appears.
+//! 2. **a tab**: the 재고 tab is hidden until pressed — 노트북 *37대*.
+//! 3. **pages**: the item is on page 3 of a list with a 다음 페이지 button — 무선 키보드 *52,900원*.
+//!
+//! Each passes if `answer.md` holds the answer. Run **with** the pressing tools and **without**
+//! them as the control: without, the answer is not on any page the loop can read, so **a pass
+//! there means the check is broken**. **Pressing works if at least 2 of 3 pass with it and 0 of 3
+//! without**; a finish that fails its check is counted apart. qwen3:14b, reasoning on, as shipped.
+//!
+//! **What this does not measure is the application's gate.** The harness presses with the pane's
+//! hands directly — found by name and role on a fresh look, as `perform` does — where the
+//! application goes through `propose` and `act`, rules and rows included. The model's half is what
+//! is measured: does it look, pick the number, type, press and read back.
+//!
+//! **Read, once each: with the tools 3 of 3, without 0 of 3** — as written. The form took eight
+//! steps, one of them a click on a number the press before had made stale, refused and looked
+//! again; the tab six; the pages eleven, three presses of 다음 페이지 with a look between each.
+//! Twice the model said *done* before it had written `answer.md`, and the finish check sent it
+//! back to write it. **The two false finishes are both the control's**, and neither is invented:
+//! *재고 수는 명시되어 있지 않습니다*, and a finish with no file — what a page without its
+//! answer shows. One control tried `?order=A-1042` on the address, which reloaded the real
+//! `example.com`; nothing a task can type into an address reaches a page's script.
+//!
 //! ## What the first runs read, 2026-10-20
 //!
 //! * **The control failed first, and was right to.** The one link on `example.com` read as off
@@ -304,6 +339,9 @@ fn main() {
         }
         if std::env::args().any(|a| a == "--plan") {
             return plan(orders);
+        }
+        if std::env::args().any(|a| a == "--work") {
+            return work(orders);
         }
         if std::env::args().any(|a| a == "--fare") {
             return fare(orders);
@@ -726,6 +764,152 @@ fn main() {
     /// digits or more in that file appears in a page it read, the request or the date** — a plan
     /// whose prices are not on any page it opened is a plan made up. What this cannot judge is
     /// whether the plan is good; the file is printed whole for a person to read.
+    /// The three pages `--work` presses, by path.
+    fn work_page(path: &str) -> Option<&'static str> {
+        Some(match path {
+            "/order" => r#"<!doctype html><html lang="ko"><meta charset="utf-8"><title>주문 조회</title>
+<h1>주문 조회</h1><p>주문번호를 넣고 조회를 누르세요.</p>
+<input id="n" aria-label="주문번호"> <button id="go">조회</button><p id="out"></p>
+<script>document.getElementById('go').onclick = () => {
+  const v = document.getElementById('n').value.trim();
+  document.getElementById('out').innerText = v === 'A-1042'
+    ? '주문 A-1042 — 배송 중, 운송장 번호 KX-7731' : '그런 주문이 없습니다: ' + v; };</script></html>"#,
+            "/stock" => r#"<!doctype html><html lang="ko"><meta charset="utf-8"><title>노트북 상품</title>
+<h1>가벼운 노트북 14</h1>
+<button onclick="show('p')">가격</button> <button onclick="show('s')">재고</button> <button onclick="show('r')">후기</button>
+<div id="p">판매가 1,290,000원</div><div id="s" style="display:none">노트북 재고: 37대 (창고 B)</div>
+<div id="r" style="display:none">후기 4.6점 (212개)</div>
+<script>function show(k) { for (const id of ['p','s','r']) document.getElementById(id).style.display = id === k ? 'block' : 'none'; }</script></html>"#,
+            "/list" => r#"<!doctype html><html lang="ko"><meta charset="utf-8"><title>사무용품</title>
+<h1>사무용품 목록</h1><ul id="l"></ul><p id="at"></p><button id="next">다음 페이지</button>
+<script>
+const items = ['A4 용지 — 4,500원','볼펜 12자루 — 6,000원','스테이플러 — 8,900원','포스트잇 — 3,200원',
+ '화이트보드 — 45,000원','마우스 M-20 — 19,900원','모니터 받침 — 23,000원','USB 허브 — 15,500원',
+ '데스크 매트 — 12,000원','서류함 — 9,800원','무선 키보드 K-58 — 52,900원','웹캠 — 39,000원'];
+let page = 0;
+function draw() { document.getElementById('l').innerHTML = items.slice(page*4, page*4+4).map(t => '<li>'+t+'</li>').join('');
+  document.getElementById('at').innerText = (page+1) + ' / 3 쪽'; }
+document.getElementById('next').onclick = () => { if (page < 2) { page++; draw(); } };
+draw();</script></html>"#,
+            _ => return None,
+        })
+    }
+
+    fn work(orders: &Sender<Say>) -> Result<(), String> {
+        use argmind_core::contract::{Eyes, Hands};
+        use argmind_core::task::{run, Ended, Joined, Pressing, Task, Tools};
+        use argmind_env_browser::{Pane, WebTools};
+        use argmind_env_windows::workspace::Workspace;
+        use std::sync::{Arc, Mutex};
+
+        struct Model(argmind_env_ollama::Local);
+        impl argmind_core::contract::Speaks for Model {
+            fn ask(&mut self, prompt: &str) -> String {
+                self.0.ask(prompt).map(|r| r.text).unwrap_or_default()
+            }
+        }
+        let wire_orders = Mutex::new(orders.clone());
+        let pane = Pane::new(Arc::new(move |method: &str, params: &str| -> Result<String, String> {
+            let (reply, answer) = channel();
+            wire_orders.lock().map_err(|_| "poisoned".to_string())?
+                .send(Say::Devtools { method: method.into(), params: params.into(), reply })
+                .map_err(|_| "the window has gone".to_string())?;
+            answer.recv_timeout(std::time::Duration::from_secs(30))
+                .map_err(|_| format!("{method}: no answer"))?
+        }));
+        let mut local = argmind_env_ollama::Local::new("qwen3:14b");
+        local.think = Some(true);
+        local.keep_alive = "300s".into();
+        let _ = local.ask("Reply with the single word: ready");
+        let mut model = Model(local);
+        let date = "2026년 11월 6일";
+        //: **The page, written into the pane** — `document.write` runs its script, which setting
+        //: `innerHTML` would not.
+        let put = |path: &str| -> Result<(), String> {
+            pane.open("https://example.com/")?;
+            let html = serde_json::to_string(work_page(path).ok_or("no page")?).map_err(|e| e.to_string())?;
+            pane.eval(&format!("(() => {{ document.open(); document.write({html}); document.close(); return 1; }})()"))?;
+            std::thread::sleep(std::time::Duration::from_millis(500));
+            Ok(())
+        };
+        let cases = [
+            ("/order", "웹 칸에 열려 있는 주문 조회 페이지에서 주문번호 A-1042 를 조회해서 운송장 번호를 answer.md 에 적어줘", "KX-7731"),
+            ("/stock", "웹 칸에 열려 있는 노트북 상품 페이지에서 재고가 몇 대인지 확인해서 answer.md 에 적어줘", "37"),
+            ("/list", "웹 칸에 열려 있는 사무용품 목록에서 무선 키보드 가격을 찾아 answer.md 에 적어줘", "52900"),
+        ];
+        println!("\n  ── 눌러야 답이 나오는 페이지 — 작업 반복, 웹 칸에서만 누름 ──");
+        //: **The control that the first run lacked**: the pane must reach these pages before any
+        //: model is blamed for not reading them. The first run read `about:blank` on every page.
+        put("/stock")?;
+        let (text, href) = pane.text()?;
+        let hidden = text.contains("37대");
+        println!("  대조: {href} · 글 {}자 · 숨은 재고가 글에 보임 {hidden}", text.chars().count());
+        //: And what is hidden must not be readable, or the tab task is not a test of pressing.
+        if !text.contains("판매가") || hidden {
+            return Err("웹 칸이 이 하네스의 페이지를 열지 못했다 — 모델 탓이 아니다".into());
+        }
+        let (mut with, mut without, mut false_done) = (0, 0, 0);
+        for pressing in [true, false] {
+            println!("\n  {}", if pressing { "누르기 도구 있음" } else { "누르기 도구 없음 (대조)" });
+            for (path, what, answer) in &cases {
+                put(path)?;
+                let dir = std::env::temp_dir().join(format!("argmind-work-{}",
+                    std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_millis()));
+                let mut sets: Vec<Box<dyn Tools + Send>> = vec![Box::new(Workspace::new(dir.clone())),
+                                                                Box::new(WebTools(pane.clone()))];
+                if pressing {
+                    let (looks, presses) = (pane.clone(), pane.clone());
+                    let mut hands = pane.hands(true);
+                    sets.push(Box::new(Pressing::new(
+                        move || Ok(looks.eyes().foreground().into_iter().map(|w| (w.role, w.name)).collect()),
+                        move |e: argmind_core::intent::Effect| {
+                            let said = match e.kind.as_str() {
+                                "click" => match presses.eyes().foreground().into_iter()
+                                    .find(|w| w.name == e.target && w.role == e.role) {
+                                    Some(w) => { hands.click(&w); format!("실행: {} \"{}\" — {:?}", e.role, e.target, hands.done.last()) }
+                                    None => format!("못 함: {} \"{}\" — 그새 사라짐", e.role, e.target),
+                                },
+                                "type" if hands.typing_lands() == Some(false) => "못 함: 입력할 칸이 선택되어 있지 않다".into(),
+                                "type" => { hands.type_text(&e.text); format!("실행: 입력 \"{}\"", e.text) }
+                                _ => { hands.press(&e.text); format!("실행: 키 {}", e.text) }
+                            };
+                            std::thread::sleep(std::time::Duration::from_millis(800));
+                            said
+                        })));
+                }
+                let mut bench = Joined(sets);
+                let mut task = Task::new(what);
+                let began = std::time::Instant::now();
+                run(&mut task, &mut model, &mut bench, date, &|| true);
+                let secs = began.elapsed().as_secs_f64();
+                let wrote = std::fs::read_to_string(dir.join("answer.md")).unwrap_or_default();
+                let ok = wrote.replace([',', ' '], "").contains(answer);
+                let done = matches!(task.ended, Some(Ended::Done(_)));
+                if pressing { with += ok as usize } else { without += ok as usize }
+                false_done += (done && !ok) as usize;
+                let tools: Vec<String> = task.steps.iter()
+                    .map(|s| format!("{}{}", s.tool, if s.failed { "✗" } else { "" })).collect();
+                println!("    {} {:>2}단계 {secs:>4.0}초 {} — answer.md {:?}\n       [{}]",
+                         if ok { "●" } else { "○" }, task.steps.len(),
+                         match &task.ended { Some(Ended::Done(_)) => "끝".to_string(),
+                             Some(Ended::Stopped(w)) => format!("멈춤({})", w.chars().take(40).collect::<String>()), None => "?".into() },
+                         wrote.trim().chars().take(80).collect::<String>(), tools.join(" "));
+                if std::env::var("WORK_VERBOSE").is_ok() {
+                    for s in &task.steps {
+                        println!("       · {} {} → {}", s.tool, s.args.to_string().chars().take(120).collect::<String>(),
+                                 s.observed.replace('\n', " ⏎ ").chars().take(200).collect::<String>());
+                    }
+                }
+                let _ = std::fs::remove_dir_all(&dir);
+            }
+        }
+        println!("\n    → 누르기 있음 {with}/3 · 없음 {without}/3 · 끝났다고 하고 틀린 것 {false_done}");
+        println!("    ── 돌리기 전에 적어둔 대로: {} ──\n",
+                 if without > 0 { "대조가 깨졌다 — 검사를 고쳐야 한다" }
+                 else if with >= 2 { "작업이 웹 칸에서 누를 수 있다" } else { "작업이 웹 칸에서 누를 수 있다고 할 수 없다" });
+        Ok(())
+    }
+
     fn plan(orders: &Sender<Say>) -> Result<(), String> {
         use argmind_core::task::{numbers, run, Ended, Joined, Task, Tools};
         use argmind_env_browser::{Pane, WebTools};

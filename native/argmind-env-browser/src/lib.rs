@@ -463,6 +463,8 @@ impl argmind_core::task::Tools for WebTools {
                        args: json!({"query": "도쿄 2박3일 추천 일정"}) },
             ToolSpec { name: "open_page".into(), does: "주소(http/https)를 열고 그 페이지의 글을 읽는다".into(),
                        args: json!({"url": "https://..."}) },
+            ToolSpec { name: "read_pane".into(), does: "웹 칸에 지금 열린 페이지의 글을 다시 읽는다 (누른 뒤에 바뀐 것을 볼 때)".into(),
+                       args: json!({}) },
             ToolSpec { name: "search_flights".into(),
                        does: "네이버 항공권에서 실제 항공편과 가격을 조회한다. 항공권 가격은 이것으로만 알 수 있다 (from/to 는 영문 코드: 서울 SEL, 도쿄 TYO, 오사카 OSA, 후쿠오카 FUK)".into(),
                        args: json!({"from": "SEL", "to": "TYO", "depart": "2026-11-16", "return": "2026-11-18", "adults": 2}) },
@@ -476,6 +478,8 @@ impl argmind_core::task::Tools for WebTools {
             .filter(|s| !s.is_empty()).ok_or_else(|| format!("{k} 가 없다"));
         let (text, at) = match tool {
             "web_search" => self.0.look_up(arg("query")?)?,
+            //: A second to let what a press set going finish drawing.
+            "read_pane" => self.0.settled_text(1, 5)?,
             "open_page" => {
                 let url = arg("url")?;
                 if !(url.starts_with("https://") || url.starts_with("http://")) {
