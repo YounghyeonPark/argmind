@@ -69,6 +69,45 @@
 //! **without** it, as the control: without, nothing can know them, so **a pass there means the
 //! check is broken**. Asking works if **at least 2 of 3** pass with it and **0 of 3** without; a
 //! finish without it is counted apart — that is a task inventing what only the person knew.
+//!
+//! **`COMPLEX_SPARING=1` reasons only where it counts** (2026-11-06): the model's first step and
+//! the step after a failure are asked with reasoning, every other step without, and a quick *done*
+//! is asked again with reasoning and the second answer counts — `task::reasons_here`. The same
+//! switch is `DOCUMENTS_SPARING=1` in `--bin documents`. Against reasoning on every step, run the
+//! same day and the same code: **complex 12 of 12, no false finish, 110 s a task**; **documents 12
+//! of 13, one false finish, 71 s**. Written before the sparing run, it **stays** only if
+//!
+//! * complex reads **at least 11 of 12** and documents **at least 11 of 13** — one run each, so a
+//!   one-task drop is noise —
+//! * with **at most one false finish across the two**, as reasoning everywhere had, and
+//! * a task takes **at most 60% as long**: 66 s on complex and 43 s on documents.
+//!
+//! The harness prints how many calls reasoned and how long each kind took, and the largest prompt
+//! against the context, so *faster* can be read as *fewer reasoned calls* rather than assumed.
+//!
+//! **It failed every part of the bar but documents' count.** Complex **9 of 12** (a spec printed
+//! nothing, the README's three edits stopped at one, a refactor circled on a missing file),
+//! documents **12 of 13**, **two false finishes** across the two, and **68 s and 69 s** a task
+//! against bars of 66 and 43. *Fewer reasoned calls* is true and did not buy the time: 33 of 81
+//! calls reasoned on complex and took **725 s against 76 s for the other 48**, and on documents 47
+//! of 82 took 812 s against 58 — a failure and a finish both reason, and documents' work is made of
+//! both. `task::Task::sparing` is kept and off (`TASK_SPARES`). **And the context is not the
+//! limit**: the largest prompt in either run was **2,067 tokens** of 8,192.
+//!
+//! **`qwen3:30b-a3b` against `qwen3:14b`** (2026-11-06, written while it downloaded): a mixture of
+//! experts, 3 B active of 30 B, Apache-2.0, 19 GB — more than the card's 16 GB, so part of it runs
+//! from the CPU, and it cannot share the card with the conversation's 8b the way 14b does: **every
+//! turn during a task would move one of them off the card**. So equal is not enough. It replaces 14b
+//! only if, in the same reasoning mode as 14b's winning arm, it reads **more** on complex or
+//! documents and **no fewer** on the other, with **no more false finishes**, at **no more than 1.5x**
+//! 14b's time a task.
+//!
+//! **It did not, by the half that asks for no fewer**: complex **10 of 12** against 14b's 12 (a
+//! spec whose script was never written, the CSV report not naming the row it left out), documents
+//! **13 of 13 with no false finish** against 12 and one; false finishes one against one; **157 s and
+//! 79 s a task** against 110 and 71, inside 1.5x. One run each, so 13 against 12 and 10 against 12
+//! are both within what a rerun moves — which is why *equal* was not enough and is what this reads
+//! as. Ollama put **26% of it on the CPU** with nothing else loaded. 14b stays.
 
 use std::path::{Path, PathBuf};
 use std::time::Instant;
@@ -81,11 +120,31 @@ use argmind_env_windows::workspace::Workspace;
 /// One: the first run's two repeats were identical step for step, so a second bought nothing.
 const REPEATS: usize = 1;
 
-struct Model(Local);
+/// The model, and **what its calls cost**: how many reasoned and how many did not, the seconds in
+/// each, and the largest prompt — which says whether a task ever came near the context.
+struct Model(Local, Spent);
+
+#[derive(Default)]
+struct Spent { reasoned: usize, quick: usize, reasoned_s: f64, quick_s: f64, most_prompt: i64 }
 
 impl Speaks for Model {
+    fn ask_reasoning(&mut self, prompt: &str, reason: bool) -> String {
+        let was = self.0.think;
+        self.0.think = Some(reason);
+        let reply = self.ask(prompt);
+        self.0.think = was;
+        reply
+    }
     fn ask(&mut self, prompt: &str) -> String {
-        let (reply, why) = self.0.ask(prompt).map(|r| (r.text, r.reason))
+        let began = Instant::now();
+        let asked = self.0.ask(prompt);
+        let secs = began.elapsed().as_secs_f64();
+        if self.0.think == Some(true) { self.1.reasoned += 1; self.1.reasoned_s += secs }
+        else { self.1.quick += 1; self.1.quick_s += secs }
+        if let Ok(r) = &asked {
+            self.1.most_prompt = self.1.most_prompt.max(r.prompt_tokens.unwrap_or(0));
+        }
+        let (reply, why) = asked.map(|r| (r.text, r.reason))
             .unwrap_or_else(|e| (String::new(), format!("오류: {e}")));
         //: `COMPLEX_RAW=1` prints every reply whole — what a step that did not read actually said,
         //: and why the model stopped saying it.
@@ -423,7 +482,7 @@ fn main() {
         local.think = Some(std::env::var("COMPLEX_THINK").is_ok());
         local.keep_alive = "300s".into();
         println!("\n  harness {}\n", argmind_measure::source_print(include_str!("complex.rs")));
-        return asking(&mut Model(local));
+        return asking(&mut Model(local, Spent::default()));
     }
     let models: Vec<String> = std::env::args().skip(1).filter(|a| !a.starts_with("--")).collect();
     let models = if models.is_empty() { vec!["qwen3:14b".to_string()] } else { models };
@@ -438,7 +497,7 @@ fn main() {
         for _ in 0..2 {
             let _ = local.ask("Reply with the single word: ready");
         }
-        let mut model = Model(local);
+        let mut model = Model(local, Spent::default());
         println!("  ── {name} ──");
         let (mut passed, mut false_done, mut runs, mut secs_all) = (0, 0, 0, 0.0);
         let (mut fitted, mut held, mut held_false) = (0, 0, 0);
@@ -461,6 +520,7 @@ fn main() {
                 }
                 let mut tools = Joined(sets);
                 let mut task = if std::env::var("COMPLEX_PLAN").is_ok() { Task::planned(case.what) } else { Task::new(case.what) };
+                task.sparing = std::env::var("COMPLEX_SPARING").is_ok();
                 let began = Instant::now();
                 run(&mut task, &mut model, &mut tools, "2026년 11월 3일", &|| true);
                 let secs = began.elapsed().as_secs_f64();
@@ -509,6 +569,9 @@ fn main() {
                  secs_all / runs as f64);
         println!("      맞춘 것(1–9) {}/9 · 따로 둔 것(10–12) {}/3, 거기서 끝났다고 하고 틀린 것 {}",
                  fitted, held, held_false);
+        let m = &model.1;
+        println!("      모델 호출: 추론 {}번 {:.0}초 · 추론 없이 {}번 {:.0}초 · 가장 긴 프롬프트 {} 토큰 (컨텍스트 {})",
+                 m.reasoned, m.reasoned_s, m.quick, m.quick_s, m.most_prompt, model.0.ctx);
         if std::env::var("COMPLEX_PLAN").is_ok() {
             println!("    ── 계획, 돌리기 전에 적어둔 대로: {} ──",
                      if passed >= 10 && false_done == 0 { "계획을 둔다" } else { "계획을 두지 않는다" });

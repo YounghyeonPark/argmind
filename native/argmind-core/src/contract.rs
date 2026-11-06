@@ -124,4 +124,10 @@ pub trait Speaks {
     fn ask_scored(&mut self, prompt: &str) -> (String, Vec<(String, f64)>) {
         (self.ask(prompt), Vec::new())
     }
+    /// **The reply, with reasoning switched on or off for this one call** — for a caller that knows
+    /// which of its calls are worth the wait. The default ignores the switch, so a model that has
+    /// none is still a model and answers as it always does.
+    fn ask_reasoning(&mut self, prompt: &str, _reason: bool) -> String {
+        self.ask(prompt)
+    }
 }

@@ -160,12 +160,17 @@ pub struct Task {
     /// Whether to ask for a plan first, and whether that has happened.
     pub planning: bool,
     pub planned: bool,
+    /// **Reason only where it counts** — see [`reasons_here`]. Off: every call is asked as the
+    /// model is set, which is how everything before this was measured.
+    pub sparing: bool,
+    /// How many of `steps` the program made before the model's first — see [`open`].
+    pub opened: usize,
 }
 
 impl Task {
     pub fn new(what: &str) -> Task {
         Task { what: what.trim().to_string(), steps: Vec::new(), ended: None, unreadable: 0,
-               plan: Vec::new(), planning: false, planned: false }
+               plan: Vec::new(), planning: false, planned: false, sparing: false, opened: 0 }
     }
 
     /// **A task that writes down, before it starts, what must be true when it ends** — and cannot
@@ -605,7 +610,18 @@ pub fn step(task: &mut Task, model: &mut dyn Speaks, tools: &mut dyn Tools, toda
         task.plan = read_plan(&model.ask(&ask_for_a_plan(task, &tools.list(), today)));
         return true;
     }
-    let reply = model.ask(&ask_for_a_step(task, &tools.list(), today));
+    let prompt = ask_for_a_step(task, &tools.list(), today);
+    let reply = if !task.sparing {
+        model.ask(&prompt)
+    } else if reasons_here(task) {
+        model.ask_reasoning(&prompt, true)
+    } else {
+        //: **A finish is decided twice**: asked quickly, and if the quick answer is *done*, asked
+        //: again with reasoning on, and the second answer is the one that counts. Ending is the one
+        //: step that cannot be taken back.
+        let quick = model.ask_reasoning(&prompt, false);
+        if matches!(read_step(&quick), Next::Done(_)) { model.ask_reasoning(&prompt, true) } else { quick }
+    };
     match read_step(&reply) {
         Next::Done(said) => {
             task.unreadable = 0;
@@ -669,18 +685,34 @@ pub fn step(task: &mut Task, model: &mut dyn Speaks, tools: &mut dyn Tools, toda
     }
 }
 
+/// **Where reasoning is worth its wait**, for a task that spares it: the model's first step — the
+/// one that decides how the work goes — and the step after anything failed, where the error has to
+/// be read rather than glanced at. Every other step is asked quickly, and a quick *done* is asked
+/// again with reasoning (see [`step`]).
+pub fn reasons_here(task: &Task) -> bool {
+    task.steps.len() <= task.opened || task.steps.last().is_some_and(|s| s.failed)
+}
+
+/// **The calls the program makes before the model's first step** — [`Tools::opening`], run and
+/// recorded as steps. Once, on a task with no steps yet; the application calls it as `run` does.
+pub fn open(task: &mut Task, tools: &mut dyn Tools) {
+    if !task.steps.is_empty() {
+        return;
+    }
+    for (tool, args) in tools.opening(&task.what) {
+        let (observed, failed) = match tools.call(&tool, &args) {
+            Ok(o) => (cut(&o, OBSERVED_CHARS), false),
+            Err(e) => (cut(&format!("오류: {e}"), OBSERVED_CHARS), true),
+        };
+        task.steps.push(Step { tool, args, observed, failed });
+    }
+    task.opened = task.steps.len();
+}
+
 /// Run a task to its end — the program's end or the model's.
 pub fn run(task: &mut Task, model: &mut dyn Speaks, tools: &mut dyn Tools, today: &str,
            carry_on: &dyn Fn() -> bool) {
-    if task.steps.is_empty() {
-        for (tool, args) in tools.opening(&task.what) {
-            let (observed, failed) = match tools.call(&tool, &args) {
-                Ok(o) => (cut(&o, OBSERVED_CHARS), false),
-                Err(e) => (cut(&format!("오류: {e}"), OBSERVED_CHARS), true),
-            };
-            task.steps.push(Step { tool, args, observed, failed });
-        }
-    }
+    open(task, tools);
     while carry_on() && step(task, model, tools, today) {}
     if task.ended.is_none() {
         task.ended = Some(Ended::Stopped("사람이 멈췄습니다".into()));
@@ -749,6 +781,57 @@ mod tests {
         let mut other = Task::new("메모 정리해줘");
         run(&mut other, &mut Scripted(vec![]), &mut tools, "2026-11-06", &|| false);
         assert!(other.steps.is_empty());
+    }
+
+    /// Answers from a script and writes down, for each call, whether reasoning was asked for.
+    struct Switched(Vec<&'static str>, Vec<Option<bool>>);
+    impl Speaks for Switched {
+        fn ask(&mut self, _: &str) -> String {
+            self.1.push(None);
+            if self.0.is_empty() { String::new() } else { self.0.remove(0).to_string() }
+        }
+        fn ask_reasoning(&mut self, p: &str, reason: bool) -> String {
+            let reply = self.ask(p);
+            *self.1.last_mut().unwrap() = Some(reason);
+            reply
+        }
+    }
+
+    #[test]
+    fn a_sparing_task_reasons_first_after_a_failure_and_before_it_ends() {
+        let mut model = Switched(vec![
+            r#"{"tool": "read_file", "args": {"path": "nope"}}"#,
+            r#"{"tool": "write_file", "args": {"path": "a.py", "content": "print(55)"}}"#,
+            r#"{"tool": "run", "args": {"command": "python3 a.py"}}"#,
+            //: Quick, and *done* — so asked again with reasoning, and that answer counts.
+            r#"{"done": "끝"}"#,
+            r#"{"done": "a.py 를 실행해 55가 나왔습니다"}"#,
+        ], Vec::new());
+        let mut tools = Box_::default();
+        let mut t = Task::new("1부터 10까지 더해 줘");
+        t.sparing = true;
+        run(&mut t, &mut model, &mut tools, "오늘", &|| true);
+        assert_eq!(model.1, vec![Some(true), Some(true), Some(false), Some(false), Some(true)]);
+        assert!(matches!(&t.ended, Some(Ended::Done(s)) if s.contains("55")), "{:?}", t.ended);
+        //: And a task that does not spare asks as the model is set, every time — as measured before.
+        let mut model = Switched(vec![r#"{"tool": "run", "args": {"command": "python3 a.py"}}"#,
+                                      r#"{"done": "55"}"#], Vec::new());
+        let mut t = Task::new("x");
+        run(&mut t, &mut model, &mut tools, "오늘", &|| true);
+        assert_eq!(model.1, vec![None, None]);
+    }
+
+    #[test]
+    fn the_first_model_step_reasons_even_after_the_program_read_first() {
+        let mut files = Box_::default();
+        files.files.insert("plan.docx".into(), "금액 5,000,000원".into());
+        let mut t = Task::new("plan.docx 고쳐줘");
+        t.sparing = true;
+        open(&mut t, &mut Opens(files));
+        assert_eq!(t.opened, 1);
+        assert!(reasons_here(&t));
+        t.steps.push(Step { tool: "run".into(), args: json!({}), observed: "ok".into(), failed: false });
+        assert!(!reasons_here(&t));
     }
 
     #[test]

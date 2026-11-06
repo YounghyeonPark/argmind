@@ -86,11 +86,31 @@ use argmind_core::task::{run, Ended, Task};
 use argmind_env_ollama::Local;
 use argmind_env_windows::workspace::Workspace;
 
-struct Model(Local);
+/// The model, and **what its calls cost**: how many reasoned and how many did not, the seconds in
+/// each, and the largest prompt — which says whether a task ever came near the context.
+struct Model(Local, Spent);
+
+#[derive(Default)]
+struct Spent { reasoned: usize, quick: usize, reasoned_s: f64, quick_s: f64, most_prompt: i64 }
 
 impl Speaks for Model {
+    fn ask_reasoning(&mut self, prompt: &str, reason: bool) -> String {
+        let was = self.0.think;
+        self.0.think = Some(reason);
+        let reply = self.ask(prompt);
+        self.0.think = was;
+        reply
+    }
     fn ask(&mut self, prompt: &str) -> String {
-        let (reply, why) = self.0.ask(prompt).map(|r| (r.text, r.reason))
+        let began = Instant::now();
+        let asked = self.0.ask(prompt);
+        let secs = began.elapsed().as_secs_f64();
+        if self.0.think == Some(true) { self.1.reasoned += 1; self.1.reasoned_s += secs }
+        else { self.1.quick += 1; self.1.quick_s += secs }
+        if let Ok(r) = &asked {
+            self.1.most_prompt = self.1.most_prompt.max(r.prompt_tokens.unwrap_or(0));
+        }
+        let (reply, why) = asked.map(|r| (r.text, r.reason))
             .unwrap_or_else(|e| (String::new(), format!("오류: {e}")));
         if std::env::var("DOCUMENTS_RAW").is_ok() {
             println!("         « {} » ({why})", reply.replace('\n', " ⏎ ").chars().take(400).collect::<String>());
@@ -555,13 +575,14 @@ fn main() {
         for _ in 0..2 {
             let _ = local.ask("Reply with the single word: ready");
         }
-        let mut model = Model(local);
+        let mut model = Model(local, Spent::default());
         println!("  ── {name} ──");
         let (mut passed, mut false_done, mut secs_all, mut fitted, mut held) = (0, 0, 0.0, 0, 0);
         for (i, case) in CASES.iter().enumerate() {
             let (dir, bench) = prepared(case, &format!("{}-{i}", name.replace(':', "_")));
             let mut tools = Workspace::new(dir.clone());
             let mut task = Task::new(case.what);
+            task.sparing = std::env::var("DOCUMENTS_SPARING").is_ok();
             let began = Instant::now();
             run(&mut task, &mut model, &mut tools, "2026년 11월 6일", &|| true);
             let secs = began.elapsed().as_secs_f64();
@@ -594,6 +615,10 @@ fn main() {
         let runs = CASES.len();
         println!("\n    → {passed}/{runs} 통과, 끝났다고 하고 틀린 것 {false_done}, 평균 {:.0}초", secs_all / runs as f64);
         println!("      앞의 열(1–10) {fitted}/10 · 따로 둔 셋(11–13) {held}/3");
+        let m = &model.1;
+        println!("      모델 호출: 추론 {}번 {:.0}초 · 추론 없이 {}번 {:.0}초 · 가장 긴 프롬프트 {} 토큰 (컨텍스트 {})",
+                 m.reasoned, m.reasoned_s, m.quick, m.quick_s, m.most_prompt, model.0.ctx);
+
         println!("    ── 돌리기 전에 적어둔 대로: {} ──\n",
                  if fitted >= 7 && held >= 2 && false_done == 0 { "문서를 다룰 수 있다 — 먼저 읽기가 남는다" }
                  else { "문서를 다룰 수 있다고 할 수 없다" });

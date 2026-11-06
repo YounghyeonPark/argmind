@@ -607,6 +607,13 @@ pub const TASK_PLANS: bool = false;
 /// could have read. The bar written first was 10 of 12 *and* no false finish.
 pub const TASK_ASKS: bool = false;
 
+/// **Reasoning only where it counts** — `argmind_core::task::reasons_here`, and a quick *done*
+/// asked again with reasoning. **Off, by the bar written first** (2026-11-06): complex 9 of 12
+/// against 12, two false finishes against one, and 68 s and 69 s a task where 66 and 43 were
+/// asked — the reasoned calls were fewer and still nine tenths of the time. `*_SPARING=1` in
+/// `--bin complex` and `--bin documents`.
+pub const TASK_SPARES: bool = false;
+
 /// The task's model, **giving the card up whenever somebody is being answered**: a step with
 /// reasoning on runs for minutes, and a turn waiting behind it is the conversation freezing. The
 /// call is abandoned the moment a turn begins — dropping the socket frees the card, measured — and
@@ -614,6 +621,13 @@ pub const TASK_ASKS: bool = false;
 struct Yielding(Local, crate::senses::Turn);
 
 impl Speaks for Yielding {
+    fn ask_reasoning(&mut self, prompt: &str, reason: bool) -> String {
+        let was = self.0.think;
+        self.0.think = Some(reason);
+        let reply = self.ask(prompt);
+        self.0.think = was;
+        reply
+    }
     fn ask(&mut self, prompt: &str) -> String {
         loop {
             while self.1.in_flight() {
@@ -692,7 +706,7 @@ fn worked_instead(desk: &mut Desk, out: &Listeners, text: &str) -> bool {
 }
 
 fn start_work(desk: &Desk, what: &str, mut bench: Box<dyn argmind_core::task::Tools + Send>) {
-    use argmind_core::task::{step, Ended, Task};
+    use argmind_core::task::{open, step, Ended, Task};
     let (working, stop, turn) = (Arc::clone(&desk.working), Arc::clone(&desk.stop_work), desk.turn.clone());
     let (jobs, out, what) = (desk.jobs.clone(), Arc::clone(&desk.speaks_to), what.to_string());
     working.store(true, Ordering::SeqCst);
@@ -703,8 +717,16 @@ fn start_work(desk: &Desk, what: &str, mut bench: Box<dyn argmind_core::task::To
         local.keep_alive = "300s".into();
         let mut model = Yielding(local, turn.clone());
         let mut task = if TASK_PLANS { Task::planned(&what) } else { Task::new(&what) };
+        task.sparing = TASK_SPARES;
         let today = crate::platform::today();
         out.record("작업", &format!("시작: {what}"));
+        //: **What the request names is read before the model's first step** — `--bin documents`
+        //: measured it in `run`, and this loop steps by itself, so it is called here too. Until
+        //: 2026-11-06 it was not, and the application ran without the fix the harness credited.
+        open(&mut task, bench.as_mut());
+        for s in &task.steps {
+            out.record("작업", &format!("{} {} → 먼저 읽음", s.tool, s.args.to_string().chars().take(80).collect::<String>()));
+        }
         loop {
             while turn.in_flight() && !stop.load(Ordering::SeqCst) {
                 std::thread::sleep(std::time::Duration::from_millis(200));
