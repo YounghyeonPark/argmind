@@ -624,8 +624,11 @@ fn written_files(task: &Task) -> Vec<(String, String)> {
 
 /// A file that is a program, whose numbers are its own business rather than claims about the world.
 fn is_code(path: &str) -> bool {
-    const CODE: [&str; 14] = ["py", "js", "ts", "sh", "ps1", "rs", "c", "cpp", "h", "java", "go", "rb",
-                              "bat", "sql"];
+    //: **And a drawing's markup** — since 2026-11-08, from `--bin mcp`: a plate drawn as an SVG by
+    //: `write_file` was refused for *2000*, which is `xmlns="http://www.w3.org/2000/svg"`. A
+    //: drawing's numbers are geometry the work chose, like a script's. Fitted to that one case.
+    const CODE: [&str; 17] = ["py", "js", "ts", "sh", "ps1", "rs", "c", "cpp", "h", "java", "go", "rb",
+                              "bat", "sql", "svg", "scad", "css"];
     path.rsplit_once('.').is_some_and(|(_, ext)| CODE.contains(&ext.to_ascii_lowercase().as_str()))
 }
 
@@ -1075,6 +1078,27 @@ mod tests {
         let mut t = Task::new("x");
         run(&mut t, &mut model, &mut Box_::default(), "오늘", &|| true);
         assert!(matches!(t.ended, Some(Ended::Done(_))), "{:?}", t.steps);
+    }
+
+    #[test]
+    fn a_drawings_namespace_is_not_an_invented_number() {
+        let mut model = Scripted(vec![
+            r#"{"tool": "write_file", "args": {"path": "plate.svg", "content": "<svg xmlns=\"http://www.w3.org/2000/svg\"><circle cx=\"50\" r=\"10\"/></svg>"}}"#,
+            r#"{"done": "plate.svg 를 만들었습니다"}"#,
+        ]);
+        let mut t = Task::new("x");
+        run(&mut t, &mut model, &mut Box_::default(), "오늘", &|| true);
+        assert!(matches!(t.ended, Some(Ended::Done(_))), "{:?}", t.steps);
+        //: And a document is still checked: the same number in a note is refused.
+        let mut model = Scripted(vec![
+            r#"{"tool": "write_file", "args": {"path": "plan.md", "content": "호텔 2000000원"}}"#,
+            r#"{"done": "plan.md 를 만들었습니다"}"#,
+            r#"{"done": "plan.md 를 만들었습니다"}"#,
+            r#"{"done": "plan.md 를 만들었습니다"}"#,
+        ]);
+        let mut t = Task::new("x");
+        run(&mut t, &mut model, &mut Box_::default(), "오늘", &|| true);
+        assert!(!matches!(t.ended, Some(Ended::Done(_))), "{:?}", t.ended);
     }
 
     #[test]

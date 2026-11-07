@@ -808,7 +808,7 @@ fn pane_hands(jobs: Sender<Job>, stop: Arc<AtomicBool>) -> impl argmind_core::ta
         })
 }
 
-fn start_work(desk: &Desk, what: &str, mut bench: Box<dyn argmind_core::task::Tools + Send>) {
+fn start_work(desk: &Desk, what: &str, bench: Box<dyn argmind_core::task::Tools + Send>) {
     use argmind_core::task::{open, step, Ended, Task};
     let (working, stop, turn) = (Arc::clone(&desk.working), Arc::clone(&desk.stop_work), desk.turn.clone());
     let (jobs, out, what) = (desk.jobs.clone(), Arc::clone(&desk.speaks_to), what.to_string());
@@ -823,6 +823,16 @@ fn start_work(desk: &Desk, what: &str, mut bench: Box<dyn argmind_core::task::To
         task.sparing = TASK_SPARES;
         let today = crate::platform::today();
         out.record("작업", &format!("시작: {what}"));
+        //: **And the MCP servers the person configured**, started here rather than on the turn's
+        //: thread — `npx` can take a minute the first time — and stopped when this thread ends.
+        let (servers, notes) = crate::mcp::started();
+        for n in notes {
+            out.record("작업", &n);
+        }
+        let mut bench = match servers {
+            Some(s) => Box::new(argmind_core::task::Joined(vec![bench, Box::new(s)])),
+            None => bench,
+        };
         //: **The folder before**, so what the task made is found by the program at the end.
         let folder = crate::platform::work_folder();
         let before = crate::deliver::snapshot(&folder);

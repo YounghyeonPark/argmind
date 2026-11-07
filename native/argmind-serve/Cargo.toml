@@ -11,6 +11,8 @@ license = "Apache-2.0"
 argmind-core = { path = "../argmind-core" }
 # argmind's own browser pane — platform-free; what carries its commands is handed in by the window.
 argmind-env-browser = { path = "../argmind-env-browser" }
+# MCP servers the person configured, as a task's tools — std and serde_json only, no platform.
+argmind-env-mcp = { path = "../argmind-env-mcp" }
 
 # The binary is the application, so it reaches the environment; the library above it is protocol
 # and proposals only, and depends on neither.

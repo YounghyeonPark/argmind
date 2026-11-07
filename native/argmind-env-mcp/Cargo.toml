@@ -1,0 +1,13 @@
+[package]
+name = "argmind-env-mcp"
+version = "0.0.1"
+edition = "2021"
+description = "Tools a task may use from MCP servers the person configured, over stdio."
+license = "Apache-2.0"
+
+# **No new dependency.** The Model Context Protocol over stdio is JSON-RPC, one message a line, and
+# `serde_json` is already here; `std::process` starts the server. No SDK, the same choice the
+# Ollama client made for HTTP.
+[dependencies]
+argmind-core = { path = "../argmind-core" }
+serde_json = "1"
