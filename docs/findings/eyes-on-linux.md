@@ -218,3 +218,24 @@ It was noticed because the *other* half of the check complained that the record 
 nothing declared. The record was right and the reader was wrong, which is the pleasanter of the two
 ways round. Fixed, with a test of its own — whose own first version was wrong, because it indented
 its sample manifest and indented lines are skipped on purpose.
+
+## A screen nobody is using — 2026-11-07
+
+The owner: *사용자의 컴퓨터 사용과 충돌하지 않게 별도의 샌드박스 창에서 작업을 수행하는것 고려.* This
+machine is Windows 11 Home, so Windows Sandbox and Hyper-V machines are not there. What is: an X
+server with no display, `Xvfb` (MIT), inside WSL. Probed once in the `Ubuntu` distro (`xvfb` and
+`x11-apps` installed there, without recommends): `Xvfb :99`, its own D-Bus session and accessibility
+bus, `gtk3-widget-factory` on `:99`, then the two examples above against it.
+
+- **The eyes read it**: 148 widgets, 588 ms on a first, cold call.
+- **The hands pressed it**: the `Menu` toggle went `0x43000900 → 0x43000910` through
+  `atspi-action` — the same proof as on WSLg, now on a screen no person is looking at.
+- **The person's pointer did not move**, `(1186, 1066)` before and after — a weak control, since
+  nobody was moving it either, but nothing in the path can reach Windows input: AT-SPI acts on the
+  widget, and that X server is not the one WSLg draws on.
+- **A frame can be had**: `xwd -root` gave 4,099,179 bytes, so the screen can be shown in argmind's
+  own window for somebody to watch.
+
+So *a separate screen the work presses* is buildable from what exists. What it is not: a Windows
+screen — Word, Excel or anything Windows-only cannot run there, only Linux programs. And keys that
+are not text (`Enter`) would go through XTEST, which inside `Xvfb` reaches only that server.
