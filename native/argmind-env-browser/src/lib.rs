@@ -550,6 +550,64 @@ impl Pane {
         self.open(&search_url(words))?;
         self.text()
     }
+
+    /// **Show a page argmind made** — `about:blank`, the one address besides the web the pane may
+    /// open, and the page written into it. Build it with [`deliverable_page`], which escapes every
+    /// character it is given, so nothing a task wrote can run here.
+    pub fn show_page(&self, html: &str) -> Result<(), String> {
+        self.open("about:blank")?;
+        let html = serde_json::to_string(html).map_err(|e| e.to_string())?;
+        self.eval(&format!("(() => {{ document.open(); document.write({html}); document.close(); return 1; }})()"))?;
+        Ok(())
+    }
+}
+
+/// `&`, `<`, `>`, `"` and `'` as entities — the whole of what keeps text text.
+pub fn escaped(text: &str) -> String {
+    let mut out = String::with_capacity(text.len());
+    for c in text.chars() {
+        match c {
+            '&' => out.push_str("&amp;"),
+            '<' => out.push_str("&lt;"),
+            '>' => out.push_str("&gt;"),
+            '"' => out.push_str("&quot;"),
+            '\'' => out.push_str("&#39;"),
+            _ => out.push(c),
+        }
+    }
+    out
+}
+
+/// **What a task made, as a page to read** — `(path, text)` a file each, every character escaped
+/// and the text kept as it was written (`pre-wrap`), since rendering Markdown would be a second
+/// reading of the file that could differ from it. No script, and a policy that refuses one in case
+/// a later change forgets to escape.
+pub fn deliverable_page(files: &[(String, String)]) -> String {
+    let mut body = String::new();
+    for (path, text) in files {
+        body.push_str(&format!("<h2>{}</h2>\n<pre>{}</pre>\n", escaped(path), escaped(text)));
+    }
+    format!("<!doctype html><html lang=\"ko\"><head><meta charset=\"utf-8\">\
+<meta http-equiv=\"Content-Security-Policy\" content=\"default-src 'none'; style-src 'unsafe-inline'\">\
+<title>argmind 이 만든 것</title><style>\
+body{{font:15px/1.6 system-ui,'Malgun Gothic',sans-serif;margin:24px;color:#1b1b1b;background:#fff}}\
+h1{{font-size:18px}}h2{{font-size:15px;margin:28px 0 8px;color:#444}}\
+pre{{white-space:pre-wrap;word-break:break-word;font:inherit;background:#f6f6f4;padding:12px 14px;border-radius:6px}}\
+</style></head><body><h1>argmind 이 만든 것 — 작업 폴더의 파일 {}개</h1>\n{body}</body></html>", files.len())
+}
+
+#[cfg(test)]
+mod made {
+    use super::*;
+
+    #[test]
+    fn what_a_task_wrote_is_shown_as_text_and_never_run() {
+        let page = deliverable_page(&[("a<b>.md".into(), "# 제목\n<script>alert('x')</script> & 끝".into())]);
+        assert!(!page.contains("<script>"), "{page}");
+        assert!(page.contains("&lt;script&gt;alert(&#39;x&#39;)&lt;/script&gt; &amp; 끝"), "{page}");
+        assert!(page.contains("<h2>a&lt;b&gt;.md</h2>"), "{page}");
+        assert!(page.contains("default-src 'none'"));
+    }
 }
 
 #[cfg(test)]

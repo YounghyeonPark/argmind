@@ -67,6 +67,12 @@ pub struct ToolSpec {
 
 /// **What an environment must provide for a task.** Results are text the model will read; an error
 /// is text too, and counted.
+/// **A file read the way a task reads it** — through the workbench's own `read_file`, so a Word
+/// file is the text a task was shown. For the program's own reading, after a task.
+pub fn read_through(tools: &mut dyn Tools, path: &str) -> Result<String, String> {
+    tools.call("read_file", &json!({ "path": path }))
+}
+
 pub trait Tools {
     fn list(&self) -> Vec<ToolSpec>;
     fn call(&mut self, tool: &str, args: &Value) -> Result<String, String>;

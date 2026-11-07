@@ -140,6 +140,28 @@
 //! answer shows. One control tried `?order=A-1042` on the address, which reloaded the real
 //! `example.com`; nothing a task can type into an address reaches a page's script.
 //!
+//! ## `--show`: what a task made, in the pane (2026-11-07)
+//!
+//! A task's result was a sentence and a file somebody had to go and find. Now the program finds
+//! what changed in the work folder (`argmind_serve::deliver`) and writes it into the pane as
+//! escaped text on `about:blank`. No model: this checks the mechanism, end to end below the
+//! application's thread — a folder snapshot, a Markdown file written and a Word file made **by a
+//! script in the sandbox** (the way a task makes one, which no step names as a write), both read
+//! through the workbench's own `read_file`, the page built and shown, the pane's text read back.
+//!
+//! **Written before it ran — it shows if all of these hold**: (1) `made` finds exactly the three
+//! files made — the Markdown, the Word file and the script that made it — not the one left alone; (2) the pane's text holds a line from each, the Word one as
+//! its text; (3) **the control**: a file holding a `<script>` and an `onerror` that would set the
+//! title — the title is still argmind's and the markup is on the page as text; (4) the pane still
+//! opens a web page afterwards.
+//!
+//! **Read: all four, on the second run.** The first failed (4) on the check's own string — it
+//! looked for *Example Domain*, and the page that opened reads *This domain is for use in
+//! documentation examples…*; its address and its words are checked now. (1) found
+//! `make.py`, `plan.md`, `report.docx` and not `untouched.md`; the Word file's
+//! paragraph *매출 합계 1,234,000원* was on the page; the control's title stayed *argmind 이 만든 것* with the markup on the page
+//! as text. One run, and the application's thread that sends it is not what ran.
+//!
 //! ## What the first runs read, 2026-10-20
 //!
 //! * **The control failed first, and was right to.** The one link on `example.com` read as off
@@ -342,6 +364,9 @@ fn main() {
         }
         if std::env::args().any(|a| a == "--work") {
             return work(orders);
+        }
+        if std::env::args().any(|a| a == "--show") {
+            return show(orders);
         }
         if std::env::args().any(|a| a == "--fare") {
             return fare(orders);
@@ -793,6 +818,68 @@ document.getElementById('next').onclick = () => { if (page < 2) { page++; draw()
 draw();</script></html>"#,
             _ => return None,
         })
+    }
+
+    fn show(orders: &Sender<Say>) -> Result<(), String> {
+        use argmind_core::task::Tools;
+        use argmind_env_browser::{deliverable_page, Pane};
+        use argmind_env_windows::workspace::Workspace;
+        use argmind_serve::deliver;
+        use std::sync::{Arc, Mutex};
+
+        let wire_orders = Mutex::new(orders.clone());
+        let pane = Pane::new(Arc::new(move |method: &str, params: &str| -> Result<String, String> {
+            let (reply, answer) = channel();
+            wire_orders.lock().map_err(|_| "poisoned".to_string())?
+                .send(Say::Devtools { method: method.into(), params: params.into(), reply })
+                .map_err(|_| "the window has gone".to_string())?;
+            answer.recv_timeout(std::time::Duration::from_secs(30))
+                .map_err(|_| format!("{method}: no answer"))?
+        }));
+        let dir = std::env::temp_dir().join(format!("argmind-show-{}",
+            std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_millis()));
+        std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+        std::fs::write(dir.join("untouched.md"), "손대지 않은 파일").map_err(|e| e.to_string())?;
+        let mut bench = Workspace::new(dir.clone());
+        let before = deliver::snapshot(&dir);
+        std::thread::sleep(std::time::Duration::from_millis(50));
+        bench.call("write_file", &serde_json::json!({"path": "plan.md",
+            "content": "# 11월 여행\n- 첫째 날: 오사카 성 <박물관> & 시장\n"}))?;
+        bench.call("write_file", &serde_json::json!({"path": "make.py", "content":
+            "import docx\nd = docx.Document()\nd.add_heading('주간 보고', 1)\nd.add_paragraph('매출 합계 1,234,000원')\nd.save('report.docx')\n"}))?;
+        println!("  샌드박스: {}", bench.call("run", &serde_json::json!({"command": "python3 make.py"}))
+            .unwrap_or_else(|e| format!("실패 {e}")).trim());
+        let mut found = deliver::made(&before, &deliver::snapshot(&dir));
+        found.sort();
+        println!("  (1) 찾은 것: {found:?}");
+        let ok1 = found == ["make.py", "plan.md", "report.docx"];
+        let files: Vec<(String, String)> = found.iter()
+            .filter_map(|rel| bench.call("read_file", &serde_json::json!({"path": rel})).ok()
+                .map(|t| (rel.clone(), deliver::trimmed(&t))))
+            .collect();
+        pane.show_page(&deliverable_page(&files))?;
+        let (text, at) = pane.text()?;
+        let ok2 = text.contains("첫째 날: 오사카 성 <박물관> & 시장") && text.contains("매출 합계 1,234,000원");
+        println!("  (2) 웹 칸 {at} · 글 {}자 · 두 파일의 줄이 다 보임 {ok2}", text.chars().count());
+
+        let evil = "<script>document.title='RAN'</script><img src=x onerror=\"document.title='RAN'\">";
+        pane.show_page(&deliverable_page(&[("evil.html".into(), evil.into())]))?;
+        std::thread::sleep(std::time::Duration::from_millis(500));
+        let title = pane.eval("document.title")?.as_str().unwrap_or("").to_string();
+        let (text, _) = pane.text()?;
+        let ok3 = title == "argmind 이 만든 것" && text.contains(evil);
+        println!("  (3) 대조: 제목 {title:?} · 표시 그대로 글로 보임 {}", text.contains(evil));
+
+        pane.open("https://example.com/")?;
+        let (text, at) = pane.text()?;
+        //: `example.com`'s own words. The first run looked for *Example Domain*, which is its title and
+        //: not in its `innerText` today, and failed a page that had opened.
+        let ok4 = at.starts_with("https://example.com") && text.contains("documentation examples");
+        println!("  (4) 그 뒤 웹 페이지: {at} · {ok4} · {:?}", text.chars().take(120).collect::<String>());
+        let _ = std::fs::remove_dir_all(&dir);
+        println!("\n    ── 돌리기 전에 적어둔 대로: {} ──\n",
+                 if ok1 && ok2 && ok3 && ok4 { "만든 것을 웹 칸에 보여 줄 수 있다" } else { "보여 준다고 할 수 없다" });
+        Ok(())
     }
 
     fn work(orders: &Sender<Say>) -> Result<(), String> {

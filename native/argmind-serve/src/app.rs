@@ -336,6 +336,9 @@ enum Job {
     Keep(String),
     /// A task ended, with what to tell the person — said and kept in the history.
     Worked(String),
+    /// **What a task made, to show in the pane** — `(path, text)` a file, found by
+    /// `crate::deliver` and read through the workbench. Sent just before its `Worked`.
+    Made(Vec<(String, String)>),
     Unkeep(usize),
     ForgetConversation,
     Activity,
@@ -820,6 +823,9 @@ fn start_work(desk: &Desk, what: &str, mut bench: Box<dyn argmind_core::task::To
         task.sparing = TASK_SPARES;
         let today = crate::platform::today();
         out.record("작업", &format!("시작: {what}"));
+        //: **The folder before**, so what the task made is found by the program at the end.
+        let folder = crate::platform::work_folder();
+        let before = crate::deliver::snapshot(&folder);
         //: **What the request names is read before the model's first step** — `--bin documents`
         //: measured it in `run`, and this loop steps by itself, so it is called here too. Until
         //: 2026-11-06 it was not, and the application ran without the fix the harness credited.
@@ -858,9 +864,37 @@ fn start_work(desk: &Desk, what: &str, mut bench: Box<dyn argmind_core::task::To
             Some(Ended::Stopped(why)) => format!("작업을 다 끝내지 못했습니다 — {why}"),
             None => "작업이 멈췄습니다".into(),
         };
+        //: **What it made, shown** — read the way the task read it, so a Word file is its text.
+        let made: Vec<(String, String)> = crate::deliver::made(&before, &crate::deliver::snapshot(&folder))
+            .into_iter()
+            .filter_map(|rel| argmind_core::task::read_through(bench.as_mut(), &rel).ok()
+                .map(|text| (rel, crate::deliver::trimmed(&text))))
+            .collect();
+        if !made.is_empty() {
+            let names: Vec<&str> = made.iter().map(|(rel, _)| rel.as_str()).collect();
+            out.record("작업", &format!("만든 것: {}", names.join(", ")));
+            let _ = jobs.send(Job::Made(made));
+        }
         working.store(false, Ordering::SeqCst);
         let _ = jobs.send(Job::Worked(said));
     });
+}
+
+/// **What a task made, in the pane** — opened for it, the files written into `about:blank` as
+/// escaped text. Without a pane the summary is all there is, which is what there was before.
+fn show_made(desk: &mut Desk, out: &Listeners, files: &[(String, String)]) {
+    if desk.web.is_none() {
+        return;
+    }
+    show_web(desk, out, true);
+    let Some(pane) = desk.web.as_ref() else { return };
+    let page = argmind_env_browser::deliverable_page(files);
+    match argmind_env_browser::Pane::new(pane.wire.clone()).show_page(&page) {
+        Ok(()) => out.send("note", &format!("만든 것을 웹 칸에 띄웠습니다 — {}",
+                                            files.iter().map(|(p, _)| p.as_str()).collect::<Vec<_>>().join(", "))),
+        Err(why) => out.send("note", &format!("만든 것을 웹 칸에 띄우지 못했습니다 ({why})")),
+    }
+    desk.session.seen.clear();
 }
 
 /// **A question about now, asked while argmind looks at its pane, is looked up by the program.**
@@ -3189,6 +3223,7 @@ pub fn run(how: How) {
                     desk.session.history.push(("you".into(), said.clone()));
                     agent_out.send("say", &said);
                 }
+                Job::Made(files) => show_made(&mut desk, &agent_out, &files),
                 Job::Keep(text) => {
                     match crate::mind::keep(&text) {
                         Ok(mind) => {

@@ -41,6 +41,7 @@ pub mod building;
 pub mod chosen;
 pub mod conversation;
 pub mod decided;
+pub mod deliver;
 pub mod errands;
 pub mod faces;
 pub mod fetch;
