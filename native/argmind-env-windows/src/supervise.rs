@@ -55,7 +55,7 @@ pub fn kill_on_close() -> windows::core::Result<HANDLE> {
 /// window. `None` means the job could not be made — the child still starts and is still killed on
 /// `Drop`, and [`Supervised::supervised`] says the weaker promise is the one in force rather than
 /// letting a caller assume the stronger one.
-fn ours() -> Option<HANDLE> {
+pub(crate) fn ours() -> Option<HANDLE> {
     static JOB: OnceLock<Option<isize>> = OnceLock::new();
     (*JOB.get_or_init(|| kill_on_close().ok().map(|h| h.0 as isize)))
         .map(|h| HANDLE(h as *mut core::ffi::c_void))

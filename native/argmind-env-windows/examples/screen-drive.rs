@@ -25,6 +25,12 @@ fn main() {
         }
         None => println!("  picture {when}: none"),
     };
+    //: `--leave`: open something and end abruptly, as a killed argmind does — then check from
+    //: outside that nothing it opened is still running.
+    if std::env::args().any(|a| a == "--leave") {
+        println!("  {:?}", s.call("screen_open", &json!({"program": exe.display().to_string()})));
+        std::process::exit(0);
+    }
     let mut go = |tool: &str, args: serde_json::Value| {
         let began = std::time::Instant::now();
         let r = s.call(tool, &args);

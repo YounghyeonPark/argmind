@@ -45,8 +45,9 @@ use windows::Win32::System::Diagnostics::ToolHelp::{CreateToolhelp32Snapshot, Pr
                                                     PROCESSENTRY32W, TH32CS_SNAPPROCESS};
 use windows::Win32::System::StationsAndDesktops::{CloseDesktop, CreateDesktopW, EnumDesktopWindows, SetThreadDesktop,
                                                   DESKTOP_CONTROL_FLAGS, HDESK};
-use windows::Win32::System::Threading::{CreateProcessW, TerminateProcess, WaitForSingleObject, PROCESS_CREATION_FLAGS,
-                                        PROCESS_INFORMATION, STARTUPINFOW};
+use windows::Win32::System::JobObjects::AssignProcessToJobObject;
+use windows::Win32::System::Threading::{CreateProcessW, ResumeThread, TerminateProcess, WaitForSingleObject,
+                                        CREATE_SUSPENDED, PROCESS_INFORMATION, STARTUPINFOW};
 use windows::Win32::UI::Accessibility::*;
 use windows::Win32::UI::WindowsAndMessaging::{GetWindowTextW, IsWindowVisible};
 
@@ -450,9 +451,16 @@ impl Worker {
         let si = STARTUPINFOW { cb: std::mem::size_of::<STARTUPINFOW>() as u32, lpDesktop: PWSTR(where_.as_mut_ptr()),
                                 ..Default::default() };
         let mut pi = PROCESS_INFORMATION::default();
-        unsafe { CreateProcessW(None, PWSTR(cmd.as_mut_ptr()), None, None, false, PROCESS_CREATION_FLAGS(0),
+        //: **Started suspended and put in argmind's job before it runs**, so it dies with argmind
+        //: however argmind ends — a killed harness once left three Character Maps running on a
+        //: desktop nobody could see. Suspended so a child it starts joins the job too.
+        unsafe { CreateProcessW(None, PWSTR(cmd.as_mut_ptr()), None, None, false, CREATE_SUSPENDED,
                                 None, None, &si, &mut pi) }
             .map_err(|e| format!("{program} 을(를) 시작하지 못했다 — {e}"))?;
+        if let Some(job) = crate::supervise::ours() {
+            unsafe { let _ = AssignProcessToJobObject(job, pi.hProcess); }
+        }
+        unsafe { ResumeThread(pi.hThread); }
         if let Ok(mut s) = started.lock() {
             s.push(pi.hProcess.0 as isize);
         }
