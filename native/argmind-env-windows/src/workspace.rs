@@ -228,13 +228,19 @@ fn cut_for_refusal(text: &str) -> String {
 }
 
 /// Run, feed `stdin`, wait at most `seconds`, and return stdout and stderr with the exit code.
-fn finish(mut c: Command, stdin: Option<&str>, seconds: u64) -> Result<String, String> {
+pub(crate) fn finish(mut c: Command, stdin: Option<&str>, seconds: u64) -> Result<String, String> {
     use std::os::windows::process::CommandExt;
     const CREATE_NO_WINDOW: u32 = 0x0800_0000;
     c.creation_flags(CREATE_NO_WINDOW)
         .stdin(if stdin.is_some() { Stdio::piped() } else { Stdio::null() })
         .stdout(Stdio::piped()).stderr(Stdio::piped());
     let mut child = c.spawn().map_err(|e| format!("시작하지 못했다: {e}"))?;
+    //: **In argmind's job**, so a command still running dies with argmind rather than outliving it.
+    if let Some(job) = crate::supervise::ours() {
+        use std::os::windows::io::AsRawHandle;
+        unsafe { let _ = windows::Win32::System::JobObjects::AssignProcessToJobObject(
+            job, windows::Win32::Foundation::HANDLE(child.as_raw_handle())); }
+    }
     if let (Some(text), Some(mut pipe)) = (stdin, child.stdin.take()) {
         let _ = pipe.write_all(text.as_bytes());
         let _ = pipe.write_all(b"\n");

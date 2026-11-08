@@ -732,6 +732,11 @@ fn worked_instead(desk: &mut Desk, out: &Listeners, text: &str) -> bool {
             sets.push((Rank::Other, Box::new(pane_hands(desk.jobs.clone(), Arc::clone(&desk.stop_work)))));
         }
         //: **And a screen of argmind's own, last** — a desktop the person never sees.
+        //: **Installed programs by their own scripting interfaces, with the APIs** — Blender's
+        //: Python and kicad-cli, when this machine has them.
+        if let Some(programs) = crate::platform::installed_programs() {
+            sets.push((Rank::Api, programs));
+        }
         //: **Every press and write there asks the person's 규칙 first**, on the worker that holds
         //: them; a question waits as long as a row would, and 멈춰 lets go of it.
         let (gate_jobs, gate_stop) = (desk.jobs.clone(), Arc::clone(&desk.stop_work));

@@ -803,6 +803,21 @@ pub fn workbench() -> Option<Box<dyn argmind_core::task::Tools + Send>> {
     }
 }
 
+/// **Programs this machine has, by their own scripting interfaces** — Blender's Python and
+/// `kicad-cli` — ranked with the APIs. `None` when neither is installed. See
+/// `argmind_env_windows::programs`.
+pub fn installed_programs() -> Option<Box<dyn argmind_core::task::Tools + Send>> {
+    #[cfg(all(windows, not(feature = "headless")))]
+    {
+        argmind_env_windows::programs::Programs::found(work_folder())
+            .map(|p| Box::new(p) as Box<dyn argmind_core::task::Tools + Send>)
+    }
+    #[cfg(not(all(windows, not(feature = "headless"))))]
+    {
+        None
+    }
+}
+
 /// **A screen of argmind's own for work**, ranked last — a Windows desktop the person never sees,
 /// operated by control patterns only. See `argmind_env_windows::screen`.
 /// Every press and write there is put to `gate` first — the person's 규칙, from `app.rs`.
