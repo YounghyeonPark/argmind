@@ -52,6 +52,11 @@ pub enum About {
     /// candidate **in the order the eyes gave them**, which is what makes the answer an index this
     /// can re-resolve against.
     WhichOne { token: u64, what: String, among: Vec<String> },
+    /// **A task wants to press or write on argmind's work screen** and the person's 규칙 says
+    /// *항상 물어봄* there, or 확인 없이 실행 is off. A press there is not a `Proposal` — it never
+    /// reaches `perform`, the work screen is not the person's — so the answer goes back to the
+    /// task thread waiting on `ask`, and only the one button means yes; skipping is no.
+    Press { ask: u64, what: String, window: String, among: Vec<String> },
 }
 
 impl About {
@@ -63,6 +68,8 @@ impl About {
             About::Who(_) => "처음 보는 분이네요. 누구신가요?".into(),
             About::WhichOne { what, among, .. } =>
                 format!("{what} 이(가) {}개 있습니다. 어느 것입니까?", among.len()),
+            About::Press { what, window, .. } =>
+                format!("작업 화면의 「{window}」에서 {what} — 할까요?"),
         }
     }
 
@@ -71,7 +78,7 @@ impl About {
     pub fn hint(&self) -> &'static str {
         match self {
             About::Who(_) => "이름 — 비워 두고 넘어가도 됩니다",
-            About::WhichOne { .. } => "",
+            About::WhichOne { .. } | About::Press { .. } => "",
         }
     }
 
@@ -81,7 +88,7 @@ impl About {
     pub fn among(&self) -> &[String] {
         match self {
             About::Who(_) => &[],
-            About::WhichOne { among, .. } => among,
+            About::WhichOne { among, .. } | About::Press { among, .. } => among,
         }
     }
 }

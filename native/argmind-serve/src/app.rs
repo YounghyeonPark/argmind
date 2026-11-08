@@ -262,6 +262,8 @@ struct Desk {
     /// **A task's press waiting on a row**: its token, where the answer goes, and the timeline mark
     /// from before the press.
     task_presses: Vec<(u64, Sender<String>, u64)>,
+    /// Work-screen presses waiting on the person, by `About::Press`'s `ask`.
+    screen_asks: Vec<(u64, Sender<Result<(), String>>)>,
     /// Judgements already raised this session, by name and role — see `raise_it`.
     raised: Vec<(String, String)>,
     /// **규칙**, read at startup and replaced whole from the page. See [`argmind_core::rule`].
@@ -348,6 +350,9 @@ enum Job {
     /// **A task presses in the pane**, through `propose` and `act` like a turn. The answer is what
     /// came of it, in the timeline's words — at once, or when the person answers the row.
     PanePress(Effect, Sender<String>),
+    /// A task's press or write on the work screen, for the person's 규칙 and 확인 없이 실행:
+    /// window, kind, what, and where the answer goes.
+    ScreenGate(String, String, String, Sender<Result<(), String>>),
     /// The thinking thread took one step: **the copy it stepped from and the result**, so a step
     /// computed before an answer arrived is recognised and thrown away rather than written over it.
     Stepped(argmind_core::errand::Errand, argmind_core::errand::Errand),
@@ -727,7 +732,25 @@ fn worked_instead(desk: &mut Desk, out: &Listeners, text: &str) -> bool {
             sets.push((Rank::Other, Box::new(pane_hands(desk.jobs.clone(), Arc::clone(&desk.stop_work)))));
         }
         //: **And a screen of argmind's own, last** — a desktop the person never sees.
-        if let Some(screen) = crate::platform::work_screen() {
+        //: **Every press and write there asks the person's 규칙 first**, on the worker that holds
+        //: them; a question waits as long as a row would, and 멈춰 lets go of it.
+        let (gate_jobs, gate_stop) = (desk.jobs.clone(), Arc::clone(&desk.stop_work));
+        let gate = Box::new(move |window: &str, kind: &str, what: &str| -> Result<(), String> {
+            let (tx, rx) = std::sync::mpsc::channel();
+            gate_jobs.send(Job::ScreenGate(window.into(), kind.into(), what.into(), tx))
+                .map_err(|_| "argmind 이 닫혔다 — 하지 않았다".to_string())?;
+            let asked_at = std::time::Instant::now();
+            loop {
+                match rx.recv_timeout(std::time::Duration::from_millis(500)) {
+                    Ok(answer) => return answer,
+                    Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => return Err("답이 오지 않았다".into()),
+                    Err(_) if gate_stop.load(Ordering::SeqCst) => return Err("사람이 작업을 멈췄다".into()),
+                    Err(_) if asked_at.elapsed().as_secs() >= 600 => return Err("10분 동안 답이 없었다 — 하지 않았다".into()),
+                    Err(_) => {}
+                }
+            }
+        });
+        if let Some(screen) = crate::platform::work_screen(gate) {
             sets.push((Rank::Screen, screen));
         }
         start_work(desk, text, sets);
@@ -773,6 +796,44 @@ fn pane_press(desk: &mut Desk, out: &Listeners, effect: Effect, tx: Sender<Strin
         }
         _ => {
             let _ = tx.send(out.pressed_since(mark));
+        }
+    }
+}
+
+/// **A task's press or write on the work screen, put to the person's 규칙** — refused, let through,
+/// or asked as a question whose one button is yes. Never a `Proposal`: the work screen is not the
+/// person's, nothing there reaches `perform`, and the answer goes back to the waiting task.
+fn screen_gate(desk: &mut Desk, out: &Listeners, window: &str, kind: &str, what: &str,
+               tx: Sender<Result<(), String>>) {
+    use crate::rules::OnTheWorkScreen;
+    let acting = crate::decided::standing("acting") == Some(Standing::Allowed);
+    match crate::rules::on_the_work_screen(&desk.rules, window, kind, acting) {
+        OnTheWorkScreen::Go => {
+            let _ = tx.send(Ok(()));
+        }
+        OnTheWorkScreen::Refuse(said) => {
+            out.record("작업", &format!("작업 화면 「{window}」 {what} → 규칙으로 하지 않음"));
+            out.send("note", &said);
+            let _ = tx.send(Err(format!("{said} — 하지 않았다. 다른 방법을 쓰거나 사람에게 말하라")));
+        }
+        OnTheWorkScreen::Ask => {
+            static ASKS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
+            let ask = ASKS.fetch_add(1, Ordering::SeqCst);
+            let yes = if kind == "type" { "넣기" } else { "누르기" };
+            let about = crate::wonders::About::Press { ask, what: what.to_string(), window: window.to_string(),
+                                                       among: vec![yes.to_string()] };
+            let raised = desk.wonders.lock().unwrap_or_else(|e| e.into_inner()).ask(about).map(wonder_json);
+            match raised {
+                Some(json) => {
+                    out.record("작업", &format!("작업 화면 「{window}」 {what} → 여쭤봄"));
+                    out.send("wonder", &json);
+                    desk.screen_asks.push((ask, tx));
+                }
+                //: One question at a time — a second one is not stacked behind it.
+                None => {
+                    let _ = tx.send(Err("다른 질문에 아직 답이 없어 여쭤보지 못했다 — 하지 않았다".into()));
+                }
+            }
         }
     }
 }
@@ -1915,6 +1976,16 @@ fn which_one(desk: &mut Desk, out: &Listeners, about: crate::wonders::About, sai
                 let _ = act(desk, out, p);
             }
         }
+        //: **Only the one button is yes**; skipping, or anything else, is no.
+        crate::wonders::About::Press { ask, what, .. } => {
+            if let Some(i) = desk.screen_asks.iter().position(|(a, _)| *a == ask) {
+                let (_, tx) = desk.screen_asks.remove(i);
+                let _ = tx.send(if said == "0" { Ok(()) } else {
+                    out.send("note", &format!("{what} — 하지 않습니다"));
+                    Err("사람이 하지 않기로 했다 — 하지 않았다".into())
+                });
+            }
+        }
     }
 }
 
@@ -2898,7 +2969,7 @@ pub fn run(how: How) {
                               working: Arc::new(AtomicBool::new(false)),
                               stop_work: Arc::new(AtomicBool::new(false)), jobs: agent_jobs,
                               task_asks: Arc::new(Mutex::new(None)),
-                              task_presses: Vec::new(),
+                              task_presses: Vec::new(), screen_asks: Vec::new(),
                               facing_now: Arc::new(Mutex::new(None)),
                               face_seen_at: Arc::new(Mutex::new(None)) };
         //: **The button is the permission, which is what this flag is for** — `session.rs`:
@@ -2992,6 +3063,8 @@ pub fn run(how: How) {
                     let _ = tx.send(pane_look(&mut desk));
                 }
                 Job::PanePress(effect, tx) => pane_press(&mut desk, &agent_out, effect, tx),
+                Job::ScreenGate(window, kind, what, tx) =>
+                    screen_gate(&mut desk, &agent_out, &window, &kind, &what, tx),
                 Job::Listen(down) => listen(&mut desk, &agent_out, down),
                 Job::Notice(on) => match (on, crate::decided::standing("notice")) {
                     //: **Switching off never asks.** A permission question in front of somebody

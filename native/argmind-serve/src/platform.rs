@@ -805,13 +805,16 @@ pub fn workbench() -> Option<Box<dyn argmind_core::task::Tools + Send>> {
 
 /// **A screen of argmind's own for work**, ranked last — a Windows desktop the person never sees,
 /// operated by control patterns only. See `argmind_env_windows::screen`.
-pub fn work_screen() -> Option<Box<dyn argmind_core::task::Tools + Send>> {
+/// Every press and write there is put to `gate` first — the person's 규칙, from `app.rs`.
+pub fn work_screen(gate: Box<dyn FnMut(&str, &str, &str) -> Result<(), String> + Send>)
+    -> Option<Box<dyn argmind_core::task::Tools + Send>> {
     #[cfg(all(windows, not(feature = "headless")))]
     {
-        Some(Box::new(argmind_env_windows::screen::Screen::shown(work_view().clone())))
+        Some(Box::new(argmind_env_windows::screen::Screen::shown(work_view().clone()).gated(gate)))
     }
     #[cfg(not(all(windows, not(feature = "headless"))))]
     {
+        let _ = gate;
         None
     }
 }
@@ -881,7 +884,7 @@ mod tests {
     #[test]
     #[ignore]
     fn the_work_screen_is_drawn_for_the_page_and_gone_when_closed() {
-        let mut s = super::work_screen().unwrap();
+        let mut s = super::work_screen(Box::new(|_: &str, _: &str, _: &str| Ok(()))).unwrap();
         s.call("screen_open", &serde_json::json!({"program": "winver.exe"})).unwrap();
         std::thread::sleep(std::time::Duration::from_millis(1500));
         let (seq, picture) = super::work_picture(0).expect("a picture while a program is open");

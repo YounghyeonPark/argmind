@@ -25,6 +25,29 @@ fn main() {
         }
         None => println!("  picture {when}: none"),
     };
+    //: `--gated`: a gate that refuses every click and lets writes through, as a 하지 않음 rule on
+    //: clicking would — the order number goes in, 조회 is refused, and the answer never appears.
+    if std::env::args().any(|a| a == "--gated") {
+        let asked = std::sync::Arc::new(std::sync::Mutex::new(Vec::<String>::new()));
+        let log = asked.clone();
+        let mut s = argmind_env_windows::screen::Screen::new().gated(Box::new(move |window, kind, what| {
+            log.lock().unwrap().push(format!("{window} | {kind} | {what}"));
+            if kind == "click" { Err("누르지 않도록 정해 두셨습니다".into()) } else { Ok(()) }
+        }));
+        s.call("screen_open", &json!({"program": exe.display().to_string()})).unwrap();
+        let look = s.call("screen_look", &json!({})).unwrap();
+        let num = |look: &str, has: &str| look.lines().find(|l| l.contains(has))
+            .and_then(|l| l.split(':').next()?.trim().parse::<u64>().ok());
+        println!("  type: {:?}", s.call("screen_type", &json!({"item": num(&look, ": edit ").or_else(|| num(&look, "편집")), "text": "A-1042"})));
+        let look = s.call("screen_look", &json!({})).unwrap();
+        println!("  press: {:?}", s.call("screen_press", &json!({"item": num(&look, "\"조회\"")})));
+        std::thread::sleep(std::time::Duration::from_millis(800));
+        let look = s.call("screen_look", &json!({})).unwrap();
+        println!("  answer appeared: {}", look.contains("6038-2271-9954"));
+        println!("  the gate was asked: {:#?}", asked.lock().unwrap());
+        let _ = s.call("screen_close", &json!({}));
+        return;
+    }
     //: `--leave`: open something and end abruptly, as a killed argmind does — then check from
     //: outside that nothing it opened is still running.
     if std::env::args().any(|a| a == "--leave") {

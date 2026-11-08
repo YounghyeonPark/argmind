@@ -26,3 +26,27 @@ pub fn keep(rules: &[Rule]) -> Result<(), String> {
     }
     std::fs::write(&path, argmind_core::rule::render_all(rules)).map_err(|e| format!("{path:?}: {e}"))
 }
+
+/// What a press or a write on argmind's work screen may do.
+#[derive(Clone, Debug, PartialEq)]
+pub enum OnTheWorkScreen {
+    Go,
+    /// Ask the person first — a *항상 물어봄* rule, or 확인 없이 실행 not on.
+    Ask,
+    /// A *하지 않음* rule; the person's sentence for it.
+    Refuse(String),
+}
+
+/// **The person's 규칙 reach the work screen the way they reach the desktop** — matched on the
+/// window's title and the kind, the strictest one winning — and so does 확인 없이 실행: a task is
+/// something a person asked for, so `acting` is the standing answer it reads, the same as a
+/// task's press in the web pane, which goes through `propose`.
+pub fn on_the_work_screen(rules: &[Rule], window: &str, kind: &str, acting: bool) -> OnTheWorkScreen {
+    use argmind_core::rule::{applies, told, Then};
+    match applies(rules, window, kind) {
+        Some(Then::Never) => OnTheWorkScreen::Refuse(told(rules, window, kind)),
+        Some(Then::Confirm) => OnTheWorkScreen::Ask,
+        None if !acting => OnTheWorkScreen::Ask,
+        None => OnTheWorkScreen::Go,
+    }
+}

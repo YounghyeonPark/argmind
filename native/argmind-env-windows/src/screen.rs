@@ -86,9 +86,18 @@ pub type View = std::sync::Arc<std::sync::Mutex<Option<Picture>>>;
 
 type Reply = Sender<Result<String, String>>;
 
+/// **What the person decided about acting, asked before every press and every write** — the
+/// window's title, the kind (`click` or `type`, `rule::ACTIONS`'s words) and what it is in the
+/// person's words. `Err` is a refusal and its sentence becomes the tool's result. The application
+/// answers it with the person's 규칙 and 확인 없이 실행, and may take as long as a person does:
+/// it runs on the task's thread, not the worker's, so no `ANSWER_SECONDS` applies to it.
+pub type Gate = Box<dyn FnMut(&str, &str, &str) -> Result<(), String> + Send>;
+
 enum Job {
     Open(String),
     Look,
+    /// The window and the name of a numbered thing, for the gate.
+    Which(usize),
     Press(usize),
     Type(usize, String),
     Close,
@@ -101,6 +110,7 @@ pub struct Screen {
     /// Processes started, as raw handles, so a stuck worker's programs can still be ended here.
     started: std::sync::Arc<std::sync::Mutex<Vec<isize>>>,
     view: View,
+    gate: Option<Gate>,
 }
 
 impl Screen {
@@ -110,7 +120,27 @@ impl Screen {
 
     /// The same, drawing into `view` for somebody to watch.
     pub fn shown(view: View) -> Self {
-        Self { worker: None, started: Default::default(), view }
+        Self { worker: None, started: Default::default(), view, gate: None }
+    }
+
+    /// Every press and write asks `gate` first.
+    pub fn gated(mut self, gate: Gate) -> Self {
+        self.gate = Some(gate);
+        self
+    }
+
+    /// The gate's answer for item `i`, or `Ok` with no gate.
+    fn passes(&mut self, i: usize, kind: &str, text: Option<&str>) -> Result<(), String> {
+        if self.gate.is_none() {
+            return Ok(());
+        }
+        let which = self.ask(Job::Which(i))?;
+        let (window, name) = which.split_once('\t').unwrap_or(("", &which));
+        let what = match text {
+            Some(t) => format!("「{name}」에 \"{}\" 넣기", t.chars().take(60).collect::<String>()),
+            None => format!("「{name}」 누르기"),
+        };
+        (self.gate.as_mut().unwrap())(window, kind, &what)
     }
 
     fn ask(&mut self, job: Job) -> Result<String, String> {
@@ -170,10 +200,16 @@ impl Tools for Screen {
                 self.ask(Job::Open(p.to_string()))
             }
             "screen_look" => self.ask(Job::Look),
-            "screen_press" => self.ask(Job::Press(item()?)),
+            "screen_press" => {
+                let i = item()?;
+                self.passes(i, "click", None)?;
+                self.ask(Job::Press(i))
+            }
             "screen_type" => {
                 let text = args.get("text").and_then(Value::as_str).ok_or("text 가 없다")?.to_string();
-                self.ask(Job::Type(item()?, text))
+                let i = item()?;
+                self.passes(i, "type", Some(&text))?;
+                self.ask(Job::Type(i, text))
             }
             "screen_close" => {
                 if self.worker.is_none() {
@@ -255,7 +291,7 @@ struct Worker {
     desk: HDESK,
     ua: IUIAutomation,
     procs: Vec<PROCESS_INFORMATION>,
-    seen: Vec<IUIAutomationElement>,
+    seen: Vec<(IUIAutomationElement, String)>,
 }
 
 fn work(jobs: Receiver<(Job, Reply)>, started: std::sync::Arc<std::sync::Mutex<Vec<isize>>>, view: View) {
@@ -293,6 +329,10 @@ fn work(jobs: Receiver<(Job, Reply)>, started: std::sync::Arc<std::sync::Mutex<V
         let got = match job {
             Job::Open(p) => w.open(&p, &name, &started),
             Job::Look => w.look(),
+            Job::Which(i) => w.element(i).map(|e| {
+                let name = unsafe { e.CurrentName() }.map(|s| s.to_string()).unwrap_or_default();
+                format!("{}\t{name}", w.seen[i].1)
+            }),
             Job::Press(i) => w.press(i),
             Job::Type(i, t) => w.type_(i, &t),
             Job::Close => w.close(),
@@ -528,7 +568,7 @@ impl Worker {
                     _ => String::new(),
                 };
                 lines.push(format!("{}: {role} \"{}\"{v}{off}", self.seen.len(), name.chars().take(80).collect::<String>()));
-                self.seen.push(e);
+                self.seen.push((e, t.clone()));
             }
         }
         Ok(format!("작업 화면의 창: {}\n(번호: 종류 \"이름\" = 값)\n{}", titles.join(", "),
@@ -536,7 +576,7 @@ impl Worker {
     }
 
     fn element(&self, i: usize) -> Result<IUIAutomationElement, String> {
-        self.seen.get(i).cloned().ok_or_else(|| if self.seen.is_empty() {
+        self.seen.get(i).map(|s| s.0.clone()).ok_or_else(|| if self.seen.is_empty() {
             "먼저 screen_look 으로 보라 — 번호는 마지막으로 본 목록의 것이다".to_string()
         } else {
             format!("{i} 번은 마지막 목록에 없다 (0–{})", self.seen.len() - 1)
