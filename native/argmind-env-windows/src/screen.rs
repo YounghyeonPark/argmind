@@ -25,6 +25,13 @@
 //!
 //! UI Automation objects are apartment-bound, and a thread is on one desktop, so everything runs
 //! on one worker thread that owns the desktop, the programs and the last look.
+//!
+//! **And a person can watch it — since 2026-11-08, the owner's 작업화면 보여주는 칸.** The worker
+//! draws the work screen's windows into a [`View`] after every job and once a second while idle,
+//! with `PrintWindow` from the worker's own thread, which is on that desktop. **The picture is for
+//! the person and never for a model**: no tool result carries it, `screen_look` stays the numbered
+//! text it was, and `argmind-rules` holds that one route in the application reads it. It is
+//! argmind's desktop, not the person's — the worker is not on the person's screen and cannot draw it.
 
 use std::sync::mpsc::{channel, Receiver, Sender};
 use std::time::{Duration, Instant};
@@ -56,6 +63,26 @@ pub const ANSWER_SECONDS: u64 = 30;
 /// Launchers whose window is somebody else's process — on Windows 11 these are packaged apps.
 const PACKAGED: [&str; 6] = ["notepad.exe", "mspaint.exe", "calc.exe", "snippingtool.exe", "wt.exe", "explorer.exe"];
 
+/// How often an idle work screen is drawn again — a program that is loading changes by itself.
+pub const REDRAWN: Duration = Duration::from_millis(1000);
+
+/// The widest picture handed out: enough to read a program's buttons by eye, about a megabyte.
+pub const MOST_WIDE: usize = 800;
+
+/// What the work screen looks like now, for a person.
+#[derive(Clone)]
+pub struct Picture {
+    /// Goes up only when the picture changed, so a page that has this one asks for nothing more.
+    pub seq: u64,
+    /// The windows' titles, front first.
+    pub titles: Vec<String>,
+    /// A complete `.bmp` file.
+    pub bmp: Vec<u8>,
+}
+
+/// Shared between the worker that draws and whoever shows it. `None` while nothing is open.
+pub type View = std::sync::Arc<std::sync::Mutex<Option<Picture>>>;
+
 type Reply = Sender<Result<String, String>>;
 
 enum Job {
@@ -72,6 +99,7 @@ pub struct Screen {
     worker: Option<(Sender<(Job, Reply)>, std::thread::JoinHandle<()>)>,
     /// Processes started, as raw handles, so a stuck worker's programs can still be ended here.
     started: std::sync::Arc<std::sync::Mutex<Vec<isize>>>,
+    view: View,
 }
 
 impl Screen {
@@ -79,11 +107,17 @@ impl Screen {
         Self::default()
     }
 
+    /// The same, drawing into `view` for somebody to watch.
+    pub fn shown(view: View) -> Self {
+        Self { worker: None, started: Default::default(), view }
+    }
+
     fn ask(&mut self, job: Job) -> Result<String, String> {
         if self.worker.is_none() {
             let (tx, rx) = channel::<(Job, Reply)>();
             let started = std::sync::Arc::clone(&self.started);
-            let handle = std::thread::spawn(move || work(rx, started));
+            let view = std::sync::Arc::clone(&self.view);
+            let handle = std::thread::spawn(move || work(rx, started, view));
             self.worker = Some((tx, handle));
         }
         let (tx, _) = self.worker.as_ref().unwrap();
@@ -223,7 +257,7 @@ struct Worker {
     seen: Vec<IUIAutomationElement>,
 }
 
-fn work(jobs: Receiver<(Job, Reply)>, started: std::sync::Arc<std::sync::Mutex<Vec<isize>>>) {
+fn work(jobs: Receiver<(Job, Reply)>, started: std::sync::Arc<std::sync::Mutex<Vec<isize>>>, view: View) {
     static MADE: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
     let name = format!("argmind-work-{}-{}", std::process::id(), MADE.fetch_add(1, std::sync::atomic::Ordering::SeqCst));
     let made = (|| -> Result<Worker, String> {
@@ -245,7 +279,15 @@ fn work(jobs: Receiver<(Job, Reply)>, started: std::sync::Arc<std::sync::Mutex<V
             return;
         }
     };
-    for (job, reply) in jobs.iter() {
+    loop {
+        let (job, reply) = match jobs.recv_timeout(REDRAWN) {
+            Ok(j) => j,
+            Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {
+                draw(w.desk, &view);
+                continue;
+            }
+            Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => break,
+        };
         let closing = matches!(job, Job::Close);
         let got = match job {
             Job::Open(p) => w.open(&p, &name, &started),
@@ -258,9 +300,137 @@ fn work(jobs: Receiver<(Job, Reply)>, started: std::sync::Arc<std::sync::Mutex<V
         if closing {
             break;
         }
+        draw(w.desk, &view);
     }
     let _ = w.close();
+    if let Ok(mut v) = view.lock() {
+        *v = None;
+    }
     unsafe { let _ = CloseDesktop(w.desk); }
+}
+
+/// The work screen's titled windows drawn where they stand, back to front, into `view` — or
+/// `None` when there are none. The sequence number moves only when the picture did.
+fn draw(desk: HDESK, view: &View) {
+    use windows::Win32::Foundation::RECT;
+    use windows::Win32::Graphics::Gdi::*;
+    use windows::Win32::Storage::Xps::{PrintWindow, PRINT_WINDOW_FLAGS};
+    use windows::Win32::UI::WindowsAndMessaging::GetWindowRect;
+    let wins: Vec<(HWND, String, RECT)> = windows_on(desk).into_iter().filter_map(|h| {
+        let t = title(h);
+        let mut r = RECT::default();
+        (!t.trim().is_empty() && unsafe { GetWindowRect(h, &mut r) }.is_ok() && r.right > r.left && r.bottom > r.top)
+            .then_some((h, t, r))
+    }).take(4).collect();
+    let made = (|| -> Option<Picture> {
+        let (l, t) = (wins.iter().map(|w| w.2.left).min()?, wins.iter().map(|w| w.2.top).min()?);
+        let wide = (wins.iter().map(|w| w.2.right).max()? - l).min(4000);
+        let tall = (wins.iter().map(|w| w.2.bottom).max()? - t).min(4000);
+        let mut pixels = vec![0u8; (wide * tall * 4) as usize];
+        unsafe {
+            let screen = GetDC(None);
+            let canvas = CreateCompatibleDC(screen);
+            let whole = CreateCompatibleBitmap(screen, wide, tall);
+            let old = SelectObject(canvas, whole);
+            //: Back to front: `EnumDesktopWindows` lists the front one first.
+            for (h, _, r) in wins.iter().rev() {
+                let (w_, h_) = (r.right - r.left, r.bottom - r.top);
+                let one = CreateCompatibleDC(screen);
+                let bmp = CreateCompatibleBitmap(screen, w_, h_);
+                let was = SelectObject(one, bmp);
+                if PrintWindow(*h, one, PRINT_WINDOW_FLAGS(2)).as_bool() {
+                    let _ = BitBlt(canvas, r.left - l, r.top - t, w_, h_, one, 0, 0, SRCCOPY);
+                }
+                SelectObject(one, was);
+                let _ = DeleteObject(bmp);
+                let _ = DeleteDC(one);
+            }
+            SelectObject(canvas, old);
+            let mut info = BITMAPINFO { bmiHeader: BITMAPINFOHEADER {
+                biSize: std::mem::size_of::<BITMAPINFOHEADER>() as u32, biWidth: wide, biHeight: -tall,
+                biPlanes: 1, biBitCount: 32, biCompression: BI_RGB.0, ..Default::default() }, ..Default::default() };
+            let got = GetDIBits(canvas, whole, 0, tall as u32, Some(pixels.as_mut_ptr() as *mut _), &mut info,
+                                DIB_RGB_COLORS);
+            let _ = DeleteObject(whole);
+            let _ = DeleteDC(canvas);
+            ReleaseDC(None, screen);
+            if got == 0 {
+                return None;
+            }
+        }
+        let (small, sw, sh) = reduced(&pixels, wide as usize, tall as usize, MOST_WIDE);
+        Some(Picture { seq: 0, titles: wins.iter().map(|w| w.1.clone()).collect(), bmp: bmp_file(&small, sw, sh) })
+    })();
+    if let Ok(mut v) = view.lock() {
+        *v = match (made, v.take()) {
+            (None, _) => None,
+            (Some(p), Some(was)) if p.bmp == was.bmp && p.titles == was.titles => Some(was),
+            (Some(mut p), _) => {
+                //: One count for the whole process, so a later task's first picture is never
+                //: mistaken for an earlier one the page already has.
+                static SEQ: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
+                p.seq = SEQ.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+                Some(p)
+            }
+        };
+    }
+}
+
+/// Top-down BGRA made at most `most` wide by averaging boxes — read by eye, so a box filter does.
+fn reduced(bgra: &[u8], wide: usize, tall: usize, most: usize) -> (Vec<u8>, usize, usize) {
+    if wide <= most {
+        return (bgra.to_vec(), wide, tall);
+    }
+    let (nw, nh) = (most, (tall * most / wide).max(1));
+    let mut out = vec![0u8; nw * nh * 4];
+    for y in 0..nh {
+        let (y0, y1) = (y * tall / nh, ((y + 1) * tall / nh).max(y * tall / nh + 1));
+        for x in 0..nw {
+            let (x0, x1) = (x * wide / nw, ((x + 1) * wide / nw).max(x * wide / nw + 1));
+            let mut sum = [0u32; 3];
+            for yy in y0..y1 {
+                for xx in x0..x1 {
+                    let i = (yy * wide + xx) * 4;
+                    for (c, s) in sum.iter_mut().enumerate() {
+                        *s += bgra[i + c] as u32;
+                    }
+                }
+            }
+            let n = ((y1 - y0) * (x1 - x0)) as u32;
+            let o = (y * nw + x) * 4;
+            for (c, s) in sum.iter().enumerate() {
+                out[o + c] = (s / n) as u8;
+            }
+            out[o + 3] = 255;
+        }
+    }
+    (out, nw, nh)
+}
+
+/// A 24-bit `.bmp` from top-down BGRA — every browser shows one and it needs no encoder.
+fn bmp_file(bgra: &[u8], wide: usize, tall: usize) -> Vec<u8> {
+    let row = (wide * 3).div_ceil(4) * 4;
+    let size = 54 + row * tall;
+    let mut f = Vec::with_capacity(size);
+    f.extend_from_slice(b"BM");
+    f.extend_from_slice(&(size as u32).to_le_bytes());
+    f.extend_from_slice(&[0; 4]);
+    f.extend_from_slice(&54u32.to_le_bytes());
+    f.extend_from_slice(&40u32.to_le_bytes());
+    f.extend_from_slice(&(wide as i32).to_le_bytes());
+    f.extend_from_slice(&(tall as i32).to_le_bytes());
+    f.extend_from_slice(&1u16.to_le_bytes());
+    f.extend_from_slice(&24u16.to_le_bytes());
+    f.extend_from_slice(&[0; 24]);
+    //: Bottom-up, as a positive height says.
+    for y in (0..tall).rev() {
+        for x in 0..wide {
+            let i = (y * wide + x) * 4;
+            f.extend_from_slice(&bgra[i..i + 3]);
+        }
+        f.resize(f.len() + row - wide * 3, 0);
+    }
+    f
 }
 
 impl Worker {
@@ -443,6 +613,29 @@ fn value_of(e: &IUIAutomationElement) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_picture_is_made_narrower_by_averaging_and_written_as_a_bmp() {
+        //: 4×2, the left half black and the right half white.
+        let mut px = Vec::new();
+        for _ in 0..2 {
+            for x in 0..4 {
+                let c = if x < 2 { 0 } else { 255 };
+                px.extend_from_slice(&[c, c, c, 255]);
+            }
+        }
+        let (small, w, h) = reduced(&px, 4, 2, 2);
+        assert_eq!((w, h), (2, 1));
+        assert_eq!(&small[..3], &[0, 0, 0]);
+        assert_eq!(&small[4..7], &[255, 255, 255]);
+        let (same, w, _) = reduced(&px, 4, 2, 800);
+        assert_eq!((w, same.len()), (4, px.len()));
+        //: 3 wide is 9 bytes a row, padded to 12.
+        let f = bmp_file(&[10u8; 3 * 2 * 4], 3, 2);
+        assert_eq!(&f[..2], b"BM");
+        assert_eq!(f.len(), 54 + 12 * 2);
+        assert_eq!(u32::from_le_bytes(f[2..6].try_into().unwrap()) as usize, f.len());
+    }
 
     #[test]
     fn the_program_a_command_line_starts_is_read() {

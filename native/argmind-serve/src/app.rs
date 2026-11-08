@@ -3617,6 +3617,18 @@ fn serve_one(mut stream: TcpStream, out: &Listeners, token: &str, jobs: &Sender<
                 let _ = stream.write_all(&respond("400 Bad Request", "text/plain", "no"));
             }
         }
+        //: **The one place the work screen's picture goes, and it goes to the page.** 204 while
+        //: nothing is open there; `same` when the page already has this one — not a 304, which a
+        //: browser may answer from a cache this response never asked it to keep.
+        Route::WorkScreen(seen) => {
+            let answer = match crate::platform::work_picture(seen) {
+                None => respond("204 No Content", "text/plain", ""),
+                Some((_, None)) => respond("200 OK", "text/plain", "same"),
+                Some((seq, Some((titles, bmp)))) => crate::respond_bytes("200 OK", "image/bmp", &bmp,
+                    &format!("X-Frame: {seq}\r\nX-Titles: {}\r\n", crate::encoded(&titles))),
+            };
+            let _ = stream.write_all(&answer);
+        }
         Route::Look => {
             let _ = stream.write_all(&respond("204 No Content", "text/plain", ""));
             let _ = jobs.send(Job::Look);

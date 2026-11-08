@@ -15,7 +15,16 @@ fn main() {
     let pointer = || { let mut p = POINT::default(); unsafe { let _ = GetPhysicalCursorPos(&mut p); } (p.x, p.y) };
     let (p0, f0) = (pointer(), unsafe { GetForegroundWindow() });
     let exe = std::env::current_exe().unwrap().parent().unwrap().join("order-window.exe");
-    let mut s = argmind_env_windows::screen::Screen::new();
+    let view = argmind_env_windows::screen::View::default();
+    let mut s = argmind_env_windows::screen::Screen::shown(view.clone());
+    let shown = |when: &str| match view.lock().unwrap().as_ref() {
+        Some(p) => {
+            let at = std::env::temp_dir().join(format!("argmind-work-screen-{when}.bmp"));
+            let _ = std::fs::write(&at, &p.bmp);
+            println!("  picture {when}: #{} {:?} {} bytes -> {}", p.seq, p.titles, p.bmp.len(), at.display());
+        }
+        None => println!("  picture {when}: none"),
+    };
     let mut go = |tool: &str, args: serde_json::Value| {
         let began = std::time::Instant::now();
         let r = s.call(tool, &args);
@@ -33,7 +42,12 @@ fn main() {
     go("screen_press", json!({"item": num(&look, "\"조회\"")}));
     let look = go("screen_look", json!({}));
     println!("\n  answer read: {}", look.contains("6038-2271-9954"));
+    shown("after");
+    let seq = view.lock().unwrap().as_ref().map(|p| p.seq);
+    std::thread::sleep(std::time::Duration::from_millis(2500));
+    println!("  idle 2.5 s, picture unchanged: {}", view.lock().unwrap().as_ref().map(|p| p.seq) == seq);
     go("screen_close", json!({}));
+    shown("closed");
     println!("  foreground unchanged: {}", unsafe { GetForegroundWindow() } == f0);
     println!("  pointer (physical) {p0:?} -> {:?}", pointer());
 }

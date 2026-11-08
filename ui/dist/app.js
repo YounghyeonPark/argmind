@@ -513,6 +513,39 @@ webForm.onsubmit = (ev) => {
         void post("/web/on");
     void post("/web/go", where);
 };
+// 작업 화면 — argmind's own desktop, asked for once a second by the number of the picture already
+// here, so an unchanged screen costs a few bytes. Nothing on it can be pressed from the page.
+const workScreen = document.getElementById("workscreen");
+const workTitles = document.getElementById("workscreen-titles");
+const workPicture = document.getElementById("workscreen-picture");
+let workSeen = 0;
+let workUrl = "";
+async function watchWork() {
+    try {
+        if (!document.hidden) {
+            const r = await fetch(`/work-screen/${workSeen}`, { headers: { "X-Argmind-Token": token } });
+            if (r.status === 204) {
+                workScreen.hidden = true;
+                workSeen = 0;
+            }
+            else if (r.ok && (r.headers.get("Content-Type") ?? "").startsWith("image/")) {
+                workSeen = Number(r.headers.get("X-Frame") ?? 0);
+                workTitles.textContent = decodeURIComponent(r.headers.get("X-Titles") ?? "");
+                const url = URL.createObjectURL(await r.blob());
+                workPicture.src = url;
+                if (workUrl)
+                    URL.revokeObjectURL(workUrl);
+                workUrl = url;
+                workScreen.hidden = false;
+            }
+        }
+    }
+    catch {
+        // The server is gone or restarting; the next try says which.
+    }
+    setTimeout(() => void watchWork(), 1000);
+}
+void watchWork();
 stream.addEventListener("web", (e) => {
     web.checked = e.data === "1";
 });

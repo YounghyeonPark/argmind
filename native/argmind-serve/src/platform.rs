@@ -808,10 +808,34 @@ pub fn workbench() -> Option<Box<dyn argmind_core::task::Tools + Send>> {
 pub fn work_screen() -> Option<Box<dyn argmind_core::task::Tools + Send>> {
     #[cfg(all(windows, not(feature = "headless")))]
     {
-        Some(Box::new(argmind_env_windows::screen::Screen::new()))
+        Some(Box::new(argmind_env_windows::screen::Screen::shown(work_view().clone())))
     }
     #[cfg(not(all(windows, not(feature = "headless"))))]
     {
+        None
+    }
+}
+
+/// The one picture every work screen draws into — one at a time, since one task runs at a time.
+#[cfg(all(windows, not(feature = "headless")))]
+fn work_view() -> &'static argmind_env_windows::screen::View {
+    static VIEW: std::sync::OnceLock<argmind_env_windows::screen::View> = std::sync::OnceLock::new();
+    VIEW.get_or_init(Default::default)
+}
+
+/// What the work screen looks like, **for the person and never for a model**: `None` when nothing
+/// is open there, `Some((seq, None))` when the page already has picture `seen`, and otherwise the
+/// picture's number, the windows' titles and a `.bmp`. `argmind-rules` holds that one route reads it.
+pub fn work_picture(seen: u64) -> Option<(u64, Option<(String, Vec<u8>)>)> {
+    #[cfg(all(windows, not(feature = "headless")))]
+    {
+        let v = work_view().lock().ok()?;
+        let p = v.as_ref()?;
+        Some((p.seq, (p.seq != seen).then(|| (p.titles.join(" · "), p.bmp.clone()))))
+    }
+    #[cfg(not(all(windows, not(feature = "headless"))))]
+    {
+        let _ = seen;
         None
     }
 }
@@ -844,4 +868,28 @@ pub fn embodied() -> bool {
 /// here yet, and a button that has never been run is worse than a sentence saying what to do.
 pub fn can_carry_out_fixes() -> bool {
     cfg!(all(windows, not(feature = "headless")))
+}
+
+#[cfg(all(test, windows, not(feature = "headless")))]
+mod tests {
+    /// **The work screen's picture reaches the route's function** — a program opened on the work
+    /// screen the way a task opens one, `work_picture` handing out a `.bmp`, the same number
+    /// answered with nothing new, and nothing at all once it is closed. Ignored because it starts
+    /// a program (`winver`, on argmind's own desktop): `cargo test -p argmind-serve --lib
+    /// work_screen -- --ignored`. **A refusal fails rather than skips** — the first version
+    /// skipped when Character Map was already open, and passed in 0.02 s having checked nothing.
+    #[test]
+    #[ignore]
+    fn the_work_screen_is_drawn_for_the_page_and_gone_when_closed() {
+        let mut s = super::work_screen().unwrap();
+        s.call("screen_open", &serde_json::json!({"program": "winver.exe"})).unwrap();
+        std::thread::sleep(std::time::Duration::from_millis(1500));
+        let (seq, picture) = super::work_picture(0).expect("a picture while a program is open");
+        let (titles, bmp) = picture.expect("a picture the page does not have");
+        assert!(bmp.starts_with(b"BM") && bmp.len() > 54 + 100 * 100 * 3, "{} bytes", bmp.len());
+        assert!(!titles.is_empty());
+        assert!(super::work_picture(seq).is_some_and(|(_, p)| p.is_none()), "the same number got the picture again");
+        s.call("screen_close", &serde_json::json!({})).unwrap();
+        assert!(super::work_picture(0).is_none(), "a closed work screen still has a picture");
+    }
 }

@@ -311,6 +311,9 @@ pub enum Route {
     /// microphone is open exactly while somebody is holding it down, which is the floor an open
     /// microphone has no equivalent of and the reason the agent cannot hear itself.
     Listen(bool),
+    /// What argmind's work screen looks like, for the page — `/work-screen/<the number it has>`,
+    /// so a picture is sent only when it changed. A GET, since it changes nothing.
+    WorkScreen(u64),
     /// Anything else, named so a front end that asked wrongly is told rather than ignored.
     Unknown,
 }
@@ -339,6 +342,16 @@ pub fn decoded(raw: &str) -> String {
         i += 1;
     }
     String::from_utf8_lossy(&out).to_string()
+}
+
+/// Bytes to per cent escapes, everything but letters, digits and `-_.~` — `decoded`'s inverse, for
+/// a window title carried in a header, where only ASCII is safe.
+pub fn encoded(text: &str) -> String {
+    text.bytes().map(|b| if b.is_ascii_alphanumeric() || b"-_.~".contains(&b) {
+        (b as char).to_string()
+    } else {
+        format!("%{b:02X}")
+    }).collect()
 }
 
 pub fn route(request: &Request) -> Route {
@@ -454,6 +467,10 @@ pub fn route(request: &Request) -> Route {
         ("POST", "/notice/on") => Route::Notice(true),
         ("POST", "/notice/off") => Route::Notice(false),
         ("POST", "/look") => Route::Look,
+        ("GET", p) if p.starts_with("/work-screen/") => match p[13..].parse() {
+            Ok(n) => Route::WorkScreen(n),
+            Err(_) => Route::Unknown,
+        },
         ("POST", "/listen/start") => Route::Listen(true),
         ("POST", "/listen/stop") => Route::Listen(false),
         _ => Route::Unknown,
@@ -489,6 +506,15 @@ pub fn respond_with(status: &str, content_type: &str, body: &str, extra: &str) -
          Connection: close\r\n\r\n", body.len());
     out.push_str(body);
     out.into_bytes()
+}
+
+/// A response whose body is bytes — the work screen's picture.
+pub fn respond_bytes(status: &str, content_type: &str, body: &[u8], extra: &str) -> Vec<u8> {
+    let mut out = format!(
+        "HTTP/1.1 {status}\r\nContent-Type: {content_type}\r\nContent-Length: {}\r\n\
+         Cache-Control: no-store\r\n{extra}Connection: close\r\n\r\n", body.len()).into_bytes();
+    out.extend_from_slice(body);
+    out
 }
 
 /// The head of a response that never ends.
