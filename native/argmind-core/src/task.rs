@@ -612,6 +612,24 @@ pub fn asks_for_work(text: &str) -> bool {
         && !asks_about(text)
 }
 
+/// **A turn's reply that says it is going to go and do something it cannot do in one look** — the
+/// seam between a turn and the task loop, read off the reply rather than asked of a model.
+///
+/// The owner's trip request reached a turn three times and was answered *먼저 항공권과 호텔을
+/// 찾아볼까요?* beside a click on a search box, and once on a Git button; *오늘 서울 날씨 알려줘* got
+/// *잠시만 기다려주세요!* and nothing. Both are a reply promising work the turn has no way to do.
+/// So the words are a doing that takes more than a look — looking for, looking into, putting
+/// together, writing up — with an ending that offers or promises it, and *잠시만 기다려*. Written
+/// from those three replies **before `--bin seam` ran**. A click promised (*눌러 드릴게요*,
+/// *열어 볼게요*) is not here: that is what a turn does.
+pub fn promises_work(reply: &str) -> bool {
+    let r: String = reply.split_whitespace().collect();
+    const DOING: [&str; 10] = ["찾아", "알아", "조사해", "검색해", "정리해", "작성해", "만들어", "짜", "비교해", "계획을세워"];
+    const ENDING: [&str; 8] = ["볼게", "볼까요", "드릴게", "드릴까요", "드리겠", "보겠", "할게", "할까요"];
+    r.contains("잠시만기다려")
+        || DOING.iter().any(|d| ENDING.iter().any(|e| r.contains(&format!("{d}{e}"))))
+}
+
 /// **A question about how, or about whether argmind is good at something — not a request.** *문서
 /// 작성 잘하는 법 알려줘* has a thing and a doing in it and went to work; *계획 세우는 거 잘해?* and
 /// *일정 관리 어떻게 해?* went to work from the model three times in three. A question is answered
@@ -1374,6 +1392,21 @@ mod tests {
         for r in ["다음 달 여행 일정 좀 짜줄래?", "이 폴더 파일 목록 정리해줄 수 있어?",
                   "보고서 쓰는 법을 정리해서 문서로 만들어줘", "엑셀 만들 수 있어?", "블로그 글 하나 써줘"] {
             assert!(!asks_about(r), "{r}");
+        }
+    }
+
+    #[test]
+    fn a_reply_promising_work_a_turn_cannot_do_is_the_seam() {
+        //: The three replies it was written from, word for word.
+        for said in ["일본 여행 계획을 도와드릴게요! 먼저 항공권과 호텔을 찾아볼까요? 지금은 네이버에서 검색할 수 있어요.",
+                     "네이버에서 일본 여행 계획을 도와드릴 수 있어요. 먼저 '일본'을 검색해볼까요?",
+                     "잠시만 기다려주세요!"] {
+            assert!(promises_work(said), "{said}");
+        }
+        //: What a turn does, and what a turn says.
+        for said in ["검색창을 눌러 드릴게요", "메모장을 열어 볼게요", "저장 버튼을 눌렀습니다", "안녕하세요! 무엇을 도와드릴까요?",
+                     "천만에요", "파이썬은 프로그래밍 언어예요", "이 창을 닫을게요"] {
+            assert!(!promises_work(said), "{said}");
         }
     }
 
