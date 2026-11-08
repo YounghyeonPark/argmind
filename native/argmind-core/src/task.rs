@@ -795,7 +795,67 @@ pub fn why_not_done(task: &Task, said: &str, tools: &dyn Tools, today: &str) -> 
         return Some(format!("{} 은(는) 어떤 도구 결과에도 나온 적이 없는 숫자다. 계산은 명령을 실행해서 \
 결과로 확인하라", unseen.join(", ")));
     }
+    //: **A count, of any length, printed whole somewhere** — `--bin programs` had a BOM exported
+    //: and the task close on *총 47개의 부품* without reading it; there were 11, and two digits pass
+    //: the check above. A count a model made by looking is the one number it cannot be trusted to
+    //: have, so a count in the closing words must stand as a whole number in what was run or read.
+    let whole: Vec<String> = digit_runs(&seen);
+    let uncounted: Vec<String> = counts(said).into_iter().filter(|n| !whole.contains(n)).collect();
+    if !uncounted.is_empty() {
+        return Some(format!("{} 은(는) 센 개수인데 어떤 도구 결과에도 그대로 나온 적이 없다. 명령으로 세고 \
+(예: python 으로 len) 그 출력으로 확인하라", uncounted.iter().map(|n| format!("{n}개")).collect::<Vec<_>>().join(", ")));
+    }
     None
+}
+
+/// Every run of digits, grouping commas removed, as written.
+fn digit_runs(text: &str) -> Vec<String> {
+    let mut out: Vec<String> = Vec::new();
+    let mut cur = String::new();
+    let chars: Vec<char> = text.chars().collect();
+    for (i, &c) in chars.iter().enumerate() {
+        if c.is_ascii_digit() {
+            cur.push(c);
+        } else if c == ',' && !cur.is_empty() && chars.get(i + 1).is_some_and(|n| n.is_ascii_digit()) {
+            continue;
+        } else if !cur.is_empty() {
+            out.push(std::mem::take(&mut cur));
+        }
+    }
+    if !cur.is_empty() {
+        out.push(cur);
+    }
+    out
+}
+
+/// **Counts** — a number with a counting word after it: *11개*, *37 건*, *5명*. Not a measure (*10mm*),
+/// not a date, not an ordinal (*3번째*, *2단계*).
+pub fn counts(text: &str) -> Vec<String> {
+    const COUNTERS: [&str; 9] = ["개", "건", "명", "줄", "곳", "권", "행", "종류", "가지"];
+    let chars: Vec<char> = text.chars().collect();
+    let mut out = Vec::new();
+    let mut i = 0;
+    while i < chars.len() {
+        if !chars[i].is_ascii_digit() || (i > 0 && (chars[i - 1].is_ascii_digit() || chars[i - 1] == '.')) {
+            i += 1;
+            continue;
+        }
+        let mut j = i;
+        let mut n = String::new();
+        while j < chars.len() && (chars[j].is_ascii_digit() || (chars[j] == ',' && chars.get(j + 1).is_some_and(|c| c.is_ascii_digit()))) {
+            if chars[j] != ',' {
+                n.push(chars[j]);
+            }
+            j += 1;
+        }
+        let after: String = chars[j..].iter().skip_while(|c| **c == ' ').take(2).collect();
+        if chars.get(j) != Some(&'.') && COUNTERS.iter().any(|w| after.starts_with(w)) && !after.starts_with("개월")
+            && !out.contains(&n) {
+            out.push(n);
+        }
+        i = j;
+    }
+    out
 }
 
 /// **One step**: ask, read, run, record — and stop the task when the program says so. Returns
@@ -1393,6 +1453,34 @@ mod tests {
                   "보고서 쓰는 법을 정리해서 문서로 만들어줘", "엑셀 만들 수 있어?", "블로그 글 하나 써줘"] {
             assert!(!asks_about(r), "{r}");
         }
+    }
+
+    #[test]
+    fn a_count_is_a_number_with_a_counting_word() {
+        assert_eq!(counts("총 47개의 부품이 있습니다"), ["47"]);
+        assert_eq!(counts("오류: 0개, 경고: 37 개, 1,204건"), ["0", "37", "1204"]);
+        //: `개월` is a span of time, not a count.
+        assert!(counts("40mm 직육면체, 2026년 11월 9일, 3번째 단계, 2.5개월, 3개월").is_empty());
+    }
+
+    struct Nothing;
+    impl Tools for Nothing {
+        fn list(&self) -> Vec<ToolSpec> { Vec::new() }
+        fn call(&mut self, _: &str, _: &Value) -> Result<String, String> { Err(String::new()) }
+    }
+
+    #[test]
+    fn a_count_nobody_printed_is_not_taken() {
+        let mut task = Task::new("amp.kicad_sch 부품 목록을 parts.csv 로 만들고 몇 개인지 알려줘");
+        task.steps.push(Step { tool: "kicad_cli".into(), args: json!(["sch"]), failed: false,
+                               observed: "Wrote bill of materials to 'parts.csv'.\n\"C1\",\"10uF\"\n\"R4\",\"1k\"\n(종료 코드 0)".into() });
+        let why = why_not_done(&task, "parts.csv 를 만들었습니다. 총 47개의 부품이 있습니다", &Nothing, "2026년 11월 9일");
+        assert!(why.as_deref().is_some_and(|w| w.contains("47개")), "{why:?}");
+        //: Counted by a command and printed, it is taken.
+        task.steps.push(Step { tool: "run".into(), args: json!({"command": "wc"}), failed: false, observed: "11\n(종료 코드 0)".into() });
+        assert_eq!(why_not_done(&task, "parts.csv 를 만들었습니다. 총 11개의 부품이 있습니다", &Nothing, "2026년 11월 9일"), None);
+        //: And a count of something it did not count but the record printed whole — *Found 37 violations*.
+        assert_eq!(why_not_done(&task, "parts.csv 완료, 1개 파일", &Nothing, "2026년 11월 9일"), None);
     }
 
     #[test]
