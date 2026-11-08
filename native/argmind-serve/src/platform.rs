@@ -803,6 +803,19 @@ pub fn workbench() -> Option<Box<dyn argmind_core::task::Tools + Send>> {
     }
 }
 
+/// **A screen of argmind's own for work**, ranked last — a Windows desktop the person never sees,
+/// operated by control patterns only. See `argmind_env_windows::screen`.
+pub fn work_screen() -> Option<Box<dyn argmind_core::task::Tools + Send>> {
+    #[cfg(all(windows, not(feature = "headless")))]
+    {
+        Some(Box::new(argmind_env_windows::screen::Screen::new()))
+    }
+    #[cfg(not(all(windows, not(feature = "headless"))))]
+    {
+        None
+    }
+}
+
 /// Today, as an errand is told it.
 pub fn today() -> String {
     let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH)

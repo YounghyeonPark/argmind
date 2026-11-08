@@ -24,6 +24,7 @@ pub mod launch;
 pub mod loudspeaker;
 pub mod microphone;
 pub mod patterns;
+pub mod screen;
 pub mod speaker;
 pub mod supervise;
 pub mod workspace;

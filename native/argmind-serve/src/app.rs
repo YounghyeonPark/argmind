@@ -690,12 +690,15 @@ fn worked_instead(desk: &mut Desk, out: &Listeners, text: &str) -> bool {
         "하던 작업이 아직 안 끝났어요 — 끝나면 다시 말씀해 주세요".to_string()
     } else if let Some(files) = crate::platform::workbench() {
         //: **And the web, when there is a pane** — a trip plan is searching before it is writing.
-        let mut sets: Vec<Box<dyn argmind_core::task::Tools + Send>> = vec![files];
+        use argmind_core::task::Rank;
+        //: **Ranked**, the owner's order of 2026-11-08: MCP or an API, then code, then a screen —
+        //: the MCP servers join on the task's thread, in `start_work`.
+        let mut sets: Vec<(Rank, Box<dyn argmind_core::task::Tools + Send>)> = vec![(Rank::Code, files)];
         //: **And the person**, who is asked through the conversation: the question is said like a
         //: result, and the next thing they say comes back here — see `task_asks` in `think`.
         let (slot, jobs) = (Arc::clone(&desk.task_asks), desk.jobs.clone());
         let stop = Arc::clone(&desk.stop_work);
-        if TASK_ASKS { sets.push(Box::new(argmind_core::task::Asking::new(move |q: &str| {
+        if TASK_ASKS { sets.push((Rank::Other, Box::new(argmind_core::task::Asking::new(move |q: &str| {
             let (tx, rx) = std::sync::mpsc::channel::<String>();
             if let Ok(mut w) = slot.lock() {
                 *w = Some(tx);
@@ -715,15 +718,19 @@ fn worked_instead(desk: &mut Desk, out: &Listeners, text: &str) -> bool {
                 w.take();
             }
             got
-        }))); }
+        })))); }
         if let Some(pane) = desk.web.as_ref() {
-            sets.push(Box::new(argmind_env_browser::WebTools(
-                argmind_env_browser::Pane::new(pane.wire.clone()))));
+            sets.push((Rank::Other, Box::new(argmind_env_browser::WebTools(
+                argmind_env_browser::Pane::new(pane.wire.clone())))));
             //: **And pressing there — the pane only**, the owner's choice of 2026-11-06: a task runs
             //: for minutes beside somebody using their own desktop.
-            sets.push(Box::new(pane_hands(desk.jobs.clone(), Arc::clone(&desk.stop_work))));
+            sets.push((Rank::Other, Box::new(pane_hands(desk.jobs.clone(), Arc::clone(&desk.stop_work)))));
         }
-        start_work(desk, text, Box::new(argmind_core::task::Joined(sets)));
+        //: **And a screen of argmind's own, last** — a desktop the person never sees.
+        if let Some(screen) = crate::platform::work_screen() {
+            sets.push((Rank::Screen, screen));
+        }
+        start_work(desk, text, sets);
         format!("작업 폴더({})에서 해 볼게요 — 끝나면 알려 드릴게요",
                 crate::platform::work_folder().display())
     } else {
@@ -808,7 +815,8 @@ fn pane_hands(jobs: Sender<Job>, stop: Arc<AtomicBool>) -> impl argmind_core::ta
         })
 }
 
-fn start_work(desk: &Desk, what: &str, bench: Box<dyn argmind_core::task::Tools + Send>) {
+fn start_work(desk: &Desk, what: &str,
+              mut sets: Vec<(argmind_core::task::Rank, Box<dyn argmind_core::task::Tools + Send>)>) {
     use argmind_core::task::{open, step, Ended, Task};
     let (working, stop, turn) = (Arc::clone(&desk.working), Arc::clone(&desk.stop_work), desk.turn.clone());
     let (jobs, out, what) = (desk.jobs.clone(), Arc::clone(&desk.speaks_to), what.to_string());
@@ -829,10 +837,10 @@ fn start_work(desk: &Desk, what: &str, bench: Box<dyn argmind_core::task::Tools 
         for n in notes {
             out.record("작업", &n);
         }
-        let mut bench = match servers {
-            Some(s) => Box::new(argmind_core::task::Joined(vec![bench, Box::new(s)])),
-            None => bench,
-        };
+        if let Some(s) = servers {
+            sets.push((argmind_core::task::Rank::Api, Box::new(s)));
+        }
+        let mut bench: Box<dyn argmind_core::task::Tools + Send> = Box::new(argmind_core::task::Tiered::new(sets));
         //: **The folder before**, so what the task made is found by the program at the end.
         let folder = crate::platform::work_folder();
         let before = crate::deliver::snapshot(&folder);

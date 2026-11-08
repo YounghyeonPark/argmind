@@ -54,6 +54,9 @@ pub const MOST_ITEMS: usize = 6;
 /// was not handed over, it was dictated.
 pub const MOST_QUESTIONS: usize = 2;
 
+/// Said when a call carries a result the record cut.
+pub const CUT_COPIED: &str = "오류: 이 인자에는 잘려서 보인 도구 결과(…자 생략)가 들어 있다. 잘린 것은 보여 주기 위해 줄인 것이라 내용이 빠져 있다 — 명령의 출력을 직접 파일로 저장하라 (예: 명령 > 파일 또는 Out-File)";
+
 /// Said beside a call that repeats the one before it with the same result. The third in a row stops.
 const SAME_AGAIN: &str = "\n(바로 앞과 같은 호출에 같은 결과다. 같은 것을 또 하지 말고 다른 방법을 써라)";
 
@@ -118,6 +121,92 @@ impl Tools for Joined {
     }
     fn opening(&self, what: &str) -> Vec<(String, Value)> {
         self.0.iter().flat_map(|t| t.opening(what)).collect()
+    }
+}
+
+/// **Which way in, first** — the owner, 2026-11-08: *작업 수행시 접근 우선순위는 mcp또는 api, 코드또는
+/// 스크립트 작성및 실행, 그래도 안되면 샌드박스작업 수행.* A program's own interface says what it
+/// can do in names; a script is checked by what it prints; pressing a program's buttons on a screen
+/// is the slowest, the least checkable and the most fragile, so it is last.
+///
+/// Tool sets with a rank: [`Rank::Api`], [`Rank::Code`], [`Rank::Screen`], or [`Rank::Other`] for
+/// what the order does not speak to (the web pane). **Listed in that order, each description saying
+/// its rank**, and the program holds the last one: the first `screen_open` of a task in which no
+/// API or code tool has been used is refused once and told why. Asked again, it goes — a second
+/// asking is a decision, the same ground a *which one?* answer stands on — so a task that truly
+/// needs a screen is slowed by one step, never stopped.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub enum Rank {
+    Api = 1,
+    Code = 2,
+    Screen = 3,
+    Other = 4,
+}
+
+impl Rank {
+    fn label(self) -> &'static str {
+        match self {
+            Rank::Api => "(1순위: MCP·API) ",
+            Rank::Code => "(2순위: 코드·스크립트) ",
+            Rank::Screen => "(3순위: 화면 조작 — MCP·API 나 코드로 안 될 때만) ",
+            Rank::Other => "",
+        }
+    }
+}
+
+/// Said when a screen is opened before anything above it was tried.
+pub const SCREEN_LAST: &str = "화면 조작은 마지막 수단이다. 먼저 MCP·API 도구나 코드(스크립트 작성과 실행)로 할 수 \
+있는지 해 보라. 그 방법으로는 정말 안 되는 일이면 screen_open 을 한 번 더 부르면 열린다";
+
+pub struct Tiered {
+    sets: Vec<(Rank, Box<dyn Tools + Send>)>,
+    tried_above: bool,
+    warned: bool,
+}
+
+impl Tiered {
+    pub fn new(mut sets: Vec<(Rank, Box<dyn Tools + Send>)>) -> Self {
+        sets.sort_by_key(|(r, _)| *r);
+        Tiered { sets, tried_above: false, warned: false }
+    }
+}
+
+impl Tools for Tiered {
+    fn list(&self) -> Vec<ToolSpec> {
+        self.sets.iter().flat_map(|(r, t)| t.list().into_iter().map(move |mut s| {
+            s.does = format!("{}{}", r.label(), s.does);
+            s
+        })).collect()
+    }
+    fn call(&mut self, tool: &str, args: &Value) -> Result<String, String> {
+        let Some(i) = self.sets.iter().position(|(_, t)| t.list().iter().any(|s| s.name == tool)) else {
+            return Err(format!("그런 도구는 없다: {tool}"));
+        };
+        let rank = self.sets[i].0;
+        if rank == Rank::Screen && tool == "screen_open" && !self.tried_above && !self.warned {
+            self.warned = true;
+            return Err(SCREEN_LAST.into());
+        }
+        //: **Reading is not trying**: the opening read of a document the request names is a
+        //: `read_file` the program made, and listing a folder says nothing about whether code can.
+        if matches!(rank, Rank::Api | Rank::Code) && !matches!(tool, "read_file" | "list_files") {
+            self.tried_above = true;
+        }
+        self.sets[i].1.call(tool, args)
+    }
+    fn missing(&self, paths: &[String]) -> Vec<String> {
+        let mut out: Vec<String> = Vec::new();
+        for (_, t) in &self.sets {
+            for p in t.missing(paths) {
+                if !out.contains(&p) {
+                    out.push(p);
+                }
+            }
+        }
+        out
+    }
+    fn opening(&self, what: &str) -> Vec<(String, Value)> {
+        self.sets.iter().flat_map(|(_, t)| t.opening(what)).collect()
     }
 }
 
@@ -754,6 +843,12 @@ pub fn step(task: &mut Task, model: &mut dyn Speaks, tools: &mut dyn Tools, toda
                 check_item(task, &args)
             } else if !known {
                 (format!("그런 도구는 없다: {tool}"), true)
+            } else if args.to_string().contains("자 생략)") {
+                //: **A cut result copied into a call** — since 2026-11-08, from `--bin screen`: a font
+                //: list read through PowerShell was written to `fonts.txt` as the record showed it,
+                //: *…(앞 5521자 생략)* and the tail, and Arial was in the part cut. The record is cut
+                //: for the prompt, never for the work, so the command's own output goes to the file.
+                (CUT_COPIED.to_string(), true)
             } else {
                 match tools.call(&tool, &args) {
                     Ok(text) => (cut(&text, OBSERVED_CHARS), false),
@@ -1078,6 +1173,53 @@ mod tests {
         let mut t = Task::new("x");
         run(&mut t, &mut model, &mut Box_::default(), "오늘", &|| true);
         assert!(matches!(t.ended, Some(Ended::Done(_))), "{:?}", t.steps);
+    }
+
+    #[test]
+    fn the_screen_is_listed_last_and_opened_only_when_asked_twice_or_after_code() {
+        struct Screen;
+        impl Tools for Screen {
+            fn list(&self) -> Vec<ToolSpec> {
+                vec![ToolSpec { name: "screen_open".into(), does: "연다".into(), args: json!({}) }]
+            }
+            fn call(&mut self, _: &str, _: &Value) -> Result<String, String> { Ok("열렸다".into()) }
+        }
+        let made = || Tiered::new(vec![(Rank::Screen, Box::new(Screen) as Box<dyn Tools + Send>),
+                                       (Rank::Code, Box::new(Box_::default()))]);
+        let mut t = made();
+        let names: Vec<String> = t.list().iter().map(|s| s.name.clone()).collect();
+        assert_eq!(names.last().map(String::as_str), Some("screen_open"), "{names:?}");
+        assert!(t.list()[0].does.starts_with("(2순위"), "{}", t.list()[0].does);
+        assert!(t.list().last().unwrap().does.starts_with("(3순위"));
+        //: Nothing tried: refused once, then it goes.
+        assert_eq!(t.call("screen_open", &json!({})), Err(SCREEN_LAST.into()));
+        assert_eq!(t.call("screen_open", &json!({})), Ok("열렸다".into()));
+        //: Reading is not trying; writing is.
+        let mut t = made();
+        let _ = t.call("read_file", &json!({"path": "a"}));
+        assert!(t.call("screen_open", &json!({})).is_err());
+        let mut t = made();
+        let _ = t.call("write_file", &json!({"path": "a.py", "content": "x"}));
+        assert_eq!(t.call("screen_open", &json!({})), Ok("열렸다".into()));
+    }
+
+    #[test]
+    fn a_cut_result_copied_into_a_call_is_refused_and_not_run() {
+        let long = "가".repeat(OBSERVED_CHARS + 50);
+        let shown = cut(&long, OBSERVED_CHARS);
+        let mut model = Scripted(vec![
+            r#"{"tool": "run", "args": {"command": "x"}}"#.to_string().leak(),
+            Box::leak(format!(r#"{{"tool": "write_file", "args": {{"path": "a.txt", "content": {}}}}}"#,
+                              serde_json::to_string(&shown).unwrap()).into_boxed_str()),
+        ]);
+        let mut tools = Box_::default();
+        let mut t = Task::new("x");
+        step(&mut t, &mut model, &mut tools, "오늘");
+        let calls = tools.calls;
+        step(&mut t, &mut model, &mut tools, "오늘");
+        assert_eq!(t.steps[1].observed, CUT_COPIED);
+        assert_eq!(tools.calls, calls, "not run");
+        assert!(tools.files.is_empty());
     }
 
     #[test]
