@@ -9,6 +9,9 @@
 //! whatever it runs. `std::process::Command` has no way to name a desktop, which is why this module
 //! starts processes itself, with `CreateProcessW` and `lpDesktop`.
 //!
+//! **And it cannot reach the person's clipboard** (`supervise::kept_apart`): a hidden desktop shares
+//! its window station's clipboard, and Character Map's *Copy* on the work screen wrote onto theirs.
+//!
 //! **And what a command leaves running ends with it.** Each command gets a job of its own, nested in
 //! argmind's, and the job is emptied when the command returns — a program `Start-Process` left
 //! behind would otherwise sit invisible on that desktop until argmind exits, and the work screen
@@ -52,15 +55,33 @@ pub(crate) struct Ran {
 }
 
 /// The desktop commands start on, as `lpDesktop` names it — made once, kept for the process's life.
+///
+/// **In a window station of its own**, not the person's `WinSta0`: the clipboard belongs to the
+/// window station, not the desktop, and a job's clipboard restriction stops `SetClipboardData` but
+/// not `EmptyClipboard` — a refused `Set-Clipboard` emptied the person's clipboard eleven times
+/// over while this was being tested, 2026-11-09. A desktop is made in the *process's* window
+/// station, so the process switches to the new one for the one call and back.
 pub(crate) fn desktop() -> Option<&'static str> {
     static DESK: OnceLock<Option<String>> = OnceLock::new();
-    DESK.get_or_init(|| {
-        let name = format!("argmind-commands-{}", std::process::id());
+    DESK.get_or_init(|| unsafe {
+        use windows::Win32::System::StationsAndDesktops::{CreateWindowStationW, GetProcessWindowStation,
+                                                          GetUserObjectInformationW, SetProcessWindowStation, UOI_NAME};
+        let name = "argmind-commands";
         let n: Vec<u16> = name.encode_utf16().chain([0]).collect();
-        //: The handle is never closed: a desktop lasts while a handle to it is open, and this one
-        //: is wanted for as long as argmind runs.
-        unsafe { CreateDesktopW(PCWSTR(n.as_ptr()), None, None, DESKTOP_CONTROL_FLAGS(0), 0x1000_0000, None) }
-            .ok().map(|_| format!("WinSta0\\{name}"))
+        //: Neither handle is closed: a window station and a desktop last while a handle to them is
+        //: open, and these are wanted for as long as argmind runs.
+        let ours = GetProcessWindowStation().ok()?;
+        //: **Unnamed**: a named one is refused to an ordinary user (*Access is denied*, measured); the
+        //: system names an unnamed one `Service-0x0-…$`, read back for `lpDesktop`.
+        let apart = CreateWindowStationW(PCWSTR::null(), 0, 0x1000_0000, None).ok()?;
+        let mut buf = [0u16; 256];
+        GetUserObjectInformationW(HANDLE(apart.0), UOI_NAME, Some(buf.as_mut_ptr() as *mut _),
+                                  (buf.len() * 2) as u32, None).ok()?;
+        let station = String::from_utf16_lossy(&buf[..buf.iter().position(|&c| c == 0).unwrap_or(0)]);
+        SetProcessWindowStation(apart).ok()?;
+        let made = CreateDesktopW(PCWSTR(n.as_ptr()), None, None, DESKTOP_CONTROL_FLAGS(0), 0x1000_0000, None);
+        let _ = SetProcessWindowStation(ours);
+        made.ok().map(|_| format!("{station}\\{name}"))
     }).as_deref()
 }
 
@@ -240,10 +261,20 @@ pub(crate) fn run(c: &Command, stdin: Option<&str>, seconds: u64) -> Result<Ran,
         if let Some(job) = crate::supervise::ours() {
             let _ = AssignProcessToJobObject(job, pi.hProcess);
         }
-        let own = crate::supervise::kill_on_close().ok();
-        if let Some(j) = own {
-            let _ = AssignProcessToJobObject(j, pi.hProcess);
-        }
+        //: **Kept apart, or not started at all** — a command that could not be put in its job would
+        //: run with the person's clipboard in reach and outlive what it was for.
+        let own = match crate::supervise::kept_apart() {
+            Ok(j) if AssignProcessToJobObject(j, pi.hProcess).is_ok() => Some(j),
+            other => {
+                if let Ok(j) = other {
+                    let _ = CloseHandle(j);
+                }
+                let _ = windows::Win32::System::Threading::TerminateProcess(pi.hProcess, 1);
+                let _ = CloseHandle(pi.hThread);
+                let _ = CloseHandle(pi.hProcess);
+                return Err("명령을 사람의 클립보드와 떨어진 작업 단위에 넣지 못해 실행하지 않았다".into());
+            }
+        };
         ResumeThread(pi.hThread);
         let _ = CloseHandle(pi.hThread);
         if let Some(text) = stdin {
@@ -308,6 +339,17 @@ mod tests {
         assert_eq!(r.code, None);
         assert!(began.elapsed() < Duration::from_secs(10));
         assert!(run(&Command::new("no-such-program-argmind"), None, 5).is_err_and(|e| e.contains("찾지 못했다")));
+    }
+
+    /// **The person's clipboard is out of reach**: a command that sets it leaves its sequence number
+    /// — which moves on every change, and says nothing of what is on it — where it was. The job's
+    /// restriction alone failed this: `Set-Clipboard` was refused and the clipboard emptied anyway.
+    #[test]
+    fn a_command_cannot_write_the_persons_clipboard() {
+        use windows::Win32::System::DataExchange::GetClipboardSequenceNumber;
+        let before = unsafe { GetClipboardSequenceNumber() };
+        let r = run(Command::new("powershell").args(["-NoProfile", "-Command", "Set-Clipboard -Value 'argmind-test'"]), None, 30).unwrap();
+        assert_eq!(unsafe { GetClipboardSequenceNumber() }, before, "{:?} {}", r.code, r.err);
     }
 
     /// **The case it exists for**: `Start-Process winver` from a command, while this thread — on

@@ -49,6 +49,32 @@ pub fn kill_on_close() -> windows::core::Result<HANDLE> {
     }
 }
 
+/// **A job whose members are killed on close and kept out of the person's desktop session** —
+/// for what a task starts: every command (`crate::apart`) and every program on the work screen.
+/// Since 2026-11-09: Character Map on the work screen was pressed *Copy* by a task and wrote `!!`
+/// onto the clipboard, which is the window station's and so **the person's**, however hidden the
+/// desktop. So a member can neither read nor write the clipboard — the person's copied password is
+/// not the task's to read either — nor switch the desktop the person sees, change display settings
+/// or system parameters, or log anybody off. Global atoms and other processes' window handles are
+/// left alone: input methods and accessibility use both.
+pub fn kept_apart() -> windows::core::Result<HANDLE> {
+    use windows::Win32::System::JobObjects::{JobObjectBasicUIRestrictions, JOBOBJECT_BASIC_UI_RESTRICTIONS,
+        JOB_OBJECT_UILIMIT_DESKTOP, JOB_OBJECT_UILIMIT_DISPLAYSETTINGS, JOB_OBJECT_UILIMIT_EXITWINDOWS,
+        JOB_OBJECT_UILIMIT_READCLIPBOARD, JOB_OBJECT_UILIMIT_SYSTEMPARAMETERS, JOB_OBJECT_UILIMIT_WRITECLIPBOARD};
+    let job = kill_on_close()?;
+    let ui = JOBOBJECT_BASIC_UI_RESTRICTIONS { UIRestrictionsClass: JOB_OBJECT_UILIMIT_READCLIPBOARD
+        | JOB_OBJECT_UILIMIT_WRITECLIPBOARD | JOB_OBJECT_UILIMIT_DESKTOP | JOB_OBJECT_UILIMIT_DISPLAYSETTINGS
+        | JOB_OBJECT_UILIMIT_SYSTEMPARAMETERS | JOB_OBJECT_UILIMIT_EXITWINDOWS };
+    unsafe {
+        if let Err(e) = SetInformationJobObject(job, JobObjectBasicUIRestrictions, &ui as *const _ as *const core::ffi::c_void,
+                                                std::mem::size_of::<JOBOBJECT_BASIC_UI_RESTRICTIONS>() as u32) {
+            let _ = windows::Win32::Foundation::CloseHandle(job);
+            return Err(e);
+        }
+    }
+    Ok(job)
+}
+
 /// The one job every supervised child joins, made once and never closed by us.
 ///
 /// Stored as an `isize` because a raw handle is not `Sync`, the same way [`crate::tray`] keeps its

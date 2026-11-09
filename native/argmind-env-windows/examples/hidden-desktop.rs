@@ -40,12 +40,35 @@ fn main() {
     }
 
     let (pointer_before, front_before) = (pointer(), unsafe { GetForegroundWindow() });
+    //: `PROBE_STATION=1` (2026-11-09): the desktop in a window station of its own, since the
+    //: clipboard is the station's — can the worker still attach, read, press and draw there?
+    //: **No.** The thread attaches and Character Map runs, but its window is never visible
+    //: (`PROBE_ANY=1` finds it anyway): UI Automation reads 6 elements — the title bar's — against
+    //: 39 on `WinSta0`, and the capture is 0% not black. A window station that is not the
+    //: interactive one draws nothing and exposes nothing, so the work screen stays on `WinSta0` and
+    //: the clipboard is kept by other means (`screen.rs`). Commands, which draw nothing anybody
+    //: needs, do move (`apart.rs`).
+    use windows::Win32::System::StationsAndDesktops::{CreateWindowStationW, GetProcessWindowStation,
+                                                      GetUserObjectInformationW, SetProcessWindowStation, UOI_NAME};
+    let station_mode = std::env::var("PROBE_STATION").is_ok();
+    let clip_before = unsafe { windows::Win32::System::DataExchange::GetClipboardSequenceNumber() };
+    let ours = unsafe { GetProcessWindowStation() }.unwrap();
+    let mut station = "WinSta0".to_string();
+    if station_mode {
+        let apart = unsafe { CreateWindowStationW(windows::core::PCWSTR::null(), 0, 0x1000_0000, None) }.expect("station");
+        let mut buf = [0u16; 256];
+        unsafe { GetUserObjectInformationW(windows::Win32::Foundation::HANDLE(apart.0), UOI_NAME,
+                                           Some(buf.as_mut_ptr() as *mut _), 512, None) }.unwrap();
+        station = String::from_utf16_lossy(&buf[..buf.iter().position(|&c| c == 0).unwrap()]);
+        unsafe { SetProcessWindowStation(apart) }.expect("set station");
+        println!("  station {station}");
+    }
     let name = wide("argmind-work-probe");
     let desk = unsafe { CreateDesktopW(windows::core::PCWSTR(name.as_ptr()), None, None,
                                        DESKTOP_CONTROL_FLAGS(0), 0x1000_0000, None) }
         .expect("CreateDesktopW");
     println!("  desktop made");
-    let mut where_ = wide("WinSta0\\argmind-work-probe");
+    let mut where_ = wide(&format!("{station}\\argmind-work-probe"));
     //: `PROBE_WORD=1` starts Word instead, with a blank document and no splash — only if Word is
     //: not already running, since a second Word joins the first, on whichever desktop it is.
     let word = std::env::var("PROBE_WORD").is_ok();
@@ -60,16 +83,25 @@ fn main() {
     println!("  charmap pid {}", pi.dwProcessId);
 
     let (pid, desk_raw) = (pi.dwProcessId, desk.0 as isize);
-    let worked = std::thread::spawn(move || -> Result<(), String> {
+    let (attached_tx, attached_rx) = std::sync::mpsc::channel::<()>();
+    let worker = std::thread::spawn(move || -> Result<(), String> {
         let desk = HDESK(desk_raw as *mut _);
-        unsafe { SetThreadDesktop(desk) }.map_err(|e| format!("SetThreadDesktop {e}"))?;
+        let attached = unsafe { SetThreadDesktop(desk) }.map_err(|e| format!("SetThreadDesktop {e}"));
+        let _ = attached_tx.send(());
+        attached?;
         unsafe { let _ = CoInitializeEx(None, COINIT_MULTITHREADED); }
         struct Find { pid: u32, hwnd: HWND }
         unsafe extern "system" fn each(h: HWND, l: LPARAM) -> BOOL {
             let f = &mut *(l.0 as *mut Find);
             let mut p = 0u32;
             GetWindowThreadProcessId(h, Some(&mut p));
-            if p == f.pid && IsWindowVisible(h).as_bool() { f.hwnd = h; return BOOL(0); }
+            let visible_or_any = std::env::var("PROBE_ANY").is_ok() || IsWindowVisible(h).as_bool();
+            if p == f.pid && visible_or_any && !windows::Win32::UI::WindowsAndMessaging::GetParent(h).is_ok_and(|x| !x.is_invalid()) {
+                let mut t = [0u16; 128];
+                let n = windows::Win32::UI::WindowsAndMessaging::GetWindowTextW(h, &mut t);
+                println!("  window {:?} visible {}", String::from_utf16_lossy(&t[..n as usize]), IsWindowVisible(h).as_bool());
+                f.hwnd = h; return BOOL(0);
+            }
             BOOL(1)
         }
         let mut find = Find { pid, hwnd: HWND::default() };
@@ -78,7 +110,12 @@ fn main() {
             unsafe { let _ = EnumDesktopWindows(desk, Some(each), LPARAM(&mut find as *mut Find as isize)); }
             if !find.hwnd.is_invalid() { break; }
         }
-        if find.hwnd.is_invalid() { return Err("no window".into()); }
+        if find.hwnd.is_invalid() {
+            unsafe extern "system" fn any(_h: HWND, l: LPARAM) -> BOOL { *(l.0 as *mut u32) += 1; BOOL(1) }
+            let mut n = 0u32;
+            let r = unsafe { EnumDesktopWindows(desk, Some(any), LPARAM(&mut n as *mut u32 as isize)) };
+            return Err(format!("no window ({n} windows of any kind, enum {r:?})"));
+        }
         let ua: IUIAutomation = unsafe { CoCreateInstance(&CUIAutomation, None, CLSCTX_INPROC_SERVER) }
             .map_err(|e| e.to_string())?;
         let began = std::time::Instant::now();
@@ -136,6 +173,15 @@ fn main() {
         let buttons: Vec<String> = elements.iter().filter(|e| kind(e) == UIA_ButtonControlTypeId).map(named).collect();
         println!("  buttons: {buttons:?}");
         if let Some(b) = elements.iter().find(|e| kind(e) == UIA_ButtonControlTypeId
+                                              && ["Copy", "복사"].iter().any(|w| named(e).starts_with(w))) {
+            if station_mode {
+                let did = unsafe { b.GetCurrentPattern(UIA_InvokePatternId) }
+                    .and_then(|r| r.cast::<IUIAutomationInvokePattern>()).and_then(|p| unsafe { p.Invoke() });
+                std::thread::sleep(std::time::Duration::from_millis(500));
+                println!("  invoke {:?}: {did:?}", named(b));
+            }
+        }
+        if let Some(b) = elements.iter().find(|e| kind(e) == UIA_ButtonControlTypeId
                                               && ["Select", "선택"].iter().any(|w| named(e).starts_with(w))) {
             let did = unsafe { b.GetCurrentPattern(UIA_InvokePatternId) }
                 .and_then(|r| r.cast::<IUIAutomationInvokePattern>()).and_then(|p| unsafe { p.Invoke() });
@@ -167,8 +213,18 @@ fn main() {
             ReleaseDC(None, screen);
         }
         Ok(())
-    }).join();
+    });
+    let _ = attached_rx.recv();
+    if station_mode {
+        unsafe { SetProcessWindowStation(ours) }.expect("back");
+    }
+    let worked = worker.join();
     println!("  thread: {worked:?}");
+    let mut code = 0u32;
+    unsafe { let _ = windows::Win32::System::Threading::GetExitCodeProcess(pi.hProcess, &mut code); }
+    println!("  charmap exit code {code} (259 = still running)");
+    println!("  person's clipboard unchanged: {}",
+             unsafe { windows::Win32::System::DataExchange::GetClipboardSequenceNumber() } == clip_before);
     unsafe {
         let _ = TerminateProcess(pi.hProcess, 0);
         std::thread::sleep(std::time::Duration::from_millis(300));

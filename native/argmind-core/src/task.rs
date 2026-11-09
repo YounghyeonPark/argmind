@@ -814,6 +814,9 @@ pub fn why_not_done(task: &Task, said: &str, tools: &dyn Tools, today: &str) -> 
     if !gone.is_empty() {
         return Some(format!("{} 은(는) 작업 폴더에 없다. 아직 만들지 않았다", gone.join(", ")));
     }
+    if let Some(why) = screen_contradicts(task, said) {
+        return Some(why);
+    }
     //: **Not the refusals**: a refusal quotes the number it refused, and the first version let the
     //: same invented *150000* through on the second try because it had now been "seen".
     //: **And the code the work wrote — code, not prose.** A test file holding `is_leap(1900)` is a
@@ -850,6 +853,90 @@ pub fn why_not_done(task: &Task, said: &str, tools: &dyn Tools, today: &str) -> 
     if !uncounted.is_empty() {
         return Some(format!("{} 은(는) 센 개수인데 어떤 도구 결과에도 그대로 나온 적이 없다. 명령으로 세고 \
 (예: python 으로 len) 그 출력으로 확인하라", uncounted.iter().map(|n| format!("{n}개")).collect::<Vec<_>>().join(", ")));
+    }
+    None
+}
+
+/// The input fields of the newest numbered list in the record — the shape a look prints,
+/// `N: role "name" = "value"` — as (name, value), the value empty when the line shows none. A
+/// result with no list in it is passed over, so a look that read nothing leaves the last one known.
+fn last_fields(steps: &[Step]) -> Vec<(String, String)> {
+    const INPUTS: [&str; 6] = ["edit", "combo box", "document", "편집", "콤보 상자", "문서"];
+    for s in steps.iter().rev() {
+        let mut fields = Vec::new();
+        let mut listed = false;
+        for line in s.observed.lines() {
+            let Some((num, rest)) = line.split_once(": ") else { continue };
+            let Some((role, quoted)) = rest.split_once(" \"") else { continue };
+            if num.trim().parse::<usize>().is_err() {
+                continue;
+            }
+            listed = true;
+            if !INPUTS.contains(&role.trim()) {
+                continue;
+            }
+            let (name, value) = match quoted.split_once("\" = \"") {
+                Some((n, v)) => (n, v.rsplit_once('"').map(|(v, _)| v).unwrap_or(v)),
+                None => (quoted.split('"').next().unwrap_or(""), ""),
+            };
+            fields.push((name.trim().trim_end_matches(':').trim().to_string(), value.to_string()));
+        }
+        if listed {
+            return fields;
+        }
+    }
+    Vec::new()
+}
+
+/// What a request names to be put somewhere, word for word: a quoted piece (*'A-1042'*, 「…」) or a
+/// symbol (★, →, an emoji) — the things a closing sentence can say went in, and a field can be read
+/// for.
+fn things_asked_for(what: &str) -> Vec<String> {
+    let mut out: Vec<String> = Vec::new();
+    for (open, close) in [('\'', '\''), ('"', '"'), ('「', '」'), ('『', '』'), ('‘', '’'), ('“', '”')] {
+        let mut rest = what;
+        while let Some(a) = rest.find(open) {
+            let after = &rest[a + open.len_utf8()..];
+            let Some(b) = after.find(close) else { break };
+            let piece = after[..b].trim();
+            if (1..=40).contains(&piece.chars().count()) && !out.iter().any(|o| o == piece) {
+                out.push(piece.to_string());
+            }
+            rest = &after[b + close.len_utf8()..];
+        }
+    }
+    for c in what.chars() {
+        let symbol = (0x2190..=0x2BFF).contains(&(c as u32)) || (0x1F000..=0x1FAFF).contains(&(c as u32));
+        if symbol && !out.iter().any(|o| o == &c.to_string()) {
+            out.push(c.to_string());
+        }
+    }
+    out
+}
+
+/// **A finish the screen contradicts** — since 2026-11-09, from `--bin screen`'s *charmap*: the
+/// task closed on *★ 를 'Characters to copy' 칸에 넣었습니다* with the newest look reading that box as
+/// `!!`, twice. When the closing words name fields of the last list and something the request asked
+/// to be put somewhere, one of those fields must hold it. A closing that says it could **not** is
+/// left alone — refusing an honest failure is the wrong direction. Fitted to that case.
+fn screen_contradicts(task: &Task, said: &str) -> Option<String> {
+    const NOT: [&str; 6] = ["못", "없", "않", "실패", "안 됐", "안됐"];
+    if NOT.iter().any(|n| said.contains(n)) {
+        return None;
+    }
+    let fields = last_fields(&task.steps);
+    let named: Vec<&(String, String)> = fields.iter()
+        .filter(|(n, _)| n.chars().count() >= 2 && said.contains(n.as_str())).collect();
+    if named.is_empty() {
+        return None;
+    }
+    let claimed = things_asked_for(&task.what).into_iter().filter(|t| said.contains(t.as_str()));
+    for t in claimed {
+        if !named.iter().any(|(_, v)| v.contains(t.as_str())) {
+            let shown: Vec<String> = named.iter().map(|(n, v)| format!("'{n}' = \"{v}\"")).collect();
+            return Some(format!("끝맺음은 {t} 이(가) 들어갔다고 하지만 마지막으로 본 화면에서는 {} 이다. 화면에서 \
+그 칸의 값으로 확인한 다음에 끝내라", shown.join(", ")));
+        }
     }
     None
 }
@@ -1351,6 +1438,37 @@ mod tests {
         assert_eq!(t.steps[1].observed, CUT_COPIED);
         assert_eq!(tools.calls, calls, "not run");
         assert!(tools.files.is_empty());
+    }
+
+    /// `--bin screen`'s *charmap*, 2026-11-09: closed on ★ being in the box the newest look read as
+    /// `!!`. Refused; taken with ★ there; an honest *could not* left alone; and the order case — a
+    /// field named, nothing quoted or symbolic asked for — untouched.
+    #[test]
+    fn a_finish_the_last_look_contradicts_is_refused() {
+        let look = |copy: &str| format!("\"Select\": 눌렀다. 번호는 아래 새 목록의 것이다.\n작업 화면의 창: 'Character Map'\n\
+(번호: 종류 \"이름\" = 값)\n0: text \"Characters to copy :\"\n1: edit \"Characters to copy :\"{copy}\n2: button \"Select\"\n\
+3: button \"Copy\" (꺼짐)\n10: edit \"Go to Unicode :\" = \"U+2605\"");
+        let asked = "작업 화면에서 문자표(charmap)를 열어서 ★ 문자를 골라 '복사할 문자' 칸에 넣어줘";
+        let said = "작업 화면의 'Character Map'에서 ★(U+2605) 문자를 선택하고 'Characters to copy :' 칸에 복사했습니다.";
+        let task = |copy: &str, what: &str| {
+            let mut t = Task::new(what);
+            t.steps.push(Step { tool: "screen_press".into(), args: json!({"item": 2}), observed: look(copy), failed: false });
+            //: A look that read nothing passes the last list on.
+            t.steps.push(Step { tool: "screen_look".into(), args: json!({}),
+                                observed: "작업 화면의 창: \n(번호: 종류 \"이름\" = 값)\n(읽을 수 있는 것이 없다)".into(), failed: false });
+            t
+        };
+        let why = why_not_done(&task(" = \"!!\"", asked), said, &Box_::default(), "오늘");
+        assert!(why.as_deref().is_some_and(|w| w.contains("'Characters to copy' = \"!!\"")), "{why:?}");
+        assert_eq!(screen_contradicts(&task("", asked), said).is_some(), true, "an empty box holds no ★ either");
+        assert_eq!(screen_contradicts(&task(" = \"★\"", asked), said), None);
+        assert_eq!(screen_contradicts(&task(" = \"!!\"", asked), "★를 'Characters to copy' 칸에 넣지 못했습니다"), None);
+        let order = "주문번호 A-1042 를 조회하고, 나온 결과를 answer.md 에 적어줘";
+        let mut t = Task::new(order);
+        t.steps.push(Step { tool: "screen_press".into(), args: json!({"item": 2}), failed: false,
+                            observed: "\"조회\": 눌렀다.\n1: edit \"주문번호\" = \"A-1042\"\n3: text \"A-1042: 출고 완료\"".into() });
+        assert_eq!(screen_contradicts(&t, "주문번호 A-1042의 조회 결과 '출고 완료 — 운송장 6038-2271-9954'를 answer.md에 기록했습니다."), None);
+        assert_eq!(things_asked_for(asked), vec!["복사할 문자".to_string(), "★".to_string()]);
     }
 
     /// The marker left off, as `--bin screen`'s *fonts* wrote it on 2026-11-09: from the half line

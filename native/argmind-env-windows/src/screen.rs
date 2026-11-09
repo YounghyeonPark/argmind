@@ -302,6 +302,8 @@ struct Worker {
     desk: HDESK,
     ua: IUIAutomation,
     procs: Vec<PROCESS_INFORMATION>,
+    /// One job a program, closed — and the program with it — when the work screen closes.
+    jobs: Vec<HANDLE>,
     seen: Vec<(IUIAutomationElement, String)>,
 }
 
@@ -316,7 +318,7 @@ fn work(jobs: Receiver<(Job, Reply)>, started: std::sync::Arc<std::sync::Mutex<V
         unsafe { let _ = CoInitializeEx(None, COINIT_MULTITHREADED); }
         let ua: IUIAutomation = unsafe { CoCreateInstance(&CUIAutomation, None, CLSCTX_INPROC_SERVER) }
             .map_err(|e| e.to_string())?;
-        Ok(Worker { desk, ua, procs: Vec::new(), seen: Vec::new() })
+        Ok(Worker { desk, ua, procs: Vec::new(), jobs: Vec::new(), seen: Vec::new() })
     })();
     let mut w = match made {
         Ok(w) => w,
@@ -511,6 +513,23 @@ impl Worker {
         if let Some(job) = crate::supervise::ours() {
             unsafe { let _ = AssignProcessToJobObject(job, pi.hProcess); }
         }
+        //: **And kept from the person's clipboard** (`supervise::kept_apart`): this desktop shares
+        //: theirs, and a task pressing Character Map's *Copy* wrote `!!` onto it. A job of its own,
+        //: since an empty job is the one a process can always join; not started if it cannot.
+        match crate::supervise::kept_apart() {
+            Ok(j) if unsafe { AssignProcessToJobObject(j, pi.hProcess) }.is_ok() => self.jobs.push(j),
+            other => {
+                if let Ok(j) = other {
+                    unsafe { let _ = CloseHandle(j); }
+                }
+                unsafe {
+                    let _ = TerminateProcess(pi.hProcess, 1);
+                    let _ = CloseHandle(pi.hProcess);
+                    let _ = CloseHandle(pi.hThread);
+                }
+                return Err(format!("{image} 을(를) 사람의 클립보드와 떨어진 작업 단위에 넣지 못해 열지 않았다"));
+            }
+        }
         unsafe { ResumeThread(pi.hThread); }
         if let Ok(mut s) = started.lock() {
             s.push(pi.hProcess.0 as isize);
@@ -620,16 +639,46 @@ impl Worker {
     /// failed had cleared the numbers before it tried: *Copy* refused as disabled, and the next
     /// press was refused too, for want of a look nothing had made necessary.
     fn press(&mut self, i: usize) -> Result<String, String> {
-        match self.pressed(i) {
-            Ok(did) => Ok(self.then_look(did)),
-            Err(why) => Err(self.then_look(why)),
+        let clip = clipboard_now();
+        let held = Held::clipboard();
+        let r = self.pressed(i);
+        drop(held);
+        match r {
+            Ok(did) => Ok(self.then_look(format!("{did}{}", self.clipboard_since(clip)))),
+            Err(why) => Err(self.then_look(format!("{why}{}", self.clipboard_since(clip)))),
         }
     }
 
     fn type_(&mut self, i: usize, text: &str) -> Result<String, String> {
-        match self.typed(i, text) {
-            Ok(did) => Ok(self.then_look(did)),
-            Err(why) => Err(self.then_look(why)),
+        let clip = clipboard_now();
+        let held = Held::clipboard();
+        let r = self.typed(i, text);
+        drop(held);
+        match r {
+            Ok(did) => Ok(self.then_look(format!("{did}{}", self.clipboard_since(clip)))),
+            Err(why) => Err(self.then_look(format!("{why}{}", self.clipboard_since(clip)))),
+        }
+    }
+
+    /// A sentence when the person's clipboard changed during an action **and a program on the work
+    /// screen holds it now** — which, with the job's restriction in force, means one emptied it
+    /// trying to copy. A change somebody else made — the person copying something meanwhile — says
+    /// nothing. Empty otherwise.
+    fn clipboard_since(&self, before: u32) -> String {
+        use windows::Win32::System::DataExchange::GetClipboardOwner;
+        use windows::Win32::UI::WindowsAndMessaging::GetWindowThreadProcessId;
+        if clipboard_now() == before {
+            return String::new();
+        }
+        let mut pid = 0u32;
+        if let Ok(owner) = unsafe { GetClipboardOwner() } {
+            unsafe { GetWindowThreadProcessId(owner, Some(&mut pid)); }
+        }
+        if pid != 0 && self.procs.iter().any(|p| p.dwProcessId == pid) {
+            " 이 동작 뒤에 사람의 클립보드가 비워졌다 — 작업 화면의 프로그램이 복사하려 했다. 클립보드는 사람의 것이니 \
+복사·잘라내기는 하지 마라.".into()
+        } else {
+            String::new()
         }
     }
 
@@ -638,6 +687,10 @@ impl Worker {
         let name = unsafe { e.CurrentName() }.map(|s| s.to_string()).unwrap_or_default();
         if !unsafe { e.CurrentIsEnabled() }.map(|b| b.as_bool()).unwrap_or(true) {
             return Err(format!("\"{name}\" 은(는) 꺼져 있어 누를 수 없다."));
+        }
+        if puts_on_the_clipboard(&name) {
+            return Err(format!("\"{name}\" 은(는) 클립보드에 넣는 단추라 누르지 않는다 — 작업 화면도 클립보드는 사람의 것과 \
+같다. 칸에 든 글은 목록의 값으로 읽는다."));
         }
         let how = unsafe {
             if let Ok(p) = e.GetCurrentPattern(UIA_InvokePatternId).and_then(|p| p.cast::<IUIAutomationInvokePattern>()) {
@@ -700,8 +753,53 @@ impl Worker {
                 let _ = CloseHandle(p.hThread);
             }
         }
+        for j in self.jobs.drain(..) {
+            unsafe { let _ = CloseHandle(j); }
+        }
         Ok(format!("작업 화면을 닫았다 (창 {closed}개를 닫고, 끝나지 않은 프로그램 {ended}개를 멈췄다)"))
     }
+}
+
+/// **The person's clipboard, held shut while a program on the work screen is pressed or written
+/// to** — since 2026-11-09. Pressing Character Map's *Select* — not *Copy* — emptied the person's
+/// clipboard, with three formats on it: a program may touch the clipboard on any button, and a
+/// job's restriction stops it writing but not emptying. Open here, nobody else can open it, so the
+/// program's attempt fails and the person's content stays — **and nothing on it is read**. The
+/// cost is the person's own copy or paste failing if it falls in the same second, and a program
+/// that touches the clipboard later than that is only reported (`clipboard_since`).
+struct Held(bool);
+
+impl Held {
+    fn clipboard() -> Held {
+        Held(unsafe { windows::Win32::System::DataExchange::OpenClipboard(None) }.is_ok())
+    }
+}
+
+impl Drop for Held {
+    fn drop(&mut self) {
+        if self.0 {
+            unsafe { let _ = windows::Win32::System::DataExchange::CloseClipboard(); }
+        }
+    }
+}
+
+/// The clipboard's sequence number — it moves on every change and says nothing of what is on it.
+fn clipboard_now() -> u32 {
+    unsafe { windows::Win32::System::DataExchange::GetClipboardSequenceNumber() }
+}
+
+/// **A button or a menu item that copies or cuts** — refused before it is pressed. The work
+/// screen is a desktop of argmind's own, but the clipboard is the window station's, and the window
+/// station is the person's: a task pressing Character Map's *Copy* on 2026-11-09 put `!!` where the
+/// person's copied text had been. A program's own job cannot write there any more
+/// (`supervise::kept_apart`) — but it can still **empty** it, which is why the press is refused
+/// rather than left to the job. A window station of the work screen's own would end this and was
+/// tried: nothing in one is drawn or readable (`examples/hidden-desktop.rs`, `PROBE_STATION`).
+fn puts_on_the_clipboard(name: &str) -> bool {
+    //: `&Copy`, `복사(&C)`, `Copy\tCtrl+C` — the words, not the accelerators.
+    let plain: String = name.split(['\t', '(']).next().unwrap_or("").replace('&', "").trim().to_lowercase();
+    ["copy", "cut", "복사", "잘라내기"].iter().any(|w| plain == *w || plain.starts_with(&format!("{w} ")))
+        || plain.contains("clipboard") || plain.contains("클립보드")
 }
 
 fn value_of(e: &IUIAutomationElement) -> Option<String> {
@@ -734,6 +832,17 @@ mod tests {
         assert_eq!(&f[..2], b"BM");
         assert_eq!(f.len(), 54 + 12 * 2);
         assert_eq!(u32::from_le_bytes(f[2..6].try_into().unwrap()) as usize, f.len());
+    }
+
+    #[test]
+    fn a_button_that_copies_or_cuts_is_known_by_its_words() {
+        for yes in ["Copy", "&Copy", "Cut", "복사", "복사(&C)", "잘라내기", "Copy\tCtrl+C", "Copy to clipboard", "클립보드에 복사",
+                    "copy all"] {
+            assert!(puts_on_the_clipboard(yes), "{yes}");
+        }
+        for no in ["Select", "Copyright", "Cutoff", "복사본 만들기", "Open", "Characters to copy :", "Search"] {
+            assert!(!puts_on_the_clipboard(no), "{no}");
+        }
     }
 
     #[test]

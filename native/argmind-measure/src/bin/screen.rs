@@ -73,6 +73,29 @@
 //! Unicode* moves no selection, and never wrote ★ into the box the one passing arm wrote it into.
 //! **And it pressed *Copy*, which puts the box on the clipboard — the person's, since a desktop of
 //! argmind's own shares its window station's clipboard.** Not addressed. One run each.
+//!
+//! **Then the false finish and the clipboard, the same day** (`ef6e76`, charmap only, twice): a
+//! finish the newest look contradicts is refused (`task::screen_contradicts`), and the work screen
+//! holds the clipboard shut while it presses — *Select*, not only *Copy*, emptied it. **Run 1**:
+//! the refusal fired on *★ 가 입력되었습니다* over `!!`, and the next step wrote ★ into the box —
+//! the box read `★`, **failed as written only on 사람 화면** (pointer 900 px, foreground changed,
+//! every step on argmind's desktop: the owner at work). **Run 2**: 16 steps through character
+//! sets and *Go to Unicode*, stopped on three failures in a row — **an honest stop, no false
+//! finish**. *Copy* was refused by name in run 1 and the clipboard's sequence number was not moved
+//! by either. **The 사람 화면 criterion cannot be met on a machine somebody is using**, and has
+//! now failed four runs on movements no step made; it stays as written, and is read beside the
+//! line that says which of the two moved.
+//!
+//! **Then two tries at the case itself, both reverted.** A sentence in each of `screen_look` and
+//! `screen_type` — *what is only drawn is not listed*, *a value already known goes straight into its
+//! box*: two runs, **identical step for step**, both picking ★ from the grid, claiming it twice
+//! over `!` and stopped by the refusal. The refusal naming the way — *screen_type into that box* —
+//! never fired: the run went the way of run 2 above, step for step, and stopped on three failures.
+//! **So at this prompt qwen3:14b is deterministic and the two-run pairs are one run each**, and
+//! which path it takes follows the tool text's wording rather than what the wording says. Over the
+//! eight charmap runs of the day the box held ★ in **two** — the arm before any of this, and the
+//! first with the refusal, which wrote ★ after being refused — and none passed as written. Not
+//! claimed; what the day did change is that **no run after the refusal ended in a false finish**.
 
 use std::path::{Path, PathBuf};
 use std::time::Instant;

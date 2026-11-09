@@ -53,6 +53,10 @@ fn main() {
     //: is what a task's record keeps (`task::OBSERVED_CHARS`) and cuts from the front.
     let args: Vec<String> = std::env::args().collect();
     if let Some(at) = args.iter().position(|a| a == "--program") {
+        //: And whether the person's clipboard moved — its sequence number, never its contents.
+        //: Character Map's *Select* empties it unless the work screen holds it shut (2026-11-09).
+        let clip = || unsafe { windows::Win32::System::DataExchange::GetClipboardSequenceNumber() };
+        let clip_before = clip();
         let mut s = argmind_env_windows::screen::Screen::new();
         let show = |tool: &str, a: serde_json::Value, s: &mut argmind_env_windows::screen::Screen| {
             let r = s.call(tool, &a);
@@ -73,6 +77,7 @@ fn main() {
             }
         }
         let _ = s.call("screen_close", &json!({}));
+        println!("── the person's clipboard unchanged: {}", clip() == clip_before);
         return;
     }
     //: `--leave`: open something and end abruptly, as a killed argmind does — then check from
