@@ -61,6 +61,14 @@ fn numbers(name: &str) -> Vec<u64> {
     name.split(|c: char| !c.is_ascii_digit()).filter(|s| !s.is_empty()).filter_map(|s| s.parse().ok()).collect()
 }
 
+/// Where code given inline to `blender_python` is saved before it runs.
+pub const INLINE: &str = "blender_script.py";
+
+/// Text in a file-name argument that is code — more than one line, or Python's own words.
+fn looks_like_code(s: &str) -> bool {
+    s.contains('\n') || s.contains("import ") || s.contains("bpy.")
+}
+
 /// An argument that names a place outside the work folder — a drive, a root, a `..`.
 fn leaves_the_folder(arg: &str) -> bool {
     let a = arg.trim().trim_matches('"');
@@ -86,6 +94,25 @@ impl Programs {
         (blender.is_some() || kicad.is_some()).then(|| Programs { work: Workspace::new(root.clone()), root, blender, kicad })
     }
 
+    /// **The script to run, and a line saying where code given inline was put.** The 2026-11-09
+    /// run of `--bin programs` spent a step on each Blender case: once the code itself went in
+    /// `script` and was refused as a path, once a file was named before it was written. So code is
+    /// taken as code — in `code`, as a bare string, or in `script` when it is plainly not a file
+    /// name — and saved through the workbench's own `write_file`, which backs up what it replaces,
+    /// to [`INLINE`], the name the result gives back for the next `edit_file`.
+    fn script_of(&mut self, args: &Value) -> Result<(String, String), String> {
+        let given = args.get("code").and_then(Value::as_str)
+            .or_else(|| args.as_str())
+            .or_else(|| args.get("script").and_then(Value::as_str).filter(|s| looks_like_code(s)));
+        if let Some(code) = given {
+            self.work.call("write_file", &json!({"path": INLINE, "content": code}))?;
+            return Ok((INLINE.into(), format!("(코드를 {INLINE} 에 저장해 실행했다 — 고칠 때는 이 파일을 edit_file 로)\n")));
+        }
+        let script = args.get("script").and_then(Value::as_str).map(str::trim).filter(|s| !s.is_empty())
+            .ok_or("code 에 코드를 주거나, script 에 작업 폴더의 .py 파일 이름을 준다")?;
+        Ok((script.to_string(), String::new()))
+    }
+
     fn version(p: &Path) -> String {
         p.ancestors().find_map(|a| {
             let n = a.file_name()?.to_string_lossy().to_string();
@@ -103,12 +130,13 @@ impl Tools for Programs {
         if let Some(b) = &self.blender {
             out.push(ToolSpec { name: "blender_python".into(), does: format!(
                 "설치된 Blender {}의 파이썬(bpy)으로 3D 모델을 만들고·바꾸고·내보낸다. 창 없이 돈다. \
-코드는 먼저 write_file 로 작업 폴더의 .py 파일에 쓰고 그 이름을 script 로 준다. 스크립트의 현재 폴더가 작업 폴더다. \
+코드를 그대로 code 로 주면 작업 폴더의 blender_script.py 에 저장해 실행하고, 이미 있는 .py 는 그 이름을 script 로 준다. \
+스크립트의 현재 폴더가 작업 폴더다. \
 빈 장면에서 시작한다 (기본 상자·카메라·조명 없음). 저장은 bpy.ops.wm.save_as_mainfile(filepath=...), \
 STL 은 bpy.ops.wm.stl_export(filepath=...), OBJ 는 bpy.ops.wm.obj_export(filepath=...). \
 Blender 의 길이 단위는 m 이고 STL·OBJ 에는 단위가 없어 다른 프로그램은 mm 로 읽는다: 크기를 mm 로 받았으면 \
 모델은 m 로 만들고 global_scale=1000 으로 내보낸다. 내보낸 STL 의 크기는 결과에 붙어 온다. print 한 것이 결과로 온다",
-                Self::version(b)), args: json!({"script": "box.py"}) });
+                Self::version(b)), args: json!({"code": "import bpy\nbpy.ops.mesh.primitive_cube_add(size=1)"}) });
         }
         if let Some(k) = &self.kicad {
             out.push(ToolSpec { name: "kicad_cli".into(), does: format!(
@@ -123,19 +151,26 @@ pcb drc)하고 넷리스트·BOM·PDF·SVG·거버로 내보낸다. args 는 kic
     fn call(&mut self, tool: &str, args: &Value) -> Result<String, String> {
         match tool {
             "blender_python" => {
-                let exe = self.blender.as_ref().ok_or("Blender 가 없다")?;
-                let script = args.get("script").and_then(Value::as_str).map(str::trim).filter(|s| !s.is_empty())
-                    .ok_or("script 는 작업 폴더의 .py 파일 이름이다 — 코드는 write_file 로 먼저 쓴다")?;
-                let path = self.work.inside(script)?;
+                let exe = self.blender.clone().ok_or("Blender 가 없다")?;
+                let (script, saved) = self.script_of(args)?;
+                let path = self.work.inside(&script)?;
                 if !path.is_file() {
                     return Err(format!("{script} 이(가) 작업 폴더에 없다 — write_file 로 먼저 쓴다"));
                 }
                 let mut c = Command::new(exe);
-                c.args(["--background", "--factory-startup", "--python-exit-code", "1", "--python"]).arg(&path)
+                //: **An empty scene, made so rather than said so.** The tool text has promised one since
+                //: the first day and `--factory-startup` gives a camera, a light and a 2 m cube: every
+                //: run that passed had deleted them itself, and the first that did not exported the
+                //: cube with its own and measured 2000 × 2000 × 2000 (2026-11-09). Checked: objects
+                //: `['Camera', 'Cube', 'Light']` without this line, `[]` with it.
+                c.args(["--background", "--factory-startup", "--python-exit-code", "1",
+                        "--python-expr", "import bpy; bpy.ops.wm.read_factory_settings(use_empty=True)",
+                        "--python"]).arg(&path)
                     .current_dir(&self.root).env("PYTHONIOENCODING", "utf-8");
                 let began = std::time::SystemTime::now();
-                let ran = crate::workspace::finish(c, None, RUN_SECONDS).map(|t| quieter(&t)).map_err(|t| renamed(&quieter(&t)))?;
-                Ok(ran + &sizes_of_new_stl(&self.root, began))
+                let ran = crate::workspace::finish(c, None, RUN_SECONDS).map(|t| quieter(&t))
+                    .map_err(|t| saved.clone() + &renamed(&quieter(&t)))?;
+                Ok(saved + &ran + &sizes_of_new_stl(&self.root, began))
             }
             "kicad_cli" => {
                 let exe = self.kicad.as_ref().ok_or("KiCad 가 없다")?;
@@ -330,6 +365,25 @@ mod tests {
         assert!(said.contains("part.stl: 40 × 20 × 10") && said.contains("t.stl: 1 × 2 × 3"), "{said}");
         //: A file older than the run is not this run's.
         assert_eq!(sizes_of_new_stl(&dir, std::time::SystemTime::now() + std::time::Duration::from_secs(60)), "");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn code_given_inline_is_saved_and_named_back() {
+        let dir = std::env::temp_dir().join(format!("argmind-inline-{}", std::process::id()));
+        let mut p = Programs::with(dir.clone(), Some(PathBuf::from("blender.exe")), None).unwrap();
+        let code = "import bpy\nprint('hi')";
+        //: In `code`, bare, and in `script` where it is plainly not a file name.
+        for args in [json!({"code": code}), json!(code), json!({"script": code})] {
+            let (script, said) = p.script_of(&args).unwrap();
+            assert_eq!(script, INLINE);
+            assert!(said.contains(INLINE), "{said}");
+            assert_eq!(std::fs::read_to_string(dir.join(INLINE)).unwrap(), code);
+        }
+        //: A file name is still a file name, and nothing is written for it.
+        let (script, said) = p.script_of(&json!({"script": "box.py"})).unwrap();
+        assert_eq!((script.as_str(), said.as_str()), ("box.py", ""));
+        assert!(p.script_of(&json!({})).is_err());
         let _ = std::fs::remove_dir_all(&dir);
     }
 

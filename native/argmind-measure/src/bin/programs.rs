@@ -41,6 +41,24 @@
 //! metres and export with `global_scale=1000` when sizes come in millimetres, and a run's result
 //! carries every new STL's measured sides.
 //!
+//! **Read: 4 of 4**, both shapes in millimetres, each after one failed `blender_python` — *box*
+//! had passed its code as `script` and was refused as a path, *coin* named a file before writing
+//! it. So code is now taken as code (`Programs::script_of`), **fitted to those two steps**.
+//! Written before the re-run: the bar stays 4 of 4, and the failed `blender_python` calls in *box*
+//! and *coin* together are printed beside the 2 of that run — one run, so a count, not a rate.
+//!
+//! **Read: 2 of 4, and both misses were mine.** The tool text has said *빈 장면에서 시작한다* since
+//! the first day and `--factory-startup` starts with a camera, a light and a 2 m cube; every
+//! passing run had deleted them in its own code, and with code passed inline neither *box* nor
+//! *coin* did — both STLs measured **2000 × 2000 × 2000**, the default cube at the new scale. (The
+//! hand check's first STL, 1,284 bytes, was two cubes; read as a size it would have said so.)
+//! *coin* then ended unreadable after 323 s. **And *erc* passed on a swapped answer** — *오류
+//! 37개, 경고 0개* — because the check took both numbers anywhere in the closing words; it now
+//! takes the number after each word. So the scene is emptied before the script, by the program,
+//! and the run is repeated with the same bar. **Re-run: 4 of 4**, *box* and *coin* in one step
+//! each, failed `blender_python` calls **0 against 2**, *erc* right under the stricter check
+//! (*오류는 0개, 경고는 37개*). One run.
+//!
 //! **Read, 2026-11-08 — three runs, two fixes, both fitted.** First **1 of 3**, and both KiCad
 //! misses were the tool: qwen3:14b called `{"kicad_cli": ["sch", …]}` six times with the right
 //! arguments and the tool wanted `{"args": […]}`, so the bare list is now read too. Second **2 of
@@ -142,6 +160,12 @@ fn coin_ok(dir: &Path) -> bool {
 }
 
 /// Every number in the closing words, as written (digits only).
+/// The first number after the first `word` in `text`.
+fn after(text: &str, word: &str) -> Option<usize> {
+    let rest = &text[text.find(word)? + word.len()..];
+    numbers_in(rest).first().copied()
+}
+
 fn numbers_in(text: &str) -> Vec<usize> {
     text.split(|c: char| !c.is_ascii_digit()).filter_map(|s| s.parse().ok()).collect()
 }
@@ -191,7 +215,10 @@ fn main() {
         let ok = match name {
             "bom" => std::fs::read_to_string(dir.join("parts.csv"))
                 .is_ok_and(|t| refs.iter().all(|r| t.contains(r.as_str()))) && said.contains(&refs.len()),
-            "erc" => dir.join("erc.txt").is_file() && said.contains(&errors) && said.contains(&warnings),
+            //: **Each count after its own word** — the first version took both numbers anywhere, and
+            //: *오류 37개, 경고 0개*, the two swapped, passed it on 2026-11-09.
+            "erc" => dir.join("erc.txt").is_file() && after(&closing, "오류") == Some(errors)
+                && after(&closing, "경고") == Some(warnings),
             "coin" => coin_ok(&dir),
             _ => box_ok(&dir),
         } && (control || via);
