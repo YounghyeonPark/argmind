@@ -52,6 +52,7 @@ pub mod needs;
 pub mod ollama;
 pub mod people;
 pub mod platform;
+pub mod pursuit;
 pub mod proposals;
 pub mod recogniser;
 pub mod rules;

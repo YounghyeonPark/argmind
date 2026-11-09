@@ -201,12 +201,15 @@ fn every_payload_the_page_parses_is_json_a_page_can_read() {
             .unwrap_or_else(|e| panic!("the page cannot read {what}: {e}\n  {text}"))
     };
 
-    //: **The dials, with the awkward characters a person can actually type into the goal box.**
+    //: **The dials, with the awkward characters a person can actually type into the goal box** —
+    //: and into a kept sentence, which is what reaches the line now the goal does not.
     let mut mind = Mind::resting();
     mind.turn("재치", 7);
     mind.aim = "이렇게: \"놓친 것\"만 — C:\\dev\\argmind 볼 때".into();
+    mind.kept = vec!["그대로: \"남긴 것\" — C:\\dev".into()];
     let d = reads("mind_json", mind_json(&mind));
-    assert!(d["line"].as_str().unwrap().contains("놓친 것"));
+    assert!(d["aim"].as_str().unwrap().contains("놓친 것"));
+    assert!(d["line"].as_str().unwrap().contains("남긴 것") && !d["line"].as_str().unwrap().contains("놓친 것"));
     assert_eq!(d["dials"].as_array().unwrap().len(), argmind_core::mind::DIALS.len());
 
     reads("mind_json at rest", mind_json(&Mind::resting()));

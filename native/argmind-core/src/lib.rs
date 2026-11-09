@@ -25,6 +25,7 @@ pub mod task;
 pub mod intent;
 pub mod llm;
 pub mod mind;
+pub mod pursuit;
 pub mod recognise;
 pub mod session;
 pub mod thinking;

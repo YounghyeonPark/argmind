@@ -75,17 +75,22 @@ fn turning_a_dial_up_and_down_again_restores_the_prompt_exactly() {
     assert_eq!(prompt(&mind), resting, "back at rest, the prompt did not come back");
 }
 
-/// The sentence a person writes is carried **as they wrote it**, and it does not need a dial.
+/// **The goal is never shown to a turn** — since 2026-11-09, the owner: it is what argmind works
+/// on when nobody needs it (`argmind_core::pursuit`), and rendered as *기억해 달라고 한 것* it came
+/// back in answers about other things. A goal alone leaves the prompt exactly at rest, and beside a
+/// dial or a kept sentence it is not in the line.
 #[test]
-fn the_goal_is_a_sentence_and_stands_on_its_own() {
+fn the_goal_is_never_shown_to_a_turn() {
+    let resting = prompt(&Mind::resting());
     let mut mind = Mind::resting();
-    mind.aim = "내가 회의 중일 때는 말 걸지 마".into();
-    let line = mind.line().expect("an aim alone renders nothing");
-    assert!(line.contains("내가 회의 중일 때는 말 걸지 마"), "{line}");
-    //: No dial was turned, so no dial is claimed.
-    for (_, gloss) in DIALS {
-        assert!(!line.contains(gloss), "{line}");
-    }
+    mind.aim = "돈을어떻게벌수있는지생각해줘".into();
+    assert_eq!(mind.line(), None);
+    assert_eq!(prompt(&mind), resting);
+    mind.turn("유머", 3);
+    mind.kept = vec!["나를 대표님이라고 불러".into()];
+    let line = mind.line().unwrap();
+    assert!(!line.contains("돈을어떻게") && line.contains("대표님"), "{line}");
+    assert!(!prompt(&mind).contains("돈을어떻게"));
 }
 
 /// **The counterweight is always there.** Every dial is a reason to talk more, and 31 of 34
@@ -94,9 +99,9 @@ fn the_goal_is_a_sentence_and_stands_on_its_own() {
 fn whatever_is_set_the_line_ends_by_saying_it_is_not_a_reason_to_speak() {
     let mut dialled = Mind::resting();
     dialled.turn("유머", 9);
-    let mut aimed = Mind::resting();
-    aimed.aim = "무엇이든".into();
-    for mind in [dialled, aimed] {
+    let mut kept = Mind::resting();
+    kept.kept = vec!["무엇이든".into()];
+    for mind in [dialled, kept] {
         let line = mind.line().unwrap();
         assert!(line.contains("할 말이 없는데 말하거나"), "{line}");
         assert!(line.contains("부탁받지 않은 일을 할 이유가 되지는 않습니다"), "{line}");
@@ -137,16 +142,16 @@ fn a_dial_left_alone_is_not_mentioned() {
 
 use argmind_core::mind::{asked_to_keep, worth_offering, Keep};
 
-/// **A goal alone renders exactly as it did**, so every measurement of the dials still describes
-/// the shipped prompt; kept sentences follow it under the same label.
+/// **A kept sentence alone renders exactly as a goal alone once did**, so what `remembering`
+/// measured still describes the shipped prompt; several follow one another under the same label.
 #[test]
-fn kept_sentences_follow_the_goal_and_the_goal_alone_is_unchanged() {
+fn kept_sentences_render_under_the_label_the_goal_once_had() {
     let mut mind = Mind::resting();
-    mind.aim = "놓친 것만 말해줘".into();
+    mind.kept = vec!["놓친 것만 말해줘".into()];
     let alone = mind.line().unwrap();
     assert_eq!(alone, "사용자가 기억해 달라고 한 것: \"놓친 것만 말해줘\" 그렇다고 해서 할 말이 없는데 \
 말하거나, 부탁받지 않은 일을 할 이유가 되지는 않습니다.");
-    mind.kept = vec!["나를 대표님이라고 불러".into()];
+    mind.kept.push("나를 대표님이라고 불러".into());
     assert!(mind.line().unwrap().contains("\"놓친 것만 말해줘\" / \"나를 대표님이라고 불러\""));
     let mut only = Mind::resting();
     only.kept = vec!["영어로 대답해".into()];

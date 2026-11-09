@@ -238,12 +238,21 @@ pub struct Pressing<L, P> {
     look: L,
     press: P,
     seen: Vec<(String, String)>,
+    /// Whether the work is argmind's own — `crate::pursuit` — rather than a person's request.
+    own: bool,
 }
 
 impl<L, P> Pressing<L, P>
 where L: FnMut() -> Result<Vec<(String, String)>, String>, P: FnMut(crate::intent::Effect) -> String {
     pub fn new(look: L, press: P) -> Self {
-        Pressing { look, press, seen: Vec::new() }
+        Pressing { look, press, seen: Vec::new(), own: false }
+    }
+
+    /// **For work argmind set itself**: every press goes out as argmind's own idea, so the
+    /// application gates it on 스스로 실행 rather than 확인 없이 실행 — the two questions the owner
+    /// answered apart.
+    pub fn own(look: L, press: P) -> Self {
+        Pressing { look, press, seen: Vec::new(), own: true }
     }
 }
 
@@ -251,11 +260,12 @@ where L: FnMut() -> Result<Vec<(String, String)>, String>, P: FnMut(crate::inten
 /// `crowding`'s collapse from 123.
 pub const MOST_PRESSABLE: usize = 100;
 
-fn effect(kind: &str, target: &str, role: &str, text: &str) -> crate::intent::Effect {
+fn effect(kind: &str, target: &str, role: &str, text: &str, own: bool) -> crate::intent::Effect {
     //: **Asked for**: a task is a request the person made — `because_asked` true, so a press is
-    //: gated as *what you asked for* is, never as argmind's own idea.
+    //: gated as *what you asked for* is, never as argmind's own idea. **Unless it is not**: work
+    //: argmind set itself presses as its own idea.
     crate::intent::Effect { kind: kind.into(), target: target.into(), role: role.into(), text: text.into(),
-                            because_asked: Some(true), which: None }
+                            because_asked: Some(!own), which: None }
 }
 
 impl<L, P> Tools for Pressing<L, P>
@@ -296,10 +306,10 @@ where L: FnMut() -> Result<Vec<(String, String)>, String>, P: FnMut(crate::inten
                     return Err(if self.seen.is_empty() { "먼저 look_pane 으로 보라 — 번호는 마지막으로 본 목록의 것이다".into() }
                                else { format!("{n} 번은 마지막 목록에 없다 (0–{})", self.seen.len() - 1) });
                 };
-                (self.press)(effect("click", &name, &role, ""))
+                (self.press)(effect("click", &name, &role, "", self.own))
             }
-            "type_text" => (self.press)(effect("type", "", "", &text("text")?)),
-            "press_key" => (self.press)(effect("key", "", "", &text("key")?)),
+            "type_text" => (self.press)(effect("type", "", "", &text("text")?, self.own)),
+            "press_key" => (self.press)(effect("key", "", "", &text("key")?, self.own)),
             other => return Err(format!("그런 도구는 없다: {other}")),
         };
         //: What the numbers named may have moved.
@@ -1259,6 +1269,14 @@ mod tests {
         assert_eq!((p[0].kind.as_str(), p[0].target.as_str(), p[0].role.as_str()), ("click", "조회", "button"));
         assert_eq!((p[1].kind.as_str(), p[1].text.as_str()), ("type", "A-1042"));
         assert!(p.iter().all(|e| e.because_asked == Some(true)), "a task is something the person asked for");
+        //: **And work argmind set itself presses as its own idea**, gated on 스스로 실행.
+        let own = std::rc::Rc::new(std::cell::RefCell::new(Vec::<crate::intent::Effect>::new()));
+        let log = own.clone();
+        let mut hands = Pressing::own(|| Ok(vec![("button".to_string(), "조회".to_string())]),
+                                      move |e| { log.borrow_mut().push(e); "실행".to_string() });
+        hands.call("look_pane", &json!({})).unwrap();
+        hands.call("click", &json!({"item": 0})).unwrap();
+        assert_eq!(own.borrow()[0].because_asked, Some(false));
     }
 
     #[test]

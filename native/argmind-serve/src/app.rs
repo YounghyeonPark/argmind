@@ -254,6 +254,21 @@ struct Desk {
     /// **A task under way** — one at a time — and the bit that stops it between steps.
     working: Arc<AtomicBool>,
     stop_work: Arc<AtomicBool>,
+    /// **Whether the task under way is argmind's own** — work toward the goal, `crate::pursuit`.
+    own_work: Arc<AtomicBool>,
+    /// A person's request that stopped argmind's own work, started when that work has stopped.
+    after_own: Option<String>,
+    /// 멈춰 said to argmind's own work: the next piece waits [`OWN_BACKOFF`].
+    own_halted: bool,
+    /// Pieces of argmind's own work nobody has been told about yet.
+    own_untold: Vec<argmind_core::pursuit::Pursued>,
+    /// When the next piece may be picked, and how many in a row did not finish.
+    own_not_before: Instant,
+    own_misses: u32,
+    /// A pick is being asked of the model.
+    own_choosing: bool,
+    /// The person was seen away since the last report — `somebody_about` read `Some(false)`.
+    own_away: bool,
     /// Where a finished task reports back, so its result enters the history on this thread.
     jobs: Sender<Job>,
     /// **A task's question waiting for the person**: the next thing they say is its answer, unless it
@@ -351,8 +366,13 @@ enum Job {
     /// came of it, in the timeline's words — at once, or when the person answers the row.
     PanePress(Effect, Sender<String>),
     /// A task's press or write on the work screen, for the person's 규칙 and 확인 없이 실행:
-    /// window, kind, what, and where the answer goes.
-    ScreenGate(String, String, String, Sender<Result<(), String>>),
+    /// window, kind, what, where the answer goes, and whether the work is argmind's own — which
+    /// is asked of 스스로 실행 instead.
+    ScreenGate(String, String, String, Sender<Result<(), String>>, bool),
+    /// **argmind picked its next piece of work toward the goal** — or could not, and why.
+    OwnPicked(Result<String, String>),
+    /// A piece of argmind's own work ended, as the program recorded it.
+    OwnEnded(argmind_core::pursuit::Pursued),
     /// The thinking thread took one step: **the copy it stepped from and the result**, so a step
     /// computed before an answer arrived is recognised and thrown away rather than written over it.
     Stepped(argmind_core::errand::Errand, argmind_core::errand::Errand),
@@ -677,7 +697,9 @@ pub const TASK_SPARES: bool = false;
 /// reasoning on runs for minutes, and a turn waiting behind it is the conversation freezing. The
 /// call is abandoned the moment a turn begins — dropping the socket frees the card, measured — and
 /// asked again once the turn is over.
-struct Yielding(Local, crate::senses::Turn);
+/// **And let go of when the work is stopped** (2026-11-09): with argmind's own work giving way to a
+/// person's request, the request would otherwise wait out a reasoning call of minutes.
+struct Yielding(Local, crate::senses::Turn, Arc<AtomicBool>);
 
 impl Speaks for Yielding {
     fn ask_reasoning(&mut self, prompt: &str, reason: bool) -> String {
@@ -689,11 +711,16 @@ impl Speaks for Yielding {
     }
     fn ask(&mut self, prompt: &str) -> String {
         loop {
-            while self.1.in_flight() {
+            while self.1.in_flight() && !self.2.load(Ordering::SeqCst) {
                 std::thread::sleep(std::time::Duration::from_millis(200));
             }
-            let carry_on = self.1.carry_on();
+            if self.2.load(Ordering::SeqCst) {
+                return String::new();
+            }
+            let (turn, stop) = (self.1.carry_on(), Arc::clone(&self.2));
+            let carry_on = move || turn() && !stop.load(Ordering::SeqCst);
             match self.0.ask_while(prompt, &[], &carry_on, &mut |_| {}) {
+                Ok(_) if self.2.load(Ordering::SeqCst) => return String::new(),
                 Ok(r) if r.reason == "abandoned" => continue,
                 Ok(r) => return r.text,
                 Err(e) => {
@@ -713,14 +740,45 @@ impl Speaks for Yielding {
 /// that folder, and PowerShell in it — the last one weaker, and said so in `workspace.rs`.
 fn worked_instead(desk: &mut Desk, out: &Listeners, text: &str, said: &str) -> bool {
     let busy = desk.working.load(Ordering::SeqCst);
+    let own = desk.own_work.load(Ordering::SeqCst);
     let reply = if busy && ["멈춰", "그만"].iter().any(|w| text.contains(w)) {
         desk.stop_work.store(true, Ordering::SeqCst);
-        "하던 작업을 멈출게요".to_string()
+        if own {
+            desk.own_halted = true;
+            "스스로 하던 일을 멈출게요 — 30분 뒤에 목표로 다시 돌아갑니다".to_string()
+        } else {
+            "하던 작업을 멈출게요".to_string()
+        }
+    //: **argmind's own work gives way to the person's**, the owner's word: *다른작업이나 대화를
+    //: 해야할떄는 다른일 우선*. It stops between steps and the request starts when it has.
+    } else if busy && own {
+        desk.stop_work.store(true, Ordering::SeqCst);
+        desk.after_own = Some(text.to_string());
+        out.record("작업", "스스로 하던 일을 멈추고 맡기신 일부터 합니다");
+        "스스로 하던 일을 멈추고 맡기신 일부터 할게요".to_string()
     //: Not asked again whether this is work: `crate::route` decided, and the model's *work* is a
     //: sentence the word rule did not recognise — asking the rule here would undo it.
     } else if busy {
         "하던 작업이 아직 안 끝났어요 — 끝나면 다시 말씀해 주세요".to_string()
-    } else if let Some(files) = crate::platform::workbench() {
+    } else if let Some(sets) = work_sets(desk, false) {
+        start_work(desk, text, sets, false);
+        format!("작업 폴더({})에서 해 볼게요 — 끝나면 알려 드릴게요",
+                crate::platform::work_folder().display())
+    } else {
+        "이 환경에서는 파일이나 명령을 다룰 수 없습니다".to_string()
+    };
+    desk.session.history.push(("them".into(), said.to_string()));
+    desk.session.history.push(("you".into(), reply.clone()));
+    out.send("say", &reply);
+    true
+}
+
+/// **Everything a task can work with**, ranked — `None` where there is no workbench. `own` is work
+/// argmind set itself: it asks nobody, and what it presses is its own idea.
+fn work_sets(desk: &Desk, own: bool)
+    -> Option<Vec<(argmind_core::task::Rank, Box<dyn argmind_core::task::Tools + Send>)>> {
+    let files = crate::platform::workbench()?;
+    {
         //: **And the web, when there is a pane** — a trip plan is searching before it is writing.
         use argmind_core::task::Rank;
         //: **Ranked**, the owner's order of 2026-11-08: MCP or an API, then code, then a screen —
@@ -730,7 +788,7 @@ fn worked_instead(desk: &mut Desk, out: &Listeners, text: &str, said: &str) -> b
         //: result, and the next thing they say comes back here — see `task_asks` in `think`.
         let (slot, jobs) = (Arc::clone(&desk.task_asks), desk.jobs.clone());
         let stop = Arc::clone(&desk.stop_work);
-        if TASK_ASKS { sets.push((Rank::Other, Box::new(argmind_core::task::Asking::new(move |q: &str| {
+        if TASK_ASKS && !own { sets.push((Rank::Other, Box::new(argmind_core::task::Asking::new(move |q: &str| {
             let (tx, rx) = std::sync::mpsc::channel::<String>();
             if let Ok(mut w) = slot.lock() {
                 *w = Some(tx);
@@ -756,7 +814,7 @@ fn worked_instead(desk: &mut Desk, out: &Listeners, text: &str, said: &str) -> b
                 argmind_env_browser::Pane::new(pane.wire.clone())))));
             //: **And pressing there — the pane only**, the owner's choice of 2026-11-06: a task runs
             //: for minutes beside somebody using their own desktop.
-            sets.push((Rank::Other, Box::new(pane_hands(desk.jobs.clone(), Arc::clone(&desk.stop_work)))));
+            sets.push((Rank::Other, pane_hands(desk.jobs.clone(), Arc::clone(&desk.stop_work), own)));
         }
         //: **And a screen of argmind's own, last** — a desktop the person never sees.
         //: **Installed programs by their own scripting interfaces, with the APIs** — Blender's
@@ -769,7 +827,7 @@ fn worked_instead(desk: &mut Desk, out: &Listeners, text: &str, said: &str) -> b
         let (gate_jobs, gate_stop) = (desk.jobs.clone(), Arc::clone(&desk.stop_work));
         let gate = Box::new(move |window: &str, kind: &str, what: &str| -> Result<(), String> {
             let (tx, rx) = std::sync::mpsc::channel();
-            gate_jobs.send(Job::ScreenGate(window.into(), kind.into(), what.into(), tx))
+            gate_jobs.send(Job::ScreenGate(window.into(), kind.into(), what.into(), tx, own))
                 .map_err(|_| "argmind 이 닫혔다 — 하지 않았다".to_string())?;
             let asked_at = std::time::Instant::now();
             loop {
@@ -785,16 +843,8 @@ fn worked_instead(desk: &mut Desk, out: &Listeners, text: &str, said: &str) -> b
         if let Some(screen) = crate::platform::work_screen(gate) {
             sets.push((Rank::Screen, screen));
         }
-        start_work(desk, text, sets);
-        format!("작업 폴더({})에서 해 볼게요 — 끝나면 알려 드릴게요",
-                crate::platform::work_folder().display())
-    } else {
-        "이 환경에서는 파일이나 명령을 다룰 수 없습니다".to_string()
-    };
-    desk.session.history.push(("them".into(), said.to_string()));
-    desk.session.history.push(("you".into(), reply.clone()));
-    out.send("say", &reply);
-    true
+        Some(sets)
+    }
 }
 
 /// **What can be pressed in the pane, read there**, whatever the switch says — the switch is put
@@ -836,9 +886,10 @@ fn pane_press(desk: &mut Desk, out: &Listeners, effect: Effect, tx: Sender<Strin
 /// or asked as a question whose one button is yes. Never a `Proposal`: the work screen is not the
 /// person's, nothing there reaches `perform`, and the answer goes back to the waiting task.
 fn screen_gate(desk: &mut Desk, out: &Listeners, window: &str, kind: &str, what: &str,
-               tx: Sender<Result<(), String>>) {
+               tx: Sender<Result<(), String>>, own: bool) {
     use crate::rules::OnTheWorkScreen;
-    let acting = crate::decided::standing("acting") == Some(Standing::Allowed);
+    //: **Whose idea the work was decides which standing answer counts**, as in `propose`.
+    let acting = crate::decided::standing(if own { "initiative" } else { "acting" }) == Some(Standing::Allowed);
     match crate::rules::on_the_work_screen(&desk.rules, window, kind, acting) {
         OnTheWorkScreen::Go => {
             let _ = tx.send(Ok(()));
@@ -882,9 +933,10 @@ fn settle_press(desk: &mut Desk, out: &Listeners, token: u64, how: &str) {
 /// **The pane's hands, for a task** — the task thread asks the worker, which looks and presses as a
 /// turn does. A press waits for its answer as long as a person might take over a row, and *멈춰*
 /// lets go of it.
-fn pane_hands(jobs: Sender<Job>, stop: Arc<AtomicBool>) -> impl argmind_core::task::Tools + Send {
+fn pane_hands(jobs: Sender<Job>, stop: Arc<AtomicBool>, own: bool) -> Box<dyn argmind_core::task::Tools + Send> {
     let looks = jobs.clone();
-    argmind_core::task::Pressing::new(
+    let make = if own { argmind_core::task::Pressing::own } else { argmind_core::task::Pressing::new };
+    Box::new(make(
         move || {
             let (tx, rx) = std::sync::mpsc::channel();
             looks.send(Job::PaneLook(tx)).map_err(|_| "argmind 이 닫혔다".to_string())?;
@@ -905,25 +957,27 @@ fn pane_hands(jobs: Sender<Job>, stop: Arc<AtomicBool>) -> impl argmind_core::ta
                     Err(_) => {}
                 }
             }
-        })
+        }))
 }
 
 fn start_work(desk: &Desk, what: &str,
-              mut sets: Vec<(argmind_core::task::Rank, Box<dyn argmind_core::task::Tools + Send>)>) {
+              mut sets: Vec<(argmind_core::task::Rank, Box<dyn argmind_core::task::Tools + Send>)>, own: bool) {
     use argmind_core::task::{open, step, Ended, Task};
     let (working, stop, turn) = (Arc::clone(&desk.working), Arc::clone(&desk.stop_work), desk.turn.clone());
     let (jobs, out, what) = (desk.jobs.clone(), Arc::clone(&desk.speaks_to), what.to_string());
+    let own_work = Arc::clone(&desk.own_work);
     working.store(true, Ordering::SeqCst);
+    own_work.store(own, Ordering::SeqCst);
     stop.store(false, Ordering::SeqCst);
     std::thread::spawn(move || {
         let mut local = Local::new(TASK_MODEL);
         local.think = Some(TASK_THINKS);
         local.keep_alive = "300s".into();
-        let mut model = Yielding(local, turn.clone());
+        let mut model = Yielding(local, turn.clone(), Arc::clone(&stop));
         let mut task = if TASK_PLANS { Task::planned(&what) } else { Task::new(&what) };
         task.sparing = TASK_SPARES;
         let today = crate::platform::today();
-        out.record("작업", &format!("시작: {what}"));
+        out.record("작업", &format!("{}시작: {what}", if own { "스스로 " } else { "" }));
         //: **And the MCP servers the person configured**, started here rather than on the turn's
         //: thread — `npx` can take a minute the first time — and stopped when this thread ends.
         let (servers, notes) = crate::mcp::started();
@@ -944,7 +998,7 @@ fn start_work(desk: &Desk, what: &str,
         for s in &task.steps {
             out.record("작업", &format!("{} {} → 먼저 읽음", s.tool, s.args.to_string().chars().take(80).collect::<String>()));
         }
-        let card = begun(&out, &what);
+        let card = begun(&out, &if own { format!("스스로: {what}") } else { what.clone() });
         loop {
             while turn.in_flight() && !stop.load(Ordering::SeqCst) {
                 std::thread::sleep(std::time::Duration::from_millis(200));
@@ -986,15 +1040,130 @@ fn start_work(desk: &Desk, what: &str,
             .filter_map(|rel| argmind_core::task::read_through(bench.as_mut(), &rel).ok()
                 .map(|text| (rel, crate::deliver::trimmed(&text))))
             .collect();
+        let names: Vec<String> = made.iter().map(|(rel, _)| rel.clone()).collect();
         if !made.is_empty() {
-            let names: Vec<&str> = made.iter().map(|(rel, _)| rel.as_str()).collect();
             out.record("작업", &format!("만든 것: {}", names.join(", ")));
-            let _ = jobs.send(Job::Made(made));
+            //: **Not shown for argmind's own work**: opening the pane on it would take the view
+            //: from somebody who did not ask for anything. It is told when they come back.
+            if !own {
+                let _ = jobs.send(Job::Made(made));
+            }
         }
         working.store(false, Ordering::SeqCst);
+        own_work.store(false, Ordering::SeqCst);
         ended(&out, card, task.steps.len(), finished.is_some(), &said);
-        let _ = jobs.send(Job::Worked(said));
+        if own {
+            let _ = jobs.send(Job::OwnEnded(argmind_core::pursuit::Pursued {
+                asked: what.clone(), finished: finished.is_some(), said: finished.clone().unwrap_or(said), made: names }));
+        } else {
+            let _ = jobs.send(Job::Worked(said));
+        }
     });
+}
+
+/// Between one piece of argmind's own work and the next. Chosen: long enough to be found between
+/// pieces now and then, short of idling — the owner asked for it to go on without limit.
+const OWN_PAUSE: std::time::Duration = std::time::Duration::from_secs(60);
+/// After 멈춰, after three pieces in a row that did not finish, or picks that could not be read.
+/// Chosen: a goal that keeps failing is a loop spending the card, not work.
+const OWN_BACKOFF: std::time::Duration = std::time::Duration::from_secs(1800);
+
+/// **The goal, worked on when nobody needs argmind** — the owner, 2026-11-09: *사용자 작업이
+/// 없을떄 스스로 목표를 설정하고 이루도록 수행*, continuously, the conversation and handed work first.
+/// When there is a goal, no task, no turn, no row or question waiting and the pause has passed, the
+/// task model is asked for the next piece (`argmind_core::pursuit`) on a thread of its own, and
+/// what it answers comes back as [`Job::OwnPicked`].
+fn pursue(desk: &mut Desk) {
+    let aim = desk.session.mind.aim.trim().to_string();
+    let asking = desk.task_asks.lock().map(|w| w.is_some()).unwrap_or(false);
+    if aim.is_empty() || desk.own_choosing || desk.working.load(Ordering::SeqCst) || desk.turn.in_flight()
+        || Instant::now() < desk.own_not_before || desk.after_own.is_some() || asking
+        || !desk.proposals.waiting().is_empty() || !desk.screen_asks.is_empty() {
+        return;
+    }
+    desk.own_choosing = true;
+    let done = crate::pursuit::remembered();
+    let files: Vec<String> = std::fs::read_dir(crate::platform::work_folder()).map(|d| d.filter_map(|e| e.ok())
+        .map(|e| e.file_name().to_string_lossy().to_string()).filter(|n| !n.starts_with('.')).collect())
+        .unwrap_or_default();
+    let (jobs, turn, today) = (desk.jobs.clone(), desk.turn.clone(), crate::platform::today());
+    //: A pick is let go of only for a turn; nothing stops it but argmind closing.
+    let never = Arc::new(AtomicBool::new(false));
+    std::thread::spawn(move || {
+        let mut local = Local::new(TASK_MODEL);
+        local.think = Some(TASK_THINKS);
+        local.keep_alive = "300s".into();
+        let mut model = Yielding(local, turn, never);
+        let reply = model.ask(&argmind_core::pursuit::ask_for_next(&aim, &done, &files, &today));
+        let _ = jobs.send(Job::OwnPicked(argmind_core::pursuit::read_next(&reply, &done)));
+    });
+}
+
+/// The next piece was picked: run it, if nothing else started meanwhile.
+fn own_picked(desk: &mut Desk, out: &Listeners, picked: Result<String, String>) {
+    desk.own_choosing = false;
+    match picked {
+        Ok(next) if !desk.working.load(Ordering::SeqCst) && desk.after_own.is_none()
+            && !desk.session.mind.aim.trim().is_empty() => {
+            match work_sets(desk, true) {
+                Some(sets) => start_work(desk, &next, sets, true),
+                None => desk.own_not_before = Instant::now() + OWN_BACKOFF,
+            }
+        }
+        Ok(_) => {}
+        Err(why) => {
+            out.record("작업", &format!("스스로 할 일을 정하지 못함 — {why}"));
+            desk.own_misses += 1;
+            desk.own_not_before = Instant::now() + if desk.own_misses >= 3 { OWN_BACKOFF } else { OWN_PAUSE };
+        }
+    }
+}
+
+/// A piece of argmind's own work ended: kept, owed to the person, and the next one timed — and a
+/// person's request that stopped it started now.
+fn own_ended(desk: &mut Desk, out: &Listeners, done: argmind_core::pursuit::Pursued) {
+    if let Err(why) = crate::pursuit::append(&done) {
+        out.send("note", &why);
+    }
+    let gave_way = desk.after_own.is_some() || desk.own_halted;
+    if done.finished {
+        desk.own_misses = 0;
+    } else if !gave_way {
+        desk.own_misses += 1;
+    }
+    let wait = if desk.own_halted || desk.own_misses >= 3 { OWN_BACKOFF } else { OWN_PAUSE };
+    desk.own_halted = false;
+    desk.own_not_before = Instant::now() + wait;
+    desk.own_untold.push(done);
+    if let Some(text) = desk.after_own.take() {
+        if let Some(sets) = work_sets(desk, false) {
+            start_work(desk, &text, sets, false);
+            out.send("note", "맡기신 일을 시작합니다");
+        }
+    }
+}
+
+/// **What argmind did by itself, said when somebody comes back** — the owner's choice, short. Back
+/// is a person talking to argmind (`spoke`), or the camera and input reading somebody about after
+/// they read nobody. Into the history, so *그 파일 보여줘* has something to refer to.
+fn tell_own(desk: &mut Desk, out: &Listeners, spoke: bool) {
+    match somebody_about(desk) {
+        Some(false) => {
+            desk.own_away = true;
+            return;
+        }
+        Some(true) if desk.own_away => {}
+        _ if spoke => {}
+        _ => return,
+    }
+    if desk.own_untold.is_empty() || desk.turn.in_flight() {
+        return;
+    }
+    let said = crate::pursuit::report(&desk.own_untold);
+    desk.own_untold.clear();
+    desk.own_away = false;
+    desk.session.history.push(("you".into(), said.clone()));
+    out.send("say", &said);
 }
 
 /// **Each task as a card, where a person is looking.** The owner, 2026-11-09: a box asked for in
@@ -3081,6 +3250,9 @@ pub fn run(how: How) {
                               raised: Vec::new(), kept_lines: 0,
                               working: Arc::new(AtomicBool::new(false)),
                               stop_work: Arc::new(AtomicBool::new(false)), jobs: agent_jobs,
+                              own_work: Arc::new(AtomicBool::new(false)), after_own: None, own_halted: false,
+                              own_untold: Vec::new(), own_not_before: Instant::now() + OWN_PAUSE, own_misses: 0,
+                              own_choosing: false, own_away: false,
                               task_asks: Arc::new(Mutex::new(None)),
                               task_presses: Vec::new(), screen_asks: Vec::new(),
                               facing_now: Arc::new(Mutex::new(None)),
@@ -3130,6 +3302,9 @@ pub fn run(how: How) {
                     //: which is a stronger permission than a switch about the screen.
                     step_errand(&mut desk, &letters, now);
                     tell_errand(&mut desk, &agent_out);
+                    //: **And the goal, when nobody needs argmind** — `crate::pursuit`.
+                    pursue(&mut desk);
+                    tell_own(&mut desk, &agent_out, false);
                     continue;
                 }
                 Err(_) => break,
@@ -3140,6 +3315,9 @@ pub fn run(how: How) {
                 Job::Said(text) => {
                     let text = text.trim();
                     think(&mut desk, &agent_out, text);
+                    //: **Somebody talking to argmind is somebody back** — what it did by itself is
+                    //: said after the answer, once.
+                    tell_own(&mut desk, &agent_out, true);
                     //: **Offered, never kept.** A correction or a preference in the person's words
                     //: is a row asking 기억해 둘까요? — the word list is rough, and a rough list
                     //: that only offers costs one dismissed row when it is wrong.
@@ -3176,8 +3354,10 @@ pub fn run(how: How) {
                     let _ = tx.send(pane_look(&mut desk));
                 }
                 Job::PanePress(effect, tx) => pane_press(&mut desk, &agent_out, effect, tx),
-                Job::ScreenGate(window, kind, what, tx) =>
-                    screen_gate(&mut desk, &agent_out, &window, &kind, &what, tx),
+                Job::ScreenGate(window, kind, what, tx, own) =>
+                    screen_gate(&mut desk, &agent_out, &window, &kind, &what, tx, own),
+                Job::OwnPicked(picked) => own_picked(&mut desk, &agent_out, picked),
+                Job::OwnEnded(done) => own_ended(&mut desk, &agent_out, done),
                 Job::Listen(down) => listen(&mut desk, &agent_out, down),
                 Job::Notice(on) => match (on, crate::decided::standing("notice")) {
                     //: **Switching off never asks.** A permission question in front of somebody

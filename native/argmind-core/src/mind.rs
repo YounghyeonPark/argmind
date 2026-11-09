@@ -79,11 +79,13 @@ pub const MOST: u8 = 10;
 pub struct Mind {
     /// One number per entry of [`DIALS`], in the same order.
     pub dials: Vec<u8>,
-    /// A sentence the person wrote, which is the goal the numbers cannot express.
+    /// **The goal argmind works toward by itself when nobody needs it** — `crate::pursuit`.
     ///
-    /// **The dials say how, this says what for.** *재치 7* cannot mean *내가 코드 리뷰하는 동안
-    /// 놓친 것만 말해줘*, and a design with only numbers would push every real instruction into
-    /// the conversation, where it is twelve turns from being forgotten.
+    /// **Never shown to a turn, since 2026-11-09.** It was rendered into every prompt as *사용자가
+    /// 기억해 달라고 한 것*, and the owner's *돈을어떻게벌수있는지생각해줘* came back in answers to
+    /// things that had nothing to do with it; the owner then said what the box was for: *사용자
+    /// 작업이 없을떄 스스로 목표를 설정하고 이루도록 수행하는것.* An instruction about how to answer
+    /// is a kept sentence, below.
     pub aim: String,
     /// **What the person asked argmind to remember**, one sentence each, in their own words —
     /// *나를 대표님이라고 불러*, *메모장 말고 VS Code*. From the dots comparison: corrections and
@@ -141,9 +143,10 @@ impl Mind {
     /// The line that goes into the prompt, or **`None` when there is nothing to say.**
     ///
     /// Only dials above zero appear, with the number, because *playful 2* and *playful 9* are
-    /// different instructions and a bare list of adjectives is neither.
+    /// different instructions and a bare list of adjectives is neither. **The goal does not** — see
+    /// [`Mind::aim`] — so a goal alone renders nothing.
     pub fn line(&self) -> Option<String> {
-        if self.at_rest() {
+        if self.dials.iter().all(|&n| n == 0) && self.kept.iter().all(|k| k.trim().is_empty()) {
             return None;
         }
         let mut parts: Vec<String> = Vec::new();
@@ -160,12 +163,10 @@ impl Mind {
             //: is the side worth erring on.
             out.push_str(&format!("{AIM_AT}{}.", parts.join(", ")));
         }
-        //: **The goal first and the kept sentences after it, under the one label they share** —
-        //: the goal was always rendered as *기억해 달라고 한 것*, and a goal alone renders byte for
-        //: byte as it did, so what the dials were measured against has not moved.
-        let aim = self.aim.trim();
-        let said: Vec<String> = std::iter::once(aim)
-            .chain(self.kept.iter().map(|k| k.trim()))
+        //: **The kept sentences, under the label the goal used to share with them** — a kept
+        //: sentence alone renders byte for byte as a goal alone did, so what `remembering`
+        //: measured has not moved.
+        let said: Vec<String> = self.kept.iter().map(|k| k.trim())
             .filter(|s| !s.is_empty())
             //: The person's own words, unedited and quoted, so a rewrite of the surrounding
             //: sentence cannot quietly change what they asked for.
