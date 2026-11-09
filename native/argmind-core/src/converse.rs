@@ -370,6 +370,31 @@ pub fn unreadable(text: &str) -> bool {
     replaced >= 3 || (lost >= 3 && lost * 4 >= written)
 }
 
+/// **A bare go-ahead** — *실행해줘*, *응*, *해줘* — that names nothing to do. On its own it is not a
+/// request, it is a yes to whatever was last offered.
+pub fn goes_ahead(text: &str) -> bool {
+    let t: String = text.split_whitespace().collect::<String>()
+        .trim_end_matches(['.', '!', '~', '?']).to_string();
+    const YES: [&str; 22] = ["실행해줘", "실행해", "실행", "해줘", "해", "응", "네", "예", "그래", "좋아", "진행해",
+                             "진행해줘", "진행", "ㅇㅇ", "오케이", "ok", "OK", "그렇게해줘", "그렇게해", "부탁해",
+                             "응해줘", "네해주세요"];
+    YES.contains(&t.as_str()) || t == "해주세요" || t == "실행해주세요" || t == "진행해주세요"
+}
+
+/// **What a go-ahead says yes to**: the person's request just before argmind's last reply, when
+/// that reply asked (*…할까요?*). The owner, 2026-11-09: *작업 화면에서 문자표를 열어서…* was answered
+/// *작업 화면에서 실행할까요?*, then *실행해줘* started a task whose whole request was *실행해줘* —
+/// it found an old `box.py` in the work folder and made the box again. `None` when the last reply
+/// asked nothing, so a yes with nothing behind it starts nothing.
+pub fn offer_answered(history: &[(String, String)]) -> Option<String> {
+    let mut lines = history.iter().rev();
+    let (_, reply) = lines.by_ref().find(|(who, _)| who == "you")?;
+    if !asks_first(reply) {
+        return None;
+    }
+    lines.take_while(|(who, _)| who != "you").find(|(who, _)| who == "them").map(|(_, t)| t.clone())
+}
+
 pub fn action_sureness(tokens: &[(String, f64)]) -> Option<f64> {
     if tokens.is_empty() {
         return None;
@@ -400,6 +425,30 @@ pub fn action_sureness(tokens: &[(String, f64)]) -> Option<f64> {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn a_go_ahead_answers_the_offer_before_it() {
+        for yes in ["실행해줘", "응", "해 줘", "진행해!", "네.", "실행해주세요"] {
+            assert!(super::goes_ahead(yes), "{yes}");
+        }
+        for not in ["메모장 실행해줘", "해줘야 할 게 뭐야", "응 그런데 그거 말고", "고마워"] {
+            assert!(!super::goes_ahead(not), "{not}");
+        }
+        let h = |pairs: &[(&str, &str)]| pairs.iter().map(|(a, b)| (a.to_string(), b.to_string())).collect::<Vec<_>>();
+        //: The owner's case, word for word.
+        let asked = h(&[("them", "작업 화면에서 문자표(charmap)를 열어서 ★ 문자를 골라 '복사할 문자' 칸에 넣어줘"),
+                        ("you", "문자표(charmap)를 열고 ★ 문자를 '복사할 문자' 칸에 복사해드릴게요. 작업 화면에서 실행할까요?")]);
+        assert_eq!(super::offer_answered(&asked).as_deref(),
+                   Some("작업 화면에서 문자표(charmap)를 열어서 ★ 문자를 골라 '복사할 문자' 칸에 넣어줘"));
+        //: Lines in between — what was offered on screen — do not hide the request.
+        let between = h(&[("them", "검색해줘"), ("you", "찾아볼까요?"), ("offered", "click …")]);
+        assert_eq!(super::offer_answered(&between).as_deref(), Some("검색해줘"));
+        //: A reply that asked nothing, or no history, offers nothing.
+        assert_eq!(super::offer_answered(&h(&[("them", "안녕"), ("you", "안녕하세요!")])), None);
+        assert_eq!(super::offer_answered(&[]), None);
+        //: A noticed remark that asked, with nobody's request before it since the last reply.
+        assert_eq!(super::offer_answered(&h(&[("you", "도와드릴까요?"), ("noticed", "창이 바뀜"), ("you", "업데이트할까요?")])), None);
+    }
+
     #[test]
     fn a_garbled_request_is_not_a_request() {
         //: Word for word what arrived on 2026-11-09.

@@ -169,6 +169,17 @@ impl Tiered {
         sets.sort_by_key(|(r, _)| *r);
         Tiered { sets, tried_above: false, warned: false }
     }
+
+    /// **The person named the work screen**, so the order does not send the task elsewhere first.
+    /// The order is the owner's default for work that does not say how; *작업 화면에서 문자표를
+    /// 열어서…* says how, and holding it back would have the task try PowerShell — which opens a
+    /// program on the person's own desktop — before the place it was told to use.
+    pub fn screen_asked_for(mut self, what: &str) -> Self {
+        if what.contains("작업 화면") || what.contains("작업화면") {
+            self.warned = true;
+        }
+        self
+    }
 }
 
 impl Tools for Tiered {
@@ -608,7 +619,12 @@ pub fn asks_for_work(text: &str) -> bool {
         let ext = f.rsplit('.').next().unwrap_or("");
         !ADDRESSES.contains(&ext.to_ascii_lowercase().as_str())
     });
-    (names_a_file || THINGS.iter().any(|w| text.contains(w))) && DOING.iter().any(|w| text.contains(w))
+    //: **The work screen is the task's** — nothing else has one, so a sentence that names it is
+    //: work. The owner's *작업 화면에서 문자표(charmap)를 열어서…* went to a turn (2026-11-09), which
+    //: asked *작업 화면에서 실행할까요?* about a screen it cannot reach.
+    let names_the_work_screen = text.contains("작업 화면") || text.contains("작업화면");
+    (names_the_work_screen || ((names_a_file || THINGS.iter().any(|w| text.contains(w)))
+        && DOING.iter().any(|w| text.contains(w))))
         && !asks_about(text)
 }
 
@@ -758,7 +774,11 @@ pub fn why_not_done(task: &Task, said: &str, tools: &dyn Tools, today: &str) -> 
     }
     //: **The last thing run failed and nothing ran since**: from `--bin complex`, a test file that
     //: could not import what it tested, run, failed, and was called done.
-    let ran = |s: &&Step| s.tool.starts_with("run");
+    //: **Anything that runs something** — a command, a program's own interface, an MCP server's
+    //: tool. With only `run…` counted, a failed `python3 box.py` followed by a `blender_python`
+    //: that exported the box still read as *the last command failed* (2026-11-09).
+    let ran = |s: &&Step| s.tool.starts_with("run") || s.tool == "blender_python" || s.tool == "kicad_cli"
+        || s.tool.contains("__");
     if let Some(last) = task.steps.iter().filter(ran).last() {
         if last.failed {
             return Some("마지막으로 실행한 명령이 실패했다. 오류를 고쳐서 성공하는 것을 확인한 다음에 끝내라".into());
@@ -1271,6 +1291,11 @@ mod tests {
         assert!(t.list().last().unwrap().does.starts_with("(3순위"));
         //: Nothing tried: refused once, then it goes.
         assert_eq!(t.call("screen_open", &json!({})), Err(SCREEN_LAST.into()));
+        //: Not when the person named the work screen.
+        let mut asked = made().screen_asked_for("작업 화면에서 문자표 열어줘");
+        assert_eq!(asked.call("screen_open", &json!({})), Ok("열렸다".into()));
+        let mut other = made().screen_asked_for("글꼴 목록을 fonts.txt 로");
+        assert_eq!(other.call("screen_open", &json!({})), Err(SCREEN_LAST.into()));
         assert_eq!(t.call("screen_open", &json!({})), Ok("열렸다".into()));
         //: Reading is not trying; writing is.
         let mut t = made();
@@ -1467,6 +1492,33 @@ mod tests {
     impl Tools for Nothing {
         fn list(&self) -> Vec<ToolSpec> { Vec::new() }
         fn call(&mut self, _: &str, _: &Value) -> Result<String, String> { Err(String::new()) }
+    }
+
+    #[test]
+    fn a_failed_command_is_undone_by_a_program_that_ran_after_it() {
+        let step = |tool: &str, failed: bool| Step { tool: tool.into(), args: json!({}), failed,
+                                                     observed: "(종료 코드 0)".into() };
+        let mut task = Task::new("상자를 part.stl 로");
+        task.steps.push(step("run", true));
+        task.steps.push(step("blender_python", false));
+        assert_eq!(why_not_done(&task, "part.stl 로 저장했습니다", &Nothing, "2026년 11월 9일"), None);
+        //: Reading after a failed run is not running it again.
+        let mut task = Task::new("상자를 part.stl 로");
+        task.steps.push(step("run", true));
+        task.steps.push(step("read_file", false));
+        assert!(why_not_done(&task, "part.stl 로 저장했습니다", &Nothing, "2026년 11월 9일").is_some());
+        //: And a program's own failure counts as the last command failing.
+        let mut task = Task::new("상자를 part.stl 로");
+        task.steps.push(step("write_file", false));
+        task.steps.push(step("blender_python", true));
+        assert!(why_not_done(&task, "part.stl 로 저장했습니다", &Nothing, "2026년 11월 9일").is_some());
+    }
+
+    #[test]
+    fn the_work_screen_named_is_work() {
+        assert!(asks_for_work("작업 화면에서 문자표(charmap)를 열어서 ★ 문자를 골라 '복사할 문자' 칸에 넣어줘"));
+        assert!(asks_for_work("작업화면에서 계산기 열어줘"));
+        assert!(!asks_for_work("작업 화면이 뭐야?"), "a question about it is not work");
     }
 
     #[test]

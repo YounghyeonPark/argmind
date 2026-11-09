@@ -471,9 +471,28 @@ fn think(desk: &mut Desk, out: &Listeners, text: &str) {
         Some((said, s)) => out.record("길", &format!("{} — 모델 {said}, {s:.2}초", route.name())),
         None => out.record("길", route.name()),
     }
+    //: **A bare go-ahead is a yes to what was offered, not a request of its own.** With a row
+    //: waiting it is the turn's to accept, as it always was; sent to work, the task is given the
+    //: request the last reply asked about — the owner's *실행해줘* once started a task whose whole
+    //: request was *실행해줘* — and with nothing asked about, no task starts.
+    let mut route = route;
+    let mut request = text.to_string();
+    if argmind_core::converse::goes_ahead(text) {
+        if !desk.proposals.waiting().is_empty() {
+            route = crate::route::Route::Turn;
+        } else if route == crate::route::Route::Work {
+            match argmind_core::converse::offer_answered(&desk.session.history) {
+                Some(asked) => {
+                    out.record("길", &format!("work — 「{asked}」에 대한 승낙"));
+                    request = asked;
+                }
+                None => route = crate::route::Route::Turn,
+            }
+        }
+    }
     let handled = match route {
         crate::route::Route::Keep => kept_instead(desk, out, text),
-        crate::route::Route::Work => worked_instead(desk, out, text),
+        crate::route::Route::Work => worked_instead(desk, out, &request, text),
         crate::route::Route::LookUp => looked_up_instead(desk, out, text),
         //: On a turn too: a desktop app named with the pane up takes the pane down and returns
         //: false, so the turn carries on at the desktop.
@@ -692,7 +711,7 @@ impl Speaks for Yielding {
 /// it ended with is said and kept. Between steps it waits out a turn, the rule every sense keeps.
 /// **Not gated by 확인 없이 실행**: what it touches is the work folder, a sandbox that can reach only
 /// that folder, and PowerShell in it — the last one weaker, and said so in `workspace.rs`.
-fn worked_instead(desk: &mut Desk, out: &Listeners, text: &str) -> bool {
+fn worked_instead(desk: &mut Desk, out: &Listeners, text: &str, said: &str) -> bool {
     let busy = desk.working.load(Ordering::SeqCst);
     let reply = if busy && ["멈춰", "그만"].iter().any(|w| text.contains(w)) {
         desk.stop_work.store(true, Ordering::SeqCst);
@@ -772,7 +791,7 @@ fn worked_instead(desk: &mut Desk, out: &Listeners, text: &str) -> bool {
     } else {
         "이 환경에서는 파일이나 명령을 다룰 수 없습니다".to_string()
     };
-    desk.session.history.push(("them".into(), text.to_string()));
+    desk.session.history.push(("them".into(), said.to_string()));
     desk.session.history.push(("you".into(), reply.clone()));
     out.send("say", &reply);
     true
@@ -914,7 +933,7 @@ fn start_work(desk: &Desk, what: &str,
         if let Some(s) = servers {
             sets.push((argmind_core::task::Rank::Api, Box::new(s)));
         }
-        let mut bench: Box<dyn argmind_core::task::Tools + Send> = Box::new(argmind_core::task::Tiered::new(sets));
+        let mut bench: Box<dyn argmind_core::task::Tools + Send> = Box::new(argmind_core::task::Tiered::new(sets).screen_asked_for(&what));
         //: **The folder before**, so what the task made is found by the program at the end.
         let folder = crate::platform::work_folder();
         let before = crate::deliver::snapshot(&folder);
