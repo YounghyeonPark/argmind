@@ -431,6 +431,14 @@ fn think(desk: &mut Desk, out: &Listeners, text: &str) {
     if !desk.heard_last.take().is_some_and(|h| h == text) {
         out.record("들음", text);
     }
+    //: **A sentence nobody can read is asked again, with no model call and nothing done** — not
+    //: routed, not answered by a turn, not handed to a task waiting on an answer, and not kept in the
+    //: history, where it would read as something said. `converse::unreadable` has the case.
+    if argmind_core::converse::unreadable(text) {
+        out.record("길", "읽을 수 없음 — 글자가 깨져 들어옴");
+        out.send("say", "글자가 깨져서 읽을 수 없어요. 다시 말씀해 주세요.");
+        return;
+    }
     //: **Held for the whole turn, and it clears itself.** While this is alive the senses stand
     //: down: one declines to start and one already running is abandoned mid-call. A guard rather
     //: than two stores, because an early return that left the flag set would silence every sense
@@ -3902,6 +3910,14 @@ fn serve_one(mut stream: TcpStream, out: &Listeners, token: &str, jobs: &Sender<
         Route::ClearActivity => {
             let _ = stream.write_all(&respond("204 No Content", "text/plain", ""));
             let _ = jobs.send(Job::ClearActivity);
+        }
+        //: **The person's button, not argmind's action** — nothing here goes through `act`, since
+        //: what opens is a window the person asked for on their own desktop.
+        Route::OpenWorkFolder => {
+            let _ = stream.write_all(&match crate::platform::open_work_folder() {
+                Ok(()) => respond("204 No Content", "text/plain", ""),
+                Err(why) => respond("500 Internal Server Error", "text/plain; charset=utf-8", &why),
+            });
         }
         Route::Keep(text) => {
             if text.chars().count() <= argmind_core::mind::KEPT_CHARS {

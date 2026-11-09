@@ -341,6 +341,35 @@ pub fn asks_first(say: &str) -> bool {
     s.ends_with('?') && s.contains("까요")
 }
 
+/// **A request nobody can read** — its letters replaced by `?` or `�` on the way in. On
+/// 2026-11-09 a sentence sent through a shell that was not speaking UTF-8 arrived as `?? 40mm ??
+/// 20mm ?? 10mm ??? 3D? ??? part.stl? ????`; the turn answered *상자를 만들어 드릴게요* and, with 확인
+/// 없이 실행 on, pressed *Synchronize Changes* in the editor and *Bookmarks* in Chrome. A garbled
+/// sentence is not a request, so it is asked again and nothing is done.
+///
+/// A `?` counts only in a run that **starts a word** — a garbled syllable — so *뭐해???* and *왜?
+/// 왜?* are questions, not damage. Unreadable when at least three such marks make up at least a
+/// quarter of what was written, or when three replacement characters `�` are in it at all.
+pub fn unreadable(text: &str) -> bool {
+    let chars: Vec<char> = text.chars().collect();
+    let written = chars.iter().filter(|c| !c.is_whitespace()).count();
+    let replaced = chars.iter().filter(|&&c| c == '\u{FFFD}').count();
+    let mut lost = 0;
+    let mut i = 0;
+    while i < chars.len() {
+        if chars[i] == '?' && (i == 0 || chars[i - 1].is_whitespace()) {
+            let start = i;
+            while i < chars.len() && chars[i] == '?' {
+                i += 1;
+            }
+            lost += i - start;
+        } else {
+            i += 1;
+        }
+    }
+    replaced >= 3 || (lost >= 3 && lost * 4 >= written)
+}
+
 pub fn action_sureness(tokens: &[(String, f64)]) -> Option<f64> {
     if tokens.is_empty() {
         return None;
@@ -371,6 +400,19 @@ pub fn action_sureness(tokens: &[(String, f64)]) -> Option<f64> {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn a_garbled_request_is_not_a_request() {
+        //: Word for word what arrived on 2026-11-09.
+        assert!(super::unreadable("?? 40mm ?? 20mm ?? 10mm ??? 3D? ??? part.stl? ????"));
+        assert!(super::unreadable("??? ?? ????"));
+        assert!(super::unreadable("\u{FFFD}\u{FFFD} 40mm \u{FFFD}\u{FFFD}\u{FFFD}"));
+        //: Questions, however many marks.
+        for ok in ["뭐해???", "왜? 왜? 왜? 왜?", "이거 뭐야? 저건?", "what?", "가로 40mm 세로 20mm 상자 만들어줘",
+                   "? 이건 뭐지", "", "??"] {
+            assert!(!super::unreadable(ok), "{ok}");
+        }
+    }
+
     #[test]
     fn a_reply_that_asks_holds_its_action() {
         for q in ["먼저 항공권과 호텔을 찾아볼까요?", "검색해 볼까요? ", "이걸로 할까요?!"] {

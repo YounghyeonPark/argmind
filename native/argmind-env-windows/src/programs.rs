@@ -105,7 +105,9 @@ impl Tools for Programs {
                 "설치된 Blender {}의 파이썬(bpy)으로 3D 모델을 만들고·바꾸고·내보낸다. 창 없이 돈다. \
 코드는 먼저 write_file 로 작업 폴더의 .py 파일에 쓰고 그 이름을 script 로 준다. 스크립트의 현재 폴더가 작업 폴더다. \
 빈 장면에서 시작한다 (기본 상자·카메라·조명 없음). 저장은 bpy.ops.wm.save_as_mainfile(filepath=...), \
-STL 은 bpy.ops.wm.stl_export(filepath=...), OBJ 는 bpy.ops.wm.obj_export(filepath=...). print 한 것이 결과로 온다",
+STL 은 bpy.ops.wm.stl_export(filepath=...), OBJ 는 bpy.ops.wm.obj_export(filepath=...). \
+Blender 의 길이 단위는 m 이고 STL·OBJ 에는 단위가 없어 다른 프로그램은 mm 로 읽는다: 크기를 mm 로 받았으면 \
+모델은 m 로 만들고 global_scale=1000 으로 내보낸다. 내보낸 STL 의 크기는 결과에 붙어 온다. print 한 것이 결과로 온다",
                 Self::version(b)), args: json!({"script": "box.py"}) });
         }
         if let Some(k) = &self.kicad {
@@ -131,7 +133,9 @@ pcb drc)하고 넷리스트·BOM·PDF·SVG·거버로 내보낸다. args 는 kic
                 let mut c = Command::new(exe);
                 c.args(["--background", "--factory-startup", "--python-exit-code", "1", "--python"]).arg(&path)
                     .current_dir(&self.root).env("PYTHONIOENCODING", "utf-8");
-                crate::workspace::finish(c, None, RUN_SECONDS).map(|t| quieter(&t)).map_err(|t| renamed(&quieter(&t)))
+                let began = std::time::SystemTime::now();
+                let ran = crate::workspace::finish(c, None, RUN_SECONDS).map(|t| quieter(&t)).map_err(|t| renamed(&quieter(&t)))?;
+                Ok(ran + &sizes_of_new_stl(&self.root, began))
             }
             "kicad_cli" => {
                 let exe = self.kicad.as_ref().ok_or("KiCad 가 없다")?;
@@ -171,6 +175,66 @@ pcb drc)하고 넷리스트·BOM·PDF·SVG·거버로 내보낸다. args 는 kic
     fn missing(&self, paths: &[String]) -> Vec<String> {
         self.work.missing(paths)
     }
+}
+
+/// **What a run exported, measured by the program** — every `.stl` in the work folder written
+/// since `began`, its three sides read off the file. The owner's first box in the application
+/// (2026-11-09) came out at 0.04 × 0.02 × 0.01: Blender's metres, which a slicer reads as
+/// millimetres, so a 40 mm box opened as 0.04 mm and the task's closing words said it was right.
+/// The sizes are the file's, not the model's account, and the note says how they will be read.
+fn sizes_of_new_stl(root: &Path, began: std::time::SystemTime) -> String {
+    let Ok(dir) = std::fs::read_dir(root) else { return String::new() };
+    let mut out = Vec::new();
+    for e in dir.filter_map(Result::ok) {
+        let p = e.path();
+        let fresh = e.metadata().and_then(|m| m.modified()).is_ok_and(|t| t >= began);
+        if fresh && p.extension().is_some_and(|x| x.eq_ignore_ascii_case("stl")) {
+            if let Some(s) = stl_sides(&p) {
+                let n = |v: f64| format!("{}", (v * 10_000.0).round() / 10_000.0);
+                out.push(format!("{}: {} × {} × {} (단위 없음 — 다른 프로그램은 mm 로 읽는다)",
+                                 p.file_name().unwrap_or_default().to_string_lossy(), n(s[0]), n(s[1]), n(s[2])));
+            }
+        }
+    }
+    if out.is_empty() { String::new() } else { format!("\n\n내보낸 STL 의 크기:\n{}", out.join("\n")) }
+}
+
+/// The bounding box of an STL, binary or text, as its three sides.
+pub fn stl_sides(path: &Path) -> Option<[f64; 3]> {
+    let b = std::fs::read(path).ok()?;
+    let mut lo = [f64::MAX; 3];
+    let mut hi = [f64::MIN; 3];
+    let mut any = false;
+    let mut take = |p: [f64; 3]| {
+        any = true;
+        for i in 0..3 {
+            lo[i] = lo[i].min(p[i]);
+            hi[i] = hi[i].max(p[i]);
+        }
+    };
+    let text = String::from_utf8_lossy(&b);
+    if b.starts_with(b"solid") && text.contains("vertex") {
+        for l in text.lines() {
+            if let Some(v) = l.trim().strip_prefix("vertex") {
+                let v: Vec<f64> = v.split_whitespace().filter_map(|n| n.parse().ok()).collect();
+                if v.len() == 3 {
+                    take([v[0], v[1], v[2]]);
+                }
+            }
+        }
+    } else if b.len() >= 84 {
+        let n = u32::from_le_bytes(b[80..84].try_into().ok()?) as usize;
+        for t in 0..n {
+            for k in 0..3 {
+                let at = 84 + t * 50 + 12 + k * 12;
+                let f = |i: usize| -> Option<f64> {
+                    Some(f32::from_le_bytes(b.get(at + i * 4..at + i * 4 + 4)?.try_into().ok()?) as f64)
+                };
+                take([f(0)?, f(1)?, f(2)?]);
+            }
+        }
+    }
+    any.then(|| [hi[0] - lo[0], hi[1] - lo[1], hi[2] - lo[2]])
 }
 
 /// **Operators that are gone, and what took their place** — Blender 4 replaced the old exporters,
@@ -241,6 +305,32 @@ mod tests {
         //: The bare list reads the same as the wrapped one.
         let r = p.call("kicad_cli", &json!(["sch", "export", "bom", "-o", "C:\\Windows\\x.csv", "a.kicad_sch"]));
         assert!(r.is_err_and(|e| e.contains("작업 폴더 밖")));
+    }
+
+    #[test]
+    fn an_exported_stl_is_measured_from_the_file() {
+        let dir = std::env::temp_dir().join(format!("argmind-stl-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let began = std::time::SystemTime::now() - std::time::Duration::from_secs(1);
+        //: One binary triangle spanning 40 × 20 × 10, and a text one spanning 1 × 2 × 3.
+        let mut b = vec![0u8; 80];
+        b.extend_from_slice(&1u32.to_le_bytes());
+        b.extend_from_slice(&[0u8; 12]);
+        for v in [[0f32, 0., 0.], [40., 20., 0.], [0., 0., 10.]] {
+            for c in v {
+                b.extend_from_slice(&c.to_le_bytes());
+            }
+        }
+        b.extend_from_slice(&[0u8; 2]);
+        std::fs::write(dir.join("part.stl"), &b).unwrap();
+        std::fs::write(dir.join("t.stl"), "solid t\nfacet normal 0 0 1\nouter loop\nvertex 0 0 0\nvertex 1 2 0\nvertex 0 0 3\nendloop\nendfacet\nendsolid t\n").unwrap();
+        assert_eq!(stl_sides(&dir.join("part.stl")), Some([40.0, 20.0, 10.0]));
+        assert_eq!(stl_sides(&dir.join("t.stl")), Some([1.0, 2.0, 3.0]));
+        let said = sizes_of_new_stl(&dir, began);
+        assert!(said.contains("part.stl: 40 × 20 × 10") && said.contains("t.stl: 1 × 2 × 3"), "{said}");
+        //: A file older than the run is not this run's.
+        assert_eq!(sizes_of_new_stl(&dir, std::time::SystemTime::now() + std::time::Duration::from_secs(60)), "");
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]

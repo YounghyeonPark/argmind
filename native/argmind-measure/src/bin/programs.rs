@@ -31,6 +31,16 @@
 //! **With the programs: 3 of 3, each through `kicad_cli` or `blender_python`.** One run each, a
 //! demonstration and not a rate. The control has no bar; it says whether the tools were needed.
 //!
+//! ## Millimetres — written 2026-11-09, before the run
+//!
+//! The owner's first box in the application came out at 0.04 × 0.02 × 0.01: Blender's metres, in a
+//! format a slicer reads as millimetres. This harness had accepted either unit, so it could not
+//! have caught it. **From now on *box* passes only at 40 × 20 × 10**, and a fourth case, **coin** —
+//! *지름 30mm 두께 5mm 원판을 coin.stl 로* — passes only at 30 × 30 × 5 within 2%, written before the
+//! new tool text was ever run. The bar is **4 of 4**. What changed: the tool text says to build in
+//! metres and export with `global_scale=1000` when sizes come in millimetres, and a run's result
+//! carries every new STL's measured sides.
+//!
 //! **Read, 2026-11-08 — three runs, two fixes, both fitted.** First **1 of 3**, and both KiCad
 //! misses were the tool: qwen3:14b called `{"kicad_cli": ["sch", …]}` six times with the right
 //! arguments and the tool wanted `{"args": […]}`, so the bare list is now read too. Second **2 of
@@ -118,8 +128,17 @@ fn box_ok(dir: &Path) -> bool {
     let Some(mut s) = stl_sides(&dir.join("part.stl")) else { return false };
     s.sort_by(|a, b| b.partial_cmp(a).unwrap());
     let near = |a: f64, b: f64| (a - b).abs() <= b.abs() * 0.01;
-    dir.join("part.blend").is_file() && (near(s[0], 40.0) || near(s[0], 0.04))
-        && near(s[1], s[0] / 2.0) && near(s[2], s[0] / 4.0)
+    //: **Millimetres only, since 2026-11-09** — see the second section at the top.
+    dir.join("part.blend").is_file() && near(s[0], 40.0) && near(s[1], 20.0) && near(s[2], 10.0)
+}
+
+/// A disc 30 mm across and 5 mm thick, as an STL in millimetres. Two per cent, since a cylinder's
+/// box depends on where its first vertex sits.
+fn coin_ok(dir: &Path) -> bool {
+    let Some(mut s) = stl_sides(&dir.join("coin.stl")) else { return false };
+    s.sort_by(|a, b| b.partial_cmp(a).unwrap());
+    let near = |a: f64, b: f64| (a - b).abs() <= b.abs() * 0.02;
+    near(s[0], 30.0) && near(s[1], 30.0) && near(s[2], 5.0)
 }
 
 /// Every number in the closing words, as written (digits only).
@@ -143,10 +162,11 @@ fn main() {
     let _ = local.ask("Reply with the single word: ready");
     let mut model = Model(local);
 
-    let cases: [(&str, &str, bool); 3] = [
+    let cases: [(&str, &str, bool); 4] = [
         ("bom", "작업 폴더의 amp.kicad_sch 회로도에 들어간 부품 목록(참조번호와 값)을 parts.csv 로 만들고, 부품이 모두 몇 개인지 알려줘", true),
         ("erc", "작업 폴더의 amp.kicad_sch 회로도의 전기 규칙 검사(ERC)를 해서 결과를 erc.txt 로 저장하고, 오류와 경고가 각각 몇 개인지 알려줘", true),
         ("box", "가로 40mm 세로 20mm 높이 10mm 직육면체 부품을 3D 로 만들어서 part.stl 로 내보내고 Blender 파일 part.blend 로도 저장해줘", false),
+        ("coin", "지름 30mm 두께 5mm 원판을 3D 로 만들어서 coin.stl 로 저장해줘", false),
     ];
     let mut passed = 0;
     for (name, what, schematic) in cases {
@@ -172,6 +192,7 @@ fn main() {
             "bom" => std::fs::read_to_string(dir.join("parts.csv"))
                 .is_ok_and(|t| refs.iter().all(|r| t.contains(r.as_str()))) && said.contains(&refs.len()),
             "erc" => dir.join("erc.txt").is_file() && said.contains(&errors) && said.contains(&warnings),
+            "coin" => coin_ok(&dir),
             _ => box_ok(&dir),
         } && (control || via);
         passed += ok as usize;
@@ -183,8 +204,9 @@ fn main() {
         let tools: Vec<String> = task.steps.iter().map(|s| format!("{}{}", s.tool, if s.failed { "✗" } else { "" })).collect();
         println!("    {} {name} — {}단계 {secs:.0}초, 프로그램 도구 {} [{}]\n       {ended}",
                  if ok { "●" } else { "○" }, task.steps.len(), if via { "씀" } else { "안 씀" }, tools.join(" "));
-        if name == "box" {
-            println!("       part.stl 변: {:?}", stl_sides(&dir.join("part.stl")));
+        if name == "box" || name == "coin" {
+            let f = if name == "box" { "part.stl" } else { "coin.stl" };
+            println!("       {f} 변: {:?}", stl_sides(&dir.join(f)));
         }
         if std::env::var("PROGRAMS_VERBOSE").is_ok() {
             for s in &task.steps {
@@ -194,6 +216,6 @@ fn main() {
         }
         let _ = std::fs::remove_dir_all(&dir);
     }
-    println!("\n  ── 돌리기 전에 적어둔 대로: {passed}/3{} ──",
-             if control { " (대조군 — 기준 없음)" } else if passed == 3 { " — 설치된 프로그램으로 된다" } else { " — 보여주지 못했다" });
+    println!("\n  ── 돌리기 전에 적어둔 대로: {passed}/4{} ──",
+             if control { " (대조군 — 기준 없음)" } else if passed == 4 { " — 설치된 프로그램으로 된다" } else { " — 보여주지 못했다" });
 }

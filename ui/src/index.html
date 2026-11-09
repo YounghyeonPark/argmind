@@ -199,6 +199,7 @@
   .task.done .mark { color: #3f7a45; }
   .task.stopped .mark { color: #a33; }
   .task button { padding: 0 6px; font-size: 12px; }
+  .task .buttons { display: flex; gap: 4px; }
   .task .spin { width: 10px; height: 10px; border-radius: 50%; border: 2px solid var(--edge);
                 border-top-color: var(--dim); animation: spin 1s linear infinite; }
   @keyframes spin { to { transform: rotate(360deg); } }
@@ -245,12 +246,19 @@
   #detail { position: fixed; top: 6px; right: 8px; z-index: 5; padding: 0 8px; line-height: 1.6;
             opacity: .45; background: transparent; }
   #detail:hover { opacity: .9; }
+  #folder { position: fixed; top: 6px; right: 44px; z-index: 5; padding: 0 8px; line-height: 1.6;
+            font-size: 12px; opacity: .45; background: transparent; }
+  #folder:hover { opacity: .9; }
+  body:not(.quiet) #folder { opacity: .7; }
   body:not(.quiet) #detail { opacity: .7; }
 </style>
 
 <body data-token="__TOKEN__" class="quiet">
   <!-- The one control the quiet view shows: everything else, one press away. -->
   <button type="button" id="detail" title="자세히 보기 / 간단히 보기">⋯</button>
+  <!-- The work folder, in the person's file manager: what a task made is there, and a card says
+       only its name. Beside ⋯ so it is reachable from the quiet view too. -->
+  <button type="button" id="folder" title="작업 폴더 열기">작업 폴더</button>
   <header>
     <span id="attending">…</span>
     <!-- State, not a control: the switch lives in 설정 since 2026-09-17, because watching is on

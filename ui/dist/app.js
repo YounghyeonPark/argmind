@@ -547,6 +547,13 @@ async function watchWork() {
 }
 void watchWork();
 const tasksBox = document.getElementById("tasks");
+const folderButton = document.getElementById("folder");
+async function openFolder() {
+    const r = await fetch("/work-folder/open", { method: "POST", headers: { "X-Argmind-Token": token } });
+    if (!r.ok)
+        statusLine.textContent = `작업 폴더를 열지 못했습니다 — ${await r.text()}`;
+}
+folderButton.onclick = () => void openFolder();
 let taskCards = [];
 const putAway = new Set();
 const seenEnd = new Set();
@@ -578,13 +585,23 @@ function drawTasks() {
             act.textContent = "치우기";
             act.onclick = () => { putAway.add(c.id); drawTasks(); };
         }
+        //: A finished task's files are in the work folder; the card says so with a way there.
+        const open = document.createElement("button");
+        open.type = "button";
+        open.className = "plain";
+        open.textContent = "폴더";
+        open.title = "작업 폴더 열기";
+        open.onclick = () => void openFolder();
+        const buttons = document.createElement("span");
+        buttons.className = "buttons";
+        buttons.append(...(c.state === "running" ? [act] : [open, act]));
         const how = document.createElement("span");
         how.className = "how";
         how.textContent = c.state === "running"
             ? `${c.steps}단계 · ${c.failed ? "실패: " : ""}${c.last} · ${ago(c.at)}`
             : `${c.state === "done" ? "완료" : "멈춤"} · ${c.steps}단계 · ${ago(c.at)} — ${c.last}`;
         how.title = c.last;
-        row.append(mark, what, act, how);
+        row.append(mark, what, buttons, how);
         return row;
     }));
 }

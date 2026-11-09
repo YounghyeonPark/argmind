@@ -279,6 +279,9 @@ pub enum Route {
     /// Send the timeline, or empty it.
     Activity,
     ClearActivity,
+    /// Open the folder tasks work in, in the person's file manager. A POST like every route that
+    /// does something, so a link or a prefetch cannot open a window.
+    OpenWorkFolder,
     /// Remember this sentence, in the person's words.
     Keep(String),
     /// Forget the kept sentence at this place in the list.
@@ -444,6 +447,7 @@ pub fn route(request: &Request) -> Route {
         ("POST", "/web/off") => Route::Web(false),
         ("POST", "/web/go") => Route::WebGo(request.body.clone()),
         ("POST", "/activity/clear") => Route::ClearActivity,
+        ("POST", "/work-folder/open") => Route::OpenWorkFolder,
         ("POST", p) if p.starts_with("/kept/") => match p[6..].strip_suffix("/drop")
             .and_then(|i| i.parse().ok()) {
             Some(i) => Route::Unkeep(i),

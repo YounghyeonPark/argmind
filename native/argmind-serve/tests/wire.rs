@@ -336,3 +336,11 @@ fn the_work_screen_is_read_by_number_and_its_title_travels_escaped() {
     assert!(head.contains("Content-Length: 3\r\n") && head.contains("X-Frame: 3\r\n") && head.ends_with("\r\n\r\n"), "{head}");
     assert_eq!(&out[out.len() - 3..], &[0, 159, 255]);
 }
+
+/// **Opening the work folder is a POST**, so a link, a prefetch or an image cannot open a window.
+#[test]
+fn the_work_folder_opens_only_by_a_post() {
+    let post = |p: &str| parse_request(&format!("POST {p} HTTP/1.1\r\n\r\n")).unwrap();
+    assert_eq!(route(&post("/work-folder/open")), Route::OpenWorkFolder);
+    assert_eq!(route(&get("/work-folder/open")), Route::Unknown);
+}

@@ -789,6 +789,22 @@ pub fn work_folder() -> std::path::PathBuf {
     home.join("argmind-work")
 }
 
+/// **The work folder, opened for the person** — the owner, 2026-11-09: *작업내용 폴더를 열수있도록
+/// 버튼을 만들어줘.* Made first if no task has run yet, so the button never opens nothing.
+pub fn open_work_folder() -> Result<(), String> {
+    let at = work_folder();
+    std::fs::create_dir_all(&at).map_err(|e| format!("{}: {e}", at.display()))?;
+    #[cfg(windows)]
+    let opener = "explorer.exe";
+    #[cfg(target_os = "macos")]
+    let opener = "open";
+    #[cfg(all(unix, not(target_os = "macos")))]
+    let opener = "xdg-open";
+    //: Not waited on: Explorer returns 1 when it hands the window to a running instance, which is
+    //: success, so its exit code says nothing.
+    std::process::Command::new(opener).arg(&at).spawn().map(|_| ()).map_err(|e| format!("{opener}: {e}"))
+}
+
 /// **The workbench a task works at**, or `None` where nothing has been written: files in
 /// [`work_folder`], commands in the `argmind-sandbox` WSL distro, PowerShell for what only runs on
 /// Windows. See `argmind_env_windows::workspace`.
