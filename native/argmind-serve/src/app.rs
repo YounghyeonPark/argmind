@@ -1083,9 +1083,17 @@ fn pursue(desk: &mut Desk) {
     }
     desk.own_choosing = true;
     let done = crate::pursuit::remembered();
-    let files: Vec<String> = std::fs::read_dir(crate::platform::work_folder()).map(|d| d.filter_map(|e| e.ok())
-        .map(|e| e.file_name().to_string_lossy().to_string()).filter(|n| !n.starts_with('.')).collect())
-        .unwrap_or_default();
+    //: **Only what its own work made and is still there** — not the whole folder. The first piece
+    //: in the application (2026-11-09) was *a Blender script for a 3D-printable model*, toward a goal
+    //: about money: the folder held the person's own tasks' `box.py` and `part.stl`, and the pick
+    //: followed them. `--bin pursuit` had passed with an empty folder.
+    let folder = crate::platform::work_folder();
+    let mut files: Vec<String> = Vec::new();
+    for f in done.iter().flat_map(|d| d.made.iter()) {
+        if folder.join(f).exists() && !files.contains(f) {
+            files.push(f.clone());
+        }
+    }
     let (jobs, turn, today) = (desk.jobs.clone(), desk.turn.clone(), crate::platform::today());
     //: A pick is let go of only for a turn; nothing stops it but argmind closing.
     let never = Arc::new(AtomicBool::new(false));

@@ -67,7 +67,7 @@ pub fn ask_for_next(aim: &str, done: &[Pursued], files: &[String], today: &str) 
         let made = if d.made.is_empty() { String::new() } else { format!(" (만든 파일: {})", d.made.join(", ")) };
         p.push_str(&format!("- 「{}」 → {}: {said}{made}\n", d.asked, if d.finished { "끝남" } else { "못 끝냄" }));
     }
-    p.push_str("\n작업 폴더에 있는 파일: ");
+    p.push_str("\n스스로 한 일이 만든 파일: ");
     if files.is_empty() {
         p.push_str("(없음)");
     } else {
@@ -83,9 +83,10 @@ JSON 하나로만 답하라: {\"next\": \"사람이 작업을 맡길 때처럼 �
     p
 }
 
-/// Does a request name a file to write — a name with an extension, or the word 파일?
+/// Does a request name a file — a name with an extension? **Not the word 파일**: the first piece in
+/// the application, *3D 인쇄 가능한 파일로 저장해줘*, named none and passed as if it had.
 pub fn names_a_file(s: &str) -> bool {
-    s.contains("파일") || s.split(|c: char| c.is_whitespace() || "'\"「」()".contains(c))
+    s.split(|c: char| c.is_whitespace() || "'\"「」()".contains(c))
         .any(|w| w.rsplit_once('.').is_some_and(|(a, ext)| !a.is_empty() && (2..=5).contains(&ext.len())
             && ext.chars().all(|c| c.is_ascii_alphanumeric())))
 }
@@ -172,7 +173,7 @@ mod tests {
         assert!(p.contains("목표: 돈을어떻게벌수있는지생각해줘"));
         assert!(p.contains("「부업 아이디어 10개를 조사해 ideas.md 에 정리해줘」 → 끝남"));
         assert!(p.contains("(만든 파일: ideas.md)"));
-        assert!(p.contains("작업 폴더에 있는 파일: ideas.md"));
+        assert!(p.contains("스스로 한 일이 만든 파일: ideas.md"));
         assert!(ask_for_next("x", &[], &[], "오늘").contains("(아직 없음)"));
         //: Only the newest SHOWN.
         let many: Vec<Pursued> = (0..20).map(|i| did(&format!("일 {i}"), true)).collect();
@@ -198,7 +199,7 @@ mod tests {
                    Ok("수익 창출 방법을 분류해 목록을 작성해 보세요 — 결과는 작업 폴더의 수익_방법.md 에 써줘".into()));
         assert_eq!(read_next(r#"{"next": "수익 창출 방법을 분류해 보세요", "file": "C:\\x\\a.md"}"#, &done),
                    Ok("수익 창출 방법을 분류해 보세요 — 결과는 작업 폴더의 목표_2.md 에 써줘".into()));
-        assert!(names_a_file("costs.md 에 표로") && names_a_file("파일로 남겨줘") && !names_a_file("목록을 작성해 보세요"));
+        assert!(names_a_file("costs.md 에 표로") && !names_a_file("파일로 남겨줘") && !names_a_file("목록을 작성해 보세요"));
         assert!(read_next(&format!(r#"{{"next": "{}"}}"#, "가".repeat(MOST_CHARS + 1)), &done).is_err());
     }
 }
