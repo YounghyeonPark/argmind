@@ -30,6 +30,10 @@ bpy.ops.wm.save_as_mainfile(filepath='box.blend')\nprint('dims', tuple(o.dimensi
         println!("  bom.csv: {:?}", std::fs::read_to_string(dir.join("bom.csv")).ok().map(|s| s.lines().take(4).map(String::from).collect::<Vec<_>>()));
         println!("  outside refused: {:?}", p.call("kicad_cli", &json!({"args": ["sch", "export", "bom", "-o", "C:/x.csv", "ecc83.kicad_sch"]})));
     }
+    //: The workbench's two commands, which since 2026-11-09 start on argmind's own desktop.
+    let mut w = argmind_env_windows::workspace::Workspace::new(dir.clone());
+    println!("\n  run: {:?}", w.call("run", &json!({"command": "python3 -c 'print(6*7)'"})));
+    println!("  run_windows: {:?}", w.call("run_windows", &json!({"command": "Start-Process winver; Write-Output 끝"})));
     let _ = std::fs::remove_dir_all(&dir);
 }
 

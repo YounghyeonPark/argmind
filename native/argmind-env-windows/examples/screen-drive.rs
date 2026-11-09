@@ -48,6 +48,33 @@ fn main() {
         let _ = s.call("screen_close", &json!({}));
         return;
     }
+    //: `--program <name> [<label>…]`: open any program, then for each label press the first thing
+    //: the last result lists under that name — and print each result whole with its length, which
+    //: is what a task's record keeps (`task::OBSERVED_CHARS`) and cuts from the front.
+    let args: Vec<String> = std::env::args().collect();
+    if let Some(at) = args.iter().position(|a| a == "--program") {
+        let mut s = argmind_env_windows::screen::Screen::new();
+        let show = |tool: &str, a: serde_json::Value, s: &mut argmind_env_windows::screen::Screen| {
+            let r = s.call(tool, &a);
+            let t = match &r { Ok(t) => t.clone(), Err(e) => format!("✗ {e}") };
+            println!("── {tool} {a} → {} chars\n{t}", t.chars().count());
+            t
+        };
+        let mut last = show("screen_open", json!({"program": args[at + 1]}), &mut s);
+        if !last.contains('\n') {
+            last = show("screen_look", json!({}), &mut s);
+        }
+        for label in &args[at + 2..] {
+            let n = last.lines().find(|l| l.contains(&format!("\"{label}\"")))
+                .and_then(|l| l.split(':').next()?.trim().parse::<u64>().ok());
+            last = show("screen_press", json!({"item": n}), &mut s);
+            if !last.contains('\n') {
+                last = show("screen_look", json!({}), &mut s);
+            }
+        }
+        let _ = s.call("screen_close", &json!({}));
+        return;
+    }
     //: `--leave`: open something and end abruptly, as a killed argmind does — then check from
     //: outside that nothing it opened is still running.
     if std::env::args().any(|a| a == "--leave") {
@@ -61,16 +88,15 @@ fn main() {
                  match &r { Ok(t) => t.replace('\n', "\n    "), Err(e) => format!("✗ {e}") });
         r.unwrap_or_default()
     };
-    go("screen_open", json!({"program": exe.display().to_string()}));
-    let look = go("screen_look", json!({}));
+    //: **No `screen_look` between steps** — since 2026-11-09 opening, writing and pressing each end
+    //: with the new list, and its numbers are the ones the next step uses.
+    let opened = go("screen_open", json!({"program": exe.display().to_string()}));
     let num = |look: &str, role_has: &str| look.lines().find(|l| l.contains(role_has))
         .and_then(|l| l.split(':').next()?.trim().parse::<u64>().ok());
-    let edit = num(&look, ": edit ").or_else(|| num(&look, "편집"));
-    go("screen_type", json!({"item": edit, "text": "A-1042"}));
-    let look = go("screen_look", json!({}));
-    go("screen_press", json!({"item": num(&look, "\"조회\"")}));
-    let look = go("screen_look", json!({}));
-    println!("\n  answer read: {}", look.contains("6038-2271-9954"));
+    let edit = num(&opened, ": edit ").or_else(|| num(&opened, "편집"));
+    let typed = go("screen_type", json!({"item": edit, "text": "A-1042"}));
+    let pressed = go("screen_press", json!({"item": num(&typed, "\"조회\"")}));
+    println!("\n  answer read from the press itself: {}", pressed.contains("6038-2271-9954"));
     shown("after");
     let seq = view.lock().unwrap().as_ref().map(|p| p.seq);
     std::thread::sleep(std::time::Duration::from_millis(2500));

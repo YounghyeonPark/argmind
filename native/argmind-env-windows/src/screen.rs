@@ -13,7 +13,11 @@
 //!
 //! **The model picks a number; the worker turns it into the element** — `Pressing`'s rule: a look
 //! numbers what can be read or pressed, with no rectangle, and a press or a write forgets the
-//! numbers, since what they named may have gone.
+//! numbers, since what they named may have gone. **And looks again by itself — since 2026-11-09**:
+//! opening, pressing and writing each end with the new list, so the numbers the model reads next are
+//! the ones the worker holds. The owner's *문자표를 열어서 ★ 문자를 골라 '복사할 문자' 칸에 넣어줘*
+//! stopped after 20 steps on three refusals in a row, every one a number from a list a press had
+//! made stale — and a write had said nothing about looking again at all.
 //!
 //! **What it refuses, and why.** A program already running somewhere: a single-instance program
 //! — Word — joins the running one on whichever desktop that is, so argmind's document would open
@@ -53,6 +57,11 @@ use windows::Win32::UI::WindowsAndMessaging::{GetWindowTextW, IsWindowVisible};
 
 /// Things one look shows, most — `task::MOST_PRESSABLE`, for the same reason.
 pub const MOST_SHOWN: usize = argmind_core::task::MOST_PRESSABLE;
+
+/// Room one result has in a task's record. The record cuts a longer one **from the front**, which
+/// for a list is its first numbers, so a list is ended here instead and the numbers past the end are
+/// forgotten with it — a number the model was never shown is refused, not pressed.
+pub const ROOM: usize = argmind_core::task::OBSERVED_CHARS;
 
 /// Waiting for a started program's window. Word took seconds in the probe; a first start more.
 pub const WINDOW_SECONDS: u64 = 40;
@@ -183,10 +192,12 @@ impl Tools for Screen {
         vec![
             t("screen_open", "사람 화면과 따로 떨어진 작업 화면에서 설치된 프로그램을 연다 (실행 파일 이름이나 경로). \
 사람의 마우스·키보드·창은 건드리지 않는다", json!({"program": "charmap"})),
-            t("screen_look", "작업 화면의 창에서 읽거나 누를 수 있는 것을 번호와 함께 본다. 누르기 전에 먼저 본다", json!({})),
-            t("screen_press", "screen_look 이 보여 준 번호의 것을 누른다 (단추, 확인란, 탭, 목록 항목, 메뉴). 키보드는 없다 — \
-저장도 저장 단추로 한다", json!({"item": 3})),
-            t("screen_type", "번호의 입력칸 값을 이 글로 바꾼다 (덧붙이지 않고 통째로 바꾼다)", json!({"item": 2, "text": "A-1042"})),
+            t("screen_look", "작업 화면의 창에서 읽거나 누를 수 있는 것을 번호와 함께 다시 본다. 열기·누르기·넣기의 결과에는 \
+새 목록이 이미 붙어 있으니, 그 사이에 저절로 바뀌었을 때만 쓴다", json!({})),
+            t("screen_press", "가장 최근 목록의 번호의 것을 누른다 (단추, 확인란, 탭, 목록 항목, 메뉴). 키보드는 없다 — \
+저장도 저장 단추로 한다. 결과에 누른 뒤의 새 목록이 붙는다", json!({"item": 3})),
+            t("screen_type", "가장 최근 목록의 번호의 입력칸 값을 이 글로 바꾼다 (덧붙이지 않고 통째로 바꾼다). 결과에 새 목록이 붙는다",
+              json!({"item": 2, "text": "A-1042"})),
             t("screen_close", "작업 화면의 프로그램을 닫는다. 저장하지 않은 것은 사라진다", json!({})),
         ]
     }
@@ -250,7 +261,7 @@ fn image_of(program: &str) -> (String, String) {
 }
 
 /// Process ids running this image, anywhere.
-fn running(image: &str) -> Vec<u32> {
+pub(crate) fn running(image: &str) -> Vec<u32> {
     let mut out = Vec::new();
     unsafe {
         let Ok(snap) = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0) else { return out };
@@ -328,7 +339,7 @@ fn work(jobs: Receiver<(Job, Reply)>, started: std::sync::Arc<std::sync::Mutex<V
         let closing = matches!(job, Job::Close);
         let got = match job {
             Job::Open(p) => w.open(&p, &name, &started),
-            Job::Look => w.look(),
+            Job::Look => w.look(ROOM),
             Job::Which(i) => w.element(i).map(|e| {
                 let name = unsafe { e.CurrentName() }.map(|s| s.to_string()).unwrap_or_default();
                 format!("{}\t{name}", w.seen[i].1)
@@ -514,7 +525,7 @@ impl Worker {
                 std::thread::sleep(Duration::from_millis(500));
                 let titles: Vec<String> = windows_on(self.desk).iter().map(|&h| title(h)).filter(|t| !t.is_empty()).collect();
                 self.seen.clear();
-                return Ok(format!("작업 화면에 열었다: {}. screen_look 으로 보라", titles.join(", ")));
+                return Ok(self.then_look(format!("작업 화면에 열었다: {}.", titles.join(", "))));
             }
             if unsafe { WaitForSingleObject(pi.hProcess, 0) }.0 == 0 {
                 return Err(format!("{image} 이(가) 창을 띄우지 않고 끝났다"));
@@ -523,26 +534,39 @@ impl Worker {
         Err(format!("{image} 의 창이 {WINDOW_SECONDS}초 안에 작업 화면에 뜨지 않았다"))
     }
 
-    fn look(&mut self) -> Result<String, String> {
+    /// What came of an action, and then what is there now — the look that makes its numbers the
+    /// ones to use. A look that finds nothing is part of the answer, not a failure of the action.
+    fn then_look(&mut self, did: String) -> String {
+        let room = ROOM.saturating_sub(did.chars().count() + 30);
+        match self.look(room) {
+            Ok(l) => format!("{did} 번호는 아래 새 목록의 것이다.\n{l}"),
+            Err(e) => format!("{did}\n{e}"),
+        }
+    }
+
+    /// The numbered list, no longer than `room` characters.
+    fn look(&mut self, room: usize) -> Result<String, String> {
         let wins = windows_on(self.desk);
         if wins.is_empty() {
             return Err("작업 화면에 열린 창이 없다 — screen_open 으로 먼저 연다".into());
         }
         self.seen.clear();
         let mut lines = Vec::new();
+        let mut used = 0;
+        let mut full = false;
         let mut titles = Vec::new();
         let all_cond = unsafe { self.ua.CreateTrueCondition() }.map_err(|e| e.to_string())?;
-        for &h in wins.iter().take(4) {
-            //: Untitled windows are the input method's own; listed by nothing.
+        //: Untitled windows are the input method's own and a dropdown's popup, listed by nothing —
+        //: and left out **before** the first four are taken: with Character Map's font list open,
+        //: three untitled windows came first and the look read *nothing to read*, Character Map
+        //: itself counted out. A dropdown's items are read through the box that owns them.
+        for h in wins.iter().copied().filter(|&h| !title(h).trim().is_empty()).take(4) {
             let t = title(h);
-            if t.trim().is_empty() {
-                continue;
-            }
             titles.push(format!("'{t}'"));
             let Ok(root) = (unsafe { self.ua.ElementFromHandle(h) }) else { continue };
             let Ok(found) = (unsafe { root.FindAll(TreeScope_Descendants, &all_cond) }) else { continue };
             for i in 0..unsafe { found.Length() }.unwrap_or(0) {
-                if self.seen.len() >= MOST_SHOWN {
+                if self.seen.len() >= MOST_SHOWN || full {
                     break;
                 }
                 let Ok(e) = (unsafe { found.GetElement(i) }) else { continue };
@@ -567,11 +591,20 @@ impl Worker {
                     Some(v) if !v.is_empty() && v != name => format!(" = \"{}\"", v.chars().take(120).collect::<String>()),
                     _ => String::new(),
                 };
-                lines.push(format!("{}: {role} \"{}\"{v}{off}", self.seen.len(), name.chars().take(80).collect::<String>()));
+                let line = format!("{}: {role} \"{}\"{v}{off}", self.seen.len(), name.chars().take(80).collect::<String>());
+                //: The header and the note at the end take about 150 characters.
+                if used + line.chars().count() + 1 > room.saturating_sub(150) {
+                    full = true;
+                    break;
+                }
+                used += line.chars().count() + 1;
+                lines.push(line);
                 self.seen.push((e, t.clone()));
             }
         }
-        Ok(format!("작업 화면의 창: {}\n(번호: 종류 \"이름\" = 값)\n{}", titles.join(", "),
+        let end = if full { format!("\n(목록이 길어 {}번까지만 실었다 — 그 뒤의 것은 번호가 없다)", self.seen.len().saturating_sub(1)) }
+                  else { String::new() };
+        Ok(format!("작업 화면의 창: {}\n(번호: 종류 \"이름\" = 값)\n{}{end}", titles.join(", "),
                    if lines.is_empty() { "(읽을 수 있는 것이 없다)".into() } else { lines.join("\n") }))
     }
 
@@ -583,10 +616,29 @@ impl Worker {
         })
     }
 
+    /// **Every press and every write ends with the list, whether it worked or not.** A press that
+    /// failed had cleared the numbers before it tried: *Copy* refused as disabled, and the next
+    /// press was refused too, for want of a look nothing had made necessary.
     fn press(&mut self, i: usize) -> Result<String, String> {
+        match self.pressed(i) {
+            Ok(did) => Ok(self.then_look(did)),
+            Err(why) => Err(self.then_look(why)),
+        }
+    }
+
+    fn type_(&mut self, i: usize, text: &str) -> Result<String, String> {
+        match self.typed(i, text) {
+            Ok(did) => Ok(self.then_look(did)),
+            Err(why) => Err(self.then_look(why)),
+        }
+    }
+
+    fn pressed(&mut self, i: usize) -> Result<String, String> {
         let e = self.element(i)?;
-        self.seen.clear();
         let name = unsafe { e.CurrentName() }.map(|s| s.to_string()).unwrap_or_default();
+        if !unsafe { e.CurrentIsEnabled() }.map(|b| b.as_bool()).unwrap_or(true) {
+            return Err(format!("\"{name}\" 은(는) 꺼져 있어 누를 수 없다."));
+        }
         let how = unsafe {
             if let Ok(p) = e.GetCurrentPattern(UIA_InvokePatternId).and_then(|p| p.cast::<IUIAutomationInvokePattern>()) {
                 p.Invoke().map(|_| "눌렀다")
@@ -601,28 +653,27 @@ impl Worker {
             } else {
                 return Err(format!("\"{name}\" 은(는) 누를 방법이 없다"));
             }
-        }.map_err(|err| format!("\"{name}\" 을(를) 누르지 못했다 — {err}"))?;
+        }.map_err(|err| format!("\"{name}\" 을(를) 누르지 못했다 — {err}."))?;
         std::thread::sleep(Duration::from_millis(600));
-        Ok(format!("\"{name}\": {how}. 화면이 바뀌었을 수 있으니 screen_look 으로 다시 보라"))
+        Ok(format!("\"{name}\": {how}."))
     }
 
-    fn type_(&mut self, i: usize, text: &str) -> Result<String, String> {
+    fn typed(&mut self, i: usize, text: &str) -> Result<String, String> {
         let e = self.element(i)?;
-        self.seen.clear();
         let name = unsafe { e.CurrentName() }.map(|s| s.to_string()).unwrap_or_default();
         //: **A password is the person's to type** — `Hands::into_a_secret`, here too.
         if unsafe { e.CurrentIsPassword() }.map(|b| b.as_bool()).unwrap_or(false) {
-            return Err("비밀번호 칸이다 — 비밀번호는 사람이 넣는다".into());
+            return Err("비밀번호 칸이다 — 비밀번호는 사람이 넣는다.".into());
         }
         let v = unsafe { e.GetCurrentPattern(UIA_ValuePatternId) }.and_then(|p| p.cast::<IUIAutomationValuePattern>())
-            .map_err(|_| format!("\"{name}\" 은(는) 글을 넣을 수 있는 칸이 아니다"))?;
+            .map_err(|_| format!("\"{name}\" 은(는) 글을 넣을 수 있는 칸이 아니다."))?;
         if unsafe { v.CurrentIsReadOnly() }.map(|b| b.as_bool()).unwrap_or(false) {
-            return Err(format!("\"{name}\" 은(는) 읽기 전용이다"));
+            return Err(format!("\"{name}\" 은(는) 읽기 전용이다."));
         }
-        unsafe { v.SetValue(&BSTR::from(text)) }.map_err(|err| format!("\"{name}\" 에 넣지 못했다 — {err}"))?;
+        unsafe { v.SetValue(&BSTR::from(text)) }.map_err(|err| format!("\"{name}\" 에 넣지 못했다 — {err}."))?;
         std::thread::sleep(Duration::from_millis(200));
         let now = unsafe { v.CurrentValue() }.map(|s| s.to_string()).unwrap_or_default();
-        Ok(format!("\"{name}\" 의 값이 이제 \"{}\"", now.chars().take(200).collect::<String>()))
+        Ok(format!("\"{name}\" 의 값이 이제 \"{}\".", now.chars().take(200).collect::<String>()))
     }
 
     fn close(&mut self) -> Result<String, String> {

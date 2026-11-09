@@ -24,6 +24,15 @@
 //!    and so is PowerShell. Passes when `fonts.txt` names Arial or 맑은 고딕 and **no `screen_open`
 //!    succeeded**.
 //!
+//! 4. **charmap**, added 2026-11-09 and written before either arm ran: the owner's own sentence,
+//!    word for word, the one that stopped in the application after 20 steps on three refusals in a
+//!    row — *작업 화면에서 문자표(charmap)를 열어서 ★ 문자를 골라 '복사할 문자' 칸에 넣어줘*.
+//!    Passes when the last value of Character Map's *Characters to copy* box the task saw holds `★`
+//!    (a look after the task, if its screen is still open, counts as the last), a screen was opened,
+//!    and the person's foreground and pointer are what they were. Run on the code **before** the
+//!    change first: if that passes, the harness does not reproduce the owner's failure and the second
+//!    arm says nothing about it. `cargo run … --bin screen -- charmap` runs only the named cases.
+//!
 //! **The order holds** only at 3 of 3. One run each: a demonstration, not a rate. Refusals of the
 //! first `screen_open` are counted and printed, since that is the program holding the order rather
 //! than the model.
@@ -39,6 +48,31 @@
 //! copy refused and wrote the command's output to the file itself. **What neither run exercised is
 //! the gate on `screen_open`**: every task that opened a screen had tried code first, so the
 //! refusal never fired with a model; it is held by `tiered` tests only.
+//!
+//! **Read, 2026-11-09 — the charmap case, and the gate firing for the first time.** The arm
+//! **before** the change (`e57a9b`) **did not reproduce the owner's failure**: the box read `★` in
+//! four steps, 103 s — one of them the order's refusal, since the harness did not yet call
+//! `screen_asked_for` as the application does — and it failed only on *사람 화면 바뀜* with every
+//! step on argmind's own desktop, which is the owner using the machine (the harness now prints
+//! which of pointer and foreground moved). So what the change is judged on is the mechanism, not
+//! this case. **First run after it, 1 of 4, and the worst thing in it was not the change**: *order*
+//! had its first `screen_open` refused — the gate's first firing with a model — and answered with
+//! `Start-Process order-window.exe` in `run_windows`, **which opened the window on the person's
+//! desktop**. Every command now starts on a desktop of argmind's own and what it leaves ends with it
+//! (`argmind_env_windows::apart`). *fonts* copied the cut tail **without** the marker — *egoesc.ttf*,
+//! half a name — and that is refused too now (`task::copies_a_cut`, fitted to it). *charmap* went
+//! 13 steps to a false finish (`!` in the box, *★ 를 넣었습니다*), with one stale-number refusal left
+//! — a failed press had cleared the numbers — and a look that read nothing with a dropdown open,
+//! because untitled windows were counted in the first four. Both fixed. **Re-run: 3 of 4.** *order*
+//! in **5 steps and 81 s** — open, write, press, the waybill read off the press's own result, no look
+//! between — against 7 steps and 142 s on 2026-11-08; the first `screen_open` refused again and this
+//! time asked again rather than reaching for PowerShell. *fonts* had its markerless copy refused and
+//! wrote the output with `Out-File`. **charmap failed again, 15 steps, 668 s, a false finish over
+//! `!!`, and no stale-number refusal**: it tried to *pick* ★ — *Go to Unicode*, *Search*, a
+//! character set — where the grid of characters is nothing a look lists and a written *Go to
+//! Unicode* moves no selection, and never wrote ★ into the box the one passing arm wrote it into.
+//! **And it pressed *Copy*, which puts the box on the clipboard — the person's, since a desktop of
+//! argmind's own shares its window station's clipboard.** Not addressed. One run each.
 
 use std::path::{Path, PathBuf};
 use std::time::Instant;
@@ -64,6 +98,25 @@ fn plate_ok(dir: &Path) -> bool {
     let Ok(svg) = std::fs::read_to_string(dir.join("plate.svg")) else { return false };
     svg.contains("width=\"100\"") && svg.contains("height=\"60\"") && svg.contains("cx=\"50\"")
         && svg.contains("cy=\"30\"") && svg.contains("r=\"10\"")
+}
+
+/// The value of Character Map's *Characters to copy* box last written in `text` — by a look line
+/// (`edit "Characters to copy :" = "★"`) or by a write (`"Characters to copy :" 의 값이 이제 "★"`).
+/// An empty box shows no `=` in a look, so a look naming the box with no value reads as empty.
+fn copy_box(text: &str) -> Option<String> {
+    let mut last = None;
+    for line in text.lines() {
+        if let Some(at) = line.find("edit \"Characters to copy :\"") {
+            let rest = &line[at + "edit \"Characters to copy :\"".len()..];
+            last = Some(rest.strip_prefix(" = \"").and_then(|r| r.rsplit_once('"')).map(|(v, _)| v.to_string())
+                .unwrap_or_default());
+        }
+        if let Some(at) = line.find("\"Characters to copy :\" 의 값이 이제 \"") {
+            let rest = &line[at + "\"Characters to copy :\" 의 값이 이제 \"".len()..];
+            last = rest.rsplit_once('"').map(|(v, _)| v.to_string());
+        }
+    }
+    last
 }
 
 fn fresh(name: &str) -> PathBuf {
@@ -92,14 +145,21 @@ fn main() {
     let _ = local.ask("Reply with the single word: ready");
     let mut model = Model(local);
 
-    let cases: [(&str, String, bool); 3] = [
+    let only: Vec<String> = std::env::args().skip(1).collect();
+    let cases: [(&str, String, bool); 4] = [
         ("order", format!("주문 조회 프로그램({})을 열어서 주문번호 A-1042 를 조회하고, 나온 결과를 answer.md 에 적어줘",
                           window.display()), false),
         ("plate", "가로 100mm 세로 60mm 판 도면을 그려줘. 바깥은 사각형, 정가운데에 반지름 10mm 구멍(원) 하나. plate.svg 로 저장해줘".into(), true),
         ("fonts", "이 PC에 설치된 글꼴 목록을 fonts.txt 에 저장해줘".into(), false),
+        ("charmap", "작업 화면에서 문자표(charmap)를 열어서 ★ 문자를 골라 '복사할 문자' 칸에 넣어줘".into(), false),
     ];
     let mut passed = 0;
+    let mut tried = 0;
     for (name, what, with_cad) in &cases {
+        if !only.is_empty() && !only.iter().any(|o| o == name) {
+            continue;
+        }
+        tried += 1;
         let dir = fresh(name);
         let mut sets: Vec<(Rank, Box<dyn Tools + Send>)> = vec![(Rank::Code, Box::new(Workspace::new(dir.clone()))),
                                                                 (Rank::Screen, Box::new(Screen::new()))];
@@ -110,20 +170,38 @@ fn main() {
             assert!(failed.is_empty(), "{failed:?}");
             sets.push((Rank::Api, Box::new(servers)));
         }
-        let mut bench = Tiered::new(sets);
+        //: As the application builds it: a request that names the work screen skips the order's
+        //: first refusal (`Tiered::screen_asked_for`). The harness had not been told, and the first
+        //: run of *charmap* spent a step on that refusal where the application would not.
+        let mut bench = Tiered::new(sets).screen_asked_for(what);
         let mut task = Task::new(what);
         let (p0, f0) = (pointer(), unsafe { GetForegroundWindow() });
         let began = Instant::now();
         run(&mut task, &mut model, &mut bench, "2026년 11월 8일", &|| true);
         let secs = began.elapsed().as_secs_f64();
+        //: The box as it stands now, if the task left its screen open: a look on argmind's own
+        //: desktop, which touches nothing of the person's.
+        let mut seen: String = task.steps.iter().map(|s| s.observed.clone()).collect::<Vec<_>>().join("\n");
+        if let Ok(now) = bench.call("screen_look", &serde_json::json!({})) {
+            seen.push('\n');
+            seen.push_str(&now);
+        }
+        let in_box = copy_box(&seen);
         drop(bench);
-        let untouched = pointer() == p0 && unsafe { GetForegroundWindow() } == f0;
+        let (p1, f1) = (pointer(), unsafe { GetForegroundWindow() });
+        let untouched = p1 == p0 && f1 == f0;
+        if !untouched {
+            //: Which one, since a person using the machine during a run moves both, and nothing
+            //: else here can tell that apart from a tool reaching their desktop.
+            println!("       사람 화면: 포인터 {p0:?} → {p1:?}, 맨 앞 창 {}", if f1 == f0 { "그대로" } else { "바뀜" });
+        }
         let opened = task.steps.iter().any(|s| s.tool == "screen_open" && !s.failed);
         let held = task.steps.iter().filter(|s| s.tool == "screen_open" && s.observed.contains(SCREEN_LAST)).count();
         let via_cad = task.steps.iter().any(|s| s.tool.starts_with("cad__") && !s.failed);
         let ok = match *name {
             "order" => std::fs::read_to_string(dir.join("answer.md")).is_ok_and(|s| s.contains("6038-2271-9954")) && untouched,
             "plate" => plate_ok(&dir) && via_cad && !opened,
+            "charmap" => in_box.as_deref().is_some_and(|v| v.contains('★')) && opened && untouched,
             _ => std::fs::read(dir.join("fonts.txt")).is_ok_and(|b| {
                 let s = String::from_utf8_lossy(&b).replace('\0', "").to_lowercase();
                 s.contains("arial") || s.contains("맑은 고딕") || s.contains("malgun")
@@ -135,6 +213,9 @@ fn main() {
             Some(Ended::Stopped(w)) => format!("**멈춤**: {w}"),
             None => "?".into(),
         };
+        if *name == "charmap" {
+            println!("       복사할 문자 칸: {in_box:?}");
+        }
         let tools: Vec<String> = task.steps.iter().map(|s| format!("{}{}", s.tool, if s.failed { "✗" } else { "" })).collect();
         println!("    {} {name} — {}단계 {secs:.0}초, 화면 {}, 처음 화면 열기 되돌림 {held}, 사람 화면 {} [{}]\n       {ended}",
                  if ok { "●" } else { "○" }, task.steps.len(), if opened { "열었음" } else { "안 엶" },
@@ -147,6 +228,6 @@ fn main() {
         }
         let _ = std::fs::remove_dir_all(&dir);
     }
-    println!("\n  ── 돌리기 전에 적어둔 대로: {passed}/3 — {} ──",
-             if passed == 3 { "순서가 지켜진다" } else { "보여주지 못했다" });
+    println!("\n  ── 돌리기 전에 적어둔 대로: {passed}/{tried} — {} ──",
+             if passed == tried { "통과" } else { "보여주지 못했다" });
 }

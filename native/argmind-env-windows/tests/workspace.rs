@@ -1,6 +1,6 @@
 //! **The workbench keeps to its folder**, and a write or an edit can be undone.
 //!
-//! Files only — nothing here starts a command, so the suite needs no sandbox and no PowerShell.
+//! Files, and one PowerShell command — nothing here needs the sandbox.
 
 use argmind_core::task::Tools;
 use argmind_env_windows::workspace::{Workspace, BACKUPS};
@@ -38,5 +38,17 @@ fn a_replaced_file_is_backed_up_and_an_edit_must_be_unambiguous() {
     assert_eq!(std::fs::read_to_string(backups[0].path()).unwrap(), "서론\n결론: 미정\n결론 끝");
     let listed = w.call("list_files", &json!({"path": "."})).unwrap();
     assert!(listed.contains("r.md") && !listed.contains(BACKUPS), "{listed}");
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+/// **PowerShell still answers from where commands now start** — argmind's own desktop, since
+/// 2026-11-09 (`apart`): Korean comes back as Korean, and a nonzero exit is a failure.
+#[test]
+fn a_windows_command_runs_apart_and_says_how_it_ended() {
+    let (mut w, dir) = bench();
+    let ok = w.call("run_windows", &json!({"command": "Write-Output '글꼴 목록'"})).unwrap();
+    assert!(ok.contains("글꼴 목록") && ok.contains("(종료 코드 0)"), "{ok}");
+    let bad = w.call("run_windows", &json!({"command": "exit 2"}));
+    assert!(bad.as_ref().is_err_and(|e| e.contains("(종료 코드 2)")), "{bad:?}");
     let _ = std::fs::remove_dir_all(dir);
 }

@@ -12,6 +12,9 @@
 //!   machine.
 //! * **`run_windows`** is PowerShell in the workspace folder. **Weaker and said so**: a Windows
 //!   process started in a folder is not confined to it. It exists for what has no Linux equivalent.
+//!   **Since 2026-11-09 it runs on a desktop of argmind's own** (`crate::apart`), as every command
+//!   here does: a model refused a screen once ran `Start-Process` and the window opened on the
+//!   person's desktop. What it starts is not shown to anybody and ends when the command returns.
 //! * **Files** are paths *inside* the folder — absolute paths and `..` are refused — and anything a
 //!   write or an edit would replace is copied to `.argmind-backup` first, so a bad edit is undone by
 //!   copying a file back.
@@ -25,10 +28,8 @@
 //! Every command has a time limit and its output is cut by the task loop; a command that runs past
 //! [`RUN_SECONDS`] is killed and says so.
 
-use std::io::{Read, Write};
 use std::path::{Component, Path, PathBuf};
-use std::process::{Command, Stdio};
-use std::time::{Duration, Instant};
+use std::process::Command;
 
 use argmind_core::task::{ToolSpec, Tools};
 use serde_json::{json, Value};
@@ -227,52 +228,29 @@ fn cut_for_refusal(text: &str) -> String {
     text.chars().take(1500).collect()
 }
 
-/// Run, feed `stdin`, wait at most `seconds`, and return stdout and stderr with the exit code.
-pub(crate) fn finish(mut c: Command, stdin: Option<&str>, seconds: u64) -> Result<String, String> {
-    use std::os::windows::process::CommandExt;
-    const CREATE_NO_WINDOW: u32 = 0x0800_0000;
-    c.creation_flags(CREATE_NO_WINDOW)
-        .stdin(if stdin.is_some() { Stdio::piped() } else { Stdio::null() })
-        .stdout(Stdio::piped()).stderr(Stdio::piped());
-    let mut child = c.spawn().map_err(|e| format!("시작하지 못했다: {e}"))?;
-    //: **In argmind's job**, so a command still running dies with argmind rather than outliving it.
-    if let Some(job) = crate::supervise::ours() {
-        use std::os::windows::io::AsRawHandle;
-        unsafe { let _ = windows::Win32::System::JobObjects::AssignProcessToJobObject(
-            job, windows::Win32::Foundation::HANDLE(child.as_raw_handle())); }
-    }
-    if let (Some(text), Some(mut pipe)) = (stdin, child.stdin.take()) {
-        let _ = pipe.write_all(text.as_bytes());
-        let _ = pipe.write_all(b"\n");
-    }
-    let mut out = child.stdout.take().unwrap();
-    let mut err = child.stderr.take().unwrap();
-    let a = std::thread::spawn(move || { let mut v = Vec::new(); let _ = out.read_to_end(&mut v); v });
-    let b = std::thread::spawn(move || { let mut v = Vec::new(); let _ = err.read_to_end(&mut v); v });
-    let began = Instant::now();
-    let status = loop {
-        if let Ok(Some(s)) = child.try_wait() {
-            break Some(s);
-        }
-        if began.elapsed() > Duration::from_secs(seconds) {
-            let _ = child.kill();
-            let _ = child.wait();
-            break None;
-        }
-        std::thread::sleep(Duration::from_millis(50));
-    };
-    let mut text = String::from_utf8_lossy(&a.join().unwrap_or_default()).to_string();
-    let e = String::from_utf8_lossy(&b.join().unwrap_or_default()).to_string();
-    if !e.trim().is_empty() {
+/// What a command's result says when it left programs running, which ended with it.
+pub const LEFT_ENDED: &str = "이 명령이 띄우고 남겨 둔 프로그램";
+
+/// Run, feed `stdin`, wait at most `seconds`, and return stdout and stderr with the exit code —
+/// **on argmind's own desktop and in a job of its own** (`crate::apart`), so nothing it starts
+/// reaches the person's screen or outlives it.
+pub(crate) fn finish(c: Command, stdin: Option<&str>, seconds: u64) -> Result<String, String> {
+    let ran = crate::apart::run(&c, stdin, seconds).map_err(|e| format!("시작하지 못했다: {e}"))?;
+    let mut text = ran.out;
+    if !ran.err.trim().is_empty() {
         text.push_str("\n[stderr]\n");
-        text.push_str(&e);
+        text.push_str(&ran.err);
     }
-    match status {
+    if !ran.left.is_empty() {
+        text.push_str(&format!("\n({LEFT_ENDED}({})을 명령과 함께 끝냈다 — 명령으로 띄운 창은 사람에게도 작업 화면에도 \
+보이지 않는다. 창이 있는 프로그램은 screen_open 으로 작업 화면에서 연다)", ran.left.join(", ")));
+    }
+    match ran.code {
         //: **A nonzero exit is a failure**, so the record says *(실패)* beside it — `dir /B` in
         //: PowerShell came back as an ordinary result and was simply sent again.
-        Some(s) => {
-            text.push_str(&format!("\n(종료 코드 {})", s.code().unwrap_or(-1)));
-            if s.success() { Ok(text.trim().to_string()) } else { Err(text.trim().to_string()) }
+        Some(code) => {
+            text.push_str(&format!("\n(종료 코드 {code})"));
+            if code == 0 { Ok(text.trim().to_string()) } else { Err(text.trim().to_string()) }
         }
         None => Err(format!("{seconds}초 안에 끝나지 않아 멈췄다\n{}", text.trim())),
     }
@@ -290,7 +268,8 @@ impl Tools for Workspace {
               json!({"path": "notes.md", "find": "바꿀 부분", "replace": "새 내용"})),
             t("run", "리눅스(bash)에서 명령을 실행한다. 작업 폴더가 현재 폴더다. python3 표준 라이브러리와 Word 문서(.docx)용 python-docx(import docx), 엑셀(.xlsx)용 openpyxl 이 있다 (pandas, pip 없음 — csv 모듈을 써라). .docx 와 .xlsx 는 이것들로만 만들고 고친다. 여러 줄 코드는 python3 -c 에 넣지 말고 write_file 로 .py 파일을 만든 뒤 실행하라",
               json!({"command": "python3 main.py"})),
-            t("run_windows", "Windows PowerShell 에서 명령을 실행한다. Windows 에서만 되는 일에만 쓴다",
+            t("run_windows", "Windows PowerShell 에서 명령을 실행한다. Windows 에서만 되는 일에만 쓴다. 여기서 띄운 프로그램의 창은 \
+아무에게도 보이지 않고 명령이 끝날 때 함께 끝난다 — 창이 있는 프로그램은 screen_open 으로 연다",
               json!({"command": "Get-ChildItem"})),
         ]
     }

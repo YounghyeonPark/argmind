@@ -13,6 +13,7 @@
 //! not launch itself* — is a type rather than a paragraph: `Reach::OnlyProcess` looks up who owns
 //! the window under the point before every click and refuses anything else.
 
+mod apart;
 pub mod ask;
 pub mod attending;
 pub mod camera;

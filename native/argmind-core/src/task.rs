@@ -385,6 +385,32 @@ pub enum Next {
     Unreadable,
 }
 
+/// **Does a call carry a cut result from where its visible part begins?** The first two lines after
+/// the marker — the first of them usually half a line, where the cut fell — standing together in
+/// any text the call passes. Only the beginning: a later line of a long listing quoted on its own is
+/// a name somebody may well want, and half a line followed by the next one is nobody's choice.
+/// Fitted to the one case that showed it, `--bin screen`'s *fonts*, 2026-11-09.
+fn copies_a_cut(steps: &[Step], args: &Value) -> bool {
+    fn texts<'a>(v: &'a Value, out: &mut Vec<&'a str>) {
+        match v {
+            Value::String(s) => out.push(s),
+            Value::Array(a) => a.iter().for_each(|x| texts(x, out)),
+            Value::Object(o) => o.values().for_each(|x| texts(x, out)),
+            _ => {}
+        }
+    }
+    let mut given = Vec::new();
+    texts(args, &mut given);
+    let given: Vec<String> = given.iter().map(|t| t.replace('\r', "")).collect();
+    steps.iter().filter(|s| s.observed.starts_with("…(앞 ")).any(|s| {
+        let tail = s.observed.replace('\r', "");
+        let mut lines = tail.lines().skip(1);
+        let (Some(a), Some(b)) = (lines.next(), lines.next()) else { return false };
+        let start = format!("{a}\n{b}");
+        start.trim().chars().count() >= 12 && given.iter().any(|g| g.contains(&start))
+    })
+}
+
 fn cut(text: &str, most: usize) -> String {
     let n = text.chars().count();
     if n <= most {
@@ -941,11 +967,13 @@ pub fn step(task: &mut Task, model: &mut dyn Speaks, tools: &mut dyn Tools, toda
                 check_item(task, &args)
             } else if !known {
                 (format!("그런 도구는 없다: {tool}"), true)
-            } else if args.to_string().contains("자 생략)") {
+            } else if args.to_string().contains("자 생략)") || copies_a_cut(&task.steps, &args) {
                 //: **A cut result copied into a call** — since 2026-11-08, from `--bin screen`: a font
                 //: list read through PowerShell was written to `fonts.txt` as the record showed it,
                 //: *…(앞 5521자 생략)* and the tail, and Arial was in the part cut. The record is cut
                 //: for the prompt, never for the work, so the command's own output goes to the file.
+                //: **And without the marker** (2026-11-09, the same case on the next run): the tail
+                //: was copied from where it starts, *egoesc.ttf* — half of `segoesc.ttf` — and on.
                 (CUT_COPIED.to_string(), true)
             } else {
                 match tools.call(&tool, &args) {
@@ -1323,6 +1351,27 @@ mod tests {
         assert_eq!(t.steps[1].observed, CUT_COPIED);
         assert_eq!(tools.calls, calls, "not run");
         assert!(tools.files.is_empty());
+    }
+
+    /// The marker left off, as `--bin screen`'s *fonts* wrote it on 2026-11-09: from the half line
+    /// the cut fell in, on. A later line of the same listing on its own is still anybody's to use.
+    #[test]
+    fn a_cut_result_copied_without_its_marker_is_refused_too() {
+        let listing: String = (0..400).map(|i| format!("font{i:03}.ttf\r\n")).collect();
+        let shown = cut(&listing, OBSERVED_CHARS);
+        let tail: String = shown.lines().skip(1).collect::<Vec<_>>().join("\n");
+        let one_line = "font399.ttf";
+        assert!(shown.contains(one_line));
+        for (content, refused) in [(tail.as_str(), true), (one_line, false)] {
+            let mut model = Scripted(vec![Box::leak(format!(r#"{{"tool": "write_file", "args": {{"path": "fonts.txt", "content": {}}}}}"#,
+                                                            serde_json::to_string(content).unwrap()).into_boxed_str())]);
+            let mut t = Task::new("x");
+            t.steps.push(Step { tool: "run_windows".into(), args: json!({"command": "ls"}), observed: shown.clone(), failed: false });
+            let mut tools = Box_::default();
+            step(&mut t, &mut model, &mut tools, "오늘");
+            assert_eq!(t.steps[1].observed == CUT_COPIED, refused, "{content:.40}");
+            assert_eq!(tools.files.is_empty(), refused);
+        }
     }
 
     #[test]

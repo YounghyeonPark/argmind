@@ -326,19 +326,28 @@ pub fn read_reply(reply: &str, listed: &[Widget], trigger: &Trigger) -> Intent {
     Intent { say, effects, parroted, sure: None }
 }
 
-/// **How sure the model was of the action part of a reply** — the product of the probabilities of
-/// every token after `"do":`, which is the action given what was already said. The reply shape puts
-/// `say` first, so this is *how sure of the click, having decided what to say*.
-///
-/// `None` when there is no action — `null`, `[]`, or no `do` at all — or no probabilities. Pure, so
-/// it can be checked without a model.
 /// **Does this reply ask before doing?** *찾아볼까요?* with a click beside it is two answers to one
 /// question — the words say *shall I* and the action slot says *I did*. The owner's request for a
 /// trip plan was answered that way and the click was a Git button in the editor. A question ending
 /// in *까요?* means the action waits for the person, however 확인 없이 실행 is set.
+///
+/// **And the other ways of offering — since 2026-11-09.** argmind's own judgement about Google
+/// Drive's iPhone dialog was said as *기기 추가하시겠어요?* and the click went ahead beside it, with
+/// 스스로 실행 on; only the dialog having gone stopped it. *…시겠어요?*, *…시겠습니까?*, *…할래요?*
+/// and the English *shall I / would you like* are offers too. A question that offers nothing —
+/// *무엇을 찾으세요?* — still does not hold an action, since a reply that did what was asked and asks
+/// what next is not waiting for a yes.
 pub fn asks_first(say: &str) -> bool {
+    const OFFERS: [&str; 4] = ["까요", "시겠어요", "시겠습니까", "시겠나요"];
+    const OFFERS_EN: [&str; 6] = ["shall i", "should i", "would you like", "do you want me", "want me to", "may i"];
     let s = say.trim().trim_end_matches(|c: char| c == '!' || c.is_whitespace());
-    s.ends_with('?') && s.contains("까요")
+    let low = s.to_lowercase();
+    //: *…ㄹ래요?* — 할래요, 열래요, 닫을래요 — read off the syllable's final ㄹ, since *그래요?* ends
+    //: the same two letters and offers nothing.
+    let chars: Vec<char> = s.chars().collect();
+    let will = chars.windows(3).any(|w| w[1] == '래' && w[2] == '요'
+        && ('가'..='힣').contains(&w[0]) && (w[0] as u32 - '가' as u32) % 28 == 8);
+    s.ends_with('?') && (will || OFFERS.iter().any(|o| s.contains(o)) || OFFERS_EN.iter().any(|o| low.contains(o)))
 }
 
 /// **A request nobody can read** — its letters replaced by `?` or `�` on the way in. On
@@ -395,6 +404,12 @@ pub fn offer_answered(history: &[(String, String)]) -> Option<String> {
     lines.take_while(|(who, _)| who != "you").find(|(who, _)| who == "them").map(|(_, t)| t.clone())
 }
 
+/// **How sure the model was of the action part of a reply** — the product of the probabilities of
+/// every token after `"do":`, which is the action given what was already said. The reply shape puts
+/// `say` first, so this is *how sure of the click, having decided what to say*.
+///
+/// `None` when there is no action — `null`, `[]`, or no `do` at all — or no probabilities. Pure, so
+/// it can be checked without a model.
 pub fn action_sureness(tokens: &[(String, f64)]) -> Option<f64> {
     if tokens.is_empty() {
         return None;
@@ -464,10 +479,14 @@ mod tests {
 
     #[test]
     fn a_reply_that_asks_holds_its_action() {
-        for q in ["먼저 항공권과 호텔을 찾아볼까요?", "검색해 볼까요? ", "이걸로 할까요?!"] {
+        for q in ["먼저 항공권과 호텔을 찾아볼까요?", "검색해 볼까요? ", "이걸로 할까요?!",
+                  //: argmind's own words beside a click it went ahead with, 2026-11-09.
+                  "Google Drive에 'Apple iPhone' 기기 추가 창이 보입니다. 기기 추가하시겠어요?",
+                  "저장하시겠습니까?", "지금 닫을래요?", "같이 열래요?", "Shall I open it?", "Would you like me to add the device?"] {
             assert!(super::asks_first(q), "{q}");
         }
-        for s in ["검색했습니다", "무엇을 찾으세요?", "열었어요. 더 볼까요 말까요는 나중에", ""] {
+        for s in ["검색했습니다", "무엇을 찾으세요?", "열었어요. 더 볼까요 말까요는 나중에", "",
+                  "기기를 추가하시겠어요", "괜찮으세요?", "그래요?", "What next?", "I opened it. Anything else?"] {
             assert!(!super::asks_first(s), "{s}");
         }
     }
