@@ -917,7 +917,7 @@ fn start_work(desk: &Desk, what: &str,
         for s in &task.steps {
             out.record("작업", &format!("{} {} → 먼저 읽음", s.tool, s.args.to_string().chars().take(80).collect::<String>()));
         }
-        progress(&out, &what, task.steps.len(), "시작했습니다", false);
+        let card = begun(&out, &what);
         loop {
             while turn.in_flight() && !stop.load(Ordering::SeqCst) {
                 std::thread::sleep(std::time::Duration::from_millis(200));
@@ -942,16 +942,16 @@ fn start_work(desk: &Desk, what: &str,
             }
             if let Some(s) = task.steps[before..].last() {
                 let first = s.observed.lines().find(|l| !l.trim().is_empty()).unwrap_or("");
-                progress(&out, &what, task.steps.len(), &format!("{} — {}", s.tool, first.chars().take(80).collect::<String>()), s.failed);
+                stepped(&out, card, task.steps.len(), &format!("{} — {}", s.tool, first.chars().take(80).collect::<String>()), s.failed);
             }
             if !going {
                 break;
             }
         }
-        let said = match task.ended {
-            Some(Ended::Done(s)) => s,
-            Some(Ended::Stopped(why)) => format!("작업을 다 끝내지 못했습니다 — {why}"),
-            None => "작업이 멈췄습니다".into(),
+        let (said, finished) = match task.ended {
+            Some(Ended::Done(s)) => (s.clone(), Some(s)),
+            Some(Ended::Stopped(why)) => (format!("작업을 다 끝내지 못했습니다 — {why}"), None),
+            None => ("작업이 멈췄습니다".into(), None),
         };
         //: **What it made, shown** — read the way the task read it, so a Word file is its text.
         let made: Vec<(String, String)> = crate::deliver::made(&before, &crate::deliver::snapshot(&folder))
@@ -965,32 +965,65 @@ fn start_work(desk: &Desk, what: &str,
             let _ = jobs.send(Job::Made(made));
         }
         working.store(false, Ordering::SeqCst);
-        stopped_progress(&out);
+        ended(&out, card, task.steps.len(), finished.is_some(), &said);
         let _ = jobs.send(Job::Worked(said));
     });
 }
 
-/// **What a running task is doing, where a person is looking.** The owner, 2026-11-09: a box asked
-/// for in Blender was answered *해 볼게요* and nothing else could be seen — its steps went to the
-/// 한 일 fold, closed, and nowhere else. So every step also reaches the page as a `work` line under
-/// the conversation, and a page opened mid-task gets the last one. Not a timeline line: those are
-/// already written above.
-static LAST_WORK: Mutex<String> = Mutex::new(String::new());
-
-fn progress(out: &Listeners, what: &str, steps: usize, last: &str, failed: bool) {
-    let json = format!("{{\"what\":\"{}\",\"steps\":{steps},\"last\":\"{}\",\"failed\":{failed},\"at\":{}}}",
-                       escape(what), escape(last), now_seconds());
-    if let Ok(mut l) = LAST_WORK.lock() {
-        l.clone_from(&json);
-    }
-    out.frame("work", &json);
+/// **Each task as a card, where a person is looking.** The owner, 2026-11-09: a box asked for in
+/// Blender was answered *해 볼게요* and nothing more could be seen — its steps went to the 한 일
+/// fold, closed. Then: *수행하는 작업별로 진행상황이랑 완료여부를 간단하게 표시해줘.* So every task is
+/// a card — its request, how many steps, what the last one did, and how it ended — the last
+/// [`CARDS_KEPT`] of them, sent whole as a `tasks` event on every change and to a page that opens
+/// mid-task. Memory only, like 한 일. Not a timeline line: those are written beside each step.
+struct Card {
+    id: u64,
+    what: String,
+    steps: usize,
+    last: String,
+    failed: bool,
+    /// `running`, `done` or `stopped`.
+    state: &'static str,
+    at: i64,
 }
 
-fn stopped_progress(out: &Listeners) {
-    if let Ok(mut l) = LAST_WORK.lock() {
-        l.clear();
+const CARDS_KEPT: usize = 5;
+static CARDS: Mutex<Vec<Card>> = Mutex::new(Vec::new());
+
+fn cards_json() -> String {
+    let cards = CARDS.lock().unwrap_or_else(|e| e.into_inner());
+    format!("[{}]", cards.iter().map(|c| format!(
+        "{{\"id\":{},\"what\":\"{}\",\"steps\":{},\"last\":\"{}\",\"failed\":{},\"state\":\"{}\",\"at\":{}}}",
+        c.id, escape(&c.what), c.steps, escape(&c.last), c.failed, c.state, c.at)).collect::<Vec<_>>().join(","))
+}
+
+fn begun(out: &Listeners, what: &str) -> u64 {
+    static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
+    let id = NEXT.fetch_add(1, Ordering::SeqCst);
+    {
+        let mut cards = CARDS.lock().unwrap_or_else(|e| e.into_inner());
+        cards.push(Card { id, what: what.into(), steps: 0, last: "시작했습니다".into(), failed: false,
+                          state: "running", at: now_seconds() });
+        let over = cards.len().saturating_sub(CARDS_KEPT);
+        cards.drain(..over);
     }
-    out.frame("work", "null");
+    out.frame("tasks", &cards_json());
+    id
+}
+
+fn stepped(out: &Listeners, id: u64, steps: usize, last: &str, failed: bool) {
+    if let Some(c) = CARDS.lock().unwrap_or_else(|e| e.into_inner()).iter_mut().find(|c| c.id == id) {
+        (c.steps, c.last, c.failed, c.at) = (steps, last.into(), failed, now_seconds());
+    }
+    out.frame("tasks", &cards_json());
+}
+
+fn ended(out: &Listeners, id: u64, steps: usize, done: bool, said: &str) {
+    if let Some(c) = CARDS.lock().unwrap_or_else(|e| e.into_inner()).iter_mut().find(|c| c.id == id) {
+        (c.steps, c.last, c.failed, c.at) = (steps, said.chars().take(120).collect(), !done, now_seconds());
+        c.state = if done { "done" } else { "stopped" };
+    }
+    out.frame("tasks", &cards_json());
 }
 
 /// **What a task made, in the pane** — opened for it, the files written into `about:blank` as
@@ -3512,9 +3545,7 @@ pub fn run(how: How) {
                 Job::Opened(tx) => {
 
                     let _ = tx.send(sse("hello", &hello(&desk, &agent_model)));
-                    if let Some(w) = LAST_WORK.lock().ok().filter(|w| !w.is_empty()).map(|w| w.clone()) {
-                        let _ = tx.send(sse("work", &w));
-                    }
+                    let _ = tx.send(sse("tasks", &cards_json()));
                     //: **What 항상 허용 buys, without anybody pressing 다시 확인.**
                     //:
                     //: It only happened on `Job::Look`, which is the button — so after every

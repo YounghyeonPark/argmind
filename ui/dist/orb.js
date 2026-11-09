@@ -73,6 +73,7 @@ export function orb(canvas) {
     // cancel one another out into stillness.
     let jolts = [];
     let running = true;
+    let orbiting = false;
     let last = 0;
     let turned = 0;
     function size() {
@@ -140,6 +141,22 @@ export function orb(canvas) {
             on.push({ sx: mid.x + rx * span * near * 2.6, sy: mid.y + ry * span * near * 2.6,
                 depth: rz2 });
         }
+        //: **The ring, while a task runs** — forty points on a circle a third wider than the sphere,
+        //: tilted the other way and turning on its own clock, mixed into the depth sort so its far half
+        //: passes behind the sphere.
+        if (orbiting) {
+            const round = still ? 0 : seconds * 0.35;
+            for (let i = 0; i < 40; i += 1) {
+                const a = (i / 40) * Math.PI * 2 + round;
+                const x = Math.cos(a) * 1.38;
+                const z = Math.sin(a) * 1.38;
+                const y = x * 0.32;
+                const ry = y * tiltC + z * tiltS;
+                const rz2 = -y * tiltS + z * tiltC;
+                const near = 1 / (2.6 - rz2);
+                on.push({ sx: mid.x + x * span * near * 2.6, sy: mid.y + ry * span * near * 2.6, depth: rz2, ring: true });
+            }
+        }
         //: Back to front, so the far half is drawn under the near half rather than over it.
         on.sort((a, b) => a.depth - b.depth);
         const dpr = Math.min(window.devicePixelRatio || 1, 2);
@@ -147,8 +164,8 @@ export function orb(canvas) {
             //: Depth does the work colour usually would: the far side is small and faint, the near side
             //: solid. One ink, so it sits in the page's palette rather than beside it.
             const front = (q.depth + 1) / 2;
-            const alpha = (0.1 + front * 0.5) * visible;
-            const dot = (0.6 + front * 1.5) * dpr;
+            const alpha = (q.ring ? 0.12 + front * 0.35 : 0.1 + front * 0.5) * visible;
+            const dot = (q.ring ? 0.8 + front * 1.2 : 0.6 + front * 1.5) * dpr;
             paint.globalAlpha = alpha;
             paint.fillStyle = doing === "gone" ? "#6b6862" : "#2c4a6e";
             paint.beginPath();
@@ -164,9 +181,12 @@ export function orb(canvas) {
             return;
         }
         const how = HOW[doing];
-        const quiet = how.fps > 0 && jolts.length === 0;
+        //: A turning ring at ten frames a second stutters, so it asks for twenty-four — still well
+        //: short of the sixty a busy sphere takes.
+        const fps = orbiting && how.fps > 0 ? 24 : how.fps;
+        const quiet = fps > 0 && jolts.length === 0;
         if (!quiet || now >= next) {
-            next = now + (quiet ? 1000 / how.fps : 0);
+            next = now + (quiet ? 1000 / fps : 0);
             draw(now);
         }
         requestAnimationFrame(tick);
@@ -188,6 +208,9 @@ export function orb(canvas) {
         },
         presence(of) {
             visible = Math.max(0, Math.min(1, of));
+        },
+        working(on) {
+            orbiting = on;
         },
         stop() {
             running = false;

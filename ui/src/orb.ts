@@ -33,6 +33,10 @@ export interface Orb {
   jolt(what: Jolt): void;
   /// How strongly to draw it. The conversation is the content; this recedes as it fills.
   presence(of: number): void;
+  /// **A task is running.** Not a `Doing`: a task runs for minutes on its own thread while the
+  /// sphere goes on thinking and listening for the conversation, so it is a ring around the sphere
+  /// rather than a state of it — the 작업 cards say the same in words.
+  working(on: boolean): void;
   stop(): void;
 }
 
@@ -99,6 +103,7 @@ export function orb(canvas: HTMLCanvasElement): Orb {
   // cancel one another out into stillness.
   let jolts: { push: number; ring: number; at: number }[] = [];
   let running = true;
+  let orbiting = false;
   let last = 0;
   let turned = 0;
 
@@ -154,7 +159,7 @@ export function orb(canvas: HTMLCanvasElement): Orb {
     const tiltC = Math.cos(0.45);
     const tiltS = Math.sin(0.45);
 
-    const on: { sx: number; sy: number; depth: number }[] = [];
+    const on: { sx: number; sy: number; depth: number; ring?: boolean }[] = [];
     for (const p of points) {
       const wave = still ? 0 : swell(p, seconds, how.wave, how.swell);
       const r = 1 + wave + kick;
@@ -172,6 +177,22 @@ export function orb(canvas: HTMLCanvasElement): Orb {
       on.push({ sx: mid.x + rx * span * near * 2.6, sy: mid.y + ry * span * near * 2.6,
                 depth: rz2 });
     }
+    //: **The ring, while a task runs** — forty points on a circle a third wider than the sphere,
+    //: tilted the other way and turning on its own clock, mixed into the depth sort so its far half
+    //: passes behind the sphere.
+    if (orbiting) {
+      const round = still ? 0 : seconds * 0.35;
+      for (let i = 0; i < 40; i += 1) {
+        const a = (i / 40) * Math.PI * 2 + round;
+        const x = Math.cos(a) * 1.38;
+        const z = Math.sin(a) * 1.38;
+        const y = x * 0.32;
+        const ry = y * tiltC + z * tiltS;
+        const rz2 = -y * tiltS + z * tiltC;
+        const near = 1 / (2.6 - rz2);
+        on.push({ sx: mid.x + x * span * near * 2.6, sy: mid.y + ry * span * near * 2.6, depth: rz2, ring: true });
+      }
+    }
     //: Back to front, so the far half is drawn under the near half rather than over it.
     on.sort((a, b) => a.depth - b.depth);
 
@@ -180,8 +201,8 @@ export function orb(canvas: HTMLCanvasElement): Orb {
       //: Depth does the work colour usually would: the far side is small and faint, the near side
       //: solid. One ink, so it sits in the page's palette rather than beside it.
       const front = (q.depth + 1) / 2;
-      const alpha = (0.1 + front * 0.5) * visible;
-      const dot = (0.6 + front * 1.5) * dpr;
+      const alpha = (q.ring ? 0.12 + front * 0.35 : 0.1 + front * 0.5) * visible;
+      const dot = (q.ring ? 0.8 + front * 1.2 : 0.6 + front * 1.5) * dpr;
       paint.globalAlpha = alpha;
       paint.fillStyle = doing === "gone" ? "#6b6862" : "#2c4a6e";
       paint.beginPath();
@@ -198,9 +219,12 @@ export function orb(canvas: HTMLCanvasElement): Orb {
       return;
     }
     const how = HOW[doing];
-    const quiet = how.fps > 0 && jolts.length === 0;
+    //: A turning ring at ten frames a second stutters, so it asks for twenty-four — still well
+    //: short of the sixty a busy sphere takes.
+    const fps = orbiting && how.fps > 0 ? 24 : how.fps;
+    const quiet = fps > 0 && jolts.length === 0;
     if (!quiet || now >= next) {
-      next = now + (quiet ? 1000 / how.fps : 0);
+      next = now + (quiet ? 1000 / fps : 0);
       draw(now);
     }
     requestAnimationFrame(tick);
@@ -223,6 +247,9 @@ export function orb(canvas: HTMLCanvasElement): Orb {
     },
     presence(of: number): void {
       visible = Math.max(0, Math.min(1, of));
+    },
+    working(on: boolean): void {
+      orbiting = on;
     },
     stop(): void {
       running = false;

@@ -183,13 +183,24 @@
   .decision button { margin-left: auto; font-size: 12px; padding: 1px 8px; }
 
   #pending:not(:empty) { border-top: 1px solid var(--edge); padding: 8px 14px; }
-  #working { display: flex; gap: 8px; align-items: center; padding: 6px 14px; font-size: 13px;
-             border-top: 1px solid var(--edge); color: var(--dim); }
-  #working[hidden] { display: none; }
-  #working-what { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  #working.failed #working-what { color: #a33; }
-  #working .spin { width: 10px; height: 10px; border-radius: 50%; border: 2px solid var(--edge);
-                   border-top-color: var(--dim); animation: spin 1s linear infinite; flex: none; }
+  #tasks { display: flex; flex-direction: column; gap: 6px; padding: 6px 14px; font-size: 13px;
+           border-top: 1px solid var(--edge); }
+  #tasks[hidden] { display: none; }
+  body.quiet #tasks { position: fixed; top: 10px; left: 10px; z-index: 4;
+                      width: min(320px, calc(100vw - 80px)); padding: 0; border: none; }
+  .task { display: grid; grid-template-columns: 14px 1fr auto; gap: 2px 8px; align-items: center;
+          background: rgba(255, 255, 255, .86); border: 1px solid var(--edge); border-radius: 6px;
+          padding: 6px 8px; }
+  .task .what { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .task .how { grid-column: 2 / 4; color: var(--dim); font-size: 12px; overflow: hidden;
+               text-overflow: ellipsis; white-space: nowrap; }
+  .task.failed .how { color: #a33; }
+  .task .mark { font-size: 12px; text-align: center; }
+  .task.done .mark { color: #3f7a45; }
+  .task.stopped .mark { color: #a33; }
+  .task button { padding: 0 6px; font-size: 12px; }
+  .task .spin { width: 10px; height: 10px; border-radius: 50%; border: 2px solid var(--edge);
+                border-top-color: var(--dim); animation: spin 1s linear infinite; }
   @keyframes spin { to { transform: rotate(360deg); } }
   .proposal { display: flex; gap: 8px; align-items: center; margin-bottom: 6px; }
   .what { flex: 1; }
@@ -464,14 +475,12 @@
       <div id="subtitle" aria-live="polite"><span></span></div>
     </div>
   </div>
-  <!-- 작업 중. A task runs for minutes on its own thread, and its steps went only to the 한 일 fold,
-       closed — the owner asked for a box in Blender and could not tell whether anything was
-       happening. One line, present only while a task runs, with what it did last. -->
-  <div id="working" hidden>
-    <span class="spin" aria-hidden="true"></span>
-    <span id="working-what"></span>
-    <button type="button" id="working-stop" class="plain">멈추기</button>
-  </div>
+  <!-- 작업. One card a task — what was asked, how far it is, how it ended — the last five,
+       because the owner asked to see each task's progress and whether it finished
+       (2026-11-09). In the quiet view it floats in the top-left corner over the sphere, which has
+       no text to cover there; in the full view it sits here above the input, because the sphere
+       never goes in front of the conversation and neither does anything riding on it. -->
+  <div id="tasks" hidden></div>
   <div id="pending"></div>
   <form id="form" autocomplete="off">
     <input id="said" placeholder="말해보세요" autofocus>

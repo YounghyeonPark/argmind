@@ -720,32 +720,67 @@ async function watchWork(): Promise<void> {
 }
 void watchWork();
 
-// 작업 중 — one line while a task runs: how many steps, what the last one did, and how long ago.
-const working = document.getElementById("working") as HTMLElement;
-const workingWhat = document.getElementById("working-what") as HTMLElement;
-let workingAt = 0;
-let workingLine = "";
-(document.getElementById("working-stop") as HTMLButtonElement).onclick = () => void post("/say", "멈춰");
-function drawWorking(): void {
-  if (working.hidden) return;
-  const ago = Math.max(0, Math.round(Date.now() / 1000 - workingAt));
-  workingWhat.textContent = `${workingLine} · ${ago}초 전`;
+// 작업 — one card a task: what was asked, how far it is, how it ended. Finished cards can be put
+// away here; the server keeps the last five and a reload brings them back, which is the honest
+// size of that promise. The sphere carries a ring while one runs, a push when one finishes and a
+// pull when one stops — the same things in a shape, never anything the cards do not say.
+interface TaskCard { id: number; what: string; steps: number; last: string; failed: boolean;
+                     state: "running" | "done" | "stopped"; at: number }
+const tasksBox = document.getElementById("tasks") as HTMLElement;
+let taskCards: TaskCard[] = [];
+const putAway = new Set<number>();
+const seenEnd = new Set<number>();
+function ago(at: number): string {
+  const s = Math.max(0, Math.round(Date.now() / 1000 - at));
+  return s < 60 ? `${s}초 전` : s < 3600 ? `${Math.floor(s / 60)}분 전` : `${Math.floor(s / 3600)}시간 전`;
 }
-stream.addEventListener("work", (e) => {
-  const raw = (e as MessageEvent).data;
-  if (raw === "null") {
-    working.hidden = true;
-    return;
+function drawTasks(): void {
+  const shown = taskCards.filter((c) => !putAway.has(c.id)).reverse();
+  tasksBox.hidden = shown.length === 0;
+  tasksBox.replaceChildren(...shown.map((c) => {
+    const row = document.createElement("div");
+    row.className = `task ${c.state}${c.failed ? " failed" : ""}`;
+    const mark = document.createElement("span");
+    mark.className = c.state === "running" ? "spin" : "mark";
+    mark.textContent = c.state === "done" ? "✓" : c.state === "stopped" ? "✕" : "";
+    const what = document.createElement("span");
+    what.className = "what";
+    what.textContent = c.what;
+    what.title = c.what;
+    const act = document.createElement("button");
+    act.type = "button";
+    act.className = "plain";
+    if (c.state === "running") {
+      act.textContent = "멈추기";
+      act.onclick = () => void post("/say", "멈춰");
+    } else {
+      act.textContent = "치우기";
+      act.onclick = () => { putAway.add(c.id); drawTasks(); };
+    }
+    const how = document.createElement("span");
+    how.className = "how";
+    how.textContent = c.state === "running"
+      ? `${c.steps}단계 · ${c.failed ? "실패: " : ""}${c.last} · ${ago(c.at)}`
+      : `${c.state === "done" ? "완료" : "멈춤"} · ${c.steps}단계 · ${ago(c.at)} — ${c.last}`;
+    how.title = c.last;
+    row.append(mark, what, act, how);
+    return row;
+  }));
+}
+stream.addEventListener("tasks", (e) => {
+  taskCards = JSON.parse((e as MessageEvent).data) as TaskCard[];
+  eye.working(taskCards.some((c) => c.state === "running"));
+  for (const c of taskCards) {
+    //: A jolt once per ending, not on every redraw of a list that still holds it — and not for an
+    //: ending a page opened after.
+    if (c.state !== "running" && !seenEnd.has(c.id)) {
+      seenEnd.add(c.id);
+      if (Date.now() / 1000 - c.at < 10) eye.jolt(c.state === "done" ? "acted" : "refused");
+    }
   }
-  const w = JSON.parse(raw) as { what: string; steps: number; last: string; failed: boolean; at: number };
-  workingLine = `작업 중 · ${w.steps}단계 · ${w.failed ? "실패: " : ""}${w.last}`;
-  workingAt = w.at;
-  working.classList.toggle("failed", w.failed);
-  working.title = w.what;
-  working.hidden = false;
-  drawWorking();
+  drawTasks();
 });
-setInterval(drawWorking, 1000);
+setInterval(() => { if (!tasksBox.hidden) drawTasks(); }, 1000);
 
 stream.addEventListener("web", (e) => {
   web.checked = (e as MessageEvent).data === "1";
