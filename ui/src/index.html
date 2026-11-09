@@ -183,6 +183,14 @@
   .decision button { margin-left: auto; font-size: 12px; padding: 1px 8px; }
 
   #pending:not(:empty) { border-top: 1px solid var(--edge); padding: 8px 14px; }
+  #working { display: flex; gap: 8px; align-items: center; padding: 6px 14px; font-size: 13px;
+             border-top: 1px solid var(--edge); color: var(--dim); }
+  #working[hidden] { display: none; }
+  #working-what { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #working.failed #working-what { color: #a33; }
+  #working .spin { width: 10px; height: 10px; border-radius: 50%; border: 2px solid var(--edge);
+                   border-top-color: var(--dim); animation: spin 1s linear infinite; flex: none; }
+  @keyframes spin { to { transform: rotate(360deg); } }
   .proposal { display: flex; gap: 8px; align-items: center; margin-bottom: 6px; }
   .what { flex: 1; }
   /* A second opinion, not a gate: it is dimmer than the label and it disables nothing. */
@@ -455,6 +463,14 @@
            gone again after long enough to read it. The transcript keeps every line regardless. -->
       <div id="subtitle" aria-live="polite"><span></span></div>
     </div>
+  </div>
+  <!-- 작업 중. A task runs for minutes on its own thread, and its steps went only to the 한 일 fold,
+       closed — the owner asked for a box in Blender and could not tell whether anything was
+       happening. One line, present only while a task runs, with what it did last. -->
+  <div id="working" hidden>
+    <span class="spin" aria-hidden="true"></span>
+    <span id="working-what"></span>
+    <button type="button" id="working-stop" class="plain">멈추기</button>
   </div>
   <div id="pending"></div>
   <form id="form" autocomplete="off">

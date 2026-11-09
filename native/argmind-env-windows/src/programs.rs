@@ -131,7 +131,7 @@ pcb drc)하고 넷리스트·BOM·PDF·SVG·거버로 내보낸다. args 는 kic
                 let mut c = Command::new(exe);
                 c.args(["--background", "--factory-startup", "--python-exit-code", "1", "--python"]).arg(&path)
                     .current_dir(&self.root).env("PYTHONIOENCODING", "utf-8");
-                crate::workspace::finish(c, None, RUN_SECONDS).map(|t| quieter(&t)).map_err(|t| quieter(&t))
+                crate::workspace::finish(c, None, RUN_SECONDS).map(|t| quieter(&t)).map_err(|t| renamed(&quieter(&t)))
             }
             "kicad_cli" => {
                 let exe = self.kicad.as_ref().ok_or("KiCad 가 없다")?;
@@ -170,6 +170,30 @@ pcb drc)하고 넷리스트·BOM·PDF·SVG·거버로 내보낸다. args 는 kic
 
     fn missing(&self, paths: &[String]) -> Vec<String> {
         self.work.missing(paths)
+    }
+}
+
+/// **Operators that are gone, and what took their place** — Blender 4 replaced the old exporters,
+/// and a model trained on older scripts writes them. The owner's first box in the application
+/// (2026-11-09) called `bpy.ops.export_mesh.stl`, got *could not be found*, and ran the same
+/// script twice more unchanged; `--bin programs` once invented `primitive_box_add`. The error
+/// already says what is wrong; this adds what is right, from Blender's own operator list.
+const RENAMED: [(&str, &str); 8] = [
+    ("export_mesh.stl", "bpy.ops.wm.stl_export(filepath='part.stl')"),
+    ("import_mesh.stl", "bpy.ops.wm.stl_import(filepath='part.stl')"),
+    ("export_scene.obj", "bpy.ops.wm.obj_export(filepath='part.obj')"),
+    ("import_scene.obj", "bpy.ops.wm.obj_import(filepath='part.obj')"),
+    ("export_mesh.ply", "bpy.ops.wm.ply_export(filepath='part.ply')"),
+    ("import_mesh.ply", "bpy.ops.wm.ply_import(filepath='part.ply')"),
+    ("primitive_box_add", "bpy.ops.mesh.primitive_cube_add(size=1) 다음에 obj.dimensions = (x, y, z)"),
+    ("primitive_cuboid_add", "bpy.ops.mesh.primitive_cube_add(size=1) 다음에 obj.dimensions = (x, y, z)"),
+];
+
+fn renamed(error: &str) -> String {
+    match RENAMED.iter().find(|(old, _)| error.contains(&format!("bpy.ops.{old}\" error, could not be found"))) {
+        Some((old, new)) => format!("{error}\n\n이 Blender 에는 bpy.ops.{old} 가 없다. 대신 {new} 를 쓴다. \
+스크립트를 edit_file 로 고친 다음에 다시 실행한다 — 고치지 않고 다시 실행하면 같은 오류가 난다"),
+        None => error.to_string(),
     }
 }
 
@@ -217,6 +241,15 @@ mod tests {
         //: The bare list reads the same as the wrapped one.
         let r = p.call("kicad_cli", &json!(["sch", "export", "bom", "-o", "C:\\Windows\\x.csv", "a.kicad_sch"]));
         assert!(r.is_err_and(|e| e.contains("작업 폴더 밖")));
+    }
+
+    #[test]
+    fn a_gone_operator_is_answered_with_its_replacement() {
+        let e = "AttributeError: Calling operator \"bpy.ops.export_mesh.stl\" error, could not be found";
+        assert!(renamed(e).contains("bpy.ops.wm.stl_export"), "{}", renamed(e));
+        //: Any other error is left as it was.
+        let other = "NameError: name 'cube' is not defined";
+        assert_eq!(renamed(other), other);
     }
 
     #[test]

@@ -917,6 +917,7 @@ fn start_work(desk: &Desk, what: &str,
         for s in &task.steps {
             out.record("작업", &format!("{} {} → 먼저 읽음", s.tool, s.args.to_string().chars().take(80).collect::<String>()));
         }
+        progress(&out, &what, task.steps.len(), "시작했습니다", false);
         loop {
             while turn.in_flight() && !stop.load(Ordering::SeqCst) {
                 std::thread::sleep(std::time::Duration::from_millis(200));
@@ -939,6 +940,10 @@ fn start_work(desk: &Desk, what: &str,
                 out.record("작업", &format!("{}{} {args} → {}", s.tool, if s.failed { " ✗" } else { "" },
                                             first.chars().take(100).collect::<String>()));
             }
+            if let Some(s) = task.steps[before..].last() {
+                let first = s.observed.lines().find(|l| !l.trim().is_empty()).unwrap_or("");
+                progress(&out, &what, task.steps.len(), &format!("{} — {}", s.tool, first.chars().take(80).collect::<String>()), s.failed);
+            }
             if !going {
                 break;
             }
@@ -960,8 +965,32 @@ fn start_work(desk: &Desk, what: &str,
             let _ = jobs.send(Job::Made(made));
         }
         working.store(false, Ordering::SeqCst);
+        stopped_progress(&out);
         let _ = jobs.send(Job::Worked(said));
     });
+}
+
+/// **What a running task is doing, where a person is looking.** The owner, 2026-11-09: a box asked
+/// for in Blender was answered *해 볼게요* and nothing else could be seen — its steps went to the
+/// 한 일 fold, closed, and nowhere else. So every step also reaches the page as a `work` line under
+/// the conversation, and a page opened mid-task gets the last one. Not a timeline line: those are
+/// already written above.
+static LAST_WORK: Mutex<String> = Mutex::new(String::new());
+
+fn progress(out: &Listeners, what: &str, steps: usize, last: &str, failed: bool) {
+    let json = format!("{{\"what\":\"{}\",\"steps\":{steps},\"last\":\"{}\",\"failed\":{failed},\"at\":{}}}",
+                       escape(what), escape(last), now_seconds());
+    if let Ok(mut l) = LAST_WORK.lock() {
+        l.clone_from(&json);
+    }
+    out.frame("work", &json);
+}
+
+fn stopped_progress(out: &Listeners) {
+    if let Ok(mut l) = LAST_WORK.lock() {
+        l.clear();
+    }
+    out.frame("work", "null");
 }
 
 /// **What a task made, in the pane** — opened for it, the files written into `about:blank` as
@@ -3483,6 +3512,9 @@ pub fn run(how: How) {
                 Job::Opened(tx) => {
 
                     let _ = tx.send(sse("hello", &hello(&desk, &agent_model)));
+                    if let Some(w) = LAST_WORK.lock().ok().filter(|w| !w.is_empty()).map(|w| w.clone()) {
+                        let _ = tx.send(sse("work", &w));
+                    }
                     //: **What 항상 허용 buys, without anybody pressing 다시 확인.**
                     //:
                     //: It only happened on `Job::Look`, which is the button — so after every

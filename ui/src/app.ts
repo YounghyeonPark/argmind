@@ -720,6 +720,33 @@ async function watchWork(): Promise<void> {
 }
 void watchWork();
 
+// 작업 중 — one line while a task runs: how many steps, what the last one did, and how long ago.
+const working = document.getElementById("working") as HTMLElement;
+const workingWhat = document.getElementById("working-what") as HTMLElement;
+let workingAt = 0;
+let workingLine = "";
+(document.getElementById("working-stop") as HTMLButtonElement).onclick = () => void post("/say", "멈춰");
+function drawWorking(): void {
+  if (working.hidden) return;
+  const ago = Math.max(0, Math.round(Date.now() / 1000 - workingAt));
+  workingWhat.textContent = `${workingLine} · ${ago}초 전`;
+}
+stream.addEventListener("work", (e) => {
+  const raw = (e as MessageEvent).data;
+  if (raw === "null") {
+    working.hidden = true;
+    return;
+  }
+  const w = JSON.parse(raw) as { what: string; steps: number; last: string; failed: boolean; at: number };
+  workingLine = `작업 중 · ${w.steps}단계 · ${w.failed ? "실패: " : ""}${w.last}`;
+  workingAt = w.at;
+  working.classList.toggle("failed", w.failed);
+  working.title = w.what;
+  working.hidden = false;
+  drawWorking();
+});
+setInterval(drawWorking, 1000);
+
 stream.addEventListener("web", (e) => {
   web.checked = (e as MessageEvent).data === "1";
 });
