@@ -935,13 +935,13 @@ fn start_work(desk: &Desk, what: &str,
                                                         else { items.join(" · ") }));
             }
             for s in &task.steps[before..] {
-                let first = s.observed.lines().find(|l| !l.trim().is_empty()).unwrap_or("");
+                let first = gist(&s.observed, s.failed);
                 let args: String = s.args.to_string().chars().take(80).collect();
                 out.record("작업", &format!("{}{} {args} → {}", s.tool, if s.failed { " ✗" } else { "" },
                                             first.chars().take(100).collect::<String>()));
             }
             if let Some(s) = task.steps[before..].last() {
-                let first = s.observed.lines().find(|l| !l.trim().is_empty()).unwrap_or("");
+                let first = gist(&s.observed, s.failed);
                 stepped(&out, card, task.steps.len(), &format!("{} — {}", s.tool, first.chars().take(80).collect::<String>()), s.failed);
             }
             if !going {
@@ -985,6 +985,25 @@ struct Card {
     /// `running`, `done` or `stopped`.
     state: &'static str,
     at: i64,
+}
+
+/// **The line of a step's result a person should read.** Its first line, unless the step failed:
+/// then the line that names the error. The owner's box in Blender, 2026-11-09, showed *오류:
+/// [stderr]* on the card twice — the first line of every failed command — while the reason,
+/// *keyword "use_selection" unrecognized*, sat at the bottom of a traceback.
+pub fn gist(observed: &str, failed: bool) -> String {
+    let lines: Vec<&str> = observed.lines().map(str::trim).filter(|l| !l.is_empty()).collect();
+    let first = lines.first().copied().unwrap_or("");
+    if !failed {
+        return first.to_string();
+    }
+    //: Not the exit code and not Blender's closing *script failed*, which say only that it failed.
+    let saying: Vec<&str> = lines.iter().copied().filter(|l| !l.starts_with("(종료 코드")
+        && !l.starts_with("Error: script failed") && !l.ends_with("[stderr]")).collect();
+    saying.iter().rev()
+        .find(|l| l.contains("Error") || l.contains("error") || l.contains("오류") || l.contains("실패"))
+        .or_else(|| saying.last())
+        .copied().unwrap_or(first).to_string()
 }
 
 const CARDS_KEPT: usize = 5;
