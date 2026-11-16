@@ -87,12 +87,16 @@ const BUT: &str =
 /// frame sat beside it** (Japanese beside a dial: 0 of 12). Korean's frame is the one that shipped,
 /// character for character, so a Korean setting changes nothing but the line.
 ///
-/// **Japanese was measured and is not here.** With its own frame it answered Korean turns in
-/// Japanese **8 and 7 of 12** against a bar of 11 — on a screen of Korean buttons it wrote
-/// *メモ장이 열렸습니다* and *計算기를 열어드릴게요*, Korean grammar around a half-converted name —
-/// and English turns 11 of 12. A setting that holds two times in three is a setting that claims what
-/// it cannot keep, so it is left out until something moves it; the frame it was measured with is in
-/// the history of this file.
+/// **Japanese was measured and left out on 2026-11-17, and is back the same day — by the program,
+/// not by its line.** With the frame below it answered Korean turns in Japanese **8 and 7 of 12**
+/// against a bar of 11; on a screen of Korean buttons it wrote *メモ장이 열렸습니다* and
+/// *計算기를 열어드릴게요*, Korean grammar around a half-converted name, and as often a reply wholly
+/// in Korean. The line is unchanged, character for character, so that failure is the control; what
+/// is new is [`crate::converse::in_language`] reading every reply when a language is set, and a
+/// reply in another script asked to be written again in [`Language::rewrite`] — one more call, only
+/// on that reply. Japanese then follows 11–12 of 12 on every set, twice, with 9 of 24 Korean turns
+/// and 0 of 12 Japanese turns paying for a second call — and of about twenty rewrites two changed
+/// the meaning both runs (*メモ장이 떠요* → *…飛んでいます*). `--bin language` has the rest.
 pub struct Language {
     pub code: &'static str,
     /// What the page shows.
@@ -106,24 +110,37 @@ pub struct Language {
     pub but: &'static str,
     /// The dials as this language says them, in [`DIALS`]' order.
     pub dials: [(&'static str, &'static str); 4],
+    /// **What the model is asked when its reply came back in another language**, followed by that
+    /// reply. Told it is *its own* words, so it rewrites rather than answers them.
+    pub rewrite: &'static str,
 }
 
-pub const LANGUAGES: [Language; 3] = [
+pub const LANGUAGES: [Language; 4] = [
     Language { code: "ko", name: "한국어", line: "상대가 어떤 언어로 말하든 항상 한국어로 대답하세요.",
-               say: "<한국어로 돌려줄 말>", aim_at: AIM_AT, keep: KEEP_IN_MIND, but: BUT, dials: DIALS },
+               say: "<한국어로 돌려줄 말>", aim_at: AIM_AT, keep: KEEP_IN_MIND, but: BUT, dials: DIALS,
+               rewrite: "다음은 당신이 상대에게 하려던 말입니다. 뜻은 그대로 두고 덧붙이지 말고 자연스러운 한국어로 다시 쓰세요. 다시 쓴 말만 답하세요." },
     Language { code: "en", name: "English",
                line: "Always reply in English, whatever language the person writes in.",
                say: "<what you say back, in English>",
                aim_at: "Aim for this manner: ", keep: "What the person asked you to remember: ",
                but: " None of this is a reason to speak when there is nothing to say, or to do what nobody asked for.",
                dials: [("wit", "quick and clever"), ("humour", "light and fun"),
-                       ("service", "offering to help first"), ("devotion", "seeing a task through to the end")] },
+                       ("service", "offering to help first"), ("devotion", "seeing a task through to the end")],
+               rewrite: "This is what you were about to say to the person. Write it again in natural English, keeping the meaning and adding nothing. Reply with the rewritten words only." },
     Language { code: "zh", name: "中文", line: "无论对方使用什么语言，请始终用中文回答。",
                say: "<用中文回复的话>",
                aim_at: "请以这样的态度为目标: ", keep: "对方请你记住的事: ",
                but: " 但这并不是在无话可说时开口、或去做没人要求的事的理由。",
                dials: [("机智", "敏捷而聪明"), ("幽默", "轻松有趣"),
-                       ("服务", "主动提出帮忙"), ("投入", "把手头的事坚持做完")] },
+                       ("服务", "主动提出帮忙"), ("投入", "把手头的事坚持做完")],
+               rewrite: "下面是你正要对对方说的话。请保持意思不变、不要添加内容，用自然的中文重新写一遍。只回答重写后的话。" },
+    Language { code: "ja", name: "日本語", line: "相手が何語で話しても、必ず日本語で答えてください。",
+               say: "<日本語で返す言葉>",
+               aim_at: "次のような話し方を目指してください: ", keep: "相手が覚えておいてほしいと言ったこと: ",
+               but: " ただし、言うことがないのに話したり、頼まれていないことをしたりする理由にはなりません。",
+               dials: [("機転", "素早く賢く"), ("ユーモア", "軽く楽しく"),
+                       ("奉仕", "自分から手伝いを申し出る"), ("献身", "やりかけたことを最後までやり抜く")],
+               rewrite: "次は、あなたが相手に言おうとした言葉です。意味を変えず、何も付け足さずに、自然な日本語で書き直してください。書き直した言葉だけを答えてください。" },
 ];
 
 /// The language set, if it is one of [`LANGUAGES`] — **an unknown code is rest**, as an unknown dial

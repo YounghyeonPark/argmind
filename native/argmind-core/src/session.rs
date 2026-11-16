@@ -322,7 +322,22 @@ impl<E: Eyes, H: Hands, M: Speaks> Session<E, H, M> {
         let prompt = crate::converse::render_with(&listed, trigger, &history,
                                                   self.limit, &self.mind, &self.note);
         let (reply, tokens) = self.model.ask_scored(&prompt);
-        let intent = read_reply(&reply, &listed, trigger);
+        let mut intent = read_reply(&reply, &listed, trigger);
+        //: **A reply in a language the person did not set is written again, once** — since
+        //: 2026-11-17. Asked for Japanese, this model answered Korean turns in Korean or in Korean
+        //: grammar around a Japanese word four times in twelve, and no line in the prompt moved it;
+        //: a second call asked only to rewrite does. Only that reply pays for it, its action is the
+        //: first call's, and a rewrite that is not in the language either is not taken.
+        let code = self.mind.language.clone();
+        if !intent.parroted && !intent.say.is_empty()
+            && !crate::converse::in_language(&intent.say, &listed, &code) {
+            if let Some(ask) = crate::converse::rewrite_prompt(&intent.say, &code) {
+                let again = self.model.ask(&ask);
+                if let Some(said) = crate::converse::read_rewrite(&again, &intent.say, &listed, &code) {
+                    intent.rewritten_from = Some(std::mem::replace(&mut intent.say, said));
+                }
+            }
+        }
         let before = intent.effects.len();
         let effects: Vec<Effect> = intent.effects.into_iter()
             .filter(|e| e.kind != "key" || self.knows_key(&e.text)).collect();
@@ -330,7 +345,8 @@ impl<E: Eyes, H: Hands, M: Speaks> Session<E, H, M> {
         //: How sure of the action, when there is one left after the key filter.
         let sure = if effects.is_empty() { None }
                    else { crate::converse::action_sureness(&tokens) };
-        Intent { say: intent.say, effects, parroted: intent.parroted, sure }
+        Intent { say: intent.say, effects, parroted: intent.parroted, sure,
+                 rewritten_from: intent.rewritten_from }
     }
 
     /// **One step at a time, each checked against the screen as it is, and the rest stopped by a

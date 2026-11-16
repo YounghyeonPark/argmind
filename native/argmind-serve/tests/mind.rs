@@ -233,7 +233,12 @@ fn the_programs_own_sentence_and_the_ear_follow_the_language() {
     assert!(mirrored.parroted);
     assert_eq!(spoken_in(&mirrored, ""), DID_NOT_FOLLOW);
     assert!(spoken_in(&mirrored, "en").starts_with("Sorry"));
-    assert!(!spoken_in(&mirrored, "zh").chars().any(|c| ('\u{AC00}'..='\u{D7A3}').contains(&c)));
+    for code in ["zh", "ja"] {
+        let said = spoken_in(&mirrored, code);
+        assert!(!said.chars().any(|c| ('\u{AC00}'..='\u{D7A3}').contains(&c)), "{code}: {said}");
+        assert_eq!(argmind_core::converse::written_in(&said), Some(code), "{code}: {said}");
+    }
     assert_eq!((hearing_language(""), hearing_language("en"), hearing_language("zh"), hearing_language("fr")),
                ("ko".into(), "en".into(), "zh".into(), "ko".into()));
+    assert_eq!(hearing_language("ja"), "ja");
 }

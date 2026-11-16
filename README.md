@@ -8,7 +8,7 @@ the switches you set allow.
 
 A side project by one person, not a product, with no support commitment. **Windows only for now.
 The interface is Korean.** argmind answers in the language you write in, or always in Korean,
-English or Chinese if you choose one in 설정 → 생각 → 대화 언어. The sentences the program writes
+English, Chinese or Japanese if you choose one in 설정 → 생각 → 대화 언어. The sentences the program writes
 itself (refusals, the activity timeline) stay Korean.
 
 ## What it does
@@ -172,7 +172,7 @@ conclusions that were withdrawn and the ways the measuring code was wrong.
 | choosing a control | **21 of 28** answerable goals right and **7 of 9** impossible ones declined: 28 of 37 decisions. qwen3:8b with thinking off, 4 captured windows, three repeats, the worst counted |
 | crowding | a list the size of a web page breaks choosing: **22 of 28 → 3–8 of 28** at 123–900 controls |
 | talking | **31 of 34** conversational turns produce no action |
-| language | with a language set, **48 of 48** replies in it for Korean, English and Chinese, asked in Korean or English, on two runs. A Korean sentence you asked it to remember pulls about one reply in twelve back to Korean |
+| language | with a language set, **48 of 48** replies in it for Korean, English and Chinese, asked in Korean or English, on two runs. Japanese holds 11–12 of 12 only because a reply in another language is rewritten by a second call (0.75 s against 0.38 s, on 9 of 24 Korean turns and none of 12 Japanese ones), and 2 of about 20 rewrites changed the meaning. A Korean sentence you asked it to remember pulls about one reply in twelve back to Korean before the rewrite |
 | a reply | **0.61 s** median |
 | work | **11 of 12** tasks, no false finish. qwen3:14b with reasoning on, about 148 s a task, one run; each task checked against files and the sandbox, never against the model's own account |
 | documents | Word and Excel made, changed and read: **13 of 13**, none false, one run |

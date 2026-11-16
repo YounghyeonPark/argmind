@@ -582,7 +582,10 @@ fn think(desk: &mut Desk, out: &Listeners, text: &str) {
     //: another into a login page. Each step is checked against the screen in `perform`; this is
     //: the other half — what follows a failed step is not offered, because it was planned against a
     //: screen that step was supposed to produce.
-    let asks = argmind_core::converse::asks_first(&reply);
+    //: **Either reading of it**: a rewrite into the language set (`Intent::rewritten_from`) must
+    //: not turn *열어드릴까요?* into a sentence this rule cannot read as an offer.
+    let asks = argmind_core::converse::asks_first(&reply)
+        || intent.rewritten_from.as_deref().is_some_and(argmind_core::converse::asks_first);
     let mut rest = intent.effects.iter();
     while let Some(effect) = rest.next() {
         if !propose(desk, out, effect.clone(), intent.sure, asks) {
@@ -1840,6 +1843,7 @@ pub fn spoken_in(intent: &argmind_core::intent::Intent, language: &str) -> Strin
         return match language {
             "en" => "Sorry, I didn't follow that. Could you say it again?",
             "zh" => "抱歉，我没听懂。能再说一遍吗？",
+            "ja" => "すみません、よく分かりませんでした。もう一度言ってもらえますか？",
             _ => DID_NOT_FOLLOW,
         }.to_string();
     }

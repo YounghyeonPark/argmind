@@ -322,10 +322,73 @@ pub fn read_reply(reply: &str, listed: &[Widget], trigger: &Trigger) -> Intent {
     if wanted.len() > MOST_AT_ONCE {
         //: The whole batch goes, not the first three. A reply asking for eight things has
         //: misunderstood, and doing three of them is worse than saying so.
-        return Intent { say, effects: Vec::new(), parroted, sure: None };
+        return Intent { say, effects: Vec::new(), parroted, sure: None, rewritten_from: None };
     }
     let effects = wanted.iter().filter_map(|item| effect_of(item, listed, trigger)).collect();
-    Intent { say, effects, parroted, sure: None }
+    Intent { say, effects, parroted, sure: None, rewritten_from: None }
+}
+
+/// **Which script a piece of text is written in**: Hangul is Korean, kana is Japanese, Han with
+/// neither is Chinese, Latin letters with none of those is English, and two of Hangul and kana
+/// together is `"mixed"` — *メモ장이 열렸습니다*. `None` when it has no letters at all (an emoji, a
+/// number), which is in no language and so in every one.
+pub fn written_in(text: &str) -> Option<&'static str> {
+    let any = |lo: char, hi: char| text.chars().any(|c| (lo..=hi).contains(&c));
+    let hangul = any('\u{AC00}', '\u{D7A3}') || any('\u{1100}', '\u{11FF}') || any('\u{3130}', '\u{318F}');
+    let kana = any('\u{3040}', '\u{30FF}');
+    let han = any('\u{4E00}', '\u{9FFF}');
+    let latin = text.chars().any(|c| c.is_ascii_alphabetic());
+    match (hangul, kana, han, latin) {
+        (true, true, _, _) => Some("mixed"),
+        (true, false, _, _) => Some("ko"),
+        (false, true, _, _) => Some("ja"),
+        (false, false, true, _) => Some("zh"),
+        (false, false, false, true) => Some("en"),
+        _ => None,
+    }
+}
+
+/// **Is this reply in the language the person set?** Read with the screen's own labels taken out,
+/// because *メモ장を開きます* names a button that is called 메모장 and is Japanese in every word it
+/// chose. **A Japanese reply may hold Han** — every one does — so it is read as Japanese when it
+/// has kana and no Hangul, and a reply of Han alone (*了解。*) is read as Chinese and costs one
+/// rewrite. Unset or unknown codes are always in it: nothing was asked for.
+pub fn in_language(say: &str, listed: &[Widget], code: &str) -> bool {
+    if crate::mind::language(code).is_none() {
+        return true;
+    }
+    let mut bare = say.to_string();
+    let mut names: Vec<&str> = listed.iter().map(|w| w.name.as_str()).filter(|n| !n.trim().is_empty()).collect();
+    //: Longest first, so *Visual Studio Code* goes before a *Code* inside it.
+    names.sort_by_key(|n| std::cmp::Reverse(n.chars().count()));
+    for n in names {
+        bare = bare.replace(n, " ");
+    }
+    match written_in(&bare) {
+        None => true,
+        Some(script) => script == code,
+    }
+}
+
+/// **The one extra call, for a reply that came back in another language** — the language's own
+/// sentence, written in it, and the reply after it. Only ever made when [`in_language`] says no.
+pub fn rewrite_prompt(say: &str, code: &str) -> Option<String> {
+    crate::mind::language(code).map(|l| format!("{}\n\n{}", l.rewrite, say.trim()))
+}
+
+/// **What came back from a rewrite, if it is one.** Taken only when it is in the language asked
+/// for, is not empty, and is not much longer than what it rewrites (a model that answers its own
+/// words rather than rewriting them writes more) — otherwise `None`, and the reply stays the
+/// model's own, in the wrong language but not invented. Quotes around the whole of it go.
+pub fn read_rewrite(reply: &str, was: &str, listed: &[Widget], code: &str) -> Option<String> {
+    let mut t = reply.trim();
+    for (open, close) in [('「', '」'), ('『', '』'), ('"', '"'), ('“', '”'), ('\'', '\'')] {
+        if t.chars().count() >= 2 && t.starts_with(open) && t.ends_with(close) {
+            t = t[open.len_utf8()..t.len() - close.len_utf8()].trim();
+        }
+    }
+    let longest = 3 * was.chars().count() + 20;
+    (!t.is_empty() && t.chars().count() <= longest && in_language(t, listed, code)).then(|| t.to_string())
 }
 
 /// **Does this reply ask before doing?** *찾아볼까요?* with a click beside it is two answers to one
@@ -342,14 +405,24 @@ pub fn read_reply(reply: &str, listed: &[Widget], trigger: &Trigger) -> Intent {
 pub fn asks_first(say: &str) -> bool {
     const OFFERS: [&str; 4] = ["까요", "시겠어요", "시겠습니까", "시겠나요"];
     const OFFERS_EN: [&str; 6] = ["shall i", "should i", "would you like", "do you want me", "want me to", "may i"];
-    let s = say.trim().trim_end_matches(|c: char| c == '!' || c.is_whitespace());
+    //: **Japanese and Chinese, since 2026-11-17**, with the languages a person can set: *…ましょうか？*
+    //: (*開きましょうか* — shall I open it), *…てもいいですか* (may I), *…ませんか* (shall we — which
+    //: also catches *知りませんか？*, a row where none was needed, the side chosen), and *要我 / 需要我
+    //: / 要不要 / 我来 / 我帮你*. Not *…ますか？* or *好吗*, which ask *what will you do* and *how are
+    //: you* as often as they offer.
+    const OFFERS_JA: [&str; 4] = ["ましょうか", "てもいいですか", "てもよろしいですか", "ませんか"];
+    const OFFERS_ZH: [&str; 5] = ["要我", "需要我", "要不要", "我来", "我帮你"];
+    let s = say.trim().trim_end_matches(|c: char| c == '!' || c == '！' || c.is_whitespace());
     let low = s.to_lowercase();
     //: *…ㄹ래요?* — 할래요, 열래요, 닫을래요 — read off the syllable's final ㄹ, since *그래요?* ends
     //: the same two letters and offers nothing.
     let chars: Vec<char> = s.chars().collect();
     let will = chars.windows(3).any(|w| w[1] == '래' && w[2] == '요'
         && ('가'..='힣').contains(&w[0]) && (w[0] as u32 - '가' as u32) % 28 == 8);
-    s.ends_with('?') && (will || OFFERS.iter().any(|o| s.contains(o)) || OFFERS_EN.iter().any(|o| low.contains(o)))
+    //: A full-width mark is how Chinese and Japanese end a question, and a Korean keyboard makes it too.
+    (s.ends_with('?') || s.ends_with('？'))
+        && (will || OFFERS.iter().chain(&OFFERS_JA).chain(&OFFERS_ZH).any(|o| s.contains(o))
+            || OFFERS_EN.iter().any(|o| low.contains(o)))
 }
 
 /// **A request nobody can read** — its letters replaced by `?` or `�` on the way in. On
@@ -484,11 +557,14 @@ mod tests {
         for q in ["먼저 항공권과 호텔을 찾아볼까요?", "검색해 볼까요? ", "이걸로 할까요?!",
                   //: argmind's own words beside a click it went ahead with, 2026-11-09.
                   "Google Drive에 'Apple iPhone' 기기 추가 창이 보입니다. 기기 추가하시겠어요?",
-                  "저장하시겠습니까?", "지금 닫을래요?", "같이 열래요?", "Shall I open it?", "Would you like me to add the device?"] {
+                  "저장하시겠습니까?", "지금 닫을래요?", "같이 열래요?", "Shall I open it?", "Would you like me to add the device?",
+                  "メモ帳を開きましょうか？", "検索してもいいですか?", "一緒に見ませんか？", "要我帮你打开记事本吗？",
+                  "需要我搜索一下吗?", "要不要打开计算器？", "열까요？"] {
             assert!(super::asks_first(q), "{q}");
         }
         for s in ["검색했습니다", "무엇을 찾으세요?", "열었어요. 더 볼까요 말까요는 나중에", "",
-                  "기기를 추가하시겠어요", "괜찮으세요?", "그래요?", "What next?", "I opened it. Anything else?"] {
+                  "기기를 추가하시겠어요", "괜찮으세요?", "그래요?", "What next?", "I opened it. Anything else?",
+                  "何をしますか？", "メモ帳を開きました。", "你好吗？", "我打开了记事本。", "开吗"] {
             assert!(!super::asks_first(s), "{s}");
         }
     }

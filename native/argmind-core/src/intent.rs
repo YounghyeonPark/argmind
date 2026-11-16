@@ -88,6 +88,10 @@ pub struct Intent {
     /// cannot say. A score, not a calibrated probability — 2026-10-21 measured this model saying
     /// 0.90 for a wrong answer — so what it may gate is decided by measurement, not by its value.
     pub sure: Option<f64>,
+    /// **The model's own words, when they came back in a language the person did not set and
+    /// `say` is their rewrite** — kept, as a mirrored reply's are, so the next report of a wrong
+    /// rewrite can be diagnosed, and so an offer in either reading still holds its action.
+    pub rewritten_from: Option<String>,
 }
 
 /// One whole turn, as it happened.
