@@ -73,3 +73,15 @@ fn the_dechunker_does_not_confuse_chunks_with_lines() {
     let got: Vec<String> = Lines::new(Cursor::new(plain), false).map(|l| l.unwrap()).collect();
     assert_eq!(got, vec![r#"{"a": 1}"#, r#"{"b": 2}"#]);
 }
+
+/// **Layers on the card, only when asked** — the 28 recorded bodies above still match byte for byte
+/// with it unset, and set it lands inside `options`, where Ollama reads it.
+#[test]
+fn layers_on_the_card_are_sent_only_when_set() {
+    let mut local = Local::new("qwen3:14b");
+    assert!(!local.body("x").contains("num_gpu"));
+    local.num_gpu = Some(24);
+    let body: serde_json::Value = serde_json::from_str(&local.body("x")).unwrap();
+    assert_eq!(body["options"]["num_gpu"], 24);
+    assert_eq!(body["options"]["num_ctx"], 8192);
+}

@@ -975,6 +975,9 @@ fn start_work(desk: &Desk, what: &str,
         let mut local = Local::new(TASK_MODEL);
         local.think = Some(TASK_THINKS);
         local.keep_alive = "300s".into();
+        if own {
+            local.num_gpu = Some(OWN_GPU_LAYERS);
+        }
         let mut model = Yielding(local, turn.clone(), Arc::clone(&stop));
         let mut task = if TASK_PLANS { Task::planned(&what) } else { Task::new(&what) };
         task.sparing = TASK_SPARES;
@@ -1066,6 +1069,17 @@ fn start_work(desk: &Desk, what: &str,
     });
 }
 
+/// **How much of the task model argmind's own work keeps on the graphics card** — the rest on the
+/// CPU, so the conversation's model stays beside it. The owner chose this over waiting for a quiet
+/// spell (2026-11-16), after a turn during argmind's own work waited **6.1 s to route and 10 s to
+/// answer** while qwen3:8b came back onto a 16 GB card qwen3:14b had filled. Measured with the
+/// criteria written first — both stay loaded, at most 13.4 GB with 2.5 GB left for the voice and
+/// the recogniser, an 8b turn under 1.5 s, and asking again past 5x slower: **24 layers** read 12.6
+/// GB, an 8b turn **0.41 s**, both loaded, at **8.3 tokens a second against 36.7 — 4.4x slower**; 28
+/// layers was 13.5 GB, over, and hardly faster (9.0); 20 was 5.6x. One run each, 400 tokens with
+/// reasoning on. A request a person hands over still has the whole card.
+const OWN_GPU_LAYERS: u32 = 24;
+
 /// Between one piece of argmind's own work and the next. Chosen: long enough to be found between
 /// pieces now and then, short of idling — the owner asked for it to go on without limit.
 const OWN_PAUSE: std::time::Duration = std::time::Duration::from_secs(60);
@@ -1107,6 +1121,7 @@ fn pursue(desk: &mut Desk) {
         let mut local = Local::new(TASK_MODEL);
         local.think = Some(TASK_THINKS);
         local.keep_alive = "300s".into();
+        local.num_gpu = Some(OWN_GPU_LAYERS);
         let mut model = Yielding(local, turn, never);
         let reply = model.ask(&argmind_core::pursuit::ask_for_next(&aim, &done, &files, &today, refused.as_deref()));
         let _ = jobs.send(Job::OwnPicked(argmind_core::pursuit::read_next(&reply, &done)));

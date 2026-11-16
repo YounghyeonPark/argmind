@@ -44,13 +44,18 @@ pub struct Local {
     /// **Ask for each token's probability.** Off unless set, so every request this tree has ever
     /// measured is the request it sends. See [`Local::ask_scored`].
     pub logprobs: bool,
+    /// **How many of the model's layers go on the graphics card**, the rest on the CPU — `None`
+    /// leaves it to Ollama, which is every request this tree measured before 2026-11-16. Set for
+    /// argmind's own work so the conversation's model can stay on a 16 GB card beside it: with both
+    /// whole, the card held one and a turn waited 6–10 s for its model to come back.
+    pub num_gpu: Option<u32>,
 }
 
 impl Local {
     pub fn new(model: &str) -> Self {
         Local { model: model.into(), host: OLLAMA.into(), ctx: 8192, max_tokens: 4096,
                 keep_alive: "60s".into(), think: None,
-                stop_when_answered: true, stop_when_looping: true, logprobs: false }
+                stop_when_answered: true, stop_when_looping: true, logprobs: false, num_gpu: None }
     }
 
     /// The exact bytes of the request. **A pure function of the settings and the prompt**, which is
@@ -81,8 +86,10 @@ impl Local {
                               py_string(prompt)));
         out.push_str("\"stream\": true, ");
         out.push_str(&format!("\"keep_alive\": {}, ", py_string(&self.keep_alive)));
+        //: `num_gpu` only when set, so a request without it is byte for byte what it was.
+        let layers = self.num_gpu.map(|n| format!(", \"num_gpu\": {n}")).unwrap_or_default();
         out.push_str(&format!(
-            "\"options\": {{\"num_predict\": {}, \"num_ctx\": {}, \"temperature\": 0}}",
+            "\"options\": {{\"num_predict\": {}, \"num_ctx\": {}, \"temperature\": 0{layers}}}",
             self.max_tokens, self.ctx));
         if let Some(think) = self.think {
             out.push_str(&format!(", \"think\": {}", if think { "true" } else { "false" }));

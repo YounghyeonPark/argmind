@@ -307,12 +307,21 @@ pub fn sounds_current(what: &str) -> bool {
 /// owner's first session with the pane had *오늘 서울 날씨 알려줘* answered *제가 직접
 /// 확인해드릴게요… 잠시만 기다려주세요!* and nothing after it, because a turn has no way to search;
 /// the program offers the one way there is, an errand, and the person decides.
+///
+/// **Not a question to argmind about itself or the person** — since 2026-11-16: *오늘 기분 어때?*
+/// opened the pane on a Naver search for itself and made an errand of it. How somebody is, or
+/// what *you* did, is conversation; the second person is read by the word, since *너무* begins
+/// with 너.
 pub fn asks_to_look_up(said: &str) -> bool {
     let asks = ["알려줘", "알려 줘", "알아봐", "알아 봐", "찾아줘", "찾아 줘", "찾아봐", "검색",
                 "얼마야", "어때", "어떻게 돼"];
     let screen = ["화면", "여기", "이 창", "이거"];
+    let personal = ["기분", "컨디션", "마음"];
+    let you = ["너", "넌", "너는", "너도", "너의", "너한테", "네가", "니가", "당신", "당신은"];
+    let to_us = personal.iter().any(|w| said.contains(w))
+        || said.split(|c: char| c.is_whitespace() || c.is_ascii_punctuation()).any(|w| you.contains(&w));
     sounds_current(said) && asks.iter().any(|w| said.contains(w))
-        && !screen.iter().any(|w| said.contains(w))
+        && !screen.iter().any(|w| said.contains(w)) && !to_us
 }
 
 /// **What was read on the web, fenced.** Present only when there is some, so every errand that
@@ -784,11 +793,12 @@ mod tests {
 
     #[test]
     fn a_question_about_now_is_offered_a_lookup_and_one_about_the_screen_is_not() {
-        for yes in ["오늘 서울 날씨 알려줘", "지금 코스피 얼마야", "이번 주 개봉 영화 찾아줘"] {
+        for yes in ["오늘 서울 날씨 알려줘", "지금 코스피 얼마야", "이번 주 개봉 영화 찾아줘",
+                    "오늘 너무 추운데 날씨 어때?"] {
             assert!(asks_to_look_up(yes), "{yes}");
         }
         for no in ["지금 화면에 뭐 있는지 알려줘", "메일 열어줘", "오늘도 고마워",
-                   "운동 루틴 알려줘"] {
+                   "운동 루틴 알려줘", "오늘 기분 어때?", "오늘 너 컨디션 어때", "너 오늘 뭐했는지 알려줘"] {
             assert!(!asks_to_look_up(no), "{no}");
         }
     }
