@@ -273,9 +273,10 @@ where L: FnMut() -> Result<Vec<(String, String)>, String>, P: FnMut(crate::inten
     fn list(&self) -> Vec<ToolSpec> {
         vec![
             ToolSpec { name: "look_pane".into(), args: json!({}),
-                       does: "웹 칸에 지금 열린 페이지에서 누를 수 있는 것을 번호와 함께 본다. click 전에 먼저 본다".into() },
+                       does: "웹 칸에 지금 열린 페이지에서 누를 수 있는 것을 번호와 함께 본다. click·type_text·press_key 의 \
+결과에는 새 목록이 이미 붙어 있다".into() },
             ToolSpec { name: "click".into(), args: json!({"item": 3}),
-                       does: "look_pane 이 보여 준 번호의 것을 누른다. 입력칸이면 누른 뒤 type_text 로 쓴다".into() },
+                       does: "가장 최근 목록의 번호의 것을 누른다. 입력칸이면 누른 뒤 type_text 로 쓴다. 결과에 새 목록이 붙는다".into() },
             ToolSpec { name: "type_text".into(), args: json!({"text": "A-1042"}),
                        does: "방금 누른 입력칸에 글을 쓴다".into() },
             ToolSpec { name: "press_key".into(), args: json!({"key": "Enter"}),
@@ -287,17 +288,8 @@ where L: FnMut() -> Result<Vec<(String, String)>, String>, P: FnMut(crate::inten
             .map(String::from).ok_or_else(|| format!("{k} 가 없다"));
         let pressed = match tool {
             "look_pane" => {
-                let mut seen = (self.look)()?;
-                seen.truncate(MOST_PRESSABLE);
-                self.seen = seen;
-                if self.seen.is_empty() {
-                    return Ok("웹 칸에 누를 수 있는 것이 보이지 않는다".into());
-                }
-                let lines: Vec<String> = self.seen.iter().enumerate()
-                    .map(|(i, (role, name))| format!("{i}: {role} \"{name}\"")).collect();
-                return Ok(format!("웹 칸에서 누를 수 있는 것 (번호: 종류 \"이름\"):
-{}", lines.join("
-")));
+                let seen = (self.look)()?;
+                return Ok(self.listed(seen, OBSERVED_CHARS));
             }
             "click" => {
                 let n = args.get("item").and_then(|v| v.as_u64().or_else(|| v.as_str()?.trim().parse().ok()))
@@ -312,10 +304,45 @@ where L: FnMut() -> Result<Vec<(String, String)>, String>, P: FnMut(crate::inten
             "press_key" => (self.press)(effect("key", "", "", &text("key")?, self.own)),
             other => return Err(format!("그런 도구는 없다: {other}")),
         };
-        //: What the numbers named may have moved.
+        //: **What the numbers named may have moved — so it looks again by itself**, since
+        //: 2026-11-09: the work screen's press forgot its numbers the same way and the owner's task
+        //: stopped on three refusals in a row for want of a look (`screen.rs`). The result carries
+        //: the new list, and its numbers are the ones held.
         self.seen.clear();
-        Ok(format!("{pressed}
-(화면이 바뀌었을 수 있다 — 다시 누르려면 look_pane 으로 다시 보라. 페이지 글은 read_pane)"))
+        let room = OBSERVED_CHARS.saturating_sub(pressed.chars().count() + 40);
+        Ok(match (self.look)() {
+            Ok(seen) => format!("{pressed}\n{} (페이지 글은 read_pane)", self.listed(seen, room)),
+            Err(why) => format!("{pressed}\n(다시 보지 못했다 — {why}. 누르려면 look_pane 으로 다시 보라)"),
+        })
+    }
+}
+
+impl<L, P> Pressing<L, P> {
+    /// The numbered list, kept within `room` characters — the record cuts a longer result from the
+    /// front, which for a list is its first numbers — and the numbers past the end forgotten with it.
+    fn listed(&mut self, mut seen: Vec<(String, String)>, room: usize) -> String {
+        seen.truncate(MOST_PRESSABLE);
+        if seen.is_empty() {
+            self.seen.clear();
+            return "웹 칸에 누를 수 있는 것이 보이지 않는다".into();
+        }
+        let head = "웹 칸에서 누를 수 있는 것 (번호: 종류 \"이름\"):";
+        let mut used = head.chars().count() + 80;
+        let mut lines = Vec::new();
+        for (i, (role, name)) in seen.iter().enumerate() {
+            let line = format!("{i}: {role} \"{name}\"");
+            used += line.chars().count() + 1;
+            if used > room {
+                break;
+            }
+            lines.push(line);
+        }
+        let more = seen.len() - lines.len();
+        seen.truncate(lines.len());
+        self.seen = seen;
+        let end = if more > 0 { format!("\n(목록이 길어 {}번까지만 실었다 — 그 뒤 {more}개는 번호가 없다)", lines.len().saturating_sub(1)) }
+                  else { String::new() };
+        format!("{head}\n{}{end}", lines.join("\n"))
     }
 }
 
@@ -1249,6 +1276,21 @@ mod tests {
         assert!(!reasons_here(&t));
     }
 
+    /// A page's list longer than the record keeps is ended where the record would have cut it —
+    /// from the front, its first numbers — and a number past the end is refused, not pressed.
+    #[test]
+    fn a_long_page_list_is_ended_inside_the_record_and_its_tail_has_no_numbers() {
+        let mut hands = Pressing::new(
+            || Ok((0..150).map(|i| ("link".to_string(), format!("기사 제목이 꽤 긴 링크 {i}번"))).collect()),
+            |_| "실행".to_string());
+        let seen = hands.call("look_pane", &json!({})).unwrap();
+        assert!(seen.chars().count() <= OBSERVED_CHARS, "{}", seen.chars().count());
+        assert!(seen.starts_with("웹 칸에서 누를 수 있는 것") && seen.contains("0: link") && seen.contains("번호가 없다"));
+        let last: usize = seen.lines().filter_map(|l| l.split(':').next()?.parse().ok()).max().unwrap();
+        assert!(hands.call("click", &json!({"item": last})).is_ok());
+        assert!(hands.call("click", &json!({"item": 149})).is_err());
+    }
+
     #[test]
     fn a_press_names_what_the_last_look_showed_and_nothing_else() {
         let pressed = std::rc::Rc::new(std::cell::RefCell::new(Vec::<crate::intent::Effect>::new()));
@@ -1261,13 +1303,16 @@ mod tests {
         let seen = hands.call("look_pane", &json!({})).unwrap();
         assert!(seen.contains("1: button \"조회\""), "{seen}");
         assert_eq!(seen.lines().skip(1).collect::<Vec<_>>(), ["0: textbox \"주문번호\"", "1: button \"조회\""], "a role and a name, never a coordinate");
-        hands.call("click", &json!({"item": "1"})).unwrap();
-        //: The numbers are forgotten after a press.
-        assert!(hands.call("click", &json!({"item": 0})).is_err());
+        let after = hands.call("click", &json!({"item": "1"})).unwrap();
+        //: The press carries the new list, so its numbers are the ones held — no look between.
+        assert!(after.contains("1: button \"조회\""), "{after}");
+        assert!(hands.call("click", &json!({"item": 0})).is_ok());
+        assert!(hands.call("click", &json!({"item": 7})).is_err_and(|e| e.contains("마지막 목록에 없다")));
         hands.call("type_text", &json!({"text": "A-1042"})).unwrap();
         let p = pressed.borrow();
         assert_eq!((p[0].kind.as_str(), p[0].target.as_str(), p[0].role.as_str()), ("click", "조회", "button"));
-        assert_eq!((p[1].kind.as_str(), p[1].text.as_str()), ("type", "A-1042"));
+        assert_eq!((p[1].kind.as_str(), p[1].target.as_str()), ("click", "주문번호"));
+        assert_eq!((p[2].kind.as_str(), p[2].text.as_str()), ("type", "A-1042"));
         assert!(p.iter().all(|e| e.because_asked == Some(true)), "a task is something the person asked for");
         //: **And work argmind set itself presses as its own idea**, gated on 스스로 실행.
         let own = std::rc::Rc::new(std::cell::RefCell::new(Vec::<crate::intent::Effect>::new()));

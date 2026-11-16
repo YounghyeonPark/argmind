@@ -52,7 +52,10 @@ const IN_THEIR_NAME: [&str; 27] = ["가입하", "가입해", "로그인하", "�
                                     "입금하", "입금해"];
 
 /// The prompt that asks for the next piece of work.
-pub fn ask_for_next(aim: &str, done: &[Pursued], files: &[String], today: &str) -> String {
+/// `refused` is why the last pick was not taken, when it was not: the model is deterministic at a
+/// fixed prompt, and asked the same thing again it picks the same thing again — in the application,
+/// twice running, until the backoff.
+pub fn ask_for_next(aim: &str, done: &[Pursued], files: &[String], today: &str, refused: Option<&str>) -> String {
     let mut p = String::new();
     p.push_str("너는 사람의 PC에서 일하는 에이전트다. 사람이 맡긴 일이 없을 때는 사람이 정해 둔 목표를 향해 \
 스스로 일한다. 한 번에 작업 하나씩, 작업 폴더에서 한다.\n\n");
@@ -73,6 +76,9 @@ pub fn ask_for_next(aim: &str, done: &[Pursued], files: &[String], today: &str) 
     } else {
         p.push_str(&files.iter().take(40).cloned().collect::<Vec<_>>().join(", "));
     }
+    if let Some(why) = refused {
+        p.push_str(&format!("\n\n직전에 고른 일은 받아들이지 않았다: {why}. 다른 일을 골라라."));
+    }
     p.push_str("\n\n이 목표를 향해 다음에 할 일 하나를 정하라.\n\
 - 작업 한 번으로 끝낼 수 있는 구체적인 일 하나. 결과는 작업 폴더의 파일로 남기고, 그 파일 이름을 요청에 적는다.\n\
 - 이미 한 일을 되풀이하지 않는다. 앞의 결과를 읽고 이어서 더 나아간다. 못 끝낸 일은 더 작게 나눠 다시 할 수 있다.\n\
@@ -84,11 +90,16 @@ JSON 하나로만 답하라: {\"next\": \"사람이 작업을 맡길 때처럼 �
 }
 
 /// Does a request name a file — a name with an extension? **Not the word 파일**: the first piece in
-/// the application, *3D 인쇄 가능한 파일로 저장해줘*, named none and passed as if it had.
+/// the application, *3D 인쇄 가능한 파일로 저장해줘*, named none and passed as if it had. **And a
+/// particle may follow with no space** — *부업_비교.md에 써줘* was read as naming nothing, and the
+/// program wrote the same file onto its end a second time (2026-11-09): the extension is the ASCII
+/// run after the dot, whatever comes after it.
 pub fn names_a_file(s: &str) -> bool {
     s.split(|c: char| c.is_whitespace() || "'\"「」()".contains(c))
-        .any(|w| w.rsplit_once('.').is_some_and(|(a, ext)| !a.is_empty() && (2..=5).contains(&ext.len())
-            && ext.chars().all(|c| c.is_ascii_alphanumeric())))
+        .any(|w| w.rsplit_once('.').is_some_and(|(a, rest)| {
+            let ext: String = rest.chars().take_while(|c| c.is_ascii_alphanumeric()).collect();
+            !a.is_empty() && (2..=5).contains(&ext.len()) && !rest[ext.len()..].starts_with(|c: char| c.is_ascii())
+        }))
 }
 
 /// A file name the model gave, if it is one the work folder can take: no folder in it, an
@@ -114,12 +125,20 @@ pub fn read_next(reply: &str, done: &[Pursued]) -> Result<String, String> {
     if next.chars().count() > MOST_CHARS {
         return Err(format!("다음 할 일이 {MOST_CHARS}자를 넘는다 — 작업 하나가 아니다"));
     }
+    //: **A finished piece is not done again; an unfinished one may be, once more.** The rule had
+    //: been *not one of the last three*, and in the application (2026-11-16) a piece stopped for the
+    //: person's request was picked again — rightly — and refused twice running, which the backoff
+    //: then counts as a goal that keeps failing.
     let squeezed = |s: &str| s.split_whitespace().collect::<Vec<_>>().join(" ");
-    if done.iter().rev().take(3).any(|d| squeezed(&d.asked) == squeezed(&next)) {
-        return Err("방금 한 일과 같은 일이다".into());
+    let same: Vec<&Pursued> = done.iter().filter(|d| squeezed(&d.asked) == squeezed(&next)).collect();
+    if same.iter().any(|d| d.finished) {
+        return Err(format!("「{next}」은(는) 이미 끝낸 일과 같다"));
+    }
+    if same.iter().filter(|d| !d.said.contains("사람이 멈췄")).count() >= 2 {
+        return Err(format!("「{next}」은(는) 두 번 해서 못 끝낸 일과 같다 — 더 작게 나눠서 다르게 하라"));
     }
     if let Some(w) = IN_THEIR_NAME.iter().find(|w| next.contains(*w)) {
-        return Err(format!("사람의 이름으로 하는 일이다 (「{w}」) — 스스로는 하지 않는다"));
+        return Err(format!("「{next}」은(는) 사람의 이름으로 하는 일이다 (「{w}」) — 스스로는 하지 않는다"));
     }
     if names_a_file(&next) {
         return Ok(next);
@@ -169,15 +188,17 @@ mod tests {
     #[test]
     fn the_prompt_carries_the_goal_the_record_and_the_folder() {
         let p = ask_for_next("돈을어떻게벌수있는지생각해줘", &[did("부업 아이디어 10개를 조사해 ideas.md 에 정리해줘", true)],
-                             &["ideas.md".into()], "2026년 11월 9일");
+                             &["ideas.md".into()], "2026년 11월 9일", None);
         assert!(p.contains("목표: 돈을어떻게벌수있는지생각해줘"));
         assert!(p.contains("「부업 아이디어 10개를 조사해 ideas.md 에 정리해줘」 → 끝남"));
         assert!(p.contains("(만든 파일: ideas.md)"));
         assert!(p.contains("스스로 한 일이 만든 파일: ideas.md"));
-        assert!(ask_for_next("x", &[], &[], "오늘").contains("(아직 없음)"));
+        assert!(ask_for_next("x", &[], &[], "오늘", None).contains("(아직 없음)"));
+        assert!(!ask_for_next("x", &[], &[], "오늘", None).contains("받아들이지 않았다"));
+        assert!(ask_for_next("x", &[], &[], "오늘", Some("「a」은(는) 이미 끝낸 일과 같다")).contains("직전에 고른 일은 받아들이지 않았다: 「a」"));
         //: Only the newest SHOWN.
         let many: Vec<Pursued> = (0..20).map(|i| did(&format!("일 {i}"), true)).collect();
-        let p = ask_for_next("x", &many, &[], "오늘");
+        let p = ask_for_next("x", &many, &[], "오늘", None);
         assert!(!p.contains("「일 7」") && p.contains("「일 8」") && p.contains("「일 19」"));
     }
 
@@ -187,6 +208,15 @@ mod tests {
         assert_eq!(read_next(r#"{"next": "ideas.md 의 아이디어마다 초기 비용을 조사해 costs.md 에 표로 정리해줘", "why": "x"}"#, &done),
                    Ok("ideas.md 의 아이디어마다 초기 비용을 조사해 costs.md 에 표로 정리해줘".into()));
         assert!(read_next(r#"{"next": "부업 아이디어 10개를 조사해  ideas.md 에 정리해줘"}"#, &done).is_err());
+        //: Unfinished once — or stopped for the person — may be tried again; twice unfinished may not.
+        let again = "costs.md 에 비용을 정리해줘";
+        let mut tried = vec![Pursued { asked: again.into(), finished: false, said: "작업을 다 끝내지 못했습니다 — 사람이 멈췄습니다".into(), made: vec![] }];
+        let pick = format!(r#"{{"next": "{again}"}}"#);
+        assert!(read_next(&pick, &tried).is_ok());
+        tried.push(Pursued { said: "끝났다고 했지만 확인되지 않아 멈췄습니다".into(), ..tried[0].clone() });
+        assert!(read_next(&pick, &tried).is_ok());
+        tried.push(tried[1].clone());
+        assert!(read_next(&pick, &tried).is_err_and(|e| e.contains("두 번")));
         for acting in ["크몽에 가입해서 서비스를 등록해줘", "블로그에 글을 올려줘", "고객에게 메일을 보내줘", "상품을 구매해줘"] {
             let r = read_next(&format!(r#"{{"next": "{acting}"}}"#), &done);
             assert!(r.as_ref().is_err_and(|e| e.contains("사람의 이름으로")), "{acting}: {r:?}");
@@ -200,6 +230,11 @@ mod tests {
         assert_eq!(read_next(r#"{"next": "수익 창출 방법을 분류해 보세요", "file": "C:\\x\\a.md"}"#, &done),
                    Ok("수익 창출 방법을 분류해 보세요 — 결과는 작업 폴더의 목표_2.md 에 써줘".into()));
         assert!(names_a_file("costs.md 에 표로") && !names_a_file("파일로 남겨줘") && !names_a_file("목록을 작성해 보세요"));
+        //: The owner's run, 2026-11-09: a particle with no space, and the file written on twice.
+        assert!(names_a_file("결과는 작업 폴더의 부업_비교.md에 써줘"));
+        assert_eq!(read_next(r#"{"next": "수익성 기준으로 비교해줘 — 결과는 작업 폴더의 부업_비교.md에 써줘", "file": "부업_비교.md"}"#, &done),
+                   Ok("수익성 기준으로 비교해줘 — 결과는 작업 폴더의 부업_비교.md에 써줘".into()));
+        assert!(!names_a_file("1.5배 늘었다") && !names_a_file("v2.0") && !names_a_file("e.g."));
         assert!(read_next(&format!(r#"{{"next": "{}"}}"#, "가".repeat(MOST_CHARS + 1)), &done).is_err());
     }
 }

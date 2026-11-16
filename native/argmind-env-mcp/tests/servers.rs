@@ -6,11 +6,14 @@ use argmind_core::task::Tools;
 use argmind_env_mcp::{configured, Servers};
 use serde_json::json;
 
+/// The example, found by walking up from this test binary — **not a fixed two levels**: Rust 1.100
+/// (2026-11) moved test binaries under `target/debug/build/<crate>/<hash>/`, and the examples stayed
+/// in `target/debug/examples`, so the old `parent().parent()` looked in a folder that was never made.
 fn echo() -> String {
     let me = std::env::current_exe().unwrap();
-    let dir = me.parent().unwrap().parent().unwrap().join("examples");
-    let exe = dir.join(if cfg!(windows) { "mcp-echo.exe" } else { "mcp-echo" });
-    assert!(exe.exists(), "{} — built by cargo test", exe.display());
+    let name = if cfg!(windows) { "mcp-echo.exe" } else { "mcp-echo" };
+    let exe = me.ancestors().map(|d| d.join("examples").join(name)).find(|p| p.exists())
+        .unwrap_or_else(|| panic!("no examples/{name} above {} — built by cargo test", me.display()));
     exe.display().to_string()
 }
 

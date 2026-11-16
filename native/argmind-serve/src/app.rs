@@ -267,6 +267,8 @@ struct Desk {
     own_misses: u32,
     /// A pick is being asked of the model.
     own_choosing: bool,
+    /// Why the last pick was not taken, for the next one to hear.
+    own_refused: Option<String>,
     /// The person was seen away since the last report — `somebody_about` read `Some(false)`.
     own_away: bool,
     /// Where a finished task reports back, so its result enters the history on this thread.
@@ -1035,13 +1037,16 @@ fn start_work(desk: &Desk, what: &str,
             None => ("작업이 멈췄습니다".into(), None),
         };
         //: **What it made, shown** — read the way the task read it, so a Word file is its text.
-        let made: Vec<(String, String)> = crate::deliver::made(&before, &crate::deliver::snapshot(&folder))
-            .into_iter()
+        //: **Every changed file is named; only the readable ones are shown.** The record of
+        //: argmind's own work had kept only what reads as text, so an STL or a .blend it made was
+        //: missing from it — and from what the next pick was shown (2026-11-09).
+        let after = crate::deliver::snapshot(&folder);
+        let names: Vec<String> = crate::deliver::changed(&before, &after);
+        let made: Vec<(String, String)> = crate::deliver::made(&before, &after).into_iter()
             .filter_map(|rel| argmind_core::task::read_through(bench.as_mut(), &rel).ok()
                 .map(|text| (rel, crate::deliver::trimmed(&text))))
             .collect();
-        let names: Vec<String> = made.iter().map(|(rel, _)| rel.clone()).collect();
-        if !made.is_empty() {
+        if !names.is_empty() {
             out.record("작업", &format!("만든 것: {}", names.join(", ")));
             //: **Not shown for argmind's own work**: opening the pane on it would take the view
             //: from somebody who did not ask for anything. It is told when they come back.
@@ -1095,6 +1100,7 @@ fn pursue(desk: &mut Desk) {
         }
     }
     let (jobs, turn, today) = (desk.jobs.clone(), desk.turn.clone(), crate::platform::today());
+    let refused = desk.own_refused.clone();
     //: A pick is let go of only for a turn; nothing stops it but argmind closing.
     let never = Arc::new(AtomicBool::new(false));
     std::thread::spawn(move || {
@@ -1102,7 +1108,7 @@ fn pursue(desk: &mut Desk) {
         local.think = Some(TASK_THINKS);
         local.keep_alive = "300s".into();
         let mut model = Yielding(local, turn, never);
-        let reply = model.ask(&argmind_core::pursuit::ask_for_next(&aim, &done, &files, &today));
+        let reply = model.ask(&argmind_core::pursuit::ask_for_next(&aim, &done, &files, &today, refused.as_deref()));
         let _ = jobs.send(Job::OwnPicked(argmind_core::pursuit::read_next(&reply, &done)));
     });
 }
@@ -1113,6 +1119,7 @@ fn own_picked(desk: &mut Desk, out: &Listeners, picked: Result<String, String>) 
     match picked {
         Ok(next) if !desk.working.load(Ordering::SeqCst) && desk.after_own.is_none()
             && !desk.session.mind.aim.trim().is_empty() => {
+            desk.own_refused = None;
             match work_sets(desk, true) {
                 Some(sets) => start_work(desk, &next, sets, true),
                 None => desk.own_not_before = Instant::now() + OWN_BACKOFF,
@@ -1121,6 +1128,7 @@ fn own_picked(desk: &mut Desk, out: &Listeners, picked: Result<String, String>) 
         Ok(_) => {}
         Err(why) => {
             out.record("작업", &format!("스스로 할 일을 정하지 못함 — {why}"));
+            desk.own_refused = Some(why.clone());
             desk.own_misses += 1;
             desk.own_not_before = Instant::now() + if desk.own_misses >= 3 { OWN_BACKOFF } else { OWN_PAUSE };
         }
@@ -3260,7 +3268,7 @@ pub fn run(how: How) {
                               stop_work: Arc::new(AtomicBool::new(false)), jobs: agent_jobs,
                               own_work: Arc::new(AtomicBool::new(false)), after_own: None, own_halted: false,
                               own_untold: Vec::new(), own_not_before: Instant::now() + OWN_PAUSE, own_misses: 0,
-                              own_choosing: false, own_away: false,
+                              own_choosing: false, own_away: false, own_refused: None,
                               task_asks: Arc::new(Mutex::new(None)),
                               task_presses: Vec::new(), screen_asks: Vec::new(),
                               facing_now: Arc::new(Mutex::new(None)),

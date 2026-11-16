@@ -62,7 +62,7 @@ fn main() {
     let (mut allowed, mut named, mut repeated) = (0, 0, 0);
     for round in 1..=5 {
         let began = std::time::Instant::now();
-        let reply = model.ask(&ask_for_next(&aim, &done, &files, "2026년 11월 9일"));
+        let reply = model.ask(&ask_for_next(&aim, &done, &files, "2026년 11월 9일", None));
         let secs = began.elapsed().as_secs_f64();
         match read_next(&reply, &done) {
             Ok(next) => {

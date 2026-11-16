@@ -54,13 +54,21 @@ fn walk(dir: &Path, prefix: &str, seen: &mut Snapshot, depth: usize) {
 
 /// **Made or changed since `before`**, readable as a page, newest first, at most [`MOST_SHOWN`].
 pub fn made(before: &Snapshot, after: &Snapshot) -> Vec<String> {
+    changed(before, after).into_iter()
+        .filter(|rel| rel.rsplit_once('.').is_some_and(|(_, ext)| SHOWN.contains(&ext.to_ascii_lowercase().as_str())))
+        .take(MOST_SHOWN).collect()
+}
+
+/// **Every file made or changed since `before`**, whatever it is, newest first — what a record of
+/// the work names, where [`made`] is what a page can show. An STL argmind made by itself was missing
+/// from its record because a page cannot show one (2026-11-09).
+pub fn changed(before: &Snapshot, after: &Snapshot) -> Vec<String> {
     let mut changed: Vec<(&String, Option<SystemTime>)> = after.iter()
         .filter(|(rel, now)| before.get(*rel) != Some(now))
-        .filter(|(rel, _)| rel.rsplit_once('.').is_some_and(|(_, ext)| SHOWN.contains(&ext.to_ascii_lowercase().as_str())))
         .map(|(rel, (at, _))| (rel, *at))
         .collect();
     changed.sort_by(|a, b| b.1.cmp(&a.1).then(a.0.cmp(b.0)));
-    changed.into_iter().take(MOST_SHOWN).map(|(rel, _)| rel.clone()).collect()
+    changed.into_iter().map(|(rel, _)| rel.clone()).collect()
 }
 
 /// At most [`MOST_CHARS`] of a file's text, and said so when cut.
@@ -92,6 +100,10 @@ mod tests {
         let mut got = made(&before, &snapshot(&root));
         got.sort();
         assert_eq!(got, ["edited.md", "sub/new.docx"]);
+        //: Every changed file is named, a picture included; backups and untouched files still not.
+        let mut all = changed(&before, &snapshot(&root));
+        all.sort();
+        assert_eq!(all, ["edited.md", "picture.png", "sub/new.docx"]);
         //: And nothing changed is nothing to show.
         assert!(made(&snapshot(&root), &snapshot(&root)).is_empty());
         let _ = std::fs::remove_dir_all(&root);

@@ -41,12 +41,20 @@ pub fn report(untold: &[Pursued]) -> String {
     if untold.is_empty() {
         return String::new();
     }
+    //: **What the first report in the application got wrong** (2026-11-16): a piece stopped
+    //: because the person handed something over was *다 못 했어요 … 작업 폴더에 있어요* — with nothing
+    //: made and nothing in the folder — and its request was cut mid-word.
     let each: Vec<String> = untold.iter().map(|p| {
-        let what: String = p.asked.chars().take(50).collect();
+        let what: String = p.asked.split(" — 결과는").next().unwrap_or(&p.asked).trim().to_string();
+        let what = if what.chars().count() > 40 { format!("{}…", what.chars().take(40).collect::<String>()) } else { what };
         let files = if p.made.is_empty() { String::new() } else { format!(" ({})", p.made.join(", ")) };
-        format!("「{what}」 {}{files}", if p.finished { "끝냈어요" } else { "다 못 했어요" })
+        let how = if p.finished { "끝냈어요" }
+                  else if p.said.contains("사람이 멈췄") { "맡기신 일 때문에 멈췄어요" }
+                  else { "다 못 했어요" };
+        format!("「{what}」 {how}{files}")
     }).collect();
-    format!("목표로 스스로 한 일 {}가지 — {}. 작업 폴더에 있어요.", untold.len(), each.join(" / "))
+    let folder = if untold.iter().any(|p| !p.made.is_empty()) { " 만든 파일은 작업 폴더에 있어요." } else { "" };
+    format!("목표로 스스로 한 일 {}가지 — {}.{folder}", untold.len(), each.join(" / "))
 }
 
 #[cfg(test)]
@@ -57,9 +65,17 @@ mod tests {
     fn a_report_is_one_short_sentence() {
         let p = Pursued { asked: "부업 아이디어 10개를 ideas.md 에 정리해줘".into(), finished: true, said: "정리했습니다".into(),
                           made: vec!["ideas.md".into()] };
-        let said = report(&[p.clone(), Pursued { finished: false, made: vec![], ..p }]);
-        assert!(said.starts_with("목표로 스스로 한 일 2가지") && said.contains("끝냈어요 (ideas.md)") && said.contains("다 못 했어요"),
-                "{said}");
+        let said = report(&[p.clone(), Pursued { finished: false, made: vec![], ..p.clone() }]);
+        assert!(said.starts_with("목표로 스스로 한 일 2가지") && said.contains("끝냈어요 (ideas.md)") && said.contains("다 못 했어요")
+                && said.ends_with("작업 폴더에 있어요."), "{said}");
         assert_eq!(report(&[]), "");
+        //: The application's first report: given way, nothing made, the request cut mid-word.
+        let gave_way = Pursued { asked: "수익_방법_목록.md 파일에 기재된 수익 창출 방법의 개수를 정확히 세어 부업_비교.md에 기록해줘".into(),
+                                 finished: false, said: "작업을 다 끝내지 못했습니다 — 사람이 멈췄습니다".into(), made: vec![] };
+        let said = report(&[gave_way]);
+        assert!(said.contains("맡기신 일 때문에 멈췄어요") && !said.contains("작업 폴더에 있어요") && said.contains("…」"), "{said}");
+        //: The program's own tail is not the request.
+        let tailed = Pursued { asked: "부업을 비교해줘 — 결과는 작업 폴더의 목표_3.md 에 써줘".into(), ..p };
+        assert!(report(&[tailed]).contains("「부업을 비교해줘」"));
     }
 }
