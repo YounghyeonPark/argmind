@@ -186,3 +186,54 @@ fn keeping_and_forgetting_travel_as_routes() {
         assert_eq!(post(bad, ""), Route::Unknown, "{bad}");
     }
 }
+
+/// **The language a person chose survives a restart; one nobody offers is rest.** Written as a code,
+/// read back as the same code, and a hand-edited `"언어": "fr"` is dropped rather than half-kept.
+#[test]
+fn the_language_is_written_down_and_an_unknown_one_is_rest() {
+    let mut mind = Mind::resting();
+    mind.language = "en".into();
+    let text = render(&mind);
+    assert!(text.contains("\"언어\": \"en\""), "{text}");
+    assert_eq!(parse(&text), mind);
+    assert!(!mind.at_rest(), "a language set is not rest");
+    assert!(mind.line().is_some_and(|l| l.starts_with("Always reply in English")));
+
+    let unknown = parse("{\n  \"언어\": \"fr\"\n}\n");
+    assert!(unknown.at_rest() && unknown.line().is_none(), "{unknown:?}");
+    //: Nothing set writes nothing about it, so a file from before this reads and writes the same.
+    assert_eq!(render(&Mind::resting()), "{}\n");
+}
+
+/// **The page can choose only what the program offers**: a code from the list, or `follow`.
+#[test]
+fn choosing_a_language_travels_as_a_route() {
+    assert_eq!(asked("/language/en"), Route::Language("en".into()));
+    assert_eq!(asked("/language/follow"), Route::Language(String::new()));
+    //: The route carries what was asked; the job and the handler refuse a code not in the list,
+    //: which `speak_in` does without touching the file.
+    assert_eq!(asked("/language/fr"), Route::Language("fr".into()));
+    assert!(argmind_serve::mind::speak_in("fr").is_err());
+    assert_eq!(asked("/language/"), Route::Unknown);
+    let sent = argmind_serve::app::mind_json(&Mind::resting());
+    for code in argmind_core::mind::LANGUAGES.map(|l| l.code) {
+        assert!(sent.contains(&format!("\"code\":\"{code}\"")), "{code} is not offered: {sent}");
+    }
+    assert!(sent.contains("\"language\":\"\""), "{sent}");
+}
+
+/// **The one sentence the program writes into a reply follows the setting** — and the recogniser
+/// is told the same language, Korean when nothing is set, as it always was.
+#[test]
+fn the_programs_own_sentence_and_the_ear_follow_the_language() {
+    use argmind_serve::app::{hearing_language, spoken_in, DID_NOT_FOLLOW};
+    let screen = vec![argmind_core::contract::Widget::new("Eraser", "button", (0, 0, 1, 1), "")];
+    let mirrored = argmind_core::converse::read_reply(r#"{"say": "머해?", "do": []}"#, &screen,
+                                                      &argmind_core::intent::Trigger::said("머해"));
+    assert!(mirrored.parroted);
+    assert_eq!(spoken_in(&mirrored, ""), DID_NOT_FOLLOW);
+    assert!(spoken_in(&mirrored, "en").starts_with("Sorry"));
+    assert!(!spoken_in(&mirrored, "zh").chars().any(|c| ('\u{AC00}'..='\u{D7A3}').contains(&c)));
+    assert_eq!((hearing_language(""), hearing_language("en"), hearing_language("zh"), hearing_language("fr")),
+               ("ko".into(), "en".into(), "zh".into(), "ko".into()));
+}

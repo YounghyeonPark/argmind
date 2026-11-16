@@ -248,6 +248,9 @@ pub enum Route {
     Dial(String, u8),
     /// Write the thinking goal — the sentence the dials cannot express. An empty one clears it.
     Aim(String),
+    /// Answer in this language — a code from `argmind_core::mind::LANGUAGES`, or `""` for the
+    /// language the person used, which is what `/language/follow` sends.
+    Language(String),
     /// Take back something that was answered once and for all.
     Forget(String),
     /// Use this microphone, speaker or camera from now on. An empty id means *go back to whatever
@@ -431,6 +434,8 @@ pub fn route(request: &Request) -> Route {
         //: The sentence comes in the body rather than the path: it is prose, it can be long, and a
         //: path is the wrong place for either.
         ("POST", "/aim") => Route::Aim(request.body.clone()),
+        ("POST", "/language/follow") => Route::Language(String::new()),
+        ("POST", p) if p.starts_with("/language/") && p.len() > 10 => Route::Language(p[10..].to_string()),
         ("POST", "/aloud/on") => Route::Aloud(true),
         ("POST", "/aloud/off") => Route::Aloud(false),
         ("POST", "/camera/on") => Route::Camera(true),

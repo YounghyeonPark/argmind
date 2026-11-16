@@ -1219,6 +1219,23 @@ stream.addEventListener("note-kept", (e) => {
 const dials = document.getElementById("dials");
 const whatissent = document.getElementById("whatissent");
 const aimBox = document.getElementById("aim");
+const speakIn = document.getElementById("speak-in");
+speakIn.onchange = () => void post(`/language/${speakIn.value}`);
+/** The language choices, redrawn only when the list itself changes so an open dropdown is not
+ *  replaced under the pointer. */
+function drawLanguages(m) {
+    const want = [{ code: "follow", name: "상대가 쓴 언어로 (기본)" }, ...(m.languages ?? [])];
+    const have = Array.from(speakIn.options).map((o) => o.value).join(",");
+    if (have !== want.map((l) => l.code).join(",")) {
+        speakIn.replaceChildren(...want.map((l) => {
+            const o = document.createElement("option");
+            o.value = l.code;
+            o.textContent = l.name;
+            return o;
+        }));
+    }
+    speakIn.value = m.language ? m.language : "follow";
+}
 stream.addEventListener("mind", (e) => {
     const m = JSON.parse(e.data);
     // Never while it is being typed in: replacing the value under the cursor loses what somebody is
@@ -1232,6 +1249,7 @@ stream.addEventListener("mind", (e) => {
     }
     whatissent.textContent = m.line;
     drawKept(m.kept ?? []);
+    drawLanguages(m);
 });
 const keptRows = document.getElementById("kept-rows");
 const keptForm = document.getElementById("kept-form");

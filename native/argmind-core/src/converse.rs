@@ -160,9 +160,11 @@ pub fn render_with(widgets: &[Widget], trigger: &Trigger, history: &[(String, St
         format!("You noticed: {}", trigger.text)
     });
     lines.push(String::new());
-    lines.push(
-        r#"Reply with only JSON: {"say": "<what you say back>", "do": [ ... ]} where each entry of"#
-            .to_string());
+    //: **The placeholder in the language set**, the line nearest the reply — and at rest the
+    //: same characters as ever. See `mind::Language`.
+    lines.push(format!(
+        r#"Reply with only JSON: {{"say": "{}", "do": [ ... ]}} where each entry of"#,
+        mind.say_slot().unwrap_or("<what you say back>")));
     lines.push(
         r#""do" is {"click": <number>}, {"type": "<text to type>"} or {"key": "<enter|tab|escape>"}."#
             .to_string());

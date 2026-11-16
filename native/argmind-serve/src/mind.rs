@@ -38,6 +38,10 @@ pub const AIM: &str = "목표";
 /// what this hand reader can read and what a person editing the file can see.
 pub const KEPT: &str = "기억";
 
+/// The key the language argmind answers in is written under, by code — `"언어": "en"`. Absent is
+/// *the language they used*, as it always was.
+pub const LANGUAGE: &str = "언어";
+
 /// Where the file lives — beside the decisions and the devices.
 pub fn at() -> PathBuf {
     let mut path = std::env::var("LOCALAPPDATA").map(PathBuf::from)
@@ -74,6 +78,14 @@ pub fn parse(text: &str) -> Mind {
         let Some((left, right)) = line.split_once(':') else { continue };
         let key = left.trim().trim_matches('"');
         let right = right.trim();
+        //: **A code nobody knows is dropped**, like an unknown dial: rest is the safe reading.
+        if key == LANGUAGE {
+            let code = right.trim_end_matches('}').trim().trim_matches('"').trim();
+            if argmind_core::mind::is_a_language(code) {
+                mind.language = code.to_string();
+            }
+            continue;
+        }
         if key == AIM || key == KEPT {
             if let Some((inside, _)) = right.strip_prefix('"').and_then(|r| r.rsplit_once('"')) {
                 let said = unescape(inside);
@@ -111,6 +123,9 @@ pub fn render(mind: &Mind) -> String {
     }
     for kept in mind.kept.iter().map(|k| k.trim()).filter(|k| !k.is_empty()) {
         rows.push(format!("  \"{KEPT}\": \"{}\"", escape(kept)));
+    }
+    if argmind_core::mind::is_a_language(&mind.language) {
+        rows.push(format!("  \"{LANGUAGE}\": \"{}\"", mind.language));
     }
     if rows.is_empty() {
         return "{}\n".to_string();
@@ -184,6 +199,19 @@ pub fn keep(text: &str) -> Result<Mind, String> {
         }
         mind.kept.push(said);
     }
+    write(&mind)?;
+    Ok(mind)
+}
+
+/// **Answer in this language from now on**, by code — or `""`, the language they used. An unknown
+/// code is refused rather than written, so the page cannot invent one.
+pub fn speak_in(code: &str) -> Result<Mind, String> {
+    let code = code.trim();
+    if !code.is_empty() && !argmind_core::mind::is_a_language(code) {
+        return Err(format!("{code} 라는 언어는 없습니다"));
+    }
+    let mut mind = remembered();
+    mind.language = code.to_string();
     write(&mind)?;
     Ok(mind)
 }

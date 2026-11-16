@@ -415,6 +415,13 @@
   <details id="aiming">
     <summary>생각 — 목표와 성향</summary>
     <div id="thinking">
+      <!-- 대화 언어 — the owner, 2026-11-17. The list comes from the server with the mind, so the page
+           cannot offer a language the server would refuse. Unset is what argmind always did: answer
+           in the language the person used. -->
+      <label class="goal">
+        <span>대화 언어 — 고르면 그 언어로 대답하고, 음성도 그 언어로 받아씁니다</span>
+        <select id="speak-in"></select>
+      </label>
       <!-- 목표 is what argmind works on by itself when nobody needs it — the owner, 2026-11-09 — and
            is never put in a reply. An instruction about how to answer is a kept sentence, below. -->
       <label class="goal">

@@ -68,6 +68,80 @@ const KEEP_IN_MIND: &str = "사용자가 기억해 달라고 한 것: ";
 const BUT: &str =
     " 그렇다고 해서 할 말이 없는데 말하거나, 부탁받지 않은 일을 할 이유가 되지는 않습니다.";
 
+/// **The languages a person can choose to be answered in — since 2026-11-17**, the owner's
+/// *사용자가 대화할 언어를 설정할수 있으면 함*: a code, the name the page shows, and the line the
+/// model is told.
+///
+/// **Each line is written in its own language**, because the measurement above is the only one this
+/// project has about a reply's language and it says the slot decides it: a content-free Korean
+/// sentence moved Korean replies from 28 to 42 of 44, an English one down to 19. So a line asking
+/// for English must not be a Korean sentence about English — the kept *항상 영어로 대답해* got
+/// English **0 of 3** (`remembering`). The codes are the ones the recogniser takes.
+///
+/// **None of them is the default.** Unset, nothing is added and the prompt says what it always
+/// said — *in the language they used* — so the six probes still hash to `r322a4c`.
+///
+/// **And each carries the frame around the dials and the kept sentences in its own language**, and
+/// the placeholder of `say` in the reply's shape — both found by `--bin language`'s first run, where
+/// the line alone held 9 of 12 Korean turns for English and **1 of 12 once a kept sentence's Korean
+/// frame sat beside it** (Japanese beside a dial: 0 of 12). Korean's frame is the one that shipped,
+/// character for character, so a Korean setting changes nothing but the line.
+///
+/// **Japanese was measured and is not here.** With its own frame it answered Korean turns in
+/// Japanese **8 and 7 of 12** against a bar of 11 — on a screen of Korean buttons it wrote
+/// *メモ장이 열렸습니다* and *計算기를 열어드릴게요*, Korean grammar around a half-converted name —
+/// and English turns 11 of 12. A setting that holds two times in three is a setting that claims what
+/// it cannot keep, so it is left out until something moves it; the frame it was measured with is in
+/// the history of this file.
+pub struct Language {
+    pub code: &'static str,
+    /// What the page shows.
+    pub name: &'static str,
+    /// What the model is told.
+    pub line: &'static str,
+    /// The placeholder for `say` in the reply's shape.
+    pub say: &'static str,
+    pub aim_at: &'static str,
+    pub keep: &'static str,
+    pub but: &'static str,
+    /// The dials as this language says them, in [`DIALS`]' order.
+    pub dials: [(&'static str, &'static str); 4],
+}
+
+pub const LANGUAGES: [Language; 3] = [
+    Language { code: "ko", name: "한국어", line: "상대가 어떤 언어로 말하든 항상 한국어로 대답하세요.",
+               say: "<한국어로 돌려줄 말>", aim_at: AIM_AT, keep: KEEP_IN_MIND, but: BUT, dials: DIALS },
+    Language { code: "en", name: "English",
+               line: "Always reply in English, whatever language the person writes in.",
+               say: "<what you say back, in English>",
+               aim_at: "Aim for this manner: ", keep: "What the person asked you to remember: ",
+               but: " None of this is a reason to speak when there is nothing to say, or to do what nobody asked for.",
+               dials: [("wit", "quick and clever"), ("humour", "light and fun"),
+                       ("service", "offering to help first"), ("devotion", "seeing a task through to the end")] },
+    Language { code: "zh", name: "中文", line: "无论对方使用什么语言，请始终用中文回答。",
+               say: "<用中文回复的话>",
+               aim_at: "请以这样的态度为目标: ", keep: "对方请你记住的事: ",
+               but: " 但这并不是在无话可说时开口、或去做没人要求的事的理由。",
+               dials: [("机智", "敏捷而聪明"), ("幽默", "轻松有趣"),
+                       ("服务", "主动提出帮忙"), ("投入", "把手头的事坚持做完")] },
+];
+
+/// The language set, if it is one of [`LANGUAGES`] — **an unknown code is rest**, as an unknown dial
+/// is: the worst a bad file can do is turn the feature off.
+pub fn language(code: &str) -> Option<&'static Language> {
+    LANGUAGES.iter().find(|l| l.code == code.trim())
+}
+
+/// Is this one of [`LANGUAGES`]?
+pub fn is_a_language(code: &str) -> bool {
+    language(code).is_some()
+}
+
+/// The line for a language, or `None` for an unset or unknown one.
+pub fn language_line(code: &str) -> Option<&'static str> {
+    language(code).map(|l| l.line)
+}
+
 /// How far a dial can go.
 ///
 /// **Ten, and the middle is not a default.** Zero is *do not aim for this at all*, which is what
@@ -93,6 +167,9 @@ pub struct Mind {
     /// one. **Never written by the model**: added by the person in the panel, by saying
     /// *…기억해줘*, or by accepting an offer the program makes when it reads a correction.
     pub kept: Vec<String>,
+    /// **The language argmind answers in**, one of [`LANGUAGES`] by code — or empty, which is *the
+    /// language they used*, what argmind has always done.
+    pub language: String,
 }
 
 /// How many things are kept. Chosen: each is a line in every prompt, and the dials' own rule is
@@ -114,13 +191,14 @@ impl Default for Mind {
 impl Mind {
     /// Nothing set. The prompt is then exactly what it was before any of this existed.
     pub fn resting() -> Self {
-        Mind { dials: vec![0; DIALS.len()], aim: String::new(), kept: Vec::new() }
+        Mind { dials: vec![0; DIALS.len()], aim: String::new(), kept: Vec::new(), language: String::new() }
     }
 
     /// Is every dial at zero and no goal written?
     pub fn at_rest(&self) -> bool {
         self.aim.trim().is_empty() && self.dials.iter().all(|&n| n == 0)
             && self.kept.iter().all(|k| k.trim().is_empty())
+            && language_line(&self.language).is_none()
     }
 
     /// Read one dial by its Korean name, clamped, missing meaning zero.
@@ -140,17 +218,32 @@ impl Mind {
         }
     }
 
+    /// **The placeholder for `say` in the reply's shape**, in the language set — `None` at rest, so
+    /// the shape is what it always was.
+    pub fn say_slot(&self) -> Option<&'static str> {
+        language(&self.language).map(|l| l.say)
+    }
+
     /// The line that goes into the prompt, or **`None` when there is nothing to say.**
     ///
     /// Only dials above zero appear, with the number, because *playful 2* and *playful 9* are
     /// different instructions and a bare list of adjectives is neither. **The goal does not** — see
     /// [`Mind::aim`] — so a goal alone renders nothing.
     pub fn line(&self) -> Option<String> {
+        let tongue = language_line(&self.language);
         if self.dials.iter().all(|&n| n == 0) && self.kept.iter().all(|k| k.trim().is_empty()) {
-            return None;
+            //: **A language alone is its own line**, with nothing about dials after it: the
+            //: sentence that follows them is about not saying more than is wanted, and nothing
+            //: here gives a reason to.
+            return tongue.map(str::to_string);
         }
+        //: The frame in the language set, or the Korean one that shipped.
+        let (aim_at, keep, but, dials) = match language(&self.language) {
+            Some(l) => (l.aim_at, l.keep, l.but, l.dials),
+            None => (AIM_AT, KEEP_IN_MIND, BUT, DIALS),
+        };
         let mut parts: Vec<String> = Vec::new();
-        for (i, (korean, gloss)) in DIALS.iter().enumerate() {
+        for (i, (korean, gloss)) in dials.iter().enumerate() {
             let n = self.dials.get(i).copied().unwrap_or(0).min(MOST);
             if n > 0 {
                 parts.push(format!("{korean}({gloss}) {n}/{MOST}"));
@@ -161,7 +254,7 @@ impl Mind {
             //: **Aimed at rather than achieved.** A model told it *is* witty writes jokes; one told
             //: to aim for it keeps answering the question. The difference is measurable and this
             //: is the side worth erring on.
-            out.push_str(&format!("{AIM_AT}{}.", parts.join(", ")));
+            out.push_str(&format!("{aim_at}{}.", parts.join(", ")));
         }
         //: **The kept sentences, under the label the goal used to share with them** — a kept
         //: sentence alone renders byte for byte as a goal alone did, so what `remembering`
@@ -176,9 +269,15 @@ impl Mind {
             if !out.is_empty() {
                 out.push(' ');
             }
-            out.push_str(&format!("{KEEP_IN_MIND}{}", said.join(" / ")));
+            out.push_str(&format!("{keep}{}", said.join(" / ")));
         }
-        out.push_str(BUT);
+        out.push_str(but);
+        //: **Last**, after the Korean of the lines above it, so the sentence nearest the turn is in
+        //: the language asked for — `language` measures whether that is enough with them present.
+        if let Some(t) = tongue {
+            out.push(' ');
+            out.push_str(t);
+        }
         Some(out)
     }
 }

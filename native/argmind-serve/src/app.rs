@@ -343,6 +343,8 @@ enum Job {
     Thought(argmind_core::thinking::Note),
     /// Write the thinking goal.
     Aim(String),
+    /// Answer in this language from now on — a code, or `""` for the language they used.
+    Language(String),
     /// A new errand, an answer to one, or one taken off the list.
     Errand(String),
     ErrandAnswer(u64, String),
@@ -556,7 +558,7 @@ fn think(desk: &mut Desk, out: &Listeners, text: &str) {
 
     desk.session.history.push(("them".into(), text.to_string()));
     //: **The words the person actually gets**, which are the model's own unless it mirrored them.
-    let reply = spoken(&intent);
+    let reply = spoken_in(&intent, &desk.session.mind.language);
     if !reply.is_empty() {
         //: The substitute goes into the history too, and that is the half that matters more than
         //: the screen: leaving `머해?` in there got it said again on each of the next two turns.
@@ -1804,9 +1806,15 @@ pub fn mind_json(mind: &argmind_core::mind::Mind) -> String {
                 escape(korean), escape(gloss), mind.of(korean))
     }).collect();
     let kept: Vec<String> = mind.kept.iter().map(|k| format!("\"{}\"", escape(k))).collect();
-    format!("{{\"most\":{},\"aim\":\"{}\",\"line\":\"{}\",\"dials\":[{}],\"kept\":[{}]}}",
+    //: **The list the page offers is the list the program accepts**, sent rather than copied into
+    //: the page, so a language cannot be offered that `/language` would refuse.
+    let languages: Vec<String> = argmind_core::mind::LANGUAGES.iter()
+        .map(|l| format!("{{\"code\":\"{}\",\"name\":\"{}\"}}", l.code, escape(l.name))).collect();
+    format!("{{\"most\":{},\"aim\":\"{}\",\"line\":\"{}\",\"dials\":[{}],\"kept\":[{}],\
+             \"language\":\"{}\",\"languages\":[{}]}}",
             argmind_core::mind::MOST, escape(&mind.aim),
-            escape(&mind.line().unwrap_or_default()), rows.join(","), kept.join(","))
+            escape(&mind.line().unwrap_or_default()), rows.join(","), kept.join(","),
+            escape(&mind.language), languages.join(","))
 }
 
 /// What to say when the model gave back the person's own words with a question mark on them.
@@ -1822,10 +1830,26 @@ pub const DID_NOT_FOLLOW: &str = "무슨 말인지 잘 못 알아들었어요. �
 
 /// The words a person gets: the model's own, unless it just mirrored them.
 pub fn spoken(intent: &argmind_core::intent::Intent) -> String {
+    spoken_in(intent, "")
+}
+
+/// **[`spoken`], in the language the person set** — the one sentence in a reply the program writes
+/// itself, so it follows the setting the model was given. Korean when nothing is set, as it was.
+pub fn spoken_in(intent: &argmind_core::intent::Intent, language: &str) -> String {
     if intent.parroted {
-        return DID_NOT_FOLLOW.to_string();
+        return match language {
+            "en" => "Sorry, I didn't follow that. Could you say it again?",
+            "zh" => "抱歉，我没听懂。能再说一遍吗？",
+            _ => DID_NOT_FOLLOW,
+        }.to_string();
     }
     intent.say.clone()
+}
+
+/// **What the recogniser is told to hear**: the language set, or Korean when none is — which is
+/// what it was always told, since a recogniser left to guess a two-second clip guesses wrong.
+pub fn hearing_language(language: &str) -> String {
+    if argmind_core::mind::is_a_language(language) { language.to_string() } else { "ko".to_string() }
 }
 
 pub fn decisions_json() -> String {
@@ -2453,7 +2477,7 @@ fn notice(desk: &mut Desk, out: &Listeners, now: f64) {
         if intent.effects.is_empty() {
             continue;
         }
-        let reply = spoken(&intent);
+        let reply = spoken_in(&intent, &desk.session.mind.language);
         //: **The fourth identical remark is not made.** Measured: over eight window changes it
         //: spoke 8 times out of 8 and 6 of those were one sentence with the name swapped. Telling
         //: it to be quiet in the prompt bought no silence and started it wanting to click things,
@@ -2508,7 +2532,7 @@ fn release_held(desk: &mut Desk, out: &Listeners) {
         crate::tact::Held::Drop => out.send("held", "0"),
         crate::tact::Held::Release => {
             out.send("held", "0");
-            let reply = spoken(&intent);
+            let reply = spoken_in(&intent, &desk.session.mind.language);
             //: Checked again: something else may have been said while this one waited.
             if !reply.is_empty()
                 && !argmind_core::converse::said_before(&reply, &desk.lately_noticed) {
@@ -2711,7 +2735,7 @@ fn raise_it(desk: &mut Desk, out: &Listeners) {
     out.send("busy", "0");
     desk.session.history.push(("noticed".into(), trigger.text.clone()));
 
-    let reply = spoken(&intent);
+    let reply = spoken_in(&intent, &desk.session.mind.language);
     if reply.is_empty() || argmind_core::converse::said_before(&reply, &desk.lately_noticed) {
         return;
     }
@@ -3308,6 +3332,9 @@ pub fn run(how: How) {
         //: touched on the hot path — and a mind that was never set is a resting one, which renders
         //: the prompt this program shipped with byte for byte.
         desk.session.mind = crate::mind::remembered();
+        if let Some((_, whisper)) = desk.ear.as_mut() {
+            whisper.language = Some(hearing_language(&desk.session.mind.language));
+        }
         //: **The conversation where it left off**, and the prompt filling the model's context with
         //: it rather than stopping at twelve turns — see `crate::conversation`.
         desk.session.history = crate::conversation::remembered();
@@ -3528,6 +3555,25 @@ pub fn run(how: How) {
                     match crate::mind::turn(&name, to) {
                         Ok(mind) => {
                             agent_out.send("note", &format!("{name} {to}"));
+                            desk.session.mind = mind;
+                        }
+                        Err(why) => agent_out.send("note", &why),
+                    }
+                    agent_out.send("mind", &mind_json(&desk.session.mind));
+                }
+                Job::Language(code) => {
+                    match crate::mind::speak_in(&code) {
+                        Ok(mind) => {
+                            let name = argmind_core::mind::language(&mind.language).map(|l| l.name);
+                            agent_out.send("note", &match name {
+                                Some(name) => format!("이제 {name}로 대답합니다"),
+                                None => "이제 상대가 쓴 언어로 대답합니다".to_string(),
+                            });
+                            //: **And hears it.** The recogniser is told the same language, so a
+                            //: person who chose English is not transcribed as Korean.
+                            if let Some((_, whisper)) = desk.ear.as_mut() {
+                                whisper.language = Some(hearing_language(&mind.language));
+                            }
                             desk.session.mind = mind;
                         }
                         Err(why) => agent_out.send("note", &why),
@@ -4013,6 +4059,15 @@ fn serve_one(mut stream: TcpStream, out: &Listeners, token: &str, jobs: &Sender<
         Route::Aim(text) => {
             let _ = stream.write_all(&respond("204 No Content", "text/plain", ""));
             let _ = jobs.send(Job::Aim(text));
+        }
+        //: Checked against the fixed list here as well as in the job, like `/dial`.
+        Route::Language(code) => {
+            if code.is_empty() || argmind_core::mind::is_a_language(&code) {
+                let _ = stream.write_all(&respond("204 No Content", "text/plain", ""));
+                let _ = jobs.send(Job::Language(code));
+            } else {
+                let _ = stream.write_all(&respond("400 Bad Request", "text/plain", "no"));
+            }
         }
         Route::Forget(key) => {
             if crate::decided::is_decidable(&key) {

@@ -53,6 +53,16 @@ pub fn mind_from(spec: &str) -> Mind {
             mind.aim = value.to_string();
             continue;
         }
+        if name == "언어" || name == "language" {
+            assert!(argmind_core::mind::is_a_language(value), "no language {value:?} — have {:?}",
+                    argmind_core::mind::LANGUAGES.map(|l| l.code));
+            mind.language = value.to_string();
+            continue;
+        }
+        if name == "기억" || name == "kept" {
+            mind.kept.push(value.to_string());
+            continue;
+        }
         let n: u8 = value.parse().unwrap_or_else(|_| panic!("{value:?} is not a number"));
         assert!(n <= MOST, "{n} is above {MOST}");
         assert!(DIALS.iter().any(|(k, _)| *k == name),
