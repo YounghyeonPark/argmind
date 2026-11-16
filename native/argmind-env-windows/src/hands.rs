@@ -21,6 +21,17 @@
 //! machine somebody is working at. `platform::hands` is where that is asked for; see
 //! [`crate::patterns`].
 //!
+//! **And what no pattern takes is addressed to the window, since 2026-11-16** —
+//! [`WindowsHands::with_messages`], see [`crate::addressed`]. The owner did not want argmind to
+//! stop when they touched the machine, nor to lock them out of it; so a key, a click no pattern
+//! takes and typing no value pattern takes are posted to the program's own window rather than sent
+//! down the person's input, and `SendInput` is left for a window that refuses a message. **Where a
+//! key goes** is the window argmind just acted on while that is fresh ([`AIM_LASTS`]), and
+//! otherwise the window the person was working in — never argmind's own. **That last is
+//! reasoned, not observed**: a pattern click does not bring its window to the front, so an Enter
+//! after it went by `SendInput` to whatever was in front, and when the person was typing to argmind
+//! that was argmind.
+//!
 //! ## **Typing still goes through the keyboard, and UI Automation has no answer for it**
 //!
 //! [`WindowsHands::type_string`] sends `KEYEVENTF_UNICODE` events, so the text lands in whatever has
@@ -66,8 +77,8 @@ use windows::Win32::UI::Input::KeyboardAndMouse::{
     MOUSEEVENTF_MIDDLEDOWN, MOUSEEVENTF_MIDDLEUP, MOUSEEVENTF_RIGHTDOWN, MOUSEEVENTF_RIGHTUP,
     MOUSEINPUT, MOUSE_EVENT_FLAGS, VIRTUAL_KEY,
 };
-use windows::Win32::UI::WindowsAndMessaging::{GetWindowThreadProcessId, SetCursorPos,
-                                              WindowFromPoint};
+use windows::Win32::UI::WindowsAndMessaging::{GetForegroundWindow, GetWindowThreadProcessId,
+                                              SetCursorPos, WindowFromPoint};
 
 /// How long a click stays an aim for the typing that follows it.
 ///
@@ -178,6 +189,15 @@ pub struct WindowsHands {
     pub typing_patterns: bool,
     /// How many times text went in through `ValuePattern` rather than through the keyboard.
     pub by_value: u32,
+    /// **A third switch**: what no pattern takes goes to the window as a message rather than down
+    /// the person's input — [`crate::addressed`]. Off unless asked for, like the other two.
+    pub messages: bool,
+    /// How many acts went as a message.
+    pub by_message: u64,
+    /// **May fall back to `SendInput` when a window refuses a message.** On unless a test turns it
+    /// off, which is what lets a test drive these hands with a guarantee that nothing it does can
+    /// reach the input of whoever is running it.
+    pub may_send_input: bool,
     /// Where the last click landed, and when. **Taken once and never reused.**
     ///
     /// A `type` effect names no target — the reply shape is `{"type": "<text>"}` and the model
@@ -186,6 +206,12 @@ pub struct WindowsHands {
     /// a quarter of a second apart, which is what makes remembering one safe where remembering a
     /// rectangle across a model call would not be.
     aimed: Option<((i64, i64), Instant)>,
+    /// **The window argmind's last act reached, and when** — where a key or untargeted typing goes
+    /// while it is fresh. Unlike the aim it is not taken: a click, its typing and its Enter are one
+    /// program's, a quarter of a second apart.
+    reached: Option<(isize, Instant)>,
+    /// Which window the person was working in, for a key with nothing just before it.
+    attending: Option<crate::Watcher>,
     /// Made once and only if a pattern is ever wanted.
     automation: Option<IUIAutomation>,
     pub by_pattern: u64,
@@ -222,6 +248,8 @@ impl WindowsHands {
 
     fn with(reach: Reach) -> Self {
         WindowsHands { reach, patterns: false, typing_patterns: false, by_value: 0, aimed: None,
+                       messages: false, by_message: 0, may_send_input: true, reached: None,
+                       attending: None,
                        automation: None, by_pattern: 0, by_click: 0,
                        why: String::new(), live: false, max_per_second: 4.0, clicked: 0,
                        refused: 0, elsewhere: 0, done: Vec::new(), last: None }
@@ -249,6 +277,69 @@ impl WindowsHands {
     pub fn with_patterns(mut self) -> Self {
         self.patterns = true;
         self
+    }
+
+    /// Post what no pattern takes to the program's window — see [`crate::addressed`].
+    pub fn with_messages(mut self) -> Self {
+        self.messages = true;
+        self
+    }
+
+    /// Know which window the person was working in — the eyes' own rule — for a key that follows
+    /// nothing argmind did.
+    pub fn reading(mut self, watcher: crate::Watcher) -> Self {
+        self.attending = Some(watcher);
+        self
+    }
+
+    /// **Refuse rather than fall back to `SendInput`.** For a test, so that driving these hands
+    /// cannot reach the keyboard or pointer of whoever runs it, whatever a window does.
+    pub fn never_send_input(mut self) -> Self {
+        self.may_send_input = false;
+        self
+    }
+
+    /// **Where a key, or typing nothing aimed, goes**: the window argmind just acted on while that
+    /// is fresh, else the window the person was working in, else the one in front — and never
+    /// argmind's own, which is where `SendInput` would send one whenever argmind was in front
+    /// (reasoned from a pattern click not bringing its window forward; never observed).
+    fn key_target(&self) -> Result<HWND, String> {
+        use crate::addressed::{alive, focus_of, pid};
+        if let Some((h, at)) = self.reached {
+            let h = HWND(h as _);
+            if at.elapsed() <= AIM_LASTS && alive(h) {
+                return Ok(focus_of(h));
+            }
+        }
+        let me = Some(std::process::id());
+        let front = unsafe { GetForegroundWindow() };
+        let attended = self.attending.as_ref().and_then(|w| w.attended(front.0 as isize))
+            .map(|h| HWND(h as _));
+        let target = attended.or_else(|| Some(front).filter(|f| !f.is_invalid()))
+            .filter(|h| pid(*h) != me)
+            .ok_or_else(|| "argmind 창 말고는 보낼 창이 없다 — 사람이 일하던 창을 모른다".to_string())?;
+        Ok(focus_of(target))
+    }
+
+    /// Post one act; `send` is the posting itself, run only when armed.
+    fn posted(&mut self, h: HWND, send: impl FnOnce(HWND) -> Result<(), String>) -> Result<Did, String> {
+        let owner = crate::addressed::pid(h);
+        if !may_touch(self.reach, owner) {
+            return Ok(self.record(Did::Elsewhere { owner }));
+        }
+        self.reached = Some((h.0 as isize, Instant::now()));
+        if !self.live {
+            self.by_message += 1;
+            return Ok(self.record(Did::Operated { how: "posted", live: false }));
+        }
+        self.pace();
+        send(h)?;
+        self.by_message += 1;
+        Ok(self.record(Did::Operated { how: "posted", live: true }))
+    }
+
+    fn because(&mut self, why: String) {
+        self.why = if self.why.is_empty() { why } else { format!("{}; {why}", self.why) };
     }
 
     fn pace(&mut self) {
@@ -294,6 +385,12 @@ impl WindowsHands {
         //: it the foreign element, and operating that is exactly what the guard exists to stop.
         //: One guard, both paths, checked before either.
         self.why = String::new();
+        //: **Which program this was**, whichever path presses it, so the Enter after it goes there.
+        if self.messages {
+            if let Some(h) = crate::addressed::window_at(x, y) {
+                self.reached = Some((h.0 as isize, Instant::now()));
+            }
+        }
         if self.patterns && button == "left" {
             if self.automation.is_none() {
                 self.automation = crate::open_automation().ok();
@@ -310,6 +407,20 @@ impl WindowsHands {
             } else {
                 self.why = "UI Automation would not open".into();
             }
+        }
+        //: **Then a message to the window under the point**: the same window a real click would
+        //: reach, without the pointer going there.
+        if self.messages {
+            match crate::addressed::window_at(x, y) {
+                Some(h) => match self.posted(h, |h| crate::addressed::click(h, x, y, button)) {
+                    Ok(did) => return did,
+                    Err(why) => self.because(why),
+                },
+                None => self.because("no window under the point".into()),
+            }
+        }
+        if !self.may_send_input {
+            return self.record(Did::Refused(format!("only the person's pointer would reach it: {}", self.why)));
         }
         self.clicked += 1;
         self.by_click += 1;
@@ -331,6 +442,22 @@ impl WindowsHands {
                  because guessing a keystroke is how an agent sends Alt+F4: {}",
                 KEY_NAMES.join(", "))));
         };
+        self.why = String::new();
+        if self.messages {
+            //: **No window to send it to is a refusal, not a fall back**: with only argmind in
+            //: front, `SendInput` would press it in argmind's own window.
+            let h = match self.key_target() {
+                Ok(h) => h,
+                Err(why) => return self.record(Did::Refused(why)),
+            };
+            match self.posted(h, |h| crate::addressed::key(h, vk)) {
+                Ok(did) => return did,
+                Err(why) => self.because(why),
+            }
+        }
+        if !self.may_send_input {
+            return self.record(Did::Refused(format!("only the person's keyboard would reach it: {}", self.why)));
+        }
         if !self.live {
             return self.record(Did::Sent { live: false });
         }
@@ -418,6 +545,31 @@ impl WindowsHands {
                     }
                 }
             }
+        }
+        //: **Then characters posted** — to the window under the click just made while it is fresh,
+        //: which for a classic box is the box itself whatever has focus, and otherwise where a key
+        //: would go. Inserted at the caret, as keys are, so a box already holding something is
+        //: added to and not replaced.
+        if self.messages {
+            let at_aim = match aim {
+                Some(((x, y), when)) if when.elapsed() <= AIM_LASTS => crate::addressed::window_at(x, y),
+                _ => None,
+            };
+            let target = match at_aim {
+                Some(h) => Ok(h),
+                None => self.key_target(),
+            };
+            let units = typing_units(text);
+            match target {
+                Err(why) => return self.record(Did::Refused(why)),
+                Ok(h) => match self.posted(h, |h| crate::addressed::chars(h, &units)) {
+                    Ok(did) => return did,
+                    Err(why) => self.because(why),
+                },
+            }
+        }
+        if !self.may_send_input {
+            return self.record(Did::Refused(format!("only the person's keyboard would reach it: {}", self.why)));
         }
         if !self.live {
             return self.record(Did::Sent { live: false });

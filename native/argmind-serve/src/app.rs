@@ -3237,12 +3237,12 @@ pub fn run(how: How) {
     let agent_model = model_name.clone();
     //: Everything COM touches lives on this thread and never leaves it.
     std::thread::spawn(move || {
-        let eyes = Sight::new(watcher).expect("the eyes would not open");
+        let eyes = Sight::new(watcher.clone()).expect("the eyes would not open");
         //: Unrestricted, and **the confirm button is what makes that safe** — the same trade
         //: `app.py` makes by inverting the unprompted flag. Dry unless asked otherwise, and how
         //: they are built is `platform`'s to decide: on Windows that now means control patterns
         //: rather than synthetic clicks, which is a fact about Windows and not about the app.
-        let hands = platform::hands(dry);
+        let hands = platform::hands(dry, &watcher);
         let mut model = Local::new(&agent_model);
         model.think = Some(false);
         //: **Each token's probability, for [`SURE_ENOUGH`].** Asked on this one model only: the

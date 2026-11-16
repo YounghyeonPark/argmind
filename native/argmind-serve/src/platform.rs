@@ -279,8 +279,17 @@ mod chosen {
     /// already in the box, and it is the keyboard exactly as before. The residual risk is a control
     /// that supports `ValuePattern`, reports itself blank, and holds content anyway; that is
     /// unmeasured and would need other applications. One application, one run.
-    pub fn hands(dry: bool) -> Touch {
-        let hands = Touch::unrestricted().with_patterns().with_typing_patterns();
+    ///
+    /// **And what no pattern takes goes to the window as a message, since 2026-11-16** — the
+    /// owner: *건드려도 멈추지 않았으면 함*. A key, a click no pattern takes and typing no value
+    /// pattern takes are posted to the program's own window instead of sent down the person's
+    /// input, so their pointer is not moved and their typing does not mix with argmind's; a key
+    /// with nothing just before it goes to the window they were working in — `watching`, the eyes'
+    /// own rule — and never to argmind's. Measured on a classic window and on Edge, not on WinUI,
+    /// WPF or Qt; `argmind_env_windows::addressed` has the run.
+    pub fn hands(dry: bool, watching: &Watching) -> Touch {
+        let hands = Touch::unrestricted().with_patterns().with_typing_patterns()
+            .with_messages().reading(watching.clone());
         if dry { hands } else { hands.arm() }
     }
 
@@ -526,7 +535,7 @@ mod chosen {
     /// The hands the application uses. **No control patterns here** — that is a Windows notion,
     /// and `argmind-env-none` is the list a third environment must satisfy rather than a place to
     /// put one platform's optimisation.
-    pub fn hands(dry: bool) -> Touch {
+    pub fn hands(dry: bool, _watching: &Watching) -> Touch {
         let hands = Touch::unrestricted();
         if dry { hands } else { hands.arm() }
     }
@@ -656,7 +665,7 @@ mod chosen {
     /// The hands the application uses. **No control patterns here** — that is a Windows notion,
     /// and `argmind-env-none` is the list a third environment must satisfy rather than a place to
     /// put one platform's optimisation.
-    pub fn hands(dry: bool) -> Touch {
+    pub fn hands(dry: bool, _watching: &Watching) -> Touch {
         let hands = Touch::unrestricted();
         if dry { hands } else { hands.arm() }
     }

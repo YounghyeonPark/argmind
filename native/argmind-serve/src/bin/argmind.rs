@@ -78,7 +78,9 @@ fn session(a: &Args) -> Session<Plain, Touch, Model> {
     let eyes = Plain::new().expect("the eyes would not open");
     //: **Two flags, two risks.** `--live` lets it do what it was asked; `--allow-unprompted` lets
     //: it act on something nobody asked for, and without it such an effect becomes a sentence.
-    let hands = argmind_serve::platform::hands(!a.live);
+    //: No watcher running: a key with nothing just before it goes to the window in front, the
+    //: terminal this was typed in, as it always did.
+    let hands = argmind_serve::platform::hands(!a.live, &argmind_serve::platform::Watching::default());
     let mut model = Local::new(&a.model);
     model.think = Some(false);
     let mut s = Session::new(eyes, hands, Model(model));

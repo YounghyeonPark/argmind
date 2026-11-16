@@ -23,8 +23,9 @@ pub enum Did {
     /// The point belonged to somebody else. **Not an error and not a success** — the caller has to
     /// be able to tell this apart from a click that landed and did nothing.
     Elsewhere { owner: Option<u32> },
-    /// Operated through the accessibility layer — **no pixel was aimed at and the cursor did not
-    /// move.** `how` is which mechanism, in the environment's own words.
+    /// Operated without the person's pointer or keyboard — through the accessibility layer, or by
+    /// a message addressed to the program's window — and **the cursor did not move.** `how` is
+    /// which mechanism, in the environment's own words.
     Operated { how: &'static str, live: bool },
     /// Malformed: an unknown button or an unnamed key.
     Refused(String),
