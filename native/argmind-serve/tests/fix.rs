@@ -164,6 +164,7 @@ fn one_of_each() -> Vec<Fix> {
                             minutes: 15, built: false },
         Fix::StartOllama { why: "Ollama가 설치되어 있는데 실행 중이 아닙니다.".into() },
         Fix::FetchFaces { about_mb: argmind_serve::faces::BOTH_MB },
+        sandbox(),
     ];
     //: **Exhaustive by construction.** A variant added to the enum and not to the list above makes
     //: this fail to compile, which is the only way a list like this stays a list of everything.
@@ -172,10 +173,29 @@ fn one_of_each() -> Vec<Fix> {
             Fix::PullModel { .. } | Fix::OpenPage { .. } | Fix::Install { .. }
             | Fix::Fetch { .. } | Fix::BuildRecogniser { .. } | Fix::BuildSpeaker { .. }
             | Fix::StartOllama { .. } | Fix::RunElevated { .. }
-            | Fix::FetchFaces { .. } => {}
+            | Fix::FetchFaces { .. } | Fix::MakeSandbox { .. } => {}
         }
     }
     all
+}
+
+fn sandbox() -> Fix {
+    Fix::MakeSandbox { name: "argmind-sandbox".into(), base: "Ubuntu-24.04".into(),
+                       at: r"C:\Users\x\AppData\Local\argmind\sandbox".into(), about_mb: 390 }
+}
+
+/// **The sandbox's window says what it installs, what it shuts out, and that a half-made one is
+/// not left** — the three things a person could otherwise assume the worst about — and it counts
+/// as running somebody else's program, since an operating system arrives and its packages run.
+#[test]
+fn making_the_sandbox_says_what_it_installs_and_what_it_shuts_out() {
+    let fix = sandbox();
+    let said = describe(&fix);
+    for want in ["Ubuntu-24.04", "'argmind-sandbox'", "390 MB", r"argmind\sandbox", "C: 드라이브",
+                 "Windows 프로그램", "python3-docx", "추천 패키지 없이", "지웁니다", "다른 배포판은 건드리지"] {
+        assert!(said.contains(want), "{want:?} is not in:\n{said}");
+    }
+    assert!(fix.runs_a_stranger() && fix.changes_the_machine());
 }
 
 /// **Every window asks, names itself, and says more than one thing.**

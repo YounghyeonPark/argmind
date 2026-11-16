@@ -110,27 +110,32 @@ The activity timeline is kept in memory only and is gone at exit.
   (measured). Less memory is untested.
 - **[Ollama](https://ollama.com)**, which argmind offers to install.
   - `qwen3:8b` for conversation: argmind offers to pull it (about 5 GB).
-  - `qwen3:14b` for work: pull it yourself, with `ollama pull qwen3:14b`. argmind does not offer
-    this one yet.
+  - `qwen3:14b` for work: argmind offers to pull it too (about 9 GB).
 - **Rust stable, MSVC toolchain** (pinned by `rust-toolchain.toml`). The page is prebuilt in
   `ui/dist`, so building needs nothing else.
 - **Optional:** the Vulkan SDK for the neural voice, and a C/C++ toolchain for the recogniser.
   `argmind check` says what is missing and what it would do about it.
-- **For tasks that run code**, a WSL 2 distro named `argmind-sandbox`. argmind does not create it
-  yet. The one in use is Ubuntu with `python3` and
-  `apt-get install --no-install-recommends python3-docx python3-openpyxl`, and this
-  `/etc/wsl.conf`:
+- **For tasks that run code**, WSL 2. argmind then offers to make its sandbox, a distro of its own
+  called `argmind-sandbox`, and asks first. It takes 1–2 minutes here and downloads about 390 MB.
+  - It installs Ubuntu 24.04 from WSL's own list into `%LOCALAPPDATA%\argmind\sandbox`.
+  - It writes this `/etc/wsl.conf`:
 
-      [automount]
-      enabled = false
-      mountFsTab = false
+        [automount]
+        enabled = false
+        mountFsTab = false
 
-      [interop]
-      enabled = false
-      appendWindowsPath = false
+        [interop]
+        enabled = false
+        appendWindowsPath = false
 
-      [user]
-      default = root
+        [user]
+        default = root
+
+  - It installs `python3-docx` and `python3-openpyxl` without recommends.
+  - Before calling it made, it checks that nothing of `C:` and no Windows program can be seen from
+    inside. If anything is off, it removes what it made.
+
+  Without WSL, run `wsl --install --no-distribution` in an administrator PowerShell and restart.
 
 ## Build and run
 

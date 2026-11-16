@@ -828,6 +828,55 @@ pub fn workbench() -> Option<Box<dyn argmind_core::task::Tools + Send>> {
     }
 }
 
+/// **The sandbox a task's `run` goes to, where there can be one** — its name, what it is made from,
+/// how much that downloads, where it would be put, and whether WSL and it are here. `None` where
+/// there is no such thing, so the need is not listed at all. See `argmind_env_windows::workspace`.
+pub struct Sandbox {
+    pub name: &'static str,
+    pub base: &'static str,
+    pub about_mb: u64,
+    pub at: std::path::PathBuf,
+    pub wsl: bool,
+    pub here: bool,
+}
+
+/// `%LOCALAPPDATA%\argmind\sandbox` — beside argmind's other files, so where it lives is a folder a
+/// person can find.
+fn sandbox_shed() -> std::path::PathBuf {
+    std::env::var_os("LOCALAPPDATA").map(std::path::PathBuf::from).unwrap_or_else(std::env::temp_dir)
+        .join("argmind").join("sandbox")
+}
+
+/// What there is of the sandbox — see [`Sandbox`].
+pub fn sandbox() -> Option<Sandbox> {
+    #[cfg(all(windows, not(feature = "headless")))]
+    {
+        use argmind_env_windows::workspace as w;
+        let wsl = w::wsl_here();
+        Some(Sandbox { name: w::SANDBOX, base: w::SANDBOX_BASE, about_mb: w::SANDBOX_MB, at: sandbox_shed(),
+                       wsl, here: wsl && w::sandbox_here(w::SANDBOX) })
+    }
+    #[cfg(not(all(windows, not(feature = "headless"))))]
+    {
+        let _ = sandbox_shed;
+        None
+    }
+}
+
+/// **Make the sandbox** — reached only from `fix::apply`, after a yes.
+pub fn make_sandbox(say: &mut dyn FnMut(&str)) -> Result<String, String> {
+    #[cfg(all(windows, not(feature = "headless")))]
+    {
+        use argmind_env_windows::workspace as w;
+        w::make_sandbox(w::SANDBOX, &sandbox_shed(), say)
+    }
+    #[cfg(not(all(windows, not(feature = "headless"))))]
+    {
+        let _ = say;
+        Err("이 빌드에는 샌드박스가 없습니다".into())
+    }
+}
+
 /// **Programs this machine has, by their own scripting interfaces** — Blender's Python and
 /// `kicad-cli` — ranked with the APIs. `None` when neither is installed. See
 /// `argmind_env_windows::programs`.

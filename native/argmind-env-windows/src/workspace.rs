@@ -361,9 +361,209 @@ python-docx(.docx) 나 openpyxl(.xlsx) 로 만들거나 고쳐라"));
     }
 }
 
+/// **The Ubuntu a sandbox is made from**, by name in WSL's own distribution list — 24.04, which is
+/// what the sandbox in use was made from (its `python3-docx`, 1.1.0, is 24.04's).
+///
+/// **Where a sandbox comes from — since 2026-11-17**, when the repository was being readied to go
+/// public and a person cloning it would have met a `run` failing on a distro nobody had told them to
+/// make. The one in use was made by hand; [`make_sandbox`] is the same steps, run in order on one
+/// approval and checked the way it was checked. **The image is WSL's**: `wsl --install` fetches the
+/// file Microsoft's list names, with the hash the list gives, so argmind downloads nothing itself.
+///
+/// Measured on a probe under another name the same day: installing **30 s**, the settings and the two
+/// libraries **51 s**; then `/mnt/c` empty, `cmd.exe` and `powershell.exe` not found, `import docx,
+/// openpyxl` working, one folder mounted by `drvfs` read and written into — and the probe removed.
+pub const SANDBOX_BASE: &str = "Ubuntu-24.04";
+
+/// What WSL downloads for [`SANDBOX_BASE`], in MB: the image its list named on 2026-11-17 is
+/// 388,975,696 bytes. The packages come on top, from Ubuntu's archive.
+pub const SANDBOX_MB: u64 = 390;
+
+/// **What makes a distro a sandbox**: no drive mounted, no Windows program reachable from inside,
+/// and root by default since nobody logs in. Each command then mounts one folder itself.
+pub const SANDBOX_CONF: &str = "[automount]\nenabled = false\nmountFsTab = false\n\n\
+[interop]\nenabled = false\nappendWindowsPath = false\n\n[user]\ndefault = root\n";
+
+/// **Run inside the new distro, once, as root**: the settings, then the libraries a document task
+/// needs — **without recommends**, which is what keeps Pillow's GPL-3 `libimagequant` out
+/// (`docs/licences.toml`). `set -e`, so a failed download is a failure and not a half-made sandbox.
+pub fn sandbox_setup() -> String {
+    format!("set -e\ncat > /etc/wsl.conf <<'ARGMIND_CONF'\n{SANDBOX_CONF}ARGMIND_CONF\n\
+             export DEBIAN_FRONTEND=noninteractive\napt-get update -qq\n\
+             apt-get install -y -qq --no-install-recommends python3 {DOCUMENT_PACKAGES}\n")
+}
+
+/// **What the check reads**, one fact a line, after the distro has been restarted so its settings
+/// hold. [`sandbox_checks_out`] says what each must be.
+pub const SANDBOX_CHECK: &str = "echo mnt_c=$(ls -A /mnt/c 2>/dev/null | wc -l)\n\
+command -v cmd.exe >/dev/null && echo cmd=yes || echo cmd=no\n\
+command -v powershell.exe >/dev/null && echo ps=yes || echo ps=no\n\
+python3 -c 'import docx, openpyxl' 2>/dev/null && echo docs=yes || echo docs=no\n";
+
+/// **Is the sandbox what it says it is?** — nothing of `C:` inside, no Windows program reachable, and
+/// the libraries there. Every one of the four, read off [`SANDBOX_CHECK`]'s output.
+pub fn sandbox_checks_out(said: &str) -> Result<(), String> {
+    let wrong: Vec<&str> = ["mnt_c=0", "cmd=no", "ps=no", "docs=yes"].into_iter()
+        .filter(|want| !said.lines().any(|l| l.trim() == *want))
+        .collect();
+    if wrong.is_empty() {
+        Ok(())
+    } else {
+        Err(format!("샌드박스 확인에서 어긋났다 — 기대한 {} 이(가) 아니었다: {}", wrong.join(", "),
+                    said.trim().replace('\n', " · ")))
+    }
+}
+
+/// Is a distro by this name in `wsl -l -q`'s output? Names are compared whole and without case,
+/// and a byte-order mark or a carriage return is not part of one.
+pub fn listed(out: &str, name: &str) -> bool {
+    out.lines().any(|l| l.trim_matches(|c: char| c.is_whitespace() || c == '\u{feff}' || c == '\0')
+        .eq_ignore_ascii_case(name))
+}
+
+/// A quick `wsl.exe` question — no window, UTF-8 out — and whether it exited 0.
+fn wsl_asked(args: &[&str]) -> Option<(bool, String)> {
+    use std::os::windows::process::CommandExt;
+    let out = Command::new("wsl.exe").args(args).env("WSL_UTF8", "1")
+        .creation_flags(0x0800_0000).output().ok()?;
+    Some((out.status.success(), String::from_utf8_lossy(&out.stdout).into_owned()))
+}
+
+/// **Is WSL here at all?** `wsl --status` exits 0. Without it there is nothing to make a sandbox
+/// in, and installing WSL wants an administrator and a restart — the person's to do.
+pub fn wsl_here() -> bool {
+    wsl_asked(&["--status"]).is_some_and(|(ok, _)| ok)
+}
+
+/// Is there a distro called `name`? About 0.15 s, measured, and it starts nothing.
+pub fn sandbox_here(name: &str) -> bool {
+    wsl_asked(&["-l", "-q"]).is_some_and(|(ok, out)| ok && listed(&out, name))
+}
+
+/// A long `wsl.exe` step, on argmind's own desktop (`crate::apart`) so nothing it opens reaches
+/// the person, with what it printed if it failed.
+fn wsl_step(args: &[&str], stdin: Option<&str>, seconds: u64) -> Result<String, String> {
+    let mut c = Command::new("wsl.exe");
+    c.args(args).env("WSL_UTF8", "1");
+    let ran = crate::apart::run(&c, stdin, seconds).map_err(|e| format!("wsl.exe 를 시작하지 못했다: {e}"))?;
+    let said = format!("{}\n{}", ran.out.trim(), ran.err.trim()).trim().to_string();
+    match ran.code {
+        Some(0) => Ok(said),
+        Some(code) => Err(format!("wsl {} 이(가) 실패했다 (종료 코드 {code}): {}", args.first().unwrap_or(&""),
+                                  said.lines().rev().take(4).collect::<Vec<_>>().into_iter().rev()
+                                      .collect::<Vec<_>>().join(" · "))),
+        None => Err(format!("wsl {} 이(가) {seconds}초 안에 끝나지 않았다", args.first().unwrap_or(&""))),
+    }
+}
+
+/// **Make the sandbox**: install [`SANDBOX_BASE`] as `name` at `at`, write [`SANDBOX_CONF`] and the
+/// libraries, restart it so the settings hold, and check all four facts. **A sandbox that does not
+/// check out is removed** — one left with `C:` mounted would read as present, never be offered again,
+/// and be no sandbox — and only one this call made: a name already there is left alone and reported.
+pub fn make_sandbox(name: &str, at: &Path, say: &mut dyn FnMut(&str)) -> Result<String, String> {
+    make_checked(name, at, SANDBOX_CHECK, say)
+}
+
+/// [`make_sandbox`] with the check as an argument, so a test can make the check fail and see the
+/// half-made distro go.
+fn make_checked(name: &str, at: &Path, check: &str, say: &mut dyn FnMut(&str)) -> Result<String, String> {
+    if !wsl_here() {
+        return Err("WSL이 없어 샌드박스를 만들 수 없다 — 관리자 PowerShell 에서 wsl --install --no-distribution 뒤 다시 시작".into());
+    }
+    if sandbox_here(name) {
+        return Ok(format!("{name} 은(는) 이미 있다 — 새로 만들지 않았다"));
+    }
+    if let Some(parent) = at.parent() {
+        std::fs::create_dir_all(parent).map_err(|e| format!("{}: {e}", parent.display()))?;
+    }
+    let place = at.to_string_lossy().to_string();
+    say(&format!("{SANDBOX_BASE} 를 내려받아 {name} 으로 설치합니다 (약 {SANDBOX_MB} MB)"));
+    let made = (|| {
+        wsl_step(&["--install", SANDBOX_BASE, "--name", name, "--location", &place, "--no-launch",
+                   "--web-download"], None, 900)?;
+        say("C: 와 Windows 프로그램을 막는 설정을 쓰고, Word·Excel 라이브러리를 설치합니다");
+        wsl_step(&["-d", name, "-u", "root", "--", "sh", "-s"], Some(&sandbox_setup()), 900)?;
+        say("설정이 들도록 다시 시작하고 확인합니다");
+        wsl_step(&["--terminate", name], None, 60)?;
+        let said = wsl_step(&["-d", name, "-u", "root", "--", "sh", "-s"], Some(check), 120)?;
+        sandbox_checks_out(&said)
+    })();
+    if let Err(e) = made {
+        //: **Ours to remove**: the name was not there when this call began.
+        if sandbox_here(name) {
+            say("끝까지 되지 않아 만들던 것을 지웁니다");
+            let _ = wsl_step(&["--unregister", name], None, 120);
+        }
+        return Err(e);
+    }
+    Ok(format!("{name} 을(를) 만들었습니다 — 안에서 C: 와 Windows 프로그램이 보이지 않고, Word·Excel 라이브러리가 있습니다"))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_sandbox_checks_out_only_on_all_four_facts() {
+        let good = "mnt_c=0\ncmd=no\nps=no\ndocs=yes\n";
+        assert!(sandbox_checks_out(good).is_ok());
+        assert!(sandbox_checks_out("mnt_c=0\r\ncmd=no\r\nps=no\r\ndocs=yes\r\n").is_ok(), "CRLF");
+        for (from, to) in [("mnt_c=0", "mnt_c=12"), ("cmd=no", "cmd=yes"), ("ps=no", "ps=yes"), ("docs=yes", "docs=no")] {
+            let bad = good.replace(from, to);
+            assert!(sandbox_checks_out(&bad).is_err_and(|e| e.contains(from)), "{bad:?} passed");
+        }
+        assert!(sandbox_checks_out("").is_err(), "nothing read is not a sandbox");
+        //: Inside a longer line is not the fact.
+        assert!(sandbox_checks_out("xmnt_c=0\ncmd=no\nps=no\ndocs=yes").is_err());
+    }
+
+    #[test]
+    fn a_distro_is_listed_by_its_whole_name() {
+        let out = "\u{feff}Ubuntu\r\nargmind-sandbox\r\n";
+        assert!(listed(out, "argmind-sandbox"));
+        assert!(listed(out, "ARGMIND-SANDBOX"));
+        assert!(!listed(out, "argmind"));
+        assert!(!listed("argmind-sandbox-probe\n", "argmind-sandbox"));
+        assert!(!listed("", "argmind-sandbox"));
+    }
+
+    /// **What the setup writes is the sandbox's settings**, and installs without recommends.
+    #[test]
+    fn the_setup_writes_the_settings_and_leaves_recommends_out() {
+        let s = sandbox_setup();
+        for want in ["set -e", "[automount]\nenabled = false", "[interop]\nenabled = false",
+                     "appendWindowsPath = false", "default = root", "--no-install-recommends",
+                     DOCUMENT_PACKAGES] {
+            assert!(s.contains(want), "{want:?} missing from:\n{s}");
+        }
+        //: The heredoc's end marker on its own line, or the settings swallow the commands after it.
+        assert!(s.contains("\nARGMIND_CONF\n"), "{s}");
+    }
+
+    /// **Made, checked and removed, under another name** — never `argmind-sandbox`. Downloads about
+    /// 390 MB and takes a minute or two, so it runs only by hand:
+    /// `cargo test -p argmind-env-windows --lib making_a_sandbox -- --ignored --nocapture`.
+    /// The second half makes the check fail on purpose and wants the half-made distro gone.
+    #[test]
+    #[ignore]
+    fn making_a_sandbox_under_another_name_and_removing_it() {
+        let name = format!("argmind-sandbox-probe-{}", std::process::id());
+        assert_ne!(name, SANDBOX);
+        let at = std::env::temp_dir().join(&name);
+        let mut say = |s: &str| eprintln!("  {s}");
+        let made = make_sandbox(&name, &at, &mut say);
+        eprintln!("{made:?}");
+        let there = sandbox_here(&name);
+        let _ = wsl_step(&["--unregister", &name], None, 120);
+        assert!(made.is_ok() && there, "{made:?}");
+        assert!(!sandbox_here(&name), "the probe was not removed");
+
+        let failed = make_checked(&name, &at, "echo mnt_c=5\n", &mut say);
+        eprintln!("{failed:?}");
+        assert!(failed.is_err_and(|e| e.contains("mnt_c=0")));
+        assert!(!sandbox_here(&name), "a sandbox that did not check out was left behind");
+        let _ = std::fs::remove_dir_all(&at);
+    }
 
     #[test]
     fn a_document_is_known_by_its_extension() {

@@ -38,7 +38,7 @@ fn it_is_a_permission_like_the_others() {
     //: `DECIDABLE` saying what kind of thing this is: needs, then the switches, then the two that
     //: cost something outside the program. `camera` joined it below on the same day.
     let at = |k| DECIDABLE.iter().position(|x| *x == k).unwrap_or(usize::MAX);
-    for quieter in ["ollama", "model", "whisper", "korean-voice", "vulkan", "speaker",
+    for quieter in ["ollama", "model", "work-model", "sandbox", "whisper", "korean-voice", "vulkan", "speaker",
                     "notice", "microphone", "aloud"] {
         assert!(at("acting") > at(quieter), "acting is listed before {quieter}");
     }

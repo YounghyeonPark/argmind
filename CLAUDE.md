@@ -363,6 +363,20 @@ by the same line. `tests/wire.rs` tries the names a rebound page would carry and
 look local; the headless server test sends `Host: evil.example` down the real socket and gets 403
 for `/` and `/app.js` — broken by disabling the check, and the page was served.
 
+**What work needs is offered like everything else — since 2026-11-17**, from the same question.
+`qwen3:14b` and the WSL sandbox had both been set up by hand on this machine and nothing asked
+anybody else for them, so a fresh clone talked and failed every piece of work. Two needs, two keys
+(`work-model`, `sandbox` — seventeen decidable now), because a standing yes for 5 GB is not one for
+9.3 more or for an operating system. `Fix::MakeSandbox` runs the steps the hand-made one was made
+with — `wsl --install Ubuntu-24.04 --name … --location %LOCALAPPDATA%\argmind\sandbox --no-launch`,
+the `wsl.conf`, the two libraries without recommends — then restarts it and **checks four facts**
+(`/mnt/c` empty, no `cmd.exe`, no `powershell.exe`, the libraries import); **one that fails the check
+is unregistered**, since a sandbox left with `C:` mounted would read as present and never be
+offered again. An ignored test made one under another name and removed it, then made the check fail
+and saw the half-made one go: 123 s for both, about 390 MB each. Only on a machine with WSL; without
+it the need says how to install WSL and offers nothing. The person's own `Ubuntu` and the existing
+`argmind-sandbox` were not touched.
+
 **One call, not two.** A round trip is the budget: 0.45 s warm, 4.7 s and 5.9 s for the first two. **One exception since 2026-11-03**: where the word rules say *a turn*, the router asks the same model *is this work?* first — 0.15 s median, measured, because the rules left seven pieces of work in fifty-five as turns.
 
 ## The numbers, as they stand

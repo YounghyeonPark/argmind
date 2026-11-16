@@ -50,7 +50,7 @@ fn nothing_that_performs_an_action_can_be_answered_always() {
         //: And every one of them has a name a person would recognise in a window.
         assert_ne!(what(allowed), "알 수 없는 권한", "{allowed} has no name");
     }
-    assert_eq!(DECIDABLE.len(), 15);
+    assert_eq!(DECIDABLE.len(), 17);
 }
 
 /// The six needs, the three switches, the one that acts and the one that leaves a light on — and
@@ -70,7 +70,7 @@ fn nothing_that_performs_an_action_can_be_answered_always() {
 /// windows that ask print numbers rather than adjectives.
 #[test]
 fn the_list_is_the_needs_the_switches_and_the_two_that_cost_something() {
-    assert_eq!(DECIDABLE, ["ollama", "model", "whisper", "korean-voice", "vulkan", "speaker",
+    assert_eq!(DECIDABLE, ["ollama", "model", "work-model", "sandbox", "whisper", "korean-voice", "vulkan", "speaker",
                            "face-models", "notice", "microphone", "aloud", "acting", "initiative", "camera",
                            "attention", "faces"]);
     //: Every need `needs::every` can report is decidable, or it is a question with no way to

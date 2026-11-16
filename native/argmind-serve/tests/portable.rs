@@ -162,7 +162,7 @@ mod without_an_environment {
         assert!(wrong.is_empty(), "these name Windows on a machine that is not it: {wrong:#?}");
         //: The two rows that are Windows facts rather than Windows fixes are gone entirely — a
         //: machine with no SAPI has no Korean voice to install.
-        for gone in ["korean-voice", "vulkan"] {
+        for gone in ["korean-voice", "vulkan", "sandbox"] {
             assert!(!needs.iter().any(|n| n.key == gone),
                     "{gone:?} is a Windows thing and it is on this list");
         }

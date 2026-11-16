@@ -98,10 +98,10 @@ impl Standing {
 /// **A fixed list rather than any string the page sends.** A key is what a stored *yes* is attached
 /// to, so a page that could invent one could invent a permission the program never asks about — and
 /// a typo would silently create a second, always-unanswered copy of a real one.
-pub const DECIDABLE: [&str; 15] = [
+pub const DECIDABLE: [&str; 17] = [
     //: The needs from `needs.rs`. `korean-voice` and `vulkan` are elevation, the rest change the
-    //: machine.
-    "ollama", "model", "whisper", "korean-voice", "vulkan", "speaker", "face-models",
+    //: machine. `work-model` and `sandbox` since 2026-11-17: what work needs, which nothing offered.
+    "ollama", "model", "work-model", "sandbox", "whisper", "korean-voice", "vulkan", "speaker", "face-models",
     //: Switched on, and then it keeps going: a model call every few seconds, a device that opens
     //: while a key is held, and a program that makes a noise in a room.
     "notice", "microphone", "aloud",
@@ -143,6 +143,8 @@ pub fn what(key: &str) -> &'static str {
         //: `speaker` were already neutral for the same reason.
         "ollama" => "Ollama",
         "model" => "모델 받기",
+        "work-model" => "작업 모델 받기",
+        "sandbox" => "작업 샌드박스 만들기",
         "whisper" => "받아쓰기 서버",
         "korean-voice" => "한국어 음성 설치",
         "vulkan" => "Vulkan SDK 설치",

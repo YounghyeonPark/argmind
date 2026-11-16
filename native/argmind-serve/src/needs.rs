@@ -173,6 +173,58 @@ pub fn every(model: &str) -> Vec<Need> {
         })),
     });
 
+    //: **The model work runs on, asked for separately — since 2026-11-17.** A task, an errand that
+    //: writes files and argmind's own work all call `TASK_MODEL`, and nothing offered it: on a fresh
+    //: machine the conversation worked and every piece of work failed on a model Ollama did not have.
+    //: Its own key, because a standing yes for five gigabytes is not one for nine more.
+    let task_model = crate::app::TASK_MODEL;
+    let has_task_model = ollama_up && argmind_env_ollama::manage::has(argmind_env_ollama::OLLAMA, task_model);
+    out.push(Need {
+        key: "work-model",
+        what: "작업 모델",
+        required: false,
+        present: has_task_model,
+        found: if !ollama_up {
+            "Ollama가 없어서 확인 못 함".into()
+        } else if has_task_model {
+            format!("{task_model} 있음")
+        } else {
+            format!("{task_model} 없음 — 맡긴 일(파일·코드·문서)은 하지 못합니다")
+        },
+        how: format!("argmind setup 이 받아옵니다 (약 9 GB) — 또는 ollama pull {task_model}"),
+        //: 9.3 GB is what `ollama list` reports for it here.
+        fix: offered(ollama_up.then(|| Fix::PullModel { model: task_model.to_string(), about_gb: 9.3 })),
+    });
+
+    //: **The sandbox a task's code runs in — since 2026-11-17**, for the same reason: it was made by
+    //: hand on this machine and nothing told anybody else to make it. Listed only where there can be
+    //: one; without WSL there is nothing argmind can make it in, and installing WSL wants an
+    //: administrator and a restart.
+    if let Some(sandbox) = crate::platform::sandbox() {
+        out.push(Need {
+            key: "sandbox",
+            what: "작업 샌드박스",
+            required: false,
+            present: sandbox.here,
+            found: if sandbox.here {
+                format!("{} 있음", sandbox.name)
+            } else if !sandbox.wsl {
+                "WSL이 없음 — 맡긴 일에서 코드를 실행하지 못합니다".into()
+            } else {
+                format!("{} 없음 — 맡긴 일에서 코드를 실행하지 못합니다", sandbox.name)
+            },
+            how: if sandbox.wsl {
+                format!("argmind가 만들 수 있습니다 — {}, 안에서 C: 와 Windows 프로그램이 안 보이게", sandbox.base)
+            } else {
+                by_hand("관리자 PowerShell 에서 wsl --install --no-distribution 을 실행하고 다시 시작하면 argmind가 나머지를 합니다")
+            },
+            fix: offered(sandbox.wsl.then(|| Fix::MakeSandbox {
+                name: sandbox.name.into(), base: sandbox.base.into(),
+                at: sandbox.at.display().to_string(), about_mb: sandbox.about_mb,
+            })),
+        });
+    }
+
     //: A TCP connect and nothing else — **it is not asked to transcribe anything**, because a
     //: check that made the thing it is checking do work is a check with a side effect.
     let whisper_up = std::net::TcpStream::connect_timeout(

@@ -75,6 +75,12 @@ pub enum Fix {
     /// [`crate::faces::model_fixes`] — so what was agreed to and what happens cannot come apart.
     /// Nothing is executed; both are read by `tract`.
     FetchFaces { about_mb: u64 },
+    /// **Make the sandbox a task's code runs in** — a WSL distro of argmind's own, from WSL's own
+    /// list, set up so that nothing of `C:` and no Windows program is reachable from inside, and
+    /// checked before it is called made. Since 2026-11-17, so a person cloning the repository is
+    /// asked rather than left with a `run` that fails. Its own variant because what it installs is an
+    /// operating system, and the packages inside it run.
+    MakeSandbox { name: String, base: String, at: String, about_mb: u64 },
 }
 
 impl Fix {
@@ -94,6 +100,7 @@ impl Fix {
             Fix::BuildSpeaker { .. } => "argmind — 목소리 서버를 빌드할까요?",
             Fix::StartOllama { .. } => "argmind — Ollama를 실행할까요?",
             Fix::RunElevated { .. } => "argmind — 관리자 권한이 필요합니다",
+            Fix::MakeSandbox { .. } => "argmind — 작업 샌드박스를 만들까요?",
         }
     }
 
@@ -119,8 +126,10 @@ impl Fix {
         //: nothing new happens. But the question this predicate asks is whether saying yes causes
         //: somebody else's program to execute, and the answer is plainly yes — so it is answered
         //: yes, and the sentence carries what makes it milder rather than the flag hiding it.
+        //: **Making the sandbox is on this side too**: what arrives is an operating system, and the
+        //: package manager inside it runs as soon as it is there.
         matches!(self, Fix::Install { .. } | Fix::BuildRecogniser { .. } | Fix::BuildSpeaker { .. }
-                     | Fix::StartOllama { .. })
+                     | Fix::StartOllama { .. } | Fix::MakeSandbox { .. })
     }
 }
 
@@ -257,6 +266,15 @@ pub fn describe(fix: &Fix) -> String {
              · Windows가 한 번 더 물어봅니다\n\
              · 몇 분 걸리고, 인터넷에서 내려받습니다\n\n\
              실행할까요?"),
+        Fix::MakeSandbox { name, base, at, about_mb } => format!(
+            "맡긴 일에서 argmind가 쓴 코드를 실행할 자리입니다. 없으면 코드를 실행하는 일은 하지 못합니다.\n\n\
+             · WSL에 {base} 를 '{name}' 이라는 이름으로 새로 설치합니다 — 지금 있는 다른 배포판은 건드리지 않습니다\n\
+             · WSL이 Microsoft의 배포판 목록에 있는 파일을 약 {about_mb} MB 내려받아 {at} 에 둡니다\n\
+             · 안에서 C: 드라이브와 Windows 프로그램이 보이지 않게 설정합니다 — 일할 때마다 작업 폴더 하나만 연결합니다\n\
+             · Ubuntu 패키지 python3-docx, python3-openpyxl 을 추천 패키지 없이 설치합니다 (Word·Excel 작업용)\n\
+             · 다 되면 C: 가 안 보이는지, 라이브러리가 있는지 확인하고, 하나라도 어긋나면 만들던 것을 지웁니다\n\
+             · 이 컴퓨터에서 1~2분 걸렸습니다\n\n\
+             만들까요?"),
     }
 }
 
@@ -440,5 +458,8 @@ pub fn apply(fix: &Fix, say: &mut dyn FnMut(&str)) -> Result<String, String> {
                 Err("관리자 권한을 받지 못했거나 취소되었습니다".into())
             }
         }
+        //: Through the seam: the steps, the check and the removal of a half-made one are
+        //: `argmind_env_windows::workspace::make_sandbox`'s.
+        Fix::MakeSandbox { .. } => crate::platform::make_sandbox(say),
     }
 }
