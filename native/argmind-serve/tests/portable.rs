@@ -198,11 +198,26 @@ mod without_an_environment {
         let page = page.expect("the server answered within five seconds");
         assert!(page.contains("<canvas"), "the orb is not in the page");
         assert!(page.contains("data-token"), "the page carries no token");
+
+        //: **The same socket, addressed to another name** — what a page rebound to 127.0.0.1
+        //: sends. The page and its script are the unauthenticated surface, so those are the two
+        //: that must be refused here; everything else already wants the token.
+        let at = argmind_serve::app::address(MINE);
+        for path in ["/", "/app.js"] {
+            let refused = fetch_as(&at, "evil.example:7731", path).expect_err("served to another name");
+            assert!(refused.contains("403"), "{path}: {refused}");
+        }
+        assert!(fetch_as(&at, "localhost:7731", "/app.js").is_ok(), "localhost is this machine");
     }
 
     /// One GET, and the body back. The server's own client is not used, because this is testing it.
     fn fetch(host: &str, path: &str) -> Result<String, String> {
-        let mut socket = TcpStream::connect(host).map_err(|e| format!("{e}"))?;
+        fetch_as(host, host, path)
+    }
+
+    /// One GET to `at`, saying it is for `host`.
+    fn fetch_as(at: &str, host: &str, path: &str) -> Result<String, String> {
+        let mut socket = TcpStream::connect(at).map_err(|e| format!("{e}"))?;
         let _ = socket.set_read_timeout(Some(std::time::Duration::from_secs(5)));
         write!(socket, "GET {path} HTTP/1.1\r\nHost: {host}\r\nConnection: close\r\n\r\n")
             .map_err(|e| format!("{e}"))?;

@@ -3884,6 +3884,13 @@ fn serve_one(mut stream: TcpStream, out: &Listeners, token: &str, jobs: &Sender<
             break;
         }
     }
+    //: **Before anything is read or served, the page included** — the page is what carries the
+    //: token, so a request addressed to some other name must not get even that. `addressed_here`
+    //: says why loopback alone was not enough.
+    if !crate::addressed_here(&head) {
+        let _ = stream.write_all(&respond("403 Forbidden", "text/plain", "not addressed to this machine"));
+        return;
+    }
     let length: usize = head.to_lowercase().split("content-length:").nth(1)
         .and_then(|r| r.split("\r\n").next()).and_then(|n| n.trim().parse().ok()).unwrap_or(0);
     let mut body = vec![0u8; length];

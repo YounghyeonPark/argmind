@@ -352,6 +352,17 @@ after, *멈춰* stopping it, the end said and kept. **Not run inside the applica
 here**: driving the server means opening the page, and that applies standing answers that open the
 camera and microphone.
 
+**A page from another name cannot reach the server — since 2026-11-16**, found asking whether the
+repository could go public. Loopback and the token stopped another machine and another program
+guessing; they did not stop a page in a browser here whose name is rebound to `127.0.0.1` (DNS
+rebinding), which the browser treats as its own origin, so it could read `/` — served without a
+token because the token is inside it — and then send `/say`. **Reasoned from the code, not
+attempted.** `addressed_here` refuses any request whose `Host` is not a loopback address or
+`localhost`, before the page is served; argmind's own browser pane, which opens the web, is covered
+by the same line. `tests/wire.rs` tries the names a rebound page would carry and the ones that only
+look local; the headless server test sends `Host: evil.example` down the real socket and gets 403
+for `/` and `/app.js` — broken by disabling the check, and the page was served.
+
 **One call, not two.** A round trip is the budget: 0.45 s warm, 4.7 s and 5.9 s for the first two. **One exception since 2026-11-03**: where the word rules say *a turn*, the router asks the same model *is this work?* first — 0.15 s median, measured, because the rules left seven pieces of work in fifty-five as turns.
 
 ## The numbers, as they stand

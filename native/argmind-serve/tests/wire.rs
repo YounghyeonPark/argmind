@@ -5,7 +5,7 @@
 //! it replaces did not — so the loopback check and the token are not conveniences, and they are
 //! tested the way a guard is tested: by trying to get past them.
 
-use argmind_serve::{authorised, cookie_header, cookie_value, event_stream_head, is_loopback,
+use argmind_serve::{addressed_here, authorised, cookie_header, cookie_value, event_stream_head, is_loopback,
                     mint_token, parse_request, respond, respond_bytes, encoded, decoded,
                     route, sse, Request, Route};
 
@@ -343,4 +343,24 @@ fn the_work_folder_opens_only_by_a_post() {
     let post = |p: &str| parse_request(&format!("POST {p} HTTP/1.1\r\n\r\n")).unwrap();
     assert_eq!(route(&post("/work-folder/open")), Route::OpenWorkFolder);
     assert_eq!(route(&get("/work-folder/open")), Route::Unknown);
+}
+
+/// **A request addressed to another name is not served, the page included** — the page carries the
+/// token, so a site rebound to `127.0.0.1` that could read it could then send anything. Checked the
+/// way a guard is: the names a rebinding page would arrive under, and the ones that only look local.
+#[test]
+fn a_page_from_another_name_cannot_reach_the_agent() {
+    let head = |host: &str| format!("GET / HTTP/1.1\r\nHost: {host}\r\nAccept: */*\r\n\r\n");
+    for here in ["127.0.0.1:7331", "127.0.0.1", "localhost:7331", "LOCALHOST", "[::1]:7331", "127.0.0.2:7331"] {
+        assert!(addressed_here(&head(here)), "{here} is this machine");
+    }
+    for elsewhere in ["evil.example:7331", "evil.example", "127.0.0.1.evil.example:7331",
+                      "localhost.evil.example", "10.0.0.5:7331", "0.0.0.0:7331", "[::]:7331", ""] {
+        assert!(!addressed_here(&head(elsewhere)), "{elsewhere:?} was served");
+    }
+    //: No `Host` at all, and a header whose name only starts with `Host`.
+    assert!(!addressed_here("GET / HTTP/1.1\r\nAccept: */*\r\n\r\n"));
+    assert!(!addressed_here("GET / HTTP/1.1\r\nHostname: 127.0.0.1\r\nHost: evil.example\r\n\r\n"));
+    //: The request line is not a header, whatever it says.
+    assert!(!addressed_here("GET http://127.0.0.1/ HTTP/1.1\r\nHost: evil.example\r\n\r\n"));
 }

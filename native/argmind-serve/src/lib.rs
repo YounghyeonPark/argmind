@@ -193,6 +193,29 @@ pub fn is_loopback(addr: &str) -> bool {
     host.parse::<IpAddr>().map(|ip| ip.is_loopback()).unwrap_or(false)
 }
 
+/// **Is this request addressed to this machine by name?** — read off its `Host`, since 2026-11-16,
+/// found while asking whether the repository could go public.
+///
+/// Loopback stops another machine connecting. It does not stop a page in a browser on *this* one:
+/// a site whose name is made to resolve to `127.0.0.1` after it has loaded — DNS rebinding — is the
+/// same origin as itself as far as the browser knows, so it may read `/`, which is served without a
+/// token because the token is inside it, and then send `/say` with that token. **Reasoned from the
+/// code, not attempted.** What such a request cannot choose is its `Host`: a browser writes the name
+/// the page was loaded from, and a script may not set that header. So a request is served only when
+/// the name is a loopback address or `localhost` — the window, the headless test and every `curl`
+/// here say `127.0.0.1` — and argmind's own browser pane, which opens the web, is covered by the
+/// same line. **No `Host` at all is refused too**: HTTP/1.1 requires one and every client here
+/// sends it.
+pub fn addressed_here(head: &str) -> bool {
+    let host = head.split("\r\n").skip(1).find_map(|line| {
+        let (name, value) = line.split_once(':')?;
+        name.trim().eq_ignore_ascii_case("host").then(|| value.trim())
+    });
+    let Some(host) = host else { return false };
+    let name = if host.starts_with('[') { host } else { host.rsplit_once(':').map(|(n, _)| n).unwrap_or(host) };
+    name.eq_ignore_ascii_case("localhost") || is_loopback(host)
+}
+
 /// What a request is asking for.
 #[derive(Debug, Clone, PartialEq)]
 pub enum Route {

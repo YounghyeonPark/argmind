@@ -1,87 +1,201 @@
 # argmind
 
-**A local-model agent you talk to while you work at your PC.** Open-source model, on your machine,
-no cloud call. It answers, and it acts only when acting is what you asked for.
+**A local-model agent you talk to while you work at your PC.** The models run on your machine
+through Ollama, so what argmind reads off your screen, hears and says is not sent to a model
+service. It reads the screen through the operating system's accessibility layer, talks and listens,
+carries work through to the end in a folder of its own, and acts on your desktop only as far as
+the switches you set allow.
 
-    argmind-app                     an icon by the clock and a page in your browser.
-                                    Leave it running while you work
-    argmind look                    what is on screen right now, and how long reading it took
-    argmind talk                    a conversation. It clicks only with --live
-    argmind say "이 창 닫아줘"        one exchange and exit
-    argmind watch --for build       it speaks when something happens, unasked
-    argmind check                   what is missing, and what it offers to do about it
+A side project by one person, not a product, with no support commitment. **Windows only for now.
+The interface, and most of what argmind says, is Korean.**
 
-Build it with `cargo build --release --manifest-path native/Cargo.toml`.
+## What it does
 
-Windows for now; the core knows nothing about Windows. Needs [Ollama](https://ollama.com) with a
-small text model. **Everything else it wants, it offers to install** — the model, and the
-recogniser, which it builds from source at a pinned commit. It says exactly what it will do and
-does nothing until you say yes.
+- **Talks while you work.** Type, or hold F9 in its window and speak. A reply takes about 0.6 s
+  (measured median, qwen3:8b, warm) and can be spoken in a neural voice it builds and runs on your
+  GPU, falling back to the Windows voice.
+- **Sees the screen as names, not pixels.** UI Automation lists what is on screen, the model picks
+  one by number, and the program finds it again just before acting.
+- **Acts on your desktop**: clicks, typing and keys. It goes through control patterns, or a
+  message posted to the program's own window, and uses your pointer and keyboard only when neither
+  works.
+- **Carries work to the end.** *Write and run a script*, *summarise this into a Word file* and *fix
+  the failing test* go to a task loop on qwen3:14b. The model picks one tool a step, the program
+  runs it and records what came back word for word, and a claimed finish is checked against the
+  files and that record before it is accepted.
+  - **Tools:** files in `%USERPROFILE%\argmind-work`, commands in a WSL sandbox, PowerShell,
+    Blender and KiCad through their scripting interfaces when they are installed, and MCP servers
+    you configure.
+  - **For programs that only have buttons:** a hidden desktop of argmind's own.
+- **Has its own browser pane** inside its window, driven over DevTools with no debugging port, for
+  looking things up.
+- **Notices things**, such as a window change or a dialog, and may say something or offer to act.
+- **Works on a goal by itself** when you have set one and nothing else is going on.
+- **Optional camera senses**: *movement seen N seconds ago*, and *head facing or turned*. No
+  picture is kept. Off unless you turn them on.
 
 ## The one rule
 
 > **The deterministic side says WHERE. The probabilistic side says WHAT.
 > A model never emits a coordinate.**
 
-Measured on this machine before any of it was written. Asking a vision model for a pixel took
-**24–82 s** and on a dense screen never answered at all; Windows UI Automation answers the same
-question exactly in **41–266 ms**; a text model chooses among named things in well under a second.
-The vision model could *see* — its reasoning log read every 14-pixel filename correctly — it simply
-could not do arithmetic on what it saw.
+This was measured on this machine before any of it was written:
 
-So the OS supplies the names and the rectangles, and the model only ever picks a name.
+- **A vision model asked for a pixel** took **24–82 s**, and on a dense screen never answered.
+- **UI Automation** answers the same question exactly in **41–266 ms**.
 
-## What it is
+So the operating system supplies the names and the rectangles, and the model only ever picks a
+name. That rule is enforced by tests that read the source: nothing in the core asks a model for
+`x`/`y`, and nothing rendered into a prompt mentions a rectangle.
 
-    native/argmind-core/         Widget, Eyes, Hands, the model, the session. No platform in it
-    native/argmind-env-windows/  one environment: UI Automation for eyes, SendInput for hands,
-                                 WASAPI for the microphone, SAPI for the voice
-    native/argmind-serve/        the application — a local server, a tray icon, and the CLI
-    ui/                          the page: a transcript, a box to type in, a button per action
-    native/argmind-measure/      every harness behind the numbers below
-    measure/                     the goal set, the captured screens, and every answer
+## Safety: what it may do, and the defaults
 
-Rust and TypeScript. **It was Python until 2026-09-15**; that tree is at
-`python-before-removal-2026-09-15`, and what it produced is committed as data so the equivalence
-checks outlived it.
+argmind presses buttons on your computer. Read this before turning things on.
 
-Four separable pieces, because **acting is not a stage that always runs, it is something decided**,
-and a thought can start without anybody speaking:
+- **At rest, only watching is on.** Everything below waits for your answer in 설정 (Settings).
+  Your answer is written to `%LOCALAPPDATA%\argmind\decisions.json`. Refusing always wins.
+  - *확인 없이 실행*: act on what you asked for without confirmation.
+  - *스스로 실행*: act on argmind's own ideas.
+  - The microphone, the camera and the voice.
+  - Every install it offers.
+- **Until you turn on 확인 없이 실행, every action waits for a press**: it is shown as a row with a
+  실행 (Run) button.
+- **The person keeps some things for themselves:**
+  - **Rules (규칙), per app and per action**: *하지 않음* (never) or *항상 물어봄* (always ask). The
+    strictest rule wins.
+  - **Passwords:** a password field is never typed into. You type it.
+- **Every action is checked against the screen:**
+  - It is re-resolved just before it lands.
+  - A step that fails stops the steps after it.
+  - A name that matches more than one control is asked about, not guessed.
+  - A reply phrased as a question (*…할까요?*) leaves its action as a row instead of running it.
+- **The local server** listens on loopback only and wants a token minted each run. It refuses any
+  request addressed to a host name other than this machine's, so a web page cannot reach it by
+  DNS rebinding.
+- **Commands a task runs** are confined, one way stronger than the other:
+  - Linux commands go to a WSL distro with drive mounting and Windows interop switched off, and
+    only the work folder mounted.
+  - PowerShell runs on a desktop and window station of argmind's own. This is weaker: a Windows
+    process is not confined to a folder.
 
-    observe()          read the world
-    poll()             anything a Watch cares about?  -> triggers
-    decide(trigger)    one model call                 -> what to say, and 0..n things to do
-    perform(intent)    each effect re-resolved against the world AS IT IS NOW, or refused
+**What it cannot promise:** a plan that is wrong but well-formed gets through. Typing into a field
+that exists, on a screen that passed every check, is still typing in the wrong place. And
+qwen3:8b picks the right control 21 times in 28 when there is one (below).
 
-The re-resolution is not caution. Over the second a model call takes, a widget that was listed is
-**gone 13 times in 14**, so an effect stores a *name* and never a rectangle: clicking a remembered
-rectangle is clicking where something used to be.
+## What leaves the machine
 
-## What it gets right, measured
+**Nothing is sent to a model service.** The network is used for:
 
-**18 of 28 answerable goals, and 8 of 9 correct declines** — 37 goals against 4 real windows of
-12 to 152 widgets, labelled before anything ran, three repeats, the worst counted. Nine goals have
-no right answer so the measurement can fail.
+- downloading the models and installers argmind asks you about;
+- building the speech recogniser and the voice server from source, at pinned commits;
+- pages its browser pane opens (searches go to Naver);
+- whatever commands a task runs (the sandbox has a network);
+- MCP servers you configure.
 
-**Not good enough to click unsupervised; good enough to propose.** So the app never clicks by
-itself: every action appears as a row saying what it would do, with a button. In the CLI, an effect
-the agent decided on its own is **downgraded to speech** rather than refused — it says *"the build
-finished, want me to open it?"* — and `--allow-unprompted` is a separate word from `--live`.
+**What it keeps** is in `%LOCALAPPDATA%\argmind\`, as files you can read and delete:
 
-The window always names the window it is answering about, because once you click into its input box
-the foreground window is the agent, and it is answering about the one you came from.
+- settings and your answers: `decisions.json`, `devices.json`, `mind.json`, `tact.json`, `rules.json`;
+- the conversation, `conversation.jsonl` (*대화 기억 지우기* empties it);
+- handed-over errands, `errands.json`;
+- the record of work it set itself, `pursuit.jsonl`;
+- face prints, `faces.json`, only when you turn on recognising faces.
 
-`docs/findings/choosing-accuracy.md` has the conditions, the failures one by one, and the
-hypothesis of mine that the shuffle control refuted.
+The activity timeline is kept in memory only and is gone at exit.
+
+## Requirements
+
+- **Windows 11**, which is what it is built and run on. Windows 10 is untested.
+- **A GPU with about 16 GB of memory.** On an RTX 4090 Laptop (16 GB), the conversation model,
+  the work model (partly on the card), the voice and the recogniser together use **12.6 GB**
+  (measured). Less memory is untested.
+- **[Ollama](https://ollama.com)**, which argmind offers to install.
+  - `qwen3:8b` for conversation: argmind offers to pull it (about 5 GB).
+  - `qwen3:14b` for work: pull it yourself, with `ollama pull qwen3:14b`. argmind does not offer
+    this one yet.
+- **Rust stable, MSVC toolchain** (pinned by `rust-toolchain.toml`). The page is prebuilt in
+  `ui/dist`, so building needs nothing else.
+- **Optional:** the Vulkan SDK for the neural voice, and a C/C++ toolchain for the recogniser.
+  `argmind check` says what is missing and what it would do about it.
+- **For tasks that run code**, a WSL 2 distro named `argmind-sandbox`. argmind does not create it
+  yet. The one in use is Ubuntu with `python3` and
+  `apt-get install --no-install-recommends python3-docx python3-openpyxl`, and this
+  `/etc/wsl.conf`:
+
+      [automount]
+      enabled = false
+      mountFsTab = false
+
+      [interop]
+      enabled = false
+      appendWindowsPath = false
+
+      [user]
+      default = root
+
+## Build and run
+
+    cargo build --release --manifest-path native/Cargo.toml
+    native\target\release\argmind-app.exe
+
+`argmind-app.exe` with no arguments starts everything you have allowed. It puts an icon by the
+clock and opens a window of its own. `--dry` presses nothing.
+
+The command line, `native\target\release\argmind.exe`:
+
+    argmind check                   what is missing, and what it offers to do about it
+    argmind setup                   fetch what is missing, asking first
+    argmind look                    what is on screen right now, and how long reading it took
+    argmind talk                    a conversation; it clicks only with --live
+    argmind say "이 창 닫아줘"        one exchange, then exit
+    argmind watch --for build       speak when something happens, unasked
+
+**Tests** need no display, model, network, microphone or speaker:
+
+    cargo test --manifest-path native/Cargo.toml
+    git config core.hooksPath .githooks    # once per clone: the pre-commit hook runs the suite
+
+## Measured
+
+Every number here has its conditions beside it, and most are one run. The full record is in
+`CLAUDE.md`, the project's working notebook, and in `docs/findings/`. That includes the
+conclusions that were withdrawn and the ways the measuring code was wrong.
+
+| | |
+|---|---|
+| choosing a control | **21 of 28** answerable goals right and **7 of 9** impossible ones declined: 28 of 37 decisions. qwen3:8b with thinking off, 4 captured windows, three repeats, the worst counted |
+| crowding | a list the size of a web page breaks choosing: **22 of 28 → 3–8 of 28** at 123–900 controls |
+| talking | **31 of 34** conversational turns produce no action |
+| a reply | **0.61 s** median |
+| work | **11 of 12** tasks, no false finish. qwen3:14b with reasoning on, about 148 s a task, one run; each task checked against files and the sandbox, never against the model's own account |
+| documents | Word and Excel made, changed and read: **13 of 13**, none false, one run |
+| installed programs | Blender and KiCad through their scripting: **3 of 3**, against **0 of 3** without them; one run each, and later runs on a changed set read 2 of 3 and 4 of 4 |
+| a covered target | with something lying over the target, neither the pattern nor the click reaches it; uncovered, both do. **24 of 24** arms as predicted before the run |
+
+## Layout
+
+    native/argmind-core/         the contract (Widget, Eyes, Hands), the model, the session, tasks,
+                                 errands, rules. Names no platform
+    native/argmind-env-windows/  UI Automation for eyes; patterns, window messages and SendInput for
+                                 hands; WASAPI, SAPI, the work desktop, the sandbox
+    native/argmind-env-*/        the browser pane, Ollama, Whisper, the voice, MCP, Linux eyes, and
+                                 an environment that can do nothing (the proof the app is separable)
+    native/argmind-serve/        the application: a local server, the page, the tray, the CLI
+    native/argmind-window/       its window, the tray icon, the browser pane
+    native/argmind-rules/        rules the repository keeps by reading its own source
+    native/argmind-measure/      every harness behind the numbers
+    ui/                          the page, TypeScript with no dependency but tsc
+    measure/                     goals, captured screens, and every recorded answer
 
 ## History
 
-Until 2026-09-09 this name meant a recursive-least-squares library for on-device adaptation, ported
-to C++ for Cortex-M. That tree was removed rather than left unused; it is intact under the tags
-`before-removal-2026-09-09` and `argmind-v1`, and `REBUILD.md` says why.
-`docs/findings/what-the-old-tree-measured.md` keeps the results that still bear on work here.
+Until 2026-09-09 this name meant a recursive-least-squares library for on-device adaptation,
+ported to C++ for Cortex-M. That tree was removed rather than left unused. It is intact under the
+tags `before-removal-2026-09-09` and `argmind-v1`, and `REBUILD.md` says why. Until 2026-09-15 the
+agent was Python. That tree is at `python-before-removal-2026-09-15`, and what it produced is
+committed as data so the equivalence checks outlived it.
 
 ## Licence
 
-Apache-2.0 — see `LICENSE` and `NOTICE`. Author: Younghyeon Park. A side project, not a product,
-with no support commitment.
+Apache-2.0. See `LICENSE` and `NOTICE`, which also asks that the numbers be quoted with their
+conditions. Every dependency's licence is recorded in `docs/licences.toml` and checked by a test.
+Author: Younghyeon Park.
