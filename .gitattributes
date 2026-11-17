@@ -6,3 +6,9 @@
 # never been re-written, so it was LF and passed; anybody else's would not have.
 * text=auto eol=lf
 *.png binary
+
+# **Except the four captured screens, which are CRLF everywhere.** `s`, the screen fingerprint every
+# harness puts in its result's name, is a hash of these files' bytes as they sit on disk, and they
+# were written on Windows with CRLF; `argmind-measure/tests/capture.rs` requires the writer to
+# reproduce them byte for byte. With `eol=lf` the second CI run read another `s` and failed there.
+measure/screens/*.json text eol=crlf

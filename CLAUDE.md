@@ -495,6 +495,12 @@ preparing.
   number one the README carries) with `pages.yml`, skipped while private, and
   `docs/images/social-preview.png`, drawn by `orb.js`. The repository's topics still named the
   removed library (`recursive-least-squares`, `cortex-m`…) and were replaced.
+- **The first two CI runs found that a fresh Windows clone failed the suite**, which this checkout
+  never could: Git for Windows writes CRLF on checkout, and this tree reads its own bytes. The
+  first run failed `tests/interface.rs` on a `\`-continued sentence in `needs.rs`; with every file
+  LF the second failed `capture.rs`, because `s` hashes the four screens' bytes and they were
+  written with CRLF. `.gitattributes` now says LF everywhere and CRLF for those four. A fresh
+  clone with `core.autocrlf=true`: **639 passed, 0 failed**, and the headless build 232 and 0.
 
 ## What is NOT built
 
