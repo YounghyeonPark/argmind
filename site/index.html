@@ -2,8 +2,13 @@
 <!--
   argmind's public page, served by GitHub Pages from this folder (.github/workflows/pages.yml).
 
-  **Every number on it is one the README states, with the same conditions**, and the page says
-  which are one run. A number here that the README does not carry is a number nobody measured.
+  **Written for somebody who has never heard the words this project uses** — the owner, 2026-11-18:
+  *이해하기 어려운 말들은 빼고 직관적으로 쉽게.* So no "deterministic", "UI Automation", "control
+  pattern", "WSL" or "MCP" on the page; the README and the notebook carry those.
+
+  **Every number on it is one the README states**, its conditions said in plain words beside it
+  (how many tries, on what, how many times it was run). A number here that the README does not
+  carry is a number nobody measured. 41–266 ms is written 0.04–0.27 s, the same measurement.
 
   The sphere is the application's own: the workflow copies ui/dist/orb.js beside this file at
   deploy time, so the page cannot drift from what argmind draws. Four languages, one table below;
@@ -14,9 +19,9 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>argmind</title>
-<meta name="description" content="A local-model agent you talk to while you work at your PC. It reads the screen through the accessibility layer, and the model picks a name — it never emits a coordinate.">
+<meta name="description" content="An assistant for your Windows PC that runs on your own computer. Talk to it while you work: it sees what is on your screen, answers, and clicks and types for you, only as far as you allow.">
 <meta property="og:title" content="argmind">
-<meta property="og:description" content="A local-model agent you talk to while you work at your PC.">
+<meta property="og:description" content="An assistant for your Windows PC that runs on your own computer.">
 <meta property="og:image" content="https://raw.githubusercontent.com/YounghyeonPark/argmind/main/docs/images/social-preview.png">
 <meta name="twitter:card" content="summary_large_image">
 <style>
@@ -49,7 +54,7 @@
   .hero canvas { width: 100%; aspect-ratio: 1; display: block; }
   .hero h1 { font-size: clamp(44px, 7vw, 76px); line-height: 1; letter-spacing: -1.5px;
              margin: 0 0 18px; font-weight: 600; }
-  .hero .tag { font-size: clamp(21px, 2.6vw, 27px); line-height: 1.35; margin: 0 0 14px; }
+  .hero .tag { font-size: clamp(21px, 2.6vw, 27px); line-height: 1.35; margin: 0 0 14px; text-wrap: balance; }
   .hero .sub { color: var(--dim); margin: 0 0 26px; }
   .buttons { display: flex; flex-wrap: wrap; gap: 10px; }
   .button { display: inline-block; padding: 10px 18px; border-radius: 8px; text-decoration: none;
@@ -59,12 +64,10 @@
   .small { font-size: 14px; color: var(--dim); margin: 12px 0 0; }
 
   section { padding: 44px 0; border-top: 1px solid var(--edge); }
-  h2 { font-size: 28px; line-height: 1.25; margin: 0 0 18px; font-weight: 600; }
+  h2 { font-size: 28px; line-height: 1.25; margin: 0 0 18px; font-weight: 600; text-wrap: balance; }
   .lead { max-width: 720px; margin: 0 0 24px; }
 
-  .rule { font-size: clamp(22px, 3vw, 30px); line-height: 1.35; color: var(--blue); margin: 0 0 26px;
-          border-left: 3px solid var(--blue); padding-left: 16px; }
-  .versus { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .versus { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 16px; }
   .stat { background: var(--card); border: 1px solid var(--edge); border-radius: 10px; padding: 18px 20px; }
   .stat .n { font-size: clamp(30px, 4.5vw, 44px); font-weight: 600; line-height: 1.1;
              font-variant-numeric: tabular-nums; }
@@ -83,9 +86,10 @@
   .table { width: 100%; border-collapse: collapse; font-size: 15px; }
   .table th, .table td { text-align: left; vertical-align: top; padding: 10px 12px;
                          border-bottom: 1px solid var(--edge); }
-  .table th { font-weight: 600; white-space: nowrap; width: 28%; }
+  .table th { font-weight: 600; width: 34%; }
   .table td b { font-variant-numeric: tabular-nums; }
   .table .why { color: var(--dim); }
+  .table tr.weak th, .table tr.weak b { color: var(--warn); }
   .scroll { overflow-x: auto; }
 
   ol.steps { margin: 0; padding-left: 22px; max-width: 760px; }
@@ -99,7 +103,7 @@
     .hero { grid-template-columns: 1fr; gap: 8px; padding-top: 4px; }
     .hero canvas { max-width: 300px; margin: 0 auto; }
     .versus, .cards { grid-template-columns: 1fr; }
-    .table th { white-space: normal; width: 38%; }
+    .table th { width: 40%; }
     nav { gap: 12px; }
   }
 </style>
@@ -133,13 +137,17 @@
 </div>
 
 <section><div class="wrap">
-  <h2 data-t="rule_h"></h2>
-  <p class="rule" data-t="rule"></p>
-  <div class="versus">
-    <div class="stat slow"><div class="n">24–82 s</div><p data-t="slow"></p></div>
-    <div class="stat fast"><div class="n">41–266 ms</div><p data-t="fast"></p></div>
+  <h2 data-t="diff_h"></h2>
+  <div class="cards">
+    <div class="card"><h3 data-t="d1h"></h3><p data-t="d1"></p></div>
+    <div class="card"><h3 data-t="d2h"></h3><p data-t="d2"></p></div>
+    <div class="card"><h3 data-t="d3h"></h3><p data-t="d3"></p></div>
   </div>
-  <p class="small" data-t="rule_note"></p>
+  <div class="versus">
+    <div class="stat slow"><div class="n" data-t="slow_n"></div><p data-t="slow"></p></div>
+    <div class="stat fast"><div class="n" data-t="fast_n"></div><p data-t="fast"></p></div>
+  </div>
+  <p class="small" data-t="versus_note"></p>
 </div></section>
 
 <section><div class="wrap">
@@ -158,7 +166,7 @@
   <h2 data-t="safe_h"></h2>
   <ul class="list">
     <li data-t="s1"></li><li data-t="s2"></li><li data-t="s3"></li>
-    <li data-t="s4"></li><li data-t="s5"></li><li data-t="s6"></li>
+    <li data-t="s4"></li><li data-t="s5"></li>
   </ul>
 </div></section>
 
@@ -171,8 +179,7 @@
     <tr><th data-t="n3h"></th><td data-t="n3"></td></tr>
     <tr><th data-t="n4h"></th><td data-t="n4"></td></tr>
     <tr><th data-t="n5h"></th><td data-t="n5"></td></tr>
-    <tr><th data-t="n6h"></th><td data-t="n6"></td></tr>
-    <tr><th data-t="n7h"></th><td data-t="n7"></td></tr>
+    <tr class="weak"><th data-t="n6h"></th><td data-t="n6"></td></tr>
   </table></div>
   <p class="small" data-t="num_more"></p>
 </div></section>
@@ -202,215 +209,219 @@
 // is written here, never taken from the address bar.
 const T = {
   tag: {
-    en: "A local-model agent you talk to while you work at your PC.",
-    ko: "PC에서 일하는 동안 말을 걸 수 있는, 내 컴퓨터 안의 모델로 도는 에이전트.",
-    zh: "在电脑前工作时可以对话的智能体，模型在你自己的电脑上运行。",
-    ja: "PCで作業しながら話しかけられる、手元のモデルで動くエージェント。" },
+    en: "An assistant for your PC that runs on your own computer.",
+    ko: "내 컴퓨터 안에서 돌아가는 PC 도우미.",
+    zh: "在你自己电脑上运行的电脑助手。",
+    ja: "自分のパソコンの中で動く、PCアシスタント。" },
   sub: {
-    en: "The models run on your machine through Ollama. It reads the screen through Windows' accessibility layer, talks and listens, carries work through to the end in a folder of its own, and acts only as far as the switches you set allow.",
-    ko: "모델은 Ollama로 내 컴퓨터에서 돕니다. Windows 접근성 계층으로 화면을 읽고, 말하고 듣고, 자기 폴더에서 일을 끝까지 해내며, 내가 켠 스위치가 허락하는 만큼만 움직입니다.",
-    zh: "模型通过 Ollama 在你的电脑上运行。它通过 Windows 无障碍接口读取屏幕，能说能听，在自己的文件夹里把工作做完，并且只在你打开的开关允许的范围内操作。",
-    ja: "モデルは Ollama であなたのPC上で動きます。Windows のアクセシビリティ層で画面を読み、話して聞き、専用のフォルダーで仕事を最後までこなし、あなたが入れたスイッチの範囲でだけ操作します。" },
+    en: "Talk to it while you work. It sees what is on your screen, answers you, and clicks and types for you — only as far as you allow.",
+    ko: "일하면서 말을 걸어 보세요. 화면을 보고, 대답하고, 대신 눌러 주고 입력해 줍니다. 내가 허락한 만큼만요.",
+    zh: "边工作边和它说话。它能看到你屏幕上的内容，回答你，替你点击和输入——只在你允许的范围内。",
+    ja: "作業しながら話しかけてください。画面を見て、答えて、代わりにクリックや入力をしてくれます。あなたが許した範囲だけで。" },
   download: { en: "Download for Windows", ko: "Windows용 받기", zh: "下载 Windows 版", ja: "Windows 版をダウンロード" },
-  source: { en: "Source on GitHub", ko: "GitHub에서 소스 보기", zh: "在 GitHub 上查看源码", ja: "GitHub でソースを見る" },
+  source: { en: "See it on GitHub", ko: "GitHub에서 보기", zh: "在 GitHub 上查看", ja: "GitHub で見る" },
   side: {
-    en: "A side project by one person, not a product. Windows 11 and a GPU with about 16 GB. Apache-2.0.",
-    ko: "한 사람의 개인 프로젝트이고 제품이 아닙니다. Windows 11, GPU 메모리 약 16 GB. Apache-2.0.",
-    zh: "一个人的业余项目，不是产品。需要 Windows 11 和约 16 GB 显存的 GPU。Apache-2.0。",
-    ja: "一人の個人プロジェクトで、製品ではありません。Windows 11 と約 16 GB のGPUメモリが必要です。Apache-2.0。" },
+    en: "Free and open source. Made by one person as a side project.",
+    ko: "무료이고 소스가 공개되어 있습니다. 한 사람이 개인 프로젝트로 만들고 있습니다.",
+    zh: "免费且开源。由一个人作为业余项目开发。",
+    ja: "無料でソースも公開されています。一人が個人プロジェクトとして作っています。" },
 
-  rule_h: { en: "The one rule", ko: "단 하나의 규칙", zh: "唯一的规则", ja: "ただ一つのルール" },
-  rule: {
-    en: "The deterministic side says WHERE. The probabilistic side says WHAT. A model never emits a coordinate.",
-    ko: "어디인지는 결정론적인 쪽이 말한다. 무엇인지는 확률적인 쪽이 말한다. 모델은 좌표를 내놓지 않는다.",
-    zh: "确定性的一方说“在哪里”，概率性的一方说“是什么”。模型从不输出坐标。",
-    ja: "「どこ」は決定的な側が言う。「何」は確率的な側が言う。モデルは座標を出さない。" },
+  diff_h: { en: "What makes it different", ko: "무엇이 다른가요", zh: "它有什么不同", ja: "ここが違います" },
+  d1h: { en: "It stays on your PC", ko: "내 PC 밖으로 나가지 않아요", zh: "不离开你的电脑", ja: "パソコンの外に出ません" },
+  d1: {
+    en: "The AI runs on your own computer. What is on your screen and what you say is not sent to any AI company.",
+    ko: "AI가 내 컴퓨터에서 직접 돌아갑니다. 화면에 보이는 것도, 내가 한 말도 AI 회사로 보내지 않습니다.",
+    zh: "AI 直接在你的电脑上运行。屏幕上的内容和你说的话都不会发给任何 AI 公司。",
+    ja: "AI があなたのパソコンで直接動きます。画面の内容も、話したことも、AI の会社には送りません。" },
+  d2h: { en: "It reads the screen instead of looking at a picture", ko: "화면을 사진으로 보지 않고 읽어요", zh: "读取屏幕，而不是看截图", ja: "画面を写真で見ずに、読み取ります" },
+  d2: {
+    en: "It asks Windows which buttons and boxes are on the screen, by name. The AI only picks one, and Windows knows exactly where it is. That is much faster and more exact than guessing from a screenshot.",
+    ko: "화면에 어떤 버튼과 입력칸이 있는지 Windows에 이름으로 물어봅니다. AI는 그중 하나를 고르기만 하고, 정확한 위치는 Windows가 압니다. 화면 사진을 보고 짐작하는 것보다 훨씬 빠르고 정확합니다.",
+    zh: "它会向 Windows 询问屏幕上有哪些按钮和输入框，按名称列出。AI 只负责从中挑一个，准确的位置由 Windows 提供。这比看截图猜位置快得多，也准得多。",
+    ja: "画面にどんなボタンや入力欄があるかを、Windows に名前で尋ねます。AI はその中から一つ選ぶだけで、正確な位置は Windows が知っています。画面の写真から推測するより、ずっと速く正確です。" },
+  d3h: { en: "You decide what it may do", ko: "할 수 있는 일은 내가 정해요", zh: "能做什么由你决定", ja: "できることは自分で決めます" },
+  d3: {
+    en: "At first it only watches. Clicking for you, the microphone, the camera and every download wait until you say yes.",
+    ko: "처음에는 지켜보기만 합니다. 대신 누르기, 마이크, 카메라, 무언가를 받는 일은 모두 내가 허락할 때까지 기다립니다.",
+    zh: "一开始它只是看着。替你点击、麦克风、摄像头和任何下载，都要等你同意。",
+    ja: "最初は見ているだけです。代わりのクリック、マイク、カメラ、何かのダウンロードは、すべてあなたが許可するまで待ちます。" },
+  slow_n: { en: "24–82 s", ko: "24~82초", zh: "24–82 秒", ja: "24〜82 秒" },
   slow: {
-    en: "A vision model asked for the pixel to click. On a dense screen it never answered. Measured on the author's machine.",
-    ko: "시각 모델에게 클릭할 픽셀을 물었을 때. 복잡한 화면에서는 끝내 답하지 못했습니다. 작성자의 컴퓨터에서 측정.",
-    zh: "让视觉模型给出要点击的像素。在复杂的屏幕上它始终没有回答。在作者的电脑上测得。",
-    ja: "視覚モデルにクリックするピクセルを尋ねた場合。込み入った画面では最後まで答えませんでした。作者のPCで計測。" },
+    en: "An AI finding where to click by looking at a screenshot. On a busy screen it never found it.",
+    ko: "AI가 화면 사진을 보고 누를 곳을 찾을 때. 복잡한 화면에서는 끝내 찾지 못했습니다.",
+    zh: "AI 看截图找要点击的位置。屏幕内容多时，它始终没找到。",
+    ja: "AI が画面の写真を見てクリックする場所を探す場合。込み入った画面では最後まで見つけられませんでした。" },
+  fast_n: { en: "0.04–0.27 s", ko: "0.04~0.27초", zh: "0.04–0.27 秒", ja: "0.04〜0.27 秒" },
   fast: {
-    en: "UI Automation, asked the same question, answers exactly. Measured on the same machine.",
-    ko: "같은 질문에 UI Automation은 정확히 답합니다. 같은 컴퓨터에서 측정.",
-    zh: "同样的问题，UI Automation 给出精确答案。在同一台电脑上测得。",
-    ja: "同じ問いに UI Automation は正確に答えます。同じPCで計測。" },
-  rule_note: {
-    en: "So the operating system supplies the names and the rectangles, and the model only ever picks a name. Tests that read the source keep it that way: nothing rendered into a prompt mentions a rectangle.",
-    ko: "그래서 이름과 위치는 운영체제가 대고, 모델은 이름 하나를 고를 뿐입니다. 소스를 읽는 테스트가 이를 지킵니다: 프롬프트에 들어가는 어떤 것도 사각형을 언급하지 않습니다.",
-    zh: "所以名称和位置由操作系统提供，模型只负责选一个名称。读取源码的测试守住了这一点：放进提示词的内容从不提及矩形区域。",
-    ja: "だから名前と位置はOSが出し、モデルは名前を一つ選ぶだけです。ソースを読むテストがそれを守っています。プロンプトに入るものは矩形に一切触れません。" },
+    en: "Asking Windows directly, the way argmind does. The answer is exact.",
+    ko: "argmind처럼 Windows에 직접 물을 때. 답이 정확합니다.",
+    zh: "像 argmind 这样直接问 Windows。答案是准确的。",
+    ja: "argmind のように Windows に直接尋ねる場合。答えは正確です。" },
+  versus_note: {
+    en: "Both measured on the author's PC.",
+    ko: "둘 다 만든 사람의 PC에서 직접 재 본 시간입니다.",
+    zh: "两者都是在作者的电脑上实测的时间。",
+    ja: "どちらも作者のパソコンで実際に計った時間です。" },
 
-  does_h: { en: "What it does", ko: "하는 일", zh: "它能做什么", ja: "できること" },
-  c1h: { en: "Talks while you work", ko: "일하는 동안 대화", zh: "边工作边对话", ja: "作業しながら会話" },
+  does_h: { en: "What it can do", ko: "할 수 있는 일", zh: "它能做什么", ja: "できること" },
+  c1h: { en: "Talk", ko: "대화", zh: "对话", ja: "会話" },
   c1: {
-    en: "Type, or hold F9 and speak. A reply takes about 0.6 s (measured median, qwen3:8b, warm), and can be spoken in a neural voice it builds on your GPU.",
-    ko: "입력하거나 F9를 누른 채 말하세요. 답은 약 0.6초(측정 중앙값, qwen3:8b, 준비된 상태)이고, GPU에서 직접 빌드한 신경망 목소리로 말할 수도 있습니다.",
-    zh: "打字，或按住 F9 说话。回复约 0.6 秒（实测中位数，qwen3:8b，已预热），还能用它在你 GPU 上构建的神经网络语音说出来。",
-    ja: "入力するか、F9 を押しながら話してください。返答は約 0.6 秒（実測の中央値、qwen3:8b、ウォーム状態）で、GPU 上でビルドするニューラル音声で読み上げることもできます。" },
-  c2h: { en: "Sees names, not pixels", ko: "픽셀이 아니라 이름을 본다", zh: "看的是名称，不是像素", ja: "ピクセルではなく名前を見る" },
+    en: "Type, or hold F9 and speak. It answers in about 0.6 seconds and can answer out loud.",
+    ko: "글로 쓰거나 F9를 누른 채 말하세요. 0.6초쯤이면 대답하고, 소리 내어 말할 수도 있습니다.",
+    zh: "打字，或按住 F9 说话。大约 0.6 秒就能回答，也可以用声音回答。",
+    ja: "文字で書くか、F9 を押しながら話してください。0.6 秒ほどで答え、声に出して話すこともできます。" },
+  c2h: { en: "Click and type for you", ko: "대신 누르고 입력하기", zh: "替你点击和输入", ja: "代わりにクリック・入力" },
   c2: {
-    en: "UI Automation lists what is on screen, the model picks one by number, and the program finds it again just before acting.",
-    ko: "UI Automation이 화면에 있는 것을 나열하고, 모델은 번호로 하나를 고르며, 프로그램은 실행 직전에 그것을 다시 찾습니다.",
-    zh: "UI Automation 列出屏幕上的内容，模型按编号选一个，程序在动手前一刻重新找到它。",
-    ja: "UI Automation が画面上のものを列挙し、モデルが番号で一つ選び、プログラムが操作の直前にそれを探し直します。" },
-  c3h: { en: "Acts without taking your pointer", ko: "포인터를 빼앗지 않고 조작", zh: "不抢你的鼠标", ja: "ポインターを奪わずに操作" },
+    en: "Ask it to press a button or fill in a box. It usually does it without taking over your mouse.",
+    ko: "버튼을 눌러 달라거나 칸을 채워 달라고 하세요. 대부분 내 마우스를 빼앗지 않고 처리합니다.",
+    zh: "让它按个按钮或填个输入框。大多数时候它不用抢你的鼠标就能完成。",
+    ja: "ボタンを押して、欄を埋めて、と頼んでください。たいていはあなたのマウスを奪わずにこなします。" },
+  c3h: { en: "Finish longer work", ko: "긴 일도 끝까지", zh: "把较长的工作做完", ja: "長い仕事も最後まで" },
   c3: {
-    en: "Clicks, typing and keys go through control patterns or a message to the program's own window. Your pointer and keyboard are used only when neither works.",
-    ko: "클릭·입력·키는 컨트롤 패턴이나 프로그램 창에 보내는 메시지로 처리합니다. 둘 다 안 될 때만 내 포인터와 키보드를 씁니다.",
-    zh: "点击、输入和按键通过控件模式或发给程序窗口的消息完成。只有两者都不行时才会用到你的鼠标和键盘。",
-    ja: "クリック・入力・キーはコントロールパターンか、プログラムのウィンドウへのメッセージで行います。どちらも使えないときだけ、あなたのポインターとキーボードを使います。" },
-  c4h: { en: "Carries work to the end", ko: "일을 끝까지", zh: "把工作做完", ja: "仕事を最後まで" },
+    en: "Write a document, make a spreadsheet, write and run a small program. Before it says \"done\", it checks the result itself.",
+    ko: "문서 쓰기, 표 만들기, 간단한 프로그램 짜서 돌리기. \"다 했어요\"라고 하기 전에 결과를 직접 확인합니다.",
+    zh: "写文档、做表格、写个小程序并运行。说“做好了”之前，它会先自己检查结果。",
+    ja: "文書を書く、表を作る、簡単なプログラムを書いて動かす。「できました」と言う前に、結果を自分で確かめます。" },
+  c4h: { en: "Look things up", ko: "웹에서 찾아보기", zh: "上网查资料", ja: "ウェブで調べる" },
   c4: {
-    en: "Write and run a script, summarise into a Word file, fix a failing test. One tool a step, the record kept word for word, and a claimed finish checked against the files before it is accepted.",
-    ko: "스크립트를 쓰고 실행하기, Word 파일로 요약하기, 실패하는 테스트 고치기. 한 단계에 도구 하나, 결과는 글자 그대로 기록하고, 끝났다는 말은 파일과 대조한 뒤에야 받아들입니다.",
-    zh: "写脚本并运行、总结成 Word 文件、修好失败的测试。每步一个工具，结果逐字记录，声称完成时要先对照文件核实才算数。",
-    ja: "スクリプトを書いて実行する、Word ファイルに要約する、失敗するテストを直す。1ステップに道具を一つ、結果は一字一句記録し、「終わった」という主張はファイルと照合してから受け入れます。" },
-  c5h: { en: "Works in a sandbox, and in programs", ko: "샌드박스와 프로그램 안에서", zh: "在沙箱和程序里工作", ja: "サンドボックスとアプリの中で" },
+    en: "It has its own browser inside its window, so it can search the web without touching yours.",
+    ko: "자기 창 안에 브라우저가 따로 있어서, 내 브라우저를 건드리지 않고 웹을 찾아봅니다.",
+    zh: "它的窗口里有自己的浏览器，所以不碰你的浏览器也能上网查。",
+    ja: "自分のウィンドウの中に専用のブラウザーがあるので、あなたのブラウザーに触れずにウェブを調べます。" },
+  c5h: { en: "Work with other programs", ko: "다른 프로그램과 함께", zh: "配合其他程序", ja: "ほかのアプリと一緒に" },
   c5: {
-    en: "Linux commands run in a WSL distro of its own. Blender and KiCad through their scripting interfaces, MCP servers you configure, and a hidden desktop of its own for programs that only have buttons.",
-    ko: "Linux 명령은 자기 전용 WSL 배포판에서 돕니다. Blender와 KiCad는 스크립트 인터페이스로, 직접 설정한 MCP 서버, 버튼만 있는 프로그램은 자기만의 숨은 데스크톱에서 다룹니다.",
-    zh: "Linux 命令在它专属的 WSL 发行版里运行。通过脚本接口操作 Blender 和 KiCad，使用你配置的 MCP 服务器；只有按钮的程序则放在它自己的隐藏桌面上操作。",
-    ja: "Linux のコマンドは専用の WSL ディストリビューションで動きます。Blender と KiCad はスクリプトインターフェースで、設定した MCP サーバーも使い、ボタンしかないアプリは専用の隠しデスクトップで扱います。" },
-  c6h: { en: "In four languages", ko: "네 가지 언어로", zh: "四种语言", ja: "4つの言語で" },
+    en: "It can make 3D models in Blender and check circuits in KiCad, when they are installed.",
+    ko: "Blender가 있으면 3D 모델을 만들고, KiCad가 있으면 회로를 확인할 수 있습니다.",
+    zh: "装了 Blender 就能做 3D 模型，装了 KiCad 就能检查电路。",
+    ja: "Blender があれば 3D モデルを作り、KiCad があれば回路を確かめられます。" },
+  c6h: { en: "Four languages", ko: "네 가지 언어", zh: "四种语言", ja: "4つの言語" },
   c6: {
-    en: "The interface and the conversation in Korean, English, Chinese or Japanese. With a language set, 48 of 48 replies came back in it for Korean, English and Chinese, on two runs.",
-    ko: "화면과 대화 모두 한국어·English·中文·日本語. 언어를 정하면 한국어·영어·중국어에서 48개 중 48개의 답이 그 언어로 나왔습니다(두 번 실행).",
-    zh: "界面和对话支持韩语、英语、中文和日语。设定语言后，韩语、英语和中文各 48 条回复中 48 条都用该语言回答（运行两次）。",
-    ja: "画面も会話も韓国語・英語・中国語・日本語。言語を設定すると、韓国語・英語・中国語で 48 件中 48 件の返答がその言語でした（2回の実行）。" },
+    en: "Korean, English, Chinese and Japanese — both the screens and the conversation.",
+    ko: "한국어, 영어, 중국어, 일본어. 화면도 대화도 모두 됩니다.",
+    zh: "韩语、英语、中文、日语。界面和对话都支持。",
+    ja: "韓国語・英語・中国語・日本語。画面も会話も対応しています。" },
 
-  safe_h: { en: "You hold the switches", ko: "스위치는 내가 쥔다", zh: "开关在你手里", ja: "スイッチはあなたが握る" },
+  safe_h: { en: "Safe by default", ko: "처음부터 안전하게", zh: "默认就是安全的", ja: "最初から安全に" },
   s1: {
-    en: "<b>At rest, only watching is on.</b> Acting without confirmation, acting on its own ideas, the microphone, the camera, the voice and every install wait for your answer. Refusing always wins.",
-    ko: "<b>처음에는 지켜보기만 켜져 있습니다.</b> 확인 없이 실행, 스스로 실행, 마이크, 카메라, 목소리, 모든 설치는 내 답을 기다립니다. 거부가 언제나 이깁니다.",
-    zh: "<b>默认只开着“观察”。</b>无需确认就执行、按自己的想法执行、麦克风、摄像头、语音以及每一项安装，都要等你回答。拒绝永远优先。",
-    ja: "<b>最初は「見守り」だけがオンです。</b>確認なしの実行、自分の考えでの実行、マイク、カメラ、音声、あらゆるインストールはあなたの答えを待ちます。拒否が常に優先されます。" },
+    en: "<b>It asks before it acts.</b> Until you change the setting, every action waits for you to press Run.",
+    ko: "<b>하기 전에 묻습니다.</b> 설정을 바꾸기 전까지는 모든 동작이 내가 ‘실행’을 누르기를 기다립니다.",
+    zh: "<b>动手之前先问你。</b>在你改设置之前，每个操作都会等你按下“执行”。",
+    ja: "<b>やる前に聞きます。</b>設定を変えるまで、すべての操作はあなたが「実行」を押すのを待ちます。" },
   s2: {
-    en: "<b>Until you allow it, every action waits for you to press Run.</b>",
-    ko: "<b>허락하기 전까지 모든 실행은 내가 ‘실행’을 누르기를 기다립니다.</b>",
-    zh: "<b>在你允许之前，每个操作都等你按下“执行”。</b>",
-    ja: "<b>許可するまで、すべての操作はあなたが「実行」を押すのを待ちます。</b>" },
+    en: "<b>It never types a password.</b> That is always yours to type.",
+    ko: "<b>비밀번호는 절대 입력하지 않습니다.</b> 비밀번호는 언제나 직접 입력하세요.",
+    zh: "<b>从不替你输入密码。</b>密码永远由你自己输入。",
+    ja: "<b>パスワードは決して入力しません。</b>パスワードはいつもご自身で。" },
   s3: {
-    en: "<b>Rules per app and per action</b>: never, or always ask. The strictest rule wins.",
-    ko: "<b>앱별·동작별 규칙</b>: 하지 않음 또는 항상 물어봄. 가장 엄격한 규칙이 이깁니다.",
-    zh: "<b>按应用、按操作设定规则</b>：从不，或总是询问。最严格的规则优先。",
-    ja: "<b>アプリごと・操作ごとのルール</b>：しない、または必ず聞く。最も厳しいルールが優先されます。" },
+    en: "<b>You can keep it away from an app,</b> or make it always ask first there.",
+    ko: "<b>특정 앱에는 손대지 못하게</b> 하거나, 거기서는 항상 먼저 묻게 할 수 있습니다.",
+    zh: "<b>可以让它别碰某个应用，</b>或者在那里每次都先问你。",
+    ja: "<b>特定のアプリには触れさせない</b>ことも、そこでは必ず先に聞くようにすることもできます。" },
   s4: {
-    en: "<b>A password field is never typed into.</b> You type it.",
-    ko: "<b>비밀번호 칸에는 절대 입력하지 않습니다.</b> 직접 입력하세요.",
-    zh: "<b>从不在密码框里输入。</b>密码由你自己输入。",
-    ja: "<b>パスワード欄には決して入力しません。</b>ご自身で入力してください。" },
+    en: "<b>It checks the screen at every step.</b> If something does not go as planned it stops, and if it is not sure which button you mean, it asks.",
+    ko: "<b>한 단계마다 화면을 확인합니다.</b> 뜻대로 안 되면 멈추고, 어느 버튼인지 헷갈리면 물어봅니다.",
+    zh: "<b>每一步都会检查屏幕。</b>不顺利就停下；分不清是哪个按钮时，它会问你。",
+    ja: "<b>一歩ごとに画面を確かめます。</b>うまくいかなければ止まり、どのボタンか迷ったら聞きます。" },
   s5: {
-    en: "<b>Every step is checked against the screen.</b> A step that fails stops the steps after it, and a name that matches more than one control is asked about, not guessed.",
-    ko: "<b>모든 단계는 화면과 대조합니다.</b> 한 단계가 실패하면 뒤 단계는 멈추고, 이름이 같은 컨트롤이 여럿이면 추측하지 않고 묻습니다.",
-    zh: "<b>每一步都对照屏幕检查。</b>某一步失败，后面的步骤就停下；名称对应多个控件时，它会问你，而不是猜。",
-    ja: "<b>すべてのステップを画面と照合します。</b>失敗したステップの後は止まり、同じ名前のコントロールが複数あれば推測せずに尋ねます。" },
-  s6: {
-    en: "<b>Nothing is sent to a model service.</b> The network is for downloads you approve, its own browser pane, what tasks run, and MCP servers you configure.",
-    ko: "<b>모델 서비스로 아무것도 보내지 않습니다.</b> 네트워크는 내가 승인한 다운로드, 자체 브라우저 칸, 작업이 실행하는 것, 직접 설정한 MCP 서버에만 쓰입니다.",
-    zh: "<b>不向任何模型服务发送内容。</b>网络只用于你批准的下载、它自带的浏览器窗格、任务运行的命令，以及你配置的 MCP 服务器。",
-    ja: "<b>モデルサービスには何も送りません。</b>ネットワークは承認したダウンロード、内蔵のブラウザーペイン、タスクが実行するもの、設定した MCP サーバーにだけ使われます。" },
+    en: "<b>Saying no always wins.</b> Once you refuse something, it stays refused.",
+    ko: "<b>거절이 언제나 우선입니다.</b> 한 번 거절한 것은 계속 거절된 채로 남습니다.",
+    zh: "<b>拒绝永远优先。</b>你拒绝过的事，会一直保持拒绝。",
+    ja: "<b>断ることが常に優先されます。</b>一度断ったことは、ずっと断ったままです。" },
 
-  num_h: { en: "Measured, with the conditions", ko: "측정한 것, 조건과 함께", zh: "实测结果，附带条件", ja: "計測結果、条件つき" },
+  num_h: { en: "How well it works", ko: "얼마나 잘 하나요", zh: "效果怎么样", ja: "どれくらいできるか" },
   num_lead: {
-    en: "Every number carries its denominator and its conditions, and most are one run. The bad ones are here too.",
-    ko: "모든 숫자에 분모와 조건을 붙였고, 대부분 한 번 실행한 결과입니다. 나쁜 결과도 함께 적었습니다.",
-    zh: "每个数字都带着分母和条件，大多数只运行了一次。不好的结果也列在这里。",
-    ja: "すべての数字に分母と条件を付けています。ほとんどは1回の実行です。悪い結果も載せています。" },
-  n1h: { en: "Choosing a control", ko: "컨트롤 고르기", zh: "选择控件", ja: "コントロールの選択" },
+    en: "Tested on the author's PC. Most were tested only once, so read them as a rough guide. The weak spot is here too.",
+    ko: "만든 사람의 PC에서 직접 시험한 결과입니다. 대부분 한 번만 시험했으니 대략적인 참고로 봐 주세요. 약한 점도 함께 적었습니다.",
+    zh: "在作者的电脑上实测的结果。大多只测了一次，请当作大致参考。弱点也一并列出。",
+    ja: "作者のパソコンで実際に試した結果です。ほとんどは一度しか試していないので、おおよその目安として見てください。弱いところも載せています。" },
+  n1h: { en: "Picking the button you meant", ko: "원하는 버튼 고르기", zh: "选中你想要的按钮", ja: "目当てのボタンを選ぶ" },
   n1: {
-    en: "<b>21 of 28</b> answerable goals right, <b>7 of 9</b> impossible ones declined. <span class=why>qwen3:8b, 4 captured windows, three repeats, the worst counted.</span>",
-    ko: "답이 있는 목표 <b>28개 중 21개</b> 정답, 불가능한 목표 <b>9개 중 7개</b> 거절. <span class=why>qwen3:8b, 캡처한 창 4개, 세 번 반복 중 가장 나쁜 값.</span>",
-    zh: "可完成的目标 <b>28 个中对 21 个</b>，不可能的目标 <b>9 个中拒绝 7 个</b>。<span class=why>qwen3:8b，4 个截取的窗口，重复三次取最差。</span>",
-    ja: "答えのある目標 <b>28 件中 21 件</b>正解、不可能な目標 <b>9 件中 7 件</b>を辞退。<span class=why>qwen3:8b、キャプチャしたウィンドウ4つ、3回の繰り返しで最悪値。</span>" },
-  n2h: { en: "A page-sized list", ko: "웹 페이지만 한 목록", zh: "网页那么长的列表", ja: "ウェブページ並みのリスト" },
+    en: "<b>21 out of 28</b> right <span class=why>— on 4 different screens; the worst of three tries</span>",
+    ko: "<b>28번 중 21번</b> 맞힘 <span class=why>— 화면 4개에서, 세 번 시험한 것 중 가장 나쁜 결과</span>",
+    zh: "<b>28 次中对 21 次</b> <span class=why>— 在 4 个不同的屏幕上；三次测试中最差的一次</span>",
+    ja: "<b>28 回中 21 回</b>正解 <span class=why>— 4 つの画面で、3 回試したうち最も悪い結果</span>" },
+  n2h: { en: "Saying no to what it cannot do", ko: "할 수 없는 부탁은 거절하기", zh: "拒绝做不到的请求", ja: "できない頼みを断る" },
   n2: {
-    en: "Choosing collapses: <b>22 of 28 → 3–8 of 28</b> at 123–900 controls. A negative result, kept.",
-    ko: "고르기가 무너집니다: 컨트롤 123–900개에서 <b>28개 중 22개 → 3–8개</b>. 부정적인 결과지만 그대로 둡니다.",
-    zh: "选择能力崩溃：控件达到 123–900 个时，<b>28 个中 22 个 → 3–8 个</b>。这是负面结果，照样保留。",
-    ja: "選択が崩れます：コントロール 123–900 個で <b>28 件中 22 件 → 3–8 件</b>。否定的な結果ですが、そのまま残しています。" },
-  n3h: { en: "Talking", ko: "대화", zh: "对话", ja: "会話" },
+    en: "<b>7 out of 9</b> <span class=why>— same test</span>",
+    ko: "<b>9번 중 7번</b> <span class=why>— 같은 시험</span>",
+    zh: "<b>9 次中 7 次</b> <span class=why>— 同一项测试</span>",
+    ja: "<b>9 回中 7 回</b> <span class=why>— 同じテスト</span>" },
+  n3h: { en: "Finishing longer work", ko: "긴 일 끝내기", zh: "完成较长的工作", ja: "長い仕事をやり遂げる" },
   n3: {
-    en: "<b>31 of 34</b> conversational turns produce no action.",
-    ko: "대화성 발화 <b>34개 중 31개</b>는 아무 동작도 만들지 않습니다.",
-    zh: "<b>34 轮</b>闲聊中有 <b>31 轮</b>没有触发任何操作。",
-    ja: "会話としての発話 <b>34 件中 31 件</b>は何の操作も起こしません。" },
-  n4h: { en: "Work", ko: "작업", zh: "任务", ja: "作業" },
+    en: "<b>11 out of 12</b> jobs, and it never said \"done\" when it was not <span class=why>— tested once</span>",
+    ko: "<b>12개 중 11개</b>, 안 끝났는데 끝났다고 한 적은 없음 <span class=why>— 한 번 시험</span>",
+    zh: "<b>12 项中完成 11 项</b>，从没在没做完时说“做好了” <span class=why>— 测试一次</span>",
+    ja: "<b>12 件中 11 件</b>、終わっていないのに「できた」と言ったことはなし <span class=why>— 1 回のテスト</span>" },
+  n4h: { en: "Word and Excel files", ko: "Word·Excel 파일 만들고 고치기", zh: "制作和修改 Word、Excel 文件", ja: "Word・Excel ファイルの作成と修正" },
   n4: {
-    en: "<b>11 of 12</b> tasks, no false finish. <span class=why>qwen3:14b with reasoning on, about 148 s a task, one run; checked against files and the sandbox, never the model's own account.</span>",
-    ko: "작업 <b>12개 중 11개</b>, 거짓 완료 없음. <span class=why>qwen3:14b 추론 켬, 작업당 약 148초, 한 번 실행. 모델의 말이 아니라 파일과 샌드박스로 확인.</span>",
-    zh: "<b>12 个</b>任务完成 <b>11 个</b>，没有虚假完成。<span class=why>qwen3:14b 开启推理，每个任务约 148 秒，运行一次；用文件和沙箱核实，而不是听模型自己说。</span>",
-    ja: "作業 <b>12 件中 11 件</b>、偽の完了なし。<span class=why>qwen3:14b 推論オン、1件あたり約 148 秒、1回の実行。モデル自身の説明ではなく、ファイルとサンドボックスで確認。</span>" },
-  n5h: { en: "Word and Excel", ko: "Word와 Excel", zh: "Word 和 Excel", ja: "Word と Excel" },
+    en: "<b>13 out of 13</b> <span class=why>— tested once</span>",
+    ko: "<b>13개 중 13개</b> <span class=why>— 한 번 시험</span>",
+    zh: "<b>13 项中 13 项</b> <span class=why>— 测试一次</span>",
+    ja: "<b>13 件中 13 件</b> <span class=why>— 1 回のテスト</span>" },
+  n5h: { en: "How fast it answers", ko: "대답하는 속도", zh: "回答速度", ja: "答える速さ" },
   n5: {
-    en: "Made, changed and read: <b>13 of 13</b>, none false. <span class=why>One run.</span>",
-    ko: "만들기·고치기·읽기 <b>13개 중 13개</b>, 거짓 없음. <span class=why>한 번 실행.</span>",
-    zh: "创建、修改、读取：<b>13 个中 13 个</b>，没有虚假完成。<span class=why>运行一次。</span>",
-    ja: "作成・変更・読み取り <b>13 件中 13 件</b>、偽りなし。<span class=why>1回の実行。</span>" },
-  n6h: { en: "Blender and KiCad", ko: "Blender와 KiCad", zh: "Blender 和 KiCad", ja: "Blender と KiCad" },
+    en: "<b>about 0.6 seconds</b> <span class=why>— a typical reply</span>",
+    ko: "<b>0.6초쯤</b> <span class=why>— 보통의 대답 기준</span>",
+    zh: "<b>约 0.6 秒</b> <span class=why>— 一般的回答</span>",
+    ja: "<b>約 0.6 秒</b> <span class=why>— ふつうの返答で</span>" },
+  n6h: { en: "Weak spot: very crowded screens", ko: "약한 점: 아주 복잡한 화면", zh: "弱点：非常复杂的屏幕", ja: "弱点：とても込み入った画面" },
   n6: {
-    en: "Through their scripting: <b>3 of 3</b>, against <b>0 of 3</b> without. <span class=why>One run each; later runs on a changed set read 2 of 3 and 4 of 4.</span>",
-    ko: "스크립트 인터페이스로 <b>3개 중 3개</b>, 없을 때는 <b>3개 중 0개</b>. <span class=why>각 한 번 실행. 이후 바뀐 세트에서는 3개 중 2개, 4개 중 4개.</span>",
-    zh: "通过脚本接口：<b>3 个中 3 个</b>，没有时 <b>3 个中 0 个</b>。<span class=why>各运行一次；之后在调整过的任务集上分别为 3 个中 2 个、4 个中 4 个。</span>",
-    ja: "スクリプト経由で <b>3 件中 3 件</b>、なしでは <b>3 件中 0 件</b>。<span class=why>各1回の実行。その後、変更したセットでは 3 件中 2 件、4 件中 4 件。</span>" },
-  n7h: { en: "A reply", ko: "답 한 번", zh: "一次回复", ja: "返答1回" },
-  n7: {
-    en: "<b>0.61 s</b> median. <span class=why>qwen3:8b, thinking off.</span>",
-    ko: "중앙값 <b>0.61초</b>. <span class=why>qwen3:8b, 생각 끔.</span>",
-    zh: "中位数 <b>0.61 秒</b>。<span class=why>qwen3:8b，关闭思考。</span>",
-    ja: "中央値 <b>0.61 秒</b>。<span class=why>qwen3:8b、思考オフ。</span>" },
+    en: "On a screen with more than a hundred buttons, like a long web page, it drops to <b>3–8 out of 28</b>",
+    ko: "긴 웹 페이지처럼 버튼이 백 개가 넘는 화면에서는 <b>28번 중 3~8번</b>으로 떨어집니다",
+    zh: "在像长网页那样有一百多个按钮的屏幕上，会降到 <b>28 次中 3–8 次</b>",
+    ja: "長いウェブページのようにボタンが百を超える画面では、<b>28 回中 3〜8 回</b>に下がります" },
   num_more: {
-    en: "The full record — including the conclusions that were withdrawn and the ways the measuring code was wrong — is in the repository's CLAUDE.md and docs/findings.",
-    ko: "철회한 결론과 측정 코드가 틀렸던 사례까지 포함한 전체 기록은 저장소의 CLAUDE.md와 docs/findings에 있습니다.",
-    zh: "完整记录——包括被撤回的结论和测量代码出错的地方——都在仓库的 CLAUDE.md 和 docs/findings 里。",
-    ja: "撤回した結論や計測コードが間違っていた例を含む全記録は、リポジトリの CLAUDE.md と docs/findings にあります。" },
+    en: "The details, and every test record, are on GitHub.",
+    ko: "자세한 조건과 모든 시험 기록은 GitHub에 있습니다.",
+    zh: "详细条件和全部测试记录都在 GitHub 上。",
+    ja: "詳しい条件と、すべてのテスト記録は GitHub にあります。" },
 
-  not_h: { en: "What it is not", ko: "아닌 것", zh: "它不是什么", ja: "できないこと" },
+  not_h: { en: "What to know first", ko: "먼저 알아 두세요", zh: "先了解这些", ja: "先に知っておいてください" },
   x1: {
-    en: "<b>Windows only, for now.</b> No macOS, and on Linux the application builds but can neither see nor act.",
-    ko: "<b>지금은 Windows 전용입니다.</b> macOS는 안 되고, Linux에서는 빌드는 되지만 화면을 보지도 조작하지도 못합니다.",
-    zh: "<b>目前只支持 Windows。</b>不支持 macOS；在 Linux 上程序可以编译，但既看不到屏幕也不能操作。",
-    ja: "<b>今は Windows 専用です。</b>macOS は非対応、Linux ではビルドはできますが、画面を見ることも操作することもできません。" },
+    en: "<b>Windows only, for now.</b> It does not run on Mac yet.",
+    ko: "<b>지금은 Windows에서만 됩니다.</b> Mac에서는 아직 안 됩니다.",
+    zh: "<b>目前只支持 Windows。</b>暂时不能在 Mac 上用。",
+    ja: "<b>今は Windows だけです。</b>Mac ではまだ動きません。" },
   x2: {
-    en: "<b>Not always right.</b> A plan that is wrong but well-formed gets through: typing into a field that exists, on a screen that passed every check, is still typing in the wrong place.",
-    ko: "<b>늘 맞지는 않습니다.</b> 틀렸지만 형식이 맞는 계획은 통과합니다. 모든 검사를 통과한 화면의 실제로 있는 칸에 입력해도, 엉뚱한 곳일 수 있습니다.",
-    zh: "<b>并不总是对的。</b>错误但格式正确的计划会通过：在一个通过了所有检查的屏幕上，往一个真实存在的输入框里输入，仍可能输错地方。",
-    ja: "<b>いつも正しいわけではありません。</b>間違っていても形の整った計画は通ります。すべての確認を通った画面の実在する欄に入力しても、場所違いのことがあります。" },
+    en: "<b>It can make mistakes.</b> It can still press the wrong thing on a screen that looked fine, so keep an eye on it.",
+    ko: "<b>실수할 수 있습니다.</b> 문제없어 보이는 화면에서도 엉뚱한 것을 누를 수 있으니 지켜봐 주세요.",
+    zh: "<b>它会出错。</b>即使屏幕看起来没问题，也可能按错，请留意。",
+    ja: "<b>間違えることがあります。</b>問題なさそうな画面でも違うものを押すことがあるので、見守ってください。" },
   x3: {
-    en: "<b>Not a product.</b> One person's side project with no support commitment.",
-    ko: "<b>제품이 아닙니다.</b> 지원 약속이 없는 한 사람의 개인 프로젝트입니다.",
-    zh: "<b>不是产品。</b>一个人的业余项目，不承诺支持。",
-    ja: "<b>製品ではありません。</b>サポートの約束がない、一人の個人プロジェクトです。" },
+    en: "<b>It is a personal project.</b> There is no official support.",
+    ko: "<b>개인 프로젝트입니다.</b> 공식 지원은 없습니다.",
+    zh: "<b>这是个人项目。</b>没有官方支持。",
+    ja: "<b>個人プロジェクトです。</b>公式サポートはありません。" },
   x4: {
-    en: "<b>Not fully translated.</b> A finished task's report is written by a Korean prompt and stays as written, because translating it was measured changing prices and names.",
-    ko: "<b>전부 번역되지는 않습니다.</b> 끝난 작업의 보고는 한국어 프롬프트가 쓰고 그대로 둡니다. 번역해 보니 가격과 이름이 바뀌는 것이 측정됐기 때문입니다.",
-    zh: "<b>并未完全翻译。</b>任务完成后的报告由韩语提示词生成并保持原样，因为测量发现翻译会改变价格和名称。",
-    ja: "<b>すべてが翻訳されるわけではありません。</b>完了した作業の報告は韓国語のプロンプトが書き、そのままにしています。翻訳すると価格や名前が変わることが計測されたためです。" },
+    en: "<b>Reports on longer work come in Korean.</b> Translating them sometimes changed prices and names, so they are left as written.",
+    ko: "<b>긴 일의 결과 보고는 한국어로 나옵니다.</b> 번역하면 가격이나 이름이 바뀌는 일이 있어서 그대로 둡니다.",
+    zh: "<b>较长工作的结果报告是韩语的。</b>翻译时价格和名称有时会被改错，所以保留原文。",
+    ja: "<b>長い仕事の結果報告は韓国語で出ます。</b>翻訳すると価格や名前が変わることがあったので、そのままにしています。" },
 
-  start_h: { en: "Start", ko: "시작하기", zh: "开始使用", ja: "はじめる" },
+  start_h: { en: "Getting started", ko: "시작하기", zh: "开始使用", ja: "はじめ方" },
   st1: {
-    en: "Windows 11 and a GPU with about 16 GB of memory. On a 16 GB laptop GPU, everything together used 12.6 GB (measured).",
-    ko: "Windows 11과 메모리 약 16 GB의 GPU. 16 GB 노트북 GPU에서 전부 함께 켰을 때 12.6 GB를 썼습니다(측정).",
-    zh: "Windows 11 和约 16 GB 显存的 GPU。在一块 16 GB 的笔记本 GPU 上，全部组件同时运行占用 12.6 GB（实测）。",
-    ja: "Windows 11 と約 16 GB のGPUメモリ。16 GB のノートPC用GPUで、すべてを同時に動かして 12.6 GB 使用しました（実測）。" },
+    en: "<b>What you need:</b> a Windows 11 PC with a strong graphics card (about 16 GB of graphics memory).",
+    ko: "<b>필요한 것:</b> 성능 좋은 그래픽카드(그래픽 메모리 약 16 GB)가 달린 Windows 11 PC.",
+    zh: "<b>需要：</b>一台装有高性能显卡（显存约 16 GB）的 Windows 11 电脑。",
+    ja: "<b>必要なもの：</b>性能の高いグラフィックカード（グラフィックメモリ約 16 GB）を積んだ Windows 11 のパソコン。" },
   st2: {
-    en: "Download the zip from <a href=\"https://github.com/YounghyeonPark/argmind/releases/latest\">Releases</a>, unzip it and run <code>argmind-app.exe</code>. It is not code-signed, so SmartScreen warns the first time.",
-    ko: "<a href=\"https://github.com/YounghyeonPark/argmind/releases/latest\">Releases</a>에서 zip을 받아 풀고 <code>argmind-app.exe</code>를 실행하세요. 코드 서명이 없어 처음 실행할 때 SmartScreen 경고가 뜹니다.",
-    zh: "从 <a href=\"https://github.com/YounghyeonPark/argmind/releases/latest\">Releases</a> 下载 zip，解压后运行 <code>argmind-app.exe</code>。它没有代码签名，所以第一次运行时 SmartScreen 会发出警告。",
-    ja: "<a href=\"https://github.com/YounghyeonPark/argmind/releases/latest\">Releases</a> から zip をダウンロードして展開し、<code>argmind-app.exe</code> を実行してください。コード署名がないため、初回は SmartScreen の警告が出ます。" },
+    en: "Download the file from the <a href=\"https://github.com/YounghyeonPark/argmind/releases/latest\">download page</a>, unzip it, and open <code>argmind-app.exe</code>. The first time, Windows may warn you about an unknown app: choose <b>More info</b>, then <b>Run anyway</b>.",
+    ko: "<a href=\"https://github.com/YounghyeonPark/argmind/releases/latest\">받기 페이지</a>에서 파일을 받아 압축을 풀고 <code>argmind-app.exe</code>를 여세요. 처음에는 Windows가 ‘알 수 없는 앱’이라고 경고할 수 있습니다. <b>추가 정보</b> → <b>실행</b>을 누르면 됩니다.",
+    zh: "从<a href=\"https://github.com/YounghyeonPark/argmind/releases/latest\">下载页面</a>下载文件，解压后打开 <code>argmind-app.exe</code>。第一次打开时 Windows 可能会提示“未知应用”：点<b>更多信息</b>，再点<b>仍要运行</b>。",
+    ja: "<a href=\"https://github.com/YounghyeonPark/argmind/releases/latest\">ダウンロードページ</a>からファイルを取得して展開し、<code>argmind-app.exe</code> を開いてください。初回は Windows が「不明なアプリ」と警告することがあります。<b>詳細情報</b> → <b>実行</b> を選んでください。" },
   st3: {
-    en: "It lists what is missing — Ollama, the models, the voice, the recogniser — and asks before fetching each one.",
-    ko: "없는 것(Ollama, 모델, 목소리, 받아쓰기)을 보여 주고, 하나씩 받기 전에 묻습니다.",
-    zh: "它会列出缺少的东西——Ollama、模型、语音、语音识别——并在下载每一项之前询问你。",
-    ja: "足りないもの（Ollama、モデル、音声、音声認識）を示し、一つずつ取得する前に尋ねます。" },
+    en: "It shows what it still needs, like the AI models and a voice, and asks you before downloading each one.",
+    ko: "AI 모델이나 목소리처럼 아직 없는 것을 보여 주고, 하나씩 받기 전에 물어봅니다.",
+    zh: "它会列出还缺的东西，比如 AI 模型和语音，下载每一项之前都会先问你。",
+    ja: "AI モデルや音声など、まだ足りないものを示し、一つずつダウンロードする前に聞きます。" },
   st4: {
     en: "Type, or hold F9 and speak.",
-    ko: "입력하거나 F9를 누른 채 말하세요.",
+    ko: "글로 쓰거나 F9를 누른 채 말하세요.",
     zh: "打字，或按住 F9 说话。",
-    ja: "入力するか、F9 を押しながら話してください。" },
+    ja: "文字で書くか、F9 を押しながら話してください。" },
 
-  foot: { en: "Apache-2.0 · Younghyeon Park", ko: "Apache-2.0 · Younghyeon Park", zh: "Apache-2.0 · Younghyeon Park", ja: "Apache-2.0 · Younghyeon Park" },
-  security: { en: "Reporting a security problem", ko: "보안 문제 신고", zh: "报告安全问题", ja: "セキュリティ問題の報告" },
+  foot: { en: "Free and open source (Apache-2.0) · Younghyeon Park", ko: "무료·오픈 소스 (Apache-2.0) · Younghyeon Park", zh: "免费开源（Apache-2.0）· Younghyeon Park", ja: "無料・オープンソース（Apache-2.0）· Younghyeon Park" },
+  security: { en: "Found a security problem?", ko: "보안 문제를 발견하셨나요?", zh: "发现安全问题？", ja: "セキュリティの問題を見つけたら" },
 };
 
 const LANGS = ["ko", "en", "zh", "ja"];
