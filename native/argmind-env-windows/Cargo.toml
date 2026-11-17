@@ -1,6 +1,6 @@
 [package]
 name = "argmind-env-windows"
-version = "0.0.1"
+version = "0.1.0"
 edition = "2021"
 description = "UI Automation for eyes. The deterministic side, natively."
 license = "Apache-2.0"

@@ -11,14 +11,14 @@
   "with_counts": 68,
   "max_tokens_setting": 4096,
   "out_tokens_max": 180,
-  "out_tokens_max_on": "chrome-remote-desktop---qvb-flfm-dev1 / 지금 화면 설명해줘",
+  "out_tokens_max_on": "chrome-remote-desktop---remote-pc / 지금 화면 설명해줘",
   "truncated": 0,
   "truncated_on": [],
   "reasons": {
    "stop": 68
   },
   "seconds_max": 2.907,
-  "seconds_max_on": "chrome-remote-desktop---qvb-flfm-dev1 / 지금 화면 설명해줘",
+  "seconds_max_on": "chrome-remote-desktop---remote-pc / 지금 화면 설명해줘",
   "thought_chars_max": 0,
   "thought_chars_max_on": null,
   "thought_chars_total": 0
@@ -27,7 +27,7 @@
  "of": 34,
  "rows": [
   {
-   "screen": "chrome-remote-desktop---qvb-flfm-dev1",
+   "screen": "chrome-remote-desktop---remote-pc",
    "kind": "greeting",
    "said": "안녕",
    "acted": [
@@ -53,7 +53,7 @@
    ]
   },
   {
-   "screen": "chrome-remote-desktop---qvb-flfm-dev1",
+   "screen": "chrome-remote-desktop---remote-pc",
    "kind": "greeting",
    "said": "고마워",
    "acted": [
@@ -79,7 +79,7 @@
    ]
   },
   {
-   "screen": "chrome-remote-desktop---qvb-flfm-dev1",
+   "screen": "chrome-remote-desktop---remote-pc",
    "kind": "greeting",
    "said": "수고했어",
    "acted": [
@@ -105,7 +105,7 @@
    ]
   },
   {
-   "screen": "chrome-remote-desktop---qvb-flfm-dev1",
+   "screen": "chrome-remote-desktop---remote-pc",
    "kind": "greeting",
    "said": "잘했어",
    "acted": [
@@ -131,7 +131,7 @@
    ]
   },
   {
-   "screen": "chrome-remote-desktop---qvb-flfm-dev1",
+   "screen": "chrome-remote-desktop---remote-pc",
    "kind": "about the screen",
    "said": "뭐가 열려 있어?",
    "acted": [
@@ -157,7 +157,7 @@
    ]
   },
   {
-   "screen": "chrome-remote-desktop---qvb-flfm-dev1",
+   "screen": "chrome-remote-desktop---remote-pc",
    "kind": "about the screen",
    "said": "지금 화면 설명해줘",
    "acted": [
@@ -183,7 +183,7 @@
    ]
   },
   {
-   "screen": "chrome-remote-desktop---qvb-flfm-dev1",
+   "screen": "chrome-remote-desktop---remote-pc",
    "kind": "about the screen",
    "said": "여기 버튼이 몇 개야?",
    "acted": [
@@ -209,7 +209,7 @@
    ]
   },
   {
-   "screen": "chrome-remote-desktop---qvb-flfm-dev1",
+   "screen": "chrome-remote-desktop---remote-pc",
    "kind": "about the screen",
    "said": "복사 버튼이 어디 있어?",
    "acted": [
@@ -239,7 +239,7 @@
    ]
   },
   {
-   "screen": "chrome-remote-desktop---qvb-flfm-dev1",
+   "screen": "chrome-remote-desktop---remote-pc",
    "kind": "about the past",
    "said": "방금 뭘 했어?",
    "acted": [
@@ -265,7 +265,7 @@
    ]
   },
   {
-   "screen": "chrome-remote-desktop---qvb-flfm-dev1",
+   "screen": "chrome-remote-desktop---remote-pc",
    "kind": "about the past",
    "said": "아까 뭐 눌렀지?",
    "acted": [
@@ -291,7 +291,7 @@
    ]
   },
   {
-   "screen": "chrome-remote-desktop---qvb-flfm-dev1",
+   "screen": "chrome-remote-desktop---remote-pc",
    "kind": "about itself",
    "said": "너 뭘 할 수 있어?",
    "acted": [
@@ -317,7 +317,7 @@
    ]
   },
   {
-   "screen": "chrome-remote-desktop---qvb-flfm-dev1",
+   "screen": "chrome-remote-desktop---remote-pc",
    "kind": "about itself",
    "said": "너 이름이 뭐야?",
    "acted": [
@@ -343,7 +343,7 @@
    ]
   },
   {
-   "screen": "chrome-remote-desktop---qvb-flfm-dev1",
+   "screen": "chrome-remote-desktop---remote-pc",
    "kind": "about itself",
    "said": "클릭도 할 수 있어?",
    "acted": [
@@ -369,7 +369,7 @@
    ]
   },
   {
-   "screen": "chrome-remote-desktop---qvb-flfm-dev1",
+   "screen": "chrome-remote-desktop---remote-pc",
    "kind": "chit-chat",
    "said": "오늘 날씨 어때?",
    "acted": [
@@ -395,7 +395,7 @@
    ]
   },
   {
-   "screen": "chrome-remote-desktop---qvb-flfm-dev1",
+   "screen": "chrome-remote-desktop---remote-pc",
    "kind": "chit-chat",
    "said": "심심하다",
    "acted": [
@@ -421,7 +421,7 @@
    ]
   },
   {
-   "screen": "chrome-remote-desktop---qvb-flfm-dev1",
+   "screen": "chrome-remote-desktop---remote-pc",
    "kind": "opinion",
    "said": "이 창 좀 복잡하지 않아?",
    "acted": [
@@ -447,7 +447,7 @@
    ]
   },
   {
-   "screen": "chrome-remote-desktop---qvb-flfm-dev1",
+   "screen": "chrome-remote-desktop---remote-pc",
    "kind": "opinion",
    "said": "이거 어떻게 쓰는 거야?",
    "acted": [

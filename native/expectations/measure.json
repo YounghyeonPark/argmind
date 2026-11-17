@@ -1,5 +1,5 @@
 {
- "screen_print": "5020f7",
+ "screen_print": "9d54a1",
  "prompt_tag": "r322a4c",
  "screens": [
   {
@@ -40,12 +40,12 @@
    ]
   },
   {
-   "name": "chrome-remote-desktop---qvb-flfm-dev1",
-   "window": "Chrome Remote Desktop - QVB-FLFM-DEV1",
+   "name": "chrome-remote-desktop---remote-pc",
+   "window": "Chrome Remote Desktop - REMOTE-PC",
    "widgets": 12,
    "first": [
     {
-     "name": "QVB-FLFM-DEV1 - Y",
+     "name": "REMOTE-PC - Y",
      "role": "region",
      "rect": [
       0,

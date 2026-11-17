@@ -179,10 +179,10 @@
     },
     {
       "believes": "사용자가 Chrome Remote Desktop 화면에서 특정 문자를 복사하는 중이며, 복사할 문자에 대한 정보를 확인하고 있는 것으로 보인다.",
-      "changed": "창이 \"Chrome Remote Desktop - QVB-FLFM-DEV1\" 로 바뀜 / 나타남: Chrome Remote Desktop - QVB-FLFM-DEV1, Chrome Remote Desktop 맞춤설정 및 제어, Connected, Desktop, QVB-FLFM-DEV1, QVB-FLFM-DEV1 - Y / 사라짐: Advanced view, Character Grid, Characters to copy :, Close, Copy, Font :",
+      "changed": "창이 \"Chrome Remote Desktop - REMOTE-PC\" 로 바뀜 / 나타남: Chrome Remote Desktop - REMOTE-PC, Chrome Remote Desktop 맞춤설정 및 제어, Connected, Desktop, REMOTE-PC, REMOTE-PC - Y / 사라짐: Advanced view, Character Grid, Characters to copy :, Close, Copy, Font :",
       "held": 1,
       "idle": false,
-      "screen": "chrome-remote-desktop---qvb-flfm-dev1",
+      "screen": "chrome-remote-desktop---remote-pc",
       "stuck": 1,
       "tick": 2,
       "worth": "button \"Chrome Remote Desktop 맞춤설정 및 제어\""
@@ -192,7 +192,7 @@
       "changed": "",
       "held": 1,
       "idle": false,
-      "screen": "chrome-remote-desktop---qvb-flfm-dev1",
+      "screen": "chrome-remote-desktop---remote-pc",
       "stuck": 2,
       "tick": 3,
       "worth": "button \"Chrome Remote Desktop 맞춤설정 및 제어\""
@@ -202,7 +202,7 @@
       "changed": "",
       "held": 1,
       "idle": false,
-      "screen": "chrome-remote-desktop---qvb-flfm-dev1",
+      "screen": "chrome-remote-desktop---remote-pc",
       "stuck": 0,
       "tick": 0,
       "worth": ""
@@ -212,14 +212,14 @@
       "changed": "",
       "held": 2,
       "idle": false,
-      "screen": "chrome-remote-desktop---qvb-flfm-dev1",
+      "screen": "chrome-remote-desktop---remote-pc",
       "stuck": 0,
       "tick": 1,
       "worth": ""
     },
     {
       "believes": "사용자가 Windows 11 시스템 정보를 확인 중이며, 하드웨어 및 소프트웨어 사양을 확인하고 있다.",
-      "changed": "창이 \"System Information\" 로 바뀜 / 나타남: 1.51, 10.0.26200 Build 26200, 12.6 GB, 13th Gen Intel(R) Core(TM) i9-13900HX, 2200 Mhz, 24 Core(s), 32 Logical Processor(s), 3.4, 31.7 GB / 사라짐: Chrome Remote Desktop - QVB-FLFM-DEV1, Chrome Remote Desktop 맞춤설정 및 제어, Connected, Desktop, QVB-FLFM-DEV1, QVB-FLFM-DEV1 - Y",
+      "changed": "창이 \"System Information\" 로 바뀜 / 나타남: 1.51, 10.0.26200 Build 26200, 12.6 GB, 13th Gen Intel(R) Core(TM) i9-13900HX, 2200 Mhz, 24 Core(s), 32 Logical Processor(s), 3.4, 31.7 GB / 사라짐: Chrome Remote Desktop - REMOTE-PC, Chrome Remote Desktop 맞춤설정 및 제어, Connected, Desktop, REMOTE-PC, REMOTE-PC - Y",
       "held": 1,
       "idle": false,
       "screen": "system-information",

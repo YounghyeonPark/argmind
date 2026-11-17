@@ -1,0 +1,36 @@
+name: Something went wrong
+description: argmind said, pressed or ran something it should not have, or did not do what you asked.
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Korean or English is fine. 한국어도 괜찮습니다.
+
+        **If something other than you could make argmind act** (a web page, a document, another
+        program), do not file it here. Use *Report a vulnerability* on the Security tab instead.
+  - type: textarea
+    id: said
+    attributes:
+      label: What you said
+      description: Word for word, typed or spoken.
+    validations:
+      required: true
+  - type: textarea
+    id: did
+    attributes:
+      label: What it did
+      description: |
+        Paste the lines of 한 일 (Activity) for that turn. **Remove window titles or file names you
+        would not post publicly**: a title can be an email subject.
+      render: text
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected
+  - type: input
+    id: setup
+    attributes:
+      label: Windows version, GPU, models
+      placeholder: Windows 11 24H2, RTX 4070 12 GB, qwen3:8b / qwen3:14b

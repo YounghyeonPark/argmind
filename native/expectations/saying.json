@@ -62,12 +62,12 @@
   ],
   [
    "one action",
-   "chrome-remote-desktop---qvb-flfm-dev1",
+   "chrome-remote-desktop---remote-pc",
    "이 창 닫아줘"
   ],
   [
    "one action",
-   "chrome-remote-desktop---qvb-flfm-dev1",
+   "chrome-remote-desktop---remote-pc",
    "비밀번호 저장 눌러줘"
   ],
   [
@@ -147,17 +147,17 @@
   ],
   [
    "one action",
-   "chrome-remote-desktop---qvb-flfm-dev1",
+   "chrome-remote-desktop---remote-pc",
    "최소화해줘"
   ],
   [
    "one action",
-   "chrome-remote-desktop---qvb-flfm-dev1",
+   "chrome-remote-desktop---remote-pc",
    "확장 프로그램 열어줘"
   ],
   [
    "nothing there",
-   "chrome-remote-desktop---qvb-flfm-dev1",
+   "chrome-remote-desktop---remote-pc",
    "인쇄 설정 열어줘"
   ]
  ],
@@ -178,7 +178,7 @@
   ],
   [
    "how many",
-   "chrome-remote-desktop---qvb-flfm-dev1",
+   "chrome-remote-desktop---remote-pc",
    "여기 버튼이 몇 개야?",
    true,
    "7 'button' of 12 widgets"

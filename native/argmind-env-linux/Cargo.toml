@@ -1,6 +1,6 @@
 [package]
 name = "argmind-env-linux"
-version = "0.0.1"
+version = "0.1.0"
 edition = "2021"
 description = "Eyes for Linux: AT-SPI2 over D-Bus. The deterministic side, on the other desktop."
 license = "Apache-2.0"

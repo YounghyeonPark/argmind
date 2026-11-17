@@ -1,8 +1,8 @@
 {
- "window": "Chrome Remote Desktop - QVB-FLFM-DEV1",
+ "window": "Chrome Remote Desktop - REMOTE-PC",
  "widgets": [
   {
-   "name": "QVB-FLFM-DEV1 - Y",
+   "name": "REMOTE-PC - Y",
    "role": "region",
    "rect": [
     0,
@@ -42,7 +42,7 @@
    ]
   },
   {
-   "name": "QVB-FLFM-DEV1",
+   "name": "REMOTE-PC",
    "role": "document",
    "rect": [
     0,
@@ -112,7 +112,7 @@
    ]
   },
   {
-   "name": "Chrome Remote Desktop - QVB-FLFM-DEV1",
+   "name": "Chrome Remote Desktop - REMOTE-PC",
    "role": "text",
    "rect": [
     27,

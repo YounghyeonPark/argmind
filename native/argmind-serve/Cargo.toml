@@ -1,6 +1,6 @@
 [package]
 name = "argmind-serve"
-version = "0.0.1"
+version = "0.1.0"
 edition = "2021"
 description = "The seam between the Rust core and a front end that is not Rust."
 license = "Apache-2.0"

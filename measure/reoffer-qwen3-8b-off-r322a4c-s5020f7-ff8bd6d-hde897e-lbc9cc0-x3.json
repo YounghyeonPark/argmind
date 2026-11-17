@@ -39,7 +39,7 @@
  "max_tokens": 4096,
  "screens": {
   "character-map": 21,
-  "chrome-remote-desktop---qvb-flfm-dev1": 12,
+  "chrome-remote-desktop---remote-pc": 12,
   "system-information": 152,
   "untitled---paint": 123
  },
@@ -438,7 +438,7 @@
   {
    "kind": "memory",
    "label": "crd close / 방금 뭘 하려고 했어",
-   "screen": "chrome-remote-desktop---qvb-flfm-dev1",
+   "screen": "chrome-remote-desktop---remote-pc",
    "ask": "닫기 눌러줘",
    "then": "방금 뭘 하려고 했어?",
    "want": null,
@@ -447,7 +447,7 @@
   {
    "kind": "memory",
    "label": "crd extensions / 아까 뭐 눌렀어",
-   "screen": "chrome-remote-desktop---qvb-flfm-dev1",
+   "screen": "chrome-remote-desktop---remote-pc",
    "ask": "확장 프로그램 눌러줘",
    "then": "아까 뭐 눌렀어?",
    "want": null,
@@ -456,7 +456,7 @@
   {
    "kind": "memory",
    "label": "crd minimize / 뭐 하려던 거야",
-   "screen": "chrome-remote-desktop---qvb-flfm-dev1",
+   "screen": "chrome-remote-desktop---remote-pc",
    "ask": "최소화 눌러줘",
    "then": "뭐 하려던 거야?",
    "want": null,
@@ -465,7 +465,7 @@
   {
    "kind": "memory",
    "label": "crd password / 방금 뭐 하려고 했지",
-   "screen": "chrome-remote-desktop---qvb-flfm-dev1",
+   "screen": "chrome-remote-desktop---remote-pc",
    "ask": "비밀번호 저장 눌러줘",
    "then": "방금 뭐 하려고 했지?",
    "want": null,
@@ -474,7 +474,7 @@
   {
    "kind": "memory",
    "label": "crd settings / 너 방금 뭐 했어",
-   "screen": "chrome-remote-desktop---qvb-flfm-dev1",
+   "screen": "chrome-remote-desktop---remote-pc",
    "ask": "원격 데스크톱 설정 열어줘",
    "then": "너 방금 뭐 했어?",
    "want": null,
@@ -484,7 +484,7 @@
    "kind": "memory",
    "lang": "en",
    "label": "crd extensions / EN what did you just try",
-   "screen": "chrome-remote-desktop---qvb-flfm-dev1",
+   "screen": "chrome-remote-desktop---remote-pc",
    "ask": "Press the extensions button",
    "then": "What did you just try to do?",
    "want": null,
@@ -800,7 +800,7 @@
    "kind": "accept",
    "form": "phrase",
    "label": "crd close / 응 그렇게 해줘",
-   "screen": "chrome-remote-desktop---qvb-flfm-dev1",
+   "screen": "chrome-remote-desktop---remote-pc",
    "ask": "닫기 눌러줘",
    "then": "응 그렇게 해줘",
    "want": null,
@@ -810,7 +810,7 @@
    "kind": "accept",
    "form": "phrase",
    "label": "crd extensions / 어 눌러줘",
-   "screen": "chrome-remote-desktop---qvb-flfm-dev1",
+   "screen": "chrome-remote-desktop---remote-pc",
    "ask": "확장 프로그램 눌러줘",
    "then": "어 눌러줘",
    "want": null,
@@ -820,7 +820,7 @@
    "kind": "accept",
    "form": "phrase",
    "label": "crd minimize / 네 해주세요",
-   "screen": "chrome-remote-desktop---qvb-flfm-dev1",
+   "screen": "chrome-remote-desktop---remote-pc",
    "ask": "최소화 눌러줘",
    "then": "네 해주세요",
    "want": null,
@@ -830,7 +830,7 @@
    "kind": "accept",
    "form": "phrase",
    "label": "crd password / 그래 진행해",
-   "screen": "chrome-remote-desktop---qvb-flfm-dev1",
+   "screen": "chrome-remote-desktop---remote-pc",
    "ask": "비밀번호 저장 눌러줘",
    "then": "그래 진행해",
    "want": null,
@@ -840,7 +840,7 @@
    "kind": "accept",
    "form": "phrase",
    "label": "crd settings / 응 그렇게 부탁해",
-   "screen": "chrome-remote-desktop---qvb-flfm-dev1",
+   "screen": "chrome-remote-desktop---remote-pc",
    "ask": "원격 데스크톱 설정 열어줘",
    "then": "응 그렇게 부탁해",
    "want": null,
@@ -851,7 +851,7 @@
    "form": "phrase",
    "lang": "en",
    "label": "crd close / EN yes, please do that",
-   "screen": "chrome-remote-desktop---qvb-flfm-dev1",
+   "screen": "chrome-remote-desktop---remote-pc",
    "ask": "Close this window",
    "then": "yes, please do that",
    "want": null,
@@ -861,7 +861,7 @@
    "kind": "accept",
    "form": "bare",
    "label": "crd close / 응",
-   "screen": "chrome-remote-desktop---qvb-flfm-dev1",
+   "screen": "chrome-remote-desktop---remote-pc",
    "ask": "닫기 눌러줘",
    "then": "응",
    "want": null,
@@ -871,7 +871,7 @@
    "kind": "accept",
    "form": "bare",
    "label": "crd restore / 그래",
-   "screen": "chrome-remote-desktop---qvb-flfm-dev1",
+   "screen": "chrome-remote-desktop---remote-pc",
    "ask": "창 복구해줘",
    "then": "그래",
    "want": null,
@@ -881,7 +881,7 @@
    "kind": "accept",
    "form": "bare",
    "label": "crd extensions / ㅇㅇ",
-   "screen": "chrome-remote-desktop---qvb-flfm-dev1",
+   "screen": "chrome-remote-desktop---remote-pc",
    "ask": "확장 프로그램 눌러줘",
    "then": "ㅇㅇ",
    "want": null,
@@ -892,7 +892,7 @@
    "form": "bare",
    "lang": "en",
    "label": "crd extensions / EN go ahead",
-   "screen": "chrome-remote-desktop---qvb-flfm-dev1",
+   "screen": "chrome-remote-desktop---remote-pc",
    "ask": "Press the extensions button",
    "then": "go ahead",
    "want": null,
@@ -1039,7 +1039,7 @@
   {
    "kind": "faraccept",
    "label": "crd close far / 응 해줘",
-   "screen": "chrome-remote-desktop---qvb-flfm-dev1",
+   "screen": "chrome-remote-desktop---remote-pc",
    "ask": "닫기 눌러줘",
    "filler": [
     "오늘 날씨 어때?",
@@ -1054,7 +1054,7 @@
   {
    "kind": "faraccept",
    "label": "crd extensions far / 그래 해줘",
-   "screen": "chrome-remote-desktop---qvb-flfm-dev1",
+   "screen": "chrome-remote-desktop---remote-pc",
    "ask": "확장 프로그램 눌러줘",
    "filler": [
     "오늘 날씨 어때?",
@@ -1070,7 +1070,7 @@
    "kind": "faraccept",
    "lang": "mixed",
    "label": "crd password far / EN yes go ahead",
-   "screen": "chrome-remote-desktop---qvb-flfm-dev1",
+   "screen": "chrome-remote-desktop---remote-pc",
    "ask": "비밀번호 저장 눌러줘",
    "filler": [
     "오늘 날씨 어때?",
@@ -1157,7 +1157,7 @@
   {
    "kind": "restate",
    "label": "crd / 이 창 닫고 싶어 -> 닫기 눌러줘",
-   "screen": "chrome-remote-desktop---qvb-flfm-dev1",
+   "screen": "chrome-remote-desktop---remote-pc",
    "ask": "이 창 닫고 싶어",
    "then": "닫기 눌러줘",
    "want": [
@@ -1169,7 +1169,7 @@
   {
    "kind": "restate",
    "label": "crd / 확장 프로그램 보고 싶어 -> 확장 프로그램 눌러줘",
-   "screen": "chrome-remote-desktop---qvb-flfm-dev1",
+   "screen": "chrome-remote-desktop---remote-pc",
    "ask": "확장 프로그램 보고 싶어",
    "then": "확장 프로그램 눌러줘",
    "want": [
@@ -1265,7 +1265,7 @@
   {
    "kind": "refuse",
    "label": "crd close / 아니 됐어",
-   "screen": "chrome-remote-desktop---qvb-flfm-dev1",
+   "screen": "chrome-remote-desktop---remote-pc",
    "ask": "닫기 눌러줘",
    "then": "아니 됐어",
    "want": null,
@@ -1274,7 +1274,7 @@
   {
    "kind": "refuse",
    "label": "crd password / 됐어 안 해도 돼",
-   "screen": "chrome-remote-desktop---qvb-flfm-dev1",
+   "screen": "chrome-remote-desktop---remote-pc",
    "ask": "비밀번호 저장 눌러줘",
    "then": "됐어 안 해도 돼",
    "want": null,
@@ -1284,7 +1284,7 @@
    "kind": "refuse",
    "lang": "en",
    "label": "crd close / EN no, never mind",
-   "screen": "chrome-remote-desktop---qvb-flfm-dev1",
+   "screen": "chrome-remote-desktop---remote-pc",
    "ask": "Close this window",
    "then": "no, never mind",
    "want": null,
@@ -1365,7 +1365,7 @@
   {
    "kind": "anew",
    "label": "crd close -> minimize",
-   "screen": "chrome-remote-desktop---qvb-flfm-dev1",
+   "screen": "chrome-remote-desktop---remote-pc",
    "ask": "닫기 눌러줘",
    "then": "그럼 최소화로 해줘",
    "want": [
@@ -1377,7 +1377,7 @@
   {
    "kind": "anew",
    "label": "crd password -> extensions",
-   "screen": "chrome-remote-desktop---qvb-flfm-dev1",
+   "screen": "chrome-remote-desktop---remote-pc",
    "ask": "비밀번호 저장 눌러줘",
    "then": "확장 프로그램도 눌러줘",
    "want": [
@@ -6086,7 +6086,7 @@
   {
    "kind": "memory",
    "case": "crd close / 방금 뭘 하려고 했어",
-   "screen": "chrome-remote-desktop---qvb-flfm-dev1",
+   "screen": "chrome-remote-desktop---remote-pc",
    "form": null,
    "distance": 1,
    "lang": "ko",
@@ -6330,7 +6330,7 @@
   {
    "kind": "memory",
    "case": "crd extensions / 아까 뭐 눌렀어",
-   "screen": "chrome-remote-desktop---qvb-flfm-dev1",
+   "screen": "chrome-remote-desktop---remote-pc",
    "form": null,
    "distance": 1,
    "lang": "ko",
@@ -6625,7 +6625,7 @@
   {
    "kind": "memory",
    "case": "crd minimize / 뭐 하려던 거야",
-   "screen": "chrome-remote-desktop---qvb-flfm-dev1",
+   "screen": "chrome-remote-desktop---remote-pc",
    "form": null,
    "distance": 1,
    "lang": "ko",
@@ -6869,7 +6869,7 @@
   {
    "kind": "memory",
    "case": "crd password / 방금 뭐 하려고 했지",
-   "screen": "chrome-remote-desktop---qvb-flfm-dev1",
+   "screen": "chrome-remote-desktop---remote-pc",
    "form": null,
    "distance": 1,
    "lang": "ko",
@@ -7113,7 +7113,7 @@
   {
    "kind": "memory",
    "case": "crd settings / 너 방금 뭐 했어",
-   "screen": "chrome-remote-desktop---qvb-flfm-dev1",
+   "screen": "chrome-remote-desktop---remote-pc",
    "form": null,
    "distance": 1,
    "lang": "ko",
@@ -7408,7 +7408,7 @@
   {
    "kind": "memory",
    "case": "crd extensions / EN what did you just try",
-   "screen": "chrome-remote-desktop---qvb-flfm-dev1",
+   "screen": "chrome-remote-desktop---remote-pc",
    "form": null,
    "distance": 1,
    "lang": "en",
@@ -16244,7 +16244,7 @@
   {
    "kind": "accept",
    "case": "crd close / 응 그렇게 해줘",
-   "screen": "chrome-remote-desktop---qvb-flfm-dev1",
+   "screen": "chrome-remote-desktop---remote-pc",
    "form": "phrase",
    "distance": 1,
    "lang": "ko",
@@ -16488,7 +16488,7 @@
   {
    "kind": "accept",
    "case": "crd extensions / 어 눌러줘",
-   "screen": "chrome-remote-desktop---qvb-flfm-dev1",
+   "screen": "chrome-remote-desktop---remote-pc",
    "form": "phrase",
    "distance": 1,
    "lang": "ko",
@@ -16732,7 +16732,7 @@
   {
    "kind": "accept",
    "case": "crd minimize / 네 해주세요",
-   "screen": "chrome-remote-desktop---qvb-flfm-dev1",
+   "screen": "chrome-remote-desktop---remote-pc",
    "form": "phrase",
    "distance": 1,
    "lang": "ko",
@@ -17027,7 +17027,7 @@
   {
    "kind": "accept",
    "case": "crd password / 그래 진행해",
-   "screen": "chrome-remote-desktop---qvb-flfm-dev1",
+   "screen": "chrome-remote-desktop---remote-pc",
    "form": "phrase",
    "distance": 1,
    "lang": "ko",
@@ -17322,7 +17322,7 @@
   {
    "kind": "accept",
    "case": "crd settings / 응 그렇게 부탁해",
-   "screen": "chrome-remote-desktop---qvb-flfm-dev1",
+   "screen": "chrome-remote-desktop---remote-pc",
    "form": "phrase",
    "distance": 1,
    "lang": "ko",
@@ -17617,7 +17617,7 @@
   {
    "kind": "accept",
    "case": "crd close / EN yes, please do that",
-   "screen": "chrome-remote-desktop---qvb-flfm-dev1",
+   "screen": "chrome-remote-desktop---remote-pc",
    "form": "phrase",
    "distance": 1,
    "lang": "en",
@@ -17912,7 +17912,7 @@
   {
    "kind": "accept",
    "case": "crd close / 응",
-   "screen": "chrome-remote-desktop---qvb-flfm-dev1",
+   "screen": "chrome-remote-desktop---remote-pc",
    "form": "bare",
    "distance": 1,
    "lang": "ko",
@@ -18156,7 +18156,7 @@
   {
    "kind": "accept",
    "case": "crd restore / 그래",
-   "screen": "chrome-remote-desktop---qvb-flfm-dev1",
+   "screen": "chrome-remote-desktop---remote-pc",
    "form": "bare",
    "distance": 1,
    "lang": "ko",
@@ -18451,7 +18451,7 @@
   {
    "kind": "accept",
    "case": "crd extensions / ㅇㅇ",
-   "screen": "chrome-remote-desktop---qvb-flfm-dev1",
+   "screen": "chrome-remote-desktop---remote-pc",
    "form": "bare",
    "distance": 1,
    "lang": "ko",
@@ -18695,7 +18695,7 @@
   {
    "kind": "accept",
    "case": "crd extensions / EN go ahead",
-   "screen": "chrome-remote-desktop---qvb-flfm-dev1",
+   "screen": "chrome-remote-desktop---remote-pc",
    "form": "bare",
    "distance": 1,
    "lang": "en",
@@ -23502,7 +23502,7 @@
   {
    "kind": "faraccept",
    "case": "crd close far / 응 해줘",
-   "screen": "chrome-remote-desktop---qvb-flfm-dev1",
+   "screen": "chrome-remote-desktop---remote-pc",
    "form": null,
    "distance": 5,
    "lang": "ko",
@@ -24013,7 +24013,7 @@
   {
    "kind": "faraccept",
    "case": "crd extensions far / 그래 해줘",
-   "screen": "chrome-remote-desktop---qvb-flfm-dev1",
+   "screen": "chrome-remote-desktop---remote-pc",
    "form": null,
    "distance": 5,
    "lang": "ko",
@@ -24524,7 +24524,7 @@
   {
    "kind": "faraccept",
    "case": "crd password far / EN yes go ahead",
-   "screen": "chrome-remote-desktop---qvb-flfm-dev1",
+   "screen": "chrome-remote-desktop---remote-pc",
    "form": null,
    "distance": 5,
    "lang": "mixed",
@@ -26736,7 +26736,7 @@
   {
    "kind": "restate",
    "case": "crd / 이 창 닫고 싶어 -> 닫기 눌러줘",
-   "screen": "chrome-remote-desktop---qvb-flfm-dev1",
+   "screen": "chrome-remote-desktop---remote-pc",
    "form": null,
    "distance": 1,
    "lang": "ko",
@@ -27034,7 +27034,7 @@
   {
    "kind": "restate",
    "case": "crd / 확장 프로그램 보고 싶어 -> 확장 프로그램 눌러줘",
-   "screen": "chrome-remote-desktop---qvb-flfm-dev1",
+   "screen": "chrome-remote-desktop---remote-pc",
    "form": null,
    "distance": 1,
    "lang": "ko",
@@ -29579,7 +29579,7 @@
   {
    "kind": "refuse",
    "case": "crd close / 아니 됐어",
-   "screen": "chrome-remote-desktop---qvb-flfm-dev1",
+   "screen": "chrome-remote-desktop---remote-pc",
    "form": null,
    "distance": 1,
    "lang": "ko",
@@ -29823,7 +29823,7 @@
   {
    "kind": "refuse",
    "case": "crd password / 됐어 안 해도 돼",
-   "screen": "chrome-remote-desktop---qvb-flfm-dev1",
+   "screen": "chrome-remote-desktop---remote-pc",
    "form": null,
    "distance": 1,
    "lang": "ko",
@@ -30067,7 +30067,7 @@
   {
    "kind": "refuse",
    "case": "crd close / EN no, never mind",
-   "screen": "chrome-remote-desktop---qvb-flfm-dev1",
+   "screen": "chrome-remote-desktop---remote-pc",
    "form": null,
    "distance": 1,
    "lang": "en",
@@ -32063,7 +32063,7 @@
   {
    "kind": "anew",
    "case": "crd close -> minimize",
-   "screen": "chrome-remote-desktop---qvb-flfm-dev1",
+   "screen": "chrome-remote-desktop---remote-pc",
    "form": null,
    "distance": 1,
    "lang": "ko",
@@ -32361,7 +32361,7 @@
   {
    "kind": "anew",
    "case": "crd password -> extensions",
-   "screen": "chrome-remote-desktop---qvb-flfm-dev1",
+   "screen": "chrome-remote-desktop---remote-pc",
    "form": null,
    "distance": 1,
    "lang": "ko",

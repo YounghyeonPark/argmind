@@ -6,7 +6,7 @@
 # choice and would have brought that back.
 [package]
 name = "argmind-env-face"
-version = "0.0.1"
+version = "0.1.0"
 edition = "2021"
 description = "Finding a face and where it is pointed, without a model that can talk."
 license = "Apache-2.0"

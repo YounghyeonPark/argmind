@@ -8,7 +8,7 @@
 //! **The owner, 2026-09-17**, looking at a transcript with watching on by default:
 //!
 //! ```text
-//!   • the window changed to 'Chrome Remote Desktop - QVB-FLFM-DEV1'
+//!   • the window changed to 'Chrome Remote Desktop - REMOTE-PC'
 //!   Chrome 데스크탑으로 넘어왔어요. 도움이 필요하시면 언제든 말씀해주세요!
 //!   • the window changed to 'Taskbar'
 //!   태스크바로 넘어왔어요. 도움이 필요하시면 언제든 말씀해주세요!
@@ -70,7 +70,7 @@ const FILLER: [&str; 4] = ["도움이 필요하시면", "말씀해주세요", "�
 fn beyond_the_name(said: &str, window: &str) -> String {
     let mut left = said.to_string();
     //: The whole name, and then its parts, because a reply says *Chrome Remote Desktop* where the
-    //: fixture is called `chrome-remote-desktop---qvb-flfm-dev1`.
+    //: fixture is called `chrome-remote-desktop---remote-pc`.
     left = left.replace(window, " ");
     for part in window.split(['-', '_', ' ', '.']).filter(|p| p.len() > 2) {
         //: Case-folded, since a title is capitalised in prose and not in a filename.

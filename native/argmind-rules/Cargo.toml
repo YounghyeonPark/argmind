@@ -1,6 +1,6 @@
 [package]
 name = "argmind-rules"
-version = "0.0.1"
+version = "0.1.0"
 edition = "2021"
 description = "The rules this repository keeps, held by tests rather than remembered."
 license = "Apache-2.0"

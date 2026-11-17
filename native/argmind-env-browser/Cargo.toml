@@ -1,6 +1,6 @@
 [package]
 name = "argmind-env-browser"
-version = "0.0.1"
+version = "0.1.0"
 edition = "2021"
 description = "Eyes and hands for argmind's own browser pane, over the DevTools protocol, naming no platform."
 license = "Apache-2.0"

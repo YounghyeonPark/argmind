@@ -1,6 +1,6 @@
 [package]
 name = "argmind-env-qwentts"
-version = "0.0.1"
+version = "0.1.0"
 edition = "2021"
 description = "A neural voice, over HTTP to a qwentts.cpp server on this machine."
 license = "Apache-2.0"

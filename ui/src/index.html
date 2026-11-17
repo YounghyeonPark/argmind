@@ -82,6 +82,10 @@
   .setup-head { display: flex; gap: 8px; align-items: baseline; font-weight: 600;
                 margin-bottom: 8px; }
   .setup-head .again { margin-left: auto; font-size: 12px; padding: 2px 8px; }
+  /* Clear of 작업 폴더 and ⋯, which are fixed in the corner: `--corner` is their width, set by
+     app.ts. The header is what sits there in the full view, the setup panel in the quiet one. */
+  header { padding-right: calc(var(--corner, 0px) + 4px); }
+  body.quiet .setup-head { padding-right: var(--corner, 0px); }
   .need { border-left: 2px solid var(--edge); padding: 4px 0 6px 10px; margin-bottom: 8px; }
   .need.required { border-left-color: var(--warn); }
   .need-what { font-weight: 600; }

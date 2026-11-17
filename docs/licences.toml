@@ -68,7 +68,17 @@ sha2 = { licence = "MIT OR Apache-2.0", why = "the prompt fingerprint, in tests 
 # copyleft and reaches only modified copies of those files — nothing here modifies them. **This is
 # the one place the `allowed` list is checked by eye rather than by the test**, which says plainly
 # that it does not follow transitive dependencies.
-wry = { licence = "Apache-2.0 OR MIT", why = "the webview: WebView2, WKWebView, WebKitGTK" }
+#
+# **Read again across the whole release graph on 2026-11-17**, for `THIRD-PARTY-NOTICES.txt`, which
+# a public release has to carry: 137 crates linked into the two executables, 22 more at build time
+# only. Two licences there are not on `allowed`, and neither is a problem — recorded rather than
+# added, because `allowed` is compared against direct dependencies and neither is one:
+#   * **Unicode-3.0**, 15 crates (icu_*, zerovec, yoke, tinystr…), through url → idna → tao. A
+#     permissive, OSI-approved licence whose only condition is the notice, which the file carries.
+#   * **Microsoft's WebView2 SDK licence**, for the statically linked loader: BSD-3-Clause in
+#     Microsoft's own wording, its NOTICE naming Antlr3 and StringTemplate4 (both BSD-3-Clause).
+# None of the Windows release graph's crates is MPL-2.0.
+wry ={ licence = "Apache-2.0 OR MIT", why = "the webview: WebView2, WKWebView, WebKitGTK" }
 tao = { licence = "Apache-2.0", why = "the window and its event loop, on all three" }
 # **The browser pane's controls, 2026-10-20.** Both were already in the graph behind wry, so no
 # crate enters the build; what changes is that `argmind-window` names them, for one call —

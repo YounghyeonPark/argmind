@@ -1,0 +1,43 @@
+# The pre-commit hook's three checks, on a machine that is not the author's.
+#
+# The suite needs no display, model, network, microphone or speaker, so a hosted Windows runner can
+# run all of it. What it cannot see is the same as on any clone: the harnesses that need a model
+# and the tests marked #[ignore] because they need WSL or a desktop.
+name: test
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      # rust-toolchain.toml pins `stable`, which on this runner resolves to MSVC: the build that
+      # double-clicks. The linux target is for the third check.
+      - run: rustup target add x86_64-unknown-linux-gnu
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            native/target
+          key: cargo-${{ runner.os }}-${{ hashFiles('native/Cargo.lock', 'rust-toolchain.toml') }}
+      - name: the suite
+        run: cargo test --manifest-path native/Cargo.toml
+      - name: the application with no environment
+        run: cargo test --manifest-path native/Cargo.toml -p argmind-serve --features headless
+      - name: it compiles for linux
+        run: cargo check --manifest-path native/Cargo.toml --target x86_64-unknown-linux-gnu -p argmind-serve --no-default-features
+      - name: the page is compiled from the source committed beside it
+        shell: bash
+        run: |
+          cd ui && npm ci --ignore-scripts && npx tsc
+          git diff --exit-code -- dist || { echo "ui/dist is stale: run tsc in ui/ and commit it"; exit 1; }

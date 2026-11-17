@@ -1,6 +1,6 @@
 [package]
 name = "argmind-voice"
-version = "0.0.1"
+version = "0.1.0"
 edition = "2021"
 description = "Heard / Listener / Speaker — the seam. Voice is interface, not a contract."
 license = "Apache-2.0"

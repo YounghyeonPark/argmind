@@ -872,7 +872,7 @@
       "right_at": [
         1
       ],
-      "screen": "chrome-remote-desktop---qvb-flfm-dev1"
+      "screen": "chrome-remote-desktop---remote-pc"
     },
     {
       "accept": [
@@ -900,7 +900,7 @@
       "right_at": [
         3
       ],
-      "screen": "chrome-remote-desktop---qvb-flfm-dev1"
+      "screen": "chrome-remote-desktop---remote-pc"
     },
     {
       "accept": [
@@ -928,7 +928,7 @@
       "right_at": [
         8
       ],
-      "screen": "chrome-remote-desktop---qvb-flfm-dev1"
+      "screen": "chrome-remote-desktop---remote-pc"
     },
     {
       "accept": [
@@ -956,7 +956,7 @@
       "right_at": [
         9
       ],
-      "screen": "chrome-remote-desktop---qvb-flfm-dev1"
+      "screen": "chrome-remote-desktop---remote-pc"
     },
     {
       "accept": null,
@@ -980,7 +980,7 @@
         "declined"
       ],
       "right_at": [],
-      "screen": "chrome-remote-desktop---qvb-flfm-dev1"
+      "screen": "chrome-remote-desktop---remote-pc"
     },
     {
       "accept": null,
@@ -1004,12 +1004,12 @@
         "declined"
       ],
       "right_at": [],
-      "screen": "chrome-remote-desktop---qvb-flfm-dev1"
+      "screen": "chrome-remote-desktop---remote-pc"
     }
   ],
   "screens": {
     "character-map": 21,
-    "chrome-remote-desktop---qvb-flfm-dev1": 12,
+    "chrome-remote-desktop---remote-pc": 12,
     "system-information": 152,
     "untitled---paint": 123
   }

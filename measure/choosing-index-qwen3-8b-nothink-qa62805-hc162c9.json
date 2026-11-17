@@ -53,7 +53,7 @@
  },
  "screens": {
   "character-map": 21,
-  "chrome-remote-desktop---qvb-flfm-dev1": 12,
+  "chrome-remote-desktop---remote-pc": 12,
   "system-information": 152,
   "untitled---paint": 123
  },
@@ -1810,7 +1810,7 @@
    ]
   },
   {
-   "screen": "chrome-remote-desktop---qvb-flfm-dev1",
+   "screen": "chrome-remote-desktop---remote-pc",
    "goal": "최소화해줘",
    "accept": [
     "최소화"
@@ -1867,7 +1867,7 @@
    ]
   },
   {
-   "screen": "chrome-remote-desktop---qvb-flfm-dev1",
+   "screen": "chrome-remote-desktop---remote-pc",
    "goal": "닫아",
    "accept": [
     "닫기"
@@ -1924,7 +1924,7 @@
    ]
   },
   {
-   "screen": "chrome-remote-desktop---qvb-flfm-dev1",
+   "screen": "chrome-remote-desktop---remote-pc",
    "goal": "비밀번호 저장해",
    "accept": [
     "비밀번호 저장"
@@ -1981,7 +1981,7 @@
    ]
   },
   {
-   "screen": "chrome-remote-desktop---qvb-flfm-dev1",
+   "screen": "chrome-remote-desktop---remote-pc",
    "goal": "extensions 보여줘",
    "accept": [
     "확장 프로그램"
@@ -2038,7 +2038,7 @@
    ]
   },
   {
-   "screen": "chrome-remote-desktop---qvb-flfm-dev1",
+   "screen": "chrome-remote-desktop---remote-pc",
    "goal": "새 탭 열어줘",
    "accept": null,
    "chose": [
@@ -2091,7 +2091,7 @@
    ]
   },
   {
-   "screen": "chrome-remote-desktop---qvb-flfm-dev1",
+   "screen": "chrome-remote-desktop---remote-pc",
    "goal": "음량 키워줘",
    "accept": null,
    "chose": [

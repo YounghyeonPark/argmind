@@ -15,8 +15,8 @@
  "choosing_print": "66fb6b",
  "repair_print": "c1dfe3",
  "llm_print": "7f62fa",
- "argmind_root": "C:\\Users\\curibio\\AppData\\Local\\Temp\\claude\\c--dev-argmind\\8df085d5-04ce-416f-922a-4d248f1189a7\\scratchpad\\prev\\argmind",
- "argmind_alternate": "C:/Users/curibio/AppData/Local/Temp/claude/c--dev-argmind/8df085d5-04ce-416f-922a-4d248f1189a7/scratchpad/prev",
+ "argmind_root": "C:\\Users\\user\\AppData\\Local\\Temp\\claude\\c--dev-argmind\\8df085d5-04ce-416f-922a-4d248f1189a7\\scratchpad\\prev\\argmind",
+ "argmind_alternate": "C:/Users/user/AppData/Local/Temp/claude/c--dev-argmind/8df085d5-04ce-416f-922a-4d248f1189a7/scratchpad/prev",
  "loop_print": "54c3e4",
  "loop_print_raw": "d1720c",
  "tree": {
@@ -39,7 +39,7 @@
  "max_tokens": 4096,
  "screens": {
   "character-map": 21,
-  "chrome-remote-desktop---qvb-flfm-dev1": 12,
+  "chrome-remote-desktop---remote-pc": 12,
   "system-information": 152,
   "untitled---paint": 123
  },

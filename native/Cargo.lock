@@ -49,7 +49,7 @@ checksum = "fb5dfbc6d8d2675589ccbe4d0fd61df2419075625f8c1a62325e718e2b0049f9"
 
 [[package]]
 name = "argmind-core"
-version = "0.0.1"
+version = "0.1.0"
 dependencies = [
  "serde_json",
  "sha2",
@@ -57,7 +57,7 @@ dependencies = [
 
 [[package]]
 name = "argmind-env-browser"
-version = "0.0.1"
+version = "0.1.0"
 dependencies = [
  "argmind-core",
  "serde_json",
@@ -65,14 +65,14 @@ dependencies = [
 
 [[package]]
 name = "argmind-env-face"
-version = "0.0.1"
+version = "0.1.0"
 dependencies = [
  "tract-onnx",
 ]
 
 [[package]]
 name = "argmind-env-linux"
-version = "0.0.1"
+version = "0.1.0"
 dependencies = [
  "argmind-core",
  "argmind-env-none",
@@ -82,7 +82,7 @@ dependencies = [
 
 [[package]]
 name = "argmind-env-mcp"
-version = "0.0.1"
+version = "0.1.0"
 dependencies = [
  "argmind-core",
  "serde_json",
@@ -90,7 +90,7 @@ dependencies = [
 
 [[package]]
 name = "argmind-env-none"
-version = "0.0.1"
+version = "0.1.0"
 dependencies = [
  "argmind-core",
  "argmind-voice",
@@ -98,7 +98,7 @@ dependencies = [
 
 [[package]]
 name = "argmind-env-ollama"
-version = "0.0.1"
+version = "0.1.0"
 dependencies = [
  "argmind-core",
  "serde_json",
@@ -106,7 +106,7 @@ dependencies = [
 
 [[package]]
 name = "argmind-env-qwentts"
-version = "0.0.1"
+version = "0.1.0"
 dependencies = [
  "argmind-env-windows",
  "argmind-voice",
@@ -114,14 +114,14 @@ dependencies = [
 
 [[package]]
 name = "argmind-env-whisper"
-version = "0.0.1"
+version = "0.1.0"
 dependencies = [
  "argmind-voice",
 ]
 
 [[package]]
 name = "argmind-env-windows"
-version = "0.0.1"
+version = "0.1.0"
 dependencies = [
  "argmind-core",
  "argmind-voice",
@@ -131,7 +131,7 @@ dependencies = [
 
 [[package]]
 name = "argmind-measure"
-version = "0.0.1"
+version = "0.1.0"
 dependencies = [
  "argmind-core",
  "argmind-env-browser",
@@ -149,11 +149,11 @@ dependencies = [
 
 [[package]]
 name = "argmind-rules"
-version = "0.0.1"
+version = "0.1.0"
 
 [[package]]
 name = "argmind-serve"
-version = "0.0.1"
+version = "0.1.0"
 dependencies = [
  "argmind-core",
  "argmind-env-browser",
@@ -172,11 +172,11 @@ dependencies = [
 
 [[package]]
 name = "argmind-voice"
-version = "0.0.1"
+version = "0.1.0"
 
 [[package]]
 name = "argmind-window"
-version = "0.0.1"
+version = "0.1.0"
 dependencies = [
  "tao",
  "tray-icon",

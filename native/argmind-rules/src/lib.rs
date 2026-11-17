@@ -154,3 +154,93 @@ pub fn outside_dependencies(manifest: &str) -> Vec<String> {
     out.dedup();
     out
 }
+
+// ---- what the two executables are built from ------------------------------------------------------
+
+/// One third-party crate compiled into `argmind-app.exe` and `argmind.exe`, as `cargo tree` reports
+/// it for the release target.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+pub struct Linked {
+    pub name: String,
+    pub version: String,
+    /// The licence the crate's own `Cargo.toml` declares. A record, not a finding.
+    pub licence: String,
+    pub repository: String,
+    /// **A procedural macro, or something only a procedural macro uses.** It runs while the
+    /// program is compiled and none of its code is linked. It is listed anyway, marked, because
+    /// the code it writes is in the executable, and listing too much is the cheap direction.
+    pub build_time: bool,
+}
+
+/// The `webview2-com-sys` this release graph was read against. **It carries Microsoft's prebuilt
+/// WebView2 loader** (`x64/WebView2LoaderStatic.lib`, linked into `argmind-app.exe`), and the
+/// crate's own package ships no licence for it, so its licence was read from the WebView2 SDK of
+/// the loader's own version ([`WEBVIEW2_SDK`], read off the DLL's version resource) and is kept in
+/// `native/argmind-rules/notices/`. A different `webview2-com-sys` may carry a different loader,
+/// so `tests/third_party_notices.rs` fails until somebody reads its licence again.
+pub const WEBVIEW2_SYS: &str = "0.39.1";
+
+/// The WebView2 SDK version of that loader, `1.0.3800.47` by `WebView2Loader.dll`'s file version.
+pub const WEBVIEW2_SDK: &str = "1.0.3800.47";
+
+/// The release target. **Not the host**: the notices are about what ships, and what ships is
+/// built for Windows on MSVC, which `rust-toolchain.toml`'s comment explains.
+pub const RELEASE_TARGET: &str = "x86_64-pc-windows-msvc";
+
+/// **Every third-party crate in the two executables**: `argmind-serve`'s normal dependencies for
+/// [`RELEASE_TARGET`], with default features, followed all the way down. **Not** dev-dependencies
+/// (they are in test binaries only) and **not** build-dependencies (build scripts run and are
+/// thrown away). Workspace members are left out, since they are this project.
+///
+/// **It asks `cargo tree`, offline and locked**, because this crate has no JSON parser on purpose
+/// (see the top of `Cargo.toml`), and `cargo tree`'s `--format` is text this file can read. Two
+/// runs, with and without `no-proc-macro`, tell build-time crates from linked ones. A failure is an
+/// error and never an empty list: a rule that reads nothing and passes is the failure this
+/// repository has written down five times.
+pub fn linked() -> Result<Vec<Linked>, String> {
+    let all = tree("normal")?;
+    let kept = tree("normal,no-proc-macro")?;
+    let mut out: Vec<Linked> = all.into_iter().map(|mut l| {
+        l.build_time = !kept.iter().any(|k| k.name == l.name && k.version == l.version);
+        l
+    }).collect();
+    out.sort();
+    out.dedup_by(|a, b| a.name == b.name && a.version == b.version);
+    if out.len() < 50 {
+        return Err(format!("cargo tree named only {} crates, which is not this graph", out.len()));
+    }
+    Ok(out)
+}
+
+fn tree(edges: &str) -> Result<Vec<Linked>, String> {
+    let cargo = std::env::var_os("CARGO").unwrap_or_else(|| "cargo".into());
+    let manifest = root().join("native").join("Cargo.toml");
+    let got = std::process::Command::new(cargo)
+        .args(["tree", "--manifest-path"]).arg(&manifest)
+        .args(["-p", "argmind-serve", "-e", edges, "--target", RELEASE_TARGET, "--prefix", "none",
+               "--offline", "--locked", "--format", "{p}|{l}|{r}"])
+        .output().map_err(|e| format!("cargo tree did not start: {e}"))?;
+    if !got.status.success() {
+        return Err(format!("cargo tree failed: {}", String::from_utf8_lossy(&got.stderr)));
+    }
+    let mut out = Vec::new();
+    for line in String::from_utf8_lossy(&got.stdout).lines() {
+        let line = line.trim_end().trim_end_matches(" (*)");
+        let mut parts = line.splitn(3, '|');
+        let (Some(package), Some(licence), Some(repository)) = (parts.next(), parts.next(), parts.next())
+        else {
+            return Err(format!("a line cargo tree printed is not name|licence|repository: {line:?}"));
+        };
+        let package = package.trim_end_matches(" (proc-macro)");
+        //: A path dependency prints its directory after the version: this project's own crates.
+        if package.contains(" (") {
+            continue;
+        }
+        let Some((name, version)) = package.split_once(" v") else {
+            return Err(format!("not a name and a version: {package:?}"));
+        };
+        out.push(Linked { name: name.into(), version: version.into(), licence: licence.into(),
+                          repository: repository.into(), build_time: false });
+    }
+    Ok(out)
+}

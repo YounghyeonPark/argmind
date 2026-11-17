@@ -1,3 +1,18 @@
+<p align="center">
+  <img src="docs/images/social-preview.png" width="720"
+       alt="argmind: a local-model agent you talk to while you work at your PC">
+</p>
+
+<p align="center">
+  <a href="https://github.com/YounghyeonPark/argmind/actions/workflows/test.yml"><img alt="test" src="https://github.com/YounghyeonPark/argmind/actions/workflows/test.yml/badge.svg"></a>
+  <img alt="licence: Apache-2.0" src="https://img.shields.io/badge/licence-Apache--2.0-2c4a6e">
+  <img alt="Windows 11" src="https://img.shields.io/badge/Windows-11-2c4a6e">
+  <img alt="models: local, through Ollama" src="https://img.shields.io/badge/models-local%2C%20Ollama-2c4a6e">
+</p>
+
+<!-- A 20–30 s screen recording goes here: drag the .mp4 into this file in GitHub's editor and it
+     becomes a user-attachments link that plays inline. -->
+
 # argmind
 
 **A local-model agent you talk to while you work at your PC.** The models run on your machine
@@ -14,6 +29,18 @@ same requests in each — *remember that…*, *stop*, *open YouTube*, *记住…
 as the model wrote it: a finished task's or errand's report, which comes from a Korean prompt and
 is said in Korean inside a sentence in your language, because translating it was measured changing
 prices and names.
+
+## Quick start
+
+1. **Check the machine**: Windows 11 and a GPU with about 16 GB of memory ([Requirements](#requirements)).
+2. **Download** `argmind-…-windows-x64.zip` from [Releases](https://github.com/YounghyeonPark/argmind/releases/latest),
+   unzip it anywhere, and run `argmind-app.exe`. It is not code-signed, so Windows SmartScreen
+   will warn the first time: *More info → Run anyway*, or [build it yourself](#build-and-run).
+3. **Let it fetch what is missing.** It lists what it needs (Ollama, the models, the voice, the
+   recogniser) and asks before fetching each one.
+4. **Talk to it.** Type, or hold F9 in its window and speak. Until you allow otherwise in 설정
+   (Settings), every action it proposes waits for you to press 실행 (Run) — see
+   [Safety](#safety-what-it-may-do-and-the-defaults).
 
 ## What it does
 
@@ -210,4 +237,6 @@ committed as data so the equivalence checks outlived it.
 
 Apache-2.0. See `LICENSE` and `NOTICE`, which also asks that the numbers be quoted with their
 conditions. Every dependency's licence is recorded in `docs/licences.toml` and checked by a test.
+The notices of the third-party code built into the executables are in `THIRD-PARTY-NOTICES.txt`,
+which a release carries and a test keeps in step with the dependency graph.
 Author: Younghyeon Park.

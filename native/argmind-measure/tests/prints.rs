@@ -2,6 +2,10 @@
 //!
 //! A port that computes a different `screen_print` does not fail loudly — it writes a result under
 //! a name nobody can compare with anything, which is the failure this project has had five times.
+//!
+//! **`screen_print` was edited by hand once**, on 2026-11-17: `5020f7` → `9d54a1`, when the
+//! screens were redacted before the repository went public (`measure/screens/README.md`). The
+//! Python that generated `measure.json` is gone, so there was nothing to regenerate it with.
 
 use std::path::PathBuf;
 

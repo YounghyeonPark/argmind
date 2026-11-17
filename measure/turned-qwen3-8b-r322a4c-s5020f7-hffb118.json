@@ -211,50 +211,50 @@
     {
       "arm": "없음",
       "effects": 0,
-      "said": "I noticed the window changed to 'chrome-remote-desktop---qvb-flfm-dev1'.",
-      "trigger": "the window changed to 'chrome-remote-desktop---qvb-flfm-dev1'"
+      "said": "I noticed the window changed to 'chrome-remote-desktop---remote-pc'.",
+      "trigger": "the window changed to 'chrome-remote-desktop---remote-pc'"
     },
     {
       "arm": "자리에 있음",
       "effects": 0,
       "said": "사용자가 자리에 있습니다.",
-      "trigger": "the window changed to 'chrome-remote-desktop---qvb-flfm-dev1'"
+      "trigger": "the window changed to 'chrome-remote-desktop---remote-pc'"
     },
     {
       "arm": "보고 있음",
       "effects": 0,
       "said": "화면을 보고 계시네요. 도와드릴까요?",
-      "trigger": "the window changed to 'chrome-remote-desktop---qvb-flfm-dev1'"
+      "trigger": "the window changed to 'chrome-remote-desktop---remote-pc'"
     },
     {
       "arm": "고개 돌림",
       "effects": 0,
       "said": "사용자가 고개를 돌리고 있네요.",
-      "trigger": "the window changed to 'chrome-remote-desktop---qvb-flfm-dev1'"
+      "trigger": "the window changed to 'chrome-remote-desktop---remote-pc'"
     },
     {
       "arm": "없음",
       "effects": 0,
-      "said": "QVB-FLFM-DEV1 - Y가 나타났습니다.",
-      "trigger": "'QVB-FLFM-DEV1 - Y' appeared"
+      "said": "REMOTE-PC - Y가 나타났습니다.",
+      "trigger": "'REMOTE-PC - Y' appeared"
     },
     {
       "arm": "자리에 있음",
       "effects": 0,
-      "said": "QVB-FLFM-DEV1 - Y appeared - User is present",
-      "trigger": "'QVB-FLFM-DEV1 - Y' appeared"
+      "said": "REMOTE-PC - Y appeared - User is present",
+      "trigger": "'REMOTE-PC - Y' appeared"
     },
     {
       "arm": "보고 있음",
       "effects": 0,
-      "said": "QVB-FLFM-DEV1 - Y가 나타났습니다. 화면을 보고 계시는군요.",
-      "trigger": "'QVB-FLFM-DEV1 - Y' appeared"
+      "said": "REMOTE-PC - Y가 나타났습니다. 화면을 보고 계시는군요.",
+      "trigger": "'REMOTE-PC - Y' appeared"
     },
     {
       "arm": "고개 돌림",
       "effects": 0,
       "said": "사용자가 고개를 돌리고 있네요.",
-      "trigger": "'QVB-FLFM-DEV1 - Y' appeared"
+      "trigger": "'REMOTE-PC - Y' appeared"
     },
     {
       "arm": "없음",
@@ -283,26 +283,26 @@
     {
       "arm": "없음",
       "effects": 0,
-      "said": "QVB-FLFM-DEV1 appeared",
-      "trigger": "'QVB-FLFM-DEV1' appeared"
+      "said": "REMOTE-PC appeared",
+      "trigger": "'REMOTE-PC' appeared"
     },
     {
       "arm": "자리에 있음",
       "effects": 0,
-      "said": "QVB-FLFM-DEV1 appeared — 사용자가 자리에 있음",
-      "trigger": "'QVB-FLFM-DEV1' appeared"
+      "said": "REMOTE-PC appeared — 사용자가 자리에 있음",
+      "trigger": "'REMOTE-PC' appeared"
     },
     {
       "arm": "보고 있음",
       "effects": 0,
-      "said": "QVB-FLFM-DEV1이 나타났습니다. 화면을 보고 계시는군요.",
-      "trigger": "'QVB-FLFM-DEV1' appeared"
+      "said": "REMOTE-PC이 나타났습니다. 화면을 보고 계시는군요.",
+      "trigger": "'REMOTE-PC' appeared"
     },
     {
       "arm": "고개 돌림",
       "effects": 0,
-      "said": "QVB-FLFM-DEV1이 나타났습니다. 사용자가 고개를 돌리고 있네요.",
-      "trigger": "'QVB-FLFM-DEV1' appeared"
+      "said": "REMOTE-PC이 나타났습니다. 사용자가 고개를 돌리고 있네요.",
+      "trigger": "'REMOTE-PC' appeared"
     },
     {
       "arm": "없음",

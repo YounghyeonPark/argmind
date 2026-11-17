@@ -222,7 +222,7 @@
    ]
   },
   {
-   "name": "LAPTOP-SLKUM90R",
+   "name": "LAPTOP-EXAMPLE",
    "role": "text",
    "rect": [
     1069,
@@ -852,7 +852,7 @@
    ]
   },
   {
-   "name": "LAPTOP-SLKUM90R\\curibio",
+   "name": "LAPTOP-EXAMPLE\\user",
    "role": "text",
    "rect": [
     1069,

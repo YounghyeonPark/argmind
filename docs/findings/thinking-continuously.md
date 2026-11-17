@@ -402,7 +402,7 @@ for six of my looks* are the same sentence otherwise, and only the second is som
 **The owner**, with watching on by default:
 
 ```text
-  • the window changed to 'Chrome Remote Desktop - QVB-FLFM-DEV1'
+  • the window changed to 'Chrome Remote Desktop - REMOTE-PC'
   Chrome 데스크탑으로 넘어왔어요. 도움이 필요하시면 언제든 말씀해주세요!
   • the window changed to 'Taskbar'
   태스크바로 넘어왔어요. 도움이 필요하시면 언제든 말씀해주세요!

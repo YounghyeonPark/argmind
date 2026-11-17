@@ -469,6 +469,33 @@ conversation**, and only `argmind-measure`'s `conversation` harness can see it.
 Interaction and communication, not accuracy. A small drop in choosing is acceptable; a turn that
 cannot be repaired is not.
 
+## Made ready to publish — 2026-11-17
+
+The owner: *공개전에 모든걸 준비하고 할것.* The visibility switch is theirs and was not flipped by
+preparing.
+
+- **The captured screens were redacted, names only**: the machine's name, the Windows account and
+  a remote machine's name, in the four screens and everywhere a record or a finding quoted them,
+  106 files. **The screen fingerprint moved `5020f7` → `9d54a1`, and `r322a4c` did not move.**
+  Every `s5020f7` result was taken against the names before; `measure/screens/README.md` says so,
+  and `measure.json` was edited by hand because the Python that wrote it is gone.
+- **History is the open question, not the tree.** `git log --all` still holds the removed
+  library's business documents — an IP memo planning a patent filing *before* publication, a
+  competition page marked *not quotable externally*, a customer-discovery plan — and every
+  unredacted record. Redacting the tree does nothing for that; publishing this repository as it is
+  publishes them.
+- **Found by the first screenshot taken for the public page**: at the window's own 520 px the
+  header's status ran under 작업 폴더 and ⋯, and in the quiet view so did 다시 확인. `--corner`
+  is now read off the buttons (`app.ts`, `keepTheCornerFree`), because the button is a different
+  width in each language.
+- **Added**: `SECURITY.md` (private reporting, and what counts — a gate crossed, not a wrong
+  choice), `CONTRIBUTING.md`, an issue form that asks for 한 일's lines and warns that a window title
+  can be an email subject, `.github/workflows/test.yml` (the hook's three checks on a hosted
+  runner), `site/` (the public page in four languages, drawing the application's own sphere, every
+  number one the README carries) with `pages.yml`, skipped while private, and
+  `docs/images/social-preview.png`, drawn by `orb.js`. The repository's topics still named the
+  removed library (`recursive-least-squares`, `cortex-m`…) and were replaced.
+
 ## What is NOT built
 
 **It runs on Linux, and there is still no Linux environment** — which sounds contradictory and is

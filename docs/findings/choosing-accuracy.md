@@ -174,7 +174,7 @@ Five goals moved, two better and three worse:
     카테고리 이름만 검색하게 해줘   missed   -> right
     복사                     right    -> wrong    Select
     램 좀 늘려줘               declined -> wrong    Installed Physical Memory (RAM)
-    닫아                     missed   -> wrong    QVB-FLFM-DEV1
+    닫아                     missed   -> wrong    REMOTE-PC
 
 Identical on correct decisions, and **slightly worse where it counts**: two more harmful outcomes
 (a click on the wrong thing) in exchange for two fewer harmless ones (doing nothing). `복사` is a

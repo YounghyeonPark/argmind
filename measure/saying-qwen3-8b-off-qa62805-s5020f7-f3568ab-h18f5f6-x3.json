@@ -32,7 +32,7 @@
  },
  "screens": {
   "character-map": 21,
-  "chrome-remote-desktop---qvb-flfm-dev1": 12,
+  "chrome-remote-desktop---remote-pc": 12,
   "system-information": 152,
   "untitled---paint": 123
  },
@@ -1263,7 +1263,7 @@
   {
    "set": "leak",
    "group": "one action",
-   "screen": "chrome-remote-desktop---qvb-flfm-dev1",
+   "screen": "chrome-remote-desktop---remote-pc",
    "said": "이 창 닫아줘",
    "n_listed": 12,
    "leak_counted": "clean",
@@ -1353,7 +1353,7 @@
   {
    "set": "leak",
    "group": "one action",
-   "screen": "chrome-remote-desktop---qvb-flfm-dev1",
+   "screen": "chrome-remote-desktop---remote-pc",
    "said": "비밀번호 저장 눌러줘",
    "n_listed": 12,
    "leak_counted": "clean",
@@ -2859,7 +2859,7 @@
   {
    "set": "leak",
    "group": "one action",
-   "screen": "chrome-remote-desktop---qvb-flfm-dev1",
+   "screen": "chrome-remote-desktop---remote-pc",
    "said": "최소화해줘",
    "n_listed": 12,
    "leak_counted": "clean",
@@ -2949,7 +2949,7 @@
   {
    "set": "leak",
    "group": "one action",
-   "screen": "chrome-remote-desktop---qvb-flfm-dev1",
+   "screen": "chrome-remote-desktop---remote-pc",
    "said": "확장 프로그램 열어줘",
    "n_listed": 12,
    "leak_counted": "clean",
@@ -3039,7 +3039,7 @@
   {
    "set": "leak",
    "group": "nothing there",
-   "screen": "chrome-remote-desktop---qvb-flfm-dev1",
+   "screen": "chrome-remote-desktop---remote-pc",
    "said": "인쇄 설정 열어줘",
    "n_listed": 12,
    "leak_counted": "clean",
@@ -3055,7 +3055,7 @@
      "effects": [
       {
        "kind": "click",
-       "target": "QVB-FLFM-DEV1",
+       "target": "REMOTE-PC",
        "role": "document",
        "text": ""
       }
@@ -3080,7 +3080,7 @@
      "effects": [
       {
        "kind": "click",
-       "target": "QVB-FLFM-DEV1",
+       "target": "REMOTE-PC",
        "role": "document",
        "text": ""
       }
@@ -3105,7 +3105,7 @@
      "effects": [
       {
        "kind": "click",
-       "target": "QVB-FLFM-DEV1",
+       "target": "REMOTE-PC",
        "role": "document",
        "text": ""
       }
@@ -3420,7 +3420,7 @@
   {
    "set": "number",
    "group": "how many",
-   "screen": "chrome-remote-desktop---qvb-flfm-dev1",
+   "screen": "chrome-remote-desktop---remote-pc",
    "said": "여기 버튼이 몇 개야?",
    "n_listed": 12,
    "leak_counted": "stray",
@@ -3442,7 +3442,7 @@
        "token": "4",
        "kind": "stray",
        "in_range": true,
-       "at_index": "QVB-FLFM-DEV1",
+       "at_index": "REMOTE-PC",
        "role_at_index": "document",
        "clicked": false,
        "equals_effect_count": false,
@@ -4117,7 +4117,7 @@
        "token": "10/22/2025",
        "kind": "quoted",
        "in_range": true,
-       "at_index": "LAPTOP-SLKUM90R",
+       "at_index": "LAPTOP-EXAMPLE",
        "role_at_index": "text",
        "clicked": false,
        "equals_effect_count": false,
@@ -4179,7 +4179,7 @@
        "token": "10/22/2025",
        "kind": "quoted",
        "in_range": true,
-       "at_index": "LAPTOP-SLKUM90R",
+       "at_index": "LAPTOP-EXAMPLE",
        "role_at_index": "text",
        "clicked": false,
        "equals_effect_count": false,
@@ -4241,7 +4241,7 @@
        "token": "10/22/2025",
        "kind": "quoted",
        "in_range": true,
-       "at_index": "LAPTOP-SLKUM90R",
+       "at_index": "LAPTOP-EXAMPLE",
        "role_at_index": "text",
        "clicked": false,
        "equals_effect_count": false,

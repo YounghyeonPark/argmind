@@ -12,7 +12,7 @@
       "kind": "greeting",
       "quiet": true,
       "said": "안녕",
-      "screen": "chrome-remote-desktop---qvb-flfm-dev1"
+      "screen": "chrome-remote-desktop---remote-pc"
     },
     {
       "acted": [
@@ -22,7 +22,7 @@
       "kind": "greeting",
       "quiet": true,
       "said": "고마워",
-      "screen": "chrome-remote-desktop---qvb-flfm-dev1"
+      "screen": "chrome-remote-desktop---remote-pc"
     },
     {
       "acted": [
@@ -32,7 +32,7 @@
       "kind": "greeting",
       "quiet": true,
       "said": "수고했어",
-      "screen": "chrome-remote-desktop---qvb-flfm-dev1"
+      "screen": "chrome-remote-desktop---remote-pc"
     },
     {
       "acted": [
@@ -42,7 +42,7 @@
       "kind": "greeting",
       "quiet": true,
       "said": "잘했어",
-      "screen": "chrome-remote-desktop---qvb-flfm-dev1"
+      "screen": "chrome-remote-desktop---remote-pc"
     },
     {
       "acted": [
@@ -52,7 +52,7 @@
       "kind": "about the screen",
       "quiet": true,
       "said": "뭐가 열려 있어?",
-      "screen": "chrome-remote-desktop---qvb-flfm-dev1"
+      "screen": "chrome-remote-desktop---remote-pc"
     },
     {
       "acted": [
@@ -62,7 +62,7 @@
       "kind": "about the screen",
       "quiet": true,
       "said": "지금 화면 설명해줘",
-      "screen": "chrome-remote-desktop---qvb-flfm-dev1"
+      "screen": "chrome-remote-desktop---remote-pc"
     },
     {
       "acted": [
@@ -72,7 +72,7 @@
       "kind": "about the screen",
       "quiet": true,
       "said": "여기 버튼이 몇 개야?",
-      "screen": "chrome-remote-desktop---qvb-flfm-dev1"
+      "screen": "chrome-remote-desktop---remote-pc"
     },
     {
       "acted": [
@@ -86,7 +86,7 @@
       "kind": "about the screen",
       "quiet": false,
       "said": "복사 버튼이 어디 있어?",
-      "screen": "chrome-remote-desktop---qvb-flfm-dev1"
+      "screen": "chrome-remote-desktop---remote-pc"
     },
     {
       "acted": [
@@ -96,7 +96,7 @@
       "kind": "about the past",
       "quiet": true,
       "said": "방금 뭘 했어?",
-      "screen": "chrome-remote-desktop---qvb-flfm-dev1"
+      "screen": "chrome-remote-desktop---remote-pc"
     },
     {
       "acted": [
@@ -106,7 +106,7 @@
       "kind": "about the past",
       "quiet": true,
       "said": "아까 뭐 눌렀지?",
-      "screen": "chrome-remote-desktop---qvb-flfm-dev1"
+      "screen": "chrome-remote-desktop---remote-pc"
     },
     {
       "acted": [
@@ -116,7 +116,7 @@
       "kind": "about itself",
       "quiet": true,
       "said": "너 뭘 할 수 있어?",
-      "screen": "chrome-remote-desktop---qvb-flfm-dev1"
+      "screen": "chrome-remote-desktop---remote-pc"
     },
     {
       "acted": [
@@ -126,7 +126,7 @@
       "kind": "about itself",
       "quiet": true,
       "said": "너 이름이 뭐야?",
-      "screen": "chrome-remote-desktop---qvb-flfm-dev1"
+      "screen": "chrome-remote-desktop---remote-pc"
     },
     {
       "acted": [
@@ -136,7 +136,7 @@
       "kind": "about itself",
       "quiet": true,
       "said": "클릭도 할 수 있어?",
-      "screen": "chrome-remote-desktop---qvb-flfm-dev1"
+      "screen": "chrome-remote-desktop---remote-pc"
     },
     {
       "acted": [
@@ -146,7 +146,7 @@
       "kind": "chit-chat",
       "quiet": true,
       "said": "오늘 날씨 어때?",
-      "screen": "chrome-remote-desktop---qvb-flfm-dev1"
+      "screen": "chrome-remote-desktop---remote-pc"
     },
     {
       "acted": [
@@ -156,7 +156,7 @@
       "kind": "chit-chat",
       "quiet": true,
       "said": "심심하다",
-      "screen": "chrome-remote-desktop---qvb-flfm-dev1"
+      "screen": "chrome-remote-desktop---remote-pc"
     },
     {
       "acted": [
@@ -166,7 +166,7 @@
       "kind": "opinion",
       "quiet": true,
       "said": "이 창 좀 복잡하지 않아?",
-      "screen": "chrome-remote-desktop---qvb-flfm-dev1"
+      "screen": "chrome-remote-desktop---remote-pc"
     },
     {
       "acted": [
@@ -180,7 +180,7 @@
       "kind": "opinion",
       "quiet": false,
       "said": "이거 어떻게 쓰는 거야?",
-      "screen": "chrome-remote-desktop---qvb-flfm-dev1"
+      "screen": "chrome-remote-desktop---remote-pc"
     },
     {
       "acted": [

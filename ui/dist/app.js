@@ -562,6 +562,18 @@ async function openFolder() {
         statusLine.textContent = `작업 폴더를 열지 못했습니다 — ${await r.text()}`;
 }
 folderButton.onclick = () => void openFolder();
+// **The corner the two fixed buttons take, kept free** — found by the first screenshots taken for
+// the public page, 2026-11-17: at the window's own 520 px the header's status (*qwen3:8b · 아무것도
+// 누르지 않음 · 소리 꺼짐*) ran under 작업 폴더 and ⋯, and in the quiet view so did 다시 확인. The
+// width is read off the buttons rather than written down, because 작업 폴더 is a different width in
+// each of the four languages the page is drawn in.
+function keepTheCornerFree() {
+    const corner = Math.max(0, window.innerWidth - folderButton.getBoundingClientRect().left);
+    document.documentElement.style.setProperty("--corner", `${Math.ceil(corner)}px`);
+}
+new ResizeObserver(keepTheCornerFree).observe(folderButton);
+window.addEventListener("resize", keepTheCornerFree);
+keepTheCornerFree();
 let taskCards = [];
 const putAway = new Set();
 const seenEnd = new Set();

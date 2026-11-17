@@ -1,6 +1,6 @@
 [package]
 name = "argmind-env-none"
-version = "0.0.1"
+version = "0.1.0"
 edition = "2021"
 description = "An environment that can do nothing, and says so. The proof that the seam is real."
 license = "Apache-2.0"

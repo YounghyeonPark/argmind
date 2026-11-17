@@ -1,6 +1,6 @@
 [package]
 name = "argmind-env-ollama"
-version = "0.0.1"
+version = "0.1.0"
 edition = "2021"
 description = "The local model, over one loopback port. No dependency but the core."
 license = "Apache-2.0"

@@ -6,7 +6,7 @@
  "of": 34,
  "rows": [
   {
-   "screen": "chrome-remote-desktop---qvb-flfm-dev1",
+   "screen": "chrome-remote-desktop---remote-pc",
    "kind": "greeting",
    "said": "안녕",
    "acted": [
@@ -16,7 +16,7 @@
    "quiet": true
   },
   {
-   "screen": "chrome-remote-desktop---qvb-flfm-dev1",
+   "screen": "chrome-remote-desktop---remote-pc",
    "kind": "greeting",
    "said": "고마워",
    "acted": [
@@ -26,7 +26,7 @@
    "quiet": true
   },
   {
-   "screen": "chrome-remote-desktop---qvb-flfm-dev1",
+   "screen": "chrome-remote-desktop---remote-pc",
    "kind": "greeting",
    "said": "수고했어",
    "acted": [
@@ -36,7 +36,7 @@
    "quiet": true
   },
   {
-   "screen": "chrome-remote-desktop---qvb-flfm-dev1",
+   "screen": "chrome-remote-desktop---remote-pc",
    "kind": "greeting",
    "said": "잘했어",
    "acted": [
@@ -46,21 +46,21 @@
    "quiet": true
   },
   {
-   "screen": "chrome-remote-desktop---qvb-flfm-dev1",
+   "screen": "chrome-remote-desktop---remote-pc",
    "kind": "about the screen",
    "said": "뭐가 열려 있어?",
    "acted": [
     [
-     "click:QVB-FLFM-DEV1"
+     "click:REMOTE-PC"
     ],
     [
-     "click:QVB-FLFM-DEV1"
+     "click:REMOTE-PC"
     ]
    ],
    "quiet": false
   },
   {
-   "screen": "chrome-remote-desktop---qvb-flfm-dev1",
+   "screen": "chrome-remote-desktop---remote-pc",
    "kind": "about the screen",
    "said": "지금 화면 설명해줘",
    "acted": [
@@ -70,7 +70,7 @@
    "quiet": true
   },
   {
-   "screen": "chrome-remote-desktop---qvb-flfm-dev1",
+   "screen": "chrome-remote-desktop---remote-pc",
    "kind": "about the screen",
    "said": "여기 버튼이 몇 개야?",
    "acted": [
@@ -90,7 +90,7 @@
    "quiet": false
   },
   {
-   "screen": "chrome-remote-desktop---qvb-flfm-dev1",
+   "screen": "chrome-remote-desktop---remote-pc",
    "kind": "about the screen",
    "said": "복사 버튼이 어디 있어?",
    "acted": [
@@ -104,7 +104,7 @@
    "quiet": false
   },
   {
-   "screen": "chrome-remote-desktop---qvb-flfm-dev1",
+   "screen": "chrome-remote-desktop---remote-pc",
    "kind": "about the past",
    "said": "방금 뭘 했어?",
    "acted": [
@@ -119,7 +119,7 @@
    "quiet": false
   },
   {
-   "screen": "chrome-remote-desktop---qvb-flfm-dev1",
+   "screen": "chrome-remote-desktop---remote-pc",
    "kind": "about the past",
    "said": "아까 뭐 눌렀지?",
    "acted": [
@@ -129,7 +129,7 @@
    "quiet": true
   },
   {
-   "screen": "chrome-remote-desktop---qvb-flfm-dev1",
+   "screen": "chrome-remote-desktop---remote-pc",
    "kind": "about itself",
    "said": "너 뭘 할 수 있어?",
    "acted": [
@@ -139,7 +139,7 @@
    "quiet": true
   },
   {
-   "screen": "chrome-remote-desktop---qvb-flfm-dev1",
+   "screen": "chrome-remote-desktop---remote-pc",
    "kind": "about itself",
    "said": "너 이름이 뭐야?",
    "acted": [
@@ -149,7 +149,7 @@
    "quiet": true
   },
   {
-   "screen": "chrome-remote-desktop---qvb-flfm-dev1",
+   "screen": "chrome-remote-desktop---remote-pc",
    "kind": "about itself",
    "said": "클릭도 할 수 있어?",
    "acted": [
@@ -157,7 +157,7 @@
      "click:최소화",
      "click:복구",
      "click:닫기",
-     "click:QVB-FLFM-DEV1",
+     "click:REMOTE-PC",
      "click:Desktop",
      "click:Connected",
      "click:이 사이트는 클립보드에 복사된 텍스트와 이미지에 액세스할 수 있습니다.",
@@ -167,7 +167,7 @@
      "click:최소화",
      "click:복구",
      "click:닫기",
-     "click:QVB-FLFM-DEV1",
+     "click:REMOTE-PC",
      "click:Desktop",
      "click:Connected",
      "click:이 사이트는 클립보드에 복사된 텍스트와 이미지에 액세스할 수 있습니다.",
@@ -177,7 +177,7 @@
    "quiet": false
   },
   {
-   "screen": "chrome-remote-desktop---qvb-flfm-dev1",
+   "screen": "chrome-remote-desktop---remote-pc",
    "kind": "chit-chat",
    "said": "오늘 날씨 어때?",
    "acted": [
@@ -187,7 +187,7 @@
    "quiet": true
   },
   {
-   "screen": "chrome-remote-desktop---qvb-flfm-dev1",
+   "screen": "chrome-remote-desktop---remote-pc",
    "kind": "chit-chat",
    "said": "심심하다",
    "acted": [
@@ -197,7 +197,7 @@
    "quiet": true
   },
   {
-   "screen": "chrome-remote-desktop---qvb-flfm-dev1",
+   "screen": "chrome-remote-desktop---remote-pc",
    "kind": "opinion",
    "said": "이 창 좀 복잡하지 않아?",
    "acted": [
@@ -207,7 +207,7 @@
    "quiet": true
   },
   {
-   "screen": "chrome-remote-desktop---qvb-flfm-dev1",
+   "screen": "chrome-remote-desktop---remote-pc",
    "kind": "opinion",
    "said": "이거 어떻게 쓰는 거야?",
    "acted": [
