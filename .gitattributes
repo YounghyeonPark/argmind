@@ -1,0 +1,8 @@
+# **Every text file is LF in the working tree as well, on every platform** — found by the first CI
+# run, 2026-11-17. Git for Windows checks out CRLF by default (`core.autocrlf=true`), and this tree
+# reads its own source: the rules in argmind-rules, the interface table's coverage test, the
+# expectations. On a fresh Windows clone `tests/interface.rs` failed on a sentence in `needs.rs`
+# that continues across a line with `\`, because the line ended `\r\n`. The author's checkout had
+# never been re-written, so it was LF and passed; anybody else's would not have.
+* text=auto eol=lf
+*.png binary
