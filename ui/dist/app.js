@@ -11,6 +11,11 @@
 // that the server does not also hold: a reload shows the truth, because the page rebuilds itself
 // from `hello` and then follows the stream.
 import { orb } from "./orb.js";
+import { SHOWN, say, starting, switchTo, watch } from "./speak.js";
+// **The page's language, before anything is drawn**: the one chosen in 설정, stamped into the page
+// by the server, or the system's. From here every text the page shows passes through the table in
+// `words.ts` — see `speak.ts` for what is left alone.
+watch(starting(document.body.dataset.lang ?? ""));
 const token = document.body.dataset.token ?? "";
 /** Every request carries the token. Localhost is not a permission: any program you run is on it. */
 async function post(path, body = "") {
@@ -157,6 +162,7 @@ stream.addEventListener("voice", (e) => {
 stream.addEventListener("hello", (e) => {
     const d = JSON.parse(e.data);
     lately = d;
+    header.translate = !d.attending;
     header.textContent = d.attending || "(아무 창도 보고 있지 않음)";
     drawStatus(d);
     talk.hidden = !d.hears;
@@ -286,6 +292,8 @@ stream.addEventListener("gone", (e) => {
 });
 stream.addEventListener("dropped", (e) => settle(Number(e.data), ""));
 stream.addEventListener("attending", (e) => {
+    //: A window's title is the window's, and is not translated; the sentence for none is the page's.
+    header.translate = !e.data;
     header.textContent = e.data || "(아무 창도 보고 있지 않음)";
 });
 stream.addEventListener("busy", (e) => {
@@ -599,7 +607,7 @@ function drawTasks() {
         how.className = "how";
         how.textContent = c.state === "running"
             ? `${c.steps}단계 · ${c.failed ? "실패: " : ""}${c.last} · ${ago(c.at)}`
-            : `${c.state === "done" ? "완료" : "멈춤"} · ${c.steps}단계 · ${ago(c.at)} — ${c.last}`;
+            : `${c.state === "done" ? "완료" : "멈춤"} · ${c.steps}단계 · ${ago(c.at)} · ${c.last}`;
         how.title = c.last;
         row.append(mark, what, buttons, how);
         return row;
@@ -676,6 +684,8 @@ stream.addEventListener("rules", (e) => {
 const timeline = document.getElementById("timeline");
 const timelineRows = document.getElementById("timeline-rows");
 const timelineClear = document.getElementById("timeline-clear");
+/** The timeline's kinds whose text a person, a model or a window wrote. */
+const OWN_WORDS = new Set(["들음", "말함", "알아챔", "보는 창", "기억 제안", "찾아보기 제안"]);
 function timelineRow(e) {
     const row = document.createElement("div");
     row.className = "tl";
@@ -689,6 +699,9 @@ function timelineRow(e) {
     kind.textContent = e.kind;
     const text = document.createElement("span");
     text.className = "text";
+    //: **What was heard, said, seen or offered is somebody's own words**, and stays as it was; the
+    //: rest of the timeline is the program's sentences.
+    text.translate = !OWN_WORDS.has(e.kind);
     text.textContent = e.text;
     row.append(when, kind, text);
     return row;
@@ -708,7 +721,7 @@ timeline.addEventListener("toggle", () => {
 timelineClear.onclick = () => void post("/activity/clear");
 const conversationForget = document.getElementById("conversation-forget");
 conversationForget.onclick = () => {
-    if (confirm("argmind 가 기억하는 대화를 지울까요? 파일도 비웁니다."))
+    if (confirm(say("argmind 가 기억하는 대화를 지울까요? 파일도 비웁니다.")))
         void post("/conversation/forget");
 };
 stream.addEventListener("activity", (e) => {
@@ -765,7 +778,7 @@ function drawPeople(who) {
 // **Asks first.** Everything else in this panel is reversible by pressing it again; this is not.
 const forgetFaces = document.getElementById("forget-faces");
 forgetFaces.onclick = () => {
-    if (window.confirm("기억한 얼굴을 모두 지우고 파일도 지웁니다. 되돌릴 수 없습니다.")) {
+    if (window.confirm(say("기억한 얼굴을 모두 지우고 파일도 지웁니다. 되돌릴 수 없습니다."))) {
         void post("/faces/forget-all");
     }
 };
@@ -1219,6 +1232,32 @@ stream.addEventListener("note-kept", (e) => {
 const dials = document.getElementById("dials");
 const whatissent = document.getElementById("whatissent");
 const aimBox = document.getElementById("aim");
+// ---- the page's own language ------------------------------------------------------------------
+//
+// 화면 언어 — the owner, 2026-11-17. Chosen here, written by the server so it holds across a
+// restart, and applied at once by writing the page again from the Korean it remembers.
+const interfaceLanguage = document.getElementById("interface-language");
+{
+    const follow = document.createElement("option");
+    follow.value = "follow";
+    follow.textContent = "시스템 언어 따라 (기본)";
+    interfaceLanguage.append(follow, ...SHOWN.map(([code, name]) => {
+        const o = document.createElement("option");
+        o.value = code;
+        o.translate = false;
+        o.textContent = name;
+        return o;
+    }));
+    interfaceLanguage.value = document.body.dataset.lang || "follow";
+}
+interfaceLanguage.onchange = async () => {
+    const chosen = interfaceLanguage.value;
+    const r = await fetch(`/interface/${chosen}`, { method: "POST", headers: { "X-Argmind-Token": token } });
+    if (!r.ok)
+        return;
+    document.body.dataset.lang = chosen === "follow" ? "" : chosen;
+    switchTo(starting(chosen === "follow" ? "" : chosen));
+};
 const speakIn = document.getElementById("speak-in");
 speakIn.onchange = () => void post(`/language/${speakIn.value}`);
 /** The language choices, redrawn only when the list itself changes so an open dropdown is not
@@ -1230,6 +1269,8 @@ function drawLanguages(m) {
         speakIn.replaceChildren(...want.map((l) => {
             const o = document.createElement("option");
             o.value = l.code;
+            //: A language's own name is written in it; only *the language they write in* is the page's.
+            o.translate = l.code === "follow";
             o.textContent = l.name;
             return o;
         }));

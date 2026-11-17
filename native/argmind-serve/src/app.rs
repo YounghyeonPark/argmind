@@ -67,12 +67,16 @@ const SCRIPT: &str = include_str!("../../../ui/dist/app.js");
 /// The sphere. **Its own module and its own file** — a hundred lines of projection arithmetic
 /// inside the page's logic would bury the part anybody needs to read.
 const ORB: &str = include_str!("../../../ui/dist/orb.js");
+/// The page's words in four languages, and what puts them on screen — `crate::interface`.
+const WORDS: &str = include_str!("../../../ui/dist/words.js");
+const SPEAK: &str = include_str!("../../../ui/dist/speak.js");
 
 /// The files served without a token, because the token arrives inside the page.
 ///
 /// **Public so the list can be asserted.** It is the program's whole unauthenticated surface, and
 /// a route added to it by an edit somewhere else is the kind of change nobody reviews twice.
-pub const SCRIPTS: [(&str, &str); 2] = [("/app.js", SCRIPT), ("/orb.js", ORB)];
+pub const SCRIPTS: [(&str, &str); 4] =
+    [("/app.js", SCRIPT), ("/orb.js", ORB), ("/speak.js", SPEAK), ("/words.js", WORDS)];
 /// The port argmind listens on, unless something says otherwise.
 pub const PORT: u16 = 7331;
 
@@ -3969,7 +3973,8 @@ fn serve_one(mut stream: TcpStream, out: &Listeners, token: &str, jobs: &Sender<
     }
     match route(&request) {
         Route::Ui => {
-            let page = INDEX.replace("__TOKEN__", token);
+            let page = crate::interface::stamped(&INDEX.replace("__TOKEN__", token),
+                                                 &crate::interface::remembered());
             //: **The cookie rides on the page**, because `EventSource` cannot send a header and
             //: the event stream is the only route that tells the page anything.
             let _ = stream.write_all(&crate::respond_with(
@@ -4063,6 +4068,14 @@ fn serve_one(mut stream: TcpStream, out: &Listeners, token: &str, jobs: &Sender<
         Route::Aim(text) => {
             let _ = stream.write_all(&respond("204 No Content", "text/plain", ""));
             let _ = jobs.send(Job::Aim(text));
+        }
+        //: **The page's own language**, written here and nowhere else: nothing the server says
+        //: changes with it, so there is no job and no event — the page switches itself.
+        Route::Interface(code) => {
+            match crate::interface::choose(&code) {
+                Ok(()) => { let _ = stream.write_all(&respond("204 No Content", "text/plain", "")); }
+                Err(why) => { let _ = stream.write_all(&respond("400 Bad Request", "text/plain", &why)); }
+            }
         }
         //: Checked against the fixed list here as well as in the job, like `/dial`.
         Route::Language(code) => {

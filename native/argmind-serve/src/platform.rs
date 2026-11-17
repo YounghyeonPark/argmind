@@ -778,6 +778,19 @@ pub fn utc_offset_minutes() -> i64 {
     }
 }
 
+/// **The language the system shows its menus in**, if it is one the page has words for — for the
+/// tray menu, which is drawn before the page can say what it chose. `None` where nothing can say.
+pub fn display_language() -> Option<&'static str> {
+    #[cfg(all(windows, not(feature = "headless")))]
+    {
+        argmind_env_windows::display_language()
+    }
+    #[cfg(not(all(windows, not(feature = "headless"))))]
+    {
+        None
+    }
+}
+
 /// **Seconds since the last keyboard or mouse input**, or `None` where nothing can say. The time
 /// only — see `argmind_env_windows::seconds_since_input`.
 pub fn seconds_since_input() -> Option<f64> {

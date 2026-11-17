@@ -47,6 +47,7 @@ pub mod errands;
 pub mod faces;
 pub mod fetch;
 pub mod fix;
+pub mod interface;
 pub mod mind;
 pub mod needs;
 pub mod ollama;
@@ -251,6 +252,9 @@ pub enum Route {
     /// Answer in this language — a code from `argmind_core::mind::LANGUAGES`, or `""` for the
     /// language the person used, which is what `/language/follow` sends.
     Language(String),
+    /// Write the page in this language — a code from `interface::LANGUAGES`, or `""` for the
+    /// system's, which is what `/interface/follow` sends.
+    Interface(String),
     /// Take back something that was answered once and for all.
     Forget(String),
     /// Use this microphone, speaker or camera from now on. An empty id means *go back to whatever
@@ -434,6 +438,8 @@ pub fn route(request: &Request) -> Route {
         //: The sentence comes in the body rather than the path: it is prose, it can be long, and a
         //: path is the wrong place for either.
         ("POST", "/aim") => Route::Aim(request.body.clone()),
+        ("POST", "/interface/follow") => Route::Interface(String::new()),
+        ("POST", p) if p.starts_with("/interface/") && p.len() > 11 => Route::Interface(p[11..].to_string()),
         ("POST", "/language/follow") => Route::Language(String::new()),
         ("POST", p) if p.starts_with("/language/") && p.len() > 10 => Route::Language(p[10..].to_string()),
         ("POST", "/aloud/on") => Route::Aloud(true),

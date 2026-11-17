@@ -6,10 +6,12 @@ service. It reads the screen through the operating system's accessibility layer,
 carries work through to the end in a folder of its own, and acts on your desktop only as far as
 the switches you set allow.
 
-A side project by one person, not a product, with no support commitment. **Windows only for now.
-The interface is Korean.** argmind answers in the language you write in, or always in Korean,
-English, Chinese or Japanese if you choose one in 설정 → 생각 → 대화 언어. The sentences the program writes
-itself (refusals, the activity timeline) stay Korean.
+A side project by one person, not a product, with no support commitment. **Windows only for now.**
+The interface is in Korean, English, Chinese or Japanese: your system's language, or the one chosen
+under 🌐 at the top of 설정 (Settings). argmind answers in the language you write in, or always in
+one of those four if you choose it under 대화 언어 (conversation language). Two things stay Korean
+whatever you choose: the few things argmind says that the program wrote rather than the model, and
+the spoken commands it recognises by their words (*멈춰* to stop, *…기억해줘* to remember).
 
 ## What it does
 

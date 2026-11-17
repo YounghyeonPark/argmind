@@ -391,6 +391,21 @@ pub fn cursor_round_trip(points: &[(i64, i64)]) -> Vec<((i64, i64), (i64, i64))>
     out
 }
 
+/// **The language Windows shows its own menus in**, as the two letters argmind's page has words
+/// for — `ko`, `en`, `zh`, `ja` — or `None` for any other. Since 2026-11-17, for the tray menu,
+/// which is drawn before the page and so cannot ask the page what it chose.
+pub fn display_language() -> Option<&'static str> {
+    //: The primary language is the low ten bits of a LANGID.
+    let id = unsafe { windows::Win32::Globalization::GetUserDefaultUILanguage() };
+    match id & 0x3ff {
+        0x12 => Some("ko"),
+        0x09 => Some("en"),
+        0x04 => Some("zh"),
+        0x11 => Some("ja"),
+        _ => None,
+    }
+}
+
 /// **How long since anybody touched the keyboard or the mouse**, in seconds — the time and nothing
 /// else. `GetLastInputInfo` reports when the last input arrived and cannot say what it was, so this
 /// is the *typing activity* CLAUDE.md set apart from a keylogger: no hook, no characters.

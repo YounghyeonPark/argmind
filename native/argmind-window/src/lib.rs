@@ -86,6 +86,9 @@ pub struct Shell {
     pub title: String,
     /// The line under the pointer when it rests on the tray icon.
     pub tooltip: String,
+    /// **The tray menu's two words** — show, quit — in the language the page is written in, since
+    /// 2026-11-17. The caller says them because this crate knows no language.
+    pub menu: [String; 2],
     pub wide: u32,
     pub tall: u32,
     /// **Off for a measurement, on for a person.** A window that appears and takes the keyboard is
@@ -134,6 +137,7 @@ impl Default for Shell {
             url: String::new(),
             title: "argmind".into(),
             tooltip: "argmind".into(),
+            menu: ["보이기".into(), "끝내기".into()],
             //: Tall rather than wide: it is a conversation with a sphere above it, not a
             //: spreadsheet.
             wide: 520,
@@ -233,16 +237,17 @@ pub fn orb(side: u32) -> Vec<u8> {
 /// reporting a missing optional system component, the failure is total and immediate rather than
 /// partway through mutating something, and the alternative is an application that will not start
 /// on a desktop with no system tray. **Plenty of them have none**; that is not a broken machine.
-fn make_tray(side: u32, tooltip: &str)
+fn make_tray(side: u32, tooltip: &str, words: &[String; 2])
              -> Result<(tray_icon::TrayIcon, tray_icon::menu::MenuId, tray_icon::menu::MenuId),
                        String> {
     let tooltip = tooltip.to_string();
+    let words = words.clone();
     let built = std::panic::catch_unwind(move || -> Result<_, String> {
         let icon = Icon::from_rgba(orb(side), side, side)
             .map_err(|e| format!("아이콘을 만들지 못했습니다 ({e})"))?;
         let menu = Menu::new();
-        let show = MenuItem::new("보이기", true, None);
-        let quit = MenuItem::new("끝내기", true, None);
+        let show = MenuItem::new(&words[0], true, None);
+        let quit = MenuItem::new(&words[1], true, None);
         menu.append(&show).map_err(|e| format!("{e}"))?;
         menu.append(&quit).map_err(|e| format!("{e}"))?;
         let (show_id, quit_id) = (show.id().clone(), quit.id().clone());
@@ -438,7 +443,7 @@ pub fn run(shell: Shell, orders: Option<Receiver<Say>>) -> Result<(), String> {
     //: for — see `LoopDestroyed` below.
     let mut tray = None;
     if shell.tray {
-        match make_tray(SIDE, &shell.tooltip) {
+        match make_tray(SIDE, &shell.tooltip, &shell.menu) {
             Ok((icon, show, quit)) => {
                 show_id = Some(show);
                 quit_id = Some(quit);

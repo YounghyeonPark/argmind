@@ -265,7 +265,7 @@ fn the_microphone_opens_only_while_the_key_is_held() {
 #[test]
 fn only_the_page_and_its_scripts_are_served_without_a_token() {
     let free: Vec<&str> = argmind_serve::app::SCRIPTS.iter().map(|(at, _)| *at).collect();
-    assert_eq!(free, ["/app.js", "/orb.js"]);
+    assert_eq!(free, ["/app.js", "/orb.js", "/speak.js", "/words.js"]);
 
     for (at, body) in argmind_serve::app::SCRIPTS {
         //: **Nothing the agent knows is in them.** The page carries the token; a script must not,

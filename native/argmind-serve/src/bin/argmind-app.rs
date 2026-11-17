@@ -107,9 +107,13 @@ fn main() {
         }
     }
 
+    //: The tray is drawn before the page exists, so it reads the same choice the page will.
+    let tongue = argmind_serve::interface::for_the_tray(&argmind_serve::interface::remembered(),
+                                                        argmind_serve::platform::display_language());
     let shell = Shell {
         url: URL.into(),
         tooltip,
+        menu: argmind_serve::interface::tray_words(tongue).map(String::from),
         //: **The second one draws no icon**, so there is one thing in the tray and quitting it
         //: quits the program rather than a viewer.
         tray: !second,
