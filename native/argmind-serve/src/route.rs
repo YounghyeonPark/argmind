@@ -32,12 +32,13 @@ impl Route {
 }
 
 /// **The word rules, in the order `think` asks them.** `has_pane` because looking up and moving the
-/// web need one; `working` because *멈춰* stops a task only while there is one.
+/// web need one; `working` because *멈춰* — or *stop*, *停下*, *止めて* — stops a task only while there
+/// is one.
 pub fn by_rules(text: &str, has_pane: bool, on_web: bool, working: bool) -> Route {
     if argmind_core::mind::asked_to_keep(text).is_some() {
         return Route::Keep;
     }
-    if (working && ["멈춰", "그만"].iter().any(|w| text.contains(w)))
+    if (working && argmind_core::tongue::stops(text))
         || argmind_core::task::asks_for_work(text) {
         return Route::Work;
     }

@@ -151,3 +151,44 @@ fn offers_in_japanese_and_chinese_are_offers() {
     assert!(!asks_first("メモ帳を開きました。"));
     assert!(!asks_first("何をしますか？"));
 }
+
+/// A model that answers from a list and counts what it was asked.
+struct Answers(Vec<&'static str>, Vec<String>);
+
+impl Speaks for Answers {
+    fn ask(&mut self, prompt: &str) -> String {
+        self.1.push(prompt.to_string());
+        if self.0.is_empty() { String::new() } else { self.0.remove(0).to_string() }
+    }
+}
+
+/// **Words that are not a turn — a task's end, an errand's result — said in the person's
+/// language, since 2026-11-17**, by the same one extra call, and refused when the rewrite drops a
+/// number or a file name: these words report work, and *369,700* becoming *about 370,000* has
+/// changed what was found.
+#[test]
+fn work_s_words_are_rewritten_only_when_they_must_be_and_keep_their_facts() {
+    use argmind_core::converse::{keeps_the_facts, say_in};
+    let done = "ideas.md 에 부업 아이디어 10개를 정리했습니다 — 가장 싼 항공권은 369,700원";
+    let mut m = Answers(vec!["I put 10 side-job ideas in ideas.md — the cheapest flight is 369,700 won"], vec![]);
+    assert_eq!(say_in(&mut m, done, "en"), "I put 10 side-job ideas in ideas.md — the cheapest flight is 369,700 won");
+    assert_eq!(m.1.len(), 1);
+    //: Already in the language, or no language at all: no call.
+    let mut m = Answers(vec!["(not asked)"], vec![]);
+    assert_eq!(say_in(&mut m, done, "ko"), done);
+    assert_eq!(say_in(&mut m, done, ""), done);
+    assert_eq!(say_in(&mut m, "Saved to box.stl", "en"), "Saved to box.stl");
+    assert!(m.1.is_empty());
+    //: A rewrite that loses a fact is not taken, and the model's own words are said instead.
+    for lost in ["I put ten side-job ideas in ideas.md — the cheapest flight is 369,700 won",
+                 "I put 10 side-job ideas in a file — the cheapest flight is 369,700 won",
+                 "I put 10 side-job ideas in ideas.md — the cheapest flight is about 370,000 won"] {
+        let mut m = Answers(vec![lost], vec![]);
+        assert_eq!(say_in(&mut m, done, "en"), done, "{lost}");
+    }
+    assert!(keeps_the_facts("369,700원", "369700 won") && !keeps_the_facts("3개", "three"));
+    //: A file whose name is Korean is still a file, particle and all.
+    assert_eq!(argmind_core::converse::named_files("수익_방법_목록.md에 정리했습니다. 끝."), vec!["수익_방법_목록.md"]);
+    assert!(!keeps_the_facts("수익_방법_목록.md에 정리했습니다", "Saved to income_methods_list.md"));
+    assert!(argmind_core::converse::named_files("1.5배, 3.14, 있어요.").is_empty());
+}

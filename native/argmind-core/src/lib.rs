@@ -29,4 +29,5 @@ pub mod pursuit;
 pub mod recognise;
 pub mod session;
 pub mod thinking;
+pub mod tongue;
 pub mod watch;

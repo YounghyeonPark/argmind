@@ -322,6 +322,11 @@ pub fn asked_to_keep(text: &str) -> Option<Keep> {
     if t.ends_with('?') || t.ends_with('？') {
         return None;
     }
+    korean_keep(t).or_else(|| keep_in_other_tongues(t))
+}
+
+/// The Korean reading, as it was before the other three languages were added.
+fn korean_keep(t: &str) -> Option<Keep> {
     let t = t.trim_end_matches(['.', '!', '~', ' ']);
     let rest = KEEP_WORDS.iter().find_map(|w| t.strip_suffix(w))
         .or_else(|| t.strip_prefix("기억해:").or_else(|| t.strip_prefix("기억해 :")))?;
@@ -350,6 +355,78 @@ pub fn asked_to_keep(text: &str) -> Option<Keep> {
     Some(Keep::This(rest.chars().take(KEPT_CHARS).collect()))
 }
 
+/// **The same request in English, Chinese and Japanese** — since 2026-11-17. *Remember (that) …*
+/// and *keep in mind …* before the sentence, *…, remember that* after it; *记住…* and *…，记住*;
+/// *…って覚えておいて* and *…、覚えておいて*. Read only in a sentence written in that language
+/// (`tongue::reads_as`), so no Korean sentence reads differently. *Remember this* and *记住这个* and
+/// *これを覚えておいて* are asked back, as *이거 기억해줘* is.
+fn keep_in_other_tongues(t: &str) -> Option<Keep> {
+    use crate::tongue::{lower, reads_as};
+    let rest: String = if reads_as(t, "en") {
+        let t = t.trim_end_matches(['.', '!', '~', ' ']);
+        let low = lower(t);
+        //: Lower-casing kept every byte where it was — ASCII does — or the sentence is read lower.
+        let same = low.len() == t.len();
+        let cut = |from: usize, to: usize| if same { t[from..to].to_string() } else { low[from..to].to_string() };
+        const BEFORE: [&str; 11] = ["please remember that ", "please remember ", "remember that ", "remember: ",
+                                    "remember:", "remember ", "keep in mind that ", "keep in mind ",
+                                    "don't forget that ", "don't forget ", "please keep in mind that "];
+        const AFTER: [&str; 4] = ["remember that", "remember this", "remember it", "remember"];
+        if let Some(b) = BEFORE.iter().find(|b| low.starts_with(*b)) {
+            let r = cut(b.len(), low.len());
+            r.strip_prefix("to ").map(str::to_string).unwrap_or(r)
+        } else if let Some(a) = AFTER.iter().find(|a| low.ends_with(*a)
+            && (low.len() == a.len() || !low.as_bytes()[low.len() - a.len() - 1].is_ascii_alphanumeric())) {
+            let r = cut(0, low.len() - a.len());
+            let r = r.trim().trim_end_matches([',', '.', '-', '—', ':', ';', ' ']).trim();
+            let r = r.strip_suffix(" please").or_else(|| r.strip_suffix(", please")).unwrap_or(r).trim();
+            //: *Do you remember* without its question mark is a question, not a request.
+            if r.to_ascii_lowercase().ends_with("you") {
+                return None;
+            }
+            r.to_string()
+        } else {
+            return None;
+        }
+    } else if reads_as(t, "zh") {
+        let t = t.trim_end_matches(['.', '!', '~', ' ', '。', '！', '～']);
+        const BEFORE: [&str; 10] = ["请帮我记住", "帮我记住", "请记住", "你要记住", "记住：", "记住:", "记住",
+                                    "请帮我记一下", "帮我记一下", "记一下"];
+        const AFTER: [&str; 8] = ["请记住", "帮我记住", "记住了", "记住哦", "要记住", "记住", "记一下", "记好"];
+        if let Some(b) = BEFORE.iter().find(|b| t.starts_with(*b)) {
+            t[b.len()..].to_string()
+        } else if let Some(a) = AFTER.iter().find(|a| t.ends_with(*a)) {
+            t[..t.len() - a.len()].to_string()
+        } else {
+            return None;
+        }
+    } else if reads_as(t, "ja") {
+        let t = t.trim_end_matches(['.', '!', '~', ' ', '。', '！', '～']);
+        const AFTER: [&str; 17] = ["って覚えておいてください", "と覚えておいてください", "を覚えておいてください",
+                                   "覚えておいてください", "って覚えておいてね", "って覚えておいて", "と覚えておいて",
+                                   "ことを覚えておいて", "を覚えておいて", "覚えておいてね", "覚えておいて",
+                                   "って覚えといて", "覚えといて", "って覚えて", "と覚えて", "を覚えて", "覚えて"];
+        const BEFORE: [&str; 3] = ["覚えておいて：", "覚えておいて:", "覚えて："];
+        if let Some(b) = BEFORE.iter().find(|b| t.starts_with(*b)) {
+            t[b.len()..].to_string()
+        } else if let Some(a) = AFTER.iter().find(|a| t.ends_with(*a)) {
+            t[..t.len() - a.len()].to_string()
+        } else {
+            return None;
+        }
+    } else {
+        return None;
+    };
+    let rest = rest.trim().trim_matches([',', ':', '.', ' ', '，', '：', '、', '。']).trim();
+    const VAGUE: [&str; 22] = ["this", "that", "it", "this one", "that one", "what i said", "what i just said",
+                               "这个", "这", "那个", "它", "这件事", "这句话", "刚才说的",
+                               "これ", "それ", "あれ", "このこと", "これを", "それを", "今言ったこと", "さっきの"];
+    if VAGUE.contains(&rest.to_lowercase().as_str()) || rest.chars().count() < 4 {
+        return Some(Keep::Vague);
+    }
+    Some(Keep::This(rest.chars().take(KEPT_CHARS).collect()))
+}
+
 /// The words that make a turn look like a correction or a standing preference. **An offer, never
 /// a store**: the program shows *기억해 둘까요?* and the person decides, so a word list that fires
 /// on the wrong sentence costs one dismissed row and nothing in the prompt.
@@ -357,7 +434,20 @@ const PREFERENCE_WORDS: [&str; 10] = ["말고", "그게 아니라", "하지 마"
                                       "앞으로", "항상", "절대", "부르지 마"];
 
 pub fn worth_offering(text: &str) -> bool {
+    use crate::tongue::{has_word, lower, reads_as};
     let t = text.trim();
+    //: **And in the other three**, each only in a sentence written in it — a row, never a store, so
+    //: a rough list costs a dismissed row.
+    const EN: [&str; 15] = ["instead of", "rather than", "not that", "don't do", "don't use", "don't call",
+                            "i don't like", "i like", "i love", "i prefer", "i hate", "from now on", "always",
+                            "never", "stop calling"];
+    const ZH: [&str; 13] = ["而不是", "不是那个", "不要", "别再", "我不喜欢", "我喜欢", "我讨厌", "以后", "总是",
+                            "永远不要", "绝对不要", "别叫我", "从现在开始"];
+    const JA: [&str; 11] = ["じゃなくて", "ではなく", "しないで", "嫌い", "好き", "これから", "今後", "いつも",
+                            "絶対", "呼ばないで", "使わないで"];
+    let theirs = (reads_as(t, "en") && EN.iter().any(|w| has_word(&lower(t), w)))
+        || (reads_as(t, "zh") && ZH.iter().any(|w| t.contains(w)))
+        || (reads_as(t, "ja") && JA.iter().any(|w| t.contains(w)));
     t.chars().count() >= 6 && !t.ends_with('?') && asked_to_keep(t).is_none()
-        && PREFERENCE_WORDS.iter().any(|w| t.contains(w))
+        && (PREFERENCE_WORDS.iter().any(|w| t.contains(w)) || (theirs && !t.ends_with('？')))
 }

@@ -38,6 +38,14 @@ pub fn append(p: &Pursued) -> Result<(), String> {
 /// **What argmind says when somebody comes back** — short, the owner's choice: how many, what each
 /// was, and which files. Empty when there is nothing untold.
 pub fn report(untold: &[Pursued]) -> String {
+    report_in(untold, "ko", &mut |t: &str| t.to_string())
+}
+
+/// **[`report`], in the language the person is spoken to in** — since 2026-11-17: the program's
+/// words from `crate::spoken`, and each request argmind set itself — the work model's, written in
+/// Korean — through `into`, which leaves it as written while `app::REWRITES_WORK` is off.
+pub fn report_in(untold: &[Pursued], code: &str, into: &mut dyn FnMut(&str) -> String) -> String {
+    use crate::spoken::{say, OWN_FILES, OWN_FINISHED, OWN_GAVE_WAY, OWN_REPORT, OWN_UNFINISHED};
     if untold.is_empty() {
         return String::new();
     }
@@ -46,15 +54,16 @@ pub fn report(untold: &[Pursued]) -> String {
     //: made and nothing in the folder — and its request was cut mid-word.
     let each: Vec<String> = untold.iter().map(|p| {
         let what: String = p.asked.split(" — 결과는").next().unwrap_or(&p.asked).trim().to_string();
+        let what = into(&what);
         let what = if what.chars().count() > 40 { format!("{}…", what.chars().take(40).collect::<String>()) } else { what };
         let files = if p.made.is_empty() { String::new() } else { format!(" ({})", p.made.join(", ")) };
-        let how = if p.finished { "끝냈어요" }
-                  else if p.said.contains("사람이 멈췄") { "맡기신 일 때문에 멈췄어요" }
-                  else { "다 못 했어요" };
-        format!("「{what}」 {how}{files}")
+        let how = if p.finished { &OWN_FINISHED }
+                  else if p.said.contains("사람이 멈췄") { &OWN_GAVE_WAY }
+                  else { &OWN_UNFINISHED };
+        format!("「{what}」 {}{files}", say(how, code, &[]))
     }).collect();
-    let folder = if untold.iter().any(|p| !p.made.is_empty()) { " 만든 파일은 작업 폴더에 있어요." } else { "" };
-    format!("목표로 스스로 한 일 {}가지 — {}.{folder}", untold.len(), each.join(" / "))
+    let folder = if untold.iter().any(|p| !p.made.is_empty()) { say(&OWN_FILES, code, &[]) } else { String::new() };
+    format!("{}{folder}", say(&OWN_REPORT, code, &[&untold.len().to_string(), &each.join(" / ")]))
 }
 
 #[cfg(test)]

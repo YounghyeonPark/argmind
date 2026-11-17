@@ -687,8 +687,55 @@ pub fn asks_for_work(text: &str) -> bool {
     //: asked *작업 화면에서 실행할까요?* about a screen it cannot reach.
     let names_the_work_screen = text.contains("작업 화면") || text.contains("작업화면");
     (names_the_work_screen || ((names_a_file || THINGS.iter().any(|w| text.contains(w)))
-        && DOING.iter().any(|w| text.contains(w))))
+        && DOING.iter().any(|w| text.contains(w)))
+        || work_in_other_tongues(text, names_a_file))
         && !asks_about(text)
+}
+
+/// **The same two lists in English, Chinese and Japanese** — since 2026-11-17, translated from the
+/// Korean ones above rather than written from the sentences `--bin tongues` reads, so a request
+/// the Korean rule misses (*블로그 글 하나 써줘*) is missed in the other three too. English is read
+/// by the start of a word, so *files* and *organizing* count and *latest* is not a *test*. Each
+/// language only in a sentence written in it (`tongue::reads_as`).
+fn work_in_other_tongues(text: &str, names_a_file: bool) -> bool {
+    use crate::tongue::{has_stem, lower, reads_as};
+    if reads_as(text, "en") {
+        let low = lower(text);
+        const THINGS: [&str; 18] = ["file", "document", "code", "script", "program", "report", "excel",
+                                    "spreadsheet", "csv", "python", "test", "work folder", "plan", "schedule",
+                                    "itinerar", "trip", "compar", "list"];
+        const DOING: [&str; 25] = ["make", "creat", "write", "draft", "fix", "edit", "modif", "chang", "organiz",
+                                   "organis", "sort out", "run", "calculat", "summar", "put together", "analy",
+                                   "translat", "research", "set up", "draw up", "look into", "find out", "find",
+                                   "plan", "build"];
+        return low.contains("work screen")
+            || ((names_a_file || THINGS.iter().any(|w| has_stem(&low, w)))
+                && DOING.iter().any(|w| has_stem(&low, w)));
+    }
+    if reads_as(text, "zh") {
+        const THINGS: [&str; 21] = ["文件", "文档", "代码", "脚本", "程序", "报告", "Excel", "excel", "表格",
+                                    "csv", "CSV", "Python", "python", "测试", "计划", "日程", "行程", "旅行",
+                                    "比较", "列表", "清单"];
+        const DOING: [&str; 25] = ["做", "制作", "创建", "生成", "写", "编写", "撰写", "修改", "改", "修复",
+                                   "修正", "整理", "运行", "执行", "计算", "总结", "汇总", "分析", "翻译", "调查",
+                                   "研究", "制定", "安排", "找出", "查找"];
+        return text.contains("工作屏幕")
+            || ((names_a_file || THINGS.iter().any(|w| text.contains(w)))
+                && DOING.iter().any(|w| text.contains(w)));
+    }
+    if reads_as(text, "ja") {
+        const THINGS: [&str; 24] = ["ファイル", "文書", "ドキュメント", "コード", "スクリプト", "プログラム",
+                                    "レポート", "報告書", "エクセル", "Excel", "csv", "CSV", "Python", "python",
+                                    "パイソン", "テスト", "計画", "予定", "日程", "スケジュール", "旅行", "比較",
+                                    "一覧", "リスト"];
+        const DOING: [&str; 22] = ["作って", "作成", "作る", "書いて", "直して", "修正", "変えて", "変更", "整理",
+                                   "まとめ", "実行", "動かして", "計算", "要約", "翻訳", "分析", "調べて", "調査",
+                                   "立てて", "組んで", "探して", "作り"];
+        return text.contains("作業画面")
+            || ((names_a_file || THINGS.iter().any(|w| text.contains(w)))
+                && DOING.iter().any(|w| text.contains(w)));
+    }
+    false
 }
 
 /// **A turn's reply that says it is going to go and do something it cannot do in one look** — the
@@ -718,6 +765,58 @@ pub fn promises_work(reply: &str) -> bool {
 /// 수 있어?* carry a 줘 or a 줄 and are requests. *만들 수 있어?* is left a request — chosen, not
 /// measured: somebody asking whether argmind can make a thing usually wants it made.
 pub fn asks_about(text: &str) -> bool {
+    //: **One reading a sentence, by its script**: the Korean one's *a question with no 줘 in it* is
+    //: true of every English question, *can you make a list?* among them, so a sentence with no
+    //: Hangul is read in its own language — and every sentence with Hangul exactly as before.
+    match crate::converse::written_in(text) {
+        Some("en") | Some("zh") | Some("ja") => asks_about_in_other_tongues(text),
+        _ => korean_asks_about(text),
+    }
+}
+
+/// **The same question in English, Chinese and Japanese** — since 2026-11-17, the shape of the
+/// Korean above: *how to* asked to be told (*tell me how to…*, *告诉我…的方法*, *…方法を教えて*), or a
+/// question with no request in it. A request in a question's clothes carries its own words —
+/// *can you*, *could you*, *will you*, *please*; *帮我*, *请*, *能*, *可以*, *给我*; *てくれる*,
+/// *てもらえる*, *ください*, *お願い* — and stays a request.
+fn asks_about_in_other_tongues(text: &str) -> bool {
+    use crate::tongue::{has_word, lower, reads_as};
+    let t = text.trim().trim_end_matches(['.', '!', '~', ' ', '。', '！']);
+    let asked = t.ends_with('?') || t.ends_with('？');
+    if reads_as(t, "en") {
+        let low = lower(t);
+        const HOW: [&str; 6] = ["tell me how", "show me how", "teach me how", "explain how", "what's the best way",
+                                "what is the best way"];
+        const REQUEST: [&str; 9] = ["can you", "could you", "would you", "will you", "please", "can i get",
+                                    "i want you to", "i need you to", "would you mind"];
+        //: A question without its mark, as people type one: it starts the way a question does.
+        const STARTS: [&str; 12] = ["how ", "what ", "what's ", "why ", "when ", "which ", "who ", "are you ",
+                                    "do you ", "is it ", "does ", "should i "];
+        let opens = STARTS.iter().any(|s| low.starts_with(s));
+        return HOW.iter().any(|h| low.contains(h))
+            || ((asked || opens) && !REQUEST.iter().any(|r| has_word(&low, r)));
+    }
+    if reads_as(t, "zh") {
+        const REQUEST: [&str; 7] = ["帮我", "请", "能", "可以", "给我", "替我", "麻烦"];
+        let how = ["怎么", "如何", "方法"].iter().any(|w| t.contains(w));
+        let q = t.trim_end_matches(['?', '？']);
+        return ((t.contains("告诉我") || t.contains("教我")) && how)
+            || ((asked || q.ends_with('吗') || q.ends_with('呢') || how)
+                && !REQUEST.iter().any(|r| t.contains(r)));
+    }
+    if reads_as(t, "ja") {
+        const HOW: [&str; 6] = ["方法を教えて", "やり方を教えて", "方法教えて", "方法を教えてください", "か教えて",
+                                "仕方を教えて"];
+        const REQUEST: [&str; 6] = ["てくれ", "でくれ", "てもらえ", "でもらえ", "ください", "お願い"];
+        let how = ["どうやって", "どうすれば", "ってどう", "どうやる"].iter().any(|w| t.contains(w));
+        return HOW.iter().any(|h| t.ends_with(h))
+            || ((asked || how) && !REQUEST.iter().any(|r| t.contains(r)));
+    }
+    false
+}
+
+/// The Korean reading, as it was before the other three languages were added.
+fn korean_asks_about(text: &str) -> bool {
     let t = text.trim().trim_end_matches(['.', '!', '~', ' ']);
     const HOW: [&str; 4] = ["법 알려줘", "법 알려 줘", "법 알려주세요", "법 좀 알려줘"];
     if HOW.iter().any(|h| t.ends_with(h)) {

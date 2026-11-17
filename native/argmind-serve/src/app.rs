@@ -266,6 +266,9 @@ struct Desk {
     own_halted: bool,
     /// Pieces of argmind's own work nobody has been told about yet.
     own_untold: Vec<argmind_core::pursuit::Pursued>,
+    /// **The language the person last wrote in** — what the program's own sentences are said in
+    /// when no language is set. See [`speaking`].
+    heard_in: String,
     /// When the next piece may be picked, and how many in a row did not finish.
     own_not_before: Instant,
     own_misses: u32,
@@ -359,8 +362,8 @@ enum Job {
     Web(bool),
     WebGo(String),
     Keep(String),
-    /// A task ended, with what to tell the person — said and kept in the history.
-    Worked(String),
+    /// A task ended, or asks something, with what to tell the person — said and kept in the history.
+    Worked(Worked),
     /// **What a task made, to show in the pane** — `(path, text)` a file, found by
     /// `crate::deliver` and read through the workbench. Sent just before its `Worked`.
     Made(Vec<(String, String)>),
@@ -427,25 +430,67 @@ fn label(effect: &Effect, found: Option<&Widget>) -> String {
     }
 }
 
+/// **What a task tells the person**, sent to the worker as what happened rather than as a Korean
+/// sentence, so it is said in the language the person is spoken to in: the program's words from
+/// [`crate::spoken`], and the work model's own words as it wrote them — [`REWRITES_WORK`] says why
+/// they are not rewritten.
+pub enum Worked {
+    /// The task asks the person this.
+    Asks(String),
+    /// Done, in the work model's closing words.
+    Done(String),
+    /// Stopped before the end, and why.
+    NotFinished(String),
+    /// Ended with no reason given.
+    Stopped,
+}
+
+/// **Whether what the work model wrote is rewritten into the person's language** before it is
+/// said — a task's closing words and question, an errand's result, the request argmind set itself.
+/// **Off, measured** (2026-11-17, `--bin tongues --reports`, the bar written first): twelve Korean
+/// texts said into English, Chinese and Japanese came back in the language **7, 8 and 10 of 12**
+/// against 11, and of what was taken **six of 36 changed what was found** against a bar of one —
+/// *이스타항공* became *Etihad Airways* and *济州航空*, and *369,700원* became *369,700元* and
+/// *369,700円*, a price in the wrong currency with every digit kept, which the facts check cannot
+/// see. So the program's words are said in the language and the work model's stay as it wrote
+/// them, Korean inside an English sentence, which is at least not wrong.
+const REWRITES_WORK: bool = false;
+
+/// What the work model wrote, as it is said — see [`REWRITES_WORK`].
+fn work_words(session: &mut Session<crate::surface::Looking, crate::surface::Touching, Model>,
+              text: &str, code: &str) -> String {
+    if REWRITES_WORK { session.say_in(text, code) } else { text.to_string() }
+}
+
+/// **The language the program's own sentences are said in**: the one set in 설정 → 생각, or else
+/// the one the person last wrote in — Korean until they write in another. The reply's own rule,
+/// *the language they used*, for what the model does not write.
+fn speaking(desk: &Desk) -> String {
+    let set = &desk.session.mind.language;
+    if argmind_core::mind::is_a_language(set) { set.clone() } else { desk.heard_in.clone() }
+}
+
 /// One turn: ask, say, and turn every effect into a row that waits.
 /// **A request to remember, answered by the program.** No model call: what to keep is the
 /// person's sentence, and asking a model to decide what argmind should remember is asking it to
 /// write its own instructions. The reply is fixed words, and both halves go into the history so the
 /// next turn can see what was kept.
 fn kept_instead(desk: &mut Desk, out: &Listeners, text: &str) -> bool {
+    use crate::spoken::{say, KEEP_FULL, KEEP_WHAT, KEPT};
     let Some(asked) = argmind_core::mind::asked_to_keep(text) else { return false };
+    let code = speaking(desk);
     let reply = match asked {
         argmind_core::mind::Keep::This(said) => match crate::mind::keep(&said) {
             Ok(mind) => {
                 desk.session.mind = mind;
                 out.send("mind", &mind_json(&desk.session.mind));
-                format!("기억했습니다 — 「{said}」. 설정 → 생각에서 보고 지울 수 있습니다")
+                say(&KEPT, &code, &[&said])
             }
+            Err(why) if why.starts_with("기억한 것이") =>
+                say(&KEEP_FULL, &code, &[&argmind_core::mind::MOST_KEPT.to_string()]),
             Err(why) => why,
         },
-        argmind_core::mind::Keep::Vague =>
-            "무엇을 기억할지 한 문장으로 말씀해 주세요 — 예: 「메모장 말고 VS Code를 쓴다고 기억해줘」"
-                .to_string(),
+        argmind_core::mind::Keep::Vague => say(&KEEP_WHAT, &code, &[]),
     };
     desk.session.history.push(("them".into(), text.to_string()));
     desk.session.history.push(("you".into(), reply.clone()));
@@ -464,8 +509,13 @@ fn think(desk: &mut Desk, out: &Listeners, text: &str) {
     //: history, where it would read as something said. `converse::unreadable` has the case.
     if argmind_core::converse::unreadable(text) {
         out.record("길", "읽을 수 없음 — 글자가 깨져 들어옴");
-        out.send("say", "글자가 깨져서 읽을 수 없어요. 다시 말씀해 주세요.");
+        out.send("say", &crate::spoken::say(&crate::spoken::UNREADABLE, &speaking(desk), &[]));
         return;
+    }
+    //: **The language they wrote in**, for what the program says back — after the check above, so
+    //: a sentence that arrived as `?? 40mm ??` is not read as English.
+    if let Some(code) = argmind_core::tongue::of(text) {
+        desk.heard_in = code.to_string();
     }
     //: **Held for the whole turn, and it clears itself.** While this is alive the senses stand
     //: down: one declines to start and one already running is abandoned mid-call. A guard rather
@@ -478,9 +528,9 @@ fn think(desk: &mut Desk, out: &Listeners, text: &str) {
     //: the question lets the task go on to the stop below.
     let waiting = desk.task_asks.lock().map(|mut w| w.take()).unwrap_or(None);
     if let Some(answer_to) = waiting {
-        if !["멈춰", "그만"].iter().any(|w| text.contains(w)) && answer_to.send(text.to_string()).is_ok() {
+        if !argmind_core::tongue::stops(text) && answer_to.send(text.to_string()).is_ok() {
             out.record("길", "작업의 물음에 대한 답");
-            let reply = "알겠습니다 — 이어서 할게요".to_string();
+            let reply = crate::spoken::say(&crate::spoken::CARRYING_ON, &speaking(desk), &[]);
             desk.session.history.push(("them".into(), text.to_string()));
             desk.session.history.push(("you".into(), reply.clone()));
             out.send("say", &reply);
@@ -562,7 +612,7 @@ fn think(desk: &mut Desk, out: &Listeners, text: &str) {
 
     desk.session.history.push(("them".into(), text.to_string()));
     //: **The words the person actually gets**, which are the model's own unless it mirrored them.
-    let reply = spoken_in(&intent, &desk.session.mind.language);
+    let reply = spoken_in(&intent, &speaking(desk));
     if !reply.is_empty() {
         //: The substitute goes into the history too, and that is the half that matters more than
         //: the screen: leaving `머해?` in there got it said again on each of the next two turns.
@@ -628,6 +678,8 @@ fn moved_web_instead(desk: &mut Desk, out: &Listeners, text: &str) -> bool {
     if desk.web.is_none() {
         return false;
     }
+    use crate::spoken::{say, WEB_CLOSED, WEB_OPENED, WEB_SEARCHED};
+    let code = speaking(desk);
     let reply = match crate::surface::web_move(text, desk.on_web.get()) {
         None => return false,
         Some(crate::surface::WebMove::ToDesktop) => {
@@ -636,7 +688,7 @@ fn moved_web_instead(desk: &mut Desk, out: &Listeners, text: &str) -> bool {
         }
         Some(crate::surface::WebMove::Close) => {
             show_web(desk, out, false);
-            "웹 칸을 닫았습니다".to_string()
+            say(&WEB_CLOSED, &code, &[])
         }
         Some(crate::surface::WebMove::Open { url, only }) => {
             show_web(desk, out, true);
@@ -651,7 +703,7 @@ fn moved_web_instead(desk: &mut Desk, out: &Listeners, text: &str) -> bool {
                 //: Something was asked of the page; the turn carries on, looking at it.
                 return false;
             }
-            format!("웹 칸에 열었습니다 — {url}")
+            say(&WEB_OPENED, &code, &[&url])
         }
         Some(crate::surface::WebMove::Search(words)) => {
             show_web(desk, out, true);
@@ -662,7 +714,7 @@ fn moved_web_instead(desk: &mut Desk, out: &Listeners, text: &str) -> bool {
                 }
             }
             desk.session.seen.clear();
-            format!("웹 칸에 「{words}」 검색 결과를 띄웠습니다")
+            say(&WEB_SEARCHED, &code, &[&words])
         }
     };
     desk.session.history.push(("them".into(), text.to_string()));
@@ -750,15 +802,17 @@ impl Speaks for Yielding {
 /// **Not gated by 확인 없이 실행**: what it touches is the work folder, a sandbox that can reach only
 /// that folder, and PowerShell in it — the last one weaker, and said so in `workspace.rs`.
 fn worked_instead(desk: &mut Desk, out: &Listeners, text: &str, said: &str) -> bool {
+    use crate::spoken::{say, NO_WORKBENCH, OWN_GIVES_WAY, OWN_HALTED, STILL_WORKING, WORK_HALTED, WORK_STARTED};
     let busy = desk.working.load(Ordering::SeqCst);
     let own = desk.own_work.load(Ordering::SeqCst);
-    let reply = if busy && ["멈춰", "그만"].iter().any(|w| text.contains(w)) {
+    let code = speaking(desk);
+    let reply = if busy && argmind_core::tongue::stops(text) {
         desk.stop_work.store(true, Ordering::SeqCst);
         if own {
             desk.own_halted = true;
-            "스스로 하던 일을 멈출게요 — 30분 뒤에 목표로 다시 돌아갑니다".to_string()
+            say(&OWN_HALTED, &code, &[])
         } else {
-            "하던 작업을 멈출게요".to_string()
+            say(&WORK_HALTED, &code, &[])
         }
     //: **argmind's own work gives way to the person's**, the owner's word: *다른작업이나 대화를
     //: 해야할떄는 다른일 우선*. It stops between steps and the request starts when it has.
@@ -766,17 +820,16 @@ fn worked_instead(desk: &mut Desk, out: &Listeners, text: &str, said: &str) -> b
         desk.stop_work.store(true, Ordering::SeqCst);
         desk.after_own = Some(text.to_string());
         out.record("작업", "스스로 하던 일을 멈추고 맡기신 일부터 합니다");
-        "스스로 하던 일을 멈추고 맡기신 일부터 할게요".to_string()
+        say(&OWN_GIVES_WAY, &code, &[])
     //: Not asked again whether this is work: `crate::route` decided, and the model's *work* is a
     //: sentence the word rule did not recognise — asking the rule here would undo it.
     } else if busy {
-        "하던 작업이 아직 안 끝났어요 — 끝나면 다시 말씀해 주세요".to_string()
+        say(&STILL_WORKING, &code, &[])
     } else if let Some(sets) = work_sets(desk, false) {
         start_work(desk, text, sets, false);
-        format!("작업 폴더({})에서 해 볼게요 — 끝나면 알려 드릴게요",
-                crate::platform::work_folder().display())
+        say(&WORK_STARTED, &code, &[&crate::platform::work_folder().display().to_string()])
     } else {
-        "이 환경에서는 파일이나 명령을 다룰 수 없습니다".to_string()
+        say(&NO_WORKBENCH, &code, &[])
     };
     desk.session.history.push(("them".into(), said.to_string()));
     desk.session.history.push(("you".into(), reply.clone()));
@@ -804,7 +857,7 @@ fn work_sets(desk: &Desk, own: bool)
             if let Ok(mut w) = slot.lock() {
                 *w = Some(tx);
             }
-            let _ = jobs.send(Job::Worked(format!("작업하다가 여쭤볼게요 — {q}")));
+            let _ = jobs.send(Job::Worked(Worked::Asks(q.to_string())));
             //: Ten minutes, and *멈춰* drops the question at once.
             let asked_at = std::time::Instant::now();
             let got = loop {
@@ -1043,10 +1096,12 @@ fn start_work(desk: &Desk, what: &str,
                 break;
             }
         }
-        let (said, finished) = match task.ended {
-            Some(Ended::Done(s)) => (s.clone(), Some(s)),
-            Some(Ended::Stopped(why)) => (format!("작업을 다 끝내지 못했습니다 — {why}"), None),
-            None => ("작업이 멈췄습니다".into(), None),
+        //: **Korean here**, for the card and the record; what the person hears is made from `told`
+        //: on the worker, in the language they are spoken to in.
+        let (said, finished, told) = match task.ended {
+            Some(Ended::Done(s)) => (s.clone(), Some(s.clone()), Worked::Done(s)),
+            Some(Ended::Stopped(why)) => (format!("작업을 다 끝내지 못했습니다 — {why}"), None, Worked::NotFinished(why)),
+            None => ("작업이 멈췄습니다".into(), None, Worked::Stopped),
         };
         //: **What it made, shown** — read the way the task read it, so a Word file is its text.
         //: **Every changed file is named; only the readable ones are shown.** The record of
@@ -1073,7 +1128,7 @@ fn start_work(desk: &Desk, what: &str,
             let _ = jobs.send(Job::OwnEnded(argmind_core::pursuit::Pursued {
                 asked: what.clone(), finished: finished.is_some(), said: finished.clone().unwrap_or(said), made: names }));
         } else {
-            let _ = jobs.send(Job::Worked(said));
+            let _ = jobs.send(Job::Worked(told));
         }
     });
 }
@@ -1199,8 +1254,10 @@ fn tell_own(desk: &mut Desk, out: &Listeners, spoke: bool) {
     if desk.own_untold.is_empty() || desk.turn.in_flight() {
         return;
     }
-    let said = crate::pursuit::report(&desk.own_untold);
-    desk.own_untold.clear();
+    let code = speaking(desk);
+    let untold = std::mem::take(&mut desk.own_untold);
+    let session = &mut desk.session;
+    let said = crate::pursuit::report_in(&untold, &code, &mut |t: &str| work_words(session, t, &code));
     desk.own_away = false;
     desk.session.history.push(("you".into(), said.clone()));
     out.send("say", &said);
@@ -1323,11 +1380,11 @@ fn looked_up_instead(desk: &mut Desk, out: &Listeners, text: &str) -> bool {
                 }
                 keep_errands(desk, out);
                 desk.session.seen.clear();
-                "브라우저 칸에 검색 결과를 띄웠습니다 — 읽고 정리해서 알려 드릴게요".to_string()
+                crate::spoken::say(&crate::spoken::LOOKED_UP, &speaking(desk), &[])
             }
-            Err(why) => why.to_string(),
+            Err(why) => crate::spoken::known(why, &speaking(desk)),
         },
-        Err(why) => format!("찾아보지 못했습니다 ({why})"),
+        Err(why) => crate::spoken::say(&crate::spoken::NOT_LOOKED_UP, &speaking(desk), &[&why.to_string()]),
     };
     desk.session.history.push(("them".into(), text.to_string()));
     desk.session.history.push(("you".into(), reply.clone()));
@@ -1833,7 +1890,7 @@ pub fn mind_json(mind: &argmind_core::mind::Mind) -> String {
 /// **An honest sentence rather than a clever one.** The model mirrors when it cannot parse what was
 /// said — `뭐해` is answered and `머해` is mirrored — so *I did not follow that* is not an evasion,
 /// it is the true reading of what just happened, and it invites the one thing that fixes it.
-pub const DID_NOT_FOLLOW: &str = "무슨 말인지 잘 못 알아들었어요. 다시 말해줄래요?";
+pub const DID_NOT_FOLLOW: &str = crate::spoken::DID_NOT_FOLLOW[0];
 
 /// The words a person gets: the model's own, unless it just mirrored them.
 pub fn spoken(intent: &argmind_core::intent::Intent) -> String {
@@ -1844,12 +1901,7 @@ pub fn spoken(intent: &argmind_core::intent::Intent) -> String {
 /// itself, so it follows the setting the model was given. Korean when nothing is set, as it was.
 pub fn spoken_in(intent: &argmind_core::intent::Intent, language: &str) -> String {
     if intent.parroted {
-        return match language {
-            "en" => "Sorry, I didn't follow that. Could you say it again?",
-            "zh" => "抱歉，我没听懂。能再说一遍吗？",
-            "ja" => "すみません、よく分かりませんでした。もう一度言ってもらえますか？",
-            _ => DID_NOT_FOLLOW,
-        }.to_string();
+        return crate::spoken::say(&crate::spoken::DID_NOT_FOLLOW, language, &[]);
     }
     intent.say.clone()
 }
@@ -2485,7 +2537,7 @@ fn notice(desk: &mut Desk, out: &Listeners, now: f64) {
         if intent.effects.is_empty() {
             continue;
         }
-        let reply = spoken_in(&intent, &desk.session.mind.language);
+        let reply = spoken_in(&intent, &speaking(desk));
         //: **The fourth identical remark is not made.** Measured: over eight window changes it
         //: spoke 8 times out of 8 and 6 of those were one sentence with the name swapped. Telling
         //: it to be quiet in the prompt bought no silence and started it wanting to click things,
@@ -2540,7 +2592,7 @@ fn release_held(desk: &mut Desk, out: &Listeners) {
         crate::tact::Held::Drop => out.send("held", "0"),
         crate::tact::Held::Release => {
             out.send("held", "0");
-            let reply = spoken_in(&intent, &desk.session.mind.language);
+            let reply = spoken_in(&intent, &speaking(desk));
             //: Checked again: something else may have been said while this one waited.
             if !reply.is_empty()
                 && !argmind_core::converse::said_before(&reply, &desk.lately_noticed) {
@@ -2743,7 +2795,7 @@ fn raise_it(desk: &mut Desk, out: &Listeners) {
     out.send("busy", "0");
     desk.session.history.push(("noticed".into(), trigger.text.clone()));
 
-    let reply = spoken_in(&intent, &desk.session.mind.language);
+    let reply = spoken_in(&intent, &speaking(desk));
     if reply.is_empty() || argmind_core::converse::said_before(&reply, &desk.lately_noticed) {
         return;
     }
@@ -2792,7 +2844,10 @@ fn tell_errand(desk: &mut Desk, out: &Listeners) {
     if crate::tact::now(desk.nunchi, evidence(desk), since_last(desk)) == crate::tact::Now::Hold {
         return;
     }
-    let said = crate::errands::report(&desk.errands[i]);
+    let code = speaking(desk);
+    let errand = desk.errands[i].clone();
+    let session = &mut desk.session;
+    let said = crate::errands::report_in(&errand, &code, &mut |t: &str| work_words(session, t, &code));
     desk.errands[i].told = true;
     desk.last_remark = Some(Instant::now());
     //: **Into the history**, so *두 번째 거 좀 더 자세히* is a reply the next turn can read.
@@ -3314,7 +3369,8 @@ pub fn run(how: How) {
                               working: Arc::new(AtomicBool::new(false)),
                               stop_work: Arc::new(AtomicBool::new(false)), jobs: agent_jobs,
                               own_work: Arc::new(AtomicBool::new(false)), after_own: None, own_halted: false,
-                              own_untold: Vec::new(), own_not_before: Instant::now() + OWN_PAUSE, own_misses: 0,
+                              own_untold: Vec::new(), heard_in: "ko".into(),
+                              own_not_before: Instant::now() + OWN_PAUSE, own_misses: 0,
                               own_choosing: false, own_away: false, own_refused: None,
                               task_asks: Arc::new(Mutex::new(None)),
                               task_presses: Vec::new(), screen_asks: Vec::new(),
@@ -3347,6 +3403,12 @@ pub fn run(how: How) {
         //: it rather than stopping at twelve turns — see `crate::conversation`.
         desk.session.history = crate::conversation::remembered();
         desk.kept_lines = desk.session.history.len();
+        //: And the language they were last talking in, so the first thing the program says after a
+        //: restart is in it.
+        if let Some(code) = desk.session.history.iter().rev().filter(|(who, _)| who == "them")
+            .find_map(|(_, t)| argmind_core::tongue::of(t)) {
+            desk.heard_in = code.to_string();
+        }
         desk.session.context_tokens = Some(CONTEXT_TOKENS);
         //: Whether the standing answers have been acted on yet this run. See `Job::Opened`.
         let mut caught_up = false;
@@ -3688,7 +3750,16 @@ pub fn run(how: How) {
                     agent_out.forget_timeline();
                     agent_out.frame("activity", "[]");
                 }
-                Job::Worked(said) => {
+                Job::Worked(told) => {
+                    use crate::spoken::{say, TASK_ASKS, TASK_NOT_FINISHED, TASK_STOPPED};
+                    let code = speaking(&desk);
+                    let said = match told {
+                        Worked::Asks(q) => say(&TASK_ASKS, &code, &[&work_words(&mut desk.session, &q, &code)]),
+                        Worked::Done(s) => work_words(&mut desk.session, &s, &code),
+                        Worked::NotFinished(why) =>
+                            say(&TASK_NOT_FINISHED, &code, &[&work_words(&mut desk.session, &why, &code)]),
+                        Worked::Stopped => say(&TASK_STOPPED, &code, &[]),
+                    };
                     desk.session.history.push(("you".into(), said.clone()));
                     agent_out.send("say", &said);
                 }

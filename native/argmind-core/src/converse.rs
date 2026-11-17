@@ -391,6 +391,54 @@ pub fn read_rewrite(reply: &str, was: &str, listed: &[Widget], code: &str) -> Op
     (!t.is_empty() && t.chars().count() <= longest && in_language(t, listed, code)).then(|| t.to_string())
 }
 
+/// **Words that are not a turn's reply, said in `code`** — [`crate::session::Session::say_in`], here
+/// so `--bin tongues` measures the function the application calls. At most one model call, and
+/// only for words not in `code` already.
+pub fn say_in(model: &mut dyn crate::contract::Speaks, text: &str, code: &str) -> String {
+    if text.trim().is_empty() || in_language(text, &[], code) {
+        return text.to_string();
+    }
+    let Some(ask) = rewrite_prompt(text, code) else { return text.to_string() };
+    let again = model.ask(&ask);
+    match read_rewrite(&again, text, &[], code) {
+        Some(said) if keeps_the_facts(text, &said) => said,
+        _ => text.to_string(),
+    }
+}
+
+/// **Did a rewrite keep what the words reported?** Every run of digits (grouping commas read through,
+/// so *369,700* and *369700* are one) and every file name in `was` must be in `now`. Words are
+/// free to change; a number or a name is a fact about the work.
+pub fn keeps_the_facts(was: &str, now: &str) -> bool {
+    let digits = |t: &str| -> Vec<String> {
+        let plain: String = t.chars().filter(|c| *c != ',').collect();
+        plain.split(|c: char| !c.is_ascii_digit()).filter(|d| !d.is_empty()).map(str::to_string).collect()
+    };
+    let have = digits(now);
+    digits(was).iter().all(|d| have.contains(d)) && named_files(was).iter().all(|f| now.contains(f.as_str()))
+}
+
+/// **File names, in any script** — *ideas.md*, and *수익_방법_목록.md* with the particle after it
+/// (*…목록.md에*): a name whose stem is Korean is still the name of a file, and a rewrite into English
+/// that calls it *income_methods_list.md* has named a file that is not there. The extension is the
+/// ASCII letters and digits after the last dot, starting with a letter, one to five of them.
+pub fn named_files(text: &str) -> Vec<String> {
+    let mut out: Vec<String> = Vec::new();
+    for word in text.split(|c: char| c.is_whitespace() || "「」『』()（）[]\"'“”‘’,，、:：;；".contains(c)) {
+        let Some(dot) = word.rfind('.') else { continue };
+        let stem = word[..dot].trim_start_matches(|c: char| c == '`' || c == '*');
+        let ext: String = word[dot + 1..].chars().take_while(|c| c.is_ascii_alphanumeric()).collect();
+        if !stem.is_empty() && !stem.ends_with('.') && (1..=5).contains(&ext.len())
+            && ext.starts_with(|c: char| c.is_ascii_alphabetic()) {
+            let name = format!("{stem}.{ext}");
+            if !out.contains(&name) {
+                out.push(name);
+            }
+        }
+    }
+    out
+}
+
 /// **Does this reply ask before doing?** *찾아볼까요?* with a click beside it is two answers to one
 /// question — the words say *shall I* and the action slot says *I did*. The owner's request for a
 /// trip plan was answered that way and the click was a Git button in the editor. A question ending
@@ -463,6 +511,35 @@ pub fn goes_ahead(text: &str) -> bool {
                              "진행해줘", "진행", "ㅇㅇ", "오케이", "ok", "OK", "그렇게해줘", "그렇게해", "부탁해",
                              "응해줘", "네해주세요"];
     YES.contains(&t.as_str()) || t == "해주세요" || t == "실행해주세요" || t == "진행해주세요"
+        || goes_ahead_in_other_tongues(text)
+}
+
+/// **A yes in English, Chinese and Japanese** — since 2026-11-17, the same kind of word as the
+/// Korean: a go-ahead that names nothing. Read whole, spaces and the closing mark taken off, so
+/// *go ahead!* is one and *go ahead and open Notepad* is not. *いいよ* is left out: it says *no
+/// thanks* as often as *go on*.
+fn goes_ahead_in_other_tongues(text: &str) -> bool {
+    use crate::tongue::{lower, reads_as};
+    let t: String = lower(text).split_whitespace().collect::<Vec<_>>().join(" ")
+        .trim_end_matches(['.', '!', '~', '?', '。', '！', '？', '～']).trim().to_string();
+    if reads_as(text, "en") {
+        const YES: [&str; 22] = ["yes", "yeah", "yep", "okay", "sure", "go ahead", "do it", "please do", "yes please",
+                                 "run it", "go", "go on", "proceed", "please", "sounds good", "let's do it",
+                                 "go for it", "yes, do it", "yes do it", "ok, do it", "ok do it", "carry on"];
+        return YES.contains(&t.as_str());
+    }
+    let t: String = t.split_whitespace().collect();
+    if reads_as(text, "zh") {
+        const YES: [&str; 18] = ["好", "好的", "好啊", "可以", "行", "执行", "执行吧", "去吧", "做吧", "是的", "嗯",
+                                 "对", "开始吧", "继续", "请执行", "去做吧", "来吧", "好，做吧"];
+        return YES.contains(&t.as_str());
+    }
+    if reads_as(text, "ja") {
+        const YES: [&str; 15] = ["はい", "うん", "お願い", "お願いします", "やって", "やってください", "実行して",
+                                 "実行", "どうぞ", "ええ", "オッケー", "進めて", "頼む", "よろしく", "はい、お願いします"];
+        return YES.contains(&t.as_str());
+    }
+    false
 }
 
 /// **What a go-ahead says yes to**: the person's request just before argmind's last reply, when

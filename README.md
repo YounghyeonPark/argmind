@@ -9,9 +9,11 @@ the switches you set allow.
 A side project by one person, not a product, with no support commitment. **Windows only for now.**
 The interface is in Korean, English, Chinese or Japanese: your system's language, or the one chosen
 under 🌐 at the top of 설정 (Settings). argmind answers in the language you write in, or always in
-one of those four if you choose it under 대화 언어 (conversation language). Two things stay Korean
-whatever you choose: the few things argmind says that the program wrote rather than the model, and
-the spoken commands it recognises by their words (*멈춰* to stop, *…기억해줘* to remember).
+one of those four if you choose it under 대화 언어 (conversation language), and it understands the
+same requests in each — *remember that…*, *stop*, *open YouTube*, *记住…*, *止めて*. One thing stays
+as the model wrote it: a finished task's or errand's report, which comes from a Korean prompt and
+is said in Korean inside a sentence in your language, because translating it was measured changing
+prices and names.
 
 ## What it does
 

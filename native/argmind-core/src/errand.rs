@@ -299,7 +299,28 @@ pub const NOW_WORDS: [&str; 12] = ["오늘", "지금", "현재", "이번 주", "
 /// errands — all four that need the web hold one and none of the five answerable ones do — so that
 /// fit is not independent evidence for it.
 pub fn sounds_current(what: &str) -> bool {
-    NOW_WORDS.iter().any(|w| what.contains(w))
+    NOW_WORDS.iter().any(|w| what.contains(w)) || now_in_other_tongues(what)
+}
+
+/// **Now, in English, Chinese and Japanese** — since 2026-11-17, [`NOW_WORDS`] translated, each
+/// read only in a sentence written in that language. English by whole words: *now* is not *know*.
+fn now_in_other_tongues(what: &str) -> bool {
+    use crate::tongue::{has_word, lower, reads_as};
+    if reads_as(what, "en") {
+        let low = lower(what);
+        return ["today", "now", "right now", "current", "currently", "this week", "tomorrow", "latest", "recent",
+                "recently", "lately", "these days", "this month", "this year", "tonight"]
+            .iter().any(|w| has_word(&low, w));
+    }
+    if reads_as(what, "zh") {
+        return ["今天", "现在", "目前", "当前", "这周", "本周", "明天", "最新", "最近", "实时", "这个月", "本月",
+                "今年", "今晚"].iter().any(|w| what.contains(w));
+    }
+    if reads_as(what, "ja") {
+        return ["今日", "今", "現在", "今週", "明日", "最新", "最近", "リアルタイム", "今月", "今年", "今夜"]
+            .iter().any(|w| what.contains(w));
+    }
+    false
 }
 
 /// **Is a turn asking for something on the web right now?** A question about now (`NOW_WORDS`)
@@ -313,6 +334,46 @@ pub fn sounds_current(what: &str) -> bool {
 /// what *you* did, is conversation; the second person is read by the word, since *너무* begins
 /// with 너.
 pub fn asks_to_look_up(said: &str) -> bool {
+    match crate::converse::written_in(said) {
+        Some("en") | Some("zh") | Some("ja") => looks_up_in_other_tongues(said),
+        _ => korean_looks_up(said),
+    }
+}
+
+/// **The same question in English, Chinese and Japanese** — since 2026-11-17: about now, asking to
+/// be told or found, not about the screen, and not about argmind or the person. *You* is not read
+/// as a word in English or Chinese, where *can you tell me* and *你能告诉我* are how a request is
+/// asked; what is read is how somebody is — *how are you*, *your*, *心情*, *気分*.
+fn looks_up_in_other_tongues(said: &str) -> bool {
+    use crate::tongue::{has_word, lower, reads_as};
+    if !sounds_current(said) {
+        return false;
+    }
+    if reads_as(said, "en") {
+        let low = lower(said);
+        let any = |ws: &[&str]| ws.iter().any(|w| has_word(&low, w));
+        return any(&["tell me", "find out", "look up", "find", "search", "check", "how much", "how's", "how is",
+                     "how are", "what's", "what is", "what are"])
+            && !any(&["on screen", "on the screen", "this window", "this page", "here"])
+            && !any(&["how are you", "how do you feel", "how're you", "are you", "did you", "have you", "were you",
+                      "you doing", "you feel", "your", "mood", "feeling"]);
+    }
+    let any = |ws: &[&str]| ws.iter().any(|w| said.contains(w));
+    if reads_as(said, "zh") {
+        return any(&["告诉我", "查", "搜索", "搜一下", "多少", "怎么样", "如何"])
+            && !any(&["屏幕", "这里", "这个窗口", "这个页面"])
+            && !any(&["心情", "感觉", "你好吗", "你怎么样", "你今天", "你现在", "你最近", "你在做什么", "你做了什么"]);
+    }
+    if reads_as(said, "ja") {
+        return any(&["教えて", "調べて", "検索", "探して", "いくら", "どう", "どうなって"])
+            && !any(&["画面", "ここ", "このウィンドウ", "このページ", "これ"])
+            && !any(&["気分", "調子", "あなた", "君", "元気", "体調"]);
+    }
+    false
+}
+
+/// The Korean reading, as it was before the other three languages were added.
+fn korean_looks_up(said: &str) -> bool {
     let asks = ["알려줘", "알려 줘", "알아봐", "알아 봐", "찾아줘", "찾아 줘", "찾아봐", "검색",
                 "얼마야", "어때", "어떻게 돼"];
     let screen = ["화면", "여기", "이 창", "이거"];

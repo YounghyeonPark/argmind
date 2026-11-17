@@ -234,7 +234,140 @@ const CLOSE: [&str; 8] = ["웹 닫", "웹창 닫", "웹 꺼", "브라우저 닫"
 const SEARCH: [&str; 7] = ["검색해줘", "검색해 줘", "검색해봐", "검색해 봐", "웹에서 찾아", "인터넷에서 찾아",
                            "찾아봐줘"];
 
+/// **The same moves in English, Chinese and Japanese** — since 2026-11-17, the owner's *대화언어도
+/// 다국어 지원이 되어야함*. Each list is read only in a sentence written in its language
+/// (`argmind_core::tongue::reads_as`), so every Korean sentence moves the pane exactly as before.
+/// English is read by whole words: *word* is not in *password*, *paint* is not in *painting*.
+struct Tongue {
+    code: &'static str,
+    close: &'static [&'static str],
+    desktop: &'static [&'static str],
+    /// The verb, and whether the words searched for come after it (English, Chinese) or before it.
+    search: &'static [(&'static str, bool)],
+    /// A box on a page, which is not a request to search.
+    search_box: &'static [&'static str],
+    sites: &'static [(&'static str, &'static str)],
+    open: &'static [&'static str],
+}
+
+const TONGUES: [Tongue; 3] = [
+    Tongue {
+        code: "en",
+        close: &["close the web", "close web", "close the browser", "close browser", "hide the web",
+                 "hide the browser", "close the pane", "close the web pane", "turn off the web"],
+        desktop: &["notepad", "file explorer", "explorer", "desktop", "vs code", "vscode", "visual studio", "excel",
+                   "word", "powerpoint", "kakaotalk", "calculator", "paint", "taskbar", "settings window"],
+        search: &[("search the web for ", true), ("search for ", true), ("search ", true), ("look up ", true)],
+        search_box: &["search box", "search bar", "search field"],
+        sites: &[("naver mail", "https://mail.naver.com/"), ("naver", "https://www.naver.com/"),
+                 ("youtube", "https://www.youtube.com/"), ("wikipedia", "https://en.wikipedia.org/"),
+                 ("github", "https://github.com/"), ("coupang", "https://www.coupang.com/"),
+                 ("gmail", "https://mail.google.com/"), ("google", "https://www.google.com/")],
+        open: &["open", "go", "to", "launch", "show", "visit", "please", "the", "site", "website", "page", "up", "pull",
+                "bring", "me", "can", "you", "could", "on", "at", "in", "a", "into"],
+    },
+    Tongue {
+        code: "zh",
+        close: &["关闭网页", "关掉网页", "关网页", "关闭浏览器", "关掉浏览器", "隐藏网页", "关闭网页窗格"],
+        desktop: &["记事本", "资源管理器", "文件资源管理器", "桌面", "计算器", "画图", "任务栏", "设置窗口"],
+        search: &[("在网上搜索", true), ("网上搜", true), ("在网上找", true), ("搜索一下", true), ("搜一下", true),
+                  ("搜搜", true), ("搜索", true)],
+        search_box: &["搜索框", "搜索栏"],
+        sites: &[("youtube", "https://www.youtube.com/"), ("油管", "https://www.youtube.com/"),
+                 ("维基百科", "https://zh.wikipedia.org/"), ("github", "https://github.com/"),
+                 ("naver", "https://www.naver.com/"), ("coupang", "https://www.coupang.com/"),
+                 ("谷歌", "https://www.google.com/"), ("google", "https://www.google.com/")],
+        open: &["帮我", "请", "打开", "进入", "访问", "去", "一下", "网站", "网页", "上", "吧"],
+    },
+    Tongue {
+        code: "ja",
+        close: &["ウェブを閉じ", "ウェブ閉じ", "ブラウザを閉じ", "ブラウザ閉じ", "ウェブを隠", "Webを閉じ", "webを閉じ"],
+        desktop: &["メモ帳", "エクスプローラー", "デスクトップ", "電卓", "ペイント", "タスクバー", "設定画面", "エクセル",
+                   "ワード", "パワーポイント"],
+        search: &[("をネットで検索して", false), ("をウェブで検索して", false), ("を検索して", false),
+                  ("で検索して", false), ("を検索", false), ("をネットで探して", false), ("をウェブで探して", false)],
+        search_box: &["検索ボックス", "検索欄", "検索窓", "検索バー"],
+        sites: &[("youtube", "https://www.youtube.com/"), ("ユーチューブ", "https://www.youtube.com/"),
+                 ("ウィキペディア", "https://ja.wikipedia.org/"), ("github", "https://github.com/"),
+                 ("ギットハブ", "https://github.com/"), ("naver", "https://www.naver.com/"),
+                 ("ネイバー", "https://www.naver.com/"), ("coupang", "https://www.coupang.com/"),
+                 ("グーグル", "https://www.google.com/"), ("google", "https://www.google.com/")],
+        open: &["を開いて", "開いて", "を開けて", "に入って", "に行って", "へ行って", "にアクセスして", "アクセスして",
+                "を表示して", "見せて", "サイト", "ください", "を", "に", "へ"],
+    },
+];
+
+/// Is `word` in the sentence — whole, for English.
+fn names(t: &Tongue, low: &str, word: &str) -> bool {
+    if t.code == "en" { argmind_core::tongue::has_word(low, word) } else { low.contains(word) }
+}
+
+fn web_move_in(t: &Tongue, said: &str, on_web: bool) -> Option<WebMove> {
+    let low = argmind_core::tongue::lower(said.trim());
+    //: Positions found in the lower-cased sentence cut the sentence itself — unless lower-casing
+    //: moved a byte, when the lower-cased one is cut instead.
+    let src = if low.len() == said.trim().len() { said.trim() } else { low.as_str() };
+    if t.close.iter().any(|w| names(t, &low, w)) {
+        return Some(WebMove::Close);
+    }
+    if on_web && t.desktop.iter().any(|w| names(t, &low, w)) {
+        return Some(WebMove::ToDesktop);
+    }
+    if !t.search_box.iter().any(|w| low.contains(w)) {
+        for (verb, after) in t.search {
+            let Some(at) = low.find(verb) else { continue };
+            if t.code == "en" && at > 0 && low.as_bytes()[at - 1].is_ascii_alphanumeric() {
+                continue;
+            }
+            let words = if *after { &src[at + verb.len()..] } else { &src[..at] };
+            let mut words = words.trim().trim_end_matches(['.', '!', '。', '！', ' ']).trim();
+            //: The site the search is on, and the softeners around it, are not what is searched.
+            for tail in [" on naver", " on the web", " online", " on the internet", " please", "一下"] {
+                let lw = words.to_lowercase();
+                if lw.len() == words.len() && lw.ends_with(tail) {
+                    words = words[..words.len() - tail.len()].trim();
+                }
+            }
+            let words = words.strip_prefix("一下").unwrap_or(words).trim();
+            if !words.is_empty() {
+                return Some(WebMove::Search(words.to_string()));
+            }
+        }
+    }
+    let address = said.split_whitespace().map(|w| w.trim_matches(|c: char| !c.is_ascii_alphanumeric()
+                                                                     && c != '.' && c != '/' && c != ':'))
+        .find(|w| {
+            let w = w.to_lowercase();
+            [".com", ".net", ".org", ".kr", ".io", ".dev", ".wiki", ".co"].iter()
+                .any(|end| w.contains(end)) && !w.starts_with('.')
+        });
+    let (url, name) = match address {
+        Some(a) => (if a.starts_with("http") { a.to_string() } else { format!("https://{a}") }, a.to_lowercase()),
+        None => match t.sites.iter().find(|(name, _)| names(t, &low, name)) {
+            Some((name, url)) => (url.to_string(), name.to_string()),
+            None => return None,
+        },
+    };
+    let rest = low.replace(&name, " ");
+    let only = if t.code == "en" {
+        rest.split(|c: char| !(c.is_ascii_alphanumeric() || c == '\''))
+            .filter(|w| !w.is_empty() && !t.open.contains(w)).all(|w| w.chars().count() <= 1)
+    } else {
+        let mut rest = rest;
+        let mut words = t.open.to_vec();
+        words.sort_by_key(|w| std::cmp::Reverse(w.chars().count()));
+        for w in words {
+            rest = rest.replace(w, " ");
+        }
+        rest.split(|c: char| c.is_whitespace() || "，。、！!,.".contains(c)).all(|w| w.chars().count() <= 1)
+    };
+    Some(WebMove::Open { url, only })
+}
+
 pub fn web_move(said: &str, on_web: bool) -> Option<WebMove> {
+    if let Some(t) = TONGUES.iter().find(|t| argmind_core::converse::written_in(said) == Some(t.code)) {
+        return web_move_in(t, said, on_web);
+    }
     let t = said.trim();
     let low = t.to_lowercase();
     if CLOSE.iter().any(|w| t.contains(w)) {
@@ -316,6 +449,32 @@ mod tests {
     fn ordinary_talk_moves_nothing() {
         for t in ["안녕", "고마워", "다음 주 회의 정리해줘", "메일 열어줘", "이거 눌러줘"] {
             assert_eq!(web_move(t, false), None, "{t}");
+        }
+    }
+
+    #[test]
+    fn the_pane_moves_in_english_chinese_and_japanese() {
+        let open = |url: &str, only: bool| Some(WebMove::Open { url: url.into(), only });
+        assert_eq!(web_move("open YouTube", false), open("https://www.youtube.com/", true));
+        assert_eq!(web_move("go to GitHub", false), open("https://github.com/", true));
+        assert_eq!(web_move("open Coupang and find wet wipes", false), open("https://www.coupang.com/", false));
+        assert_eq!(web_move("打开YouTube", false), open("https://www.youtube.com/", true));
+        assert_eq!(web_move("进入GitHub", false), open("https://github.com/", true));
+        assert_eq!(web_move("YouTubeを開いて", false), open("https://www.youtube.com/", true));
+        assert_eq!(web_move("ウィキペディアを開いて", false), open("https://ja.wikipedia.org/", true));
+        assert_eq!(web_move("search for Son Heung-min on Naver", false), Some(WebMove::Search("Son Heung-min".into())));
+        assert_eq!(web_move("在Naver上搜索孙兴慜", false), Some(WebMove::Search("孙兴慜".into())));
+        assert_eq!(web_move("ラーメンを検索して", false), Some(WebMove::Search("ラーメン".into())));
+        for close in ["close the web", "Close the browser please", "关闭网页", "ウェブを閉じて"] {
+            assert_eq!(web_move(close, true), Some(WebMove::Close), "{close}");
+        }
+        assert_eq!(web_move("open Notepad", true), Some(WebMove::ToDesktop));
+        assert_eq!(web_move("打开记事本", true), Some(WebMove::ToDesktop));
+        assert_eq!(web_move("メモ帳を開いて", true), Some(WebMove::ToDesktop));
+        //: A box on a page is not a search; a password is not Word; research is not a search.
+        for none in ["click the search box", "type my password", "research three competitors", "thanks",
+                     "点一下搜索框", "検索ボックスを押して"] {
+            assert_eq!(web_move(none, true), None, "{none}");
         }
     }
 

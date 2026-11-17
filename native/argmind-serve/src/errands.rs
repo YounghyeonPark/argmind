@@ -93,9 +93,18 @@ pub fn due(errands: &[Errand]) -> Option<usize> {
 /// **What is said, and the wording is the program's** around the model's result: the errand is
 /// named in the person's own words, so a report arriving minutes later says what it is about.
 pub fn report(e: &Errand) -> String {
+    report_in(e, "ko", &mut |t: &str| t.to_string())
+}
+
+/// **[`report`], in the language the person is spoken to in** — since 2026-11-17. The program's
+/// words come from `crate::spoken`; the errand is named in the person's own words, as they wrote
+/// it; and the result or the question is the model's, Korean from a Korean prompt, so it goes
+/// through `into` — which leaves it as written while `app::REWRITES_WORK` is off.
+pub fn report_in(e: &Errand, code: &str, into: &mut dyn FnMut(&str) -> String) -> String {
+    use crate::spoken::{say, ERRAND_ASKS, ERRAND_DONE};
     match e.state {
-        State::Done => format!("맡기신 「{}」 정리했습니다.\n{}", e.what, e.result),
-        State::NeedsYou => format!("맡기신 「{}」 — {}", e.what, e.ask),
+        State::Done => format!("{}\n{}", say(&ERRAND_DONE, code, &[&e.what]), into(&e.result)),
+        State::NeedsYou => say(&ERRAND_ASKS, code, &[&e.what, &into(&e.ask)]),
         _ => String::new(),
     }
 }

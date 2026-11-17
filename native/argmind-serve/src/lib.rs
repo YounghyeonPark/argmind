@@ -59,6 +59,7 @@ pub mod recogniser;
 pub mod rules;
 pub mod senses;
 pub mod speaker;
+pub mod spoken;
 pub mod route;
 pub mod surface;
 pub mod tact;

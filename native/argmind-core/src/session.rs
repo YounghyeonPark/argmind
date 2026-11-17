@@ -349,6 +349,21 @@ impl<E: Eyes, H: Hands, M: Speaks> Session<E, H, M> {
                  rewritten_from: intent.rewritten_from }
     }
 
+    /// **Words argmind's other paths wrote, said in `code`** — since 2026-11-17: a task's closing
+    /// words, the question it asks, an errand's result, the request argmind set itself. The work
+    /// model writes them from Korean prompts, so somebody spoken to in English heard Korean from
+    /// every one; this is the rewrite [`Session::decide`] makes for a turn, for text that is not a
+    /// turn. **Not called by the application** — `--bin tongues --reports` found it changing what
+    /// was found (a price in the wrong currency, an airline renamed) in six texts of 36. Unchanged
+    /// when it is already in `code`, when `code` is no language, or when the rewrite is not taken —
+    /// **and not taken when it loses a fact**
+    /// ([`crate::converse::keeps_the_facts`]): every number and every file name the words held must
+    /// still be in them, since these words report work and a rewrite that drops *369,700* or
+    /// `ideas.md` has changed what was done.
+    pub fn say_in(&mut self, text: &str, code: &str) -> String {
+        crate::converse::say_in(&mut self.model, text, code)
+    }
+
     /// **One step at a time, each checked against the screen as it is, and the rest stopped by a
     /// step that did not land.** Since 2026-10-21: the owner asked for the weather with the pane on a
     /// login page, and a click, *서울* and Enter ran one after another — the click re-read the
