@@ -1,6 +1,6 @@
 <p align="center">
   <img src="docs/images/social-preview.png" width="720"
-       alt="argmind: a local-model agent you talk to while you work at your PC">
+       alt="argmind: an assistant for your PC that runs on your own computer">
 </p>
 
 <p align="center">
