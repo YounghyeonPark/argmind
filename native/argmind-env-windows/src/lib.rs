@@ -328,6 +328,19 @@ pub fn pointing() -> Pointing {
     }
 }
 
+/// **Read and draw the screen in its real pixels**, whatever the display's scale — per-monitor
+/// aware, version 2, for the whole process. `false` when it was already set, which is the ordinary
+/// case inside `argmind-app`, whose window library sets the same thing.
+///
+/// **Found by the first run of the application's own look, 2026-11-19**: the server without its
+/// window is not aware, so at 150% UI Automation and `GetWindowRect` answered in scaled pixels
+/// while `PrintWindow` drew at real size, and the picture beside the row held the top left two
+/// thirds of Character Map's grid — the same failure `--example pointing` had found in itself.
+pub fn per_monitor_pixels() -> bool {
+    use windows::Win32::UI::HiDpi::{SetProcessDpiAwarenessContext, DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2};
+    unsafe { SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2) }.is_ok()
+}
+
 /// Where the pointer is, **without moving it.**
 ///
 /// Separate from [`cursor_round_trip`] on purpose: an instrument that answers *"did the pointer

@@ -3336,6 +3336,9 @@ pub fn url(port: u16) -> String {
 pub fn run(how: How) {
 
     let How { dry, speak, hear, model_name, port: how_port, web } = how;
+    //: **Before the eyes exist**: a list, a picture and a press in one kind of pixel. `argmind-app`'s
+    //: window library sets the same; the console server and the harnesses had nothing.
+    crate::platform::real_pixels();
 
     //: **Checked before the socket opens.** An agent that can press buttons on your screen has no
     //: business accepting a connection from the network.

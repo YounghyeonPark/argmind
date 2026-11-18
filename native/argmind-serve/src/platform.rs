@@ -791,6 +791,15 @@ pub fn display_language() -> Option<&'static str> {
     }
 }
 
+/// **Screen coordinates in real pixels for this whole process**, before anything reads the screen —
+/// `argmind_env_windows::per_monitor_pixels`. Nothing to do elsewhere.
+pub fn real_pixels() {
+    #[cfg(all(windows, not(feature = "headless")))]
+    {
+        let _ = argmind_env_windows::per_monitor_pixels();
+    }
+}
+
 /// **Seconds since the last keyboard or mouse input**, or `None` where nothing can say. The time
 /// only — see `argmind_env_windows::seconds_since_input`.
 pub fn seconds_since_input() -> Option<f64> {

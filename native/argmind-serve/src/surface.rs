@@ -164,6 +164,31 @@ impl Hands for Touching {
             None => self.desk.into_a_secret(),
         }
     }
+    //: **The three below were not here until 2026-11-19**, and nothing failed: `Hands` gives each a
+    //: default, so this wrapper answered *cannot tell* for the real hands on both surfaces — the
+    //: check before every `type` and the one after every action, shipped 2026-10-21 and measured on
+    //: the hands themselves, never ran in the application, and a point inside a place could not be
+    //: pressed at all. Found by the first run of the application's own look
+    //: (`examples/looking_live.rs`); `argmind-rules` (`the_surface_hides_no_hand`) now reads this
+    //: impl for every method the trait has.
+    fn click_inside(&mut self, within: &Widget, at: (i64, i64)) -> bool {
+        match self.web_now() {
+            Some(web) => web.click_inside(within, at),
+            None => self.desk.click_inside(within, at),
+        }
+    }
+    fn typing_lands(&mut self) -> Option<bool> {
+        match self.web_now() {
+            Some(web) => web.typing_lands(),
+            None => self.desk.typing_lands(),
+        }
+    }
+    fn landed(&self) -> Option<bool> {
+        match (self.on_web.get(), self.web.as_ref()) {
+            (true, Some(web)) => web.landed(),
+            _ => self.desk.landed(),
+        }
+    }
 }
 
 /// Build both halves from what the window handed over, or desktop-only when there is no pane.

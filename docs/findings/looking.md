@@ -241,19 +241,48 @@ misses and two hits.
 a ring that sits round the glyph (20 px at 640 wide, where a cell is about 37) and four ticks
 pointing in from outside it.
 
+## The application's own path — `--example looking_live`, 2026-11-19
+
+The owner said yes to running it. `argmind-serve --example looking_live` starts an argmind of its
+own on port 7742 with `LOCALAPPDATA` in a scratch folder (it refuses the real one). There it writes
+`looking` allowed and `notice` and `initiative` refused, and leaves `acting` unanswered. It starts a
+Character Map and stops unless that is the window in front. Then it sends *© 문자 눌러줘* to `/say`,
+fetches `/looked/<row>`, draws the page in headless Edge, and presses 실행 only when the row is a
+point inside the grid. The owner's argmind was stopped for the run.
+
+**Two runs failed, each on a defect only this path could show:**
+- **The picture held the top left of the grid.** The server without its window was not DPI aware,
+  so at 150% the rectangles were scaled and the picture was not — the failure `--example pointing`
+  had in itself. `argmind-app`'s window library made the process aware; the console server and
+  this example had nothing. `app::run` now makes the process per-monitor aware before anything
+  reads the screen (`argmind_env_windows::per_monitor_pixels`).
+- **The press came back *여기서는 칸 안의 한 점을 누를 수 없습니다*.** The application's hands are
+  `surface::Touching`, which did not forward `click_inside`, so it answered the trait's *cannot*.
+  **It had not forwarded `typing_lands` or `landed` either**, so the screen checks of 2026-10-21
+  never ran in the application. All three are forwarded now, and `argmind-rules`
+  (`the_surface_hides_no_hand`) reads the wrapper for every method the trait has.
+
+**The third run passed every step**:
+- the row came 8.2 s after the request (the look itself 0.99 s), with the program's sentence and
+  the picture under the label, the grid whole and © ringed;
+- 실행 pressed ©, and Character Map's status bar read *U+00A9: Copyright Sign*;
+- the person's pointer was where it had been. The second run gave the row in 13.8 s, with the
+  model loading.
+
+One request, one program. The headless Edge page was English, because an unset interface language
+follows the browser's.
+
 ## Not established
 
-- **The application's own turn was not run from here.** Running it means turning `looking` on,
-  which is the owner's standing answer to give, in front of a window on the owner's desktop. The
-  pieces ran on a real Character Map through the same functions; `app::look_inside`, which strings
-  them together, did not.
+- **Only the one request ran through the application's path**, once each of three runs. The ten
+  characters ran through the pieces (`--example pointing`).
 - **No real remote desktop.** Whether a posted click reaches `mstsc`'s input window is unknown, and
   a control that reads `GetCursorPos` would see the person's pointer instead.
 - Ten characters in one program, two runs; drawn screens otherwise. Dark mode, other scales and
   other programs were not asked.
 - What the row says is still the vision model's word for the place (*"copyright symbol"*), often in
-  English. The picture under it is what shows where. **The row and its picture were not seen in the
-  application**, for the same reason as the turn above.
+  English. The picture under it is what shows where. The row and its picture were seen on the
+  application's own page in headless Edge, not in `argmind-app`'s window.
 - An unnamed icon in a toolbar is not reachable: 128×96 keeps toolbars from being places.
 - Earlier, on the drawn screens: whether a crop fixed the off-by-a-row misses on dense lists was not
   asked, because a list row is never a place, so the picture is never asked about one.
