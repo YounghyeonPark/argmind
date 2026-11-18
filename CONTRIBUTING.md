@@ -9,7 +9,7 @@ direction is the author's to set and a large change may not be taken however goo
 What helps most:
 
 - **What you said** (typed or spoken), word for word.
-- **What it did**: the lines of 한 일 (*Activity*) for that turn. That timeline already records what
+- **What it did**: the lines of *Activity* for that turn. That timeline already records what
   it heard, which window was in front, what it said, and what it pressed and whether the screen
   changed.
 - **Windows version, GPU, and the model names** shown in the header.

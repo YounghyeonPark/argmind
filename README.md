@@ -23,9 +23,9 @@ the switches you set allow.
 
 A side project by one person, not a product, with no support commitment. **Windows only for now.**
 The interface is in Korean, English, Chinese or Japanese: your system's language, or the one chosen
-under 🌐 at the top of 설정 (Settings). argmind answers in the language you write in, or always in
-one of those four if you choose it under 대화 언어 (conversation language), and it understands the
-same requests in each — *remember that…*, *stop*, *open YouTube*, *记住…*, *止めて*. One thing stays
+under 🌐 at the top of Settings. argmind answers in the language you write in, or always in one
+of those four if you choose it under *Conversation language*, and it understands the same requests
+in each of them — *remember that…*, *stop*, *open YouTube*. One thing stays
 as the model wrote it: a finished task's or errand's report, which comes from a Korean prompt and
 is said in Korean inside a sentence in your language, because translating it was measured changing
 prices and names.
@@ -38,8 +38,8 @@ prices and names.
    will warn the first time: *More info → Run anyway*, or [build it yourself](#build-and-run).
 3. **Let it fetch what is missing.** It lists what it needs (Ollama, the models, the voice, the
    recogniser) and asks before fetching each one.
-4. **Talk to it.** Type, or hold F9 in its window and speak. Until you allow otherwise in 설정
-   (Settings), every action it proposes waits for you to press 실행 (Run) — see
+4. **Talk to it.** Type, or hold F9 in its window and speak. Until you allow otherwise in
+   Settings, every action it proposes waits for you to press **Run** — see
    [Safety](#safety-what-it-may-do-and-the-defaults).
 
 ## What it does
@@ -85,23 +85,23 @@ name. That rule is enforced by tests that read the source: nothing in the core a
 
 argmind presses buttons on your computer. Read this before turning things on.
 
-- **At rest, only watching is on.** Everything below waits for your answer in 설정 (Settings).
+- **At rest, only watching is on.** Everything below waits for your answer in Settings.
   Your answer is written to `%LOCALAPPDATA%\argmind\decisions.json`. Refusing always wins.
-  - *확인 없이 실행*: act on what you asked for without confirmation.
-  - *스스로 실행*: act on argmind's own ideas.
+  - *Act without confirming*: carry out what you asked for without waiting for a press.
+  - *Act on its own ideas too*: carry out argmind's own ideas as well.
   - The microphone, the camera and the voice.
   - Every install it offers.
-- **Until you turn on 확인 없이 실행, every action waits for a press**: it is shown as a row with a
-  실행 (Run) button.
+- **Until you turn on *Act without confirming*, every action waits for a press**: it is shown as a
+  row with a **Run** button.
 - **The person keeps some things for themselves:**
-  - **Rules (규칙), per app and per action**: *하지 않음* (never) or *항상 물어봄* (always ask). The
+  - **Rules, per app and per action**: *Never* or *Always ask*. The
     strictest rule wins.
   - **Passwords:** a password field is never typed into. You type it.
 - **Every action is checked against the screen:**
   - It is re-resolved just before it lands.
   - A step that fails stops the steps after it.
   - A name that matches more than one control is asked about, not guessed.
-  - A reply phrased as a question (*…할까요?*) leaves its action as a row instead of running it.
+  - A reply phrased as a question (*Shall I…?*) leaves its action as a row instead of running it.
 - **The local server** listens on loopback only and wants a token minted each run. It refuses any
   request addressed to a host name other than this machine's, so a web page cannot reach it by
   DNS rebinding.
@@ -128,7 +128,7 @@ qwen3:8b picks the right control 21 times in 28 when there is one (below).
 **What it keeps** is in `%LOCALAPPDATA%\argmind\`, as files you can read and delete:
 
 - settings and your answers: `decisions.json`, `devices.json`, `mind.json`, `tact.json`, `rules.json`;
-- the conversation, `conversation.jsonl` (*대화 기억 지우기* empties it);
+- the conversation, `conversation.jsonl` (*Forget the conversation* empties it);
 - handed-over errands, `errands.json`;
 - the record of work it set itself, `pursuit.jsonl`;
 - face prints, `faces.json`, only when you turn on recognising faces.
@@ -184,7 +184,7 @@ The command line, `native\target\release\argmind.exe`:
     argmind setup                   fetch what is missing, asking first
     argmind look                    what is on screen right now, and how long reading it took
     argmind talk                    a conversation; it clicks only with --live
-    argmind say "이 창 닫아줘"        one exchange, then exit
+    argmind say "close this window" one exchange, then exit
     argmind watch --for build       speak when something happens, unasked
 
 **Tests** need no display, model, network, microphone or speaker:

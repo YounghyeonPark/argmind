@@ -4,7 +4,7 @@ body:
   - type: markdown
     attributes:
       value: |
-        Korean or English is fine. 한국어도 괜찮습니다.
+        Korean or English is fine.
 
         **If something other than you could make argmind act** (a web page, a document, another
         program), do not file it here. Use *Report a vulnerability* on the Security tab instead.
@@ -20,7 +20,7 @@ body:
     attributes:
       label: What it did
       description: |
-        Paste the lines of 한 일 (Activity) for that turn. **Remove window titles or file names you
+        Paste the lines of Activity for that turn. **Remove window titles or file names you
         would not post publicly**: a title can be an email subject.
       render: text
     validations:

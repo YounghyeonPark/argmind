@@ -30,16 +30,16 @@ something they did not allow. For example:
   own. Programs it opens on its work screen run on a desktop of its own, in a job object, with the
   clipboard held shut while it presses. Reaching the person's desktop, clipboard or input from
   either counts.
-- **The person's own limits.** Typing into a password field, acting against a *하지 않음* (never)
-  rule, or acting without confirmation when *확인 없이 실행* is off.
+- **The person's own limits.** Typing into a password field, acting against a *Never* rule, or
+  acting without confirmation when *Act without confirming* is off.
 - **Anything leaving the machine** that the README's *What leaves the machine* section does not list.
 
 ## What does not
 
 - **The model choosing the wrong control.** That is a measured limit (21 of 28 answerable goals,
   qwen3:8b), not a vulnerability, unless it gets past one of the gates above.
-- **Something the person turned on doing what the switch says.** For example, *스스로 실행* (act on
-  argmind's own ideas) acting on argmind's own idea.
+- **Something the person turned on doing what the switch says.** For example, *Act on its own ideas
+  too* acting on argmind's own idea.
 - **Tasks' PowerShell commands.** They run as the person, on a separate desktop and window station,
   and the README says this is weaker than the WSL sandbox. A way past the separate desktop or window
   station is in scope; a command reaching the person's files is not, because it is documented.
