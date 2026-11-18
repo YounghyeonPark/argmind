@@ -1,0 +1,229 @@
+{
+ "window": "문자표",
+ "widgets": [
+  {
+   "name": "최소화",
+   "role": "button",
+   "rect": [
+    811,
+    71,
+    46,
+    32
+   ],
+   "target": null
+  },
+  {
+   "name": "최대화",
+   "role": "button",
+   "rect": [
+    857,
+    71,
+    46,
+    32
+   ],
+   "target": null
+  },
+  {
+   "name": "닫기",
+   "role": "button",
+   "rect": [
+    903,
+    71,
+    46,
+    32
+   ],
+   "target": null
+  },
+  {
+   "name": "글꼴",
+   "role": "combo box",
+   "rect": [
+    451,
+    113,
+    330,
+    24
+   ],
+   "target": null
+  },
+  {
+   "name": "열기",
+   "role": "button",
+   "rect": [
+    789,
+    113,
+    46,
+    24
+   ],
+   "target": "c-open-font"
+  },
+  {
+   "name": "도움말",
+   "role": "button",
+   "rect": [
+    843,
+    113,
+    74,
+    24
+   ],
+   "target": null
+  },
+  {
+   "name": "문자 격자",
+   "role": "pane",
+   "rect": [
+    343,
+    145,
+    581,
+    262
+   ],
+   "target": null
+  },
+  {
+   "name": "복사할 문자",
+   "role": "edit",
+   "rect": [
+    451,
+    431,
+    230,
+    24
+   ],
+   "target": null
+  },
+  {
+   "name": "선택",
+   "role": "button",
+   "rect": [
+    689,
+    431,
+    60,
+    24
+   ],
+   "target": null
+  },
+  {
+   "name": "복사",
+   "role": "button",
+   "rect": [
+    757,
+    431,
+    61,
+    24
+   ],
+   "target": "c-copy"
+  },
+  {
+   "name": "고급 보기",
+   "role": "check box",
+   "rect": [
+    343,
+    463,
+    93,
+    34
+   ],
+   "target": null
+  },
+  {
+   "name": "문자 집합",
+   "role": "combo box",
+   "rect": [
+    451,
+    499,
+    330,
+    24
+   ],
+   "target": null
+  },
+  {
+   "name": "열기",
+   "role": "button",
+   "rect": [
+    789,
+    499,
+    46,
+    24
+   ],
+   "target": "c-open-charset"
+  },
+  {
+   "name": "그룹화",
+   "role": "combo box",
+   "rect": [
+    451,
+    537,
+    330,
+    24
+   ],
+   "target": null
+  },
+  {
+   "name": "열기",
+   "role": "button",
+   "rect": [
+    789,
+    537,
+    46,
+    24
+   ],
+   "target": null
+  },
+  {
+   "name": "검색",
+   "role": "edit",
+   "rect": [
+    451,
+    575,
+    330,
+    24
+   ],
+   "target": null
+  },
+  {
+   "name": "찾기",
+   "role": "button",
+   "rect": [
+    789,
+    575,
+    61,
+    24
+   ],
+   "target": null
+  },
+  {
+   "name": "유니코드로 이동",
+   "role": "edit",
+   "rect": [
+    451,
+    617,
+    120,
+    24
+   ],
+   "target": null
+  }
+ ],
+ "targets": {
+  "c-open-font": [
+   789,
+   113,
+   46,
+   24
+  ],
+  "c-star": [
+   634,
+   233,
+   29,
+   29
+  ],
+  "c-copy": [
+   757,
+   431,
+   61,
+   24
+  ],
+  "c-open-charset": [
+   789,
+   499,
+   46,
+   24
+  ]
+ }
+}

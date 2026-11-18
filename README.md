@@ -77,6 +77,13 @@ This was measured on this machine before any of it was written:
 - **A vision model asked for a pixel** took **24–82 s**, and on a dense screen never answered.
 - **UI Automation** answers the same question exactly in **41–266 ms**.
 
+**The first of those was a reasoning model doing arithmetic.** Asked the way it was trained —
+reasoning off, a box — the same family answers in **0.4–0.6 s**, measured on drawn screens on
+2026-11-18. It is still less exact where the list has the thing by name (9 against 12 of 13: on a
+file list it lands a row out), and it sees what the list cannot — a remote desktop, an unnamed
+icon — in 5 or 6 of 6. So the rule stands on exactness, not on speed;
+[docs/findings/looking.md](docs/findings/looking.md) has the numbers.
+
 So the operating system supplies the names and the rectangles, and the model only ever picks a
 name. That rule is enforced by tests that read the source: nothing in the core asks a model for
 `x`/`y`, and nothing rendered into a prompt mentions a rectangle.

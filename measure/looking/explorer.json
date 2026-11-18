@@ -1,0 +1,653 @@
+{
+ "window": "문서 - 파일 탐색기",
+ "widgets": [
+  {
+   "name": "최소화",
+   "role": "button",
+   "rect": [
+    1142,
+    0,
+    46,
+    32
+   ],
+   "target": null
+  },
+  {
+   "name": "최대화",
+   "role": "button",
+   "rect": [
+    1188,
+    0,
+    46,
+    32
+   ],
+   "target": null
+  },
+  {
+   "name": "닫기",
+   "role": "button",
+   "rect": [
+    1234,
+    0,
+    46,
+    32
+   ],
+   "target": null
+  },
+  {
+   "name": "새로 만들기",
+   "role": "button",
+   "rect": [
+    8,
+    40,
+    112,
+    31
+   ],
+   "target": null
+  },
+  {
+   "name": "잘라내기",
+   "role": "button",
+   "rect": [
+    122,
+    40,
+    95,
+    31
+   ],
+   "target": null
+  },
+  {
+   "name": "복사",
+   "role": "button",
+   "rect": [
+    219,
+    40,
+    69,
+    31
+   ],
+   "target": null
+  },
+  {
+   "name": "붙여넣기",
+   "role": "button",
+   "rect": [
+    290,
+    40,
+    95,
+    31
+   ],
+   "target": null
+  },
+  {
+   "name": "이름 바꾸기",
+   "role": "button",
+   "rect": [
+    387,
+    40,
+    112,
+    31
+   ],
+   "target": null
+  },
+  {
+   "name": "공유",
+   "role": "button",
+   "rect": [
+    500,
+    40,
+    69,
+    31
+   ],
+   "target": null
+  },
+  {
+   "name": "삭제",
+   "role": "button",
+   "rect": [
+    571,
+    40,
+    69,
+    31
+   ],
+   "target": "e-delete"
+  },
+  {
+   "name": "정렬",
+   "role": "button",
+   "rect": [
+    642,
+    40,
+    69,
+    31
+   ],
+   "target": null
+  },
+  {
+   "name": "보기",
+   "role": "button",
+   "rect": [
+    713,
+    40,
+    69,
+    31
+   ],
+   "target": null
+  },
+  {
+   "name": "주소",
+   "role": "edit",
+   "rect": [
+    10,
+    86,
+    992,
+    28
+   ],
+   "target": null
+  },
+  {
+   "name": "문서 검색",
+   "role": "edit",
+   "rect": [
+    1010,
+    86,
+    260,
+    28
+   ],
+   "target": null
+  },
+  {
+   "name": "홈",
+   "role": "tree item",
+   "rect": [
+    4,
+    128,
+    191,
+    27
+   ],
+   "target": null
+  },
+  {
+   "name": "갤러리",
+   "role": "tree item",
+   "rect": [
+    4,
+    155,
+    191,
+    27
+   ],
+   "target": null
+  },
+  {
+   "name": "바탕 화면",
+   "role": "tree item",
+   "rect": [
+    4,
+    182,
+    191,
+    27
+   ],
+   "target": null
+  },
+  {
+   "name": "다운로드",
+   "role": "tree item",
+   "rect": [
+    4,
+    209,
+    191,
+    27
+   ],
+   "target": "e-downloads"
+  },
+  {
+   "name": "문서",
+   "role": "tree item",
+   "rect": [
+    4,
+    236,
+    191,
+    27
+   ],
+   "target": null
+  },
+  {
+   "name": "사진",
+   "role": "tree item",
+   "rect": [
+    4,
+    263,
+    191,
+    27
+   ],
+   "target": null
+  },
+  {
+   "name": "음악",
+   "role": "tree item",
+   "rect": [
+    4,
+    290,
+    191,
+    27
+   ],
+   "target": null
+  },
+  {
+   "name": "동영상",
+   "role": "tree item",
+   "rect": [
+    4,
+    317,
+    191,
+    27
+   ],
+   "target": null
+  },
+  {
+   "name": "내 PC",
+   "role": "tree item",
+   "rect": [
+    4,
+    344,
+    191,
+    27
+   ],
+   "target": null
+  },
+  {
+   "name": "네트워크",
+   "role": "tree item",
+   "rect": [
+    4,
+    371,
+    191,
+    27
+   ],
+   "target": null
+  },
+  {
+   "name": "견적서_A사.pdf",
+   "role": "list item",
+   "rect": [
+    200,
+    148,
+    1080,
+    19
+   ],
+   "target": null
+  },
+  {
+   "name": "견적서_B사.pdf",
+   "role": "list item",
+   "rect": [
+    200,
+    167,
+    1080,
+    19
+   ],
+   "target": null
+  },
+  {
+   "name": "계약서_2026_초안.docx",
+   "role": "list item",
+   "rect": [
+    200,
+    186,
+    1080,
+    19
+   ],
+   "target": null
+  },
+  {
+   "name": "계약서_2026_최종.docx",
+   "role": "list item",
+   "rect": [
+    200,
+    205,
+    1080,
+    19
+   ],
+   "target": null
+  },
+  {
+   "name": "그림1.png",
+   "role": "list item",
+   "rect": [
+    200,
+    224,
+    1080,
+    19
+   ],
+   "target": null
+  },
+  {
+   "name": "그림2.png",
+   "role": "list item",
+   "rect": [
+    200,
+    243,
+    1080,
+    19
+   ],
+   "target": null
+  },
+  {
+   "name": "발표자료_11월.pptx",
+   "role": "list item",
+   "rect": [
+    200,
+    262,
+    1080,
+    19
+   ],
+   "target": null
+  },
+  {
+   "name": "발표자료_11월_수정.pptx",
+   "role": "list item",
+   "rect": [
+    200,
+    281,
+    1080,
+    19
+   ],
+   "target": null
+  },
+  {
+   "name": "보고서_초안.docx",
+   "role": "list item",
+   "rect": [
+    200,
+    300,
+    1080,
+    19
+   ],
+   "target": null
+  },
+  {
+   "name": "보고서_최종_v2.docx",
+   "role": "list item",
+   "rect": [
+    200,
+    319,
+    1080,
+    19
+   ],
+   "target": null
+  },
+  {
+   "name": "보고서_최종_v3.docx",
+   "role": "list item",
+   "rect": [
+    200,
+    338,
+    1080,
+    19
+   ],
+   "target": "e-report3"
+  },
+  {
+   "name": "보고서_최종_v3_수정.docx",
+   "role": "list item",
+   "rect": [
+    200,
+    357,
+    1080,
+    19
+   ],
+   "target": null
+  },
+  {
+   "name": "사진_모음.zip",
+   "role": "list item",
+   "rect": [
+    200,
+    376,
+    1080,
+    19
+   ],
+   "target": null
+  },
+  {
+   "name": "설치_안내.txt",
+   "role": "list item",
+   "rect": [
+    200,
+    395,
+    1080,
+    19
+   ],
+   "target": null
+  },
+  {
+   "name": "세금계산서_10월.pdf",
+   "role": "list item",
+   "rect": [
+    200,
+    414,
+    1080,
+    19
+   ],
+   "target": null
+  },
+  {
+   "name": "세금계산서_11월.pdf",
+   "role": "list item",
+   "rect": [
+    200,
+    433,
+    1080,
+    19
+   ],
+   "target": null
+  },
+  {
+   "name": "업무일지.xlsx",
+   "role": "list item",
+   "rect": [
+    200,
+    452,
+    1080,
+    19
+   ],
+   "target": null
+  },
+  {
+   "name": "예산표_2025.xlsx",
+   "role": "list item",
+   "rect": [
+    200,
+    471,
+    1080,
+    19
+   ],
+   "target": null
+  },
+  {
+   "name": "예산표_2026.xlsx",
+   "role": "list item",
+   "rect": [
+    200,
+    490,
+    1080,
+    19
+   ],
+   "target": "e-budget26"
+  },
+  {
+   "name": "예산표_2026_백업.xlsx",
+   "role": "list item",
+   "rect": [
+    200,
+    509,
+    1080,
+    19
+   ],
+   "target": null
+  },
+  {
+   "name": "이력서.docx",
+   "role": "list item",
+   "rect": [
+    200,
+    528,
+    1080,
+    19
+   ],
+   "target": null
+  },
+  {
+   "name": "일정표.xlsx",
+   "role": "list item",
+   "rect": [
+    200,
+    547,
+    1080,
+    19
+   ],
+   "target": null
+  },
+  {
+   "name": "주소록.csv",
+   "role": "list item",
+   "rect": [
+    200,
+    566,
+    1080,
+    19
+   ],
+   "target": null
+  },
+  {
+   "name": "출장_보고.docx",
+   "role": "list item",
+   "rect": [
+    200,
+    585,
+    1080,
+    19
+   ],
+   "target": null
+  },
+  {
+   "name": "회의록_1020.md",
+   "role": "list item",
+   "rect": [
+    200,
+    604,
+    1080,
+    19
+   ],
+   "target": null
+  },
+  {
+   "name": "회의록_1027.md",
+   "role": "list item",
+   "rect": [
+    200,
+    623,
+    1080,
+    19
+   ],
+   "target": null
+  },
+  {
+   "name": "회의록_1103.md",
+   "role": "list item",
+   "rect": [
+    200,
+    642,
+    1080,
+    19
+   ],
+   "target": null
+  },
+  {
+   "name": "회의록_1104.md",
+   "role": "list item",
+   "rect": [
+    200,
+    661,
+    1080,
+    19
+   ],
+   "target": "e-min1104"
+  },
+  {
+   "name": "회의록_1110.md",
+   "role": "list item",
+   "rect": [
+    200,
+    680,
+    1080,
+    19
+   ],
+   "target": null
+  },
+  {
+   "name": "회의록_1117.md",
+   "role": "list item",
+   "rect": [
+    200,
+    699,
+    1080,
+    19
+   ],
+   "target": null
+  },
+  {
+   "name": "휴가_신청서.hwp",
+   "role": "list item",
+   "rect": [
+    200,
+    718,
+    1080,
+    19
+   ],
+   "target": null
+  },
+  {
+   "name": "~$보고서_최종_v3.docx",
+   "role": "list item",
+   "rect": [
+    200,
+    737,
+    1080,
+    19
+   ],
+   "target": null
+  }
+ ],
+ "targets": {
+  "e-delete": [
+   571,
+   40,
+   69,
+   31
+  ],
+  "e-downloads": [
+   4,
+   209,
+   191,
+   27
+  ],
+  "e-report3": [
+   200,
+   338,
+   1080,
+   19
+  ],
+  "e-budget26": [
+   200,
+   490,
+   1080,
+   19
+  ],
+  "e-min1104": [
+   200,
+   661,
+   1080,
+   19
+  ]
+ }
+}

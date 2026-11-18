@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="ko"><head><meta charset="utf-8"><title>문서 - 파일 탐색기</title>
+<link rel="stylesheet" href="win.css">
+<style>
+  .toolbar { height: 48px; display: flex; align-items: center; gap: 2px; padding: 0 8px; background: #f9f9f9;
+    border-bottom: 1px solid #e5e5e5; }
+  .toolbar button { display: flex; align-items: center; gap: 6px; padding: 6px 10px; }
+  .toolbar .ico { font-size: 15px; }
+  .address { height: 40px; display: flex; align-items: center; gap: 8px; padding: 0 10px; background: #f9f9f9;
+    border-bottom: 1px solid #e5e5e5; }
+  .address input { flex: 1; } .address .search { flex: 0 0 260px; }
+  .body { display: flex; height: calc(800px - 32px - 48px - 40px - 24px); }
+  nav { width: 200px; padding: 8px 4px; border-right: 1px solid #e5e5e5; background: #f9f9f9; }
+  nav div { display: flex; align-items: center; gap: 10px; padding: 5px 12px; border-radius: 4px; }
+  nav div.on { background: #e5e5e5; }
+  nav .ico { font-size: 14px; color: #555; }
+  main { flex: 1; background: #fff; }
+  .head, .row { display: grid; grid-template-columns: 1fr 160px 150px 90px; padding: 0 12px; }
+  .head { height: 28px; align-items: center; color: #555; font-size: 12px; border-bottom: 1px solid #eee; }
+  .row { height: 19px; align-items: center; font-size: 12px; }
+  .row span:first-child { display: flex; align-items: center; gap: 6px; }
+  .row .ico { font-size: 12px; color: #4a7bd0; }
+  .row span:nth-child(n+2) { color: #666; }
+  .status { height: 24px; display: flex; align-items: center; padding: 0 12px; font-size: 12px;
+    border-top: 1px solid #e5e5e5; background: #f9f9f9; }
+</style></head>
+<body>
+<div class="titlebar"><span class="title">문서 - 파일 탐색기</span>
+  <span class="cap ico" data-name="최소화" data-role="button">&#xE921;</span>
+  <span class="cap ico" data-name="최대화" data-role="button">&#xE922;</span>
+  <span class="cap ico" data-name="닫기" data-role="button">&#xE8BB;</span></div>
+<div class="toolbar">
+  <button class="flat" data-name="새로 만들기" data-role="button"><i class="ico">&#xE710;</i>새로 만들기</button>
+  <button class="flat" data-name="잘라내기" data-role="button"><i class="ico">&#xE8C6;</i>잘라내기</button>
+  <button class="flat" data-name="복사" data-role="button"><i class="ico">&#xE8C8;</i>복사</button>
+  <button class="flat" data-name="붙여넣기" data-role="button"><i class="ico">&#xE77F;</i>붙여넣기</button>
+  <button class="flat" data-name="이름 바꾸기" data-role="button"><i class="ico">&#xE8AC;</i>이름 바꾸기</button>
+  <button class="flat" data-name="공유" data-role="button"><i class="ico">&#xE72D;</i>공유</button>
+  <button class="flat" data-name="삭제" data-role="button" data-target="e-delete"><i class="ico">&#xE74D;</i>삭제</button>
+  <button class="flat" data-name="정렬" data-role="button"><i class="ico">&#xE8CB;</i>정렬</button>
+  <button class="flat" data-name="보기" data-role="button"><i class="ico">&#xE8FD;</i>보기</button>
+</div>
+<div class="address">
+  <input data-name="주소" data-role="edit" value="› 내 PC › 문서">
+  <input class="search" data-name="문서 검색" data-role="edit" placeholder="문서 검색">
+</div>
+<div class="body">
+  <nav>
+    <div data-name="홈" data-role="tree item"><i class="ico">&#xE80F;</i>홈</div>
+    <div data-name="갤러리" data-role="tree item"><i class="ico">&#xE91B;</i>갤러리</div>
+    <div data-name="바탕 화면" data-role="tree item"><i class="ico">&#xE8FC;</i>바탕 화면</div>
+    <div data-name="다운로드" data-role="tree item" data-target="e-downloads"><i class="ico">&#xE896;</i>다운로드</div>
+    <div class="on" data-name="문서" data-role="tree item"><i class="ico">&#xE8A5;</i>문서</div>
+    <div data-name="사진" data-role="tree item"><i class="ico">&#xEB9F;</i>사진</div>
+    <div data-name="음악" data-role="tree item"><i class="ico">&#xE8D6;</i>음악</div>
+    <div data-name="동영상" data-role="tree item"><i class="ico">&#xE8B2;</i>동영상</div>
+    <div data-name="내 PC" data-role="tree item"><i class="ico">&#xE7F8;</i>내 PC</div>
+    <div data-name="네트워크" data-role="tree item"><i class="ico">&#xE968;</i>네트워크</div>
+  </nav>
+  <main>
+    <div class="head"><span>이름</span><span>수정한 날짜</span><span>유형</span><span>크기</span></div>
+    <div id="rows"></div>
+  </main>
+</div>
+<div class="status">32개 항목</div>
+<script>
+  const files = [
+    ["견적서_A사.pdf", "2026-10-02 오전 9:14", "PDF 문서", "212KB"],
+    ["견적서_B사.pdf", "2026-10-02 오전 9:20", "PDF 문서", "198KB"],
+    ["계약서_2026_초안.docx", "2026-09-28 오후 4:02", "DOCX 문서", "44KB"],
+    ["계약서_2026_최종.docx", "2026-10-11 오전 11:37", "DOCX 문서", "47KB"],
+    ["그림1.png", "2026-08-19 오후 2:10", "PNG 파일", "1,204KB"],
+    ["그림2.png", "2026-08-19 오후 2:11", "PNG 파일", "988KB"],
+    ["발표자료_11월.pptx", "2026-11-05 오후 6:48", "PPTX 프레젠테이션", "5,310KB"],
+    ["발표자료_11월_수정.pptx", "2026-11-06 오전 8:02", "PPTX 프레젠테이션", "5,402KB"],
+    ["보고서_초안.docx", "2026-10-14 오후 3:15", "DOCX 문서", "61KB"],
+    ["보고서_최종_v2.docx", "2026-10-20 오후 7:41", "DOCX 문서", "73KB"],
+    ["보고서_최종_v3.docx", "2026-10-22 오전 10:05", "DOCX 문서", "75KB", "e-report3"],
+    ["보고서_최종_v3_수정.docx", "2026-10-23 오후 1:29", "DOCX 문서", "76KB"],
+    ["사진_모음.zip", "2026-07-30 오후 9:55", "압축(ZIP) 폴더", "48,120KB"],
+    ["설치_안내.txt", "2026-06-12 오전 8:30", "텍스트 문서", "3KB"],
+    ["세금계산서_10월.pdf", "2026-11-01 오전 9:00", "PDF 문서", "156KB"],
+    ["세금계산서_11월.pdf", "2026-11-15 오전 9:00", "PDF 문서", "158KB"],
+    ["업무일지.xlsx", "2026-11-17 오후 6:30", "XLSX 워크시트", "88KB"],
+    ["예산표_2025.xlsx", "2025-12-29 오후 5:12", "XLSX 워크시트", "102KB"],
+    ["예산표_2026.xlsx", "2026-11-12 오후 2:44", "XLSX 워크시트", "118KB", "e-budget26"],
+    ["예산표_2026_백업.xlsx", "2026-11-12 오후 2:45", "XLSX 워크시트", "118KB"],
+    ["이력서.docx", "2026-03-03 오후 10:20", "DOCX 문서", "39KB"],
+    ["일정표.xlsx", "2026-11-16 오전 7:58", "XLSX 워크시트", "27KB"],
+    ["주소록.csv", "2026-05-21 오후 12:01", "CSV 파일", "12KB"],
+    ["출장_보고.docx", "2026-09-09 오후 4:40", "DOCX 문서", "52KB"],
+    ["회의록_1020.md", "2026-10-20 오후 5:30", "MD 파일", "4KB"],
+    ["회의록_1027.md", "2026-10-27 오후 5:42", "MD 파일", "5KB"],
+    ["회의록_1103.md", "2026-11-03 오후 5:18", "MD 파일", "4KB"],
+    ["회의록_1104.md", "2026-11-04 오후 6:05", "MD 파일", "6KB", "e-min1104"],
+    ["회의록_1110.md", "2026-11-10 오후 5:27", "MD 파일", "5KB"],
+    ["회의록_1117.md", "2026-11-17 오후 5:50", "MD 파일", "4KB"],
+    ["휴가_신청서.hwp", "2026-08-01 오전 9:33", "HWP 문서", "21KB"],
+    ["~$보고서_최종_v3.docx", "2026-10-23 오후 1:29", "DOCX 문서", "1KB"],
+  ];
+  const rows = document.getElementById("rows");
+  for (const [name, when, kind, size, target] of files) {
+    const r = document.createElement("div");
+    r.className = "row";
+    r.dataset.name = name;
+    r.dataset.role = "list item";
+    if (target) r.dataset.target = target;
+    r.innerHTML = `<span><i class="ico">&#xE8A5;</i>${name}</span><span>${when}</span><span>${kind}</span><span>${size}</span>`;
+    rows.appendChild(r);
+  }
+</script>
+</body></html>

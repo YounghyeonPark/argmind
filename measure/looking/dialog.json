@@ -1,0 +1,168 @@
+{
+ "window": "제안서 - 문서 편집기",
+ "widgets": [
+  {
+   "name": "최소화",
+   "role": "button",
+   "rect": [
+    1142,
+    0,
+    46,
+    32
+   ],
+   "target": null
+  },
+  {
+   "name": "최대화",
+   "role": "button",
+   "rect": [
+    1188,
+    0,
+    46,
+    32
+   ],
+   "target": null
+  },
+  {
+   "name": "닫기",
+   "role": "button",
+   "rect": [
+    1234,
+    0,
+    46,
+    32
+   ],
+   "target": null
+  },
+  {
+   "name": "파일",
+   "role": "menu item",
+   "rect": [
+    6,
+    34,
+    46,
+    25
+   ],
+   "target": null
+  },
+  {
+   "name": "편집",
+   "role": "menu item",
+   "rect": [
+    54,
+    34,
+    46,
+    25
+   ],
+   "target": null
+  },
+  {
+   "name": "보기",
+   "role": "menu item",
+   "rect": [
+    102,
+    34,
+    46,
+    25
+   ],
+   "target": null
+  },
+  {
+   "name": "삽입",
+   "role": "menu item",
+   "rect": [
+    150,
+    34,
+    46,
+    25
+   ],
+   "target": null
+  },
+  {
+   "name": "서식",
+   "role": "menu item",
+   "rect": [
+    198,
+    34,
+    46,
+    25
+   ],
+   "target": null
+  },
+  {
+   "name": "도움말",
+   "role": "menu item",
+   "rect": [
+    246,
+    34,
+    59,
+    25
+   ],
+   "target": null
+  },
+  {
+   "name": "본문",
+   "role": "document",
+   "rect": [
+    260,
+    86,
+    760,
+    700
+   ],
+   "target": null
+  },
+  {
+   "name": "저장",
+   "role": "button",
+   "rect": [
+    555,
+    394,
+    96,
+    27
+   ],
+   "target": "d-save"
+  },
+  {
+   "name": "저장 안 함",
+   "role": "button",
+   "rect": [
+    659,
+    394,
+    96,
+    27
+   ],
+   "target": "d-nosave"
+  },
+  {
+   "name": "취소",
+   "role": "button",
+   "rect": [
+    763,
+    394,
+    96,
+    27
+   ],
+   "target": "d-cancel"
+  }
+ ],
+ "targets": {
+  "d-save": [
+   555,
+   394,
+   96,
+   27
+  ],
+  "d-nosave": [
+   659,
+   394,
+   96,
+   27
+  ],
+  "d-cancel": [
+   763,
+   394,
+   96,
+   27
+  ]
+ }
+}

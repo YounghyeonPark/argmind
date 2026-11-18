@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="ko"><head><meta charset="utf-8"><title>제안서 - 문서 편집기</title>
+<link rel="stylesheet" href="win.css">
+<style>
+  .menu { height: 30px; display: flex; align-items: center; gap: 2px; padding: 0 6px; background: #f9f9f9;
+    border-bottom: 1px solid #e5e5e5; }
+  .menu span { padding: 4px 10px; }
+  .page { position: absolute; top: 62px; bottom: 0; left: 0; right: 0; background: #e8e8e8; }
+  .paper { width: 760px; margin: 24px auto; background: #fff; height: 700px; padding: 60px 72px;
+    font-family: "Malgun Gothic"; font-size: 15px; line-height: 1.8; color: #333; }
+  .paper h1 { font-size: 24px; margin: 0 0 18px; }
+  .shade { position: absolute; inset: 0; background: rgba(0,0,0,.18); }
+  .dialog { position: absolute; left: 400px; top: 280px; width: 480px; background: #fff; border-radius: 8px;
+    box-shadow: 0 12px 40px rgba(0,0,0,.28); border: 1px solid #ccc; }
+  .dialog .dt { height: 32px; display: flex; align-items: center; padding-left: 14px; font-size: 12px; }
+  .dialog .dm { padding: 18px 24px 26px; font-size: 15px; }
+  .dialog .db { display: flex; justify-content: flex-end; gap: 8px; padding: 16px 20px; background: #f3f3f3;
+    border-top: 1px solid #e5e5e5; border-radius: 0 0 8px 8px; }
+  .dialog .db button { min-width: 96px; }
+</style></head>
+<body>
+<div class="titlebar"><span class="title">제안서 - 문서 편집기</span>
+  <span class="cap ico" data-name="최소화" data-role="button">&#xE921;</span>
+  <span class="cap ico" data-name="최대화" data-role="button">&#xE922;</span>
+  <span class="cap ico" data-name="닫기" data-role="button">&#xE8BB;</span></div>
+<div class="menu">
+  <span data-name="파일" data-role="menu item">파일</span><span data-name="편집" data-role="menu item">편집</span>
+  <span data-name="보기" data-role="menu item">보기</span><span data-name="삽입" data-role="menu item">삽입</span>
+  <span data-name="서식" data-role="menu item">서식</span><span data-name="도움말" data-role="menu item">도움말</span>
+</div>
+<div class="page"><div class="paper" data-name="본문" data-role="document">
+  <h1>2027년 협력 제안서</h1>
+  귀사의 지속적인 성장에 감사드립니다. 본 제안서는 내년 상반기 공동 프로젝트의 범위와 일정,
+  예산을 정리한 것입니다. 1단계에서는 요구 사항을 정리하고, 2단계에서는 시제품을 만들어 시험하며,
+  3단계에서는 결과를 바탕으로 정식 출시를 준비합니다. 각 단계의 담당자와 일정은 붙임 자료를
+  참고해 주십시오.
+</div></div>
+<div class="shade"></div>
+<div class="dialog">
+  <div class="dt">문서 편집기</div>
+  <div class="dm">제안서의 변경 내용을 저장하시겠습니까?</div>
+  <div class="db">
+    <button class="primary" data-name="저장" data-role="button" data-target="d-save">저장</button>
+    <button data-name="저장 안 함" data-role="button" data-target="d-nosave">저장 안 함</button>
+    <button data-name="취소" data-role="button" data-target="d-cancel">취소</button>
+  </div>
+</div>
+</body></html>

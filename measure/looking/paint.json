@@ -1,0 +1,334 @@
+{
+ "window": "제목 없음 - 그림판",
+ "widgets": [
+  {
+   "name": "최소화",
+   "role": "button",
+   "rect": [
+    1142,
+    0,
+    46,
+    32
+   ],
+   "target": null
+  },
+  {
+   "name": "최대화",
+   "role": "button",
+   "rect": [
+    1188,
+    0,
+    46,
+    32
+   ],
+   "target": null
+  },
+  {
+   "name": "닫기",
+   "role": "button",
+   "rect": [
+    1234,
+    0,
+    46,
+    32
+   ],
+   "target": null
+  },
+  {
+   "name": "파일",
+   "role": "menu item",
+   "rect": [
+    6,
+    35,
+    46,
+    25
+   ],
+   "target": null
+  },
+  {
+   "name": "편집",
+   "role": "menu item",
+   "rect": [
+    54,
+    35,
+    46,
+    25
+   ],
+   "target": null
+  },
+  {
+   "name": "보기",
+   "role": "menu item",
+   "rect": [
+    102,
+    35,
+    46,
+    25
+   ],
+   "target": null
+  },
+  {
+   "name": "저장",
+   "role": "button",
+   "rect": [
+    150,
+    36,
+    30,
+    22
+   ],
+   "target": null
+  },
+  {
+   "name": "실행 취소",
+   "role": "button",
+   "rect": [
+    182,
+    36,
+    30,
+    22
+   ],
+   "target": null
+  },
+  {
+   "name": "다시 실행",
+   "role": "button",
+   "rect": [
+    214,
+    36,
+    30,
+    22
+   ],
+   "target": null
+  },
+  {
+   "name": "연필",
+   "role": "button",
+   "rect": [
+    22,
+    68,
+    36,
+    32
+   ],
+   "target": null
+  },
+  {
+   "name": "텍스트",
+   "role": "button",
+   "rect": [
+    62,
+    68,
+    36,
+    32
+   ],
+   "target": "p-text"
+  },
+  {
+   "name": "지우개",
+   "role": "button",
+   "rect": [
+    102,
+    68,
+    36,
+    32
+   ],
+   "target": "p-eraser"
+  },
+  {
+   "name": "자르기",
+   "role": "button",
+   "rect": [
+    22,
+    104,
+    36,
+    32
+   ],
+   "target": null
+  },
+  {
+   "name": "확대/축소",
+   "role": "button",
+   "rect": [
+    62,
+    104,
+    36,
+    32
+   ],
+   "target": null
+  },
+  {
+   "name": "회전",
+   "role": "button",
+   "rect": [
+    102,
+    104,
+    36,
+    32
+   ],
+   "target": null
+  },
+  {
+   "name": "직사각형",
+   "role": "button",
+   "rect": [
+    167,
+    68,
+    36,
+    32
+   ],
+   "target": null
+  },
+  {
+   "name": "타원",
+   "role": "button",
+   "rect": [
+    207,
+    68,
+    36,
+    32
+   ],
+   "target": null
+  },
+  {
+   "name": "선",
+   "role": "button",
+   "rect": [
+    247,
+    68,
+    36,
+    32
+   ],
+   "target": null
+  },
+  {
+   "name": "검정",
+   "role": "button",
+   "rect": [
+    312,
+    68,
+    22,
+    22
+   ],
+   "target": null
+  },
+  {
+   "name": "흰색",
+   "role": "button",
+   "rect": [
+    339,
+    68,
+    22,
+    22
+   ],
+   "target": null
+  },
+  {
+   "name": "빨강",
+   "role": "button",
+   "rect": [
+    366,
+    68,
+    22,
+    22
+   ],
+   "target": "p-red"
+  },
+  {
+   "name": "주황",
+   "role": "button",
+   "rect": [
+    393,
+    68,
+    22,
+    22
+   ],
+   "target": null
+  },
+  {
+   "name": "노랑",
+   "role": "button",
+   "rect": [
+    420,
+    68,
+    22,
+    22
+   ],
+   "target": null
+  },
+  {
+   "name": "초록",
+   "role": "button",
+   "rect": [
+    447,
+    68,
+    22,
+    22
+   ],
+   "target": null
+  },
+  {
+   "name": "파랑",
+   "role": "button",
+   "rect": [
+    474,
+    68,
+    22,
+    22
+   ],
+   "target": null
+  },
+  {
+   "name": "보라",
+   "role": "button",
+   "rect": [
+    501,
+    68,
+    22,
+    22
+   ],
+   "target": null
+  },
+  {
+   "name": "캔버스",
+   "role": "pane",
+   "rect": [
+    40,
+    184,
+    900,
+    520
+   ],
+   "target": null
+  }
+ ],
+ "targets": {
+  "p-trash": [
+   1208,
+   35,
+   32,
+   24
+  ],
+  "p-gear": [
+   1242,
+   35,
+   32,
+   24
+  ],
+  "p-text": [
+   62,
+   68,
+   36,
+   32
+  ],
+  "p-eraser": [
+   102,
+   68,
+   36,
+   32
+  ],
+  "p-red": [
+   366,
+   68,
+   22,
+   22
+  ]
+ }
+}

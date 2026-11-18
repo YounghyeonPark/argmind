@@ -1,0 +1,4482 @@
+{
+  "arms": [
+    {
+      "arm": "box",
+      "goals": [
+        {
+          "counted": "wrong",
+          "goal": "보고서_최종_v3.docx 파일 선택해줘",
+          "kind": "listed",
+          "tries": [
+            {
+              "at": [
+                289.0,
+                360.0,
+                "보고서_최종_v3_수정.docx"
+              ],
+              "reason": "stop",
+              "reply": "{\"bbox_2d\": [175, 437, 277, 464]}",
+              "result": "wrong",
+              "seconds": 1.34,
+              "thought": 0
+            },
+            {
+              "at": [
+                289.0,
+                360.0,
+                "보고서_최종_v3_수정.docx"
+              ],
+              "reason": "stop",
+              "reply": "{\"bbox_2d\": [175, 437, 277, 464]}",
+              "result": "wrong",
+              "seconds": 0.49,
+              "thought": 0
+            },
+            {
+              "at": [
+                289.0,
+                360.0,
+                "보고서_최종_v3_수정.docx"
+              ],
+              "reason": "stop",
+              "reply": "{\"bbox_2d\": [175, 437, 277, 464]}",
+              "result": "wrong",
+              "seconds": 0.49,
+              "thought": 0
+            }
+          ]
+        },
+        {
+          "counted": "wrong",
+          "goal": "예산표_2026.xlsx 눌러줘",
+          "kind": "listed",
+          "tries": [
+            {
+              "at": [
+                288.0,
+                516.0,
+                "예산표_2026_백업.xlsx"
+              ],
+              "reason": "stop",
+              "reply": "{\"bbox_2d\": [175, 632, 275, 657]}",
+              "result": "wrong",
+              "seconds": 0.59,
+              "thought": 0
+            },
+            {
+              "at": [
+                288.0,
+                516.0,
+                "예산표_2026_백업.xlsx"
+              ],
+              "reason": "stop",
+              "reply": "{\"bbox_2d\": [175, 632, 275, 657]}",
+              "result": "wrong",
+              "seconds": 0.44,
+              "thought": 0
+            },
+            {
+              "at": [
+                288.0,
+                516.0,
+                "예산표_2026_백업.xlsx"
+              ],
+              "reason": "stop",
+              "reply": "{\"bbox_2d\": [175, 632, 275, 657]}",
+              "result": "wrong",
+              "seconds": 0.48,
+              "thought": 0
+            }
+          ]
+        },
+        {
+          "counted": "wrong",
+          "goal": "회의록_1104.md 골라줘",
+          "kind": "listed",
+          "tries": [
+            {
+              "at": [
+                265.0,
+                711.0,
+                "회의록_1117.md"
+              ],
+              "reason": "stop",
+              "reply": "{\"bbox_2d\": [167, 877, 247, 900]}",
+              "result": "wrong",
+              "seconds": 0.78,
+              "thought": 0
+            },
+            {
+              "at": [
+                265.0,
+                711.0,
+                "회의록_1117.md"
+              ],
+              "reason": "stop",
+              "reply": "{\"bbox_2d\": [167, 877, 247, 900]}",
+              "result": "wrong",
+              "seconds": 0.46,
+              "thought": 0
+            },
+            {
+              "at": [
+                265.0,
+                711.0,
+                "회의록_1117.md"
+              ],
+              "reason": "stop",
+              "reply": "{\"bbox_2d\": [167, 877, 247, 900]}",
+              "result": "wrong",
+              "seconds": 0.48,
+              "thought": 0
+            }
+          ]
+        },
+        {
+          "counted": "right",
+          "goal": "삭제 버튼 눌러줘",
+          "kind": "listed",
+          "tries": [
+            {
+              "at": [
+                595.0,
+                56.0,
+                "e-delete"
+              ],
+              "reason": "stop",
+              "reply": "{\"bbox_2d\": [447, 57, 483, 83]}",
+              "result": "right",
+              "seconds": 0.81,
+              "thought": 0
+            },
+            {
+              "at": [
+                595.0,
+                56.0,
+                "e-delete"
+              ],
+              "reason": "stop",
+              "reply": "{\"bbox_2d\": [447, 57, 483, 83]}",
+              "result": "right",
+              "seconds": 0.71,
+              "thought": 0
+            },
+            {
+              "at": [
+                595.0,
+                56.0,
+                "e-delete"
+              ],
+              "reason": "stop",
+              "reply": "{\"bbox_2d\": [447, 57, 483, 83]}",
+              "result": "right",
+              "seconds": 0.66,
+              "thought": 0
+            }
+          ]
+        },
+        {
+          "counted": "right",
+          "goal": "다운로드 폴더로 가줘",
+          "kind": "listed",
+          "tries": [
+            {
+              "at": [
+                40.0,
+                231.0,
+                "e-downloads"
+              ],
+              "reason": "stop",
+              "reply": "{\"bbox_2d\": [16, 277, 47, 300]}",
+              "result": "right",
+              "seconds": 0.75,
+              "thought": 0
+            },
+            {
+              "at": [
+                40.0,
+                231.0,
+                "e-downloads"
+              ],
+              "reason": "stop",
+              "reply": "{\"bbox_2d\": [16, 277, 47, 300]}",
+              "result": "right",
+              "seconds": 0.51,
+              "thought": 0
+            },
+            {
+              "at": [
+                40.0,
+                231.0,
+                "e-downloads"
+              ],
+              "reason": "stop",
+              "reply": "{\"bbox_2d\": [16, 277, 47, 300]}",
+              "result": "right",
+              "seconds": 0.44,
+              "thought": 0
+            }
+          ]
+        },
+        {
+          "counted": "declined",
+          "goal": "휴지통 비우기 눌러줘",
+          "kind": "none",
+          "tries": [
+            {
+              "at": null,
+              "reason": "stop",
+              "reply": "{\"bbox_2d\": null}",
+              "result": "declined",
+              "seconds": 0.35,
+              "thought": 0
+            },
+            {
+              "at": null,
+              "reason": "stop",
+              "reply": "{\"bbox_2d\": null}",
+              "result": "declined",
+              "seconds": 0.22,
+              "thought": 0
+            },
+            {
+              "at": null,
+              "reason": "stop",
+              "reply": "{\"bbox_2d\": null}",
+              "result": "declined",
+              "seconds": 0.25,
+              "thought": 0
+            }
+          ]
+        },
+        {
+          "counted": "wrong",
+          "goal": "저장하지 말고 닫아줘",
+          "kind": "listed",
+          "tries": [
+            {
+              "at": [
+                809.0,
+                407.0,
+                "d-cancel"
+              ],
+              "reason": "stop",
+              "reply": "{\"bbox_2d\": [597, 491, 667, 527]}",
+              "result": "wrong",
+              "seconds": 0.89,
+              "thought": 0
+            },
+            {
+              "at": [
+                809.0,
+                407.0,
+                "d-cancel"
+              ],
+              "reason": "stop",
+              "reply": "{\"bbox_2d\": [597, 491, 667, 526]}",
+              "result": "wrong",
+              "seconds": 0.73,
+              "thought": 0
+            },
+            {
+              "at": [
+                809.0,
+                407.0,
+                "d-cancel"
+              ],
+              "reason": "stop",
+              "reply": "{\"bbox_2d\": [597, 491, 667, 526]}",
+              "result": "wrong",
+              "seconds": 0.45,
+              "thought": 0
+            }
+          ]
+        },
+        {
+          "counted": "right",
+          "goal": "취소해줘",
+          "kind": "listed",
+          "tries": [
+            {
+              "at": [
+                806.0,
+                406.0,
+                "d-cancel"
+              ],
+              "reason": "stop",
+              "reply": "{\"bbox_2d\": [592, 488, 668, 526]}",
+              "result": "right",
+              "seconds": 0.81,
+              "thought": 0
+            },
+            {
+              "at": [
+                806.0,
+                406.0,
+                "d-cancel"
+              ],
+              "reason": "stop",
+              "reply": "{\"bbox_2d\": [592, 488, 668, 526]}",
+              "result": "right",
+              "seconds": 0.46,
+              "thought": 0
+            },
+            {
+              "at": [
+                806.0,
+                406.0,
+                "d-cancel"
+              ],
+              "reason": "stop",
+              "reply": "{\"bbox_2d\": [592, 488, 668, 526]}",
+              "result": "right",
+              "seconds": 0.46,
+              "thought": 0
+            }
+          ]
+        },
+        {
+          "counted": "right",
+          "goal": "저장해",
+          "kind": "listed",
+          "tries": [
+            {
+              "at": [
+                600.0,
+                407.0,
+                "d-save"
+              ],
+              "reason": "stop",
+              "reply": "{\"bbox_2d\": [430, 491, 507, 526]}",
+              "result": "right",
+              "seconds": 0.83,
+              "thought": 0
+            },
+            {
+              "at": [
+                600.0,
+                407.0,
+                "d-save"
+              ],
+              "reason": "stop",
+              "reply": "{\"bbox_2d\": [430, 491, 507, 526]}",
+              "result": "right",
+              "seconds": 0.68,
+              "thought": 0
+            },
+            {
+              "at": [
+                600.0,
+                407.0,
+                "d-save"
+              ],
+              "reason": "stop",
+              "reply": "{\"bbox_2d\": [430, 491, 507, 526]}",
+              "result": "right",
+              "seconds": 0.47,
+              "thought": 0
+            }
+          ]
+        },
+        {
+          "counted": "declined",
+          "goal": "인쇄해줘",
+          "kind": "none",
+          "tries": [
+            {
+              "at": null,
+              "reason": "stop",
+              "reply": "{\"bbox_2d\": null}",
+              "result": "declined",
+              "seconds": 0.31,
+              "thought": 0
+            },
+            {
+              "at": null,
+              "reason": "stop",
+              "reply": "{\"bbox_2d\": null}",
+              "result": "declined",
+              "seconds": 0.27,
+              "thought": 0
+            },
+            {
+              "at": null,
+              "reason": "stop",
+              "reply": "{\"bbox_2d\": null}",
+              "result": "declined",
+              "seconds": 0.25,
+              "thought": 0
+            }
+          ]
+        },
+        {
+          "counted": "right",
+          "goal": "지우개로 바꿔줘",
+          "kind": "listed",
+          "tries": [
+            {
+              "at": [
+                122.0,
+                88.0,
+                "p-eraser"
+              ],
+              "reason": "stop",
+              "reply": "{\"bbox_2d\": [85, 93, 106, 127]}",
+              "result": "right",
+              "seconds": 1.33,
+              "thought": 0
+            },
+            {
+              "at": [
+                122.0,
+                88.0,
+                "p-eraser"
+              ],
+              "reason": "stop",
+              "reply": "{\"bbox_2d\": [85, 93, 106, 127]}",
+              "result": "right",
+              "seconds": 0.46,
+              "thought": 0
+            },
+            {
+              "at": [
+                122.0,
+                88.0,
+                "p-eraser"
+              ],
+              "reason": "stop",
+              "reply": "{\"bbox_2d\": [85, 93, 106, 127]}",
+              "result": "right",
+              "seconds": 0.45,
+              "thought": 0
+            }
+          ]
+        },
+        {
+          "counted": "right",
+          "goal": "빨간색 골라줘",
+          "kind": "listed",
+          "tries": [
+            {
+              "at": [
+                380.0,
+                81.0,
+                "p-red"
+              ],
+              "reason": "stop",
+              "reply": "{\"bbox_2d\": [287, 86, 307, 116]}",
+              "result": "right",
+              "seconds": 0.82,
+              "thought": 0
+            },
+            {
+              "at": [
+                380.0,
+                81.0,
+                "p-red"
+              ],
+              "reason": "stop",
+              "reply": "{\"bbox_2d\": [287, 86, 307, 116]}",
+              "result": "right",
+              "seconds": 0.45,
+              "thought": 0
+            },
+            {
+              "at": [
+                380.0,
+                81.0,
+                "p-red"
+              ],
+              "reason": "stop",
+              "reply": "{\"bbox_2d\": [287, 86, 307, 116]}",
+              "result": "right",
+              "seconds": 0.43,
+              "thought": 0
+            }
+          ]
+        },
+        {
+          "counted": "right",
+          "goal": "글자 넣는 도구 골라줘",
+          "kind": "listed",
+          "tries": [
+            {
+              "at": [
+                83.0,
+                87.0,
+                "p-text"
+              ],
+              "reason": "stop",
+              "reply": "{\"bbox_2d\": [53, 91, 76, 127]}",
+              "result": "right",
+              "seconds": 0.77,
+              "thought": 0
+            },
+            {
+              "at": [
+                83.0,
+                87.0,
+                "p-text"
+              ],
+              "reason": "stop",
+              "reply": "{\"bbox_2d\": [53, 91, 76, 127]}",
+              "result": "right",
+              "seconds": 0.67,
+              "thought": 0
+            },
+            {
+              "at": [
+                83.0,
+                87.0,
+                "p-text"
+              ],
+              "reason": "stop",
+              "reply": "{\"bbox_2d\": [53, 91, 76, 127]}",
+              "result": "right",
+              "seconds": 0.42,
+              "thought": 0
+            }
+          ]
+        },
+        {
+          "counted": "right",
+          "goal": "휴지통 아이콘 눌러줘",
+          "kind": "unlisted",
+          "tries": [
+            {
+              "at": [
+                1219.0,
+                46.0,
+                "p-trash"
+              ],
+              "reason": "stop",
+              "reply": "{\"bbox_2d\": [942, 43, 963, 72]}",
+              "result": "right",
+              "seconds": 0.65,
+              "thought": 0
+            },
+            {
+              "at": [
+                1219.0,
+                46.0,
+                "p-trash"
+              ],
+              "reason": "stop",
+              "reply": "{\"bbox_2d\": [942, 43, 963, 72]}",
+              "result": "right",
+              "seconds": 0.54,
+              "thought": 0
+            },
+            {
+              "at": [
+                1219.0,
+                46.0,
+                "p-trash"
+              ],
+              "reason": "stop",
+              "reply": "{\"bbox_2d\": [942, 43, 963, 72]}",
+              "result": "right",
+              "seconds": 0.59,
+              "thought": 0
+            }
+          ]
+        },
+        {
+          "counted": "wrong",
+          "goal": "톱니바퀴 아이콘 눌러줘",
+          "kind": "unlisted",
+          "tries": [
+            {
+              "at": [
+                126.0,
+                121.0,
+                "회전"
+              ],
+              "reason": "stop",
+              "reply": "{\"bbox_2d\": [90, 135, 107, 168]}",
+              "result": "wrong",
+              "seconds": 0.67,
+              "thought": 0
+            },
+            {
+              "at": [
+                126.0,
+                120.0,
+                "회전"
+              ],
+              "reason": "stop",
+              "reply": "{\"bbox_2d\": [90, 135, 107, 166]}",
+              "result": "wrong",
+              "seconds": 0.63,
+              "thought": 0
+            },
+            {
+              "at": [
+                126.0,
+                120.0,
+                "회전"
+              ],
+              "reason": "stop",
+              "reply": "{\"bbox_2d\": [90, 135, 107, 166]}",
+              "result": "wrong",
+              "seconds": 0.73,
+              "thought": 0
+            }
+          ]
+        },
+        {
+          "counted": "declined",
+          "goal": "동영상 재생해줘",
+          "kind": "none",
+          "tries": [
+            {
+              "at": null,
+              "reason": "stop",
+              "reply": "{\"bbox_2d\": null}",
+              "result": "declined",
+              "seconds": 0.3,
+              "thought": 0
+            },
+            {
+              "at": null,
+              "reason": "stop",
+              "reply": "{\"bbox_2d\": null}",
+              "result": "declined",
+              "seconds": 0.2,
+              "thought": 0
+            },
+            {
+              "at": null,
+              "reason": "stop",
+              "reply": "{\"bbox_2d\": null}",
+              "result": "declined",
+              "seconds": 0.23,
+              "thought": 0
+            }
+          ]
+        },
+        {
+          "counted": "right",
+          "goal": "글꼴 목록 열어줘",
+          "kind": "same-name",
+          "tries": [
+            {
+              "at": [
+                810.0,
+                127.0,
+                "c-open-font"
+              ],
+              "reason": "stop",
+              "reply": "{\"bbox_2d\": [613, 145, 653, 172]}",
+              "result": "right",
+              "seconds": 1.75,
+              "thought": 0
+            },
+            {
+              "at": [
+                810.0,
+                127.0,
+                "c-open-font"
+              ],
+              "reason": "stop",
+              "reply": "{\"bbox_2d\": [613, 145, 653, 172]}",
+              "result": "right",
+              "seconds": 0.6,
+              "thought": 0
+            },
+            {
+              "at": [
+                810.0,
+                127.0,
+                "c-open-font"
+              ],
+              "reason": "stop",
+              "reply": "{\"bbox_2d\": [613, 145, 653, 172]}",
+              "result": "right",
+              "seconds": 0.63,
+              "thought": 0
+            }
+          ]
+        },
+        {
+          "counted": "wrong",
+          "goal": "문자 집합 목록 열어줘",
+          "kind": "same-name",
+          "tries": [
+            {
+              "at": [
+                614.0,
+                511.0,
+                "문자 집합"
+              ],
+              "reason": "stop",
+              "reply": "{\"bbox_2d\": [353, 624, 607, 654]}",
+              "result": "wrong",
+              "seconds": 0.75,
+              "thought": 0
+            },
+            {
+              "at": [
+                614.0,
+                511.0,
+                "문자 집합"
+              ],
+              "reason": "stop",
+              "reply": "{\"bbox_2d\": [353, 624, 607, 654]}",
+              "result": "wrong",
+              "seconds": 0.72,
+              "thought": 0
+            },
+            {
+              "at": [
+                614.0,
+                511.0,
+                "문자 집합"
+              ],
+              "reason": "stop",
+              "reply": "{\"bbox_2d\": [353, 624, 607, 654]}",
+              "result": "wrong",
+              "seconds": 0.61,
+              "thought": 0
+            }
+          ]
+        },
+        {
+          "counted": "right",
+          "goal": "복사 버튼 눌러줘",
+          "kind": "listed",
+          "tries": [
+            {
+              "at": [
+                781.0,
+                445.0,
+                "c-copy"
+              ],
+              "reason": "stop",
+              "reply": "{\"bbox_2d\": [587, 542, 633, 570]}",
+              "result": "right",
+              "seconds": 0.74,
+              "thought": 0
+            },
+            {
+              "at": [
+                779.0,
+                445.0,
+                "c-copy"
+              ],
+              "reason": "stop",
+              "reply": "{\"bbox_2d\": [584, 542, 633, 570]}",
+              "result": "right",
+              "seconds": 0.64,
+              "thought": 0
+            },
+            {
+              "at": [
+                779.0,
+                445.0,
+                "c-copy"
+              ],
+              "reason": "stop",
+              "reply": "{\"bbox_2d\": [584, 542, 633, 570]}",
+              "result": "right",
+              "seconds": 0.61,
+              "thought": 0
+            }
+          ]
+        },
+        {
+          "counted": "right",
+          "goal": "★ 문자 눌러줘",
+          "kind": "unlisted",
+          "tries": [
+            {
+              "at": [
+                634.0,
+                252.0,
+                "c-star"
+              ],
+              "reason": "stop",
+              "reply": "{\"bbox_2d\": [487, 303, 504, 327]}",
+              "result": "right",
+              "seconds": 0.81,
+              "thought": 0
+            },
+            {
+              "at": [
+                634.0,
+                252.0,
+                "c-star"
+              ],
+              "reason": "stop",
+              "reply": "{\"bbox_2d\": [487, 303, 504, 327]}",
+              "result": "right",
+              "seconds": 0.53,
+              "thought": 0
+            },
+            {
+              "at": [
+                634.0,
+                252.0,
+                "c-star"
+              ],
+              "reason": "stop",
+              "reply": "{\"bbox_2d\": [487, 303, 504, 327]}",
+              "result": "right",
+              "seconds": 0.66,
+              "thought": 0
+            }
+          ]
+        },
+        {
+          "counted": "declined",
+          "goal": "글꼴 크기 키워줘",
+          "kind": "none",
+          "tries": [
+            {
+              "at": null,
+              "reason": "stop",
+              "reply": "{\"bbox_2d\": null}",
+              "result": "declined",
+              "seconds": 0.29,
+              "thought": 0
+            },
+            {
+              "at": null,
+              "reason": "stop",
+              "reply": "{\"bbox_2d\": null}",
+              "result": "declined",
+              "seconds": 0.23,
+              "thought": 0
+            },
+            {
+              "at": null,
+              "reason": "stop",
+              "reply": "{\"bbox_2d\": null}",
+              "result": "declined",
+              "seconds": 0.28,
+              "thought": 0
+            }
+          ]
+        },
+        {
+          "counted": "right",
+          "goal": "원격 화면에서 지금 설치 눌러줘",
+          "kind": "unlisted",
+          "tries": [
+            {
+              "at": [
+                758.0,
+                408.0,
+                "r-install"
+              ],
+              "reason": "stop",
+              "reply": "{\"bbox_2d\": [559, 493, 626, 527]}",
+              "result": "right",
+              "seconds": 1.83,
+              "thought": 0
+            },
+            {
+              "at": [
+                758.0,
+                408.0,
+                "r-install"
+              ],
+              "reason": "stop",
+              "reply": "{\"bbox_2d\": [559, 493, 626, 527]}",
+              "result": "right",
+              "seconds": 0.65,
+              "thought": 0
+            },
+            {
+              "at": [
+                758.0,
+                408.0,
+                "r-install"
+              ],
+              "reason": "stop",
+              "reply": "{\"bbox_2d\": [559, 493, 626, 527]}",
+              "result": "right",
+              "seconds": 0.6,
+              "thought": 0
+            }
+          ]
+        },
+        {
+          "counted": "right",
+          "goal": "원격 PC 업데이트는 나중에 하게 눌러줘",
+          "kind": "unlisted",
+          "tries": [
+            {
+              "at": [
+                841.0,
+                407.0,
+                "r-later"
+              ],
+              "reason": "stop",
+              "reply": "{\"bbox_2d\": [627, 491, 687, 527]}",
+              "result": "right",
+              "seconds": 0.73,
+              "thought": 0
+            },
+            {
+              "at": [
+                841.0,
+                407.0,
+                "r-later"
+              ],
+              "reason": "stop",
+              "reply": "{\"bbox_2d\": [627, 491, 687, 527]}",
+              "result": "right",
+              "seconds": 0.72,
+              "thought": 0
+            },
+            {
+              "at": [
+                841.0,
+                407.0,
+                "r-later"
+              ],
+              "reason": "stop",
+              "reply": "{\"bbox_2d\": [627, 491, 687, 527]}",
+              "result": "right",
+              "seconds": 0.59,
+              "thought": 0
+            }
+          ]
+        },
+        {
+          "counted": "right",
+          "goal": "원격 PC의 휴지통 열어줘",
+          "kind": "unlisted",
+          "tries": [
+            {
+              "at": [
+                55.0,
+                108.0,
+                "r-recycle"
+              ],
+              "reason": "stop",
+              "reply": "{\"bbox_2d\": [24, 103, 62, 168]}",
+              "result": "right",
+              "seconds": 0.61,
+              "thought": 0
+            },
+            {
+              "at": [
+                55.0,
+                108.0,
+                "r-recycle"
+              ],
+              "reason": "stop",
+              "reply": "{\"bbox_2d\": [24, 103, 62, 168]}",
+              "result": "right",
+              "seconds": 0.71,
+              "thought": 0
+            },
+            {
+              "at": [
+                55.0,
+                108.0,
+                "r-recycle"
+              ],
+              "reason": "stop",
+              "reply": "{\"bbox_2d\": [24, 103, 62, 168]}",
+              "result": "right",
+              "seconds": 0.58,
+              "thought": 0
+            }
+          ]
+        },
+        {
+          "counted": "right",
+          "goal": "원격 연결 끊어줘",
+          "kind": "listed",
+          "tries": [
+            {
+              "at": [
+                1225.0,
+                52.0,
+                "r-disconnect"
+              ],
+              "reason": "stop",
+              "reply": "{\"bbox_2d\": [927, 51, 987, 78]}",
+              "result": "right",
+              "seconds": 0.63,
+              "thought": 0
+            },
+            {
+              "at": [
+                1225.0,
+                52.0,
+                "r-disconnect"
+              ],
+              "reason": "stop",
+              "reply": "{\"bbox_2d\": [927, 51, 987, 78]}",
+              "result": "right",
+              "seconds": 0.56,
+              "thought": 0
+            },
+            {
+              "at": [
+                1225.0,
+                52.0,
+                "r-disconnect"
+              ],
+              "reason": "stop",
+              "reply": "{\"bbox_2d\": [927, 51, 987, 78]}",
+              "result": "right",
+              "seconds": 0.69,
+              "thought": 0
+            }
+          ]
+        },
+        {
+          "counted": "declined",
+          "goal": "원격 화면에서 계산기 열어줘",
+          "kind": "none",
+          "tries": [
+            {
+              "at": null,
+              "reason": "stop",
+              "reply": "{\"bbox_2d\": null}",
+              "result": "declined",
+              "seconds": 0.34,
+              "thought": 0
+            },
+            {
+              "at": null,
+              "reason": "stop",
+              "reply": "{\"bbox_2d\": null}",
+              "result": "declined",
+              "seconds": 0.26,
+              "thought": 0
+            },
+            {
+              "at": null,
+              "reason": "stop",
+              "reply": "{\"bbox_2d\": null}",
+              "result": "declined",
+              "seconds": 0.23,
+              "thought": 0
+            }
+          ]
+        }
+      ],
+      "listed_right": 9,
+      "max_s": 1.83,
+      "median_prompt_tokens": 1172.0,
+      "median_s": 0.59,
+      "model": "qwen3-vl:8b-instruct",
+      "none_declined": 5,
+      "same_name_asked": 0,
+      "same_name_right": 1,
+      "unlisted_right": 5,
+      "unlisted_wrong": 1,
+      "wrong": 6
+    },
+    {
+      "arm": "marks",
+      "goals": [
+        {
+          "counted": "right",
+          "goal": "보고서_최종_v3.docx 파일 선택해줘",
+          "kind": "listed",
+          "tries": [
+            {
+              "at": [
+                35,
+                "보고서_최종_v3.docx"
+              ],
+              "reason": "stop",
+              "reply": "{\"mark\": 35}",
+              "result": "right",
+              "seconds": 1.06,
+              "thought": 0
+            },
+            {
+              "at": [
+                35,
+                "보고서_최종_v3.docx"
+              ],
+              "reason": "stop",
+              "reply": "{\"mark\": 35}",
+              "result": "right",
+              "seconds": 0.2,
+              "thought": 0
+            },
+            {
+              "at": [
+                35,
+                "보고서_최종_v3.docx"
+              ],
+              "reason": "stop",
+              "reply": "{\"mark\": 35}",
+              "result": "right",
+              "seconds": 0.19,
+              "thought": 0
+            }
+          ]
+        },
+        {
+          "counted": "right",
+          "goal": "예산표_2026.xlsx 눌러줘",
+          "kind": "listed",
+          "tries": [
+            {
+              "at": [
+                43,
+                "예산표_2026.xlsx"
+              ],
+              "reason": "stop",
+              "reply": "{\"mark\": 43}",
+              "result": "right",
+              "seconds": 0.26,
+              "thought": 0
+            },
+            {
+              "at": [
+                43,
+                "예산표_2026.xlsx"
+              ],
+              "reason": "stop",
+              "reply": "{\"mark\": 43}",
+              "result": "right",
+              "seconds": 0.18,
+              "thought": 0
+            },
+            {
+              "at": [
+                43,
+                "예산표_2026.xlsx"
+              ],
+              "reason": "stop",
+              "reply": "{\"mark\": 43}",
+              "result": "right",
+              "seconds": 0.21,
+              "thought": 0
+            }
+          ]
+        },
+        {
+          "counted": "right",
+          "goal": "회의록_1104.md 골라줘",
+          "kind": "listed",
+          "tries": [
+            {
+              "at": [
+                52,
+                "회의록_1104.md"
+              ],
+              "reason": "stop",
+              "reply": "{\"mark\": 52}",
+              "result": "right",
+              "seconds": 0.29,
+              "thought": 0
+            },
+            {
+              "at": [
+                52,
+                "회의록_1104.md"
+              ],
+              "reason": "stop",
+              "reply": "{\"mark\": 52}",
+              "result": "right",
+              "seconds": 0.21,
+              "thought": 0
+            },
+            {
+              "at": [
+                52,
+                "회의록_1104.md"
+              ],
+              "reason": "stop",
+              "reply": "{\"mark\": 52}",
+              "result": "right",
+              "seconds": 0.25,
+              "thought": 0
+            }
+          ]
+        },
+        {
+          "counted": "right",
+          "goal": "삭제 버튼 눌러줘",
+          "kind": "listed",
+          "tries": [
+            {
+              "at": [
+                10,
+                "삭제"
+              ],
+              "reason": "stop",
+              "reply": "{\"mark\": 10}",
+              "result": "right",
+              "seconds": 0.27,
+              "thought": 0
+            },
+            {
+              "at": [
+                10,
+                "삭제"
+              ],
+              "reason": "stop",
+              "reply": "{\"mark\": 10}",
+              "result": "right",
+              "seconds": 0.18,
+              "thought": 0
+            },
+            {
+              "at": [
+                10,
+                "삭제"
+              ],
+              "reason": "stop",
+              "reply": "{\"mark\": 10}",
+              "result": "right",
+              "seconds": 0.18,
+              "thought": 0
+            }
+          ]
+        },
+        {
+          "counted": "missed",
+          "goal": "다운로드 폴더로 가줘",
+          "kind": "listed",
+          "tries": [
+            {
+              "at": [
+                null,
+                null
+              ],
+              "reason": "stop",
+              "reply": "{\"mark\": null}",
+              "result": "missed",
+              "seconds": 0.24,
+              "thought": 0
+            },
+            {
+              "at": [
+                null,
+                null
+              ],
+              "reason": "stop",
+              "reply": "{\"mark\": null}",
+              "result": "missed",
+              "seconds": 0.15,
+              "thought": 0
+            },
+            {
+              "at": [
+                null,
+                null
+              ],
+              "reason": "stop",
+              "reply": "{\"mark\": null}",
+              "result": "missed",
+              "seconds": 0.17,
+              "thought": 0
+            }
+          ]
+        },
+        {
+          "counted": "declined",
+          "goal": "휴지통 비우기 눌러줘",
+          "kind": "none",
+          "tries": [
+            {
+              "at": [
+                null,
+                null
+              ],
+              "reason": "stop",
+              "reply": "{\"mark\": null}",
+              "result": "declined",
+              "seconds": 0.25,
+              "thought": 0
+            },
+            {
+              "at": [
+                null,
+                null
+              ],
+              "reason": "stop",
+              "reply": "{\"mark\": null}",
+              "result": "declined",
+              "seconds": 0.18,
+              "thought": 0
+            },
+            {
+              "at": [
+                null,
+                null
+              ],
+              "reason": "stop",
+              "reply": "{\"mark\": null}",
+              "result": "declined",
+              "seconds": 0.19,
+              "thought": 0
+            }
+          ]
+        },
+        {
+          "counted": "wrong",
+          "goal": "저장하지 말고 닫아줘",
+          "kind": "listed",
+          "tries": [
+            {
+              "at": [
+                13,
+                "취소"
+              ],
+              "reason": "stop",
+              "reply": "{\"mark\": 13}",
+              "result": "wrong",
+              "seconds": 1.03,
+              "thought": 0
+            },
+            {
+              "at": [
+                13,
+                "취소"
+              ],
+              "reason": "stop",
+              "reply": "{\"mark\": 13}",
+              "result": "wrong",
+              "seconds": 0.19,
+              "thought": 0
+            },
+            {
+              "at": [
+                13,
+                "취소"
+              ],
+              "reason": "stop",
+              "reply": "{\"mark\": 13}",
+              "result": "wrong",
+              "seconds": 0.19,
+              "thought": 0
+            }
+          ]
+        },
+        {
+          "counted": "right",
+          "goal": "취소해줘",
+          "kind": "listed",
+          "tries": [
+            {
+              "at": [
+                13,
+                "취소"
+              ],
+              "reason": "stop",
+              "reply": "{\"mark\": 13}",
+              "result": "right",
+              "seconds": 0.27,
+              "thought": 0
+            },
+            {
+              "at": [
+                13,
+                "취소"
+              ],
+              "reason": "stop",
+              "reply": "{\"mark\": 13}",
+              "result": "right",
+              "seconds": 0.17,
+              "thought": 0
+            },
+            {
+              "at": [
+                13,
+                "취소"
+              ],
+              "reason": "stop",
+              "reply": "{\"mark\": 13}",
+              "result": "right",
+              "seconds": 0.19,
+              "thought": 0
+            }
+          ]
+        },
+        {
+          "counted": "right",
+          "goal": "저장해",
+          "kind": "listed",
+          "tries": [
+            {
+              "at": [
+                11,
+                "저장"
+              ],
+              "reason": "stop",
+              "reply": "{\"mark\": 11}",
+              "result": "right",
+              "seconds": 0.26,
+              "thought": 0
+            },
+            {
+              "at": [
+                11,
+                "저장"
+              ],
+              "reason": "stop",
+              "reply": "{\"mark\": 11}",
+              "result": "right",
+              "seconds": 0.17,
+              "thought": 0
+            },
+            {
+              "at": [
+                11,
+                "저장"
+              ],
+              "reason": "stop",
+              "reply": "{\"mark\": 11}",
+              "result": "right",
+              "seconds": 0.2,
+              "thought": 0
+            }
+          ]
+        },
+        {
+          "counted": "declined",
+          "goal": "인쇄해줘",
+          "kind": "none",
+          "tries": [
+            {
+              "at": [
+                null,
+                null
+              ],
+              "reason": "stop",
+              "reply": "{\"mark\": null}",
+              "result": "declined",
+              "seconds": 0.26,
+              "thought": 0
+            },
+            {
+              "at": [
+                null,
+                null
+              ],
+              "reason": "stop",
+              "reply": "{\"mark\": null}",
+              "result": "declined",
+              "seconds": 0.14,
+              "thought": 0
+            },
+            {
+              "at": [
+                null,
+                null
+              ],
+              "reason": "stop",
+              "reply": "{\"mark\": null}",
+              "result": "declined",
+              "seconds": 0.15,
+              "thought": 0
+            }
+          ]
+        },
+        {
+          "counted": "missed",
+          "goal": "지우개로 바꿔줘",
+          "kind": "listed",
+          "tries": [
+            {
+              "at": [
+                null,
+                null
+              ],
+              "reason": "stop",
+              "reply": "{\"mark\": null}",
+              "result": "missed",
+              "seconds": 1.06,
+              "thought": 0
+            },
+            {
+              "at": [
+                null,
+                null
+              ],
+              "reason": "stop",
+              "reply": "{\"mark\": null}",
+              "result": "missed",
+              "seconds": 0.14,
+              "thought": 0
+            },
+            {
+              "at": [
+                null,
+                null
+              ],
+              "reason": "stop",
+              "reply": "{\"mark\": null}",
+              "result": "missed",
+              "seconds": 0.15,
+              "thought": 0
+            }
+          ]
+        },
+        {
+          "counted": "missed",
+          "goal": "빨간색 골라줘",
+          "kind": "listed",
+          "tries": [
+            {
+              "at": [
+                null,
+                null
+              ],
+              "reason": "stop",
+              "reply": "{\"mark\": null}",
+              "result": "missed",
+              "seconds": 0.23,
+              "thought": 0
+            },
+            {
+              "at": [
+                null,
+                null
+              ],
+              "reason": "stop",
+              "reply": "{\"mark\": null}",
+              "result": "missed",
+              "seconds": 0.14,
+              "thought": 0
+            },
+            {
+              "at": [
+                null,
+                null
+              ],
+              "reason": "stop",
+              "reply": "{\"mark\": null}",
+              "result": "missed",
+              "seconds": 0.16,
+              "thought": 0
+            }
+          ]
+        },
+        {
+          "counted": "right",
+          "goal": "글자 넣는 도구 골라줘",
+          "kind": "listed",
+          "tries": [
+            {
+              "at": [
+                11,
+                "텍스트"
+              ],
+              "reason": "stop",
+              "reply": "{\"mark\": 11}",
+              "result": "right",
+              "seconds": 0.27,
+              "thought": 0
+            },
+            {
+              "at": [
+                11,
+                "텍스트"
+              ],
+              "reason": "stop",
+              "reply": "{\"mark\": 11}",
+              "result": "right",
+              "seconds": 0.51,
+              "thought": 0
+            },
+            {
+              "at": [
+                11,
+                "텍스트"
+              ],
+              "reason": "stop",
+              "reply": "{\"mark\": 11}",
+              "result": "right",
+              "seconds": 0.2,
+              "thought": 0
+            }
+          ]
+        },
+        {
+          "counted": "wrong",
+          "goal": "휴지통 아이콘 눌러줘",
+          "kind": "unlisted",
+          "tries": [
+            {
+              "at": [
+                2,
+                "최대화"
+              ],
+              "reason": "stop",
+              "reply": "{\"mark\": 2}",
+              "result": "wrong",
+              "seconds": 0.26,
+              "thought": 0
+            },
+            {
+              "at": [
+                2,
+                "최대화"
+              ],
+              "reason": "stop",
+              "reply": "{\"mark\": 2}",
+              "result": "wrong",
+              "seconds": 0.18,
+              "thought": 0
+            },
+            {
+              "at": [
+                2,
+                "최대화"
+              ],
+              "reason": "stop",
+              "reply": "{\"mark\": 2}",
+              "result": "wrong",
+              "seconds": 0.17,
+              "thought": 0
+            }
+          ]
+        },
+        {
+          "counted": "cannot",
+          "goal": "톱니바퀴 아이콘 눌러줘",
+          "kind": "unlisted",
+          "tries": [
+            {
+              "at": [
+                null,
+                null
+              ],
+              "reason": "stop",
+              "reply": "{\"mark\": null}",
+              "result": "cannot",
+              "seconds": 0.23,
+              "thought": 0
+            },
+            {
+              "at": [
+                null,
+                null
+              ],
+              "reason": "stop",
+              "reply": "{\"mark\": null}",
+              "result": "cannot",
+              "seconds": 0.15,
+              "thought": 0
+            },
+            {
+              "at": [
+                null,
+                null
+              ],
+              "reason": "stop",
+              "reply": "{\"mark\": null}",
+              "result": "cannot",
+              "seconds": 0.16,
+              "thought": 0
+            }
+          ]
+        },
+        {
+          "counted": "declined",
+          "goal": "동영상 재생해줘",
+          "kind": "none",
+          "tries": [
+            {
+              "at": [
+                null,
+                null
+              ],
+              "reason": "stop",
+              "reply": "{\"mark\": null}",
+              "result": "declined",
+              "seconds": 0.23,
+              "thought": 0
+            },
+            {
+              "at": [
+                null,
+                null
+              ],
+              "reason": "stop",
+              "reply": "{\"mark\": null}",
+              "result": "declined",
+              "seconds": 0.16,
+              "thought": 0
+            },
+            {
+              "at": [
+                null,
+                null
+              ],
+              "reason": "stop",
+              "reply": "{\"mark\": null}",
+              "result": "declined",
+              "seconds": 0.16,
+              "thought": 0
+            }
+          ]
+        },
+        {
+          "counted": "right",
+          "goal": "글꼴 목록 열어줘",
+          "kind": "same-name",
+          "tries": [
+            {
+              "at": [
+                5,
+                "열기"
+              ],
+              "reason": "stop",
+              "reply": "{\"mark\": 5}",
+              "result": "right",
+              "seconds": 1.04,
+              "thought": 0
+            },
+            {
+              "at": [
+                5,
+                "열기"
+              ],
+              "reason": "stop",
+              "reply": "{\"mark\": 5}",
+              "result": "right",
+              "seconds": 0.2,
+              "thought": 0
+            },
+            {
+              "at": [
+                5,
+                "열기"
+              ],
+              "reason": "stop",
+              "reply": "{\"mark\": 5}",
+              "result": "right",
+              "seconds": 0.2,
+              "thought": 0
+            }
+          ]
+        },
+        {
+          "counted": "wrong",
+          "goal": "문자 집합 목록 열어줘",
+          "kind": "same-name",
+          "tries": [
+            {
+              "at": [
+                12,
+                "문자 집합"
+              ],
+              "reason": "stop",
+              "reply": "{\"mark\": 12}",
+              "result": "wrong",
+              "seconds": 0.28,
+              "thought": 0
+            },
+            {
+              "at": [
+                12,
+                "문자 집합"
+              ],
+              "reason": "stop",
+              "reply": "{\"mark\": 12}",
+              "result": "wrong",
+              "seconds": 0.18,
+              "thought": 0
+            },
+            {
+              "at": [
+                12,
+                "문자 집합"
+              ],
+              "reason": "stop",
+              "reply": "{\"mark\": 12}",
+              "result": "wrong",
+              "seconds": 0.21,
+              "thought": 0
+            }
+          ]
+        },
+        {
+          "counted": "right",
+          "goal": "복사 버튼 눌러줘",
+          "kind": "listed",
+          "tries": [
+            {
+              "at": [
+                10,
+                "복사"
+              ],
+              "reason": "stop",
+              "reply": "{\"mark\": 10}",
+              "result": "right",
+              "seconds": 0.27,
+              "thought": 0
+            },
+            {
+              "at": [
+                10,
+                "복사"
+              ],
+              "reason": "stop",
+              "reply": "{\"mark\": 10}",
+              "result": "right",
+              "seconds": 0.2,
+              "thought": 0
+            },
+            {
+              "at": [
+                10,
+                "복사"
+              ],
+              "reason": "stop",
+              "reply": "{\"mark\": 10}",
+              "result": "right",
+              "seconds": 0.2,
+              "thought": 0
+            }
+          ]
+        },
+        {
+          "counted": "wrong",
+          "goal": "★ 문자 눌러줘",
+          "kind": "unlisted",
+          "tries": [
+            {
+              "at": [
+                5,
+                "열기"
+              ],
+              "reason": "stop",
+              "reply": "{\"mark\": 5}",
+              "result": "wrong",
+              "seconds": 0.29,
+              "thought": 0
+            },
+            {
+              "at": [
+                5,
+                "열기"
+              ],
+              "reason": "stop",
+              "reply": "{\"mark\": 5}",
+              "result": "wrong",
+              "seconds": 0.19,
+              "thought": 0
+            },
+            {
+              "at": [
+                5,
+                "열기"
+              ],
+              "reason": "stop",
+              "reply": "{\"mark\": 5}",
+              "result": "wrong",
+              "seconds": 0.2,
+              "thought": 0
+            }
+          ]
+        },
+        {
+          "counted": "declined",
+          "goal": "글꼴 크기 키워줘",
+          "kind": "none",
+          "tries": [
+            {
+              "at": [
+                null,
+                null
+              ],
+              "reason": "stop",
+              "reply": "{\"mark\": null}",
+              "result": "declined",
+              "seconds": 0.24,
+              "thought": 0
+            },
+            {
+              "at": [
+                null,
+                null
+              ],
+              "reason": "stop",
+              "reply": "{\"mark\": null}",
+              "result": "declined",
+              "seconds": 0.17,
+              "thought": 0
+            },
+            {
+              "at": [
+                null,
+                null
+              ],
+              "reason": "stop",
+              "reply": "{\"mark\": null}",
+              "result": "declined",
+              "seconds": 0.19,
+              "thought": 0
+            }
+          ]
+        },
+        {
+          "counted": "cannot",
+          "goal": "원격 화면에서 지금 설치 눌러줘",
+          "kind": "unlisted",
+          "tries": [
+            {
+              "at": [
+                null,
+                null
+              ],
+              "reason": "stop",
+              "reply": "{\"mark\": null}",
+              "result": "cannot",
+              "seconds": 1.17,
+              "thought": 0
+            },
+            {
+              "at": [
+                null,
+                null
+              ],
+              "reason": "stop",
+              "reply": "{\"mark\": null}",
+              "result": "cannot",
+              "seconds": 0.2,
+              "thought": 0
+            },
+            {
+              "at": [
+                null,
+                null
+              ],
+              "reason": "stop",
+              "reply": "{\"mark\": null}",
+              "result": "cannot",
+              "seconds": 0.21,
+              "thought": 0
+            }
+          ]
+        },
+        {
+          "counted": "wrong",
+          "goal": "원격 PC 업데이트는 나중에 하게 눌러줘",
+          "kind": "unlisted",
+          "tries": [
+            {
+              "at": [
+                5,
+                "전체 화면"
+              ],
+              "reason": "stop",
+              "reply": "{\"mark\": 5}",
+              "result": "wrong",
+              "seconds": 0.28,
+              "thought": 0
+            },
+            {
+              "at": [
+                5,
+                "전체 화면"
+              ],
+              "reason": "stop",
+              "reply": "{\"mark\": 5}",
+              "result": "wrong",
+              "seconds": 0.21,
+              "thought": 0
+            },
+            {
+              "at": [
+                5,
+                "전체 화면"
+              ],
+              "reason": "stop",
+              "reply": "{\"mark\": 5}",
+              "result": "wrong",
+              "seconds": 0.23,
+              "thought": 0
+            }
+          ]
+        },
+        {
+          "counted": "wrong",
+          "goal": "원격 PC의 휴지통 열어줘",
+          "kind": "unlisted",
+          "tries": [
+            {
+              "at": [
+                1,
+                "최소화"
+              ],
+              "reason": "stop",
+              "reply": "{\"mark\": 1}",
+              "result": "wrong",
+              "seconds": 0.27,
+              "thought": 0
+            },
+            {
+              "at": [
+                1,
+                "최소화"
+              ],
+              "reason": "stop",
+              "reply": "{\"mark\": 1}",
+              "result": "wrong",
+              "seconds": 0.21,
+              "thought": 0
+            },
+            {
+              "at": [
+                1,
+                "최소화"
+              ],
+              "reason": "stop",
+              "reply": "{\"mark\": 1}",
+              "result": "wrong",
+              "seconds": 0.23,
+              "thought": 0
+            }
+          ]
+        },
+        {
+          "counted": "right",
+          "goal": "원격 연결 끊어줘",
+          "kind": "listed",
+          "tries": [
+            {
+              "at": [
+                6,
+                "연결 끊기"
+              ],
+              "reason": "stop",
+              "reply": "{\"mark\": 6}",
+              "result": "right",
+              "seconds": 0.3,
+              "thought": 0
+            },
+            {
+              "at": [
+                6,
+                "연결 끊기"
+              ],
+              "reason": "stop",
+              "reply": "{\"mark\": 6}",
+              "result": "right",
+              "seconds": 0.23,
+              "thought": 0
+            },
+            {
+              "at": [
+                6,
+                "연결 끊기"
+              ],
+              "reason": "stop",
+              "reply": "{\"mark\": 6}",
+              "result": "right",
+              "seconds": 0.23,
+              "thought": 0
+            }
+          ]
+        },
+        {
+          "counted": "declined",
+          "goal": "원격 화면에서 계산기 열어줘",
+          "kind": "none",
+          "tries": [
+            {
+              "at": [
+                null,
+                null
+              ],
+              "reason": "stop",
+              "reply": "{\"mark\": null}",
+              "result": "declined",
+              "seconds": 0.26,
+              "thought": 0
+            },
+            {
+              "at": [
+                null,
+                null
+              ],
+              "reason": "stop",
+              "reply": "{\"mark\": null}",
+              "result": "declined",
+              "seconds": 0.21,
+              "thought": 0
+            },
+            {
+              "at": [
+                null,
+                null
+              ],
+              "reason": "stop",
+              "reply": "{\"mark\": null}",
+              "result": "declined",
+              "seconds": 0.2,
+              "thought": 0
+            }
+          ]
+        }
+      ],
+      "listed_right": 9,
+      "max_s": 1.17,
+      "median_prompt_tokens": 1152.0,
+      "median_s": 0.21,
+      "model": "qwen3-vl:8b-instruct",
+      "none_declined": 5,
+      "same_name_asked": 0,
+      "same_name_right": 1,
+      "unlisted_right": 0,
+      "unlisted_wrong": 4,
+      "wrong": 6
+    },
+    {
+      "arm": "box",
+      "goals": [
+        {
+          "counted": "wrong",
+          "goal": "보고서_최종_v3.docx 파일 선택해줘",
+          "kind": "listed",
+          "tries": [
+            {
+              "at": [
+                300.0,
+                362.0,
+                "보고서_최종_v3_수정.docx"
+              ],
+              "reason": "stop",
+              "reply": "{\"bbox_2d\": [168, 438, 300, 467]}",
+              "result": "wrong",
+              "seconds": 0.71,
+              "thought": 0
+            },
+            {
+              "at": [
+                300.0,
+                361.0,
+                "보고서_최종_v3_수정.docx"
+              ],
+              "reason": "stop",
+              "reply": "{\"bbox_2d\": [168, 438, 300, 465]}",
+              "result": "wrong",
+              "seconds": 0.32,
+              "thought": 0
+            },
+            {
+              "at": [
+                300.0,
+                361.0,
+                "보고서_최종_v3_수정.docx"
+              ],
+              "reason": "stop",
+              "reply": "{\"bbox_2d\": [168, 438, 300, 465]}",
+              "result": "wrong",
+              "seconds": 0.32,
+              "thought": 0
+            }
+          ]
+        },
+        {
+          "counted": "wrong",
+          "goal": "예산표_2026.xlsx 눌러줘",
+          "kind": "listed",
+          "tries": [
+            {
+              "at": [
+                280.0,
+                520.0,
+                "예산표_2026_백업.xlsx"
+              ],
+              "reason": "stop",
+              "reply": "{\"bbox_2d\": [168, 638, 270, 663]}",
+              "result": "wrong",
+              "seconds": 0.5,
+              "thought": 0
+            },
+            {
+              "at": [
+                280.0,
+                520.0,
+                "예산표_2026_백업.xlsx"
+              ],
+              "reason": "stop",
+              "reply": "{\"bbox_2d\": [168, 638, 270, 663]}",
+              "result": "wrong",
+              "seconds": 0.35,
+              "thought": 0
+            },
+            {
+              "at": [
+                280.0,
+                520.0,
+                "예산표_2026_백업.xlsx"
+              ],
+              "reason": "stop",
+              "reply": "{\"bbox_2d\": [168, 638, 270, 663]}",
+              "result": "wrong",
+              "seconds": 0.37,
+              "thought": 0
+            }
+          ]
+        },
+        {
+          "counted": "wrong",
+          "goal": "회의록_1104.md 골라줘",
+          "kind": "listed",
+          "tries": [
+            {
+              "at": [
+                268.0,
+                648.0,
+                "회의록_1103.md"
+              ],
+              "reason": "stop",
+              "reply": "{\"bbox_2d\": [168, 798, 250, 823]}",
+              "result": "wrong",
+              "seconds": 0.48,
+              "thought": 0
+            },
+            {
+              "at": [
+                265.0,
+                648.0,
+                "회의록_1103.md"
+              ],
+              "reason": "stop",
+              "reply": "{\"bbox_2d\": [166, 798, 248, 823]}",
+              "result": "wrong",
+              "seconds": 0.41,
+              "thought": 0
+            },
+            {
+              "at": [
+                265.0,
+                648.0,
+                "회의록_1103.md"
+              ],
+              "reason": "stop",
+              "reply": "{\"bbox_2d\": [166, 798, 248, 823]}",
+              "result": "wrong",
+              "seconds": 0.39,
+              "thought": 0
+            }
+          ]
+        },
+        {
+          "counted": "right",
+          "goal": "삭제 버튼 눌러줘",
+          "kind": "listed",
+          "tries": [
+            {
+              "at": [
+                606.0,
+                52.0,
+                "e-delete"
+              ],
+              "reason": "stop",
+              "reply": "{\"bbox_2d\": [455, 53, 492, 78]}",
+              "result": "right",
+              "seconds": 0.44,
+              "thought": 0
+            },
+            {
+              "at": [
+                606.0,
+                52.0,
+                "e-delete"
+              ],
+              "reason": "stop",
+              "reply": "{\"bbox_2d\": [455, 53, 492, 78]}",
+              "result": "right",
+              "seconds": 0.37,
+              "thought": 0
+            },
+            {
+              "at": [
+                606.0,
+                52.0,
+                "e-delete"
+              ],
+              "reason": "stop",
+              "reply": "{\"bbox_2d\": [455, 53, 492, 78]}",
+              "result": "right",
+              "seconds": 0.41,
+              "thought": 0
+            }
+          ]
+        },
+        {
+          "counted": "right",
+          "goal": "다운로드 폴더로 가줘",
+          "kind": "listed",
+          "tries": [
+            {
+              "at": [
+                68.0,
+                218.0,
+                "e-downloads"
+              ],
+              "reason": "stop",
+              "reply": "{\"bbox_2d\": [28, 258, 78, 288]}",
+              "result": "right",
+              "seconds": 0.48,
+              "thought": 0
+            },
+            {
+              "at": [
+                70.0,
+                218.0,
+                "e-downloads"
+              ],
+              "reason": "stop",
+              "reply": "{\"bbox_2d\": [31, 258, 78, 288]}",
+              "result": "right",
+              "seconds": 0.41,
+              "thought": 0
+            },
+            {
+              "at": [
+                70.0,
+                218.0,
+                "e-downloads"
+              ],
+              "reason": "stop",
+              "reply": "{\"bbox_2d\": [31, 258, 78, 288]}",
+              "result": "right",
+              "seconds": 0.4,
+              "thought": 0
+            }
+          ]
+        },
+        {
+          "counted": "wrong",
+          "goal": "휴지통 비우기 눌러줘",
+          "kind": "none",
+          "tries": [
+            {
+              "at": [
+                607.0,
+                52.0,
+                "e-delete"
+              ],
+              "reason": "stop",
+              "reply": "{\"bbox_2d\": [455, 52, 494, 78]}",
+              "result": "wrong",
+              "seconds": 0.45,
+              "thought": 0
+            },
+            {
+              "at": [
+                607.0,
+                52.0,
+                "e-delete"
+              ],
+              "reason": "stop",
+              "reply": "{\"bbox_2d\": [454, 52, 494, 78]}",
+              "result": "wrong",
+              "seconds": 0.37,
+              "thought": 0
+            },
+            {
+              "at": [
+                607.0,
+                52.0,
+                "e-delete"
+              ],
+              "reason": "stop",
+              "reply": "{\"bbox_2d\": [454, 52, 494, 78]}",
+              "result": "wrong",
+              "seconds": 0.41,
+              "thought": 0
+            }
+          ]
+        },
+        {
+          "counted": "right",
+          "goal": "저장하지 말고 닫아줘",
+          "kind": "listed",
+          "tries": [
+            {
+              "at": [
+                705.0,
+                407.0,
+                "d-nosave"
+              ],
+              "reason": "stop",
+              "reply": "{\"bbox_2d\": [514, 490, 587, 527]}",
+              "result": "right",
+              "seconds": 0.51,
+              "thought": 0
+            },
+            {
+              "at": [
+                704.0,
+                407.0,
+                "d-nosave"
+              ],
+              "reason": "stop",
+              "reply": "{\"bbox_2d\": [513, 490, 587, 527]}",
+              "result": "right",
+              "seconds": 0.42,
+              "thought": 0
+            },
+            {
+              "at": [
+                704.0,
+                407.0,
+                "d-nosave"
+              ],
+              "reason": "stop",
+              "reply": "{\"bbox_2d\": [513, 490, 587, 527]}",
+              "result": "right",
+              "seconds": 0.42,
+              "thought": 0
+            }
+          ]
+        },
+        {
+          "counted": "right",
+          "goal": "취소해줘",
+          "kind": "listed",
+          "tries": [
+            {
+              "at": [
+                808.0,
+                406.0,
+                "d-cancel"
+              ],
+              "reason": "stop",
+              "reply": "{\"bbox_2d\": [593, 490, 670, 525]}",
+              "result": "right",
+              "seconds": 0.5,
+              "thought": 0
+            },
+            {
+              "at": [
+                808.0,
+                406.0,
+                "d-cancel"
+              ],
+              "reason": "stop",
+              "reply": "{\"bbox_2d\": [593, 490, 670, 525]}",
+              "result": "right",
+              "seconds": 0.46,
+              "thought": 0
+            },
+            {
+              "at": [
+                808.0,
+                406.0,
+                "d-cancel"
+              ],
+              "reason": "stop",
+              "reply": "{\"bbox_2d\": [593, 490, 670, 525]}",
+              "result": "right",
+              "seconds": 0.36,
+              "thought": 0
+            }
+          ]
+        },
+        {
+          "counted": "right",
+          "goal": "저장해",
+          "kind": "listed",
+          "tries": [
+            {
+              "at": [
+                602.0,
+                407.0,
+                "d-save"
+              ],
+              "reason": "stop",
+              "reply": "{\"bbox_2d\": [432, 490, 508, 527]}",
+              "result": "right",
+              "seconds": 0.48,
+              "thought": 0
+            },
+            {
+              "at": [
+                602.0,
+                406.0,
+                "d-save"
+              ],
+              "reason": "stop",
+              "reply": "{\"bbox_2d\": [432, 490, 508, 526]}",
+              "result": "right",
+              "seconds": 0.41,
+              "thought": 0
+            },
+            {
+              "at": [
+                602.0,
+                406.0,
+                "d-save"
+              ],
+              "reason": "stop",
+              "reply": "{\"bbox_2d\": [432, 490, 508, 526]}",
+              "result": "right",
+              "seconds": 0.41,
+              "thought": 0
+            }
+          ]
+        },
+        {
+          "counted": "wrong",
+          "goal": "인쇄해줘",
+          "kind": "none",
+          "tries": [
+            {
+              "at": [
+                602.0,
+                406.0,
+                "d-save"
+              ],
+              "reason": "stop",
+              "reply": "{\"bbox_2d\": [432, 490, 508, 526]}",
+              "result": "wrong",
+              "seconds": 0.47,
+              "thought": 0
+            },
+            {
+              "at": [
+                602.0,
+                406.0,
+                "d-save"
+              ],
+              "reason": "stop",
+              "reply": "{\"bbox_2d\": [432, 490, 508, 526]}",
+              "result": "wrong",
+              "seconds": 0.38,
+              "thought": 0
+            },
+            {
+              "at": [
+                602.0,
+                406.0,
+                "d-save"
+              ],
+              "reason": "stop",
+              "reply": "{\"bbox_2d\": [432, 490, 508, 526]}",
+              "result": "wrong",
+              "seconds": 0.36,
+              "thought": 0
+            }
+          ]
+        },
+        {
+          "counted": "right",
+          "goal": "지우개로 바꿔줘",
+          "kind": "listed",
+          "tries": [
+            {
+              "at": [
+                120.0,
+                85.0,
+                "p-eraser"
+              ],
+              "reason": "stop",
+              "reply": "{\"bbox_2d\": [83, 90, 105, 123]}",
+              "result": "right",
+              "seconds": 0.8,
+              "thought": 0
+            },
+            {
+              "at": [
+                120.0,
+                85.0,
+                "p-eraser"
+              ],
+              "reason": "stop",
+              "reply": "{\"bbox_2d\": [83, 90, 105, 123]}",
+              "result": "right",
+              "seconds": 0.37,
+              "thought": 0
+            },
+            {
+              "at": [
+                120.0,
+                85.0,
+                "p-eraser"
+              ],
+              "reason": "stop",
+              "reply": "{\"bbox_2d\": [83, 90, 105, 123]}",
+              "result": "right",
+              "seconds": 0.32,
+              "thought": 0
+            }
+          ]
+        },
+        {
+          "counted": "right",
+          "goal": "빨간색 골라줘",
+          "kind": "listed",
+          "tries": [
+            {
+              "at": [
+                381.0,
+                80.0,
+                "p-red"
+              ],
+              "reason": "stop",
+              "reply": "{\"bbox_2d\": [287, 88, 308, 113]}",
+              "result": "right",
+              "seconds": 0.45,
+              "thought": 0
+            },
+            {
+              "at": [
+                381.0,
+                80.0,
+                "p-red"
+              ],
+              "reason": "stop",
+              "reply": "{\"bbox_2d\": [287, 88, 308, 113]}",
+              "result": "right",
+              "seconds": 0.34,
+              "thought": 0
+            },
+            {
+              "at": [
+                381.0,
+                80.0,
+                "p-red"
+              ],
+              "reason": "stop",
+              "reply": "{\"bbox_2d\": [287, 88, 308, 113]}",
+              "result": "right",
+              "seconds": 0.36,
+              "thought": 0
+            }
+          ]
+        },
+        {
+          "counted": "right",
+          "goal": "글자 넣는 도구 골라줘",
+          "kind": "listed",
+          "tries": [
+            {
+              "at": [
+                81.0,
+                88.0,
+                "p-text"
+              ],
+              "reason": "stop",
+              "reply": "{\"bbox_2d\": [53, 93, 73, 127]}",
+              "result": "right",
+              "seconds": 0.41,
+              "thought": 0
+            },
+            {
+              "at": [
+                81.0,
+                88.0,
+                "p-text"
+              ],
+              "reason": "stop",
+              "reply": "{\"bbox_2d\": [53, 93, 73, 127]}",
+              "result": "right",
+              "seconds": 0.33,
+              "thought": 0
+            },
+            {
+              "at": [
+                81.0,
+                88.0,
+                "p-text"
+              ],
+              "reason": "stop",
+              "reply": "{\"bbox_2d\": [53, 93, 73, 127]}",
+              "result": "right",
+              "seconds": 0.32,
+              "thought": 0
+            }
+          ]
+        },
+        {
+          "counted": "right",
+          "goal": "휴지통 아이콘 눌러줘",
+          "kind": "unlisted",
+          "tries": [
+            {
+              "at": [
+                1224.0,
+                44.0,
+                "p-trash"
+              ],
+              "reason": "stop",
+              "reply": "{\"bbox_2d\": [945, 38, 967, 72]}",
+              "result": "right",
+              "seconds": 0.44,
+              "thought": 0
+            },
+            {
+              "at": [
+                1224.0,
+                44.0,
+                "p-trash"
+              ],
+              "reason": "stop",
+              "reply": "{\"bbox_2d\": [945, 38, 967, 72]}",
+              "result": "right",
+              "seconds": 0.35,
+              "thought": 0
+            },
+            {
+              "at": [
+                1224.0,
+                44.0,
+                "p-trash"
+              ],
+              "reason": "stop",
+              "reply": "{\"bbox_2d\": [945, 38, 967, 72]}",
+              "result": "right",
+              "seconds": 0.36,
+              "thought": 0
+            }
+          ]
+        },
+        {
+          "counted": "right",
+          "goal": "톱니바퀴 아이콘 눌러줘",
+          "kind": "unlisted",
+          "tries": [
+            {
+              "at": [
+                1251.0,
+                44.0,
+                "p-gear"
+              ],
+              "reason": "stop",
+              "reply": "{\"bbox_2d\": [966, 38, 988, 72]}",
+              "result": "right",
+              "seconds": 0.4,
+              "thought": 0
+            },
+            {
+              "at": [
+                1252.0,
+                44.0,
+                "p-gear"
+              ],
+              "reason": "stop",
+              "reply": "{\"bbox_2d\": [966, 38, 990, 72]}",
+              "result": "right",
+              "seconds": 0.36,
+              "thought": 0
+            },
+            {
+              "at": [
+                1252.0,
+                44.0,
+                "p-gear"
+              ],
+              "reason": "stop",
+              "reply": "{\"bbox_2d\": [966, 38, 990, 72]}",
+              "result": "right",
+              "seconds": 0.32,
+              "thought": 0
+            }
+          ]
+        },
+        {
+          "counted": "declined",
+          "goal": "동영상 재생해줘",
+          "kind": "none",
+          "tries": [
+            {
+              "at": null,
+              "reason": "stop",
+              "reply": "{\"bbox_2d\": null}",
+              "result": "declined",
+              "seconds": 0.21,
+              "thought": 0
+            },
+            {
+              "at": null,
+              "reason": "stop",
+              "reply": "{\"bbox_2d\": null}",
+              "result": "declined",
+              "seconds": 0.15,
+              "thought": 0
+            },
+            {
+              "at": null,
+              "reason": "stop",
+              "reply": "{\"bbox_2d\": null}",
+              "result": "declined",
+              "seconds": 0.15,
+              "thought": 0
+            }
+          ]
+        },
+        {
+          "counted": "right",
+          "goal": "글꼴 목록 열어줘",
+          "kind": "same-name",
+          "tries": [
+            {
+              "at": [
+                810.0,
+                124.0,
+                "c-open-font"
+              ],
+              "reason": "stop",
+              "reply": "{\"bbox_2d\": [618, 140, 648, 170]}",
+              "result": "right",
+              "seconds": 0.87,
+              "thought": 0
+            },
+            {
+              "at": [
+                810.0,
+                124.0,
+                "c-open-font"
+              ],
+              "reason": "stop",
+              "reply": "{\"bbox_2d\": [618, 140, 648, 170]}",
+              "result": "right",
+              "seconds": 0.36,
+              "thought": 0
+            },
+            {
+              "at": [
+                810.0,
+                124.0,
+                "c-open-font"
+              ],
+              "reason": "stop",
+              "reply": "{\"bbox_2d\": [618, 140, 648, 170]}",
+              "result": "right",
+              "seconds": 0.36,
+              "thought": 0
+            }
+          ]
+        },
+        {
+          "counted": "wrong",
+          "goal": "문자 집합 목록 열어줘",
+          "kind": "same-name",
+          "tries": [
+            {
+              "at": [
+                812.0,
+                547.0,
+                "열기"
+              ],
+              "reason": "stop",
+              "reply": "{\"bbox_2d\": [618, 668, 650, 700]}",
+              "result": "wrong",
+              "seconds": 0.44,
+              "thought": 0
+            },
+            {
+              "at": [
+                812.0,
+                547.0,
+                "열기"
+              ],
+              "reason": "stop",
+              "reply": "{\"bbox_2d\": [618, 668, 650, 700]}",
+              "result": "wrong",
+              "seconds": 0.39,
+              "thought": 0
+            },
+            {
+              "at": [
+                812.0,
+                547.0,
+                "열기"
+              ],
+              "reason": "stop",
+              "reply": "{\"bbox_2d\": [618, 668, 650, 700]}",
+              "result": "wrong",
+              "seconds": 0.37,
+              "thought": 0
+            }
+          ]
+        },
+        {
+          "counted": "right",
+          "goal": "복사 버튼 눌러줘",
+          "kind": "listed",
+          "tries": [
+            {
+              "at": [
+                785.0,
+                443.0,
+                "c-copy"
+              ],
+              "reason": "stop",
+              "reply": "{\"bbox_2d\": [590, 538, 637, 570]}",
+              "result": "right",
+              "seconds": 0.48,
+              "thought": 0
+            },
+            {
+              "at": [
+                785.0,
+                443.0,
+                "c-copy"
+              ],
+              "reason": "stop",
+              "reply": "{\"bbox_2d\": [590, 538, 637, 570]}",
+              "result": "right",
+              "seconds": 0.4,
+              "thought": 0
+            },
+            {
+              "at": [
+                785.0,
+                443.0,
+                "c-copy"
+              ],
+              "reason": "stop",
+              "reply": "{\"bbox_2d\": [590, 538, 637, 570]}",
+              "result": "right",
+              "seconds": 0.39,
+              "thought": 0
+            }
+          ]
+        },
+        {
+          "counted": "right",
+          "goal": "★ 문자 눌러줘",
+          "kind": "unlisted",
+          "tries": [
+            {
+              "at": [
+                648.0,
+                246.0,
+                "c-star"
+              ],
+              "reason": "stop",
+              "reply": "{\"bbox_2d\": [497, 293, 515, 323]}",
+              "result": "right",
+              "seconds": 0.46,
+              "thought": 0
+            },
+            {
+              "at": [
+                646.0,
+                247.0,
+                "c-star"
+              ],
+              "reason": "stop",
+              "reply": "{\"bbox_2d\": [495, 294, 514, 323]}",
+              "result": "right",
+              "seconds": 0.34,
+              "thought": 0
+            },
+            {
+              "at": [
+                646.0,
+                247.0,
+                "c-star"
+              ],
+              "reason": "stop",
+              "reply": "{\"bbox_2d\": [495, 294, 514, 323]}",
+              "result": "right",
+              "seconds": 0.37,
+              "thought": 0
+            }
+          ]
+        },
+        {
+          "counted": "declined",
+          "goal": "글꼴 크기 키워줘",
+          "kind": "none",
+          "tries": [
+            {
+              "at": null,
+              "reason": "stop",
+              "reply": "{\"bbox_2d\": null}",
+              "result": "declined",
+              "seconds": 0.23,
+              "thought": 0
+            },
+            {
+              "at": null,
+              "reason": "stop",
+              "reply": "{\"bbox_2d\": null}",
+              "result": "declined",
+              "seconds": 0.16,
+              "thought": 0
+            },
+            {
+              "at": null,
+              "reason": "stop",
+              "reply": "{\"bbox_2d\": null}",
+              "result": "declined",
+              "seconds": 0.17,
+              "thought": 0
+            }
+          ]
+        },
+        {
+          "counted": "right",
+          "goal": "원격 화면에서 지금 설치 눌러줘",
+          "kind": "unlisted",
+          "tries": [
+            {
+              "at": [
+                760.0,
+                407.0,
+                "r-install"
+              ],
+              "reason": "stop",
+              "reply": "{\"bbox_2d\": [560, 492, 628, 526]}",
+              "result": "right",
+              "seconds": 0.88,
+              "thought": 0
+            },
+            {
+              "at": [
+                760.0,
+                407.0,
+                "r-install"
+              ],
+              "reason": "stop",
+              "reply": "{\"bbox_2d\": [560, 492, 628, 526]}",
+              "result": "right",
+              "seconds": 0.45,
+              "thought": 0
+            },
+            {
+              "at": [
+                760.0,
+                407.0,
+                "r-install"
+              ],
+              "reason": "stop",
+              "reply": "{\"bbox_2d\": [560, 492, 628, 526]}",
+              "result": "right",
+              "seconds": 0.39,
+              "thought": 0
+            }
+          ]
+        },
+        {
+          "counted": "right",
+          "goal": "원격 PC 업데이트는 나중에 하게 눌러줘",
+          "kind": "unlisted",
+          "tries": [
+            {
+              "at": [
+                844.0,
+                407.0,
+                "r-later"
+              ],
+              "reason": "stop",
+              "reply": "{\"bbox_2d\": [632, 492, 687, 525]}",
+              "result": "right",
+              "seconds": 0.54,
+              "thought": 0
+            },
+            {
+              "at": [
+                844.0,
+                407.0,
+                "r-later"
+              ],
+              "reason": "stop",
+              "reply": "{\"bbox_2d\": [632, 492, 687, 525]}",
+              "result": "right",
+              "seconds": 0.45,
+              "thought": 0
+            },
+            {
+              "at": [
+                844.0,
+                407.0,
+                "r-later"
+              ],
+              "reason": "stop",
+              "reply": "{\"bbox_2d\": [632, 492, 687, 525]}",
+              "result": "right",
+              "seconds": 0.44,
+              "thought": 0
+            }
+          ]
+        },
+        {
+          "counted": "right",
+          "goal": "원격 PC의 휴지통 열어줘",
+          "kind": "unlisted",
+          "tries": [
+            {
+              "at": [
+                56.0,
+                104.0,
+                "r-recycle"
+              ],
+              "reason": "stop",
+              "reply": "{\"bbox_2d\": [27, 98, 60, 163]}",
+              "result": "right",
+              "seconds": 0.46,
+              "thought": 0
+            },
+            {
+              "at": [
+                56.0,
+                104.0,
+                "r-recycle"
+              ],
+              "reason": "stop",
+              "reply": "{\"bbox_2d\": [27, 98, 60, 163]}",
+              "result": "right",
+              "seconds": 0.36,
+              "thought": 0
+            },
+            {
+              "at": [
+                56.0,
+                104.0,
+                "r-recycle"
+              ],
+              "reason": "stop",
+              "reply": "{\"bbox_2d\": [27, 98, 60, 163]}",
+              "result": "right",
+              "seconds": 0.39,
+              "thought": 0
+            }
+          ]
+        },
+        {
+          "counted": "wrong",
+          "goal": "원격 연결 끊어줘",
+          "kind": "listed",
+          "tries": [
+            {
+              "at": [
+                760.0,
+                408.0,
+                "r-install"
+              ],
+              "reason": "stop",
+              "reply": "{\"bbox_2d\": [560, 492, 628, 527]}",
+              "result": "wrong",
+              "seconds": 0.48,
+              "thought": 0
+            },
+            {
+              "at": [
+                760.0,
+                408.0,
+                "r-install"
+              ],
+              "reason": "stop",
+              "reply": "{\"bbox_2d\": [560, 492, 628, 527]}",
+              "result": "wrong",
+              "seconds": 0.39,
+              "thought": 0
+            },
+            {
+              "at": [
+                760.0,
+                408.0,
+                "r-install"
+              ],
+              "reason": "stop",
+              "reply": "{\"bbox_2d\": [560, 492, 628, 527]}",
+              "result": "wrong",
+              "seconds": 0.37,
+              "thought": 0
+            }
+          ]
+        },
+        {
+          "counted": "wrong",
+          "goal": "원격 화면에서 계산기 열어줘",
+          "kind": "none",
+          "tries": [
+            {
+              "at": [
+                639.0,
+                777.0,
+                "원격 화면"
+              ],
+              "reason": "stop",
+              "reply": "{\"bbox_2d\": [488, 955, 510, 987]}",
+              "result": "wrong",
+              "seconds": 0.44,
+              "thought": 0
+            },
+            {
+              "at": [
+                639.0,
+                777.0,
+                "원격 화면"
+              ],
+              "reason": "stop",
+              "reply": "{\"bbox_2d\": [488, 955, 510, 987]}",
+              "result": "wrong",
+              "seconds": 0.37,
+              "thought": 0
+            },
+            {
+              "at": [
+                639.0,
+                777.0,
+                "원격 화면"
+              ],
+              "reason": "stop",
+              "reply": "{\"bbox_2d\": [488, 955, 510, 987]}",
+              "result": "wrong",
+              "seconds": 0.44,
+              "thought": 0
+            }
+          ]
+        }
+      ],
+      "listed_right": 9,
+      "max_s": 0.88,
+      "median_prompt_tokens": 1172.0,
+      "median_s": 0.4,
+      "model": "qwen3-vl:4b-instruct",
+      "none_declined": 2,
+      "same_name_asked": 0,
+      "same_name_right": 1,
+      "unlisted_right": 6,
+      "unlisted_wrong": 0,
+      "wrong": 8
+    },
+    {
+      "arm": "marks",
+      "goals": [
+        {
+          "counted": "wrong",
+          "goal": "보고서_최종_v3.docx 파일 선택해줘",
+          "kind": "listed",
+          "tries": [
+            {
+              "at": [
+                56,
+                "~$보고서_최종_v3.docx"
+              ],
+              "reason": "stop",
+              "reply": "{\"mark\": 56}",
+              "result": "wrong",
+              "seconds": 0.54,
+              "thought": 0
+            },
+            {
+              "at": [
+                56,
+                "~$보고서_최종_v3.docx"
+              ],
+              "reason": "stop",
+              "reply": "{\"mark\": 56}",
+              "result": "wrong",
+              "seconds": 0.13,
+              "thought": 0
+            },
+            {
+              "at": [
+                56,
+                "~$보고서_최종_v3.docx"
+              ],
+              "reason": "stop",
+              "reply": "{\"mark\": 56}",
+              "result": "wrong",
+              "seconds": 0.14,
+              "thought": 0
+            }
+          ]
+        },
+        {
+          "counted": "right",
+          "goal": "예산표_2026.xlsx 눌러줘",
+          "kind": "listed",
+          "tries": [
+            {
+              "at": [
+                43,
+                "예산표_2026.xlsx"
+              ],
+              "reason": "stop",
+              "reply": "{\"mark\": 43}",
+              "result": "right",
+              "seconds": 0.2,
+              "thought": 0
+            },
+            {
+              "at": [
+                43,
+                "예산표_2026.xlsx"
+              ],
+              "reason": "stop",
+              "reply": "{\"mark\": 43}",
+              "result": "right",
+              "seconds": 0.16,
+              "thought": 0
+            },
+            {
+              "at": [
+                43,
+                "예산표_2026.xlsx"
+              ],
+              "reason": "stop",
+              "reply": "{\"mark\": 43}",
+              "result": "right",
+              "seconds": 0.16,
+              "thought": 0
+            }
+          ]
+        },
+        {
+          "counted": "wrong",
+          "goal": "회의록_1104.md 골라줘",
+          "kind": "listed",
+          "tries": [
+            {
+              "at": [
+                53,
+                "회의록_1110.md"
+              ],
+              "reason": "stop",
+              "reply": "{\"mark\": 53}",
+              "result": "wrong",
+              "seconds": 0.24,
+              "thought": 0
+            },
+            {
+              "at": [
+                53,
+                "회의록_1110.md"
+              ],
+              "reason": "stop",
+              "reply": "{\"mark\": 53}",
+              "result": "wrong",
+              "seconds": 0.15,
+              "thought": 0
+            },
+            {
+              "at": [
+                53,
+                "회의록_1110.md"
+              ],
+              "reason": "stop",
+              "reply": "{\"mark\": 53}",
+              "result": "wrong",
+              "seconds": 0.17,
+              "thought": 0
+            }
+          ]
+        },
+        {
+          "counted": "wrong",
+          "goal": "삭제 버튼 눌러줘",
+          "kind": "listed",
+          "tries": [
+            {
+              "at": [
+                9,
+                "공유"
+              ],
+              "reason": "stop",
+              "reply": "{\"mark\": 9}",
+              "result": "wrong",
+              "seconds": 0.21,
+              "thought": 0
+            },
+            {
+              "at": [
+                9,
+                "공유"
+              ],
+              "reason": "stop",
+              "reply": "{\"mark\": 9}",
+              "result": "wrong",
+              "seconds": 0.16,
+              "thought": 0
+            },
+            {
+              "at": [
+                9,
+                "공유"
+              ],
+              "reason": "stop",
+              "reply": "{\"mark\": 9}",
+              "result": "wrong",
+              "seconds": 0.16,
+              "thought": 0
+            }
+          ]
+        },
+        {
+          "counted": "wrong",
+          "goal": "다운로드 폴더로 가줘",
+          "kind": "listed",
+          "tries": [
+            {
+              "at": [
+                17,
+                "바탕 화면"
+              ],
+              "reason": "stop",
+              "reply": "{\"mark\": 17}",
+              "result": "wrong",
+              "seconds": 0.23,
+              "thought": 0
+            },
+            {
+              "at": [
+                17,
+                "바탕 화면"
+              ],
+              "reason": "stop",
+              "reply": "{\"mark\": 17}",
+              "result": "wrong",
+              "seconds": 0.16,
+              "thought": 0
+            },
+            {
+              "at": [
+                17,
+                "바탕 화면"
+              ],
+              "reason": "stop",
+              "reply": "{\"mark\": 17}",
+              "result": "wrong",
+              "seconds": 0.16,
+              "thought": 0
+            }
+          ]
+        },
+        {
+          "counted": "declined",
+          "goal": "휴지통 비우기 눌러줘",
+          "kind": "none",
+          "tries": [
+            {
+              "at": [
+                null,
+                null
+              ],
+              "reason": "stop",
+              "reply": "{\"mark\": null}",
+              "result": "declined",
+              "seconds": 0.2,
+              "thought": 0
+            },
+            {
+              "at": [
+                null,
+                null
+              ],
+              "reason": "stop",
+              "reply": "{\"mark\": null}",
+              "result": "declined",
+              "seconds": 0.13,
+              "thought": 0
+            },
+            {
+              "at": [
+                null,
+                null
+              ],
+              "reason": "stop",
+              "reply": "{\"mark\": null}",
+              "result": "declined",
+              "seconds": 0.13,
+              "thought": 0
+            }
+          ]
+        },
+        {
+          "counted": "right",
+          "goal": "저장하지 말고 닫아줘",
+          "kind": "listed",
+          "tries": [
+            {
+              "at": [
+                12,
+                "저장 안 함"
+              ],
+              "reason": "stop",
+              "reply": "{\"mark\": 12}",
+              "result": "right",
+              "seconds": 0.6,
+              "thought": 0
+            },
+            {
+              "at": [
+                12,
+                "저장 안 함"
+              ],
+              "reason": "stop",
+              "reply": "{\"mark\": 12}",
+              "result": "right",
+              "seconds": 0.16,
+              "thought": 0
+            },
+            {
+              "at": [
+                12,
+                "저장 안 함"
+              ],
+              "reason": "stop",
+              "reply": "{\"mark\": 12}",
+              "result": "right",
+              "seconds": 0.14,
+              "thought": 0
+            }
+          ]
+        },
+        {
+          "counted": "right",
+          "goal": "취소해줘",
+          "kind": "listed",
+          "tries": [
+            {
+              "at": [
+                13,
+                "취소"
+              ],
+              "reason": "stop",
+              "reply": "{\"mark\": 13}",
+              "result": "right",
+              "seconds": 0.21,
+              "thought": 0
+            },
+            {
+              "at": [
+                13,
+                "취소"
+              ],
+              "reason": "stop",
+              "reply": "{\"mark\": 13}",
+              "result": "right",
+              "seconds": 0.13,
+              "thought": 0
+            },
+            {
+              "at": [
+                13,
+                "취소"
+              ],
+              "reason": "stop",
+              "reply": "{\"mark\": 13}",
+              "result": "right",
+              "seconds": 0.14,
+              "thought": 0
+            }
+          ]
+        },
+        {
+          "counted": "right",
+          "goal": "저장해",
+          "kind": "listed",
+          "tries": [
+            {
+              "at": [
+                11,
+                "저장"
+              ],
+              "reason": "stop",
+              "reply": "{\"mark\": 11}",
+              "result": "right",
+              "seconds": 0.17,
+              "thought": 0
+            },
+            {
+              "at": [
+                11,
+                "저장"
+              ],
+              "reason": "stop",
+              "reply": "{\"mark\": 11}",
+              "result": "right",
+              "seconds": 0.15,
+              "thought": 0
+            },
+            {
+              "at": [
+                11,
+                "저장"
+              ],
+              "reason": "stop",
+              "reply": "{\"mark\": 11}",
+              "result": "right",
+              "seconds": 0.16,
+              "thought": 0
+            }
+          ]
+        },
+        {
+          "counted": "declined",
+          "goal": "인쇄해줘",
+          "kind": "none",
+          "tries": [
+            {
+              "at": [
+                null,
+                null
+              ],
+              "reason": "stop",
+              "reply": "{\"mark\": null}",
+              "result": "declined",
+              "seconds": 0.2,
+              "thought": 0
+            },
+            {
+              "at": [
+                null,
+                null
+              ],
+              "reason": "stop",
+              "reply": "{\"mark\": null}",
+              "result": "declined",
+              "seconds": 0.12,
+              "thought": 0
+            },
+            {
+              "at": [
+                null,
+                null
+              ],
+              "reason": "stop",
+              "reply": "{\"mark\": null}",
+              "result": "declined",
+              "seconds": 0.13,
+              "thought": 0
+            }
+          ]
+        },
+        {
+          "counted": "wrong",
+          "goal": "지우개로 바꿔줘",
+          "kind": "listed",
+          "tries": [
+            {
+              "at": [
+                10,
+                "연필"
+              ],
+              "reason": "stop",
+              "reply": "{\"mark\": 10}",
+              "result": "wrong",
+              "seconds": 0.55,
+              "thought": 0
+            },
+            {
+              "at": [
+                10,
+                "연필"
+              ],
+              "reason": "stop",
+              "reply": "{\"mark\": 10}",
+              "result": "wrong",
+              "seconds": 0.13,
+              "thought": 0
+            },
+            {
+              "at": [
+                10,
+                "연필"
+              ],
+              "reason": "stop",
+              "reply": "{\"mark\": 10}",
+              "result": "wrong",
+              "seconds": 0.13,
+              "thought": 0
+            }
+          ]
+        },
+        {
+          "counted": "missed",
+          "goal": "빨간색 골라줘",
+          "kind": "listed",
+          "tries": [
+            {
+              "at": [
+                null,
+                null
+              ],
+              "reason": "stop",
+              "reply": "{\"mark\": null}",
+              "result": "missed",
+              "seconds": 0.18,
+              "thought": 0
+            },
+            {
+              "at": [
+                null,
+                null
+              ],
+              "reason": "stop",
+              "reply": "{\"mark\": null}",
+              "result": "missed",
+              "seconds": 0.13,
+              "thought": 0
+            },
+            {
+              "at": [
+                null,
+                null
+              ],
+              "reason": "stop",
+              "reply": "{\"mark\": null}",
+              "result": "missed",
+              "seconds": 0.12,
+              "thought": 0
+            }
+          ]
+        },
+        {
+          "counted": "wrong",
+          "goal": "글자 넣는 도구 골라줘",
+          "kind": "listed",
+          "tries": [
+            {
+              "at": [
+                14,
+                "확대/축소"
+              ],
+              "reason": "stop",
+              "reply": "{\"mark\": 14}",
+              "result": "wrong",
+              "seconds": 0.21,
+              "thought": 0
+            },
+            {
+              "at": [
+                14,
+                "확대/축소"
+              ],
+              "reason": "stop",
+              "reply": "{\"mark\": 14}",
+              "result": "wrong",
+              "seconds": 0.14,
+              "thought": 0
+            },
+            {
+              "at": [
+                14,
+                "확대/축소"
+              ],
+              "reason": "stop",
+              "reply": "{\"mark\": 14}",
+              "result": "wrong",
+              "seconds": 0.14,
+              "thought": 0
+            }
+          ]
+        },
+        {
+          "counted": "wrong",
+          "goal": "휴지통 아이콘 눌러줘",
+          "kind": "unlisted",
+          "tries": [
+            {
+              "at": [
+                3,
+                "닫기"
+              ],
+              "reason": "stop",
+              "reply": "{\"mark\": 3}",
+              "result": "wrong",
+              "seconds": 0.21,
+              "thought": 0
+            },
+            {
+              "at": [
+                3,
+                "닫기"
+              ],
+              "reason": "stop",
+              "reply": "{\"mark\": 3}",
+              "result": "wrong",
+              "seconds": 0.11,
+              "thought": 0
+            },
+            {
+              "at": [
+                3,
+                "닫기"
+              ],
+              "reason": "stop",
+              "reply": "{\"mark\": 3}",
+              "result": "wrong",
+              "seconds": 0.12,
+              "thought": 0
+            }
+          ]
+        },
+        {
+          "counted": "cannot",
+          "goal": "톱니바퀴 아이콘 눌러줘",
+          "kind": "unlisted",
+          "tries": [
+            {
+              "at": [
+                null,
+                null
+              ],
+              "reason": "stop",
+              "reply": "{\"mark\": null}",
+              "result": "cannot",
+              "seconds": 0.17,
+              "thought": 0
+            },
+            {
+              "at": [
+                null,
+                null
+              ],
+              "reason": "stop",
+              "reply": "{\"mark\": null}",
+              "result": "cannot",
+              "seconds": 0.14,
+              "thought": 0
+            },
+            {
+              "at": [
+                null,
+                null
+              ],
+              "reason": "stop",
+              "reply": "{\"mark\": null}",
+              "result": "cannot",
+              "seconds": 0.11,
+              "thought": 0
+            }
+          ]
+        },
+        {
+          "counted": "declined",
+          "goal": "동영상 재생해줘",
+          "kind": "none",
+          "tries": [
+            {
+              "at": [
+                null,
+                null
+              ],
+              "reason": "stop",
+              "reply": "{\"mark\": null}",
+              "result": "declined",
+              "seconds": 0.18,
+              "thought": 0
+            },
+            {
+              "at": [
+                null,
+                null
+              ],
+              "reason": "stop",
+              "reply": "{\"mark\": null}",
+              "result": "declined",
+              "seconds": 0.12,
+              "thought": 0
+            },
+            {
+              "at": [
+                null,
+                null
+              ],
+              "reason": "stop",
+              "reply": "{\"mark\": null}",
+              "result": "declined",
+              "seconds": 0.12,
+              "thought": 0
+            }
+          ]
+        },
+        {
+          "counted": "right",
+          "goal": "글꼴 목록 열어줘",
+          "kind": "same-name",
+          "tries": [
+            {
+              "at": [
+                5,
+                "열기"
+              ],
+              "reason": "stop",
+              "reply": "{\"mark\": 5}",
+              "result": "right",
+              "seconds": 0.58,
+              "thought": 0
+            },
+            {
+              "at": [
+                5,
+                "열기"
+              ],
+              "reason": "stop",
+              "reply": "{\"mark\": 5}",
+              "result": "right",
+              "seconds": 0.13,
+              "thought": 0
+            },
+            {
+              "at": [
+                5,
+                "열기"
+              ],
+              "reason": "stop",
+              "reply": "{\"mark\": 5}",
+              "result": "right",
+              "seconds": 0.12,
+              "thought": 0
+            }
+          ]
+        },
+        {
+          "counted": "right",
+          "goal": "문자 집합 목록 열어줘",
+          "kind": "same-name",
+          "tries": [
+            {
+              "at": [
+                13,
+                "열기"
+              ],
+              "reason": "stop",
+              "reply": "{\"mark\": 13}",
+              "result": "right",
+              "seconds": 0.19,
+              "thought": 0
+            },
+            {
+              "at": [
+                13,
+                "열기"
+              ],
+              "reason": "stop",
+              "reply": "{\"mark\": 13}",
+              "result": "right",
+              "seconds": 0.15,
+              "thought": 0
+            },
+            {
+              "at": [
+                13,
+                "열기"
+              ],
+              "reason": "stop",
+              "reply": "{\"mark\": 13}",
+              "result": "right",
+              "seconds": 0.15,
+              "thought": 0
+            }
+          ]
+        },
+        {
+          "counted": "wrong",
+          "goal": "복사 버튼 눌러줘",
+          "kind": "listed",
+          "tries": [
+            {
+              "at": [
+                8,
+                "복사할 문자"
+              ],
+              "reason": "stop",
+              "reply": "{\"mark\": 8}",
+              "result": "wrong",
+              "seconds": 0.21,
+              "thought": 0
+            },
+            {
+              "at": [
+                8,
+                "복사할 문자"
+              ],
+              "reason": "stop",
+              "reply": "{\"mark\": 8}",
+              "result": "wrong",
+              "seconds": 0.14,
+              "thought": 0
+            },
+            {
+              "at": [
+                8,
+                "복사할 문자"
+              ],
+              "reason": "stop",
+              "reply": "{\"mark\": 8}",
+              "result": "wrong",
+              "seconds": 0.13,
+              "thought": 0
+            }
+          ]
+        },
+        {
+          "counted": "wrong",
+          "goal": "★ 문자 눌러줘",
+          "kind": "unlisted",
+          "tries": [
+            {
+              "at": [
+                4,
+                "글꼴"
+              ],
+              "reason": "stop",
+              "reply": "{\"mark\": 4}",
+              "result": "wrong",
+              "seconds": 0.2,
+              "thought": 0
+            },
+            {
+              "at": [
+                4,
+                "글꼴"
+              ],
+              "reason": "stop",
+              "reply": "{\"mark\": 4}",
+              "result": "wrong",
+              "seconds": 0.13,
+              "thought": 0
+            },
+            {
+              "at": [
+                4,
+                "글꼴"
+              ],
+              "reason": "stop",
+              "reply": "{\"mark\": 4}",
+              "result": "wrong",
+              "seconds": 0.13,
+              "thought": 0
+            }
+          ]
+        },
+        {
+          "counted": "wrong",
+          "goal": "글꼴 크기 키워줘",
+          "kind": "none",
+          "tries": [
+            {
+              "at": [
+                5,
+                "열기"
+              ],
+              "reason": "stop",
+              "reply": "{\"mark\": 5}",
+              "result": "wrong",
+              "seconds": 0.19,
+              "thought": 0
+            },
+            {
+              "at": [
+                5,
+                "열기"
+              ],
+              "reason": "stop",
+              "reply": "{\"mark\": 5}",
+              "result": "wrong",
+              "seconds": 0.13,
+              "thought": 0
+            },
+            {
+              "at": [
+                5,
+                "열기"
+              ],
+              "reason": "stop",
+              "reply": "{\"mark\": 5}",
+              "result": "wrong",
+              "seconds": 0.15,
+              "thought": 0
+            }
+          ]
+        },
+        {
+          "counted": "wrong",
+          "goal": "원격 화면에서 지금 설치 눌러줘",
+          "kind": "unlisted",
+          "tries": [
+            {
+              "at": [
+                5,
+                "전체 화면"
+              ],
+              "reason": "stop",
+              "reply": "{\"mark\": 5}",
+              "result": "wrong",
+              "seconds": 0.6,
+              "thought": 0
+            },
+            {
+              "at": [
+                5,
+                "전체 화면"
+              ],
+              "reason": "stop",
+              "reply": "{\"mark\": 5}",
+              "result": "wrong",
+              "seconds": 0.16,
+              "thought": 0
+            },
+            {
+              "at": [
+                5,
+                "전체 화면"
+              ],
+              "reason": "stop",
+              "reply": "{\"mark\": 5}",
+              "result": "wrong",
+              "seconds": 0.17,
+              "thought": 0
+            }
+          ]
+        },
+        {
+          "counted": "wrong",
+          "goal": "원격 PC 업데이트는 나중에 하게 눌러줘",
+          "kind": "unlisted",
+          "tries": [
+            {
+              "at": [
+                6,
+                "연결 끊기"
+              ],
+              "reason": "stop",
+              "reply": "{\"mark\": 6}",
+              "result": "wrong",
+              "seconds": 0.23,
+              "thought": 0
+            },
+            {
+              "at": [
+                6,
+                "연결 끊기"
+              ],
+              "reason": "stop",
+              "reply": "{\"mark\": 6}",
+              "result": "wrong",
+              "seconds": 0.19,
+              "thought": 0
+            },
+            {
+              "at": [
+                6,
+                "연결 끊기"
+              ],
+              "reason": "stop",
+              "reply": "{\"mark\": 6}",
+              "result": "wrong",
+              "seconds": 0.17,
+              "thought": 0
+            }
+          ]
+        },
+        {
+          "counted": "wrong",
+          "goal": "원격 PC의 휴지통 열어줘",
+          "kind": "unlisted",
+          "tries": [
+            {
+              "at": [
+                7,
+                "원격 화면"
+              ],
+              "reason": "stop",
+              "reply": "{\"mark\": 7}",
+              "result": "wrong",
+              "seconds": 0.24,
+              "thought": 0
+            },
+            {
+              "at": [
+                7,
+                "원격 화면"
+              ],
+              "reason": "stop",
+              "reply": "{\"mark\": 7}",
+              "result": "wrong",
+              "seconds": 0.17,
+              "thought": 0
+            },
+            {
+              "at": [
+                7,
+                "원격 화면"
+              ],
+              "reason": "stop",
+              "reply": "{\"mark\": 7}",
+              "result": "wrong",
+              "seconds": 0.18,
+              "thought": 0
+            }
+          ]
+        },
+        {
+          "counted": "right",
+          "goal": "원격 연결 끊어줘",
+          "kind": "listed",
+          "tries": [
+            {
+              "at": [
+                6,
+                "연결 끊기"
+              ],
+              "reason": "stop",
+              "reply": "{\"mark\": 6}",
+              "result": "right",
+              "seconds": 0.25,
+              "thought": 0
+            },
+            {
+              "at": [
+                6,
+                "연결 끊기"
+              ],
+              "reason": "stop",
+              "reply": "{\"mark\": 6}",
+              "result": "right",
+              "seconds": 0.19,
+              "thought": 0
+            },
+            {
+              "at": [
+                6,
+                "연결 끊기"
+              ],
+              "reason": "stop",
+              "reply": "{\"mark\": 6}",
+              "result": "right",
+              "seconds": 0.18,
+              "thought": 0
+            }
+          ]
+        },
+        {
+          "counted": "wrong",
+          "goal": "원격 화면에서 계산기 열어줘",
+          "kind": "none",
+          "tries": [
+            {
+              "at": [
+                6,
+                "연결 끊기"
+              ],
+              "reason": "stop",
+              "reply": "{\"mark\": 6}",
+              "result": "wrong",
+              "seconds": 0.26,
+              "thought": 0
+            },
+            {
+              "at": [
+                6,
+                "연결 끊기"
+              ],
+              "reason": "stop",
+              "reply": "{\"mark\": 6}",
+              "result": "wrong",
+              "seconds": 0.17,
+              "thought": 0
+            },
+            {
+              "at": [
+                6,
+                "연결 끊기"
+              ],
+              "reason": "stop",
+              "reply": "{\"mark\": 6}",
+              "result": "wrong",
+              "seconds": 0.19,
+              "thought": 0
+            }
+          ]
+        }
+      ],
+      "listed_right": 5,
+      "max_s": 0.6,
+      "median_prompt_tokens": 1152.0,
+      "median_s": 0.16,
+      "model": "qwen3-vl:4b-instruct",
+      "none_declined": 3,
+      "same_name_asked": 0,
+      "same_name_right": 2,
+      "unlisted_right": 0,
+      "unlisted_wrong": 5,
+      "wrong": 14
+    },
+    {
+      "arm": "control",
+      "goals": [
+        {
+          "goal": "보고서_최종_v3.docx 파일 선택해줘",
+          "reason": "length",
+          "reply": "",
+          "result": "missed",
+          "seconds": 61.2,
+          "thought": 10433
+        },
+        {
+          "goal": "예산표_2026.xlsx 눌러줘",
+          "reason": "stop",
+          "reply": "{\"x\": 715, \"y\": 400}",
+          "result": "wrong",
+          "seconds": 59.2,
+          "thought": 10907
+        },
+        {
+          "goal": "회의록_1104.md 골라줘",
+          "reason": "length",
+          "reply": "",
+          "result": "missed",
+          "seconds": 63.0,
+          "thought": 10093
+        }
+      ],
+      "listed_right": 0,
+      "max_s": 62.98,
+      "median_prompt_tokens": null,
+      "median_s": 61.22,
+      "model": "qwen3-vl:8b",
+      "none_declined": 0,
+      "same_name_asked": 0,
+      "same_name_right": 0,
+      "unlisted_right": 0,
+      "unlisted_wrong": 0,
+      "wrong": 1
+    },
+    {
+      "arm": "ocr",
+      "found": 5,
+      "goals": [
+        {
+          "goal": "보고서_최종_v3.docx 파일 선택해줘",
+          "inside_target": false,
+          "occurrences": 0,
+          "shows": "보고서_최종_v3.docx"
+        },
+        {
+          "goal": "예산표_2026.xlsx 눌러줘",
+          "inside_target": false,
+          "occurrences": 0,
+          "shows": "예산표_2026.xlsx"
+        },
+        {
+          "goal": "회의록_1104.md 골라줘",
+          "inside_target": false,
+          "occurrences": 0,
+          "shows": "회의록_1104.md"
+        },
+        {
+          "goal": "삭제 버튼 눌러줘",
+          "inside_target": true,
+          "occurrences": 1,
+          "shows": "삭제"
+        },
+        {
+          "goal": "다운로드 폴더로 가줘",
+          "inside_target": true,
+          "occurrences": 1,
+          "shows": "다운로드"
+        },
+        {
+          "goal": "저장하지 말고 닫아줘",
+          "inside_target": false,
+          "occurrences": 0,
+          "shows": "저장 안 함"
+        },
+        {
+          "goal": "취소해줘",
+          "inside_target": false,
+          "occurrences": 0,
+          "shows": "취소"
+        },
+        {
+          "goal": "저장해",
+          "inside_target": true,
+          "occurrences": 2,
+          "shows": "저장"
+        },
+        {
+          "goal": "글꼴 목록 열어줘",
+          "inside_target": false,
+          "occurrences": 0,
+          "shows": "열기"
+        },
+        {
+          "goal": "문자 집합 목록 열어줘",
+          "inside_target": false,
+          "occurrences": 0,
+          "shows": "열기"
+        },
+        {
+          "goal": "복사 버튼 눌러줘",
+          "inside_target": false,
+          "occurrences": 0,
+          "shows": "복사(C)"
+        },
+        {
+          "goal": "★ 문자 눌러줘",
+          "inside_target": false,
+          "occurrences": 0,
+          "shows": "★"
+        },
+        {
+          "goal": "원격 화면에서 지금 설치 눌러줘",
+          "inside_target": true,
+          "occurrences": 1,
+          "shows": "지금 설치"
+        },
+        {
+          "goal": "원격 PC 업데이트는 나중에 하게 눌러줘",
+          "inside_target": true,
+          "occurrences": 1,
+          "shows": "나중에"
+        },
+        {
+          "goal": "원격 PC의 휴지통 열어줘",
+          "inside_target": false,
+          "occurrences": 0,
+          "shows": "휴지통"
+        },
+        {
+          "goal": "원격 연결 끊어줘",
+          "inside_target": false,
+          "occurrences": 0,
+          "shows": "연결 끊기"
+        }
+      ],
+      "median_s": 0.088,
+      "of": 16,
+      "remote_found": 2,
+      "screens": [
+        {
+          "decode_s": 0.024,
+          "median_s": 0.141,
+          "screen": "charmap",
+          "words": 19
+        },
+        {
+          "decode_s": 0.003,
+          "median_s": 0.084,
+          "screen": "dialog",
+          "words": 51
+        },
+        {
+          "decode_s": 0.005,
+          "median_s": 0.603,
+          "screen": "explorer",
+          "words": 309
+        },
+        {
+          "decode_s": 0.002,
+          "median_s": 0.045,
+          "screen": "paint",
+          "words": 15
+        },
+        {
+          "decode_s": 0.005,
+          "median_s": 0.088,
+          "screen": "remote",
+          "words": 41
+        }
+      ]
+    }
+  ],
+  "fixtures": "e2e475",
+  "harness": "cc3520",
+  "picture": "1280x800 PNG, drawn",
+  "repeats": 3,
+  "when": "2026-11-18"
+}

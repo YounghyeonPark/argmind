@@ -21,7 +21,13 @@ argmind-env-face = { path = "../argmind-env-face" }
 argmind-window = { path = "../argmind-window" }
 argmind-env-browser = { path = "../argmind-env-browser" }
 argmind-env-mcp = { path = "../argmind-env-mcp" }
-# `screen` only: the person's foreground window and physical pointer, read before and after.
-windows = { version = "0.58", features = ["Win32_Foundation", "Win32_UI_WindowsAndMessaging"] }
+# `screen`: the person's foreground window and physical pointer, read before and after.
+# `looking`: Windows' own OCR (`Media_Ocr` and what it takes a picture in through) — part of
+# Windows, so the same crate with more of its features and no new third party.
+windows = { version = "0.58", features = [
+    "Win32_Foundation", "Win32_UI_WindowsAndMessaging", "Win32_System_WinRT",
+    "Foundation", "Foundation_Collections", "Globalization", "Graphics_Imaging", "Media_Ocr",
+    "Storage_Streams",
+] }
 serde_json = "1"
 sha2 = "0.10"

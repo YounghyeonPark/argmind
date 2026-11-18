@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="ko"><head><meta charset="utf-8"><title>원격 데스크톱 - REMOTE-PC</title>
+<link rel="stylesheet" href="win.css">
+<style>
+  .bar { height: 36px; display: flex; align-items: center; gap: 6px; padding: 0 10px; background: #2b2b2b; color: #eee; }
+  .bar button { background: #3c3c3c; border-color: #555; color: #eee; padding: 3px 12px; }
+  .bar .who { flex: 1; font-size: 12px; color: #bbb; }
+  /* Everything inside .remote is a picture as far as Windows is concerned: a remote session arrives
+     as pixels, so nothing in it carries data-name. The list arm sees the pane and the bar. */
+  .remote { position: absolute; top: 68px; left: 0; right: 0; bottom: 0;
+    background: linear-gradient(135deg, #1b4f8a 0%, #2f78c4 55%, #6aa7e0 100%); overflow: hidden; }
+  .icon { position: absolute; width: 76px; display: flex; flex-direction: column; align-items: center; gap: 4px;
+    color: #fff; font-size: 12px; text-shadow: 0 1px 2px rgba(0,0,0,.6); }
+  .icon .ico { font-size: 34px; }
+  .task { position: absolute; left: 0; right: 0; bottom: 0; height: 44px; background: rgba(240,240,240,.92);
+    display: flex; align-items: center; justify-content: center; gap: 14px; }
+  .task .ico { font-size: 20px; color: #333; }
+  .clock { position: absolute; right: 14px; bottom: 6px; font-size: 11px; color: #222; text-align: right; }
+  .upd { position: absolute; left: 470px; top: 210px; width: 430px; background: #fff; border-radius: 8px;
+    box-shadow: 0 10px 30px rgba(0,0,0,.35); }
+  .upd .h { padding: 16px 22px 4px; font-size: 16px; font-weight: 600; }
+  .upd .m { padding: 6px 22px 22px; font-size: 13px; color: #333; }
+  .upd .b { display: flex; justify-content: flex-end; gap: 8px; padding: 14px 18px; background: #f3f3f3;
+    border-radius: 0 0 8px 8px; }
+</style></head>
+<body>
+<div class="titlebar"><span class="title">원격 데스크톱 - REMOTE-PC</span>
+  <span class="cap ico" data-name="최소화" data-role="button">&#xE921;</span>
+  <span class="cap ico" data-name="최대화" data-role="button">&#xE922;</span>
+  <span class="cap ico" data-name="닫기" data-role="button">&#xE8BB;</span></div>
+<div class="bar">
+  <span class="who">REMOTE-PC에 연결됨</span>
+  <button data-name="화면 크기 맞춤" data-role="button">화면 크기 맞춤</button>
+  <button data-name="전체 화면" data-role="button">전체 화면</button>
+  <button data-name="연결 끊기" data-role="button" data-target="r-disconnect">연결 끊기</button>
+</div>
+<div class="remote" data-name="원격 화면" data-role="pane">
+  <div class="icon" style="left:18px; top:16px" data-target="r-recycle"><i class="ico">&#xE74D;</i>휴지통</div>
+  <div class="icon" style="left:18px; top:104px"><i class="ico">&#xE7F8;</i>내 PC</div>
+  <div class="icon" style="left:18px; top:192px"><i class="ico">&#xE8A5;</i>문서</div>
+  <div class="icon" style="left:18px; top:280px"><i class="ico">&#xE70B;</i>메모장</div>
+  <div class="upd">
+    <div class="h">Windows 업데이트</div>
+    <div class="m">중요한 업데이트를 설치할 준비가 되었습니다. 지금 설치할까요? 설치하는 동안 PC가 다시 시작될 수 있습니다.</div>
+    <div class="b">
+      <button class="primary" data-target="r-install">지금 설치</button>
+      <button data-target="r-later">나중에</button>
+    </div>
+  </div>
+  <div class="task"><i class="ico">&#xE782;</i><i class="ico">&#xE721;</i><i class="ico">&#xE8B7;</i><i class="ico">&#xE774;</i><i class="ico">&#xE715;</i></div>
+  <div class="clock">오후 3:42<br>2026-11-18</div>
+</div>
+</body></html>

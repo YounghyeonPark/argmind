@@ -1,0 +1,108 @@
+{
+ "window": "원격 데스크톱 - REMOTE-PC",
+ "widgets": [
+  {
+   "name": "최소화",
+   "role": "button",
+   "rect": [
+    1142,
+    0,
+    46,
+    32
+   ],
+   "target": null
+  },
+  {
+   "name": "최대화",
+   "role": "button",
+   "rect": [
+    1188,
+    0,
+    46,
+    32
+   ],
+   "target": null
+  },
+  {
+   "name": "닫기",
+   "role": "button",
+   "rect": [
+    1234,
+    0,
+    46,
+    32
+   ],
+   "target": null
+  },
+  {
+   "name": "화면 크기 맞춤",
+   "role": "button",
+   "rect": [
+    984,
+    38,
+    111,
+    25
+   ],
+   "target": null
+  },
+  {
+   "name": "전체 화면",
+   "role": "button",
+   "rect": [
+    1101,
+    38,
+    82,
+    25
+   ],
+   "target": null
+  },
+  {
+   "name": "연결 끊기",
+   "role": "button",
+   "rect": [
+    1188,
+    38,
+    82,
+    25
+   ],
+   "target": "r-disconnect"
+  },
+  {
+   "name": "원격 화면",
+   "role": "pane",
+   "rect": [
+    0,
+    68,
+    1280,
+    732
+   ],
+   "target": null
+  }
+ ],
+ "targets": {
+  "r-disconnect": [
+   1188,
+   38,
+   82,
+   25
+  ],
+  "r-recycle": [
+   18,
+   84,
+   76,
+   54
+  ],
+  "r-install": [
+   719,
+   395,
+   86,
+   27
+  ],
+  "r-later": [
+   813,
+   395,
+   69,
+   27
+  ]
+ }
+}

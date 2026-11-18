@@ -1,0 +1,38 @@
+{
+ "why": "Written 2026-11-18, before any model saw these screens. `target` is the id of the element that does what was asked — `data-target` in html/<screen>.html — or null when nothing on that screen does it and the right answer is to say so.",
+ "kinds": {
+  "listed": "the target is in the list, with a name nothing else on the screen has: what argmind can do today",
+  "same-name": "the target is in the list, but another listed widget has the same name and role: today argmind asks which one",
+  "unlisted": "the target is on the screen and not in the list: an icon with no name, a character inside a grid listed as one pane, anything inside a remote desktop",
+  "none": "nothing on the screen does it: the honest answer is to decline"
+ },
+ "shows": "the text drawn inside the target, for the OCR arm; null for an icon or swatch with no text, and for a goal with no target",
+ "goals": [
+  {"screen": "explorer", "goal": "보고서_최종_v3.docx 파일 선택해줘", "target": "e-report3", "kind": "listed", "shows": "보고서_최종_v3.docx"},
+  {"screen": "explorer", "goal": "예산표_2026.xlsx 눌러줘", "target": "e-budget26", "kind": "listed", "shows": "예산표_2026.xlsx"},
+  {"screen": "explorer", "goal": "회의록_1104.md 골라줘", "target": "e-min1104", "kind": "listed", "shows": "회의록_1104.md"},
+  {"screen": "explorer", "goal": "삭제 버튼 눌러줘", "target": "e-delete", "kind": "listed", "shows": "삭제"},
+  {"screen": "explorer", "goal": "다운로드 폴더로 가줘", "target": "e-downloads", "kind": "listed", "shows": "다운로드"},
+  {"screen": "explorer", "goal": "휴지통 비우기 눌러줘", "target": null, "kind": "none", "shows": null},
+  {"screen": "dialog", "goal": "저장하지 말고 닫아줘", "target": "d-nosave", "kind": "listed", "shows": "저장 안 함"},
+  {"screen": "dialog", "goal": "취소해줘", "target": "d-cancel", "kind": "listed", "shows": "취소"},
+  {"screen": "dialog", "goal": "저장해", "target": "d-save", "kind": "listed", "shows": "저장"},
+  {"screen": "dialog", "goal": "인쇄해줘", "target": null, "kind": "none", "shows": null},
+  {"screen": "paint", "goal": "지우개로 바꿔줘", "target": "p-eraser", "kind": "listed", "shows": null},
+  {"screen": "paint", "goal": "빨간색 골라줘", "target": "p-red", "kind": "listed", "shows": null},
+  {"screen": "paint", "goal": "글자 넣는 도구 골라줘", "target": "p-text", "kind": "listed", "shows": null},
+  {"screen": "paint", "goal": "휴지통 아이콘 눌러줘", "target": "p-trash", "kind": "unlisted", "shows": null},
+  {"screen": "paint", "goal": "톱니바퀴 아이콘 눌러줘", "target": "p-gear", "kind": "unlisted", "shows": null},
+  {"screen": "paint", "goal": "동영상 재생해줘", "target": null, "kind": "none", "shows": null},
+  {"screen": "charmap", "goal": "글꼴 목록 열어줘", "target": "c-open-font", "kind": "same-name", "shows": "열기"},
+  {"screen": "charmap", "goal": "문자 집합 목록 열어줘", "target": "c-open-charset", "kind": "same-name", "shows": "열기"},
+  {"screen": "charmap", "goal": "복사 버튼 눌러줘", "target": "c-copy", "kind": "listed", "shows": "복사(C)"},
+  {"screen": "charmap", "goal": "★ 문자 눌러줘", "target": "c-star", "kind": "unlisted", "shows": "★"},
+  {"screen": "charmap", "goal": "글꼴 크기 키워줘", "target": null, "kind": "none", "shows": null},
+  {"screen": "remote", "goal": "원격 화면에서 지금 설치 눌러줘", "target": "r-install", "kind": "unlisted", "shows": "지금 설치"},
+  {"screen": "remote", "goal": "원격 PC 업데이트는 나중에 하게 눌러줘", "target": "r-later", "kind": "unlisted", "shows": "나중에"},
+  {"screen": "remote", "goal": "원격 PC의 휴지통 열어줘", "target": "r-recycle", "kind": "unlisted", "shows": "휴지통"},
+  {"screen": "remote", "goal": "원격 연결 끊어줘", "target": "r-disconnect", "kind": "listed", "shows": "연결 끊기"},
+  {"screen": "remote", "goal": "원격 화면에서 계산기 열어줘", "target": null, "kind": "none", "shows": null}
+ ]
+}
