@@ -71,6 +71,72 @@
 //! than the old one.
 //!
 //! **list**, predicted rather than judged: unlisted 0 of 6 by construction, same-name asked.
+//!
+//! ## Fitting on the card — `--fit`, 2026-11-18
+//!
+//! ```text
+//!   cargo run -p argmind-measure --bin looking --release -- --fit
+//! ```
+//!
+//! The owner chose *the picture only where the list is blind, always with a press* — and the cost
+//! nobody had measured is the card. **Run with argmind left running as the person runs it**, since
+//! the question is what the conversation's model, the voice and the recogniser leave room for.
+//! Nothing is clicked and no device is opened; the harness calls Ollama and reads `nvidia-smi` and
+//! `ollama ps`. Each vision model, two conditions:
+//!
+//! * **talking** — what argmind already has loaded;
+//! * **working** — and `qwen3:14b` at 24 layers, as argmind's own work loads it.
+//!
+//! A turn is the shipped prompt on the file list (`qwen3:8b`), a look is the box on the remote
+//! desktop; one turn, then four rounds of look-then-turn. The first look loads the model and is
+//! reported apart.
+//!
+//! **Written before the run** — *fits* means, in that condition:
+//! * after every look, `ollama ps` holds `qwen3:8b` and the vision model, both `100% GPU`;
+//! * every turn after a look ≤ 1.5 s (a warm turn is ~0.5 s; a reload is seconds);
+//! * every warm look ≤ 3 s, the slowest the *fast enough* bar allowed.
+//!
+//! **Predicted**: both models fit *talking* (8.9 GB used before the run, measured, against
+//! ~6 GB and ~3.5 GB, estimated); neither fits *working* (12.6 GB measured 2026-11-16).
+//!
+//! ## The shipped path — `--arms gated`, 2026-11-18
+//!
+//! The path `argmind_serve::looking` gives the application, run whole: the list's turn first
+//! (`qwen3:8b`, the shipped prompt); **a look only when `wants_a_look` says** — a request to press,
+//! somewhere on the screen the list is blind, and a turn that chose nothing or chose that place;
+//! the picture's point **kept only when `landed` puts it inside a region** and dropped on a listed
+//! control or on nothing; a kept point is a row (the application always waits for a press on it),
+//! right when the point is inside the target. A look that keeps nothing leaves the turn with no
+//! click — the middle of the pane it chose is not what was asked. `asking` is the prompt.
+//!
+//! **Written before the run**, for `qwen3-vl:4b-instruct` (the one that fits) and the 8b beside it:
+//! * *the list's answers survive* — listed right ≥ 12 of 13, and no listed or same-name goal
+//!   turns out differently from the list arm;
+//! * *where the list is blind, through the gate* — unlisted right ≥ 3 of the 4 it can reach (★ in
+//!   the grid, three things inside the remote desktop). The paint icons have no listed container
+//!   in this drawing and are **predicted dropped**;
+//! * *impossible requests* — a row on at most 1 of 5;
+//! * *the picture's own mistakes* — at most 1 row over all 26 whose point misses its target or
+//!   answers an impossible request; overall wrong ≤ 4, which is the list's 7 less the three
+//!   presses on the middle of a pane;
+//! * *time* — a look's median ≤ 1.0 s warm.
+//!
+//! **Read, first run (the whole picture, regions from 48×32)**: 4b — listed 12, unlisted **4 of the 4
+//! reachable**, the paint icons dropped as predicted (one on nothing, one on the 회전 button), a row
+//! on 1 of 5 impossible requests (*계산기* inside the remote desktop, pointed at its taskbar), overall
+//! wrong **5 against the bar of 4** — that row is the fifth; look median 0.39 s. The 8b: unlisted 3 of
+//! 4 (★ a pixel outside its cell), impossible rows 0, wrong 5.
+//!
+//! **Then the design moved, on a real window** (`--example pointing`): regions from 128×96, and
+//! the blind place cut out and made 1280 wide (`place_to_show`). **Second run, the same bars**,
+//! written down again before it ran.
+//!
+//! **Read, second run**: **the 8b met every bar** — listed 12, unlisted 4 of the 4 reachable, no row
+//! for an impossible request, no row in the wrong place, overall wrong 4 (all the list's own), look
+//! median 0.81 s. **The 4b missed two**: unlisted 3 of 4 (★ answered with the middle of the grid)
+//! and a row on 지금 설치 for the calculator, overall wrong 6, median 0.67 s. Cut out, the paint
+//! icons were not in the picture at all and both models said so. So the application looks with
+//! the 8b, which does not fit beside argmind's own work (`--fit`).
 
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
@@ -349,6 +415,218 @@ impl Tally {
     }
 }
 
+// ---- the shipped path ---------------------------------------------------------------------------
+
+fn gated(screens: &BTreeMap<String, Screen>, goals: &[Goal]) -> Vec<Value> {
+    use argmind_serve::looking::{asking, effect, landed, on_screen, place_to_show, read, wants_a_look, Landed,
+                                 Saw, MOST_WIDE};
+    let drawn: BTreeMap<String, argmind_env_windows::picture::Drawn> = screens.iter().map(|(k, s)| {
+        let (bgra, wide, tall) = ocr::pixels(&s.plain).expect("a drawn screen decodes");
+        (k.clone(), argmind_env_windows::picture::Drawn { bgra, wide, tall, rect: (0, 0, wide as i64, tall as i64) })
+    }).collect();
+    let mut talker = Local::new(LIST_MODEL);
+    talker.think = Some(false);
+    talker.keep_alive = "300s".into();
+    let _ = talker.ask("Reply with the single word: ready");
+    let mut out = Vec::new();
+    for name in [argmind_serve::looking::VISION_MODEL, VISION[0]] {
+        let mut looker = Local::new(name);
+        looker.think = Some(false);
+        looker.max_tokens = 256;
+        looker.keep_alive = "300s".into();
+        let _ = looker.look_at(&asking("ready"), &screens["dialog"].plain);
+        let mut t = Tally::new();
+        let (mut looks, mut rows, mut on_control, mut on_nothing, mut picture_wrong) = (0, 0, 0, 0, 0);
+        for g in goals {
+            let s = &screens[&g.screen];
+            let widgets: Vec<Widget> = s.widgets.iter().map(|l| l.widget.clone()).collect();
+            let trigger = Trigger::said(&g.goal);
+            let prompt = render(&widgets, &trigger, &[], MAX_LISTED, &Mind::resting());
+            let (mut results, mut tries) = (Vec::new(), Vec::new());
+            for _ in 0..REPEATS {
+                let reply = talker.ask(&prompt).expect("list call");
+                let intent = read_reply(&reply.text, &widgets, &trigger);
+                let click = intent.effects.iter().find(|e| e.kind == "click");
+                let chose = click.map(|e| format!("{} ({})", e.target, e.role));
+                if !wants_a_look(&g.goal, &intent.effects, &widgets) {
+                    let r = by_list(g, s, click.map(|e| (e.target.as_str(), e.role.as_str())));
+                    results.push(r);
+                    tries.push(json!({"path": "list", "chose": chose, "result": r}));
+                    continue;
+                }
+                looks += 1;
+                //: **The part the application would show**: the blind place cut out and made 1280 wide.
+                let part = place_to_show(&intent.effects, &widgets);
+                let shot = drawn[&g.screen].shot(part.as_ref().map(|w| w.rect), MOST_WIDE).expect("a shot");
+                let began = Instant::now();
+                let seen = looker.look_at(&asking(&g.goal), &shot.png).expect("look");
+                let secs = began.elapsed().as_secs_f64();
+                t.seconds.push(secs);
+                let (r, kept) = match read(&seen.text) {
+                    Saw::At { x, y, label } => {
+                        let (px, py) = on_screen(x, y, shot.rect);
+                        match landed(&widgets, px, py) {
+                            Landed::Inside(container) => {
+                                rows += 1;
+                                let e = effect(container, px, py, &label);
+                                let (ax, ay) = e.inside.unwrap().within(container.rect);
+                                let r = match &g.target {
+                                    Some(tid) if inside(s.targets[tid], ax as f64, ay as f64) => "right",
+                                    _ => { picture_wrong += 1; "wrong" }
+                                };
+                                (r, json!({"inside": container.name, "point": [ax, ay], "label": label,
+                                           "landed_on": landed_label(s, ax as f64, ay as f64)}))
+                            }
+                            Landed::OnAControl(w) => {
+                                on_control += 1;
+                                (by_list(g, s, None), json!({"dropped": "on a control", "on": w.name}))
+                            }
+                            Landed::OnNothing => {
+                                on_nothing += 1;
+                                (by_list(g, s, None), json!({"dropped": "on nothing", "point": [px, py]}))
+                            }
+                        }
+                    }
+                    Saw::Nothing => (by_list(g, s, None), json!({"saw": "nothing"})),
+                    Saw::Unreadable => (by_list(g, s, None), json!({"saw": "unreadable", "reply": clip(&seen.text)})),
+                };
+                results.push(r);
+                tries.push(json!({"path": "looked", "chose": chose, "shown": part.map(|w| w.name),
+                                  "seconds": (secs * 100.0).round() / 100.0,
+                                  "result": r, "picture": kept}));
+            }
+            let w = worst(&results);
+            t.counted.push((g.kind.clone(), w));
+            t.rows.push(json!({"goal": g.goal, "kind": g.kind, "counted": w, "tries": tries}));
+        }
+        t.line("gated", name);
+        println!("          보기 {looks}번 · 줄 {rows} · 버튼 위라 버림 {on_control} · 아무것도 없는 곳이라 버림 \
+                  {on_nothing} · 그림이 만든 틀린 줄 {picture_wrong} (반복 포함)");
+        let mut s = t.summary("gated", name);
+        s["looks"] = json!(looks);
+        s["rows"] = json!(rows);
+        s["dropped_on_a_control"] = json!(on_control);
+        s["dropped_on_nothing"] = json!(on_nothing);
+        s["picture_rows_wrong"] = json!(picture_wrong);
+        out.push(s);
+    }
+    out
+}
+
+fn landed_label(s: &Screen, x: f64, y: f64) -> String {
+    landed(s, x, y)
+}
+
+// ---- fitting on the card ------------------------------------------------------------------------
+
+/// MiB in use on the card, all processes, as `nvidia-smi` reports it.
+fn card_used() -> Option<i64> {
+    let out = std::process::Command::new("nvidia-smi")
+        .args(["--query-gpu=memory.used", "--format=csv,noheader,nounits"]).output().ok()?;
+    String::from_utf8_lossy(&out.stdout).trim().lines().next()?.trim().parse().ok()
+}
+
+/// `ollama ps`, one `name · size · processor` a model.
+fn loaded() -> Vec<String> {
+    let Ok(out) = std::process::Command::new("ollama").arg("ps").output() else { return vec![] };
+    String::from_utf8_lossy(&out.stdout).lines().skip(1).filter(|l| !l.trim().is_empty()).map(|l| {
+        let cols: Vec<&str> = l.split("  ").map(str::trim).filter(|c| !c.is_empty()).collect();
+        format!("{} · {} · {}", cols.first().unwrap_or(&""), cols.get(2).unwrap_or(&""), cols.get(3).unwrap_or(&""))
+    }).collect()
+}
+
+fn holds(state: &[String], model: &str) -> bool {
+    state.iter().any(|l| l.starts_with(&format!("{model} ·")) && l.ends_with("100% GPU"))
+}
+
+fn stop(model: &str) {
+    let _ = std::process::Command::new("ollama").args(["stop", model]).output();
+}
+
+fn fit(screens: &BTreeMap<String, Screen>, goals: &[Goal], fixtures: &str, harness: &str, dir: &Path) {
+    let out = Destination::new(dir, "fit", &[format!("f{fixtures}"), format!("h{harness}")]);
+    if let Err(e) = out.refuse_if_taken() { eprintln!("{e}"); std::process::exit(2); }
+    let before_any = loaded();
+    println!("\n  카드에 같이 올라가나 — 시작할 때 {:?} MiB · {before_any:?}\n", card_used());
+
+    let turn_goal = goals.iter().find(|g| g.goal == "삭제 버튼 눌러줘").unwrap();
+    let look_goal = goals.iter().find(|g| g.goal == "원격 화면에서 지금 설치 눌러줘").unwrap();
+    let tscreen = &screens[&turn_goal.screen];
+    let lscreen = &screens[&look_goal.screen];
+    let widgets: Vec<Widget> = tscreen.widgets.iter().map(|l| l.widget.clone()).collect();
+    let trigger = Trigger::said(&turn_goal.goal);
+    let prompt = render(&widgets, &trigger, &[], MAX_LISTED, &Mind::resting());
+    let mut talker = Local::new(LIST_MODEL);
+    talker.think = Some(false);
+    talker.keep_alive = "300s".into();
+
+    let mut arms = Vec::new();
+    for condition in ["talking", "working"] {
+        for name in VISION {
+            for v in VISION { stop(v); }
+            let mut loaded_work = false;
+            if condition == "working" && !holds(&loaded(), "qwen3:14b") {
+                let mut work = Local::new("qwen3:14b");
+                work.think = Some(false);
+                work.max_tokens = 8;
+                work.keep_alive = "300s".into();
+                work.num_gpu = Some(24);
+                let _ = work.ask("Reply with the single word: ready");
+                loaded_work = true;
+            }
+            let mut looker = Local::new(name);
+            looker.think = Some(false);
+            looker.max_tokens = 256;
+            looker.keep_alive = "300s".into();
+
+            let mut steps = Vec::new();
+            let mut step = |what: &str, secs: f64, text: &str| {
+                let state = loaded();
+                let used = card_used();
+                println!("  {condition:<8} {name:<22} {what:<6} {secs:>6.2}s  {used:?} MiB  {state:?}");
+                steps.push(json!({"step": what, "seconds": (secs * 100.0).round() / 100.0,
+                                  "card_mib": used, "loaded": state, "reply": clip(text)}));
+            };
+            let began = Instant::now();
+            let r = talker.ask(&prompt).expect("turn");
+            step("turn", began.elapsed().as_secs_f64(), &r.text);
+            for round in 0..5 {
+                let began = Instant::now();
+                let r = looker.look_at(&ask_box(&look_goal.goal), &lscreen.plain).expect("look");
+                let secs = began.elapsed().as_secs_f64();
+                let right = by_point(look_goal, lscreen, &pointed(&r.text, lscreen.w, lscreen.h));
+                step(if round == 0 { "load" } else { "look" }, secs, &format!("{right} {}", r.text));
+                let began = Instant::now();
+                let r = talker.ask(&prompt).expect("turn");
+                step("turn", began.elapsed().as_secs_f64(), &r.text);
+            }
+            //: Judged on the rounds after the load, against the bars written first.
+            let looks: Vec<&Value> = steps.iter().filter(|s| s["step"] == "look").collect();
+            let turns_after: Vec<&Value> = steps.iter().skip(1).filter(|s| s["step"] == "turn").collect();
+            let both_held = steps.iter().filter(|s| s["step"] == "look" || s["step"] == "load").all(|s| {
+                let state: Vec<String> = serde_json::from_value(s["loaded"].clone()).unwrap_or_default();
+                holds(&state, LIST_MODEL) && holds(&state, name)
+            });
+            let slowest_turn = turns_after.iter().map(|s| s["seconds"].as_f64().unwrap()).fold(0.0, f64::max);
+            let slowest_look = looks.iter().map(|s| s["seconds"].as_f64().unwrap()).fold(0.0, f64::max);
+            let most = steps.iter().filter_map(|s| s["card_mib"].as_i64()).max();
+            let fits = both_held && slowest_turn <= 1.5 && slowest_look <= 3.0;
+            println!("  {condition:<8} {name:<22} → {} · 둘 다 카드에 {both_held} · 대화 최대 {slowest_turn:.2}s · \
+                      보기 최대 {slowest_look:.2}s · 카드 최대 {most:?} MiB\n",
+                     if fits { "들어감" } else { "안 들어감" });
+            arms.push(json!({"condition": condition, "model": name, "fits": fits, "both_held": both_held,
+                             "slowest_turn_after_look_s": slowest_turn, "slowest_warm_look_s": slowest_look,
+                             "most_card_mib": most, "loaded_work_model": loaded_work, "steps": steps}));
+            stop(name);
+            if loaded_work { stop("qwen3:14b"); }
+        }
+    }
+    let record = json!({"harness": harness, "fixtures": fixtures, "loaded_at_start": before_any,
+                        "card_total_mib": 16376, "arms": arms});
+    std::fs::write(&out.path, serde_json::to_string_pretty(&record).unwrap()).unwrap();
+    println!("  → {}", out.path.display());
+}
+
 fn main() {
     let args: Vec<String> = std::env::args().collect();
     let pilot = args.iter().any(|a| a == "--pilot");
@@ -358,6 +636,11 @@ fn main() {
     let dir = root.join("measure").join("looking");
     let (screens, goals, fixtures) = load(&dir);
     let harness = source_print(include_str!("looking.rs"));
+
+    if args.iter().any(|a| a == "--fit") {
+        fit(&screens, &goals, &fixtures, &harness, &dir);
+        return;
+    }
 
     if pilot {
         //: One goal, the raw reply printed: the check that the box convention is the one the
@@ -384,8 +667,13 @@ fn main() {
 
     let mut summaries: Vec<Value> = Vec::new();
 
+    // ---- gated: the application's path, whole ----
+    if only.contains("gated") {
+        summaries.extend(gated(&screens, &goals));
+    }
+
     // ---- list: today's path ----
-    if only.contains("list") {
+    if only.split(',').any(|a| a == "list") {
         let mut model = Local::new(LIST_MODEL);
         model.think = Some(false);
         model.keep_alive = "300s".into();
@@ -598,6 +886,20 @@ mod ocr {
         writer.DetachStream()?;
         stream.Seek(0)?;
         BitmapDecoder::CreateAsync(&stream)?.get()?.GetSoftwareBitmapAsync()?.get()
+    }
+
+    /// A PNG's pixels, top-down BGRA — so the `gated` arm can cut a place out of a drawn screen
+    /// the way the application cuts one out of a window.
+    pub fn pixels(png: &[u8]) -> windows::core::Result<(Vec<u8>, usize, usize)> {
+        use windows::Graphics::Imaging::BitmapPixelFormat;
+        use windows::Storage::Streams::{Buffer, DataReader};
+        let bmp = SoftwareBitmap::Convert(&bitmap(png)?, BitmapPixelFormat::Bgra8)?;
+        let (w, h) = (bmp.PixelWidth()? as usize, bmp.PixelHeight()? as usize);
+        let buffer = Buffer::Create((w * h * 4) as u32)?;
+        bmp.CopyToBuffer(&buffer)?;
+        let mut out = vec![0u8; w * h * 4];
+        DataReader::FromBuffer(&buffer)?.ReadBytes(&mut out)?;
+        Ok((out, w, h))
     }
 
     pub fn read(engine: &OcrEngine, bmp: &SoftwareBitmap) -> windows::core::Result<Vec<Line>> {

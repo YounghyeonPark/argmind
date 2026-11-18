@@ -37,6 +37,37 @@ pub struct Among {
     pub of: usize,
 }
 
+/// **A point inside the thing an effect names, for a place the list cannot see into** —
+/// thousandths of its width and height from its top-left corner.
+///
+/// The owner's choice of 2026-11-18, after `--bin looking` measured a vision model finding 5–6 of
+/// 6 things the list is blind to (a character inside a grid listed as one pane, anything inside a
+/// remote desktop) and being *less* exact than the list where the list has the thing by name. So
+/// the rule this project hangs on — *a model never emits a coordinate* — gives way in exactly one
+/// shape, and this is that shape: **the deterministic side still says WHERE the container is**, by
+/// name and role, re-resolved at act time like every other target; the picture says only where
+/// inside it, so the point moves with the container and cannot leave it.
+///
+/// **Made in one place**, `argmind-serve`'s `looking.rs`, from a picture of the window and only
+/// where the list holds nothing smaller than a region; never by the reader of a model's reply, and
+/// never carried out without a person pressing the button — `argmind-rules` reads the source for
+/// all three.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Inside {
+    pub x: u16,
+    pub y: u16,
+}
+
+impl Inside {
+    /// The point in `rect` as it is **now** — the container's fresh rectangle, at act time.
+    /// Clamped to the rectangle, so a point can never be outside what was named.
+    pub fn within(&self, rect: (i64, i64, i64, i64)) -> (i64, i64) {
+        let (x, y, w, h) = rect;
+        let (fx, fy) = (self.x.min(1000) as i64, self.y.min(1000) as i64);
+        (x + (w * fx / 1000).min(w.max(1) - 1), y + (h * fy / 1000).min(h.max(1) - 1))
+    }
+}
+
 /// One thing to do. **It carries a name and a role, never a rectangle** — a listed widget is gone
 /// 13 times in 14 over the second a call takes, so the target is re-resolved immediately before
 /// acting and the rectangle is exactly what moves.
@@ -54,6 +85,11 @@ pub struct Effect {
     /// fields and cannot name the one it means — and the reader never fills it. It arrives when
     /// somebody answers *which `Open`?*, which is the only thing in this program that knows.
     pub which: Option<Among>,
+    /// **Where inside the target, when the list could not see into it** — see [`Inside`]. `None`
+    /// for every effect a model's reply produces; a click with it set is pressed at that point in
+    /// the target's fresh rectangle and never by the target's own pattern. For such a click,
+    /// `text` holds what the picture showed there, in the vision model's words, for the person.
+    pub inside: Option<Inside>,
 }
 
 impl Effect {

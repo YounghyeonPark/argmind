@@ -36,6 +36,8 @@ interface Hello {
   acts: boolean;
   /** Whether what argmind thought of by itself runs without a person. */
   initiative: boolean;
+  /** Whether a picture is looked at where the list is blind — always with a press. */
+  looking: boolean;
   /** Whether the camera is open right now — the fact, not the permission. */
   watching_you: boolean;
   /** Which voice: "neural", "windows", "none" or "off". Named rather than a flag, because the
@@ -322,6 +324,7 @@ stream.addEventListener("hello", (e) => {
   aloud.checked = d.speaks;
   acting.checked = d.acts;
   initiative.checked = d.initiative;
+  looking.checked = d.looking;
   camera.checked = d.watching_you;
   askRow(d.wonder);
   // **The switch, not the device** — unlike the camera above. Nothing happens while the models are
@@ -1021,6 +1024,18 @@ initiative.onchange = () => {
 
 stream.addEventListener("initiative", (e) => {
   initiative.checked = (e as MessageEvent).data === "1";
+});
+
+// The picture where the list is blind: the same shape — off is written down, on asks first.
+const looking = document.getElementById("looking") as HTMLInputElement;
+looking.onchange = () => {
+  const want = looking.checked;
+  looking.checked = false;
+  void post(want ? "/looking/on" : "/looking/off");
+};
+
+stream.addEventListener("looking", (e) => {
+  looking.checked = (e as MessageEvent).data === "1";
 });
 
 const aloud = document.getElementById("aloud") as HTMLInputElement;

@@ -307,7 +307,7 @@ fn the_window_the_model_saw_is_rebuilt_from_the_turns() {
                                           target: e["target"].as_str().unwrap_or("").into(),
                                           role: e["role"].as_str().unwrap_or("").into(),
                                           text: e["text"].as_str().unwrap_or("").into(),
-                                          because_asked: None , which: None}).collect();
+                                          because_asked: None, which: None, inside: None }).collect();
                     for e in &effects {
                         history.push((argmind_core::converse::OFFER_OPEN.into(),
                             format!("to {} — {NOTHING_DONE}; they have not accepted",

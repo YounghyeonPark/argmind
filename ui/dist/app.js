@@ -169,6 +169,7 @@ stream.addEventListener("hello", (e) => {
     aloud.checked = d.speaks;
     acting.checked = d.acts;
     initiative.checked = d.initiative;
+    looking.checked = d.looking;
     camera.checked = d.watching_you;
     askRow(d.wonder);
     // **The switch, not the device** — unlike the camera above. Nothing happens while the models are
@@ -811,6 +812,16 @@ initiative.onchange = () => {
 };
 stream.addEventListener("initiative", (e) => {
     initiative.checked = e.data === "1";
+});
+// The picture where the list is blind: the same shape — off is written down, on asks first.
+const looking = document.getElementById("looking");
+looking.onchange = () => {
+    const want = looking.checked;
+    looking.checked = false;
+    void post(want ? "/looking/on" : "/looking/off");
+};
+stream.addEventListener("looking", (e) => {
+    looking.checked = e.data === "1";
 });
 const aloud = document.getElementById("aloud");
 aloud.onchange = () => {

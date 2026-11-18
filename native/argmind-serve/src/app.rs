@@ -359,6 +359,7 @@ enum Job {
     /// The rules, as the page sent them.
     Rules(String),
     Initiative(bool),
+    Looking(bool),
     Web(bool),
     WebGo(String),
     Keep(String),
@@ -421,6 +422,10 @@ pub fn as_json(p: &Proposal) -> String {
 /// What the person reads on the button.
 fn label(effect: &Effect, found: Option<&Widget>) -> String {
     match effect.kind.as_str() {
+        //: **Where, and what the picture showed** — never the point, which the row does not need.
+        "click" if effect.inside.is_some() => format!("클릭  \u{201c}{}\u{201d} 안 — 그림에서 본 \u{201c}{}\u{201d}",
+                                                     found.map_or(effect.target.as_str(), |w| w.name.as_str()),
+                                                     effect.text),
         "click" => match found {
             Some(w) => format!("클릭  {} \u{201c}{}\u{201d}", w.role, w.name),
             None => format!("클릭  \u{201c}{}\u{201d}", effect.target),
@@ -610,9 +615,32 @@ fn think(desk: &mut Desk, out: &Listeners, text: &str) {
                                 \"think_ms\":{:.0}}}",
                                widgets.len(), listed.len(), look_s * 1000.0, think_s * 1000.0));
 
+    //: **Where the list was blind, a picture — only there, and only with a press.** The owner's
+    //: choice of 2026-11-18; `looking.rs` has the measurements and the gate. Asked before anything
+    //: is said, so the person hears one answer rather than a refusal followed by a find.
+    let mut intent = intent;
+    let mut from_the_picture: Option<String> = None;
+    if !desk.on_web.get() && crate::decided::standing("looking") == Some(Standing::Allowed)
+        && crate::looking::wants_a_look(text, &intent.effects, &widgets) {
+        let chose_a_place = intent.effects.iter().any(|e| e.kind == "click");
+        match look_inside(desk, out, text, &intent.effects, &widgets) {
+            Some((effect, said)) => {
+                intent.effects = vec![effect];
+                from_the_picture = Some(said);
+            }
+            //: **The turn chose the middle of a place the list cannot see into**, and the picture
+            //: found nothing there: the middle of a remote desktop is not what was asked for.
+            None if chose_a_place => {
+                intent.effects.clear();
+                from_the_picture = Some(crate::spoken::say(&crate::spoken::LOOKED_NOTHING, &speaking(desk), &[]));
+            }
+            None => {}
+        }
+    }
     desk.session.history.push(("them".into(), text.to_string()));
-    //: **The words the person actually gets**, which are the model's own unless it mirrored them.
-    let reply = spoken_in(&intent, &speaking(desk));
+    //: **The words the person actually gets**, which are the model's own unless it mirrored them —
+    //: or the program's, when the picture decided what is offered.
+    let reply = from_the_picture.unwrap_or_else(|| spoken_in(&intent, &speaking(desk)));
     if !reply.is_empty() {
         //: The substitute goes into the history too, and that is the half that matters more than
         //: the screen: leaving `머해?` in there got it said again on each of the next two turns.
@@ -655,6 +683,71 @@ fn think(desk: &mut Desk, out: &Listeners, text: &str) {
         }
     }
     out.send("busy", "0");
+}
+
+/// **The one place in this program that shows a model a picture of the screen** — `looking.rs`
+/// says when and holds what comes back. The window argmind is attending to, or the one place in it
+/// the list cannot see into, made [`crate::looking::MOST_WIDE`] wide; the vision model's box; and
+/// the point kept only where `landed` puts it inside a region. Nothing is saved.
+fn look_inside(desk: &mut Desk, out: &Listeners, text: &str, effects: &[Effect], seen: &[Widget])
+               -> Option<(Effect, String)> {
+    use crate::looking::{asking, effect, landed, on_screen, place_to_show, read, Landed, Saw, MOST_WIDE,
+                         VISION_MODEL};
+    let (handle, _) = desk.session.eyes.window();
+    let part = place_to_show(effects, seen);
+    let shown = part.as_ref().map_or_else(|| "창 전체".to_string(), |w| format!("「{}」", w.name));
+    let Some((png, rect)) = crate::platform::window_picture(handle, part.as_ref().map(|w| w.rect), MOST_WIDE)
+    else {
+        out.record("그림", "창을 그리지 못함");
+        return None;
+    };
+    let mut model = Local::new(VISION_MODEL);
+    model.think = Some(false);
+    model.max_tokens = 256;
+    model.keep_alive = "300s".into();
+    let began = Instant::now();
+    let reply = match model.look_at(&asking(text), &png) {
+        Ok(r) => r,
+        Err(why) => {
+            out.record("그림", &format!("시각 모델이 답하지 않음 — {why}"));
+            out.send("note", &format!("그림 보기 모델이 답하지 않았습니다 — ollama pull {VISION_MODEL}"));
+            return None;
+        }
+    };
+    let secs = began.elapsed().as_secs_f64();
+    match read(&reply.text) {
+        Saw::At { x, y, label } => {
+            let (px, py) = on_screen(x, y, rect);
+            match landed(seen, px, py) {
+                Landed::Inside(place) => {
+                    let called = if label.is_empty() { text.to_string() } else { label.clone() };
+                    out.record("그림", &format!("{shown}에서 「{called}」 — 「{}」 안, {secs:.2}초", place.name));
+                    let said = crate::spoken::say(&crate::spoken::LOOKED_FOUND, &speaking(desk),
+                                                  &[&called, &place.name]);
+                    Some((effect(place, px, py, &called), said))
+                }
+                //: **The list's to answer**, and it was the more exact of the two wherever it had
+                //: the thing.
+                Landed::OnAControl(w) => {
+                    out.record("그림", &format!("{shown}에서 「{label}」 — 목록에 있는 「{}」 위라 버림, {secs:.2}초",
+                                               w.name));
+                    None
+                }
+                Landed::OnNothing => {
+                    out.record("그림", &format!("{shown}에서 「{label}」 — 목록에 아무것도 없는 곳이라 버림, {secs:.2}초"));
+                    None
+                }
+            }
+        }
+        Saw::Nothing => {
+            out.record("그림", &format!("{shown}에서 찾지 못함, {secs:.2}초"));
+            None
+        }
+        Saw::Unreadable => {
+            out.record("그림", &format!("{shown} — 답을 읽지 못함, {secs:.2}초"));
+            None
+        }
+    }
 }
 
 /// **Show the pane and look there, or hide it and look at the desktop** — the one way it happens,
@@ -1458,7 +1551,8 @@ fn propose(desk: &mut Desk, out: &Listeners, effect: Effect, sure: Option<f64>, 
                 if !found.window.is_empty() {
                     window = found.window.clone();
                 }
-                let (cx, cy) = found.centre();
+                //: The point a press would land on: the widget's middle, or the point inside it.
+                let (cx, cy) = effect.inside.map_or_else(|| found.centre(), |i| i.within(found.rect));
                 //: **A second opinion, not a gate.** A widget's own centre resolves back to itself
                 //: about seven times in ten, and a caption button answering `application` is the
                 //: hit test disagreeing with a pixel that is correct.
@@ -1492,7 +1586,9 @@ fn propose(desk: &mut Desk, out: &Listeners, effect: Effect, sure: Option<f64>, 
     let doubt = !hint.is_empty();
     //: *Always ask* here means the button, whatever 확인 없이 실행 says — and so does a reply that
     //: itself asked (*찾아볼까요?*): the words wait for the person, so the action does too.
-    let must_confirm = rule == Some(argmind_core::rule::Then::Confirm) || asked;
+    //: **And a point the picture found, always** — the owner's condition of 2026-11-18 for letting a
+    //: model say where at all: 확인 없이 실행 never covers it. `argmind-rules` reads this line.
+    let must_confirm = rule == Some(argmind_core::rule::Then::Confirm) || asked || effect.inside.is_some();
     //: **How sure the model was of this action** — below [`SURE_ENOUGH`] argmind's own idea is let
     //: go. `None` (a model that cannot say) gates nothing.
     let unsure = sure.is_some_and(|s| s < SURE_ENOUGH);
@@ -1571,7 +1667,16 @@ fn act(desk: &mut Desk, out: &Listeners, p: Proposal) -> bool {
     let before = (desk.session.ambiguous, desk.session.chose_too_late);
     let (no_field, not_landed) = (desk.session.nowhere_to_type, desk.session.not_landed);
     let secret_before = desk.session.secret;
+    let pointing_before = desk.session.cannot_point;
     let (did, downgraded, refused) = desk.session.perform(std::slice::from_ref(&p.effect));
+    //: **Hands that cannot press a point inside anything**, said as that.
+    if desk.session.cannot_point > pointing_before {
+        desk.session.history.push(("could not".into(), format!(
+            "{} — these hands cannot press a point inside anything; nothing was done", label(&p.effect, None))));
+        out.send("dropped", &p.token.to_string());
+        out.send("note", "여기서는 칸 안의 한 점을 누를 수 없습니다");
+        return false;
+    }
     let after = (desk.session.ambiguous, desk.session.chose_too_late);
     //: **A password field is the hand-off**, not a failure: told as what it is, and written into
     //: the conversation as such — `remember_doing` would record it as *it had gone by then*.
@@ -1760,6 +1865,18 @@ pub fn plan_for(key: &str) -> String {
              · 누르기 직전에 화면을 다시 읽고, 대상이 없거나 단계가 안 되면 멈춥니다\n\
              · 규칙의 '하지 않음'과, 그 지점이 다른 것을 가리킬 때는 여전히 멈추거나 묻습니다\n\n\
              스스로 판단한 것도 실행할까요?"),
+        //: **What it sees, what it costs, and that it never presses by itself** — measured, in the
+        //: window that asks, the way `acting` prints its numbers.
+        "looking" => String::from(
+            "목록에 없는 곳은 그림으로 찾습니다.
+
+\n             · 원격 화면, 문자표의 글자 격자처럼 목록이 속을 못 보는 칸 안을 눌러 달라고 할 때만 봅니다
+\n             · 그 창의 그림을 이 PC의 시각 모델에 보여 줍니다 — 밖으로 나가지 않고, 저장하지 않습니다
+\n             · 찾은 곳은 항상 실행을 눌러야 누릅니다 — 확인 없이 실행이 켜져 있어도 마찬가지입니다
+\n             · 실제 문자표에서 글자 10개 중 8개를 맞혔습니다 — 옆 칸을 누를 때가 있습니다 (측정)
+\n             · 그래픽 메모리를 약 6 GB 더 씁니다 — argmind 가 스스로 일하는 중이면 다시 올리느라 10초쯤 걸립니다
+
+\n             그림으로 찾아볼까요?"),
         //: **Found by the test below, not by reading.** It had been asking with the bare default
         //: since it became a setting on 2026-09-17 — the permission to make a noise in the room.
         //: What it says is what `argmind-rules` holds: a remark argmind makes on its own is text.
@@ -1982,6 +2099,11 @@ fn carry_out(desk: &mut Desk, out: &Listeners, model: &str, key: &str) {
         "initiative" => {
             out.send("initiative", "1");
             out.send("note", "이제 스스로 판단한 것도 실행합니다 — 설정에서 되돌릴 수 있습니다");
+        }
+        //: **Nothing downloads here**: the model is `vision-model`'s, a need of its own.
+        "looking" => {
+            out.send("looking", "1");
+            out.send("note", "이제 목록에 없는 곳은 그림으로 찾아봅니다 — 찾은 곳은 실행을 눌러야 누릅니다");
         }
         //: Everything else is a need with a fix, and `fix` re-reads what is missing before acting.
         _ => {
@@ -3048,6 +3170,8 @@ fn hello(desk: &Desk, model: &str) -> String {
                 crate::decided::standing("acting") == Some(Standing::Allowed)),
         format!("\"initiative\":{}",
                 crate::decided::standing("initiative") == Some(Standing::Allowed)),
+        format!("\"looking\":{}",
+                crate::decided::standing("looking") == Some(Standing::Allowed)),
         //: **Held rather than read**, unlike `acts`: a standing 허용 says the camera *may* be on
         //: and this says it *is*, and they come apart when the device fails to open.
         format!("\"watching_you\":{}", desk.eyeing.load(Ordering::SeqCst)),
@@ -3532,6 +3656,22 @@ pub fn run(how: How) {
                     (true, _) => {
                         agent_out.send("initiative", "0");
                         agent_out.send("asking", &asking_json("initiative"));
+                    }
+                },
+                //: **The same shape again**: off is written down, on asks unless it was answered.
+                Job::Looking(on) => match (on, crate::decided::standing("looking")) {
+                    (false, _) => {
+                        if let Err(why) = crate::decided::keep("looking", Some(Standing::Denied)) {
+                            agent_out.send("note", &why);
+                        }
+                        agent_out.send("looking", "0");
+                        agent_out.send("note", "이제 그림은 보지 않습니다 — 목록에 있는 것만 누릅니다");
+                        agent_out.send("decisions", &decisions_json());
+                    }
+                    (true, Some(Standing::Allowed)) => agent_out.send("looking", "1"),
+                    (true, _) => {
+                        agent_out.send("looking", "0");
+                        agent_out.send("asking", &asking_json("looking"));
                     }
                 },
                 Job::Acting(on) => match (on, crate::decided::standing("acting")) {
@@ -4197,6 +4337,10 @@ fn serve_one(mut stream: TcpStream, out: &Listeners, token: &str, jobs: &Sender<
             let _ = stream.write_all(&respond("204 No Content", "text/plain", ""));
             let _ = jobs.send(Job::Acting(on));
         }
+        Route::Looking(on) => {
+            let _ = stream.write_all(&respond("204 No Content", "text/plain", ""));
+            let _ = jobs.send(Job::Looking(on));
+        }
         Route::Camera(on) => {
             let _ = stream.write_all(&respond("204 No Content", "text/plain", ""));
             let _ = jobs.send(Job::Camera(on));
@@ -4348,8 +4492,8 @@ mod question_tests {
         //: listed there look identical — `korean-voice` and `vulkan` are Windows facts and vanish
         //: off Windows — and the second attempt at this test treated both as switches. A switch can
         //: always be asked; a need only when it is listed here with a fix.
-        const SWITCHES: [&str; 8] =
-            ["notice", "microphone", "aloud", "acting", "initiative", "camera", "attention", "faces"];
+        const SWITCHES: [&str; 9] =
+            ["notice", "microphone", "aloud", "acting", "initiative", "looking", "camera", "attention", "faces"];
         for key in SWITCHES {
             assert!(crate::decided::DECIDABLE.contains(&key), "{key} is no longer decidable");
         }

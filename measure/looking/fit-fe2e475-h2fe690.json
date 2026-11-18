@@ -1,0 +1,506 @@
+{
+  "arms": [
+    {
+      "both_held": true,
+      "condition": "talking",
+      "fits": true,
+      "loaded_work_model": false,
+      "model": "qwen3-vl:8b-instruct",
+      "most_card_mib": 15846,
+      "slowest_turn_after_look_s": 0.54,
+      "slowest_warm_look_s": 0.66,
+      "steps": [
+        {
+          "card_mib": 8905,
+          "loaded": [
+            "qwen3:8b · 6.3 GB · 100% GPU"
+          ],
+          "reply": "{\"say\": \"삭제 버튼을 클릭합니다.\", \"do\": [{\"click\": 9}]}",
+          "seconds": 0.92,
+          "step": "turn"
+        },
+        {
+          "card_mib": 15846,
+          "loaded": [
+            "qwen3-vl:8b-instruct · 6.6 GB · 100% GPU",
+            "qwen3:8b · 6.3 GB · 100% GPU"
+          ],
+          "reply": "right {\"bbox_2d\": [559, 493, 626, 527]}",
+          "seconds": 9.11,
+          "step": "load"
+        },
+        {
+          "card_mib": 15846,
+          "loaded": [
+            "qwen3:8b · 6.3 GB · 100% GPU",
+            "qwen3-vl:8b-instruct · 6.6 GB · 100% GPU"
+          ],
+          "reply": "{\"say\": \"삭제 버튼을 클릭합니다.\", \"do\": [{\"click\": 9}]}",
+          "seconds": 0.44,
+          "step": "turn"
+        },
+        {
+          "card_mib": 15846,
+          "loaded": [
+            "qwen3-vl:8b-instruct · 6.6 GB · 100% GPU",
+            "qwen3:8b · 6.3 GB · 100% GPU"
+          ],
+          "reply": "right {\"bbox_2d\": [559, 493, 626, 527]}",
+          "seconds": 0.66,
+          "step": "look"
+        },
+        {
+          "card_mib": 15846,
+          "loaded": [
+            "qwen3:8b · 6.3 GB · 100% GPU",
+            "qwen3-vl:8b-instruct · 6.6 GB · 100% GPU"
+          ],
+          "reply": "{\"say\": \"삭제 버튼을 클릭합니다.\", \"do\": [{\"click\": 9}]}",
+          "seconds": 0.54,
+          "step": "turn"
+        },
+        {
+          "card_mib": 15846,
+          "loaded": [
+            "qwen3-vl:8b-instruct · 6.6 GB · 100% GPU",
+            "qwen3:8b · 6.3 GB · 100% GPU"
+          ],
+          "reply": "right {\"bbox_2d\": [559, 493, 626, 527]}",
+          "seconds": 0.59,
+          "step": "look"
+        },
+        {
+          "card_mib": 15846,
+          "loaded": [
+            "qwen3:8b · 6.3 GB · 100% GPU",
+            "qwen3-vl:8b-instruct · 6.6 GB · 100% GPU"
+          ],
+          "reply": "{\"say\": \"삭제 버튼을 클릭합니다.\", \"do\": [{\"click\": 9}]}",
+          "seconds": 0.54,
+          "step": "turn"
+        },
+        {
+          "card_mib": 15846,
+          "loaded": [
+            "qwen3-vl:8b-instruct · 6.6 GB · 100% GPU",
+            "qwen3:8b · 6.3 GB · 100% GPU"
+          ],
+          "reply": "right {\"bbox_2d\": [559, 493, 626, 527]}",
+          "seconds": 0.63,
+          "step": "look"
+        },
+        {
+          "card_mib": 15846,
+          "loaded": [
+            "qwen3:8b · 6.3 GB · 100% GPU",
+            "qwen3-vl:8b-instruct · 6.6 GB · 100% GPU"
+          ],
+          "reply": "{\"say\": \"삭제 버튼을 클릭합니다.\", \"do\": [{\"click\": 9}]}",
+          "seconds": 0.47,
+          "step": "turn"
+        },
+        {
+          "card_mib": 15846,
+          "loaded": [
+            "qwen3:8b · 6.3 GB · 100% GPU",
+            "qwen3-vl:8b-instruct · 6.6 GB · 100% GPU"
+          ],
+          "reply": "right {\"bbox_2d\": [559, 493, 626, 527]}",
+          "seconds": 0.65,
+          "step": "look"
+        },
+        {
+          "card_mib": 15846,
+          "loaded": [
+            "qwen3:8b · 6.3 GB · 100% GPU",
+            "qwen3-vl:8b-instruct · 6.6 GB · 100% GPU"
+          ],
+          "reply": "{\"say\": \"삭제 버튼을 클릭합니다.\", \"do\": [{\"click\": 9}]}",
+          "seconds": 0.38,
+          "step": "turn"
+        }
+      ]
+    },
+    {
+      "both_held": true,
+      "condition": "talking",
+      "fits": false,
+      "loaded_work_model": false,
+      "model": "qwen3-vl:4b-instruct",
+      "most_card_mib": 13362,
+      "slowest_turn_after_look_s": 2.57,
+      "slowest_warm_look_s": 0.38,
+      "steps": [
+        {
+          "card_mib": 8009,
+          "loaded": [
+            "qwen3:8b · 6.3 GB · 100% GPU"
+          ],
+          "reply": "{\"say\": \"삭제 버튼을 클릭합니다.\", \"do\": [{\"click\": 9}]}",
+          "seconds": 0.46,
+          "step": "turn"
+        },
+        {
+          "card_mib": 13362,
+          "loaded": [
+            "qwen3:8b · 6.3 GB · 100% GPU",
+            "qwen3-vl:4b-instruct · 4.3 GB · 100% GPU"
+          ],
+          "reply": "right {\"bbox_2d\": [560, 492, 628, 526]}",
+          "seconds": 4.43,
+          "step": "load"
+        },
+        {
+          "card_mib": 13362,
+          "loaded": [
+            "qwen3:8b · 6.3 GB · 100% GPU",
+            "qwen3-vl:4b-instruct · 4.3 GB · 100% GPU"
+          ],
+          "reply": "{\"say\": \"삭제 버튼을 클릭합니다.\", \"do\": [{\"click\": 9}]}",
+          "seconds": 0.38,
+          "step": "turn"
+        },
+        {
+          "card_mib": 13362,
+          "loaded": [
+            "qwen3-vl:4b-instruct · 4.3 GB · 100% GPU",
+            "qwen3:8b · 6.3 GB · 100% GPU"
+          ],
+          "reply": "right {\"bbox_2d\": [560, 492, 628, 526]}",
+          "seconds": 0.37,
+          "step": "look"
+        },
+        {
+          "card_mib": 13362,
+          "loaded": [
+            "qwen3:8b · 6.3 GB · 100% GPU",
+            "qwen3-vl:4b-instruct · 4.3 GB · 100% GPU"
+          ],
+          "reply": "{\"say\": \"삭제 버튼을 클릭합니다.\", \"do\": [{\"click\": 9}]}",
+          "seconds": 0.57,
+          "step": "turn"
+        },
+        {
+          "card_mib": 13362,
+          "loaded": [
+            "qwen3:8b · 6.3 GB · 100% GPU",
+            "qwen3-vl:4b-instruct · 4.3 GB · 100% GPU"
+          ],
+          "reply": "right {\"bbox_2d\": [560, 492, 628, 526]}",
+          "seconds": 0.34,
+          "step": "look"
+        },
+        {
+          "card_mib": 13362,
+          "loaded": [
+            "qwen3:8b · 6.3 GB · 100% GPU",
+            "qwen3-vl:4b-instruct · 4.3 GB · 100% GPU"
+          ],
+          "reply": "{\"say\": \"삭제 버튼을 클릭합니다.\", \"do\": [{\"click\": 9}]}",
+          "seconds": 2.57,
+          "step": "turn"
+        },
+        {
+          "card_mib": 13362,
+          "loaded": [
+            "qwen3-vl:4b-instruct · 4.3 GB · 100% GPU",
+            "qwen3:8b · 6.3 GB · 100% GPU"
+          ],
+          "reply": "right {\"bbox_2d\": [560, 492, 628, 526]}",
+          "seconds": 0.35,
+          "step": "look"
+        },
+        {
+          "card_mib": 13362,
+          "loaded": [
+            "qwen3:8b · 6.3 GB · 100% GPU",
+            "qwen3-vl:4b-instruct · 4.3 GB · 100% GPU"
+          ],
+          "reply": "{\"say\": \"삭제 버튼을 클릭합니다.\", \"do\": [{\"click\": 9}]}",
+          "seconds": 0.59,
+          "step": "turn"
+        },
+        {
+          "card_mib": 13362,
+          "loaded": [
+            "qwen3-vl:4b-instruct · 4.3 GB · 100% GPU",
+            "qwen3:8b · 6.3 GB · 100% GPU"
+          ],
+          "reply": "right {\"bbox_2d\": [560, 492, 628, 526]}",
+          "seconds": 0.38,
+          "step": "look"
+        },
+        {
+          "card_mib": 13362,
+          "loaded": [
+            "qwen3:8b · 6.3 GB · 100% GPU",
+            "qwen3-vl:4b-instruct · 4.3 GB · 100% GPU"
+          ],
+          "reply": "{\"say\": \"삭제 버튼을 클릭합니다.\", \"do\": [{\"click\": 9}]}",
+          "seconds": 0.56,
+          "step": "turn"
+        }
+      ]
+    },
+    {
+      "both_held": false,
+      "condition": "working",
+      "fits": false,
+      "loaded_work_model": true,
+      "model": "qwen3-vl:8b-instruct",
+      "most_card_mib": 15974,
+      "slowest_turn_after_look_s": 9.43,
+      "slowest_warm_look_s": 10.44,
+      "steps": [
+        {
+          "card_mib": 14274,
+          "loaded": [
+            "qwen3:8b · 6.3 GB · 100% GPU",
+            "qwen3:14b · 10 GB · 42%/58% CPU/GPU"
+          ],
+          "reply": "{\"say\": \"삭제 버튼을 클릭합니다.\", \"do\": [{\"click\": 9}]}",
+          "seconds": 0.42,
+          "step": "turn"
+        },
+        {
+          "card_mib": 15940,
+          "loaded": [
+            "qwen3-vl:8b-instruct · 6.6 GB · 100% GPU",
+            "qwen3:14b · 10 GB · 42%/58% CPU/GPU"
+          ],
+          "reply": "right {\"bbox_2d\": [559, 493, 626, 527]}",
+          "seconds": 11.76,
+          "step": "load"
+        },
+        {
+          "card_mib": 14274,
+          "loaded": [
+            "qwen3:8b · 6.3 GB · 100% GPU",
+            "qwen3:14b · 10 GB · 42%/58% CPU/GPU"
+          ],
+          "reply": "{\"say\": \"삭제 버튼을 클릭합니다.\", \"do\": [{\"click\": 9}]}",
+          "seconds": 9.43,
+          "step": "turn"
+        },
+        {
+          "card_mib": 15974,
+          "loaded": [
+            "qwen3-vl:8b-instruct · 6.6 GB · 100% GPU",
+            "qwen3:8b · 6.3 GB · 100% GPU"
+          ],
+          "reply": "right {\"bbox_2d\": [559, 493, 626, 527]}",
+          "seconds": 10.44,
+          "step": "look"
+        },
+        {
+          "card_mib": 15974,
+          "loaded": [
+            "qwen3:8b · 6.3 GB · 100% GPU",
+            "qwen3-vl:8b-instruct · 6.6 GB · 100% GPU"
+          ],
+          "reply": "{\"say\": \"삭제 버튼을 클릭합니다.\", \"do\": [{\"click\": 9}]}",
+          "seconds": 0.59,
+          "step": "turn"
+        },
+        {
+          "card_mib": 15974,
+          "loaded": [
+            "qwen3-vl:8b-instruct · 6.6 GB · 100% GPU",
+            "qwen3:8b · 6.3 GB · 100% GPU"
+          ],
+          "reply": "right {\"bbox_2d\": [559, 493, 626, 527]}",
+          "seconds": 0.65,
+          "step": "look"
+        },
+        {
+          "card_mib": 15974,
+          "loaded": [
+            "qwen3-vl:8b-instruct · 6.6 GB · 100% GPU",
+            "qwen3:8b · 6.3 GB · 100% GPU"
+          ],
+          "reply": "{\"say\": \"삭제 버튼을 클릭합니다.\", \"do\": [{\"click\": 9}]}",
+          "seconds": 0.38,
+          "step": "turn"
+        },
+        {
+          "card_mib": 15974,
+          "loaded": [
+            "qwen3-vl:8b-instruct · 6.6 GB · 100% GPU",
+            "qwen3:8b · 6.3 GB · 100% GPU"
+          ],
+          "reply": "right {\"bbox_2d\": [559, 493, 626, 527]}",
+          "seconds": 0.48,
+          "step": "look"
+        },
+        {
+          "card_mib": 15974,
+          "loaded": [
+            "qwen3:8b · 6.3 GB · 100% GPU",
+            "qwen3-vl:8b-instruct · 6.6 GB · 100% GPU"
+          ],
+          "reply": "{\"say\": \"삭제 버튼을 클릭합니다.\", \"do\": [{\"click\": 9}]}",
+          "seconds": 0.39,
+          "step": "turn"
+        },
+        {
+          "card_mib": 15974,
+          "loaded": [
+            "qwen3-vl:8b-instruct · 6.6 GB · 100% GPU",
+            "qwen3:8b · 6.3 GB · 100% GPU"
+          ],
+          "reply": "right {\"bbox_2d\": [559, 493, 626, 527]}",
+          "seconds": 0.55,
+          "step": "look"
+        },
+        {
+          "card_mib": 15974,
+          "loaded": [
+            "qwen3:8b · 6.3 GB · 100% GPU",
+            "qwen3-vl:8b-instruct · 6.6 GB · 100% GPU"
+          ],
+          "reply": "{\"say\": \"삭제 버튼을 클릭합니다.\", \"do\": [{\"click\": 9}]}",
+          "seconds": 0.59,
+          "step": "turn"
+        }
+      ]
+    },
+    {
+      "both_held": true,
+      "condition": "working",
+      "fits": true,
+      "loaded_work_model": true,
+      "model": "qwen3-vl:4b-instruct",
+      "most_card_mib": 15950,
+      "slowest_turn_after_look_s": 0.82,
+      "slowest_warm_look_s": 0.44,
+      "steps": [
+        {
+          "card_mib": 14274,
+          "loaded": [
+            "qwen3:8b · 6.3 GB · 100% GPU",
+            "qwen3:14b · 10 GB · 42%/58% CPU/GPU"
+          ],
+          "reply": "{\"say\": \"삭제 버튼을 클릭합니다.\", \"do\": [{\"click\": 9}]}",
+          "seconds": 0.42,
+          "step": "turn"
+        },
+        {
+          "card_mib": 15950,
+          "loaded": [
+            "qwen3-vl:4b-instruct · 4.2 GB · 100% GPU",
+            "qwen3:8b · 6.3 GB · 100% GPU",
+            "qwen3:14b · 10 GB · 42%/58% CPU/GPU"
+          ],
+          "reply": "right {\"bbox_2d\": [560, 492, 628, 526]}",
+          "seconds": 7.16,
+          "step": "load"
+        },
+        {
+          "card_mib": 15950,
+          "loaded": [
+            "qwen3:8b · 6.3 GB · 100% GPU",
+            "qwen3-vl:4b-instruct · 4.2 GB · 100% GPU",
+            "qwen3:14b · 10 GB · 42%/58% CPU/GPU"
+          ],
+          "reply": "{\"say\": \"삭제 버튼을 클릭합니다.\", \"do\": [{\"click\": 9}]}",
+          "seconds": 0.82,
+          "step": "turn"
+        },
+        {
+          "card_mib": 15950,
+          "loaded": [
+            "qwen3:8b · 6.3 GB · 100% GPU",
+            "qwen3-vl:4b-instruct · 4.2 GB · 100% GPU",
+            "qwen3:14b · 10 GB · 42%/58% CPU/GPU"
+          ],
+          "reply": "right {\"bbox_2d\": [560, 492, 628, 526]}",
+          "seconds": 0.42,
+          "step": "look"
+        },
+        {
+          "card_mib": 15950,
+          "loaded": [
+            "qwen3:8b · 6.3 GB · 100% GPU",
+            "qwen3-vl:4b-instruct · 4.2 GB · 100% GPU",
+            "qwen3:14b · 10 GB · 42%/58% CPU/GPU"
+          ],
+          "reply": "{\"say\": \"삭제 버튼을 클릭합니다.\", \"do\": [{\"click\": 9}]}",
+          "seconds": 0.64,
+          "step": "turn"
+        },
+        {
+          "card_mib": 15950,
+          "loaded": [
+            "qwen3:8b · 6.3 GB · 100% GPU",
+            "qwen3-vl:4b-instruct · 4.2 GB · 100% GPU",
+            "qwen3:14b · 10 GB · 42%/58% CPU/GPU"
+          ],
+          "reply": "right {\"bbox_2d\": [560, 492, 628, 526]}",
+          "seconds": 0.44,
+          "step": "look"
+        },
+        {
+          "card_mib": 15950,
+          "loaded": [
+            "qwen3:8b · 6.3 GB · 100% GPU",
+            "qwen3-vl:4b-instruct · 4.2 GB · 100% GPU",
+            "qwen3:14b · 10 GB · 42%/58% CPU/GPU"
+          ],
+          "reply": "{\"say\": \"삭제 버튼을 클릭합니다.\", \"do\": [{\"click\": 9}]}",
+          "seconds": 0.48,
+          "step": "turn"
+        },
+        {
+          "card_mib": 15950,
+          "loaded": [
+            "qwen3:8b · 6.3 GB · 100% GPU",
+            "qwen3-vl:4b-instruct · 4.2 GB · 100% GPU",
+            "qwen3:14b · 10 GB · 42%/58% CPU/GPU"
+          ],
+          "reply": "right {\"bbox_2d\": [560, 492, 628, 526]}",
+          "seconds": 0.43,
+          "step": "look"
+        },
+        {
+          "card_mib": 15950,
+          "loaded": [
+            "qwen3:8b · 6.3 GB · 100% GPU",
+            "qwen3-vl:4b-instruct · 4.2 GB · 100% GPU",
+            "qwen3:14b · 10 GB · 42%/58% CPU/GPU"
+          ],
+          "reply": "{\"say\": \"삭제 버튼을 클릭합니다.\", \"do\": [{\"click\": 9}]}",
+          "seconds": 0.64,
+          "step": "turn"
+        },
+        {
+          "card_mib": 15950,
+          "loaded": [
+            "qwen3-vl:4b-instruct · 4.2 GB · 100% GPU",
+            "qwen3:8b · 6.3 GB · 100% GPU",
+            "qwen3:14b · 10 GB · 42%/58% CPU/GPU"
+          ],
+          "reply": "right {\"bbox_2d\": [560, 492, 628, 526]}",
+          "seconds": 0.39,
+          "step": "look"
+        },
+        {
+          "card_mib": 15950,
+          "loaded": [
+            "qwen3:8b · 6.3 GB · 100% GPU",
+            "qwen3-vl:4b-instruct · 4.2 GB · 100% GPU",
+            "qwen3:14b · 10 GB · 42%/58% CPU/GPU"
+          ],
+          "reply": "{\"say\": \"삭제 버튼을 클릭합니다.\", \"do\": [{\"click\": 9}]}",
+          "seconds": 0.57,
+          "step": "turn"
+        }
+      ]
+    }
+  ],
+  "card_total_mib": 16376,
+  "fixtures": "e2e475",
+  "harness": "2fe690",
+  "loaded_at_start": [
+    "qwen3:8b · 6.3 GB · 100% GPU"
+  ]
+}

@@ -26,6 +26,7 @@ pub mod launch;
 pub mod loudspeaker;
 pub mod microphone;
 pub mod patterns;
+pub mod picture;
 pub mod screen;
 pub mod programs;
 pub mod speaker;

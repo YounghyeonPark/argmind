@@ -196,6 +196,27 @@ pub fn every(model: &str) -> Vec<Need> {
         fix: offered(ollama_up.then(|| Fix::PullModel { model: task_model.to_string(), about_gb: 9.3 })),
     });
 
+    //: **The model that looks where the list is blind — since 2026-11-18**, for `looking`: offered
+    //: like the work model, and used only while that switch is on.
+    let vision = crate::looking::VISION_MODEL;
+    let has_vision = ollama_up && argmind_env_ollama::manage::has(argmind_env_ollama::OLLAMA, vision);
+    out.push(Need {
+        key: "vision-model",
+        what: "그림 보기 모델",
+        required: false,
+        present: has_vision,
+        found: if !ollama_up {
+            "Ollama가 없어서 확인 못 함".into()
+        } else if has_vision {
+            format!("{vision} 있음")
+        } else {
+            format!("{vision} 없음 — '목록에 없는 곳은 그림으로 찾기'를 켰을 때만 씁니다")
+        },
+        how: format!("argmind setup 이 받아옵니다 (약 6 GB) — 또는 ollama pull {vision}"),
+        //: 6.2 GB is what `ollama list` reports for it here.
+        fix: offered(ollama_up.then(|| Fix::PullModel { model: vision.to_string(), about_gb: 6.2 })),
+    });
+
     //: **The sandbox a task's code runs in — since 2026-11-17**, for the same reason: it was made by
     //: hand on this machine and nothing told anybody else to make it. Listed only where there can be
     //: one; without WSL there is nothing argmind can make it in, and installing WSL wants an

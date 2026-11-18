@@ -1,0 +1,1597 @@
+{
+  "arms": [
+    {
+      "arm": "gated",
+      "dropped_on_a_control": 0,
+      "dropped_on_nothing": 0,
+      "goals": [
+        {
+          "counted": "wrong",
+          "goal": "보고서_최종_v3.docx 파일 선택해줘",
+          "kind": "listed",
+          "tries": [
+            {
+              "chose": "보고서_최종_v2.docx (list item)",
+              "path": "list",
+              "result": "wrong"
+            },
+            {
+              "chose": "보고서_최종_v2.docx (list item)",
+              "path": "list",
+              "result": "wrong"
+            },
+            {
+              "chose": "보고서_최종_v2.docx (list item)",
+              "path": "list",
+              "result": "wrong"
+            }
+          ]
+        },
+        {
+          "counted": "right",
+          "goal": "예산표_2026.xlsx 눌러줘",
+          "kind": "listed",
+          "tries": [
+            {
+              "chose": "예산표_2026.xlsx (list item)",
+              "path": "list",
+              "result": "right"
+            },
+            {
+              "chose": "예산표_2026.xlsx (list item)",
+              "path": "list",
+              "result": "right"
+            },
+            {
+              "chose": "예산표_2026.xlsx (list item)",
+              "path": "list",
+              "result": "right"
+            }
+          ]
+        },
+        {
+          "counted": "right",
+          "goal": "회의록_1104.md 골라줘",
+          "kind": "listed",
+          "tries": [
+            {
+              "chose": "회의록_1104.md (list item)",
+              "path": "list",
+              "result": "right"
+            },
+            {
+              "chose": "회의록_1104.md (list item)",
+              "path": "list",
+              "result": "right"
+            },
+            {
+              "chose": "회의록_1104.md (list item)",
+              "path": "list",
+              "result": "right"
+            }
+          ]
+        },
+        {
+          "counted": "right",
+          "goal": "삭제 버튼 눌러줘",
+          "kind": "listed",
+          "tries": [
+            {
+              "chose": "삭제 (button)",
+              "path": "list",
+              "result": "right"
+            },
+            {
+              "chose": "삭제 (button)",
+              "path": "list",
+              "result": "right"
+            },
+            {
+              "chose": "삭제 (button)",
+              "path": "list",
+              "result": "right"
+            }
+          ]
+        },
+        {
+          "counted": "right",
+          "goal": "다운로드 폴더로 가줘",
+          "kind": "listed",
+          "tries": [
+            {
+              "chose": "다운로드 (tree item)",
+              "path": "list",
+              "result": "right"
+            },
+            {
+              "chose": "다운로드 (tree item)",
+              "path": "list",
+              "result": "right"
+            },
+            {
+              "chose": "다운로드 (tree item)",
+              "path": "list",
+              "result": "right"
+            }
+          ]
+        },
+        {
+          "counted": "declined",
+          "goal": "휴지통 비우기 눌러줘",
+          "kind": "none",
+          "tries": [
+            {
+              "chose": null,
+              "path": "list",
+              "result": "declined"
+            },
+            {
+              "chose": null,
+              "path": "list",
+              "result": "declined"
+            },
+            {
+              "chose": null,
+              "path": "list",
+              "result": "declined"
+            }
+          ]
+        },
+        {
+          "counted": "right",
+          "goal": "저장하지 말고 닫아줘",
+          "kind": "listed",
+          "tries": [
+            {
+              "chose": "저장 안 함 (button)",
+              "path": "list",
+              "result": "right"
+            },
+            {
+              "chose": "저장 안 함 (button)",
+              "path": "list",
+              "result": "right"
+            },
+            {
+              "chose": "저장 안 함 (button)",
+              "path": "list",
+              "result": "right"
+            }
+          ]
+        },
+        {
+          "counted": "right",
+          "goal": "취소해줘",
+          "kind": "listed",
+          "tries": [
+            {
+              "chose": "취소 (button)",
+              "path": "list",
+              "result": "right"
+            },
+            {
+              "chose": "취소 (button)",
+              "path": "list",
+              "result": "right"
+            },
+            {
+              "chose": "취소 (button)",
+              "path": "list",
+              "result": "right"
+            }
+          ]
+        },
+        {
+          "counted": "right",
+          "goal": "저장해",
+          "kind": "listed",
+          "tries": [
+            {
+              "chose": "저장 (button)",
+              "path": "list",
+              "result": "right"
+            },
+            {
+              "chose": "저장 (button)",
+              "path": "list",
+              "result": "right"
+            },
+            {
+              "chose": "저장 (button)",
+              "path": "list",
+              "result": "right"
+            }
+          ]
+        },
+        {
+          "counted": "declined",
+          "goal": "인쇄해줘",
+          "kind": "none",
+          "tries": [
+            {
+              "chose": null,
+              "path": "list",
+              "result": "declined"
+            },
+            {
+              "chose": null,
+              "path": "list",
+              "result": "declined"
+            },
+            {
+              "chose": null,
+              "path": "list",
+              "result": "declined"
+            }
+          ]
+        },
+        {
+          "counted": "right",
+          "goal": "지우개로 바꿔줘",
+          "kind": "listed",
+          "tries": [
+            {
+              "chose": "지우개 (button)",
+              "path": "list",
+              "result": "right"
+            },
+            {
+              "chose": "지우개 (button)",
+              "path": "list",
+              "result": "right"
+            },
+            {
+              "chose": "지우개 (button)",
+              "path": "list",
+              "result": "right"
+            }
+          ]
+        },
+        {
+          "counted": "right",
+          "goal": "빨간색 골라줘",
+          "kind": "listed",
+          "tries": [
+            {
+              "chose": "빨강 (button)",
+              "path": "list",
+              "result": "right"
+            },
+            {
+              "chose": "빨강 (button)",
+              "path": "list",
+              "result": "right"
+            },
+            {
+              "chose": "빨강 (button)",
+              "path": "list",
+              "result": "right"
+            }
+          ]
+        },
+        {
+          "counted": "right",
+          "goal": "글자 넣는 도구 골라줘",
+          "kind": "listed",
+          "tries": [
+            {
+              "chose": "텍스트 (button)",
+              "path": "list",
+              "result": "right"
+            },
+            {
+              "chose": "텍스트 (button)",
+              "path": "list",
+              "result": "right"
+            },
+            {
+              "chose": "텍스트 (button)",
+              "path": "list",
+              "result": "right"
+            }
+          ]
+        },
+        {
+          "counted": "cannot",
+          "goal": "휴지통 아이콘 눌러줘",
+          "kind": "unlisted",
+          "tries": [
+            {
+              "chose": null,
+              "path": "looked",
+              "picture": {
+                "saw": "nothing"
+              },
+              "result": "cannot",
+              "seconds": 0.97,
+              "shown": "캔버스"
+            },
+            {
+              "chose": null,
+              "path": "looked",
+              "picture": {
+                "saw": "nothing"
+              },
+              "result": "cannot",
+              "seconds": 0.47,
+              "shown": "캔버스"
+            },
+            {
+              "chose": null,
+              "path": "looked",
+              "picture": {
+                "saw": "nothing"
+              },
+              "result": "cannot",
+              "seconds": 0.5,
+              "shown": "캔버스"
+            }
+          ]
+        },
+        {
+          "counted": "cannot",
+          "goal": "톱니바퀴 아이콘 눌러줘",
+          "kind": "unlisted",
+          "tries": [
+            {
+              "chose": null,
+              "path": "looked",
+              "picture": {
+                "saw": "nothing"
+              },
+              "result": "cannot",
+              "seconds": 0.45,
+              "shown": "캔버스"
+            },
+            {
+              "chose": null,
+              "path": "looked",
+              "picture": {
+                "saw": "nothing"
+              },
+              "result": "cannot",
+              "seconds": 0.5,
+              "shown": "캔버스"
+            },
+            {
+              "chose": null,
+              "path": "looked",
+              "picture": {
+                "saw": "nothing"
+              },
+              "result": "cannot",
+              "seconds": 0.49,
+              "shown": "캔버스"
+            }
+          ]
+        },
+        {
+          "counted": "declined",
+          "goal": "동영상 재생해줘",
+          "kind": "none",
+          "tries": [
+            {
+              "chose": null,
+              "path": "looked",
+              "picture": {
+                "saw": "nothing"
+              },
+              "result": "declined",
+              "seconds": 0.49,
+              "shown": "캔버스"
+            },
+            {
+              "chose": null,
+              "path": "looked",
+              "picture": {
+                "saw": "nothing"
+              },
+              "result": "declined",
+              "seconds": 0.46,
+              "shown": "캔버스"
+            },
+            {
+              "chose": null,
+              "path": "looked",
+              "picture": {
+                "saw": "nothing"
+              },
+              "result": "declined",
+              "seconds": 0.48,
+              "shown": "캔버스"
+            }
+          ]
+        },
+        {
+          "counted": "wrong",
+          "goal": "글꼴 목록 열어줘",
+          "kind": "same-name",
+          "tries": [
+            {
+              "chose": "글꼴 (combo box)",
+              "path": "list",
+              "result": "wrong"
+            },
+            {
+              "chose": "글꼴 (combo box)",
+              "path": "list",
+              "result": "wrong"
+            },
+            {
+              "chose": "글꼴 (combo box)",
+              "path": "list",
+              "result": "wrong"
+            }
+          ]
+        },
+        {
+          "counted": "wrong",
+          "goal": "문자 집합 목록 열어줘",
+          "kind": "same-name",
+          "tries": [
+            {
+              "chose": "문자 집합 (combo box)",
+              "path": "list",
+              "result": "wrong"
+            },
+            {
+              "chose": "문자 집합 (combo box)",
+              "path": "list",
+              "result": "wrong"
+            },
+            {
+              "chose": "문자 집합 (combo box)",
+              "path": "list",
+              "result": "wrong"
+            }
+          ]
+        },
+        {
+          "counted": "right",
+          "goal": "복사 버튼 눌러줘",
+          "kind": "listed",
+          "tries": [
+            {
+              "chose": "복사 (button)",
+              "path": "list",
+              "result": "right"
+            },
+            {
+              "chose": "복사 (button)",
+              "path": "list",
+              "result": "right"
+            },
+            {
+              "chose": "복사 (button)",
+              "path": "list",
+              "result": "right"
+            }
+          ]
+        },
+        {
+          "counted": "wrong",
+          "goal": "★ 문자 눌러줘",
+          "kind": "unlisted",
+          "tries": [
+            {
+              "chose": "문자 격자 (pane)",
+              "path": "looked",
+              "picture": {
+                "inside": "문자 격자",
+                "label": "star symbol",
+                "landed_on": "문자 격자",
+                "point": [
+                  501,
+                  246
+                ]
+              },
+              "result": "wrong",
+              "seconds": 1.03,
+              "shown": "문자 격자"
+            },
+            {
+              "chose": "문자 격자 (pane)",
+              "path": "looked",
+              "picture": {
+                "inside": "문자 격자",
+                "label": "star symbol",
+                "landed_on": "문자 격자",
+                "point": [
+                  501,
+                  246
+                ]
+              },
+              "result": "wrong",
+              "seconds": 0.61,
+              "shown": "문자 격자"
+            },
+            {
+              "chose": "문자 격자 (pane)",
+              "path": "looked",
+              "picture": {
+                "inside": "문자 격자",
+                "label": "star symbol",
+                "landed_on": "문자 격자",
+                "point": [
+                  501,
+                  246
+                ]
+              },
+              "result": "wrong",
+              "seconds": 0.61,
+              "shown": "문자 격자"
+            }
+          ]
+        },
+        {
+          "counted": "wrong",
+          "goal": "글꼴 크기 키워줘",
+          "kind": "none",
+          "tries": [
+            {
+              "chose": "글꼴 (combo box)",
+              "path": "list",
+              "result": "wrong"
+            },
+            {
+              "chose": "글꼴 (combo box)",
+              "path": "list",
+              "result": "wrong"
+            },
+            {
+              "chose": "글꼴 (combo box)",
+              "path": "list",
+              "result": "wrong"
+            }
+          ]
+        },
+        {
+          "counted": "right",
+          "goal": "원격 화면에서 지금 설치 눌러줘",
+          "kind": "unlisted",
+          "tries": [
+            {
+              "chose": "원격 화면 (pane)",
+              "path": "looked",
+              "picture": {
+                "inside": "원격 화면",
+                "label": "button",
+                "landed_on": "r-install",
+                "point": [
+                  761,
+                  407
+                ]
+              },
+              "result": "right",
+              "seconds": 1.18,
+              "shown": "원격 화면"
+            },
+            {
+              "chose": "원격 화면 (pane)",
+              "path": "looked",
+              "picture": {
+                "inside": "원격 화면",
+                "label": "button",
+                "landed_on": "r-install",
+                "point": [
+                  761,
+                  407
+                ]
+              },
+              "result": "right",
+              "seconds": 0.72,
+              "shown": "원격 화면"
+            },
+            {
+              "chose": "원격 화면 (pane)",
+              "path": "looked",
+              "picture": {
+                "inside": "원격 화면",
+                "label": "button",
+                "landed_on": "r-install",
+                "point": [
+                  761,
+                  407
+                ]
+              },
+              "result": "right",
+              "seconds": 0.67,
+              "shown": "원격 화면"
+            }
+          ]
+        },
+        {
+          "counted": "right",
+          "goal": "원격 PC 업데이트는 나중에 하게 눌러줘",
+          "kind": "unlisted",
+          "tries": [
+            {
+              "chose": null,
+              "path": "looked",
+              "picture": {
+                "inside": "원격 화면",
+                "label": "button",
+                "landed_on": "r-later",
+                "point": [
+                  843,
+                  406
+                ]
+              },
+              "result": "right",
+              "seconds": 0.68,
+              "shown": "원격 화면"
+            },
+            {
+              "chose": null,
+              "path": "looked",
+              "picture": {
+                "inside": "원격 화면",
+                "label": "button",
+                "landed_on": "r-later",
+                "point": [
+                  843,
+                  406
+                ]
+              },
+              "result": "right",
+              "seconds": 0.67,
+              "shown": "원격 화면"
+            },
+            {
+              "chose": null,
+              "path": "looked",
+              "picture": {
+                "inside": "원격 화면",
+                "label": "button",
+                "landed_on": "r-later",
+                "point": [
+                  843,
+                  406
+                ]
+              },
+              "result": "right",
+              "seconds": 0.72,
+              "shown": "원격 화면"
+            }
+          ]
+        },
+        {
+          "counted": "right",
+          "goal": "원격 PC의 휴지통 열어줘",
+          "kind": "unlisted",
+          "tries": [
+            {
+              "chose": null,
+              "path": "looked",
+              "picture": {
+                "inside": "원격 화면",
+                "label": "Recycle Bin icon",
+                "landed_on": "r-recycle",
+                "point": [
+                  53,
+                  107
+                ]
+              },
+              "result": "right",
+              "seconds": 0.73,
+              "shown": "원격 화면"
+            },
+            {
+              "chose": null,
+              "path": "looked",
+              "picture": {
+                "inside": "원격 화면",
+                "label": "Recycle Bin icon",
+                "landed_on": "r-recycle",
+                "point": [
+                  53,
+                  107
+                ]
+              },
+              "result": "right",
+              "seconds": 0.7,
+              "shown": "원격 화면"
+            },
+            {
+              "chose": null,
+              "path": "looked",
+              "picture": {
+                "inside": "원격 화면",
+                "label": "Recycle Bin icon",
+                "landed_on": "r-recycle",
+                "point": [
+                  53,
+                  107
+                ]
+              },
+              "result": "right",
+              "seconds": 0.71,
+              "shown": "원격 화면"
+            }
+          ]
+        },
+        {
+          "counted": "right",
+          "goal": "원격 연결 끊어줘",
+          "kind": "listed",
+          "tries": [
+            {
+              "chose": "연결 끊기 (button)",
+              "path": "list",
+              "result": "right"
+            },
+            {
+              "chose": "연결 끊기 (button)",
+              "path": "list",
+              "result": "right"
+            },
+            {
+              "chose": "연결 끊기 (button)",
+              "path": "list",
+              "result": "right"
+            }
+          ]
+        },
+        {
+          "counted": "wrong",
+          "goal": "원격 화면에서 계산기 열어줘",
+          "kind": "none",
+          "tries": [
+            {
+              "chose": "원격 화면 (pane)",
+              "path": "looked",
+              "picture": {
+                "inside": "원격 화면",
+                "label": "button",
+                "landed_on": "r-install",
+                "point": [
+                  761,
+                  407
+                ]
+              },
+              "result": "wrong",
+              "seconds": 0.73,
+              "shown": "원격 화면"
+            },
+            {
+              "chose": "원격 화면 (pane)",
+              "path": "looked",
+              "picture": {
+                "inside": "원격 화면",
+                "label": "button",
+                "landed_on": "r-install",
+                "point": [
+                  761,
+                  407
+                ]
+              },
+              "result": "wrong",
+              "seconds": 0.73,
+              "shown": "원격 화면"
+            },
+            {
+              "chose": "원격 화면 (pane)",
+              "path": "looked",
+              "picture": {
+                "inside": "원격 화면",
+                "label": "button",
+                "landed_on": "r-install",
+                "point": [
+                  761,
+                  407
+                ]
+              },
+              "result": "wrong",
+              "seconds": 0.66,
+              "shown": "원격 화면"
+            }
+          ]
+        }
+      ],
+      "listed_right": 12,
+      "looks": 24,
+      "max_s": 1.18,
+      "median_prompt_tokens": null,
+      "median_s": 0.67,
+      "model": "qwen3-vl:4b-instruct",
+      "none_declined": 3,
+      "picture_rows_wrong": 6,
+      "rows": 15,
+      "same_name_asked": 0,
+      "same_name_right": 0,
+      "unlisted_right": 3,
+      "unlisted_wrong": 1,
+      "wrong": 6
+    },
+    {
+      "arm": "gated",
+      "dropped_on_a_control": 0,
+      "dropped_on_nothing": 0,
+      "goals": [
+        {
+          "counted": "wrong",
+          "goal": "보고서_최종_v3.docx 파일 선택해줘",
+          "kind": "listed",
+          "tries": [
+            {
+              "chose": "보고서_최종_v2.docx (list item)",
+              "path": "list",
+              "result": "wrong"
+            },
+            {
+              "chose": "보고서_최종_v2.docx (list item)",
+              "path": "list",
+              "result": "wrong"
+            },
+            {
+              "chose": "보고서_최종_v2.docx (list item)",
+              "path": "list",
+              "result": "wrong"
+            }
+          ]
+        },
+        {
+          "counted": "right",
+          "goal": "예산표_2026.xlsx 눌러줘",
+          "kind": "listed",
+          "tries": [
+            {
+              "chose": "예산표_2026.xlsx (list item)",
+              "path": "list",
+              "result": "right"
+            },
+            {
+              "chose": "예산표_2026.xlsx (list item)",
+              "path": "list",
+              "result": "right"
+            },
+            {
+              "chose": "예산표_2026.xlsx (list item)",
+              "path": "list",
+              "result": "right"
+            }
+          ]
+        },
+        {
+          "counted": "right",
+          "goal": "회의록_1104.md 골라줘",
+          "kind": "listed",
+          "tries": [
+            {
+              "chose": "회의록_1104.md (list item)",
+              "path": "list",
+              "result": "right"
+            },
+            {
+              "chose": "회의록_1104.md (list item)",
+              "path": "list",
+              "result": "right"
+            },
+            {
+              "chose": "회의록_1104.md (list item)",
+              "path": "list",
+              "result": "right"
+            }
+          ]
+        },
+        {
+          "counted": "right",
+          "goal": "삭제 버튼 눌러줘",
+          "kind": "listed",
+          "tries": [
+            {
+              "chose": "삭제 (button)",
+              "path": "list",
+              "result": "right"
+            },
+            {
+              "chose": "삭제 (button)",
+              "path": "list",
+              "result": "right"
+            },
+            {
+              "chose": "삭제 (button)",
+              "path": "list",
+              "result": "right"
+            }
+          ]
+        },
+        {
+          "counted": "right",
+          "goal": "다운로드 폴더로 가줘",
+          "kind": "listed",
+          "tries": [
+            {
+              "chose": "다운로드 (tree item)",
+              "path": "list",
+              "result": "right"
+            },
+            {
+              "chose": "다운로드 (tree item)",
+              "path": "list",
+              "result": "right"
+            },
+            {
+              "chose": "다운로드 (tree item)",
+              "path": "list",
+              "result": "right"
+            }
+          ]
+        },
+        {
+          "counted": "declined",
+          "goal": "휴지통 비우기 눌러줘",
+          "kind": "none",
+          "tries": [
+            {
+              "chose": null,
+              "path": "list",
+              "result": "declined"
+            },
+            {
+              "chose": null,
+              "path": "list",
+              "result": "declined"
+            },
+            {
+              "chose": null,
+              "path": "list",
+              "result": "declined"
+            }
+          ]
+        },
+        {
+          "counted": "right",
+          "goal": "저장하지 말고 닫아줘",
+          "kind": "listed",
+          "tries": [
+            {
+              "chose": "저장 안 함 (button)",
+              "path": "list",
+              "result": "right"
+            },
+            {
+              "chose": "저장 안 함 (button)",
+              "path": "list",
+              "result": "right"
+            },
+            {
+              "chose": "저장 안 함 (button)",
+              "path": "list",
+              "result": "right"
+            }
+          ]
+        },
+        {
+          "counted": "right",
+          "goal": "취소해줘",
+          "kind": "listed",
+          "tries": [
+            {
+              "chose": "취소 (button)",
+              "path": "list",
+              "result": "right"
+            },
+            {
+              "chose": "취소 (button)",
+              "path": "list",
+              "result": "right"
+            },
+            {
+              "chose": "취소 (button)",
+              "path": "list",
+              "result": "right"
+            }
+          ]
+        },
+        {
+          "counted": "right",
+          "goal": "저장해",
+          "kind": "listed",
+          "tries": [
+            {
+              "chose": "저장 (button)",
+              "path": "list",
+              "result": "right"
+            },
+            {
+              "chose": "저장 (button)",
+              "path": "list",
+              "result": "right"
+            },
+            {
+              "chose": "저장 (button)",
+              "path": "list",
+              "result": "right"
+            }
+          ]
+        },
+        {
+          "counted": "declined",
+          "goal": "인쇄해줘",
+          "kind": "none",
+          "tries": [
+            {
+              "chose": null,
+              "path": "list",
+              "result": "declined"
+            },
+            {
+              "chose": null,
+              "path": "list",
+              "result": "declined"
+            },
+            {
+              "chose": null,
+              "path": "list",
+              "result": "declined"
+            }
+          ]
+        },
+        {
+          "counted": "right",
+          "goal": "지우개로 바꿔줘",
+          "kind": "listed",
+          "tries": [
+            {
+              "chose": "지우개 (button)",
+              "path": "list",
+              "result": "right"
+            },
+            {
+              "chose": "지우개 (button)",
+              "path": "list",
+              "result": "right"
+            },
+            {
+              "chose": "지우개 (button)",
+              "path": "list",
+              "result": "right"
+            }
+          ]
+        },
+        {
+          "counted": "right",
+          "goal": "빨간색 골라줘",
+          "kind": "listed",
+          "tries": [
+            {
+              "chose": "빨강 (button)",
+              "path": "list",
+              "result": "right"
+            },
+            {
+              "chose": "빨강 (button)",
+              "path": "list",
+              "result": "right"
+            },
+            {
+              "chose": "빨강 (button)",
+              "path": "list",
+              "result": "right"
+            }
+          ]
+        },
+        {
+          "counted": "right",
+          "goal": "글자 넣는 도구 골라줘",
+          "kind": "listed",
+          "tries": [
+            {
+              "chose": "텍스트 (button)",
+              "path": "list",
+              "result": "right"
+            },
+            {
+              "chose": "텍스트 (button)",
+              "path": "list",
+              "result": "right"
+            },
+            {
+              "chose": "텍스트 (button)",
+              "path": "list",
+              "result": "right"
+            }
+          ]
+        },
+        {
+          "counted": "cannot",
+          "goal": "휴지통 아이콘 눌러줘",
+          "kind": "unlisted",
+          "tries": [
+            {
+              "chose": null,
+              "path": "looked",
+              "picture": {
+                "saw": "nothing"
+              },
+              "result": "cannot",
+              "seconds": 1.41,
+              "shown": "캔버스"
+            },
+            {
+              "chose": null,
+              "path": "looked",
+              "picture": {
+                "saw": "nothing"
+              },
+              "result": "cannot",
+              "seconds": 0.97,
+              "shown": "캔버스"
+            },
+            {
+              "chose": null,
+              "path": "looked",
+              "picture": {
+                "saw": "nothing"
+              },
+              "result": "cannot",
+              "seconds": 0.51,
+              "shown": "캔버스"
+            }
+          ]
+        },
+        {
+          "counted": "cannot",
+          "goal": "톱니바퀴 아이콘 눌러줘",
+          "kind": "unlisted",
+          "tries": [
+            {
+              "chose": null,
+              "path": "looked",
+              "picture": {
+                "saw": "nothing"
+              },
+              "result": "cannot",
+              "seconds": 0.54,
+              "shown": "캔버스"
+            },
+            {
+              "chose": null,
+              "path": "looked",
+              "picture": {
+                "saw": "nothing"
+              },
+              "result": "cannot",
+              "seconds": 0.55,
+              "shown": "캔버스"
+            },
+            {
+              "chose": null,
+              "path": "looked",
+              "picture": {
+                "saw": "nothing"
+              },
+              "result": "cannot",
+              "seconds": 0.49,
+              "shown": "캔버스"
+            }
+          ]
+        },
+        {
+          "counted": "declined",
+          "goal": "동영상 재생해줘",
+          "kind": "none",
+          "tries": [
+            {
+              "chose": null,
+              "path": "looked",
+              "picture": {
+                "saw": "nothing"
+              },
+              "result": "declined",
+              "seconds": 0.51,
+              "shown": "캔버스"
+            },
+            {
+              "chose": null,
+              "path": "looked",
+              "picture": {
+                "saw": "nothing"
+              },
+              "result": "declined",
+              "seconds": 0.53,
+              "shown": "캔버스"
+            },
+            {
+              "chose": null,
+              "path": "looked",
+              "picture": {
+                "saw": "nothing"
+              },
+              "result": "declined",
+              "seconds": 0.49,
+              "shown": "캔버스"
+            }
+          ]
+        },
+        {
+          "counted": "wrong",
+          "goal": "글꼴 목록 열어줘",
+          "kind": "same-name",
+          "tries": [
+            {
+              "chose": "글꼴 (combo box)",
+              "path": "list",
+              "result": "wrong"
+            },
+            {
+              "chose": "글꼴 (combo box)",
+              "path": "list",
+              "result": "wrong"
+            },
+            {
+              "chose": "글꼴 (combo box)",
+              "path": "list",
+              "result": "wrong"
+            }
+          ]
+        },
+        {
+          "counted": "wrong",
+          "goal": "문자 집합 목록 열어줘",
+          "kind": "same-name",
+          "tries": [
+            {
+              "chose": "문자 집합 (combo box)",
+              "path": "list",
+              "result": "wrong"
+            },
+            {
+              "chose": "문자 집합 (combo box)",
+              "path": "list",
+              "result": "wrong"
+            },
+            {
+              "chose": "문자 집합 (combo box)",
+              "path": "list",
+              "result": "wrong"
+            }
+          ]
+        },
+        {
+          "counted": "right",
+          "goal": "복사 버튼 눌러줘",
+          "kind": "listed",
+          "tries": [
+            {
+              "chose": "복사 (button)",
+              "path": "list",
+              "result": "right"
+            },
+            {
+              "chose": "복사 (button)",
+              "path": "list",
+              "result": "right"
+            },
+            {
+              "chose": "복사 (button)",
+              "path": "list",
+              "result": "right"
+            }
+          ]
+        },
+        {
+          "counted": "right",
+          "goal": "★ 문자 눌러줘",
+          "kind": "unlisted",
+          "tries": [
+            {
+              "chose": "문자 격자 (pane)",
+              "path": "looked",
+              "picture": {
+                "inside": "문자 격자",
+                "label": "star symbol",
+                "landed_on": "c-star",
+                "point": [
+                  645,
+                  245
+                ]
+              },
+              "result": "right",
+              "seconds": 1.7,
+              "shown": "문자 격자"
+            },
+            {
+              "chose": "문자 격자 (pane)",
+              "path": "looked",
+              "picture": {
+                "inside": "문자 격자",
+                "label": "star symbol",
+                "landed_on": "c-star",
+                "point": [
+                  645,
+                  245
+                ]
+              },
+              "result": "right",
+              "seconds": 0.8,
+              "shown": "문자 격자"
+            },
+            {
+              "chose": "문자 격자 (pane)",
+              "path": "looked",
+              "picture": {
+                "inside": "문자 격자",
+                "label": "star symbol",
+                "landed_on": "c-star",
+                "point": [
+                  645,
+                  245
+                ]
+              },
+              "result": "right",
+              "seconds": 0.82,
+              "shown": "문자 격자"
+            }
+          ]
+        },
+        {
+          "counted": "wrong",
+          "goal": "글꼴 크기 키워줘",
+          "kind": "none",
+          "tries": [
+            {
+              "chose": "글꼴 (combo box)",
+              "path": "list",
+              "result": "wrong"
+            },
+            {
+              "chose": "글꼴 (combo box)",
+              "path": "list",
+              "result": "wrong"
+            },
+            {
+              "chose": "글꼴 (combo box)",
+              "path": "list",
+              "result": "wrong"
+            }
+          ]
+        },
+        {
+          "counted": "right",
+          "goal": "원격 화면에서 지금 설치 눌러줘",
+          "kind": "unlisted",
+          "tries": [
+            {
+              "chose": "원격 화면 (pane)",
+              "path": "looked",
+              "picture": {
+                "inside": "원격 화면",
+                "label": "blue button labeled '지금 설치'",
+                "landed_on": "r-install",
+                "point": [
+                  753,
+                  408
+                ]
+              },
+              "result": "right",
+              "seconds": 1.87,
+              "shown": "원격 화면"
+            },
+            {
+              "chose": "원격 화면 (pane)",
+              "path": "looked",
+              "picture": {
+                "inside": "원격 화면",
+                "label": "blue button labeled '지금 설치'",
+                "landed_on": "r-install",
+                "point": [
+                  753,
+                  408
+                ]
+              },
+              "result": "right",
+              "seconds": 0.97,
+              "shown": "원격 화면"
+            },
+            {
+              "chose": "원격 화면 (pane)",
+              "path": "looked",
+              "picture": {
+                "inside": "원격 화면",
+                "label": "blue button labeled '지금 설치'",
+                "landed_on": "r-install",
+                "point": [
+                  753,
+                  408
+                ]
+              },
+              "result": "right",
+              "seconds": 0.94,
+              "shown": "원격 화면"
+            }
+          ]
+        },
+        {
+          "counted": "right",
+          "goal": "원격 PC 업데이트는 나중에 하게 눌러줘",
+          "kind": "unlisted",
+          "tries": [
+            {
+              "chose": null,
+              "path": "looked",
+              "picture": {
+                "inside": "원격 화면",
+                "label": "button to postpone update",
+                "landed_on": "r-later",
+                "point": [
+                  839,
+                  408
+                ]
+              },
+              "result": "right",
+              "seconds": 1.3,
+              "shown": "원격 화면"
+            },
+            {
+              "chose": null,
+              "path": "looked",
+              "picture": {
+                "inside": "원격 화면",
+                "label": "button to postpone update",
+                "landed_on": "r-later",
+                "point": [
+                  839,
+                  408
+                ]
+              },
+              "result": "right",
+              "seconds": 1.22,
+              "shown": "원격 화면"
+            },
+            {
+              "chose": null,
+              "path": "looked",
+              "picture": {
+                "inside": "원격 화면",
+                "label": "button to postpone update",
+                "landed_on": "r-later",
+                "point": [
+                  839,
+                  408
+                ]
+              },
+              "result": "right",
+              "seconds": 2.36,
+              "shown": "원격 화면"
+            }
+          ]
+        },
+        {
+          "counted": "right",
+          "goal": "원격 PC의 휴지통 열어줘",
+          "kind": "unlisted",
+          "tries": [
+            {
+              "chose": null,
+              "path": "looked",
+              "picture": {
+                "inside": "원격 화면",
+                "label": "trash icon",
+                "landed_on": "r-recycle",
+                "point": [
+                  53,
+                  109
+                ]
+              },
+              "result": "right",
+              "seconds": 0.84,
+              "shown": "원격 화면"
+            },
+            {
+              "chose": null,
+              "path": "looked",
+              "picture": {
+                "inside": "원격 화면",
+                "label": "trash icon",
+                "landed_on": "r-recycle",
+                "point": [
+                  53,
+                  109
+                ]
+              },
+              "result": "right",
+              "seconds": 0.8,
+              "shown": "원격 화면"
+            },
+            {
+              "chose": null,
+              "path": "looked",
+              "picture": {
+                "inside": "원격 화면",
+                "label": "trash icon",
+                "landed_on": "r-recycle",
+                "point": [
+                  53,
+                  109
+                ]
+              },
+              "result": "right",
+              "seconds": 0.83,
+              "shown": "원격 화면"
+            }
+          ]
+        },
+        {
+          "counted": "right",
+          "goal": "원격 연결 끊어줘",
+          "kind": "listed",
+          "tries": [
+            {
+              "chose": "연결 끊기 (button)",
+              "path": "list",
+              "result": "right"
+            },
+            {
+              "chose": "연결 끊기 (button)",
+              "path": "list",
+              "result": "right"
+            },
+            {
+              "chose": "연결 끊기 (button)",
+              "path": "list",
+              "result": "right"
+            }
+          ]
+        },
+        {
+          "counted": "declined",
+          "goal": "원격 화면에서 계산기 열어줘",
+          "kind": "none",
+          "tries": [
+            {
+              "chose": "원격 화면 (pane)",
+              "path": "looked",
+              "picture": {
+                "saw": "nothing"
+              },
+              "result": "declined",
+              "seconds": 0.54,
+              "shown": "원격 화면"
+            },
+            {
+              "chose": "원격 화면 (pane)",
+              "path": "looked",
+              "picture": {
+                "saw": "nothing"
+              },
+              "result": "declined",
+              "seconds": 0.55,
+              "shown": "원격 화면"
+            },
+            {
+              "chose": "원격 화면 (pane)",
+              "path": "looked",
+              "picture": {
+                "saw": "nothing"
+              },
+              "result": "declined",
+              "seconds": 0.53,
+              "shown": "원격 화면"
+            }
+          ]
+        }
+      ],
+      "listed_right": 12,
+      "looks": 24,
+      "max_s": 2.36,
+      "median_prompt_tokens": null,
+      "median_s": 0.81,
+      "model": "qwen3-vl:8b-instruct",
+      "none_declined": 4,
+      "picture_rows_wrong": 0,
+      "rows": 12,
+      "same_name_asked": 0,
+      "same_name_right": 0,
+      "unlisted_right": 4,
+      "unlisted_wrong": 0,
+      "wrong": 4
+    }
+  ],
+  "fixtures": "e2e475",
+  "harness": "799599",
+  "picture": "1280x800 PNG, drawn",
+  "repeats": 3,
+  "when": "2026-11-18"
+}

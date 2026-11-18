@@ -431,7 +431,7 @@ fn draw(desk: HDESK, view: &View) {
 }
 
 /// Top-down BGRA made at most `most` wide by averaging boxes — read by eye, so a box filter does.
-fn reduced(bgra: &[u8], wide: usize, tall: usize, most: usize) -> (Vec<u8>, usize, usize) {
+pub(crate) fn reduced(bgra: &[u8], wide: usize, tall: usize, most: usize) -> (Vec<u8>, usize, usize) {
     if wide <= most {
         return (bgra.to_vec(), wide, tall);
     }

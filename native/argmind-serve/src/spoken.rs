@@ -166,13 +166,26 @@ pub const OWN_FILES: Sentence = [
     " 作ったファイルは作業フォルダにあります。",
 ];
 
+/// **Where the list was blind and the picture found something** — `{0}` what the vision model
+/// called it, in its own words, `{1}` the place it is inside. The press is the person's.
+pub const LOOKED_FOUND: Sentence = [
+    "목록에는 없어서 그림으로 찾아봤어요 — 「{1}」 안에서 「{0}」(으)로 보이는 곳이에요. 실행을 누르시면 누를게요.",
+    "It wasn't in the list, so I looked at the picture — a spot inside 「{1}」 that looks like 「{0}」. I'll press it when you press Run.",
+    "列表里没有，所以我看了画面 — 在「{1}」里看起来像「{0}」的地方。你按「执行」我就点。",
+    "リストになかったので画面を見ました — 「{1}」の中の「{0}」に見える所です。「実行」を押したら押します。",
+];
+pub const LOOKED_NOTHING: Sentence = [
+    "그림에서도 찾지 못했어요.", "I couldn't find it in the picture either.", "画面里也没找到。",
+    "画面でも見つかりませんでした。",
+];
+
 /// Every sentence above — a test counts the `Sentence =` in this file so none is left out.
 pub const ALL: &[&Sentence] = &[
     &DID_NOT_FOLLOW, &KEPT, &KEEP_WHAT, &KEEP_FULL, &UNREADABLE, &CARRYING_ON, &WEB_CLOSED, &WEB_OPENED,
     &WEB_SEARCHED, &OWN_HALTED, &WORK_HALTED, &OWN_GIVES_WAY, &STILL_WORKING, &WORK_STARTED, &NO_WORKBENCH,
     &TASK_ASKS, &TASK_NOT_FINISHED, &TASK_STOPPED, &LOOKED_UP, &NOT_LOOKED_UP, &ERRAND_EMPTY,
     &ERRAND_TOO_LONG, &ERRAND_FULL, &ERRAND_DONE, &ERRAND_ASKS, &OWN_REPORT, &OWN_FINISHED, &OWN_GAVE_WAY,
-    &OWN_UNFINISHED, &OWN_FILES,
+    &OWN_UNFINISHED, &OWN_FILES, &LOOKED_FOUND, &LOOKED_NOTHING,
 ];
 
 #[cfg(test)]

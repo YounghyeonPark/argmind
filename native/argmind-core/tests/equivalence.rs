@@ -220,19 +220,19 @@ fn the_history_the_window_and_the_resolution_match() {
 fn effect_from(v: &Value) -> Effect {
     Effect { kind: v["kind"].as_str().unwrap().into(), target: v["target"].as_str().unwrap().into(),
              role: v["role"].as_str().unwrap().into(), text: v["text"].as_str().unwrap().into(),
-             because_asked: None , which: None}
+             because_asked: None, which: None, inside: None }
 }
 fn click(target: &str, role: &str) -> Effect {
     Effect { kind: "click".into(), target: target.into(), role: role.into(), text: String::new(),
-             because_asked: None , which: None}
+             because_asked: None, which: None, inside: None }
 }
 fn typing(text: &str) -> Effect {
     Effect { kind: "type".into(), target: String::new(), role: String::new(), text: text.into(),
-             because_asked: None , which: None}
+             because_asked: None, which: None, inside: None }
 }
 fn keying(text: &str) -> Effect {
     Effect { kind: "key".into(), target: String::new(), role: String::new(), text: text.into(),
-             because_asked: None , which: None}
+             because_asked: None, which: None, inside: None }
 }
 
 // ---- 4. a whole turn, across the seam ------------------------------------------------------------

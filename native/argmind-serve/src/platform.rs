@@ -945,6 +945,23 @@ pub fn work_picture(seen: u64) -> Option<(u64, Option<(String, Vec<u8>)>)> {
     }
 }
 
+/// **A picture of the window argmind is attending to**, or of `part` of it (screen pixels), made
+/// `width` wide — for `looking.rs` and nothing else, which `argmind-rules` holds. A PNG and the
+/// screen rectangle it covers; `None` where there is no window, or no way to draw one.
+pub fn window_picture(handle: isize, part: Option<(i64, i64, i64, i64)>, width: usize)
+                      -> Option<(Vec<u8>, (i64, i64, i64, i64))> {
+    #[cfg(all(windows, not(feature = "headless")))]
+    {
+        let shot = argmind_env_windows::picture::drawn(handle)?.shot(part, width)?;
+        Some((shot.png, shot.rect))
+    }
+    #[cfg(not(all(windows, not(feature = "headless"))))]
+    {
+        let _ = (handle, part, width);
+        None
+    }
+}
+
 /// Today, as an errand is told it.
 pub fn today() -> String {
     let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH)

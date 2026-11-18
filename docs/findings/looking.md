@@ -93,10 +93,9 @@ not tried.
   answer that is arguably right.
 - So the shape that fits is **the list first, the picture only when the list cannot answer** — and
   that is the rule this project hangs on, *a model never emits a coordinate*, giving way inside one
-  container. That is the owner's decision, not this measurement's.
-- **The card is the cost nobody measured**: argmind's work model, voice and recogniser already use
-  12.6 GB of 16 (measured 2026-11-16); an 8B vision model wants about 6 GB more and the 4B about
-  3.5 GB (estimated from the file sizes).
+  container. That was the owner's decision, not this measurement's, and **the owner took it the
+  same day** (below).
+- The card was the cost nobody had measured; it is measured below.
 
 ## Jev and the open models like it
 
@@ -122,10 +121,111 @@ The models that would make *looking* better are the grounding specialists: **UI-
 (Apache-2.0, Qwen3-VL based, ScreenSpot-Pro 68.4 on its card) and Holo2-8B (58.9), against about 57
 for Qwen3-VL-8B. Whether either loads in Ollama was not checked.
 
+## The owner's choice, and what was built for it
+
+*1번* — the owner, the same evening: **try the picture only where the list is blind, always with a
+press, and measure the card first.** What that became:
+
+- **A point inside a named place, not a coordinate.** `argmind_core::intent::Inside` is thousandths
+  of a container's width and height. The container is still found by name and role at the press,
+  like every target; the point is placed in its fresh rectangle, so it moves with the container and
+  cannot leave it. `Hands::click_inside` is `false` by default, so an environment that has not said
+  it can press a point presses nothing. On Windows it is `click_point`: the reach guard, then a
+  message to the window under the point — no pattern, because a pattern operates the container,
+  and the middle of a remote desktop is not the button inside it. `argmind-core/tests/inside.rs`.
+- **When to look, and what to keep** — `argmind-serve/src/looking.rs`:
+  - it looks only when the person asked for a press, there is a *blind place* on the screen (a
+    listed region of at least 128×96 with nothing listed inside), and the turn chose no click, or
+    chose that place;
+  - the picture is of that place, cut out and made 1280 wide;
+  - the point is kept only when the smallest listed thing under it is a region. A point on a listed
+    button or row is the list's to answer and is dropped.
+- **Always a press.** `propose` counts a point inside among what must wait for a person, whatever
+  *Act without confirming* says.
+- **One maker and one call.** `argmind-rules`, `a_picture_points_only_where_the_list_is_blind.rs`:
+  the picture is asked for and shown to a model once (`app::look_inside`, called by one turn), and
+  a point is made only in `looking.rs` and never in the core.
+  - Checked by breaking it four ways: a second `look_at(`, a `window_picture(` in `route.rs`, an
+    `inside: Some(` in `converse.rs`, and `must_confirm` without the clause.
+  - The first `route.rs` break was written into a doc comment and checked nothing. Written as code,
+    it was caught.
+- **Off until asked.** `looking` is a decidable key of its own and `vision-model` a need of its
+  own, and the window that asks prints the measured numbers.
+
+## Fitting on the card — `--fit`
+
+Measured with argmind running as the owner runs it: `qwen3:8b`, the voice and the recogniser on a
+16 GB card, 8.9 GB used before the run. A turn is the shipped prompt; a look is one box. Bars written
+first: both models stay `100% GPU`, a turn after a look ≤ 1.5 s, a warm look ≤ 3 s.
+
+| | beside the conversation | beside the conversation and argmind's own work (`qwen3:14b`, 24 layers) |
+|---|---|---|
+| `qwen3-vl:8b-instruct` | **fits**: 15.8 of 16.4 GB, turns 0.38–0.54 s, looks 0.59–0.66 s | **does not**: each call put another model out, 9.4 s and 10.4 s, until the work model was gone |
+| `qwen3-vl:4b-instruct` | both stayed, looks 0.34–0.38 s; one turn at **2.57 s** fails the bar as written, with no reload (cause not established — argmind's own calls share the model) | **fits**: all three on the card, 15.9 GB, turns ≤ 0.82 s, looks ≤ 0.44 s |
+
+## The shipped path on the drawn screens — `--arms gated`
+
+The whole path, run as the application runs it: the list's turn, the look when `wants_a_look` says
+so, `landed`, and a row. Bars written first:
+- listed ≥ 12 of 13;
+- unlisted ≥ 3 of the 4 reachable (★, and three things inside the remote desktop; the two paint
+  icons have no listed container in this drawing);
+- a row on ≤ 1 of 5 impossible requests;
+- ≤ 1 row in the wrong place;
+- overall wrong ≤ 4;
+- look median ≤ 1.0 s.
+
+| run | model | listed | unlisted | impossible, rows | rows in the wrong place | wrong | look median |
+|---|---|---|---|---|---|---|---|
+| 1 — the whole picture, regions from 48×32 | 4b | 12 | **4 of 4** | 1 | 1 | **5** — misses the bar by one | 0.39 s |
+| | 8b | 12 | 3 (★ a pixel outside its cell) | 0 | 1 | 5 | 0.58 s |
+| 2 — the place cut out, regions from 128×96 | 4b | 12 | 3 (★ answered with the grid's middle) | 1 (*계산기* → 지금 설치) | 2 | 6 | 0.67 s |
+| | **8b** | 12 | **4 of 4** | **0** | **0** | **4 — every bar met** | 0.81 s |
+
+The design changed between the two runs because of the real window below, and the bars were
+written down again before the second.
+
+## On a real window — `--example pointing`
+
+Character Map at 150%, on a desktop of its own, a fresh window for every request, ten characters on
+its first page and ★, which is not on it. The answer is read off Character Map's own status bar.
+The person's pointer and foreground window were unchanged in every run, and nothing went down their
+input: every press was posted.
+
+| picture | 4b | 8b |
+|---|---|---|
+| the window as it is | 5 of 10 | — |
+| the whole window made 1280 wide | 6 (★ declined) | — |
+| **the grid cut out, made 1280 wide** | **8 and 8, ★ pressed both times** | **8 and 8, ★ declined both times** |
+
+**Three earlier runs measured the harness instead:**
+- The first read 0, 0 and 1 of 10. The example was not per-monitor aware, so the window's
+  rectangle came back in scaled pixels while the picture was drawn at its real size: the picture
+  held two thirds of the grid, and every point was read against a rectangle 1.5 times too small.
+  The application is per-monitor aware; the example is now too.
+- At 48×32, 150% made every button and label a "region".
+- With one Character Map reused, a posted press sometimes left Character Map's enlarged character
+  drawn over the grid. The next request then pointed at it: the 8b answered *"AE symbol"* for ß.
+  **That leftover is real for the person too**, and four probe clicks did not reproduce it.
+
+**So the application looks with the 8b**: it met every bar on the drawn screens and declined the
+character that was not there. It does not fit beside argmind's own work, and a look then costs
+about 10 s of reloading. A look happens only on a request to press inside a place the list cannot
+see into.
+
 ## Not established
 
-- Drawn screens, 26 goals, one answer each (the repeats were identical). Real Windows at another
-  scale, dark mode, or a 1920×1080 screen were not asked.
-- Whether a crop of the region the list points at, sent larger, fixes the off-by-a-row misses.
-- Whether the vision model fits on the card beside argmind's other models, and what a turn costs
-  when it has to be loaded.
+- **The application's own turn was not run from here.** Running it means turning `looking` on,
+  which is the owner's standing answer to give, in front of a window on the owner's desktop. The
+  pieces ran on a real Character Map through the same functions; `app::look_inside`, which strings
+  them together, did not.
+- **No real remote desktop.** Whether a posted click reaches `mstsc`'s input window is unknown, and
+  a control that reads `GetCursorPos` would see the person's pointer instead.
+- Ten characters in one program, two runs; drawn screens otherwise. Dark mode, other scales and
+  other programs were not asked.
+- What the row says is the vision model's word for the place (*"copyright symbol"*), often in
+  English, and not what is at the point. A small picture with the point marked, beside the row,
+  would let the person check where. It was not built.
+- An unnamed icon in a toolbar is not reachable: 128×96 keeps toolbars from being places.
+- Earlier, on the drawn screens: whether a crop fixed the off-by-a-row misses on dense lists was not
+  asked, because a list row is never a place, so the picture is never asked about one.

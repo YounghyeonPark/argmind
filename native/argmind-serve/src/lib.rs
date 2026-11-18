@@ -48,6 +48,7 @@ pub mod faces;
 pub mod fetch;
 pub mod fix;
 pub mod interface;
+pub mod looking;
 pub mod mind;
 pub mod needs;
 pub mod ollama;
@@ -302,6 +303,7 @@ pub enum Route {
     Rules(String),
     /// Let argmind carry out what it thought of by itself, or go back to waiting for a person.
     Initiative(bool),
+    Looking(bool),
     /// Show argmind's browser pane and look there, or hide it and look at the desktop.
     Web(bool),
     /// Open an address in the pane, or search for the words.
@@ -502,6 +504,8 @@ pub fn route(request: &Request) -> Route {
         },
         ("POST", "/initiative/on") => Route::Initiative(true),
         ("POST", "/initiative/off") => Route::Initiative(false),
+        ("POST", "/looking/on") => Route::Looking(true),
+        ("POST", "/looking/off") => Route::Looking(false),
         ("POST", "/acting/on") => Route::Acting(true),
         ("POST", "/acting/off") => Route::Acting(false),
         ("POST", "/notice/on") => Route::Notice(true),

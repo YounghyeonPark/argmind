@@ -265,7 +265,7 @@ fn effect(kind: &str, target: &str, role: &str, text: &str, own: bool) -> crate:
     //: gated as *what you asked for* is, never as argmind's own idea. **Unless it is not**: work
     //: argmind set itself presses as its own idea.
     crate::intent::Effect { kind: kind.into(), target: target.into(), role: role.into(), text: text.into(),
-                            because_asked: Some(!own), which: None }
+                            because_asked: Some(!own), which: None, inside: None }
 }
 
 impl<L, P> Tools for Pressing<L, P>

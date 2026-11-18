@@ -98,10 +98,12 @@ impl Standing {
 /// **A fixed list rather than any string the page sends.** A key is what a stored *yes* is attached
 /// to, so a page that could invent one could invent a permission the program never asks about — and
 /// a typo would silently create a second, always-unanswered copy of a real one.
-pub const DECIDABLE: [&str; 17] = [
+pub const DECIDABLE: [&str; 19] = [
     //: The needs from `needs.rs`. `korean-voice` and `vulkan` are elevation, the rest change the
     //: machine. `work-model` and `sandbox` since 2026-11-17: what work needs, which nothing offered.
-    "ollama", "model", "work-model", "sandbox", "whisper", "korean-voice", "vulkan", "speaker", "face-models",
+    //: `vision-model` since 2026-11-18: what `looking` needs, below.
+    "ollama", "model", "work-model", "sandbox", "vision-model", "whisper", "korean-voice", "vulkan", "speaker",
+    "face-models",
     //: Switched on, and then it keeps going: a model call every few seconds, a device that opens
     //: while a key is held, and a program that makes a noise in a room.
     "notice", "microphone", "aloud",
@@ -114,6 +116,11 @@ pub const DECIDABLE: [&str; 17] = [
     //: key because it is its own question: `acting` is *may what I asked for run without the
     //: button*, this is *may what argmind thought of run at all without a person*.
     "initiative",
+    //: **And the one that shows a model a picture of the screen — the owner's choice of
+    //: 2026-11-18**: only where the list is blind, and whatever it finds waits for a press. Its own key
+    //: because it is its own question: the others are about what argmind may *do*; this is about what
+    //: a model may *see*, and a picture of a window can hold anything that window holds.
+    "looking",
     //: **And the one that leaves a light on.** The microphone opens while a key is held; this stays
     //: open for as long as it is allowed, which is the owner's choice of 2026-09-22 over blinking
     //: every half minute — a light that is on means a camera that is on, and a blinking one says
@@ -145,6 +152,7 @@ pub fn what(key: &str) -> &'static str {
         "model" => "모델 받기",
         "work-model" => "작업 모델 받기",
         "sandbox" => "작업 샌드박스 만들기",
+        "vision-model" => "그림 보기 모델 받기",
         "whisper" => "받아쓰기 서버",
         "korean-voice" => "한국어 음성 설치",
         "vulkan" => "Vulkan SDK 설치",
@@ -165,6 +173,9 @@ pub fn what(key: &str) -> &'static str {
         //: keep asking.
         "acting" => "확인 없이 실행",
         "initiative" => "스스로 판단한 것도 실행",
+        //: **Not 화면 보기**, which would say argmind looks at the screen — it always reads it. What is
+        //: allowed is a picture, and only of a place the list cannot see into.
+        "looking" => "목록에 없는 곳은 그림으로 찾기",
         //: **Not 카메라 사용**, which would read as *may it take a picture*. What is allowed is a
         //: camera that stays on; what leaves the module is never a picture.
         "camera" => "카메라로 사람 알아보기",

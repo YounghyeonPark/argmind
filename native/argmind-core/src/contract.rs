@@ -64,8 +64,10 @@ impl Widget {
     }
 }
 
-/// Reading the screen. **Exact, and that is the contract** — 41–266 ms measured, against 24–82 s
-/// for a vision model that on a dense screen never answered at all.
+/// Reading the screen. **Exact, and that is the contract** — 41–266 ms measured. The 24–82 s once
+/// written beside it for a vision model was the thinking build asked for a pixel; asked for a box
+/// with reasoning off it answers in 0.4–0.6 s and is still less exact than this where this has the
+/// thing by name (`--bin looking`, 2026-11-18).
 pub trait Eyes {
     fn foreground(&mut self) -> Vec<Widget>;
     /// The same read, with what it cost. Separate because the cost is a measurement an interface
@@ -79,6 +81,17 @@ pub trait Hands {
     /// `Session::confirm` answers `None` rather than `false`.
     fn live(&self) -> bool;
     fn click(&mut self, widget: &Widget);
+    /// **A click at a point inside a widget**, for a place the list cannot see into — see
+    /// [`crate::intent::Inside`]. `at` is a screen point the core has already placed inside
+    /// `within`'s fresh rectangle. Returns whether anything was sent.
+    ///
+    /// **`false` by default**, the opposite direction from [`Hands::into_a_secret`] and on purpose:
+    /// an environment that has not said it can press a point inside something presses nothing,
+    /// because the fallback — the widget's own pattern, or its centre — is a press on something
+    /// nobody chose. The middle of a remote desktop is not *the button inside it*.
+    fn click_inside(&mut self, _within: &Widget, _at: (i64, i64)) -> bool {
+        false
+    }
     fn type_text(&mut self, text: &str);
     fn press(&mut self, key: &str);
     /// The keys this environment has, or `None` when it publishes none — in which case

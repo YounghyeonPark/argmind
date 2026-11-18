@@ -363,6 +363,12 @@ impl WindowsHands {
         did
     }
 
+    /// **Where the type after this click goes** — set by a click and by nothing else: both ways of
+    /// clicking come through here, so there is one place that aims.
+    fn aim(&mut self, x: i64, y: i64) {
+        self.aimed = Some(((x, y), Instant::now()));
+    }
+
     /// A click, with the reach check in front of it.
     pub fn click_button(&mut self, widget: &Widget, button: &str) -> Did {
         let Some((down, up)) = button_flags(button) else {
@@ -372,7 +378,7 @@ impl WindowsHands {
         //: **Remembered for the type that may follow**, and only for it — see `aimed`. Set before
         //: the guard rather than after, because a click that was refused still tells the next
         //: effect where argmind was aiming, and `set_value` runs the same guard again anyway.
-        self.aimed = Some(((x, y), Instant::now()));
+        self.aim(x, y);
         //: **Checked immediately before acting, not when the widget was chosen.** A listed widget
         //: is gone 13 times in 14 over the second a call takes, and a window that arrived in front
         //: in that second is exactly what this refuses.
@@ -419,6 +425,12 @@ impl WindowsHands {
                 None => self.because("no window under the point".into()),
             }
         }
+        self.pointer_click(x, y, down, up)
+    }
+
+    /// **The person's pointer, as the last resort** — moved to the point and clicked — and only
+    /// where these hands were allowed it.
+    fn pointer_click(&mut self, x: i64, y: i64, down: MOUSE_EVENT_FLAGS, up: MOUSE_EVENT_FLAGS) -> Did {
         if !self.may_send_input {
             return self.record(Did::Refused(format!("only the person's pointer would reach it: {}", self.why)));
         }
@@ -433,6 +445,35 @@ impl WindowsHands {
         }
         send(&[mouse(down), mouse(up)]);
         self.record(Did::Sent { live: true })
+    }
+
+    /// **A click at a point inside a place the list cannot see into** — see
+    /// `argmind_core::intent::Inside`. **No pattern**: a pattern operates the widget it finds, and
+    /// the middle of a remote desktop or a character grid is not the thing inside it that was asked
+    /// for. So the same reach guard, then a message to the window under the point, then the
+    /// pointer only where these hands may use it.
+    pub fn click_point(&mut self, x: i64, y: i64) -> Did {
+        let Some((down, up)) = button_flags("left") else {
+            return self.record(Did::Refused("no left button".into()));
+        };
+        self.aim(x, y);
+        let owner = owner_at(x, y);
+        if !may_touch(self.reach, owner) {
+            return self.record(Did::Elsewhere { owner });
+        }
+        self.why = String::new();
+        if self.messages {
+            match crate::addressed::window_at(x, y) {
+                Some(h) => match self.posted(h, |h| crate::addressed::click(h, x, y, "left")) {
+                    Ok(did) => return did,
+                    Err(why) => self.because(why),
+                },
+                None => self.because("no window under the point".into()),
+            }
+        } else {
+            self.because("messages are off".into());
+        }
+        self.pointer_click(x, y, down, up)
     }
 
     pub fn press_key(&mut self, key: &str) -> Did {
@@ -647,6 +688,12 @@ impl Hands for WindowsHands {
     }
     fn click(&mut self, widget: &Widget) {
         self.click_button(widget, "left");
+    }
+    /// **Always sent somewhere or refused on the record** — a covered point is `Elsewhere`, read
+    /// back through [`Hands::landed`] as every other click is — so `true`: these hands can point.
+    fn click_inside(&mut self, _within: &Widget, at: (i64, i64)) -> bool {
+        self.click_point(at.0, at.1);
+        true
     }
     fn type_text(&mut self, text: &str) {
         self.type_string(text);

@@ -42,6 +42,13 @@ pub fn describe(effect: &Effect, widget: Option<&Widget>, form: usize) -> String
             Some(w) => w.role.clone(),
             None => if effect.role.is_empty() { "thing".into() } else { effect.role.clone() },
         };
+        //: **A point inside, said as where it was and what the picture showed** — never the point.
+        //: The conversation's model reads this in its history, and it is never shown a coordinate.
+        if effect.inside.is_some() {
+            let showed = if effect.text.is_empty() { String::new() }
+                         else { format!(", where the picture showed \"{}\"", effect.text) };
+            return format!("{v} inside the {role} \"{}\"{showed}", effect.target);
+        }
         return format!("{v} the {role} \"{}\"", effect.target);
     }
     if effect.kind == "type" {
@@ -178,6 +185,9 @@ pub struct Session<E: Eyes, H: Hands, M: Speaks> {
     /// **Steps not attempted because one before them failed.** Counted apart: these were never
     /// tried, and a person told *the click failed* should also be told what did not follow it.
     pub unattempted: u32,
+    /// **Points inside a widget the hands could not press** — see [`Hands::click_inside`], which
+    /// says no unless an environment has said it can.
+    pub cannot_point: u32,
     pub unknown_keys: u32,
     /// **The human is the permission.** An interface with a confirm button turns this on and gates
     /// with the button instead, which is stronger than the flag; one with no button leaves it off.
@@ -199,7 +209,7 @@ impl<E: Eyes, H: Hands, M: Speaks> Session<E, H, M> {
     pub fn new(eyes: E, hands: H, model: M) -> Self {
         Session { eyes, hands, model, seen: Vec::new(), history: Vec::new(), exchanges: 0,
                   blind: 0, vanished: 0, ambiguous: 0, chose_too_late: 0, secret: 0, nowhere_to_type: 0,
-                  not_landed: 0, unattempted: 0, unknown_keys: 0,
+                  not_landed: 0, unattempted: 0, cannot_point: 0, unknown_keys: 0,
                   may_act_unprompted: false,
                   remember_turns: Some(REMEMBER_TURNS), limit: MAX_LISTED, context_tokens: None,
                   mind: Mind::resting(), note: Note::blank() }
@@ -407,11 +417,10 @@ impl<E: Eyes, H: Hands, M: Speaks> Session<E, H, M> {
                     //: outran them*, and the two say different things about whether asking works.
                     Found::Several(same) => match effect.which {
                         Some(a) if a.of == same.len() && a.index < same.len() => {
-                            let target = same[a.index].clone();
-                            self.hands.click(&target);
-                            let confirmed = self.confirm(&target);
-                            did.push(Done { effect: effect.clone(), target: Some(target),
-                                            confirmed });
+                            match self.press(effect, same[a.index].clone()) {
+                                Some(done) => did.push(done),
+                                None => refused.push(effect.clone()),
+                            }
                         }
                         Some(_) => {
                             self.chose_too_late += 1;
@@ -422,11 +431,10 @@ impl<E: Eyes, H: Hands, M: Speaks> Session<E, H, M> {
                             refused.push(effect.clone());
                         }
                     },
-                    Found::One(target) => {
-                        self.hands.click(&target);
-                        let confirmed = self.confirm(&target);
-                        did.push(Done { effect: effect.clone(), target: Some(target), confirmed });
-                    }
+                    Found::One(target) => match self.press(effect, target) {
+                        Some(done) => did.push(done),
+                        None => refused.push(effect.clone()),
+                    },
                 },
                 "type" => {
                     //: **A password is the person's to type.** Refused and counted apart — this
@@ -462,6 +470,26 @@ impl<E: Eyes, H: Hands, M: Speaks> Session<E, H, M> {
             }
         }
         (did, proposed, refused)
+    }
+
+    /// **One press on a target already resolved** — by its own means, or, for an effect carrying
+    /// [`crate::intent::Inside`], at that point in the target's rectangle *as it is now*. `None`
+    /// when the hands cannot press a point inside anything, counted in `cannot_point`.
+    fn press(&mut self, effect: &Effect, target: Widget) -> Option<Done> {
+        let Some(inside) = effect.inside else {
+            self.hands.click(&target);
+            let confirmed = self.confirm(&target);
+            return Some(Done { effect: effect.clone(), target: Some(target), confirmed });
+        };
+        let at = inside.within(target.rect);
+        if !self.hands.click_inside(&target, at) {
+            self.cannot_point += 1;
+            return None;
+        }
+        //: **Not confirmed either way.** The list cannot see into this place — that is why a point
+        //: was needed — so whether anything inside it moved is not the list's to say, and `false`
+        //: would be a claim it did not.
+        Some(Done { effect: effect.clone(), target: Some(target), confirmed: None })
     }
 
     /// Put what happened into the conversation, beside what was said. **The past tense belongs to

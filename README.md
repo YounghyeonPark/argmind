@@ -84,6 +84,17 @@ file list it lands a row out), and it sees what the list cannot — a remote des
 icon — in 5 or 6 of 6. So the rule stands on exactness, not on speed;
 [docs/findings/looking.md](docs/findings/looking.md) has the numbers.
 
+**Where the list is blind, there is now a switch, off by default**: *Find in a picture what the
+list cannot see*. It works inside a place the list cannot see into, such as a remote desktop or
+Character Map's grid. A picture of that place goes to a vision model on your PC, and the point it
+finds is kept as a fraction of the place.
+- **The place, not the point.** The place is found again by name at the press, so the point moves
+  with it.
+- **Always a press.** Whatever it found waits for you to press **Run**, even with *Act without
+  confirming* on.
+- **Measured.** On a real Character Map it found 8 of 10 characters, twice, and declined the one
+  that was not on the page.
+
 So the operating system supplies the names and the rectangles, and the model only ever picks a
 name. That rule is enforced by tests that read the source: nothing in the core asks a model for
 `x`/`y`, and nothing rendered into a prompt mentions a rectangle.

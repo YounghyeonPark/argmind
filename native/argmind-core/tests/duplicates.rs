@@ -88,7 +88,7 @@ fn the_click_is_refused_and_counted_apart_from_a_vanishing() {
     let screen = character_map();
     let mut s = looking(screen.clone(), screen);
     let click = Effect { kind: "click".into(), target: "Open".into(), role: "button".into(),
-                         text: String::new(), because_asked: Some(true) , which: None};
+                         text: String::new(), because_asked: Some(true), which: None, inside: None };
     let (did, _proposed, refused) = s.perform(std::slice::from_ref(&click));
     assert!(did.is_empty(), "a click with two candidates must not land");
     assert_eq!(refused.len(), 1);
@@ -102,7 +102,7 @@ fn the_click_is_refused_and_counted_apart_from_a_vanishing() {
 /// A click on `Open`, optionally carrying which copy a person picked.
 fn click_open(which: Option<Among>) -> Effect {
     Effect { kind: "click".into(), target: "Open".into(), role: "button".into(),
-             text: String::new(), because_asked: Some(true), which }
+             text: String::new(), because_asked: Some(true), which, inside: None }
 }
 
 #[test]

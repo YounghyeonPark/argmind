@@ -125,10 +125,12 @@ fn doubt_still_asks_even_when_acting_is_allowed() {
     assert!(guard.contains("!must_confirm"), "a rule saying always ask is ignored: {guard}");
 
     //: **The rule, or a reply that itself asked** — since 2026-11-03, when *찾아볼까요?* went out
-    //: beside a click on a Git button and 확인 없이 실행 pressed it. Either half dropped fails here.
+    //: beside a click on a Git button and 확인 없이 실행 pressed it — **or a point the picture found**,
+    //: since 2026-11-18, the owner's condition for letting a model say where. Any of the three
+    //: dropped fails here.
     assert!(propose.contains(
-        "let must_confirm = rule == Some(argmind_core::rule::Then::Confirm) || asked;"),
-            "must_confirm no longer means the rule said so, or the reply asked:
+        "let must_confirm = rule == Some(argmind_core::rule::Then::Confirm) || asked || effect.inside.is_some();"),
+            "must_confirm no longer means the rule said so, the reply asked, or the picture found it:
 {propose}");
     //: **`doubt` is the hint being non-empty and nothing else.** A refactor that made it mean
     //: something looser — *the widget was found*, say — would pass the line above and gate on
