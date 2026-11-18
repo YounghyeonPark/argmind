@@ -25,6 +25,10 @@
 //!     cargo run --release -p argmind-measure --example pointing
 //!     POINTING_MODEL=qwen3-vl:8b-instruct POINTING_ONLY="place 1280" POINTING_SAVE=<dir> …
 //!
+//! `POINTING_SAVE` writes the picture each request was shown, the row's marked picture made as
+//! `app::look_inside` makes it, and the place after the press — so the ring can be held against the
+//! cell Character Map actually selected.
+//!
 //! **Read, 2026-11-18, at 150%.** The first run read 0, 0 and 1 of 10 and was this harness: not
 //! per-monitor aware, so `GetWindowRect` and UI Automation answered in scaled pixels while
 //! `PrintWindow` drew at real size, and the picture held two thirds of the grid. Then, with one
@@ -187,6 +191,22 @@ fn main() {
                         match landed(&seen, px, py) {
                             Landed::Inside(container) => {
                                 let e = effect(container, px, py, &label);
+                                //: **The row's picture, made as `app::look_inside` makes it** — the
+                                //: point where the press will land, ringed on the picture the model
+                                //: was shown — and, after the press, the place as it then looks, so
+                                //: the ring can be held against the cell that was actually chosen.
+                                let tag = format!("{:04x}", c.chars().next().unwrap() as u32);
+                                if let Some(dir) = &save {
+                                    let picture = argmind_serve::looking::Picture {
+                                        png: Vec::new(), rect: shot.rect, bgra: shot.bgra.clone(),
+                                        wide: shot.wide, tall: shot.tall };
+                                    let at = e.inside.map(|i| i.within(container.rect)).and_then(|(x, y)| picture.at(x, y));
+                                    if let Some(at) = at {
+                                        let png = argmind_env_windows::picture::marked(&picture.bgra, picture.wide,
+                                            picture.tall, at, argmind_serve::looking::SHOWN_WIDE);
+                                        let _ = std::fs::write(format!("{dir}/marked-{tag}.png"), png);
+                                    }
+                                }
                                 //: **What `perform` does with it, written out**, because a harness may
                                 //: not call `perform` (`argmind-rules`, `the_voice_cannot_act`): the
                                 //: container found again by name and role, the point placed in its
@@ -199,6 +219,12 @@ fn main() {
                                     _ => false,
                                 };
                                 std::thread::sleep(Duration::from_millis(400));
+                                if let Some(dir) = &save {
+                                    if let Some(after) = argmind_env_windows::picture::drawn(handle)
+                                        .and_then(|d| d.shot(Some(shot.rect), argmind_serve::looking::SHOWN_WIDE)) {
+                                        let _ = std::fs::write(format!("{dir}/after-{tag}.png"), after.png);
+                                    }
+                                }
                                 let status: Vec<String> = session.eyes.foreground().into_iter()
                                     .filter(|w| w.name.starts_with("U+")).map(|w| w.name).collect();
                                 let hit = match want {

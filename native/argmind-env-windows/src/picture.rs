@@ -5,7 +5,9 @@
 //! partly covered by another is still drawn as itself; a point on the covered part is refused at
 //! the press by the reach guard, which reads who owns the pixel *then*. Cut to a part and sized by a
 //! box filter or a bilinear one, and written as a PNG with stored blocks — no dependency. **Never
-//! saved**: the bytes go to the model's socket and are dropped.
+//! saved**: the bytes go to the model's socket and are dropped, and the one copy kept is the same
+//! picture with the point the model chose drawn on it ([`marked`]), held in memory for the person
+//! to see beside the 실행 row until that row is answered.
 //!
 //! The rectangle is `GetWindowRect`'s, in the same physical pixels UI Automation reports, so a
 //! point in thousandths of the picture is a point on the screen without any scaling in between.
@@ -15,10 +17,14 @@ use windows::Win32::Graphics::Gdi::*;
 use windows::Win32::Storage::Xps::{PrintWindow, PRINT_WINDOW_FLAGS};
 use windows::Win32::UI::WindowsAndMessaging::GetWindowRect;
 
-/// The picture and the screen rectangle it covers.
+/// The picture and the screen rectangle it covers — and the pixels the PNG holds, top-down BGRA,
+/// so the same picture can be shown to the person with a point marked on it.
 pub struct Shot {
     pub png: Vec<u8>,
     pub rect: (i64, i64, i64, i64),
+    pub bgra: Vec<u8>,
+    pub wide: usize,
+    pub tall: usize,
 }
 
 /// A window's pixels as it draws itself — top-down BGRA — and the screen rectangle they cover.
@@ -96,7 +102,62 @@ impl Drawn {
         for px in out.chunks_exact(4) {
             rgb.extend_from_slice(&[px[2], px[1], px[0]]);
         }
-        Some(Shot { png: png(&rgb, ow, oh), rect: (x0, y0, x1 - x0, y1 - y0) })
+        Some(Shot { png: png(&rgb, ow, oh), rect: (x0, y0, x1 - x0, y1 - y0), bgra: out, wide: ow, tall: oh })
+    }
+}
+
+/// **The picture a model was shown, with the point it chose drawn on it** — a red ring with a white
+/// edge and four ticks pointing in, at `at` (pixels of that picture), made at most `most_wide` wide,
+/// as a PNG. **Nothing on the point itself**: the first version put a dot there, and on a real
+/// Character Map the dot hid the very glyph it marked (ì, under a request for Ø) — the thing a
+/// person reads the picture to check. For
+/// the person, beside the row that waits for their press: *the picture showed “©”* says what the
+/// model believed, and this says where it will land.
+pub fn marked(bgra: &[u8], wide: usize, tall: usize, at: (usize, usize), most_wide: usize) -> Vec<u8> {
+    let (mut out, ow, oh) = crate::screen::reduced(bgra, wide, tall, most_wide.max(1));
+    let (cx, cy) = (at.0 as f64 * ow as f64 / wide.max(1) as f64, at.1 as f64 * oh as f64 / tall.max(1) as f64);
+    ring(&mut out, ow, oh, cx, cy);
+    let mut rgb = Vec::with_capacity(ow * oh * 3);
+    for px in out.chunks_exact(4) {
+        rgb.extend_from_slice(&[px[2], px[1], px[0]]);
+    }
+    png(&rgb, ow, oh)
+}
+
+/// **Radius of the ring**, in pixels of the picture it is drawn on: a thirty-second of its width and
+/// never under 12 — 20 at 640 wide, where a Character Map cell at 150% is about 37 across, so the
+/// ring sits round the glyph rather than on it.
+fn radius(wide: usize) -> f64 {
+    (wide as f64 / 32.0).max(12.0)
+}
+
+/// Red on white so it reads on a light window and a dark one; drawn by distance from the centre,
+/// so a ring that runs off an edge is cut there rather than wrapping.
+fn ring(bgra: &mut [u8], wide: usize, tall: usize, cx: f64, cy: f64) {
+    const RED: [u8; 3] = [0x30, 0x30, 0xe8];
+    const WHITE: [u8; 3] = [0xff, 0xff, 0xff];
+    let r = radius(wide);
+    let (tick_from, tick_to) = (r + 2.0, r + 9.0);
+    let reach = (tick_to + 2.0).ceil() as i64;
+    //: A tick: within `half` of an axis through the point, between the ring and `tick_to`.
+    let tick = |dx: f64, dy: f64, half: f64, grow: f64| {
+        let (along, across) = if dx.abs() > dy.abs() { (dx.abs(), dy.abs()) } else { (dy.abs(), dx.abs()) };
+        across <= half && along >= tick_from - grow && along <= tick_to + grow
+    };
+    for y in (cy as i64 - reach).max(0)..=(cy as i64 + reach).min(tall as i64 - 1) {
+        for x in (cx as i64 - reach).max(0)..=(cx as i64 + reach).min(wide as i64 - 1) {
+            let (dx, dy) = (x as f64 + 0.5 - cx, y as f64 + 0.5 - cy);
+            let d = (dx * dx + dy * dy).sqrt();
+            let paint = if (d - r).abs() <= 1.5 || tick(dx, dy, 1.0, 0.0) {
+                RED
+            } else if (d - r).abs() <= 2.7 || tick(dx, dy, 2.2, 1.2) {
+                WHITE
+            } else {
+                continue;
+            };
+            let o = (y as usize * wide + x as usize) * 4;
+            bgra[o..o + 3].copy_from_slice(&paint);
+        }
     }
 }
 
@@ -220,6 +281,32 @@ mod tests {
         let clipped = d.shot(Some((130, 40, 100, 100)), 10).unwrap();
         assert_eq!(clipped.rect, (130, 50, 10, 20), "clipped to the window it was cut from");
         assert!(d.shot(Some((0, 0, 10, 10)), 10).is_none(), "nothing of it inside the window");
+    }
+
+    #[test]
+    fn the_point_is_ringed_where_it_was_chosen_and_nothing_else_is_touched() {
+        let (wide, tall) = (200, 100);
+        let mut bgra = vec![0x80; wide * tall * 4];
+        ring(&mut bgra, wide, tall, 50.0, 40.0);
+        let px = |x: usize, y: usize| [bgra[(y * wide + x) * 4], bgra[(y * wide + x) * 4 + 1], bgra[(y * wide + x) * 4 + 2]];
+        let r = radius(wide) as usize;
+        assert_eq!(px(50, 40), [0x80; 3], "the point itself is left as it is, so its glyph can be read");
+        assert_eq!(px(50 + r / 2, 40), [0x80; 3], "and so is everything inside the ring");
+        assert_eq!(px(50 + r, 40), [0x30, 0x30, 0xe8], "the ring at its radius");
+        assert_eq!(px(50, 40 - r - 5), [0x30, 0x30, 0xe8], "a tick above it, pointing in");
+        assert_eq!(px(150, 80), [0x80; 3], "far from the point nothing changed");
+        //: Cut at an edge, never wrapped to the other side.
+        let mut edge = vec![0x80; wide * tall * 4];
+        ring(&mut edge, wide, tall, 1.0, 1.0);
+        assert_eq!(&edge[(wide - 1) * 4..wide * 4 - 1], &[0x80; 3]);
+    }
+
+    #[test]
+    fn a_marked_picture_is_a_png_no_wider_than_asked() {
+        let d = checker(1280, 400);
+        let s = d.shot(None, 1280).unwrap();
+        let made = marked(&s.bgra, s.wide, s.tall, (640, 200), 640);
+        assert_eq!(&made[16..24], &[0, 0, 2, 128, 0, 0, 0, 200]);
     }
 
     #[test]

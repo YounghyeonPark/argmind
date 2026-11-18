@@ -213,6 +213,34 @@ character that was not there. It does not fit beside argmind's own work, and a l
 about 10 s of reloading. A look happens only on a request to press inside a place the list cannot
 see into.
 
+## The picture beside the row — 2026-11-19
+
+The row said *click inside "Character Grid" — the picture showed "paragraph symbol"*. That is what
+the model believed, often in English, and nothing about where the press would land. The person is
+the only check left between the two, so **the row now carries the picture the model was shown, with
+the press point ringed on it** — under the label, on a line of its own.
+
+- **Made after the model answered, from the same pixels**, at the point the press will use
+  (`Inside::within` of the place) rather than the model's own number. 640 wide.
+- **Memory only, one at a time.** It waits with its row's number and goes when the row is answered,
+  turned down or cleared. The page asks `/looked/<row>` with the token every request carries.
+- **`argmind-rules` holds it:** it is made once, in `look_inside`, after the one `look_at(`, and a
+  model is never shown it; it is read once, by the route that writes it to the page. Checked by
+  breaking it three ways: a read in `think`, `look_at` given the marked picture, and a
+  `marked_picture(` in `route.rs`.
+
+**On the real Character Map** (`--example pointing` with `POINTING_SAVE`, which now also writes the
+marked picture and the place after the press): the same 8 of 10 and ★ declined as before, twice.
+**Both misses, ¶ and Ø, came out wrong both times, and in both the ring sits on the character that
+was actually chosen** (¦ and ì, read off the status bar and seen in the picture after the press). So
+a wrong row is visible as wrong before it is pressed. Checked by eye on four of the ten: the two
+misses and two hits.
+
+**The first mark failed at what it was for**: a dot at the point hid the glyph under it. On the
+Ø request the ringed cell held ì, and ì could not be read. The point itself is now left untouched:
+a ring that sits round the glyph (20 px at 640 wide, where a cell is about 37) and four ticks
+pointing in from outside it.
+
 ## Not established
 
 - **The application's own turn was not run from here.** Running it means turning `looking` on,
@@ -223,9 +251,9 @@ see into.
   a control that reads `GetCursorPos` would see the person's pointer instead.
 - Ten characters in one program, two runs; drawn screens otherwise. Dark mode, other scales and
   other programs were not asked.
-- What the row says is the vision model's word for the place (*"copyright symbol"*), often in
-  English, and not what is at the point. A small picture with the point marked, beside the row,
-  would let the person check where. It was not built.
+- What the row says is still the vision model's word for the place (*"copyright symbol"*), often in
+  English. The picture under it is what shows where. **The row and its picture were not seen in the
+  application**, for the same reason as the turn above.
 - An unnamed icon in a toolbar is not reachable: 128×96 keeps toolbars from being places.
 - Earlier, on the drawn screens: whether a crop fixed the off-by-a-row misses on dense lists was not
   asked, because a list row is never a place, so the picture is never asked about one.

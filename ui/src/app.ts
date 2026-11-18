@@ -26,6 +26,8 @@ interface Proposal {
   token: number;
   label: string;
   hint: string;
+  /** Whether a look found this one, with the picture it was shown kept at `/looked/<token>`. */
+  picture?: boolean;
 }
 
 interface Hello {
@@ -220,7 +222,33 @@ function row(p: Proposal): void {
   };
 
   box.append(yes, no);
+  if (p.picture) {
+    // **Where the picture says it will press**, ringed on the picture the model was shown — the
+    // label says what the model believed, and only this says where the press will land.
+    const seen = document.createElement("img");
+    seen.className = "looked";
+    seen.alt = seen.title = "시각 모델이 본 그림 — 동그라미가 누를 곳입니다";
+    box.classList.add("pictured");
+    box.append(seen);
+    void showLooked(p.token, seen);
+  }
   pending.append(box);
+}
+
+/** The marked picture for row `token`, fetched with the token every other request carries. */
+async function showLooked(rowToken: number, into: HTMLImageElement): Promise<void> {
+  try {
+    const r = await fetch(`/looked/${rowToken}`, { headers: { "X-Argmind-Token": token } });
+    if (!r.ok) {
+      into.remove();
+      return;
+    }
+    const url = URL.createObjectURL(await r.blob());
+    into.onload = () => URL.revokeObjectURL(url);
+    into.src = url;
+  } catch {
+    into.remove();
+  }
 }
 
 function settle(tokenId: number, how: string): void {

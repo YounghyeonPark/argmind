@@ -91,7 +91,8 @@ finds is kept as a fraction of the place.
 - **The place, not the point.** The place is found again by name at the press, so the point moves
   with it.
 - **Always a press.** Whatever it found waits for you to press **Run**, even with *Act without
-  confirming* on.
+  confirming* on. Under the row is the picture the model saw, with a ring where the press will
+  land, so you can see a wrong cell before you press.
 - **Measured.** On a real Character Map it found 8 of 10 characters, twice, and declined the one
   that was not on the page.
 

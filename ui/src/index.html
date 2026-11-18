@@ -217,6 +217,11 @@
   @keyframes spin { to { transform: rotate(360deg); } }
   .proposal { display: flex; gap: 8px; align-items: center; margin-bottom: 6px; }
   .what { flex: 1; }
+  /* The picture a look was shown, with the point it will press ringed — on a line of its own under
+     the row, so the label and the two buttons stay where every other row has them. */
+  .proposal.pictured { flex-wrap: wrap; }
+  .proposal .looked { order: 9; flex-basis: 100%; max-width: 100%; height: auto;
+                      border: 1px solid var(--edge); border-radius: 3px; }
   /* A second opinion, not a gate: it is dimmer than the label and it disables nothing. */
   .hint { color: var(--warn); font-size: 12px; }
   button {
@@ -370,7 +375,7 @@
     <label class="switch">
       <input type="checkbox" id="looking">
       <span class="what">목록에 없는 곳은 그림으로 찾기</span>
-      <span class="cost">원격 화면처럼 목록이 속을 못 보는 칸에서만 창 그림을 이 PC의 시각 모델에 보여 줍니다 — 찾은 곳은 늘 실행을 눌러야 누릅니다</span>
+      <span class="cost">원격 화면처럼 목록이 속을 못 보는 칸에서만 창 그림을 이 PC의 시각 모델에 보여 줍니다 — 찾은 곳은 실행 줄 아래 그림에 표시하고, 늘 실행을 눌러야 누릅니다</span>
     </label>
     <!-- 규칙. Where argmind may not act and where it must always ask, by app and by kind of
          action. **Checked by the program and never shown to the model**, which is what makes it a

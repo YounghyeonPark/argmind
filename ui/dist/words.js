@@ -609,7 +609,7 @@ export const WORDS = [
     ["Vulkan SDK를 찾지 못했습니다", "The Vulkan SDK was not found", "找不到 Vulkan SDK", "Vulkan SDK が見つかりませんでした"],
     // the picture where the list is blind, 2026-11-18
     ["목록에 없는 곳은 그림으로 찾기", "Find in a picture what the list cannot see", "列表里没有的就看画面找", "リストにないものは画像で探す"],
-    ["원격 화면처럼 목록이 속을 못 보는 칸에서만 창 그림을 이 PC의 시각 모델에 보여 줍니다 — 찾은 곳은 늘 실행을 눌러야 누릅니다", "Only for a place the list cannot see into, such as a remote desktop, it shows a picture of the window to a vision model on this PC — whatever it finds waits for you to press Run", "只在列表看不到内部的区域（如远程桌面）才把窗口画面给本机的视觉模型看 — 找到的位置总要你按“执行”才会点", "リモート画面のようにリストが中を見られない場所でだけ、ウィンドウの画像をこの PC の視覚モデルに見せます — 見つけた所は「実行」を押すまで押しません"],
+    ["원격 화면처럼 목록이 속을 못 보는 칸에서만 창 그림을 이 PC의 시각 모델에 보여 줍니다 — 찾은 곳은 실행 줄 아래 그림에 표시하고, 늘 실행을 눌러야 누릅니다", "Only for a place the list cannot see into, such as a remote desktop, it shows a picture of the window to a vision model on this PC — what it finds is marked on that picture under the Run row, and waits for you to press Run", "只在列表看不到内部的区域（如远程桌面）才把窗口画面给本机的视觉模型看 — 找到的位置会在“执行”行下方的画面上标出，总要你按“执行”才会点", "リモート画面のようにリストが中を見られない場所でだけ、ウィンドウの画像をこの PC の視覚モデルに見せます — 見つけた所は「実行」の行の下の画像に印を付け、「実行」を押すまで押しません"],
     ["그림 보기 모델", "Picture model", "看图模型", "画像を見るモデル"],
     ["그림 보기 모델 받기", "Get the picture model", "获取看图模型", "画像を見るモデルを取得"],
     ["{0} 없음 — '목록에 없는 곳은 그림으로 찾기'를 켰을 때만 씁니다", "{0} missing — used only when \"Find in a picture what the list cannot see\" is on", "{0} 缺失 — 只在开启“列表里没有的就看画面找”时使用", "{0} がありません — 「リストにないものは画像で探す」がオンのときだけ使います"],
@@ -626,5 +626,6 @@ export const WORDS = [
     ["실제 문자표에서 글자 10개 중 8개를 맞혔습니다 — 옆 칸을 누를 때가 있습니다 (측정)", "On a real Character Map it found 8 of 10 characters — sometimes it picks the cell next to the right one (measured)", "在真实的字符映射表里 10 个字符找对了 8 个 — 有时会点到旁边的格子（实测）", "実際の文字コード表で 10 文字中 8 文字を当てました — 隣のマスを押すことがあります（測定）"],
     ["그래픽 메모리를 약 6 GB 더 씁니다 — argmind 가 스스로 일하는 중이면 다시 올리느라 10초쯤 걸립니다", "It uses about 6 GB more graphics memory — while argmind works on its own, reloading takes about 10 seconds", "多用约 6 GB 显存 — argmind 自己工作时，重新加载要 10 秒左右", "グラフィックメモリを約 6 GB 多く使います — argmind が自分で作業中なら読み込み直しに 10 秒ほどかかります"],
     ["그림으로 찾아볼까요?", "Look in a picture?", "要看画面找吗？", "画像で探しましょうか？"],
+    ["시각 모델이 본 그림 — 동그라미가 누를 곳입니다", "The picture the vision model saw — the circle is where it will press", "视觉模型看到的画面 — 圆圈是要点的位置", "視覚モデルが見た画像 — 丸が押す所です"],
     // words:end
 ];

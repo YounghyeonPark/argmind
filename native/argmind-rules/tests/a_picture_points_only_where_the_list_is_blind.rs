@@ -8,7 +8,7 @@
 //! has why: the picture found 5–6 of 6 things the list is blind to and was less exact than the list
 //! wherever the list had the thing.
 //!
-//! An exception is only as narrow as what holds it, so this reads the source for four things:
+//! An exception is only as narrow as what holds it, so this reads the source for five things:
 //!
 //! * **one picture, one call** — outside `platform.rs` the window's picture is asked for once,
 //!   and a model is shown a picture once, both inside `app.rs`'s `look_inside`, which one turn
@@ -17,12 +17,15 @@
 //!   the core, where the reader of a model's reply lives;
 //! * **always a press** — `propose` counts a point inside among the things that must wait for a
 //!   person, whatever 확인 없이 실행 says;
+//! * **the marked picture goes to the person** — since 2026-11-19 the picture the model was shown,
+//!   with its point drawn on it, waits beside the row: it is made once, in `look_inside`, after the
+//!   model has answered, and read once, by the route that writes it to the page;
 //! * **the door still exists** — the names this rule watches have not been renamed out from under
 //!   it.
 //!
 //! Checked by breaking it: a second `look_at(` in `app.rs`, a `window_picture(` in `route.rs`, an
 //! `inside: Some(` in `converse.rs`, and `|| effect.inside.is_some()` taken off `must_confirm` each
-//! fail here.
+//! fail here; so do a `looking::shown(` in `think` and a `marked_picture(` in `route.rs`.
 
 use argmind_rules::{code_lines, root, rust_files};
 
@@ -115,13 +118,48 @@ fn a_point_inside_always_waits_for_a_person() {
     assert!(app.contains("if !must_confirm &&"), "must_confirm no longer gates the automatic run");
 }
 
+#[test]
+fn the_marked_picture_is_made_after_the_look_and_read_by_its_route() {
+    let mut made = Vec::new();
+    let mut read = Vec::new();
+    for path in rust_files(&serve()) {
+        let name = path.file_name().unwrap().to_string_lossy().to_string();
+        let source = std::fs::read_to_string(&path).unwrap();
+        for (n, line) in code_lines(&source) {
+            let c = code(line);
+            if name != "platform.rs" && c.contains("marked_picture(") {
+                made.push((name.clone(), inside_fn(&source, n), n));
+            }
+            if c.contains("looking::shown(") {
+                read.push((name.clone(), n));
+            }
+        }
+    }
+    assert_eq!(made.len(), 1, "the marked picture is made in more than one place, or none: {made:?}");
+    assert_eq!((made[0].0.as_str(), made[0].1.as_str()), ("app.rs", "look_inside"), "{made:?}");
+    let app = std::fs::read_to_string(serve().join("app.rs")).unwrap();
+    let lines: Vec<&str> = app.lines().collect();
+    //: **After the model answered**: the one `look_at(` comes before the mark, so the picture a
+    //: model was shown is never one with a point already drawn on it.
+    let asked = lines.iter().position(|l| code(l).contains("look_at(")).expect("look_inside asks no model");
+    assert!(asked + 1 < made[0].2, "the picture is marked before the model is shown it");
+    assert!(!code(lines[asked]).contains("marked") && !code(lines[asked]).contains("looked"),
+            "a model is shown the marked picture: {}", lines[asked].trim());
+    //: **And read by its route**, which writes it to the page.
+    assert_eq!(read.len(), 1, "the marked picture is read in more than one place, or none: {read:?}");
+    assert_eq!(read[0].0, "app.rs", "{read:?}");
+    let arm = lines[..read[0].1].iter().rev().find(|l| l.trim_start().starts_with("Route::")).copied().unwrap_or("");
+    assert!(arm.contains("Route::Looked"), "the marked picture is read outside its route, under `{}`", arm.trim());
+}
+
 /// **The door**: a rule about names that were renamed watches nothing.
 #[test]
 fn the_door_this_rule_guards_still_exists() {
     let looking = std::fs::read_to_string(serve().join("looking.rs")).unwrap();
     assert!(looking.contains("pub fn effect(") && looking.contains("pub fn landed("));
     let platform = std::fs::read_to_string(serve().join("platform.rs")).unwrap();
-    assert!(platform.contains("pub fn window_picture("));
+    assert!(platform.contains("pub fn window_picture(") && platform.contains("pub fn marked_picture("));
+    assert!(looking.contains("pub fn shown("));
     let intent = std::fs::read_to_string(root().join("native/argmind-core/src/intent.rs")).unwrap();
     assert!(intent.contains("pub struct Inside") && intent.contains("pub inside: Option<Inside>"));
 }

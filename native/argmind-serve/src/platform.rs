@@ -946,18 +946,33 @@ pub fn work_picture(seen: u64) -> Option<(u64, Option<(String, Vec<u8>)>)> {
 }
 
 /// **A picture of the window argmind is attending to**, or of `part` of it (screen pixels), made
-/// `width` wide — for `looking.rs` and nothing else, which `argmind-rules` holds. A PNG and the
-/// screen rectangle it covers; `None` where there is no window, or no way to draw one.
+/// `width` wide — for `looking.rs` and nothing else, which `argmind-rules` holds. The PNG, the
+/// screen rectangle it covers and its pixels; `None` where there is no window, or no way to draw one.
 pub fn window_picture(handle: isize, part: Option<(i64, i64, i64, i64)>, width: usize)
-                      -> Option<(Vec<u8>, (i64, i64, i64, i64))> {
+                      -> Option<crate::looking::Picture> {
     #[cfg(all(windows, not(feature = "headless")))]
     {
         let shot = argmind_env_windows::picture::drawn(handle)?.shot(part, width)?;
-        Some((shot.png, shot.rect))
+        Some(crate::looking::Picture { png: shot.png, rect: shot.rect, bgra: shot.bgra,
+                                       wide: shot.wide, tall: shot.tall })
     }
     #[cfg(not(all(windows, not(feature = "headless"))))]
     {
         let _ = (handle, part, width);
+        None
+    }
+}
+
+/// **That picture with the point drawn on it, for the person** — `at` in the picture's own pixels,
+/// at most `width` wide, as a PNG. `None` where there are no pictures to mark.
+pub fn marked_picture(picture: &crate::looking::Picture, at: (usize, usize), width: usize) -> Option<Vec<u8>> {
+    #[cfg(all(windows, not(feature = "headless")))]
+    {
+        Some(argmind_env_windows::picture::marked(&picture.bgra, picture.wide, picture.tall, at, width))
+    }
+    #[cfg(not(all(windows, not(feature = "headless"))))]
+    {
+        let _ = (picture, at, width);
         None
     }
 }

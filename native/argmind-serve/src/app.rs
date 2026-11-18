@@ -168,6 +168,9 @@ struct Desk {
     on_web: crate::surface::OnWeb,
     web: Option<crate::surface::WebPane>,
     proposals: Proposals,
+    /// **The last look's picture with its point drawn on it**, until `propose` files it beside the
+    /// row it belongs to — `crate::looking::keep_shown`. `None` between looks.
+    looked: Option<Vec<u8>>,
     dry: bool,
     /// **`None` unless asked for.** Speaking makes a noise in a room, which is not something to
     /// start doing because a program was run — see `--speak`.
@@ -415,8 +418,8 @@ fn escape(s: &str) -> String {
 }
 
 pub fn as_json(p: &Proposal) -> String {
-    format!("{{\"token\":{},\"label\":\"{}\",\"hint\":\"{}\"}}",
-            p.token, escape(&p.label), escape(&p.hint))
+    format!("{{\"token\":{},\"label\":\"{}\",\"hint\":\"{}\",\"picture\":{}}}",
+            p.token, escape(&p.label), escape(&p.hint), crate::looking::has_shown(p.token))
 }
 
 /// What the person reads on the button.
@@ -688,15 +691,17 @@ fn think(desk: &mut Desk, out: &Listeners, text: &str) {
 /// **The one place in this program that shows a model a picture of the screen** — `looking.rs`
 /// says when and holds what comes back. The window argmind is attending to, or the one place in it
 /// the list cannot see into, made [`crate::looking::MOST_WIDE`] wide; the vision model's box; and
-/// the point kept only where `landed` puts it inside a region. Nothing is saved.
+/// the point kept only where `landed` puts it inside a region. Nothing is saved; the picture with
+/// the point drawn on it waits in `desk.looked` for the row.
 fn look_inside(desk: &mut Desk, out: &Listeners, text: &str, effects: &[Effect], seen: &[Widget])
                -> Option<(Effect, String)> {
     use crate::looking::{asking, effect, landed, on_screen, place_to_show, read, Landed, Saw, MOST_WIDE,
-                         VISION_MODEL};
+                         SHOWN_WIDE, VISION_MODEL};
+    desk.looked = None;
     let (handle, _) = desk.session.eyes.window();
     let part = place_to_show(effects, seen);
     let shown = part.as_ref().map_or_else(|| "창 전체".to_string(), |w| format!("「{}」", w.name));
-    let Some((png, rect)) = crate::platform::window_picture(handle, part.as_ref().map(|w| w.rect), MOST_WIDE)
+    let Some(picture) = crate::platform::window_picture(handle, part.as_ref().map(|w| w.rect), MOST_WIDE)
     else {
         out.record("그림", "창을 그리지 못함");
         return None;
@@ -706,7 +711,8 @@ fn look_inside(desk: &mut Desk, out: &Listeners, text: &str, effects: &[Effect],
     model.max_tokens = 256;
     model.keep_alive = "300s".into();
     let began = Instant::now();
-    let reply = match model.look_at(&asking(text), &png) {
+    let (png, rect) = (&picture.png, picture.rect);
+    let reply = match model.look_at(&asking(text), png) {
         Ok(r) => r,
         Err(why) => {
             out.record("그림", &format!("시각 모델이 답하지 않음 — {why}"));
@@ -724,7 +730,12 @@ fn look_inside(desk: &mut Desk, out: &Listeners, text: &str, effects: &[Effect],
                     out.record("그림", &format!("{shown}에서 「{called}」 — 「{}」 안, {secs:.2}초", place.name));
                     let said = crate::spoken::say(&crate::spoken::LOOKED_FOUND, &speaking(desk),
                                                   &[&called, &place.name]);
-                    Some((effect(place, px, py, &called), said))
+                    let found = effect(place, px, py, &called);
+                    //: **Marked where the press will land**, which is the point inside the place
+                    //: as the effect holds it — not the model's own number, which `effect` rounded.
+                    let at = found.inside.map(|i| i.within(place.rect)).and_then(|(x, y)| picture.at(x, y));
+                    desk.looked = at.and_then(|at| crate::platform::marked_picture(&picture, at, SHOWN_WIDE));
+                    Some((found, said))
                 }
                 //: **The list's to answer**, and it was the more exact of the two wherever it had
                 //: the thing.
@@ -1611,7 +1622,12 @@ fn propose(desk: &mut Desk, out: &Listeners, effect: Effect, sure: Option<f64>, 
     //: **In the conversation, not only on the screen.** An offer the person then argues with —
     //: *"not that one"* — has to be something the next turn can see.
     desk.session.remember_doing(&[], &[], std::slice::from_ref(&effect), &[]);
+    //: **The picture goes with the point it marks**, and only with it.
+    let picture = if effect.inside.is_some() { desk.looked.take() } else { None };
     let token = desk.proposals.offer(effect, text, hint, desk.on_web.get());
+    if let Some(png) = picture {
+        crate::looking::keep_shown(token, png);
+    }
     if let Some(p) = desk.proposals.waiting().last() {
         out.send("propose", &as_json(p));
     }
@@ -3465,7 +3481,7 @@ pub fn run(how: How) {
             crate::surface::surfaces(eyes, hands, web.as_ref(), !dry, on_web);
         let mut desk = Desk { session: Session::new(eyes, hands, Model(model)), on_web,
                               web: web.clone(),
-                              proposals: Proposals::default(), dry,
+                              proposals: Proposals::default(), looked: None, dry,
                               voice, voice_is, wants_voice: speak, ear,
                               //: One watch for now: the person moved to a different window, which
                               //: is the change that means *look at this*. `Appeared` and `Vanished`
@@ -4123,6 +4139,9 @@ pub fn run(how: How) {
             if keep_after {
                 keep_conversation(&mut desk, &agent_out);
             }
+            //: **A marked picture lives as long as its row**, whichever job answered or cleared it.
+            let waiting: Vec<u64> = desk.proposals.waiting().iter().map(|p| p.token).collect();
+            crate::looking::keep_only(&waiting);
         }
     });
 
@@ -4314,6 +4333,15 @@ fn serve_one(mut stream: TcpStream, out: &Listeners, token: &str, jobs: &Sender<
                 Some((_, None)) => respond("200 OK", "text/plain", "same"),
                 Some((seq, Some((titles, bmp)))) => crate::respond_bytes("200 OK", "image/bmp", &bmp,
                     &format!("X-Frame: {seq}\r\nX-Titles: {}\r\n", crate::encoded(&titles))),
+            };
+            let _ = stream.write_all(&answer);
+        }
+        //: **The one place the marked picture goes, and it goes to the page** — beside the row whose
+        //: number it carries, while that row waits. A model never asks for this.
+        Route::Looked(row) => {
+            let answer = match crate::looking::shown(row) {
+                Some(png) => crate::respond_bytes("200 OK", "image/png", &png, ""),
+                None => respond("404 Not Found", "text/plain", "no"),
             };
             let _ = stream.write_all(&answer);
         }

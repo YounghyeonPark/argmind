@@ -320,6 +320,14 @@ fn a_permission_answer_is_two_segments() {
 fn the_work_screen_is_read_by_number_and_its_title_travels_escaped() {
     assert_eq!(route(&get("/work-screen/0")), Route::WorkScreen(0));
     assert_eq!(route(&get("/work-screen/41")), Route::WorkScreen(41));
+    assert_eq!(route(&get("/looked/3")), Route::Looked(3));
+    assert_eq!(route(&get("/looked/three")), Route::Unknown);
+    assert_eq!(route(&parse_request("POST /looked/3 HTTP/1.1
+Host: x
+Content-Length: 0
+
+").unwrap()),
+               Route::Unknown, "a GET, since it changes nothing");
     assert_eq!(route(&get("/work-screen/")), Route::Unknown);
     assert_eq!(route(&get("/work-screen/x")), Route::Unknown);
     let post = |p: &str| parse_request(&format!("POST {p} HTTP/1.1\r\n\r\n")).unwrap();

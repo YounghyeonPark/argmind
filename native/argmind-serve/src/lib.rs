@@ -351,6 +351,9 @@ pub enum Route {
     /// What argmind's work screen looks like, for the page — `/work-screen/<the number it has>`,
     /// so a picture is sent only when it changed. A GET, since it changes nothing.
     WorkScreen(u64),
+    /// The picture a look was shown, with its point marked, for the row that waits on it —
+    /// `/looked/<the row's number>`. A GET, since it changes nothing.
+    Looked(u64),
     /// Anything else, named so a front end that asked wrongly is told rather than ignored.
     Unknown,
 }
@@ -513,6 +516,10 @@ pub fn route(request: &Request) -> Route {
         ("POST", "/look") => Route::Look,
         ("GET", p) if p.starts_with("/work-screen/") => match p[13..].parse() {
             Ok(n) => Route::WorkScreen(n),
+            Err(_) => Route::Unknown,
+        },
+        ("GET", p) if p.starts_with("/looked/") => match p[8..].parse() {
+            Ok(n) => Route::Looked(n),
             Err(_) => Route::Unknown,
         },
         ("POST", "/listen/start") => Route::Listen(true),

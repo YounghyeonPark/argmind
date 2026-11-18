@@ -23,7 +23,10 @@
 //!   moves with the container and cannot leave it — `argmind_core::intent::Inside`.
 //!
 //! And a person presses it: `app::propose` never runs an effect with `inside` set by itself,
-//! whatever 확인 없이 실행 says. `argmind-rules` (`a_picture_points_only_where_the_list_is_blind`)
+//! whatever 확인 없이 실행 says. **Beside that row, the picture the model was shown with its point
+//! drawn on it** ([`keep_shown`]) — since 2026-11-19, because *the picture showed “copyright
+//! symbol”* says what the model believed and not where the press will land, and the person is the
+//! only check left between the two. Memory only, one at a time, gone when the row is answered. `argmind-rules` (`a_picture_points_only_where_the_list_is_blind`)
 //! reads the source for that, for the one call, and for this file being the only maker of a point.
 //!
 //! **Off until somebody turns it on** — `looking`, a decidable key of its own — and the model is
@@ -59,6 +62,62 @@ pub const REGION: (i64, i64) = (128, 96);
 /// The widest picture sent, in pixels. `--bin looking` measured 1280×800; a wider window is
 /// shrunk to this so a look costs what was measured rather than four times it.
 pub const MOST_WIDE: usize = 1280;
+
+/// **How wide the marked picture beside a row is** — the row sits in a 520-px window, and at 150%
+/// that is 780 pixels, so 640 is sharp there and a quarter of the model's 1280 in bytes.
+pub const SHOWN_WIDE: usize = 640;
+
+/// **A picture of the screen as the model was shown it**: the PNG that went to the model, the
+/// screen rectangle it covers, and its pixels, top-down BGRA, for marking.
+pub struct Picture {
+    pub png: Vec<u8>,
+    pub rect: (i64, i64, i64, i64),
+    pub bgra: Vec<u8>,
+    pub wide: usize,
+    pub tall: usize,
+}
+
+impl Picture {
+    /// Where a point on the screen is in this picture's own pixels; `None` outside it.
+    pub fn at(&self, x: i64, y: i64) -> Option<(usize, usize)> {
+        let (rx, ry, rw, rh) = self.rect;
+        if !contains(self.rect, x, y) || rw <= 0 || rh <= 0 {
+            return None;
+        }
+        Some((((x - rx) * self.wide as i64 / rw) as usize, ((y - ry) * self.tall as i64 / rh) as usize))
+    }
+}
+
+/// **The one marked picture there is**, and the row it belongs to. Held here rather than on the
+/// desk because the page asks for it on the server's thread; one, because a turn makes one look.
+static SHOWN: std::sync::Mutex<Option<(u64, Vec<u8>)>> = std::sync::Mutex::new(None);
+
+/// Keep the marked picture for row `token`, replacing whatever was kept.
+pub fn keep_shown(token: u64, png: Vec<u8>) {
+    if let Ok(mut s) = SHOWN.lock() {
+        *s = Some((token, png));
+    }
+}
+
+/// The marked picture for row `token`, if that is the one kept — for the page's route, and nothing
+/// else (`argmind-rules`).
+pub fn shown(token: u64) -> Option<Vec<u8>> {
+    SHOWN.lock().ok()?.as_ref().filter(|(t, _)| *t == token).map(|(_, png)| png.clone())
+}
+
+/// Whether row `token` has a picture to show beside it.
+pub fn has_shown(token: u64) -> bool {
+    SHOWN.lock().ok().is_some_and(|s| s.as_ref().is_some_and(|(t, _)| *t == token))
+}
+
+/// **Let the picture go once its row is**: answered, turned down, or cleared by a new turn.
+pub fn keep_only(waiting: &[u64]) {
+    if let Ok(mut s) = SHOWN.lock() {
+        if s.as_ref().is_some_and(|(t, _)| !waiting.contains(t)) {
+            *s = None;
+        }
+    }
+}
 
 /// **What the vision model is asked**, word for word what `--bin looking --arms gated` measured.
 pub fn asking(request: &str) -> String {
@@ -256,6 +315,28 @@ pub fn wants_a_look(text: &str, effects: &[Effect], listed: &[Widget]) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_point_on_the_screen_is_found_in_the_picture_of_it() {
+        //: A 643×363 place enlarged to 1280 wide: the picture is about twice the screen.
+        let p = Picture { png: vec![], rect: (100, 200, 643, 363), bgra: vec![], wide: 1280, tall: 722 };
+        assert_eq!(p.at(100, 200), Some((0, 0)));
+        assert_eq!(p.at(100 + 321, 200 + 181), Some((639, 360)));
+        assert_eq!(p.at(99, 300), None, "outside the place is nowhere in its picture");
+        assert_eq!(p.at(100 + 643, 300), None);
+    }
+
+    #[test]
+    fn the_picture_is_kept_for_its_row_and_let_go_with_it() {
+        keep_shown(7, vec![1, 2, 3]);
+        assert!(has_shown(7) && !has_shown(8));
+        assert_eq!(shown(7), Some(vec![1, 2, 3]));
+        assert_eq!(shown(8), None, "another row's number gets nothing");
+        keep_only(&[7, 9]);
+        assert!(has_shown(7), "kept while its row waits");
+        keep_only(&[9]);
+        assert!(!has_shown(7) && shown(7).is_none(), "gone once its row is");
+    }
 
     fn w(name: &str, role: &str, rect: (i64, i64, i64, i64)) -> Widget {
         Widget::new(name, role, rect, "문자표")
