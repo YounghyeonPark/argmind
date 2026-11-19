@@ -85,9 +85,10 @@ icon — in 5 or 6 of 6. So the rule stands on exactness, not on speed;
 [docs/findings/looking.md](docs/findings/looking.md) has the numbers.
 
 **Where the list is blind, there is now a switch, off by default**: *Find in a picture what the
-list cannot see*. It works inside a place the list cannot see into, such as a remote desktop or
-Character Map's grid. A picture of that place goes to a vision model on your PC, and the point it
-finds is kept as a fraction of the place.
+list cannot see*. It works inside a place the list cannot see into, such as Character Map's grid,
+where it was run in the application. A remote desktop is the same kind of place, but it was only
+tried on a drawn screen, never a real one. A picture of that place goes to a vision model on your
+PC, and the point it finds is kept as a fraction of the place.
 - **The place, not the point.** The place is found again by name at the press, so the point moves
   with it.
 - **Always a press.** Whatever it found waits for you to press **Run**, even with *Act without

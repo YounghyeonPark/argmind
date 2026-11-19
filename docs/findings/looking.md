@@ -277,7 +277,8 @@ follows the browser's.
 - **Only the one request ran through the application's path**, once each of three runs. The ten
   characters ran through the pieces (`--example pointing`).
 - **No real remote desktop.** Whether a posted click reaches `mstsc`'s input window is unknown, and
-  a control that reads `GetCursorPos` would see the person's pointer instead.
+  a control that reads `GetCursorPos` would see the person's pointer instead. Not planned: the
+  owner does not use one (2026-11-19), and this machine, on Windows Home, cannot host one.
 - Ten characters in one program, two runs; drawn screens otherwise. Dark mode, other scales and
   other programs were not asked.
 - What the row says is still the vision model's word for the place (*"copyright symbol"*), often in
