@@ -336,9 +336,14 @@ the text typed anyway reached — a plain `contenteditable` in both (a Group wit
 and Edge's address bar, whose click took 2 s and outlived its own 1 s aim. Now the text-edit
 pattern counts, what was under the point before the click counts, and an aim's second runs from
 the end of its click: **0**, with a non-editable group and a button still refused. **Chrome's
-address bar is allowed and takes nothing** — it holds the address, so the value is not written, and
-an inactive Chrome drops posted characters — which is older than the check and not fixed. VS Code
-was not run: it will not start beside the person's while that one holds a pending update.
+address bar was allowed and took nothing** on the test page — it holds the address, so the value was
+not written, and that Chrome dropped the posted characters. Clicked, the bar holds its address all
+selected, as after a person's click, so `set_value` now writes a box that holds something exactly
+when all of it is selected (a rich edit in a hidden window, all, caret and part, broken to check):
+it arrived and the Enter after it moved the page. **On a real-looking `https://www.` address the
+old rule had not failed**, one run, so how often a person met it is unknown. The Enter's window
+was stamped when the click began and not at all by a written value; both stamp when done now. VS
+Code was not run: it will not start beside the person's while that one holds a pending update.
 
 **argmind's own ideas may run without a person — on their own key, since 2026-10-21.** The owner
 found asking every time tiresome; eleven hours of the timeline showed what was asking: **0 requests

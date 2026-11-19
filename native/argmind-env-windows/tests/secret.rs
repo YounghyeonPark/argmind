@@ -79,6 +79,42 @@ fn an_edit_takes_text_and_a_button_and_a_read_only_box_do_not() {
     }
 }
 
+/// **A box whose text is all selected is one typing would replace** — and a caret or a part is not.
+/// `set_value` writes into a box that holds something only then, since 2026-11-19: Chrome's address
+/// bar selects its address when clicked and drops posted characters while it is inactive. The
+/// selection is set with `EM_SETSEL` on a rich edit this test makes and never shows.
+#[test]
+fn all_of_it_selected_is_whole_and_a_caret_or_a_part_is_not() {
+    let _one = ONE_AT_A_TIME.lock().unwrap_or_else(|e| e.into_inner());
+    use windows::Win32::Foundation::{LPARAM, WPARAM};
+    use windows::Win32::UI::WindowsAndMessaging::SendMessageW;
+    //: `EM_SETSEL`, written out: it lives behind the `Win32_UI_Controls` feature, which nothing
+    //: else here needs.
+    const EM_SETSEL: u32 = 0x00B1;
+    let automation = argmind_env_windows::open_automation().expect("UI Automation");
+    unsafe {
+        let parent = CreateWindowExW(WINDOW_EX_STYLE(0), w!("STATIC"), w!("argmind selection test"),
+                                     WS_OVERLAPPEDWINDOW, 0, 0, 300, 100, None, None, None, None)
+            .expect("a window");
+        //: **A RichEdit, not an EDIT**: the plain edit in a window never shown offers no text
+        //: pattern at all, so it would read *not whole* in every case and pass the two negatives
+        //: while checking nothing. RichEdit implements the pattern itself.
+        let _ = windows::Win32::System::LibraryLoader::LoadLibraryW(w!("Msftedit.dll"));
+        let edit = CreateWindowExW(WINDOW_EX_STYLE(0), w!("RICHEDIT50W"), w!("먼저 쓴 글"), WS_CHILD,
+                                   0, 0, 200, 20, parent, None, None, None).expect("a rich edit");
+        let whole = |from: isize, to: isize| {
+            SendMessageW(edit, EM_SETSEL, WPARAM(from as usize), LPARAM(to));
+            let el = automation.ElementFromHandle(edit).expect("the edit");
+            argmind_env_windows::patterns::all_selected(&el)
+        };
+        let (all, caret, part) = (whole(0, -1), whole(2, 2), whole(0, 2));
+        let _ = DestroyWindow(parent);
+        assert!(all, "the whole text selected read as not whole");
+        assert!(!caret, "a caret read as the whole text selected — set_value would replace a person's text");
+        assert!(!part, "part of the text read as all of it");
+    }
+}
+
 /// **The rule itself, both directions** — the case UI Automation in a hidden window cannot build:
 /// a web page's plain `contenteditable`, a Group with no value pattern that offers the text-edit
 /// pattern. `examples/typing-lands.rs` found it refused in Edge and Chrome on 2026-11-19, with the

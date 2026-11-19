@@ -415,6 +415,13 @@ impl WindowsHands {
                 *when = Instant::now();
             }
         }
+        //: **And the window it reached, for the same reason**: that is where the Enter after the
+        //: typing goes, and it was set before the same two slow seconds.
+        if let Some((_, when)) = &mut self.reached {
+            if *when >= began {
+                *when = Instant::now();
+            }
+        }
     }
 
     fn click_button_from(&mut self, widget: &Widget, button: &str) -> Did {
@@ -637,6 +644,14 @@ impl WindowsHands {
                                                          &|owner| may_touch(reach, owner)) {
                             Typed::Set | Typed::WouldSet => {
                                 self.by_value += 1;
+                                //: **Writing a value is acting on that window too**, so the Enter
+                                //: after it goes there — a posted click already said so, a pattern
+                                //: click and a slow one did not, and the Enter went nowhere.
+                                if self.messages {
+                                    if let Some(h) = crate::addressed::window_at(x, y) {
+                                        self.reached = Some((h.0 as isize, Instant::now()));
+                                    }
+                                }
                                 return self.record(Did::Sent { live: self.live });
                             }
                             Typed::Keys(why) => self.why = why,

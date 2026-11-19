@@ -39,6 +39,16 @@
 //!   characters posted to an inactive Chrome are dropped where Edge's are not. Word read
 //!   *Unlicensed Product* and took nothing either way: void. And a button's Invoke took about 2 s
 //!   in both browsers.
+//! - **Then Chrome's address bar, the same day.** After argmind's click the bar holds its address
+//!   **all selected**, as after a person's, so typing would replace it — and `set_value` now writes
+//!   into a box that holds something when, and only when, all of it is selected. It arrived, and
+//!   the Enter after it, at `perform`'s pace, moved the page; the rest read as before. **Read with
+//!   the old rule on a real-looking `https://www.` address the failure did not reproduce**: the
+//!   point read an unnamed element, the characters were posted and arrived, and Enter moved the
+//!   page. So what failed was the `data:` page, and how often a person meets it is not known; the
+//!   rule is kept because writing a fully selected box is what typing does. **The Enter had its
+//!   own expiry**: the window it goes to was stamped when the click began, and a written value did
+//!   not stamp it at all — both now stamp when the act is done.
 //! - **Not run**: VS Code, which will not start while the person's own VS Code holds its update
 //!   (`checkInnoSetupMutex: vscode-updating is held`); Notepad, a packaged launcher; KakaoTalk,
 //!   one instance, the person's. **The harness's own faults first**: reading the whole tree between
@@ -126,6 +136,13 @@ for (const e of [q,m,c,d]) e.addEventListener('input',show);
     let apps = vec![
         App { name: "edge", cmd: browser(edge, "edge"), ready: "probe-ready" },
         App { name: "chrome", cmd: browser(chrome, "chrome"), ready: "probe-ready" },
+        //: **An address shown shorter than it is**: Chrome hides `https://www.` until the bar is
+        //: clicked, the case a real site makes. The network is off, so the page is Chrome's own.
+        App { name: "chrome-site", ready: "example.com",
+              cmd: format!("\"{chrome}\" --user-data-dir=\"{}\" --no-first-run --no-default-browser-check \
+                            --disable-sync --disable-features=CalculateNativeWinOcclusion \
+                            --host-resolver-rules=\"MAP * ~NOTFOUND\" --new-window https://www.example.com/page",
+                           scratch.join(format!("chrome-site-profile-{}", std::process::id())).display()) },
         App { name: "vscode", ready: "note.txt",
               cmd: through_cmd(format!("\"{code}\" --user-data-dir \"{}\" --extensions-dir \"{}\" --disable-extensions \
                             --skip-release-notes --skip-welcome --disable-workspace-trust --new-window \"{}\" \"{}\"",
@@ -221,6 +238,19 @@ for (const e of [q,m,c,d]) e.addEventListener('input',show);
                         e.CurrentIsKeyboardFocusable().map(|b| b.as_bool()).unwrap_or(false),
                         e.CurrentAriaRole().map(|r| r.to_string()).unwrap_or_default(),
                         state & 0x40 != 0)
+            }
+        };
+        //: **What is selected in it**, through the text pattern — whether typing would replace it.
+        let selection = |e: &IUIAutomationElement| -> String {
+            unsafe {
+                let Some(p) = e.GetCurrentPattern(UIA_TextPatternId).ok()
+                    .and_then(|raw| raw.cast::<IUIAutomationTextPattern>().ok()) else { return "no text pattern".into() };
+                let Ok(ranges) = p.GetSelection() else { return "no selection".into() };
+                let n = ranges.Length().unwrap_or(0);
+                let texts: Vec<String> = (0..n).filter_map(|i| ranges.GetElement(i).ok())
+                    .map(|r| r.GetText(200).map(|t| t.to_string()).unwrap_or_default().chars().take(40).collect())
+                    .collect();
+                format!("{n} ranges {texts:?}")
             }
         };
         //: **Where a piece of text is**, anywhere in the window: a value, a name, a document's text.
@@ -323,6 +353,7 @@ for (const e of [q,m,c,d]) e.addEventListener('input',show);
                 "edge" | "chrome" => vec![("edit", "검색어", true), ("edit", "메모", true), ("edit", "본문", true),
                                           ("group", "댓글", true), ("group", "안내", false), ("button", "보내기", false),
                                           ("edit", "Address and search bar", true)],
+                "chrome-site" => vec![("edit", "Address and search bar", true)],
                 "vscode" => vec![("edit", "", true)],
                 "word" => vec![("document", "", true)],
                 _ => vec![],
@@ -351,8 +382,21 @@ for (const e of [q,m,c,d]) e.addEventListener('input',show);
                 let lands = hands.typing_lands();
                 let check_took = clock.elapsed().as_millis() - click_took;
                 let checked = at_point();
+                let selected = unsafe { ua.ElementFromPoint(POINT { x: cx as i32, y: cy as i32 }) }.ok()
+                    .map(|e| selection(&e)).unwrap_or_default();
                 hands.type_text(&needle);
                 let type_landed = hands.landed();
+                let typed = hands.done.last().cloned();
+                let typed_why = hands.why.clone();
+                //: **The address bar's Enter, in `perform`'s order and at its pace**: click, type,
+                //: enter is the documented sequence, a quarter of a second apart.
+                let mut entered = String::new();
+                if name_part == "Address and search bar" {
+                    let was = title(top);
+                    let pressed = hands.press_key("enter");
+                    settle(2500);
+                    entered = format!("\n      enter: {pressed:?}; the window's title {was:?} -> {:?}", title(top));
+                }
                 let under = unsafe { ua.ElementFromPoint(POINT { x: cx as i32, y: cy as i32 }) }.ok()
                     .map(|e| format!("{}\n        offers: {}", describe(&e), offers(&e))).unwrap_or_else(|| "nothing".into());
                 let focus = unsafe { ua.GetFocusedElement() }.ok()
@@ -365,10 +409,10 @@ for (const e of [q,m,c,d]) e.addEventListener('input',show);
                     (_, true) => "allowed, arrived",
                     (_, false) => "allowed, DID NOT ARRIVE",
                 };
-                said.push(format!("  [{}] {role} {:?} (a person types here: {should})\n      click {:?} landed {click_landed:?} in {click_took} ms, the check {check_took} ms\n      under the point before the click: {ahead}\n      just after the check: {checked}\n      after the type: {under}\n      focus, after: {focus}\n      typing_lands {lands:?}; typed anyway {:?} landed {type_landed:?}; found before {before_text:?}, after {arrived:?}\n      → {verdict}",
+                said.push(format!("  [{}] {role} {:?} (a person types here: {should})\n      click {:?} landed {click_landed:?} in {click_took} ms, the check {check_took} ms\n      under the point before the click: {ahead}\n      just after the check: {checked}, selected {selected}\n      after the type: {under}\n      focus, after: {focus}\n      typing_lands {lands:?}; typed anyway {typed:?} landed {type_landed:?}; found before {before_text:?}, after {arrived:?}{entered}\n      → {verdict}",
                                   app.name, w.name.chars().take(40).collect::<String>(),
-                                  hands.done.first(), hands.done.last()));
-                said.push(format!("      why: {:?}", hands.why));
+                                  hands.done.first()));
+                said.push(format!("      why, after the type: {typed_why:?}"));
                 said.push(format!("      tallies: pattern {}, value {}, posted {}, SendInput {}",
                                   hands.by_pattern, hands.by_value, hands.by_message, hands.by_click));
             }

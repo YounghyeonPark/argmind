@@ -118,8 +118,10 @@ pub fn blank(value: &str) -> bool {
 /// `argmind-env-linux` types through `EditableText.InsertText`, which inserts *at an offset*. UI
 /// Automation has no insert anywhere: `ValuePattern::SetValue` replaces the entire value and
 /// `TextPattern` only reads. So the honest use of it is narrow — **only into a control that is
-/// empty** — and everything else falls back to keys. Typing into a box that already holds something
-/// is where the two APIs stop looking alike, and it is the case this refuses.
+/// empty, or whose text is all selected** ([`all_selected`], since 2026-11-19), the two cases in
+/// which typing leaves nothing of what was there — and everything else falls back to keys. Typing
+/// into a box that already holds something is where the two APIs stop looking alike, and it is the
+/// case this refuses.
 ///
 /// **The reach guard applies here too, from the element rather than from a point's window.** A
 /// click is checked against whatever owns the window under the pixel; here the element resolved at
@@ -165,9 +167,13 @@ pub fn set_value(automation: &IUIAutomation, x: i64, y: i64, text: &str, live: b
             Ok(_) => {}
             Err(e) => return Typed::Keys(format!("could not ask if read only ({e})")),
         }
-        //: **The narrow case.** Anything already in the box means `SetValue` would delete it.
+        //: **The narrow case.** Anything already in the box means `SetValue` would delete it —
+        //: **unless all of it is selected**, when keys would replace it too and the two operations are
+        //: the same one. A browser's address bar selects the whole address when clicked, a person's
+        //: click or argmind's, and Chrome drops the characters posted to it while it is not the
+        //: active window, so it took nothing at all (`examples/typing-lands.rs`, 2026-11-19).
         let already = value.CurrentValue().map(|v| v.to_string()).unwrap_or_default();
-        if !blank(&already) {
+        if !blank(&already) && !all_selected(&at) {
             //: **Shown rather than counted.** *1 characters already there* was the answer four runs
             //: in a row and it took a guess to work out which character — printing it turns a
             //: guess into a reading.
@@ -181,6 +187,29 @@ pub fn set_value(automation: &IUIAutomation, x: i64, y: i64, text: &str, live: b
             Ok(()) => Typed::Set,
             Err(e) => Typed::Keys(format!("SetValue failed ({e})")),
         }
+    }
+}
+
+/// **Is everything in this control selected?** One selection, from the start of the text pattern's
+/// document to its end and not empty — the one case in which typing replaces what is there, so
+/// writing the whole value is what typing would have done. By endpoints, not by comparing text:
+/// an address bar can show a shorter address than its value holds. No text pattern, or a caret, or
+/// a part, is no.
+pub fn all_selected(e: &IUIAutomationElement) -> bool {
+    use windows::Win32::UI::Accessibility::{IUIAutomationTextPattern, TextPatternRangeEndpoint_End,
+                                            TextPatternRangeEndpoint_Start, UIA_TextPatternId};
+    unsafe {
+        let Some(text) = e.GetCurrentPattern(UIA_TextPatternId).ok()
+            .and_then(|raw| raw.cast::<IUIAutomationTextPattern>().ok()) else { return false };
+        let (Ok(whole), Ok(chosen)) = (text.DocumentRange(), text.GetSelection()) else { return false };
+        if chosen.Length().unwrap_or(0) != 1 {
+            return false;
+        }
+        let Ok(range) = chosen.GetElement(0) else { return false };
+        let from = range.CompareEndpoints(TextPatternRangeEndpoint_Start, &whole, TextPatternRangeEndpoint_Start);
+        let to = range.CompareEndpoints(TextPatternRangeEndpoint_End, &whole, TextPatternRangeEndpoint_End);
+        let something = range.GetText(1).is_ok_and(|t| !t.is_empty());
+        from.is_ok_and(|c| c == 0) && to.is_ok_and(|c| c == 0) && something
     }
 }
 
