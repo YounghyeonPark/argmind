@@ -206,6 +206,14 @@ pub struct WindowsHands {
     /// a quarter of a second apart, which is what makes remembering one safe where remembering a
     /// rectangle across a model call would not be.
     aimed: Option<((i64, i64), Instant)>,
+    /// **What was under the aim just before the click** — whether it took text, and whether it was
+    /// a password box — read when the aim is set and consulted only while the aim is fresh.
+    ///
+    /// Because a click can cover what it clicked: Edge's address bar, clicked, opens its
+    /// suggestions over itself, and the point then reads a pane while the keys still go to the bar.
+    /// The check refused it and the text typed anyway arrived (`examples/typing-lands.rs`,
+    /// 2026-11-19). The password half is there so widening one check does not narrow the other.
+    before: Option<(bool, bool)>,
     /// **The window argmind's last act reached, and when** — where a key or untargeted typing goes
     /// while it is fresh. Unlike the aim it is not taken: a click, its typing and its Enter are one
     /// program's, a quarter of a second apart.
@@ -247,7 +255,7 @@ impl WindowsHands {
     }
 
     fn with(reach: Reach) -> Self {
-        WindowsHands { reach, patterns: false, typing_patterns: false, by_value: 0, aimed: None,
+        WindowsHands { reach, patterns: false, typing_patterns: false, by_value: 0, aimed: None, before: None,
                        messages: false, by_message: 0, may_send_input: true, reached: None,
                        attending: None,
                        automation: None, by_pattern: 0, by_click: 0,
@@ -367,10 +375,49 @@ impl WindowsHands {
     /// clicking come through here, so there is one place that aims.
     fn aim(&mut self, x: i64, y: i64) {
         self.aimed = Some(((x, y), Instant::now()));
+        self.before = self.reading_at(x, y);
+    }
+
+    /// Whether the element at a point takes text and whether it is a password box — read only.
+    fn reading_at(&mut self, x: i64, y: i64) -> Option<(bool, bool)> {
+        if self.automation.is_none() {
+            self.automation = crate::open_automation().ok();
+        }
+        let automation = self.automation.as_ref()?;
+        let e = unsafe { automation.ElementFromPoint(POINT { x: x as i32, y: y as i32 }) }.ok()?;
+        Some((crate::patterns::takes_text(&e), unsafe { e.CurrentIsPassword() }.is_ok_and(|b| b.as_bool())))
+    }
+
+    /// The reading taken when the aim was set, while that aim is fresh.
+    fn before_fresh(&self) -> Option<(bool, bool)> {
+        match self.aimed {
+            Some((_, when)) if when.elapsed() <= AIM_LASTS => self.before,
+            _ => None,
+        }
     }
 
     /// A click, with the reach check in front of it.
     pub fn click_button(&mut self, widget: &Widget, button: &str) -> Did {
+        let began = Instant::now();
+        let did = self.click_button_from(widget, button);
+        self.aim_from_now(began);
+        did
+    }
+
+    /// **An aim's second runs from when its click is done, not from when it began** — since
+    /// 2026-11-19. A click on Edge's address bar took 2,075 ms, most of it UI Automation on the
+    /// browser's own controls, so the aim had expired before the check that follows every click
+    /// and the check read the focus instead (`examples/typing-lands.rs`). Only an aim this click set
+    /// is renewed: a click refused before it aimed must not bring an older one back.
+    fn aim_from_now(&mut self, began: Instant) {
+        if let Some((_, when)) = &mut self.aimed {
+            if *when >= began {
+                *when = Instant::now();
+            }
+        }
+    }
+
+    fn click_button_from(&mut self, widget: &Widget, button: &str) -> Did {
         let Some((down, up)) = button_flags(button) else {
             return self.record(Did::Refused(format!("unknown button {button:?}")));
         };
@@ -453,6 +500,13 @@ impl WindowsHands {
     /// for. So the same reach guard, then a message to the window under the point, then the
     /// pointer only where these hands may use it.
     pub fn click_point(&mut self, x: i64, y: i64) -> Did {
+        let began = Instant::now();
+        let did = self.click_point_from(x, y);
+        self.aim_from_now(began);
+        did
+    }
+
+    fn click_point_from(&mut self, x: i64, y: i64) -> Did {
         let Some((down, up)) = button_flags("left") else {
             return self.record(Did::Refused("no left button".into()));
         };
@@ -516,7 +570,7 @@ impl WindowsHands {
         let secret = |e: &Option<windows::Win32::UI::Accessibility::IUIAutomationElement>| {
             e.as_ref().is_some_and(|e| unsafe { e.CurrentIsPassword() }.is_ok_and(|b| b.as_bool()))
         };
-        secret(&focused) || secret(&aimed)
+        secret(&focused) || secret(&aimed) || self.before_fresh().is_some_and(|(_, secret)| secret)
     }
 
     /// **The two elements text could reach right now**: the focus, where keys go, and the box just
@@ -538,9 +592,13 @@ impl WindowsHands {
         (focused, aimed)
     }
 
-    /// **Is there a field where the text would go?** The box just clicked if that is fresh, the
-    /// focus otherwise; `None` when UI Automation will not say.
+    /// **Is there a field where the text would go?** The box just clicked if that is fresh — as it
+    /// was before the click, or as the point reads now — the focus otherwise; `None` when UI
+    /// Automation will not say.
     pub fn typing_lands_here(&mut self) -> Option<bool> {
+        if self.before_fresh().is_some_and(|(takes, _)| takes) {
+            return Some(true);
+        }
         let (focused, aimed) = self.where_text_goes();
         Some(crate::patterns::takes_text(&aimed.or(focused)?))
     }

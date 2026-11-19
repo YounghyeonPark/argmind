@@ -277,9 +277,10 @@ fn element_for(automation: &IUIAutomation, x: i64, y: i64, name: &str, role: &st
 
 /// **Does this control take text?** An edit or a document by its control type, or anything with a
 /// value pattern that is not read-only — a combo box's edit, a search box that calls itself
-/// something else. Read-only values and buttons are no.
+/// something else — or anything offering the text-edit pattern. Read-only values and buttons are no.
 pub fn takes_text(e: &IUIAutomationElement) -> bool {
-    use windows::Win32::UI::Accessibility::{UIA_DocumentControlTypeId, UIA_EditControlTypeId};
+    use windows::Win32::UI::Accessibility::{UIA_DocumentControlTypeId, UIA_EditControlTypeId,
+                                            UIA_TextEditPatternId};
     unsafe {
         //: **The value pattern first**, because it can say *read-only* and the control type
         //: cannot: a read-only edit is still an Edit.
@@ -287,10 +288,23 @@ pub fn takes_text(e: &IUIAutomationElement) -> bool {
             .and_then(|raw| raw.cast::<IUIAutomationValuePattern>().ok())
             .and_then(|v| v.CurrentIsReadOnly().ok())
             .map(|r| r.as_bool());
-        match read_only {
-            Some(r) => !r,
-            None => e.CurrentControlType().is_ok_and(|t| t == UIA_EditControlTypeId
-                                                        || t == UIA_DocumentControlTypeId),
-        }
+        let typed = e.CurrentControlType().is_ok_and(|t| t == UIA_EditControlTypeId
+                                                         || t == UIA_DocumentControlTypeId);
+        let edits = e.GetCurrentPattern(UIA_TextEditPatternId).is_ok_and(|p| !p.as_raw().is_null());
+        takes_text_given(read_only, typed, edits)
+    }
+}
+
+/// **The rule [`takes_text`] reads, apart from UI Automation** so a test can hold it.
+///
+/// **The text-edit pattern is the third way in, since 2026-11-19** (`examples/typing-lands.rs`): a
+/// web page's plain `contenteditable` — a comment box, a blog editor's body — is a Group with no
+/// value pattern, so the check refused it in Edge and in Chrome, and the text typed anyway arrived.
+/// Chromium offers the text-edit pattern there and not on a Group that cannot be edited or on a
+/// button, which both still read as no.
+pub fn takes_text_given(read_only: Option<bool>, an_edit_or_document: bool, offers_text_edit: bool) -> bool {
+    match read_only {
+        Some(r) => !r,
+        None => an_edit_or_document || offers_text_edit,
     }
 }

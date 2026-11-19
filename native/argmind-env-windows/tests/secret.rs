@@ -79,6 +79,21 @@ fn an_edit_takes_text_and_a_button_and_a_read_only_box_do_not() {
     }
 }
 
+/// **The rule itself, both directions** — the case UI Automation in a hidden window cannot build:
+/// a web page's plain `contenteditable`, a Group with no value pattern that offers the text-edit
+/// pattern. `examples/typing-lands.rs` found it refused in Edge and Chrome on 2026-11-19, with the
+/// text typed anyway arriving; a Group with neither and a button stay no.
+#[test]
+fn a_text_edit_with_no_value_takes_text_and_what_offers_neither_does_not() {
+    use argmind_env_windows::patterns::takes_text_given;
+    assert!(takes_text_given(None, false, true), "a contenteditable Group read as not taking text");
+    assert!(!takes_text_given(None, false, false), "a Group or a button read as taking text");
+    assert!(takes_text_given(None, true, false), "an Edit with no value pattern read as not taking text");
+    //: The value pattern still decides when there is one: read-only is no whatever else it offers.
+    assert!(!takes_text_given(Some(true), true, true), "a read-only box read as taking text");
+    assert!(takes_text_given(Some(false), false, false), "a writable value read as not taking text");
+}
+
 /// **The time since the last input is a time**: non-negative, and on a machine somebody is using
 /// it is not decades. Reading it moves nothing and types nothing.
 #[test]

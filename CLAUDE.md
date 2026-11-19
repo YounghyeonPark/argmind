@@ -329,7 +329,16 @@ where a point inside the grid came back *cannot press* for the same reason. Forw
 `argmind-rules` (`the_surface_hides_no_hand`) reads the wrapper for every method the trait has —
 broken three ways, including the wrapper as it was. **What changes for the person**: a `type` into
 something that is neither an edit nor a document nor a writable value is now refused, as designed,
-where it went ahead before.
+where it went ahead before. **And the check was then run against what a person types into, the
+same day** (`argmind-env-windows --example typing-lands`, a desktop of its own, the shipped hands
+without `SendInput`, criteria first): on a web page in Edge and Chrome it refused **3** places
+the text typed anyway reached — a plain `contenteditable` in both (a Group with no value pattern),
+and Edge's address bar, whose click took 2 s and outlived its own 1 s aim. Now the text-edit
+pattern counts, what was under the point before the click counts, and an aim's second runs from
+the end of its click: **0**, with a non-editable group and a button still refused. **Chrome's
+address bar is allowed and takes nothing** — it holds the address, so the value is not written, and
+an inactive Chrome drops posted characters — which is older than the check and not fixed. VS Code
+was not run: it will not start beside the person's while that one holds a pending update.
 
 **argmind's own ideas may run without a person — on their own key, since 2026-10-21.** The owner
 found asking every time tiresome; eleven hours of the timeline showed what was asking: **0 requests

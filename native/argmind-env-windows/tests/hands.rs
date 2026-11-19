@@ -267,6 +267,11 @@ fn a_click_aims_one_type_and_then_stops() {
     //: And it is set where a click happens and nowhere else.
     assert_eq!(source.matches("self.aimed = Some(").count(), 1,
                "something other than a click sets the aim");
+    //: **And renewed only where a click finishes** — since 2026-11-19 the second runs from the end
+    //: of the click, because a 2-second click on Edge's address bar outlived its own aim. Renewing
+    //: it anywhere else would let an aim outlive the model call it must not span.
+    assert_eq!(source.matches("self.aim_from_now(began);").count(), 2,
+               "the aim is renewed somewhere other than the two clicks");
 
     //: **No aim is keys, not focus.** Falling back to `GetFocusedElement` is exactly the design
     //: that was measured and rejected, so it must not come back as a convenience.
